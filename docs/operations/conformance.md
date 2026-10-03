@@ -19,7 +19,7 @@ Logout on its own: a logout certification is RP-Initiated **plus at
 least one** of Session Management, Front-Channel or Back-Channel. We
 serve Back-Channel and only Back-Channel, for reasons that are about
 what a browser will actually do rather than about effort — see
-[the design note](../design/access-roster.md#telling-the-relying-party-back-channel-logout). So this pair is the
+[the design note](../design/sluis.md#telling-the-relying-party-back-channel-logout). So this pair is the
 smallest set that can be submitted, and neither half counts alone.
 
 

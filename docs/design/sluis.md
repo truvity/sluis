@@ -1,4 +1,4 @@
-# access-roster — the design
+# sluis — the design
 
 **Status:** shipped. One process reads the corporate directories, applies
 the policy, issues tokens, serves the login page and serves the console.
@@ -227,7 +227,7 @@ and a machine that already holds a token.
 
 | Grant | For |
 |---|---|
-| authorization code + PKCE | every browser flow, and every CLI: `accessctl login` and kubelogin open a browser and listen on a loopback port |
+| authorization code + PKCE | every browser flow, and every CLI: `sluisctl login` and kubelogin open a browser and listen on a loopback port |
 | refresh | sessions that outlive a token |
 | userinfo | relying parties that ask |
 | `end_session` | sign-out ends the sign-in, not one application's cookie |
@@ -258,7 +258,7 @@ access token of a live session at a **public** client that declares
 everything else it signs is refused.
 
 The third row is why it is *one* grant. AWS accepts only a token whose
-`aud` matches a client on its OIDC provider, so `accessctl` trades the
+`aud` matches a client on its OIDC provider, so `sluisctl` trades the
 token it holds for one audienced at AWS.
 
 The protocol is a library — `github.com/zitadel/oidc/v3` — certified for
@@ -274,7 +274,7 @@ Three things get called a session and each has one owner. A proxy holds
 the **browser session** for one console, a ticket cookie with the state in
 Valkey. This process holds the **SSO session** with the browser, so a
 second console needs no second login, and one **refresh token per identity
-and client**, which is what kubelogin, `accessctl` and every proxy
+and client**, which is what kubelogin, `sluisctl` and every proxy
 actually hold.
 
 **The SSO session is the keystone.** A cookie at the issuer's host,
@@ -904,7 +904,7 @@ from the mirror.
 
 ## Audit
 
-access-roster does not keep its own audit trail. It
+sluis does not keep its own audit trail. It
 records into an installation of [truvity/audit](https://github.com/truvity/audit)
 that belongs to this application and runs in its namespace: with
 `audit.writer` set it registers its catalogue and sends its records to that
@@ -948,7 +948,7 @@ GitHub account is a person's, so its login is treated the same way. No
 address is ever data.
 
 **Every record belongs to the installation**, the audit tenant
-`@platform`: an installation of access-roster serves one organisation, and
+`@platform`: an installation of sluis serves one organisation, and
 its trail is the organisation's own.
 
 **Each process records as itself.** The service, the GitHub controller and the
@@ -1212,7 +1212,7 @@ bounded by a setting we choose.
 
 ## Build
 
-`devbox shell`, then `just check`. The chart is `charts/access-roster`.
+`devbox shell`, then `just check`. The chart is `charts/sluis`.
 For a console with no OpenID flow of its own, use gateway-native OIDC
 on Envoy Gateway, or run upstream oauth2-proxy on other gateways
 (removed from publication in v1.32.0;

@@ -174,7 +174,7 @@ MCP endpoint — naming this issuer's URL as an `authorization_server` and
 its own resource URI as `resource`. That document is what lets a
 compliant MCP client discover which issuer to authenticate against
 without being told out of band. This is the MCP server's own
-responsibility to serve: access-roster is the authorization server named
+responsibility to serve: sluis is the authorization server named
 inside it, not the party that publishes it.
 
 ## Calling a backend: the server's own identity, not the caller's
@@ -205,7 +205,7 @@ does the same with `identity/resource` below.
 act as the user rather than as the service, that needs a delegation (a
 token exchange carrying an actor claim, naming the server as the actor
 for that user) designed explicitly, with its own consent and audit
-story. access-roster does not offer one yet; do not approximate it by
+story. sluis does not offer one yet; do not approximate it by
 forwarding the caller's token.
 
 This applies to HTTP transports (Streamable HTTP, HTTP+SSE), where the
@@ -258,9 +258,9 @@ for a record of which client called. Never authorize on it.
 ## Fronting a stock MCP server with `resource-proxy`
 
 Most MCP servers are somebody else's software and know nothing about
-access-roster. `resource-proxy` is the sidecar that gives one its front
+sluis. `resource-proxy` is the sidecar that gives one its front
 door without changing it: one container beside the stock server, from the
-image `ghcr.io/truvity/access-roster/resource-proxy:<version>` (pin it by
+image `ghcr.io/truvity/sluis/resource-proxy:<version>` (pin it by
 digest; it is published with every release, multi-arch, distroless,
 non-root, and needs no shell and no writable filesystem).
 

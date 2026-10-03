@@ -150,8 +150,8 @@ confirmations or pass markers). Both are the legacy Secrets' entries byte for by
 - **The sealed State is still the source of truth.** A copy is a convenience for a
   consumer and a backup for the operator; losing it loses nothing, and the next
   reconcile makes it again.
-- **A stale copy is silent without the alerts.** `AccessRosterExportFailing` and
-  `AccessRosterExportStale` say it. An export that has never succeeded has no
+- **A stale copy is silent without the alerts.** `SluisExportFailing` and
+  `SluisExportStale` say it. An export that has never succeeded has no
   last-success series, which is why the failing rule exists.
 - **Not covered:** a key written by a PushSecret that is still running at the same
   time is not detected; an OpenBao policy that is wrong shows as a failure and not at

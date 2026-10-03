@@ -1,13 +1,13 @@
 # AWS Lambda — telemetry with the function role's identity
 
 A Lambda function can send its OpenTelemetry data to an OTLP endpoint that
-trusts access-roster **without holding any secret**. The release carries an
-extension layer, `access-roster-lambda-layer_<version>_linux_<arch>.zip`,
+trusts sluis **without holding any secret**. The release carries an
+extension layer, `sluis-lambda-layer_<version>_linux_<arch>.zip`,
 that does three things for the function:
 
 1. asks STS for an identity token for the role the function already runs as
    (`sts:GetWebIdentityToken`, AWS outbound identity federation);
-2. trades it at the access-roster issuer (RFC 8693 token exchange) for a
+2. trades it at the sluis issuer (RFC 8693 token exchange) for a
    short-lived access token audienced at the OTLP endpoint;
 3. runs an OTLP/HTTP proxy on `127.0.0.1:4318` that forwards every export to
    the endpoint with that token as the bearer;
@@ -32,7 +32,7 @@ sequenceDiagram
     participant F as function (OTel SDK)
     participant E as extension (127.0.0.1:4318)
     participant S as STS (regional)
-    participant I as access-roster issuer
+    participant I as sluis issuer
     participant O as OTLP endpoint
     F->>E: POST /v1/traces
     E->>S: GetWebIdentityToken (function role)
@@ -147,6 +147,13 @@ logged.
 
 All settings are environment variables on the function.
 
+Since the rename to sluis each one is read as `SLUIS_<NAME>` first and as
+`ACCESS_ROSTER_<NAME>` second: both work, and `SLUIS_*` wins when both are set.
+The table lists the `ACCESS_ROSTER_*` names, which are unchanged; write
+`SLUIS_ISSUER` where it says `ACCESS_ROSTER_ISSUER`, and so on. The contract
+name `ACCESS_ROSTER_ISSUER` as a GitHub variable (`vars.ACCESS_ROSTER_ISSUER`)
+is not this variable and does not change.
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `ACCESS_ROSTER_ISSUER` | required | The issuer's base URL. |
@@ -216,8 +223,8 @@ Each release carries one zip per architecture:
 
 | Lambda architecture | Release asset |
 |---|---|
-| `x86_64` | `access-roster-lambda-layer_<version>_linux_amd64.zip` |
-| `arm64` | `access-roster-lambda-layer_<version>_linux_arm64.zip` |
+| `x86_64` | `sluis-lambda-layer_<version>_linux_amd64.zip` |
+| `arm64` | `sluis-lambda-layer_<version>_linux_arm64.zip` |
 
 The zip root is the layer root: it holds one file,
 `extensions/access-roster-otlp` (mode 0755). Publish it as a layer version in
@@ -226,7 +233,7 @@ and add it to the function:
 
 ```
 aws lambda publish-layer-version --layer-name access-roster-otlp \
-  --zip-file fileb://access-roster-lambda-layer_<version>_linux_arm64.zip \
+  --zip-file fileb://sluis-lambda-layer_<version>_linux_arm64.zip \
   --compatible-architectures arm64
 ```
 

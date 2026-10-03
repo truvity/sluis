@@ -34,7 +34,7 @@ second, competing decision engine even when no secret moves through it.
 that system passes the 0008 test — its membership is already governed
 here.** GitHub passes: the issuer reconciles GitHub organisation and
 team membership, so the GitHub App installation-token minter
-(`accessctl github-token`) stays exactly as it is, a principled and
+(`sluisctl github-token`) stays exactly as it is, a principled and
 documented exception to "deliver tokens, not credentials", not an
 oversight to eventually close.
 
@@ -45,7 +45,7 @@ its own parent key, never a feature added here. The broker:
 
 - verifies a standard OIDC token against this issuer's discovery
   document — issuer, audience, a `groups` claim — nothing specific to
-  access-roster; any OIDC provider that shapes a token the same way
+  sluis; any OIDC provider that shapes a token the same way
   could stand in its place;
 - maps **group only** to bucket, prefixes and permission. There is
   deliberately no claim-matching language in the broker beyond that: a
@@ -65,27 +65,27 @@ its own parent key, never a feature added here. The broker:
   audit trail, the way every other credential-shaped action here already
   is.
 
-**3. The client stays one command.** `accessctl` will offer a thin
+**3. The client stays one command.** `sluisctl` will offer a thin
 wrapper around the broker's own CLI — sign in, hand the resulting token
 to the broker CLI in its environment, then exec it unchanged — the same
 shape [0013](0013-openbao-access-through-the-bao-cli.md) already ships
-for `accessctl bao`: this tool authenticates, the other project's own
+for `sluisctl bao`: this tool authenticates, the other project's own
 binary does everything after that, and a release of this repository
 never has to catch up with a release of that one. The broker CLI itself
 accepts any OIDC token from any issuer, so it works standalone, without
-access-roster in front of it, for an installation that has no use for
+sluis in front of it, for an installation that has no use for
 the rest of this repository. This wrapper is **planned, not shipped** —
 recorded here so the shape is decided before the code is, not worked out
 differently by whoever writes it first.
 
 **4. A store with OIDC federation needs no broker.** AWS S3 (and
 anything else reachable through `AssumeRoleWithWebIdentity`) is already
-covered by `accessctl aws` today; nothing here changes that path or adds
+covered by `sluisctl aws` today; nothing here changes that path or adds
 a second one for it.
 
 ## Consequences
 
-**access-roster gains no storage code, in the broker or in the issuer.**
+**sluis gains no storage code, in the broker or in the issuer.**
 The parent key for an object store never enters this repository's
 process, its config, or its chart values — only a client row for the
 broker's audience and the group grants that decide what it may mint.
@@ -96,7 +96,7 @@ then a call to the broker, versus a direct mint. That is the same hop
 priced in for this exact case, not a new cost this record introduces.
 
 **The broker CLI is one more binary an installation that wants storage
-credentials must install**, the same dependency `accessctl bao` already
+credentials must install**, the same dependency `sluisctl bao` already
 has on the real `bao` binary being on `PATH`.
 
 **The GitHub App keys stay in the issuer process**, unchanged. This is
@@ -123,14 +123,14 @@ identity this installation trusts. Widening the mission this way once is
 the same mistake regardless of which store is first through the door.
 
 **The broker trusting a CI provider's OIDC token directly**, with no
-access-roster in between, for an installation that already runs this
+sluis in between, for an installation that already runs this
 repository. Rejected for that installation specifically: it puts the
 authorization decision — which group may read or write which prefix — in
 the broker's own claim-matching rules, a second engine deciding the same
 question this repository's policy already decides for every other
 audience, with its own drift risk and its own place to get out of sync.
 This stays a real option for an installation that does **not** run
-access-roster at all — the broker's OIDC-only contract does not require
+sluis at all — the broker's OIDC-only contract does not require
 this repository to be the token's source, which is exactly why it is a
 separate project and not a feature of this one.
 

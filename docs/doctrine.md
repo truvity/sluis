@@ -11,16 +11,16 @@ of every page in the repository, not just these, see
   solves, and the principles every design question is decided by
 - [concepts.md](concepts.md) — the words used precisely
 - [architecture.md](architecture.md) — every piece and how it connects,
-  and [who owns what](architecture.md#who-owns-what): access-roster, the
+  and [who owns what](architecture.md#who-owns-what): sluis, the
   directories, the relying parties
 - [design/trust.md](design/trust.md) — two anchors and one vocabulary of
   internal groups: the rule under everything
-- [design/access-roster.md](design/access-roster.md) — one process, the
+- [design/sluis.md](design/sluis.md) — one process, the
   directory model, freshness, sessions, the console, the GitHub and
   Slack controllers and the rails they share, the audit trail
 - [design/access-proxy.md](design/access-proxy.md) — why the proxy is
   upstream oauth2-proxy in a chart and no code of ours
-- [design/accessctl.md](design/accessctl.md) — why a CLI at all, the
+- [design/sluisctl.md](design/sluisctl.md) — why a CLI at all, the
   GitHub Action, and the credential broker's list of decisions it does
   not make
 - [design/libraries.md](design/libraries.md) — the Go module and the

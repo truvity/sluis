@@ -135,7 +135,7 @@ a fake directory; the policy engine against fixtures; the OpenID
 Provider surface against the library's own tests, and, by hand and
 before a release that touches it, against the OpenID Foundation's suite
 ([operations/conformance.md](../operations/conformance.md)), whose
-results are [conformance.md](../conformance.md). `accessctl` is tested against the
+results are [conformance.md](../conformance.md). `sluisctl` is tested against the
 acceptance issuer with a fake cloud STS and a kind cluster, on a laptop
 path and on a simulated CI path.
 

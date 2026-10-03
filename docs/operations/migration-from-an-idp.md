@@ -30,13 +30,13 @@ logins.
    Watch a day of logins.
 4. **Clusters.** Add the new issuer as the API server's OIDC provider; on
    platforms that allow one provider per cluster, this is a flip per
-   cluster, non-production first. Put `accessctl` on every laptop through
-   its Nix flake, and distribute kubeconfigs with `accessctl setup`.
+   cluster, non-production first. Put `sluisctl` on every laptop through
+   its Nix flake, and distribute kubeconfigs with `sluisctl setup`.
 5. **Cloud accounts.** Add the IAM OIDC provider for the new issuer and a
    trust condition on the audience beside the old one; move people to
-   `accessctl aws`; remove the old condition.
+   `sluisctl aws`; remove the old condition.
 6. **CI.** Replace the broker's client in workflows with the action, or
-   with the same `accessctl` files a laptop uses. Rules on repository,
+   with the same `sluisctl` files a laptop uses. Rules on repository,
    ref and visibility replace the broker's mapping.
 7. **The rest of the consoles**, the CD system, the CLIs.
 8. **GitHub organisations.** Bind their teams in the policy, connect each

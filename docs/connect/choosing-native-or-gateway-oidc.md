@@ -11,11 +11,11 @@ is how to build the gateway-native shape once you have made it.
 
 There are three things that get called a session here, and only one of
 them is this issuer's to reach directly
-([design/access-roster.md#sessions-and-sign-out](../design/access-roster.md#sessions-and-sign-out)):
+([design/sluis.md#sessions-and-sign-out](../design/sluis.md#sessions-and-sign-out)):
 
 - the **SSO session**, a cookie at the issuer's own host;
 - a **per-client refresh chain** — one refresh token per identity and
-  client, which is what kubelogin, `accessctl` and every gateway-native
+  client, which is what kubelogin, `sluisctl` and every gateway-native
   filter actually hold;
 - the **application's own local session**, on its own clock, once it has
   signed somebody in.
@@ -27,7 +27,7 @@ session revoked; an access or ID token's `exp` is capped at
 `auth_time+absolute` even when its ordinary lifetime would reach
 further; and a silent `/authorize` against an SSO session already past
 the limit ends that session first rather than completing against it
-([design/access-roster.md#the-absolute-session-limit](../design/access-roster.md#the-absolute-session-limit),
+([design/sluis.md#the-absolute-session-limit](../design/sluis.md#the-absolute-session-limit),
 [reference/configuration.md#values](../reference/configuration.md#values),
 [ADR 0001](../decisions/0001-sessions-and-an-absolute-limit.md)). It
 reaches the third session — the application's own — only if that
@@ -42,7 +42,7 @@ Every relying party falls into one of two shapes
 
 | Class | Shape | How the 24h limit reaches it |
 |---|---|---|
-| **A** | refreshes against the issuer to stay signed in: a gateway-fronted console, an application with its own refresh enabled, `accessctl`, kubelogin | directly, with lag no worse than the token's own lifetime or the client's `ttl_cap` |
+| **A** | refreshes against the issuer to stay signed in: a gateway-fronted console, an application with its own refresh enabled, `sluisctl`, kubelogin | directly, with lag no worse than the token's own lifetime or the client's `ttl_cap` |
 | **B** | mints its own session after one sign-in and does not come back on its own | not automatically — it must cap its own session at 24 hours or less, or accept Back-Channel Logout and live with the window that leaves |
 
 **Class B is a deliberate choice an application's operator makes, never a
@@ -80,9 +80,9 @@ application itself documents it:
   same reasoning applied a second time. *(OpenBAO's own field names for
   a role's token lifetime are not documented on this repository's side
   of the contract — see
-  [truvity/openbao](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md)
+  [truvity/openbao](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md)
   for those.)*
-- **A CLI is class A by definition** — `accessctl` and kubelogin are
+- **A CLI is class A by definition** — `sluisctl` and kubelogin are
   named as class A in [ADR 0001](../decisions/0001-sessions-and-an-absolute-limit.md)
   itself, because the whole point of a laptop credential is that it asks
   again.
@@ -105,7 +105,7 @@ application itself documents it:
 |---|---|---|
 | ArgoCD | B — own `users.session.duration` | confidential client, own redirect; no `signing_alg` pin — its verifier (go-oidc's provider verifier) accepts whatever the issuer's discovery document advertises ([connect/argocd.md](argocd.md)) |
 | Kargo | A — refreshes, capped by `ttl_cap` | two public clients (UI + CLI); **needs `signing_alg: RS256`** — its verifier is built with no `SupportedSigningAlgs` and defaults to RS256 without reading discovery ([connect/kargo.md](kargo.md), [ADR 0009](../decisions/0009-a-default-signing-algorithm-and-per-audience-exceptions.md)) |
-| Kubernetes API server (kube-apiserver / a managed control plane's OIDC identity provider) | A — `accessctl`/kubelogin refresh it | one public client per cluster; **often needs `signing_alg: RS256`** — `--oidc-signing-algs` defaults to RS256 and a managed control plane's associated identity provider may accept only RS256 with no algorithm setting exposed at all ([connect/kubernetes-cluster.md](kubernetes-cluster.md)) |
+| Kubernetes API server (kube-apiserver / a managed control plane's OIDC identity provider) | A — `sluisctl`/kubelogin refresh it | one public client per cluster; **often needs `signing_alg: RS256`** — `--oidc-signing-algs` defaults to RS256 and a managed control plane's associated identity provider may accept only RS256 with no algorithm setting exposed at all ([connect/kubernetes-cluster.md](kubernetes-cluster.md)) |
 | OpenBAO UI | A — own OIDC flow, `ttl_cap: 5m` | confidential client; no `signing_alg` pin needed — OpenBAO's JWT auth reads whichever algorithm discovery advertises unless `jwt_supported_algs` is set to pin one ([integrations/openbao.md](../integrations/openbao.md)) |
 | Grafana (`generic_oauth`) | B — own session; cap `login_maximum_lifetime_duration` yourself | confidential client (Grafana redeems the code server-side); its own signing-algorithm acceptance is not verified here |
 | Headlamp | not verified — confirm whether it refreshes or mints its own session before choosing | not verified |
@@ -129,7 +129,7 @@ application itself documents it:
   repository has found real bugs before: a revoke path that ended one
   session and left its parent SSO session standing looked, from the
   console, like a complete sign-out
-  ([design/access-roster.md#telling-the-relying-party-back-channel-logout](../design/access-roster.md#telling-the-relying-party-back-channel-logout)).
+  ([design/sluis.md#telling-the-relying-party-back-channel-logout](../design/sluis.md#telling-the-relying-party-back-channel-logout)).
 
 ## oauth2-proxy, and when it is still the answer
 

@@ -72,7 +72,7 @@ name it in [reference/policy.md](../reference/policy.md).
 
 ## 6. A CLI subcommand
 
-`cmd/accessctl`: subcommands share the login cache, the issuer client
+`cmd/sluisctl`: subcommands share the login cache, the issuer client
 and the ambient-token detection in that package; a new one that needs
 none of them probably belongs in a script. Keep the CI path working:
 every command must behave with an ambient platform token and no cache,
@@ -80,7 +80,7 @@ and it ships to a job through the release's Nix flake like the rest.
 
 ## 7. An audit action
 
-What access-roster records is its catalogue,
+What sluis records is its catalogue,
 [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml),
 held to the audit component's own toolchain. To record something new:
 declare the action there — a fact, `roster.<thing>.<verb>` in the past

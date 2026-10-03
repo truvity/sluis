@@ -1,6 +1,6 @@
 # Connect SSH — people, machines and hosts
 
-**Anchor:** the issuer, and only the issuer. access-roster mints the
+**Anchor:** the issuer, and only the issuer. sluis mints the
 tokens; it never signs an SSH key. The secret store (OpenBAO, or a Vault
 that speaks the same API) builds the certificate authority, and each
 host's own owner installs and configures the pieces that run there. Three
@@ -11,7 +11,7 @@ question and "who runs the CA" is another
 | Who | Authenticates with | Owner of that piece |
 |---|---|---|
 | a person | **opkssh** — an OpenID Connect ID token, verified straight into `sshd` | — |
-| a machine (a CI job, a controller) | **accessctl bao ssh -mode=ca** (or `accessctl bao write ... sign/<role>`) — a short-lived OpenBAO-signed user certificate | — |
+| a machine (a CI job, a controller) | **sluisctl bao ssh -mode=ca** (or `sluisctl bao write ... sign/<role>`) — a short-lived OpenBAO-signed user certificate | — |
 | a host | **a host certificate** from OpenBAO's SSH CA | — |
 
 The [Who owns what](#who-owns-what) table at the end places every piece
@@ -65,10 +65,10 @@ was waiting on.
 ### The client side: `~/.opk/config.yml`
 
 ```yaml
-default_provider: access-roster
+default_provider: sluis
 
 providers:
-  - alias: access-roster
+  - alias: sluis
     issuer: https://access.example
     client_id: opkssh
     scopes: openid email profile groups
@@ -131,7 +131,7 @@ opkssh's own client mints `devel.build-worker.operator` instead of
 three, which is what `auth_id`, above, actually matches. Every `auth_id`
 line on every opkssh-facing server has to use the DOT-separated spelling,
 never the policy file's own `:`-separated one — add lines by hand or with
-`sudo opkssh add ops oidc:groups:devel.build-worker.operator access-roster`.
+`sudo opkssh add ops oidc:groups:devel.build-worker.operator sluis`.
 It is a temporary interop shim: once opkssh's own parser stops splitting
 on every `:`, `groups_delimiter` can be removed from the client row and
 every `auth_id` line reverts to the policy's own spelling.
@@ -201,13 +201,13 @@ root  oidc:groups:devel.build-worker.admin  https://access.example
 
 ## Machines: OpenBAO-signed short-lived SSH user certificates (recommended)
 
-**`accessctl credential ssh` was removed in v1.34.0**
+**`sluisctl credential ssh` was removed in v1.34.0**
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)):
-the commands below, `accessctl bao ssh -mode=ca …` and `accessctl bao
+the commands below, `sluisctl bao ssh -mode=ca …` and `sluisctl bao
 write ... sign/<role>`, are the same login, then the real `bao` binary,
 rather than a dedicated subcommand. This page's shape (opkssh for
 people, OpenBAO for machines and hosts) is unchanged; only which
-accessctl command a machine runs is.
+sluisctl command a machine runs is.
 
 A CI job or a controller doing remote work over SSH is not a person at a
 browser, so opkssh's interactive login does not fit it — except the one
@@ -225,7 +225,7 @@ the job's own identity          the issuer                OpenBAO
                                                         ── ssh-agent, or files
 ```
 
-access-roster's documented contract routes every kind through the
+sluis's documented contract routes every kind through the
 issuer's exchange, never straight from the job's token to OpenBAO's JWT
 mount — OpenBAO's JWT auth method could, in principle, trust a job's
 issuer directly, but going through this issuer's exchange first is what
@@ -233,27 +233,27 @@ gives the certificate a subject the issuer's own audit trail agrees on,
 and what makes the same policy `requires` gate SSH, the database role
 and the client-certificate role alike.
 
-### `accessctl bao ssh -mode=ca`, and `accessctl bao write` for files
+### `sluisctl bao ssh -mode=ca`, and `sluisctl bao write` for files
 
-Two shapes, from [cmd/accessctl/bao.go](../../cmd/accessctl/bao.go): an
+Two shapes, from [cmd/sluisctl/bao.go](../../cmd/sluisctl/bao.go): an
 interactive session, or a certificate written to a file for something
 else to use.
 
 ```sh
-accessctl bao --address https://openbao.example:8200 ssh -mode=ca -ns=staging -role=user deploy@build-worker.example
+sluisctl bao --address https://openbao.example:8200 ssh -mode=ca -ns=staging -role=user deploy@build-worker.example
 ```
 
 `bao ssh -mode=ca` is OpenBAO's own client-side SSH helper: it asks the
 signing role named by `-role` for a certificate over a key it generates,
 then runs `ssh` itself with it — agent handling, host key checking and
 every other `ssh` behaviour exactly as when pointed at any other
-CA-issued certificate. accessctl's own part ends at the login; `bao`'s
+CA-issued certificate. sluisctl's own part ends at the login; `bao`'s
 own flags (`-mode`, `-role`, `-namespace`, and anything else `bao ssh`
 accepts) go after the subcommand, the same separation rule as any other
-`accessctl bao` call.
+`sluisctl bao` call.
 
 ```sh
-accessctl bao --address https://openbao.example:8200 write -ns=staging -field=signed_key \
+sluisctl bao --address https://openbao.example:8200 write -ns=staging -field=signed_key \
     ssh/sign/user public_key=@id_ci.pub > id_ci-cert.pub
 scp -i id_ci ci@build-worker.example:backup.tar.gz .    # ssh reads id_ci-cert.pub beside id_ci automatically
 ```
@@ -276,7 +276,7 @@ separately from the everyday `-role=user`
 
 In a job, the same two recipes run with the job's own GitHub Actions
 OIDC token or Kubernetes ServiceAccount token exchanged the same way any
-other `accessctl` command exchanges one
+other `sluisctl` command exchanges one
 ([connect/github-actions.md](github-actions.md),
 [connect/kubernetes-cluster.md](kubernetes-cluster.md)) — no separate SSH
 credential to provision. A job has no ssh-agent, so the `bao write`
@@ -294,7 +294,7 @@ job's `sub` — `repo:<owner>/<repo>:ref:<ref>`) — verified against opkssh
 **Prefer it** when the caller is *only* ever a GitHub Actions job and
 never anything else: one fewer hop (no exchange, no OpenBAO login), and
 one file (`auth_id`) rather than two systems (policy plus an OpenBAO
-role) to keep in sync. **Prefer `accessctl bao`'s recipes above** the
+role) to keep in sync. **Prefer `sluisctl bao`'s recipes above** the
 moment an in-cluster runner, a controller carrying a Kubernetes ServiceAccount
 token, or any other workload identity this issuer already accepts as a
 matcher needs the same access: opkssh's provider list has no equivalent
@@ -361,10 +361,10 @@ domain rather than a `known_hosts` entry per host:
 the public key `bao read ssh/config/ca` (or `ssh-keygen -L -f
 <cert>`) prints.
 
-**`accessctl ssh known-hosts` automates exactly this line**, for every
-CA an installation configures, refreshed automatically by `accessctl
+**`sluisctl ssh known-hosts` automates exactly this line**, for every
+CA an installation configures, refreshed automatically by `sluisctl
 login` — see
-[reference/accessctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](../reference/accessctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect)
+[reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](../reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect)
 and
 [decisions/0016](../decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md).
 It complements opkssh above: opkssh authenticates the *person*; this
@@ -375,6 +375,6 @@ it is connecting to without a first-connect prompt.
 
 | Piece | Owner |
 |---|---|
-| the issuer, opkssh's client row, and every internal group | access-roster |
+| the issuer, opkssh's client row, and every internal group | sluis |
 | the SSH CA, its signing roles (user and host), which auth methods hosts use, the OpenBAO Agent or timer that renews a host certificate | the secret store's owners |
 | opkssh installed and wired into `sshd` (`AuthorizedKeysCommand`), `/etc/opk/providers`, `/etc/opk/auth_id`, `HostCertificate` in `sshd_config`, and `known_hosts` on every client | each host's own owner |

@@ -22,7 +22,7 @@ keyed to a policy group.
 ## Decision
 
 The issuer mints a credential for another system **only where that system is
-one access-roster already governs by membership** — that is, a system it
+one sluis already governs by membership** — that is, a system it
 reconciles, for which it holds that system's app identity and a catalogue of
 policy-driven grants.
 
@@ -33,7 +33,7 @@ other feature uses — and mints a credential scoped to that grant and no
 wider.
 
 Everywhere else, the pattern is an **external broker that is an ordinary
-relying party**: access-roster mints a token for the broker's own audience,
+relying party**: sluis mints a token for the broker's own audience,
 gated by `requires` with groups decided by policy. The broker verifies the
 token against the issuer's JWKS and alone holds the upstream secret it mints
 from. Example: a broker service that turns an identity token into

@@ -29,13 +29,13 @@ yet know which of those you want.
 | name a grant, or declare a vocabulary that checks it | [taxonomy.md](taxonomy.md) |
 | connect the corporate directory people sign in with | [connect/corporate-directory.md](connect/corporate-directory.md), and [operations/connect-runbook.md](operations/connect-runbook.md) |
 | give a CI job an identity with no stored secret | [connect/github-actions.md](connect/github-actions.md) |
-| move an installation from the `access-issuer` chart and the three images to the one `access-roster` chart and image | [reference/configuration.md — migrating from the access-issuer chart](reference/configuration.md#migrating-from-the-access-issuer-chart) |
+| move an installation from the `access-issuer` chart and the three images to the one `sluis` chart and image | [reference/configuration.md — migrating from the access-issuer chart](reference/configuration.md#migrating-from-the-access-issuer-chart) |
 | deploy it | [operations/adoption-plain-helm.md](operations/adoption-plain-helm.md), [reference/configuration.md](reference/configuration.md) (and [the configuration file](reference/configuration.md#the-configuration-file), with the [migration from environment variables](reference/configuration.md#migrating-from-environment-variables)), then [operations/connect-runbook.md](operations/connect-runbook.md) |
 | run it: what to check, what to back up, how to restore | [operations/runbook.md](operations/runbook.md), [configuration.md — restoring from the Secrets alone](reference/configuration.md#restoring-from-the-secrets-alone) |
 | run it on AWS: the Pulumi library for the bucket, key, table and Pod Identity roles | [deployment/aws.md](deployment/aws.md) |
 | run more than one replica of the issuer | [operations/high-availability.md](operations/high-availability.md) |
 | see what it publishes, alert on it, put it on a dashboard | [operations/telemetry.md](operations/telemetry.md) |
-| use it from a laptop or a CI job | [reference/accessctl.md](reference/accessctl.md) |
+| use it from a laptop or a CI job | [reference/sluisctl.md](reference/sluisctl.md) |
 | put a console behind the gateway | [connect/console-app.md](connect/console-app.md) |
 | decide whether a console signs itself in or lets the gateway do it, then build the gateway shape | [connect/choosing-native-or-gateway-oidc.md](connect/choosing-native-or-gateway-oidc.md) |
 | keep a GitHub organisation's teams in step with the policy | [connect/github-organisation.md](connect/github-organisation.md) |
@@ -56,8 +56,8 @@ yet know which of those you want.
 | run the conformance suite | [operations/conformance.md](operations/conformance.md) |
 | let an AWS Lambda, ECS task or EC2 instance exchange its IAM role's token | [connect/aws-workloads.md](connect/aws-workloads.md) |
 | build a service that accepts both people and workloads | [connect/service-to-service.md](connect/service-to-service.md) |
-| see how the console is organised (IDENTITY, ACCESS, SYSTEMS, ADMIN) and what each Systems tab does | [design/access-roster.md](design/access-roster.md#the-console) |
-| understand how the GitHub and Slack controllers share one set of rails, and what neither will ever do | [design/access-roster.md](design/access-roster.md#reconciler-rails), [safety.md](safety.md#the-reconcilers-what-they-refuse-to-do) |
+| see how the console is organised (IDENTITY, ACCESS, SYSTEMS, ADMIN) and what each Systems tab does | [design/sluis.md](design/sluis.md#the-console) |
+| understand how the GitHub and Slack controllers share one set of rails, and what neither will ever do | [design/sluis.md](design/sluis.md#reconciler-rails), [safety.md](safety.md#the-reconcilers-what-they-refuse-to-do) |
 | read the trail: what each Slack action is recorded as | [architecture.md](architecture.md#the-audit-trail-and-who-writes-it), [CHANGELOG.md](../CHANGELOG.md) (audit catalogue 1.6.0) |
 | see what runs on which platform, and how far each piece has got | [capabilities.md](capabilities.md) |
 | read the specification of the storage, trigger, sealing and identity ports | [design/ports.md](design/ports.md) |

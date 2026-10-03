@@ -1,7 +1,10 @@
-# access-roster
+# sluis
 
-[![CI](https://github.com/truvity/access-roster/actions/workflows/ci.yaml/badge.svg)](https://github.com/truvity/access-roster/actions/workflows/ci.yaml)
+[![CI](https://github.com/truvity/sluis/actions/workflows/ci.yaml/badge.svg)](https://github.com/truvity/sluis/actions/workflows/ci.yaml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> Formerly **access-roster** (CLI `accessctl`, now `sluisctl`). What changed
+> and what deliberately did not: [ADR 0035](docs/decisions/0035-renamed-to-sluis.md).
 
 **The policy is the product.** One file in git turns the groups your
 people already have in the corporate directory, and the identities your
@@ -31,12 +34,12 @@ repository.
 
 | Artifact | Published at | For | |
 |---|---|---|---|
-| `access-roster` chart and image | `oci://ghcr.io/truvity/charts/access-roster`, `ghcr.io/truvity/access-roster/access-roster` | the installation, once. One binary with three jobs, one image, one chart: `serve` (the directory, the policy, the OpenID provider, the login page, the console and the audit trail), `controller github` (one loop that keeps every connected GitHub organisation's teams as the policy says, reporting to the console) and `controller slack` (the same for Slack channels; a dry run until a workspace is in `controllerSlack.config.enabledWorkspaces`). The chart runs each as its own Deployment. Replaces the `access-issuer` chart and the `access-issuer`, `github-roster` and `slack-roster` images: [the migration](docs/reference/configuration.md#migrating-from-the-access-issuer-chart) | shipped |
+| `sluis` chart and image | `oci://ghcr.io/truvity/charts/sluis`, `ghcr.io/truvity/sluis/sluis` | the installation, once. One binary with three jobs, one image, one chart: `serve` (the directory, the policy, the OpenID provider, the login page, the console and the audit trail), `controller github` (one loop that keeps every connected GitHub organisation's teams as the policy says, reporting to the console) and `controller slack` (the same for Slack channels; a dry run until a workspace is in `controllerSlack.config.enabledWorkspaces`). The chart runs each as its own Deployment. Replaces the `access-issuer` chart and the `access-issuer`, `github-roster` and `slack-roster` images: [the migration](docs/reference/configuration.md#migrating-from-the-access-issuer-chart) | shipped |
 | `access-proxy` chart | removed in v1.32.0 | the chart was Envoy Gateway's external authorization backend; gateway-native OIDC replaces it there. For a gateway that is not Envoy Gateway, run upstream oauth2-proxy yourself — see [docs/design/access-proxy.md](docs/design/access-proxy.md), [ADR 0003](docs/decisions/0003-deprecate-access-proxy.md). Versions already published stay available. | removed |
-| Go module | `github.com/truvity/access-roster` | services and consoles in Go: verify a bearer, read the caller's groups | shipped |
-| TypeScript package | `@truvity/access-roster` on GitHub Packages | console UIs: `useIdentity()` over `/.access/whoami`; Node services: verify a bearer | shipped |
-| `accessctl` | the release's archives, and a Nix flake on every release | people on laptops and CI jobs: one sign-in, then kubeconfigs, AWS credentials, a token for any audience, and short-lived certificates a secret manager mints | shipped |
-| GitHub Action | `truvity/access-roster@<commit>` | workflows: one exchange, then a kubeconfig, AWS profiles, or a GitHub App token | shipped |
+| Go module | `github.com/truvity/sluis` | services and consoles in Go: verify a bearer, read the caller's groups | shipped |
+| TypeScript package | `@truvity/sluis` on GitHub Packages | console UIs: `useIdentity()` over `/.access/whoami`; Node services: verify a bearer | shipped |
+| `sluisctl` | the release's archives, and a Nix flake on every release | people on laptops and CI jobs: one sign-in, then kubeconfigs, AWS credentials, a token for any audience, and short-lived certificates a secret manager mints | shipped |
+| GitHub Action | `truvity/sluis@<commit>` | workflows: one exchange, then a kubeconfig, AWS profiles, or a GitHub App token | shipped |
 | the policy | one file, one schema | the issuer and the controllers | shipped |
 | an Entra directory backend | — | a second corporate directory, behind the same workspace record | planned |
 
@@ -61,7 +64,7 @@ corporate directory.
 Every mature identity provider can do this. None of them is built for
 it, and the difference is what you run to get it.
 
-| | dex | Keycloak, Zitadel, Authentik | Okta, Auth0, Entra ID | Teleport | **access-roster** |
+| | dex | Keycloak, Zitadel, Authentik | Okta, Auth0, Entra ID | Teleport | **sluis** |
 |---|---|---|---|---|---|
 | runs on | a ConfigMap | a database, an operator, a login UI you theme | someone else's cloud | its own Auth and Proxy services, plus an agent per resource | a ConfigMap |
 | users | none, federates | its own user store, plus federation | its own user store | its own local users, plus SSO connectors | none, federates |
@@ -82,8 +85,8 @@ a mapper, a hook or a sync written and run per relying party. The heavy
 providers can be made to do all of it, at the cost of running an identity
 product to use about a fifth of one. Teleport issues its own SSH,
 database and Kubernetes certificates and runs its own access proxy in
-front of your infrastructure; access-roster does not try to be that.
-access-roster is dex's shape, with the directory read built in and one
+front of your infrastructure; sluis does not try to be that.
+sluis is dex's shape, with the directory read built in and one
 policy file doing the rest: minted into tokens where a relying party can
 read a claim, reconciled into memberships where it cannot.
 
@@ -91,7 +94,7 @@ read a claim, reconciled into memberships where it cannot.
 
 **As a person.** Sign in once, at one page, with your corporate account.
 Every console behind the gateway opens without another login. One
-`accessctl login` on your laptop, and `kubectl` works on every cluster
+`sluisctl login` on your laptop, and `kubectl` works on every cluster
 you are granted, AWS credentials come with no long-lived key, and a token
 for any other audience is one command away. Link your GitHub account
 once and the teams the policy puts you in follow. Sign out once: it ends
@@ -101,12 +104,12 @@ gateway-fronted console it ends within that token's own lifetime or
 application that minted its own session after signing in is reached only
 through Back-Channel Logout, or whatever limit it put on that session
 itself
-([how each kind finds out](docs/design/access-roster.md#telling-the-relying-party-back-channel-logout)).
+([how each kind finds out](docs/design/sluis.md#telling-the-relying-party-back-channel-logout)).
 
 **As a machine.** A GitHub Actions job presents the identity token it
 already has and receives one for AWS or a cluster, under a rule that
 names the repository, the ref and, if you want, the repository's
-visibility. The same `accessctl`, kubeconfig and AWS profile a person
+visibility. The same `sluisctl`, kubeconfig and AWS profile a person
 uses on a laptop work unchanged inside the job. A workload in any
 cluster does the same with its ServiceAccount token. No secret is stored
 anywhere, and the rule sits in the same file as the human ones.
@@ -143,7 +146,7 @@ flowchart LR
   gh["GitHub Actions"]
   k8s["Any cluster's<br/>ServiceAccount tokens"]
 
-  subgraph ar["access-roster"]
+  subgraph ar["sluis"]
     iss["the issuer<br/>reads the directory · applies the policy · mints tokens<br/>serves the login page and the console"]
     ctl["the GitHub controller<br/>keeps each organisation's teams as the policy says"]
     sctl["the Slack controller<br/>keeps each workspace's channels as the policy says"]
@@ -225,19 +228,19 @@ row is expressed in configuration.
 ## Install and a worked example
 
 ```sh
-helm install access-roster oci://ghcr.io/truvity/charts/access-roster \
-  --version X.Y.Z --namespace access-roster --create-namespace \
+helm install sluis oci://ghcr.io/truvity/charts/sluis \
+  --version X.Y.Z --namespace sluis --create-namespace \
   --values issuer-values.yaml
 ```
 
 ```yaml
-config:                                    # `access-roster serve`'s configuration file, as it stands
+config:                                    # `sluis serve`'s configuration file, as it stands
   issuerURL: https://access.example.com    # stable for the life of the installation
-  release: access-roster                   # the release's full name
+  release: sluis                   # the release's full name
   publicRootURL: https://access.example.com
   publicURL: https://access.example.com/console
   valkey:
-    address: valkey.access-roster.svc:6379
+    address: valkey.sluis.svc:6379
   oauthClient:                             # keys client-id and client-secret
     secretName: access-issuer-google-client
     idFile: /var/run/access-issuer/oauth-client/client-id
@@ -259,7 +262,7 @@ policy:
     all:access-roster:operator:
       members: [platform-admins@example.com]
       matchers:                                   # the first way in: recovery
-        - service_account: { namespace: access-roster, name: access-issuer-recovery }
+        - service_account: { namespace: sluis, name: access-issuer-recovery }
     all:access-roster:viewer:
       matchers: [{ email_domain: example.com }]
   clients:
@@ -270,7 +273,7 @@ policy:
 ```
 
 Then sign in once with a recovery token
-(`kubectl -n access-roster create token access-issuer-recovery --audience access-issuer-recovery`),
+(`kubectl -n sluis create token access-issuer-recovery --audience access-issuer-recovery`),
 and the console's Overview walks the rest: connecting the directory, and
 the first operator who signs in as themselves.
 [docs/operations/adoption-plain-helm.md](docs/operations/adoption-plain-helm.md)
@@ -279,33 +282,33 @@ setup for consoles with no authorization model of their own.
 
 ## Consumers
 
-The access-roster chart installs in `truvity/gitops` and a second, non-AWS estate.
+The sluis chart installs in `truvity/gitops` and a second, non-AWS estate.
 The Go module is imported by `truvity/gitops` (for `policy`, in its render
 tests) and by `truvity/gemaal` (for `identity`), and used by CI workflows
-via the `accessctl` command. The `access-roster` chart
+via the `sluisctl` command. The `sluis` chart
 serves as a token audience for `truvity/cloudflare` (r2broker) and
-`truvity/observability` (vmauth). Developers use `accessctl` to mint
+`truvity/observability` (vmauth). Developers use `sluisctl` to mint
 credentials locally; it is also used in CI jobs. The GitHub Action
-`truvity/access-roster` is used in workflows for token exchange.
+`truvity/sluis` is used in workflows for token exchange.
 
 ## Neighbours
 
-`access-roster` is the issuer in a three-part system with two other
+`sluis` is the issuer in a three-part system with two other
 repositories:
 
-- **openbao**: access-roster mints tokens; openbao is a relying party that
+- **openbao**: sluis mints tokens; openbao is a relying party that
   trusts them and issues certificates. See
-  [openbao's docs/integrations/access-roster.md](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md).
+  [openbao's docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md).
 - **audit**: every decision, sign-in, refusal, exchange and console action
   is one record in the audit trail, written by the issuer and by each
   controller for itself.
-- **workstation**: `accessctl` (from this repository) and `awsctl` both mint
-  AWS credentials on a developer machine; `accessctl` is the estate path,
-  `awsctl` the SSO fallback (when access-roster is unreachable).
+- **workstation**: `sluisctl` (from this repository) and `awsctl` both mint
+  AWS credentials on a developer machine; `sluisctl` is the estate path,
+  `awsctl` the SSO fallback (when sluis is unreachable).
 
 ## Conformance
 
-access-roster targets four OpenID Foundation profiles. A profile is
+sluis targets four OpenID Foundation profiles. A profile is
 claimed only once the suite says so, so this is the last run rather than
 an intention.
 
@@ -359,7 +362,7 @@ This repository follows the shared
 
 Used in production by its maintainers. [CHANGELOG.md](CHANGELOG.md) says
 what exists at each version, and releases are on the
-[releases page](https://github.com/truvity/access-roster/releases).
+[releases page](https://github.com/truvity/sluis/releases).
 
 ## Development
 
@@ -376,7 +379,7 @@ build order.
 ## Releasing
 
 Push a tag `vX.Y.Z`: the release workflow publishes the images, the
-chart, `accessctl` and its Nix flake, and the TypeScript package at that
+chart, `sluisctl` and its Nix flake, and the TypeScript package at that
 version, and the Go module and the Action are the same tag. Auto-release
 is armed and cuts patch tags when changes merge to master; a minor needs its
 `## vX.Y.0` CHANGELOG heading and is tagged by hand.

@@ -1,6 +1,6 @@
 # Safety
 
-What can break and how access-roster prevents it: every refusal at
+What can break and how sluis prevents it: every refusal at
 render or at load, every default chosen because the other one failed,
 and the traps that were met in use, each with the failure that earned
 it. The test for whether something belongs here: *what goes wrong if I
@@ -28,7 +28,7 @@ substance. For a map of every page in the repository, not just these, see
 - [connect/github-apps-catalogue.md](connect/github-apps-catalogue.md#errors)
   — how a token request is refused, and what the audit trail records
 - [architecture.md](architecture.md#failure-semantics) and
-  [design/access-roster.md](design/access-roster.md#failure-semantics) —
+  [design/sluis.md](design/sluis.md#failure-semantics) —
   what happens when the directory, the store or the issuer is down
 - [design/trust.md](design/trust.md#recovery-is-the-root-not-a-back-door)
   and [operations/runbook.md](operations/runbook.md#lost-operator-access)
@@ -38,8 +38,8 @@ substance. For a map of every page in the repository, not just these, see
   [when the installation cannot be reached](operations/runbook.md#when-the-installation-cannot-be-reached)
 - [connect/console-app.md](connect/console-app.md#traps-that-were-real) —
   the traps of putting a console behind the gateway
-- [reference/accessctl.md](reference/accessctl.md#what-each-failure-exits-with)
-  — every failure of `accessctl bao`/`pg`/`psql` and its exit code, and a
+- [reference/sluisctl.md](reference/sluisctl.md#what-each-failure-exits-with)
+  — every failure of `sluisctl bao`/`pg`/`psql` and its exit code, and a
   key it will never overwrite
 - [reference/policy.md](reference/policy.md#slack-channels) — what the loader
   refuses about Slack channels (a strict public channel, an empty `from`, the
@@ -49,7 +49,7 @@ substance. For a map of every page in the repository, not just these, see
 ## The reconcilers: what they refuse to do
 
 - [connect/slack-workspace.md](connect/slack-workspace.md#what-it-never-does)
-  and [design/access-roster.md](design/access-roster.md#the-slack-reconciler)
+  and [design/sluis.md](design/sluis.md#the-slack-reconciler)
   — what the Slack controller will not do: create an account, touch a user
   group, remove anybody from a public channel, convert a channel's visibility,
   unarchive a channel, create a second channel under another name, invite or

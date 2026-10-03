@@ -75,7 +75,7 @@ and the legacy adapter, with nothing stored that today's storage cannot hold:
   for GitHub the people's link check as a target of its own, `github:links`. A
   tick publishes its own report only (`rails.Journal.PublishOne`, a one-entry
   write through the Blob port), and a sweep prunes the reports of targets the
-  policy no longer has. `access-roster tick <github|slack> <target>` runs one
+  policy no longer has. `sluis tick <github|slack> <target>` runs one
   tick once.
 - A lease per target from the State port (`rails.Leases`): `Create` with a
   lifetime, renewed by `Update` with the revision it holds, released by
@@ -96,7 +96,7 @@ and the legacy adapter, with nothing stored that today's storage cannot hold:
   report (`guest_sides`).
 
 **The one-shot `tick` refuses without a shared State.** With the legacy adapter
-the controllers' leases are in the process's own memory, so `access-roster tick`
+the controllers' leases are in the process's own memory, so `sluis tick`
 would not be excluded by the running controller and both could act on one
 target. It refuses, saying so, unless `--unsafe-local-lease` is given (for an
 operator who has scaled the controller to 0); with a shared State it behaves as

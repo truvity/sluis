@@ -97,7 +97,7 @@ the same reason every other grant lives here.
 
    Connecting an organisation nobody has connected records the **connecting
    operator's directory** as its owner: whoever connects it first owns it.
-   That is a rule about who operates the connection inside access-roster;
+   That is a rule about who operates the connection inside sluis;
    GitHub itself still requires an owner of the target organisation to install
    the App, so the console grants nothing in GitHub. The installation-wide
    operator can change the owner afterwards, and the change is audited. The

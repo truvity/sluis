@@ -70,7 +70,7 @@ edit on GitHub, because nothing here can change an App's permissions.
 
 Every estate on GitHub needs the same few automations, and every estate
 builds them by hand. The set below is shipped as values to copy —
-`charts/access-roster/examples/github-apps.yaml` in this repository —
+`charts/sluis/examples/github-apps.yaml` in this repository —
 rather than as a default the chart applies, because creating an App is an
 owner of the organisation confirming a manifest, and that stays a
 deliberate act.
@@ -147,7 +147,7 @@ How a grant becomes a token is [Minting a token](#minting-a-token).
 
 A caller exchanges the proof it already holds — a GitHub Actions job's
 identity token, a cluster workload's ServiceAccount token, or a person's
-`accessctl login` — for an installation token of one App. The proof is
+`sluisctl login` — for an installation token of one App. The proof is
 verified exactly as for [any other exchange](github-actions.md), and
 resolves to the same groups; the App's grants for those groups then
 decide. Nothing is stored: every token is minted from GitHub on request,
@@ -161,7 +161,7 @@ permissions:
   contents: read
 steps:
   - id: access
-    uses: truvity/access-roster@v1.11.0
+    uses: truvity/sluis@v1.11.0
     with:
       issuer: https://access.example.com
       github-app: publisher             # the catalogue id
@@ -175,12 +175,12 @@ steps:
 `audiences` may be left out when a job wants only the GitHub token, or
 given beside it for clusters and cloud roles in the same step.
 
-Or with `accessctl`, which picks the job's identity token up from the
+Or with `sluisctl`, which picks the job's identity token up from the
 environment and the sign-in on a laptop, so the same line serves both:
 
 ```sh
-accessctl github-token --app publisher --repository app --permission contents=write
-accessctl github-token --app publisher --repository app --json
+sluisctl github-token --app publisher --repository app --permission contents=write
+sluisctl github-token --app publisher --repository app --json
 # {"token":"ghs_…","expires_at":"2026-01-01T13:00:00Z","repositories":["app"],"permissions":{"contents":"write"}}
 ```
 
@@ -277,7 +277,7 @@ installation has not accepted, is GitHub's refusal and comes back as
 | `invalid_scope` | 400 | the request is wider than every one grant the proof holds: a repository outside them, two repositories no one grant covers, a permission above them, no repositories named where no grant is `["*"]`, or GitHub refusing the narrowing |
 | `server_error` | 500 | GitHub failing, or the App's key failing |
 
-`accessctl github-token` exits `4` on every refusal and `5` when the
+`sluisctl github-token` exits `4` on every refusal and `5` when the
 issuer cannot be reached.
 
 ### Audit

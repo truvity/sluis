@@ -44,7 +44,7 @@ clients:                       # who may be issued a token for what; the id is t
   aws:1111:deployer: { kind: exchange,     requires: [ci:platform:deployer] }
   argocd:            { kind: confidential, secret: argocd-oidc-client, redirects: [https://argocd.example/auth/callback], signed_out: [https://argocd.example/], requires: [prod:k8s:admin, prod:k8s:auditor], ttl_cap: 12h, display_name: Argo CD, description: Continuous delivery for the mgmt cluster. }
   local-dev:         { kind: public,       redirects: [http://localhost:8000/callback], requires: [prod:shop:deployer] }
-  accessctl:         { kind: public,       redirects: [http://127.0.0.1/callback], requires: [prod:k8s:admin, prod:k8s:auditor], sign_in_exchange: true, display_name: accessctl }
+  accessctl:        { kind: public,       redirects: [http://127.0.0.1/callback], requires: [prod:k8s:admin, prod:k8s:auditor], sign_in_exchange: true, display_name: accessctl }
 
 resources:                     # what a token may be minted FOR, when that is not the client asking
   https://mcp.example/:        { requires: [prod:k8s:admin], ttl_cap: 5m, display_name: Telemetry }
@@ -293,7 +293,7 @@ identity holding one may act everywhere and carries no scopes at all.
 The same two groups can operate one company's GitHub organisations and not
 another's. Which directory owns an organisation is **not in the policy**: it
 is recorded in the organisation's own connection when it is connected, because
-access-roster already knows which directories are connected, and a second copy
+sluis already knows which directories are connected, and a second copy
 in a file would only drift from the first. The policy names an organisation by
 its login and binds its teams; it carries no `owner`.
 
@@ -505,7 +505,7 @@ before a token exists.
 
 | Kind | Used by | Has a secret |
 |---|---|---|
-| `public` | kubelogin per cluster, accessctl, Kargo's web UI and CLI, `local-dev` | no |
+| `public` | kubelogin per cluster, sluisctl, Kargo's web UI and CLI, `local-dev` | no |
 | `confidential` | ArgoCD, every access-proxy | yes: a Secret in the issuer's namespace |
 | `exchange` | AWS roles reached by token exchange | no |
 
@@ -521,7 +521,7 @@ A token **exchange** trades a proof for a token whose `aud` is any
 declared client, and the target's `requires` decides. The proofs are the
 ones in the table above, each checked against its own issuer's keys, plus
 one of this issuer's own: a person's sign-in to a client that declares
-`sign_in_exchange: true` -- `accessctl`, whose tokens never leave the
+`sign_in_exchange: true` -- `sluisctl`, whose tokens never leave the
 laptop -- presented by that client, as its `access_token`, while the
 session behind it is live. It is what lets one kubeconfig and one aws.ini
 serve a laptop and a CI job alike. No other token this issuer signs is a
@@ -544,7 +544,7 @@ The host is taken from the redirect URI of the request being answered,
 which the issuer has already matched against `redirects`, and it is
 shown as text, never as a link. When that redirect is on this computer
 (`localhost` or a loopback address, which is where kubelogin and
-accessctl listen) the page says instead that *a program on this computer*
+sluisctl listen) the page says instead that *a program on this computer*
 is asking, names the client, and shows no port. Nothing on the page comes
 from its own query string, and nothing on it says which groups would
 admit anybody. The refusal a signed-in person sees for a client they
@@ -973,7 +973,7 @@ algorithm, ES384 in the chart — unchanged from before this existed.
 always the client, because an ID token never names a resource as its
 audience. For an access token it is the resource a caller named
 (`resource`, above) or the client itself. For a token exchange
-(`accessctl kube-token`, a CI job's exchange) it is the audience the
+(`sluisctl kube-token`, a CI job's exchange) it is the audience the
 exchange was *granted* — the target — never the client presenting the
 exchange: a caller authenticating as `local-dev` to exchange for
 `eks-cluster` gets `eks-cluster`'s algorithm, not `local-dev`'s. For a
@@ -1177,7 +1177,7 @@ lowercased. The same person declared in two merged files is a clash.
 
 A Slack workspace is known to the policy by its **key** and the channels bound
 in it. Three things the policy used to be asked for are not in it any more,
-because access-roster already knows each at run time:
+because sluis already knows each at run time:
 
 | Fact | Where it comes from |
 |---|---|
@@ -1218,12 +1218,12 @@ console.
 
 ## Slack channels
 
-> **The Slack controller, `access-roster controller slack`, reads this table.** It is a second
-> process from the `access-roster` chart and changes only the workspaces listed
+> **The Slack controller, `sluis controller slack`, reads this table.** It is a second
+> process from the `sluis` chart and changes only the workspaces listed
 > in `slackRoster.config.enabledWorkspaces`; every other declared workspace is a dry run. What it
 > does with the keys is on
 > [Connect a Slack workspace](../connect/slack-workspace.md) and in
-> [the Slack reconciler](../design/access-roster.md#the-slack-reconciler).
+> [the Slack reconciler](../design/sluis.md#the-slack-reconciler).
 
 ```yaml
 slack:
@@ -1315,7 +1315,7 @@ What is refused, and why each would otherwise be silent:
 | Refused | Because |
 |---|---|
 | a workspace key that is not lowercase letters, digits and `-`, starting and ending with a letter or digit, at most 40 characters | it appears in messages, audit records and credential names |
-| `team_id`, `domains` or `owner` on a workspace, or `owner` on a GitHub organisation | removed in favour of what access-roster records and reads at run time; the message says where each comes from, so a stale policy fails the rollout rather than being half-read |
+| `team_id`, `domains` or `owner` on a workspace, or `owner` on a GitHub organisation | removed in favour of what sluis records and reads at run time; the message says where each comes from, so a stale policy fails the rollout rather than being half-read |
 | a channel name that is not lowercase letters, digits, `-`, `_` (at most 80) | Slack would refuse it at create time, not at load |
 | `mode` other than `extend` or `strict`; `mode: strict` on a channel that is not `private` | Slack would refuse every removal from a public channel, at every pass |
 | `ignore` without `mode: strict`, or an entry that is neither an address nor a Slack user id, or one listed twice | an extend channel removes nobody, so the list would mean nothing |
@@ -1483,7 +1483,7 @@ keep serving the previous policy while everything reads Synced.
 an account with its directory groups, a CI token's claims, a client id —
 returns the groups, claims and lifetime a token would carry, so a change
 to the file can be pinned by a fixture the way the issuer's own tests
-pin it. There is no `accessctl` subcommand for this; the Go package is
+pin it. There is no `sluisctl` subcommand for this; the Go package is
 the interface.
 
 **Live:** the console does it against the policy in force. Search for a

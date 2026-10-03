@@ -1,6 +1,6 @@
 # Telemetry
 
-What access-roster publishes, what it never publishes, the alerts and the
+What sluis publishes, what it never publishes, the alerts and the
 dashboard that read it, and how to install them. The contract it follows is
 [0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)
 to
@@ -225,23 +225,23 @@ Nothing a person controls becomes a label.
 
 Twelve rules, in one group, rendered by the chart with `renders: alerts`. Every
 threshold is a value (`alerts.rules.<rule>`) and its reason is in the comment
-above the rule in `charts/access-roster/templates/alerts.yaml`. Every
+above the rule in `charts/sluis/templates/alerts.yaml`. Every
 aggregation keeps the cluster label, since one store holds many clusters.
 
 | Alert | Severity | Fires when | Default threshold |
 |---|---|---|---|
-| `AccessRosterNoSigningKeyPublished` | critical | An algorithm has no published key. | `< 1` for 5m |
-| `AccessRosterSigningKeyRotationStalled` | warning | The active key is older than a certificate's life less its renewal. | 350 days (30240000s) for 1h |
-| `AccessRosterIssuer5xx` | critical | A share of the listener's requests is answered 5xx. | over 5% and at least 5 errors, over 10m, for 10m |
-| `AccessRosterTokenEndpointSlow` | warning | The token endpoint's p99 is high. | over 2s, over 10m, for 15m |
-| `AccessRosterTickFailing` | warning | One target's ticks keep failing. | 3 in 45m |
-| `AccessRosterTickStale` | critical | A target has had no ok tick for a long while (absence). | 3600s (four default intervals), for 10m |
-| `AccessRosterLeaseLost` | warning | Leases of one kind are lost repeatedly. | 3 in 1h |
-| `AccessRosterGitHubRateLimitLow` | warning | GitHub's budget is nearly spent, for long. | under 100 for 30m |
-| `AccessRosterSeatsShort` | warning | An organisation lacks the seats to invite. | `> 0` for 30m |
-| `AccessRosterPortErrors` | critical | Storage port calls are failing. | over 5% and at least 5 errors, over 5m, for 10m |
-| `AccessRosterExportFailing` | warning | One export's copy keeps failing. | 3 in 30m, for 15m |
-| `AccessRosterExportStale` | warning | An export has not had its copy in the store for a long while (absence). | 10800s (three default intervals), for 10m |
+| `SluisNoSigningKeyPublished` | critical | An algorithm has no published key. | `< 1` for 5m |
+| `SluisSigningKeyRotationStalled` | warning | The active key is older than a certificate's life less its renewal. | 350 days (30240000s) for 1h |
+| `SluisIssuer5xx` | critical | A share of the listener's requests is answered 5xx. | over 5% and at least 5 errors, over 10m, for 10m |
+| `SluisTokenEndpointSlow` | warning | The token endpoint's p99 is high. | over 2s, over 10m, for 15m |
+| `SluisTickFailing` | warning | One target's ticks keep failing. | 3 in 45m |
+| `SluisTickStale` | critical | A target has had no ok tick for a long while (absence). | 3600s (four default intervals), for 10m |
+| `SluisLeaseLost` | warning | Leases of one kind are lost repeatedly. | 3 in 1h |
+| `SluisGitHubRateLimitLow` | warning | GitHub's budget is nearly spent, for long. | under 100 for 30m |
+| `SluisSeatsShort` | warning | An organisation lacks the seats to invite. | `> 0` for 30m |
+| `SluisPortErrors` | critical | Storage port calls are failing. | over 5% and at least 5 errors, over 5m, for 10m |
+| `SluisExportFailing` | warning | One export's copy keeps failing. | 3 in 30m, for 15m |
+| `SluisExportStale` | warning | An export has not had its copy in the store for a long while (absence). | 10800s (three default intervals), for 10m |
 
 A rule whose series is absent does not fire: whether the issuer or the
 controller is running at all is the platform's alert on its own scrape, not
@@ -249,7 +249,7 @@ this chart's.
 
 ### Runbook
 
-#### AccessRosterNoSigningKeyPublished
+#### SluisNoSigningKeyPublished
 
 The issuer's key ring holds no key to publish for an algorithm, so its JWKS is
 empty: no relying party can verify a token, and a new one cannot be signed. Look
@@ -259,7 +259,7 @@ file was not read ("the active signing key changed" and "a signing key was seen"
 are the lines that say a key arrived). A rollout shows a zero for seconds; five
 minutes is not a rollout.
 
-#### AccessRosterSigningKeyRotationStalled
+#### SluisSigningKeyRotationStalled
 
 The active key has not been replaced. cert-manager replaces the certificate
 `signingKey.certificate.renewBefore` ahead of its end (720h before 8760h by
@@ -271,21 +271,21 @@ or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks; if the
 key is rotated by hand (`signingKey.existingSecret`), turn the rule off or set it
 to your cadence.
 
-#### AccessRosterIssuer5xx
+#### SluisIssuer5xx
 
 The listener answers server errors. The dashboard's 5xx panel names the route,
-the issuer's log has the error. If `AccessRosterPortErrors` is also firing, the
+the issuer's log has the error. If `SluisPortErrors` is also firing, the
 store is the cause: look there first. Otherwise a directory that cannot be
 reached (`directory_unreachable` in the sign-in failures) or a policy that does
 not load are the usual causes.
 
-#### AccessRosterTokenEndpointSlow
+#### SluisTokenEndpointSlow
 
 Token requests are slow at the 99th percentile. A token is signed in memory and
 costs one store write, so look at the port latency panel (a slow Valkey, or a
 slow API server on the namespace's objects), then the size of the policy.
 
-#### AccessRosterTickFailing
+#### SluisTickFailing
 
 A controller's ticks of one target failed three times in 45 minutes. The
 controller's page in the console shows the report and the error; in the log it
@@ -294,7 +294,7 @@ uninstalled App, a revoked credential and GitHub being down are the causes. The
 console answering under another policy during a rollout is retried within
 seconds and does not reach this rule.
 
-#### AccessRosterTickStale
+#### SluisTickStale
 
 A target has completed no tick for an hour. This is the absence rule: it fires
 when the controller is not running, when nobody can take the lease, and when the
@@ -304,28 +304,28 @@ target the policy no longer declares fires for at most a day and then leaves,
 because the last value is looked back over a day; remove it from the policy
 first.
 
-#### AccessRosterLeaseLost
+#### SluisLeaseLost
 
 A lease is lost when another runner takes it over, or it could not be renewed
 for a whole lifetime. One loss is the design working: the tick stopped before its
 next write. Repeated losses are two runners on one target (a `tick` Job beside
 the Deployment, or more than one replica where the State is not shared, see
 [high-availability.md](high-availability.md)) or a State that cannot be reached
-to renew: see `AccessRosterPortErrors`.
+to renew: see `SluisPortErrors`.
 
-#### AccessRosterGitHubRateLimitLow
+#### SluisGitHubRateLimitLow
 
 GitHub's budget for a resource has been under 100 requests for half an hour.
 `github_roster_rate_limited_total` says how often a call already waited. Lengthen
 the controller's `interval`, or look for something else spending the App's budget.
 
-#### AccessRosterSeatsShort
+#### SluisSeatsShort
 
 An organisation has fewer free seats than the invitations the policy admits. The
 controller is healthy; buy a seat or remove a member who no longer belongs and
 the next pass sends the invitations.
 
-#### AccessRosterPortErrors
+#### SluisPortErrors
 
 More than 5% of the calls to a storage port failed. State and index are Valkey or
 the namespace's ConfigMaps and Secrets; blobs are the reports' ConfigMaps.
@@ -333,7 +333,7 @@ the namespace's ConfigMaps and Secrets; blobs are the reports' ConfigMaps.
 NetworkPolicy to it); `error` is anything else, and the log line beside it names
 the call. Lost conflicts and missing keys are not counted.
 
-#### AccessRosterExportFailing
+#### SluisExportFailing
 
 An export's copy into OpenBao failed three times in half an hour, held for fifteen
 minutes. What a consumer reads there is stale; nothing live is affected, which is why
@@ -345,7 +345,7 @@ namespace; `unavailable` is OpenBao being down, sealed or unreachable, or its
 certificate not trusted (`ports.export.openbao.caFile`). An export that fails from the
 first attempt has no last-success series, which is why this rule exists beside the next.
 
-#### AccessRosterExportStale
+#### SluisExportStale
 
 An export has not had its copy in the store for three hours, with an interval of one.
 It catches what the failure counter cannot: the service is not running its exports
@@ -366,7 +366,7 @@ where the metrics store and Grafana look for them:
 # alerts: a VMRule (or alerts.format: prometheusrule) for the ruler
 renders: alerts
 alerts:
-  namespace: access-roster        # where the service runs; its series are selected by it
+  namespace: sluis        # where the service runs; its series are selected by it
   ruleLabels:
     k8s_cluster_name: prod        # for the Alertmanager routing tree
 ```
@@ -379,7 +379,7 @@ dashboards:
 ```
 
 ```sh
-helm install access-roster-alerts oci://ghcr.io/truvity/charts/access-roster \
+helm install sluis-alerts oci://ghcr.io/truvity/charts/sluis \
   -n monitoring -f alerts.yaml
 ```
 
@@ -408,10 +408,10 @@ seats.
   datasource, which must fail;
 - unit-tests every rule with `vmalert-tool` (a pinned, checksum-verified
   VictoriaMetrics release, the engine of the estate's own ruler) against
-  `tests/rules/access-roster-alerts.test.yaml`. Every rule has a case that fires
+  `tests/rules/sluis-alerts.test.yaml`. Every rule has a case that fires
   it, with its labels and text, and at least one that must not, and
   `tests/chart/alerts_test.go` refuses a rule without both.
 
 `just chart-lint` holds the goldens for both modes
-(`tests/golden/access-roster/alerts.yaml`, `dashboards.yaml`) and that the
+(`tests/golden/sluis/alerts.yaml`, `dashboards.yaml`) and that the
 default render did not change.

@@ -6,7 +6,7 @@
 ## Context
 
 v1.41.0 let the policy carry, for each Slack workspace, `team_id`, `domains`
-and `owner`, and for each GitHub organisation, `owner`. access-roster already
+and `owner`, and for each GitHub organisation, `owner`. sluis already
 learns each at run time: every connected directory records its workspace id and
 the domains it serves, a Slack install reports the team, and the person who
 connects a thing acts within a directory. Holding each twice, in git and at

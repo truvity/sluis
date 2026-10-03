@@ -23,9 +23,9 @@ count alone.
   by the SDK; nothing restates them. A trace carries no personal data in a span
   or a label.
 - **The hundred environment variables are retired.**
-- **One binary, `access-roster`,** with subcommands `serve` (the issuer, console
+- **One binary, `sluis`,** with subcommands `serve` (the issuer, console
   and hub), `tick` (a reconciler's `Tick`, for one target or all) and `migrate`
-  ([0031](0031-a-generic-migration-tool.md)). **One chart, `access-roster`.**
+  ([0031](0031-a-generic-migration-tool.md)). **One chart, `sluis`.**
 
 This is a **breaking change**, shipped in a 1.x minor release as 0007 allows and
 named `**Breaking:**` in the CHANGELOG with the migration spelled out: the old
@@ -56,11 +56,11 @@ binary and the one chart came second, and `tick` is a third, with the leases
 of [0029](0029-ticks-per-target-under-a-lease.md).
 
 ```
-access-roster serve --config <file>               the issuer, the hub and the console
-access-roster controller github --config <file>   the GitHub reconciler's loop
-access-roster controller slack --config <file>    the Slack reconciler's loop
-access-roster migrate --from <file> --to <file>   0031: copy the State between storages (two `serve` files)
-access-roster --version | --help
+sluis serve --config <file>               the issuer, the hub and the console
+sluis controller github --config <file>   the GitHub reconciler's loop
+sluis controller slack --config <file>    the Slack reconciler's loop
+sluis migrate --from <file> --to <file>   0031: copy the State between storages (two `serve` files)
+sluis --version | --help
 ```
 
 **`controller <target>` is the loop, `tick <target>` is one pass.** The

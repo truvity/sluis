@@ -1,7 +1,7 @@
-# Moving the State: `access-roster migrate`
+# Moving the State: `sluis migrate`
 
 How to move an installation's State from one storage to another with
-`access-roster migrate`, and how to undo it. The decision is
+`sluis migrate`, and how to undo it. The decision is
 [0031](../decisions/0031-a-generic-migration-tool.md): one generic command, the
 move order **Kubernetes objects, then NATS, then DynamoDB**, and **data and
 runtime never move in the same step**. This page is the first step: today's
@@ -16,7 +16,7 @@ so is its rollback.
 ## What it does
 
 ```
-access-roster migrate --from <old serve config> --to <new serve config> [flags]
+sluis migrate --from <old serve config> --to <new serve config> [flags]
 ```
 
 Each side is the **`serve` configuration file** of that storage, the same file the
@@ -136,7 +136,7 @@ Before the window, with nothing stopped:
    Valkey and the new bucket, and writes nothing:
 
    ```
-   access-roster migrate --from old.yaml --to new.yaml --dry-run
+   sluis migrate --from old.yaml --to new.yaml --dry-run
    ```
 
    Read `totals`, `conflicts` (the destination should be empty, so there should be
@@ -158,7 +158,7 @@ In the window:
    ```yaml
    apiVersion: batch/v1
    kind: Job
-   metadata: {name: access-roster-migrate}
+   metadata: {name: sluis-migrate}
    spec:
      backoffLimit: 0
      template:
@@ -174,7 +174,7 @@ In the window:
              # the two files above (a ConfigMap).
    ```
 
-   `kubectl logs job/access-roster-migrate` is the report on stdout and the log on
+   `kubectl logs job/sluis-migrate` is the report on stdout and the log on
    stderr; `kubectl wait --for=condition=complete` is the gate.
 5. **Read the report.** `ok: true`, `mismatches: []`, `conflicts: []`,
    `unreadable: []`, and `totals.verified` equal to `totals.source`. If a run
@@ -206,7 +206,7 @@ the old values.
 copy back with the files the other way round:
 
 ```
-access-roster migrate --from new.yaml --to old.yaml --overwrite --i-have-stopped-writers
+sluis migrate --from new.yaml --to old.yaml --overwrite --i-have-stopped-writers
 ```
 
 `--overwrite` is needed because the old objects hold the older values. It writes

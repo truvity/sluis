@@ -4,7 +4,7 @@ The Slack controller, `slack-roster`, makes each Slack workspace's channels
 match the policy's `slack` table: a channel is bound to groups, its wanted
 members are those groups' holders, and every pass the controller invites the
 people who belong and, where the channel is `strict`, removes the people who do
-not. It is a second process from the `access-roster` chart, like the
+not. It is a second process from the `sluis` chart, like the
 [GitHub controller](github-organisation.md), and has no listener.
 
 There are three kinds of channel. A **policy channel** is bound in git, to
@@ -147,7 +147,7 @@ breakers hold a large removal set, and a hold is recorded once. Visibility is
 never converted.
 
 **The groups.** A source is a **directory group address** such as
-`team@example.com`, of a directory access-roster has connected. An ordinary
+`team@example.com`, of a directory sluis has connected. An ordinary
 channel takes groups of **its workspace's owning directory** only (the
 directory recorded as the workspace's owner when it was connected). Members are
 resolved **through nested groups**: a member of a group that is itself a group
@@ -338,7 +338,7 @@ The policy names a workspace by its **key** and binds channels in it. A key is
 lowercase letters, digits and `-`, at most 40, starting and ending with a
 letter or digit. It does
 not say which Slack team the key stands for, which directory owns it or which
-domains its people use: access-roster knows each of those already, and a
+domains its people use: sluis knows each of those already, and a
 second copy in a file would only drift from the first. A policy that still
 carries `team_id`, `domains` or `owner` is refused at load, with a message
 saying so.
@@ -369,7 +369,7 @@ globex.example`; served domains that are not authoritative are left out.
 
 Connecting a workspace nobody has connected records the **connecting
 operator's directory** as its owner: whoever connects it first owns it. That
-is a rule about who operates the connection inside access-roster; Slack itself
+is a rule about who operates the connection inside sluis; Slack itself
 still requires an owner or administrator of the target workspace to approve
 the App, so the console grants nothing in Slack. The installation-wide
 operator can change the owner afterwards, and the change is audited.

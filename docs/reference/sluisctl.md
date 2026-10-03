@@ -1,31 +1,47 @@
-# accessctl
+# sluisctl
 
 ```sh
-accessctl version                            # accessctl 1.35.0 (also --version, -version)
-accessctl login   --issuer https://access.example
-accessctl whoami                             # who you are, and what it opens
-accessctl setup                              # both of the next two
+sluisctl version                            # sluisctl 1.35.0 (also --version, -version)
+sluisctl login   --issuer https://access.example
+sluisctl whoami                             # who you are, and what it opens
+sluisctl setup                              # both of the next two
 
-accessctl kubeconfig                         # a context per granted cluster
-accessctl aws-config                         # a profile per granted cloud role
+sluisctl kubeconfig                         # a context per granted cluster
+sluisctl aws-config                         # a profile per granted cloud role
 
-kubectl --context staging get nodes          # exec plugin: accessctl kube-token
-aws --profile deployer@111122223333 sts get-caller-identity   # credential_process: accessctl aws
+kubectl --context staging get nodes          # exec plugin: sluisctl kube-token
+aws --profile deployer@111122223333 sts get-caller-identity   # credential_process: sluisctl aws
 
-accessctl token --audience openbao              # one token for one audience, on stdout
-accessctl github-token --app publisher --repository app --permission contents=read
-accessctl exchange --audience k8s:staging < subject-token
+sluisctl token --audience openbao              # one token for one audience, on stdout
+sluisctl github-token --app publisher --repository app --permission contents=read
+sluisctl exchange --audience k8s:staging < subject-token
 
-accessctl bao --address https://openbao.example:8200 kv get -format=env secret/app > .env
-accessctl bao --address https://openbao.example:8200 ssh -mode=ca -role=user ci@build-worker.example
-accessctl bao --address https://openbao.example:8200 write -field=signed_key \
+sluisctl bao --address https://openbao.example:8200 kv get -format=env secret/app > .env
+sluisctl bao --address https://openbao.example:8200 ssh -mode=ca -role=user ci@build-worker.example
+sluisctl bao --address https://openbao.example:8200 write -field=signed_key \
     ssh/sign/user public_key=@key.pub > key-cert.pub
 
-accessctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
-accessctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orders > orders.sql
+sluisctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
+sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orders > orders.sql
 
-accessctl r2 --service-url https://r2-broker.example.com -- credentials --bucket example-bucket --prefix nix/
+sluisctl r2 --service-url https://r2-broker.example.com -- credentials --bucket example-bucket --prefix nix/
 ```
+
+> **Renamed from `accessctl`.** The product is now sluis, and this command is
+> `sluisctl`. For one or two releases the release also carries `accessctl_*`
+> archives (and an `accessctl` Nix flake): the same program under its old name,
+> which prints a deprecation notice on **stderr** (never stdout, which a
+> credential helper's caller parses) and otherwise behaves identically. Move
+> kubeconfigs and AWS profiles with `sluisctl kubeconfig` and
+> `sluisctl aws-config`. Settings read from the environment are `SLUISCTL_*`;
+> the `ACCESSCTL_*` names they replaced still work, and `SLUISCTL_*` wins when
+> both are set.
+>
+> **What did not change**, because renaming it would sign people out or break a
+> relying party: the OIDC client id (`accessctl`), the configuration and cache
+> directory (`accessctl` under the OS config directory), the kubeconfig user
+> names (`accessctl:<cluster>`), the managed known-hosts file
+> (`~/.ssh/known_hosts.d/accessctl`) and the AWS role-session name fallback.
 
 It exists for one reason: **the cloud CLI has no interactive login.**
 kubectl has kubelogin for the same job; AWS has nothing that will open a
@@ -37,11 +53,11 @@ browser flow served. The client must be declared in the policy as
 `kind: public` with a loopback redirect **and `sign_in_exchange: true`**:
 that key is what lets the exchange take a sign-in's access token as a
 proof, and without it every command after `login` is refused (exit 4).
-The default id is `accessctl`.
+The default id is `sluisctl`.
 
 `version` (also `--version` and `-version`, as the first argument) prints
-this build's own version — `accessctl <version>`, e.g. `accessctl
-1.35.0`, or `accessctl dev` for one built without the release workflow's
+this build's own version — `sluisctl <version>`, e.g. `sluisctl
+1.35.0`, or `sluisctl dev` for one built without the release workflow's
 ldflags — plus the commit and build date when the release stamps those
 too. `--json` prints `{"version", "commit", "date"}`, including only
 whichever of those this build actually carries. It makes no network call
@@ -60,29 +76,29 @@ asks for exactly what the grant allows), and `--json` to print
 granted — instead of the bare token. It takes `--issuer` and `--client`
 like the rest.
 
-**`accessctl credential ssh|db|client` was removed in v1.34.0**
+**`sluisctl credential ssh|db|client` was removed in v1.34.0**
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)):
 `bao`, below, replaces `ssh` and `client`; `pg`/`psql`, further down,
 replace `db`. Running any of the three now names its replacement.
 
 ## `bao`: authenticate, then run `bao` unchanged
 
-`accessctl bao <args…>` exists only to put a valid OpenBAO token in front
+`sluisctl bao <args…>` exists only to put a valid OpenBAO token in front
 of the real `bao` binary — it does not parse OpenBAO's own syntax, and
-everything after accessctl's own flags is `bao`'s, unchanged
+everything after sluisctl's own flags is `bao`'s, unchanged
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)).
 
-**The separation rule:** accessctl's own flags go BEFORE the bao
+**The separation rule:** sluisctl's own flags go BEFORE the bao
 subcommand; `bao`'s own flags — including its `-namespace` (or bao's own
 documented shortcut, `-ns`) — go AFTER it, exactly where `bao` has
 always accepted them (`bao kv get -ns=dev secret/foo`). Parsing stops at
-the first argument that is not one of accessctl's declared flags, which
+the first argument that is not one of sluisctl's declared flags, which
 for this command is the subcommand itself (`kv`, `ssh`, `write`,
 `login`, ...) — an ordinary word, never a flag.
 
 Accessctl's own flags: `--address`, `--ca-cert`, `--mount`
 (`jwt-roster`), `--login-role` (`roster`), `--login-ns` (default: the
-target namespace; then `$ACCESSCTL_BAO_LOGIN_NAMESPACE`), `--audience`
+target namespace; then `$SLUISCTL_BAO_LOGIN_NAMESPACE`), `--audience`
 (`openbao`), `--issuer`, `--client` — the same resolution order (flag,
 then `BAO_*`, then `VAULT_*`) `pg`/`psql`, below, use for the ones they
 share. `--forget` revokes the cached token and removes it, needing no bao
@@ -97,7 +113,7 @@ last one wins regardless of spelling), then `BAO_NAMESPACE`, then
 one OpenBAO namespace is only valid there and in its children, never in
 a sibling.
 
-**`--login-ns` (or `$ACCESSCTL_BAO_LOGIN_NAMESPACE`) logs in at a PARENT
+**`--login-ns` (or `$SLUISCTL_BAO_LOGIN_NAMESPACE`) logs in at a PARENT
 namespace instead**, for an installation that keeps its logins at one
 namespace while data lives in per-project children — see
 [connect/openbao.md#logins-at-a-parent-namespace](../connect/openbao.md#logins-at-a-parent-namespace).
@@ -134,7 +150,7 @@ propagates the exit code the same way.
 
 The one exception to "unchanged": `bao kv get ... -format=env` (also
 `--format=env`, `-format env`, or `BAO_FORMAT=env`) does not exist
-upstream yet. Until it does, accessctl runs `bao` once in JSON and
+upstream yet. Until it does, sluisctl runs `bao` once in JSON and
 renders the dotenv itself:
 
 - a string with none of `'`, CR or LF is `KEY='value'`;
@@ -158,31 +174,31 @@ call is bao's own answer, unchanged.
 
 | Code | When |
 |---|---|
-| `2` | a flag accessctl does not recognise before the subcommand; no OpenBAO address; a CA bundle that cannot be read or holds no certificate; an empty `--audience`; no bao command and no `--forget`; `-field` combined with `-format=env`; `--login-ns` (or `$ACCESSCTL_BAO_LOGIN_NAMESPACE`) that does not cover the target namespace |
-| `3` | not signed in (on a laptop): run `accessctl login` |
+| `2` | a flag sluisctl does not recognise before the subcommand; no OpenBAO address; a CA bundle that cannot be read or holds no certificate; an empty `--audience`; no bao command and no `--forget`; `-field` combined with `-format=env`; `--login-ns` (or `$SLUISCTL_BAO_LOGIN_NAMESPACE`) that does not cover the target namespace |
+| `3` | not signed in (on a laptop): run `sluisctl login` |
 | `4` | the issuer refused the exchange for `openbao`, or OpenBAO refused the login |
 | `5` | no `bao` on `PATH`; the issuer or OpenBAO could not be reached |
-| bao's own | whatever `bao` itself exits with, once it is run — accessctl adds nothing on top and prints nothing of its own |
+| bao's own | whatever `bao` itself exits with, once it is run — sluisctl adds nothing on top and prints nothing of its own |
 
 ## `r2`: authenticate, then run the real `r2broker` CLI unchanged
 
-`accessctl r2 [flags] [-- <r2broker args…>]` exists only to put a valid
+`sluisctl r2 [flags] [-- <r2broker args…>]` exists only to put a valid
 bearer token in front of the real `r2broker` binary — the CLI for an R2
 credential broker (temporary, prefix-scoped object-storage credentials).
-It parses none of `r2broker`'s own syntax; everything after accessctl's
+It parses none of `r2broker`'s own syntax; everything after sluisctl's
 own flags is `r2broker`'s, unchanged
 ([ADR 0014](../decisions/0014-minting-third-party-credentials-only-where-membership-is-governed.md),
 the same shape [ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)
-already ships for `bao`, above). access-roster holds no R2 logic at all —
+already ships for `bao`, above). sluis holds no R2 logic at all —
 no bucket, no prefix, no permission is ever named by this tool.
 
 ```sh
-accessctl r2 --service-url https://r2-broker.example.com -- credentials \
+sluisctl r2 --service-url https://r2-broker.example.com -- credentials \
     --bucket example-bucket --prefix nix/ --permission object-read-only
 ```
 
-**Flags:** `--audience` (default: `$ACCESSCTL_R2_AUDIENCE`, then
-`r2-broker`), `--service-url` (default: `$ACCESSCTL_R2_SERVICE_URL`),
+**Flags:** `--audience` (default: `$SLUISCTL_R2_AUDIENCE`, then
+`r2-broker`), `--service-url` (default: `$SLUISCTL_R2_SERVICE_URL`),
 `--issuer`, `--client` — the same resolution order every other command
 uses.
 
@@ -193,7 +209,7 @@ broker service itself, holding its own parent key, which a sign-in
 exchange is never for). Naming a subcommand explicitly needs nothing
 special; omitting it needs a `--` first, exactly as any other use of
 Go's flag package requires, so that `--bucket` is not parsed as one of
-accessctl's own flags. **`--service-url`, when configured, is injected
+sluisctl's own flags. **`--service-url`, when configured, is injected
 as `r2broker`'s own `--service-url`** right after the subcommand, unless
 the command already names one — an explicit `--service-url` on the
 command always wins.
@@ -228,22 +244,22 @@ at a time — see
 
 | Code | When |
 |---|---|
-| `2` | a flag accessctl does not recognise before the subcommand (commonly: `--` was left out before `r2broker`'s own flags); an empty `--audience` |
-| `3` | not signed in (on a laptop): run `accessctl login` |
+| `2` | a flag sluisctl does not recognise before the subcommand (commonly: `--` was left out before `r2broker`'s own flags); an empty `--audience` |
+| `3` | not signed in (on a laptop): run `sluisctl login` |
 | `4` | the issuer refused the exchange for the R2 broker's audience |
 | `5` | no `r2broker` on `PATH`; the issuer could not be reached |
-| `r2broker`'s own | whatever `r2broker` itself exits with, once it is run — accessctl adds nothing on top and prints nothing of its own (`r2broker`'s own contract: `0` ok, `2` usage, `3` refused, `4` upstream) |
+| `r2broker`'s own | whatever `r2broker` itself exits with, once it is run — sluisctl adds nothing on top and prints nothing of its own (`r2broker`'s own contract: `0` ok, `2` usage, `3` refused, `4` upstream) |
 
 ## `pg` / `psql`: a Postgres client certificate, then a command
 
-`accessctl pg [flags] -- <command> [args…]` authenticates, mints (or
+`sluisctl pg [flags] -- <command> [args…]` authenticates, mints (or
 reuses) a Postgres client certificate, and runs `<command>` with libpq's
-own environment variables pointed at it. `accessctl psql [flags]
-[psql args…]` is the shorthand for `accessctl pg -- psql [psql args…]`.
-This replaces `accessctl credential db`, removed in v1.34.0
+own environment variables pointed at it. `sluisctl psql [flags]
+[psql args…]` is the shorthand for `sluisctl pg -- psql [psql args…]`.
+This replaces `sluisctl credential db`, removed in v1.34.0
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)).
 
-**The separation rule is the same as `bao`'s.** accessctl's own flags go
+**The separation rule is the same as `bao`'s.** sluisctl's own flags go
 before `--` (or before the first argument that is not one of them);
 everything after is the command's own, unchanged. `psql`'s arguments
 usually start with a flag (`-h`, `-d`), so `--` is needed there too
@@ -251,8 +267,8 @@ whenever the first one does; a bare positional argument (a database
 name, `service=name`) does not.
 
 ```sh
-accessctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
-accessctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orders > orders.sql
+sluisctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
+sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orders > orders.sql
 ```
 
 ### Flags
@@ -262,7 +278,7 @@ accessctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump ord
 | `--address` | `$BAO_ADDR`, then `$VAULT_ADDR` | the OpenBAO API |
 | `--ca-cert` | `$BAO_CACERT`, then `$VAULT_CACERT` | a PEM bundle to trust, added to the system's roots |
 | `-ns` | `$BAO_NAMESPACE`, then `$VAULT_NAMESPACE` | the OpenBAO namespace the PKI mount lives in, and where the certificate is signed |
-| `--login-ns` | `-ns` itself; then `$ACCESSCTL_BAO_LOGIN_NAMESPACE` | the namespace to log in at, when it differs from `-ns` — must be `-ns` or a parent of it |
+| `--login-ns` | `-ns` itself; then `$SLUISCTL_BAO_LOGIN_NAMESPACE` | the namespace to log in at, when it differs from `-ns` — must be `-ns` or a parent of it |
 | `-role` | `db-client` | the OpenBAO PKI role to sign with |
 | `-mount` | `pki` | the OpenBAO PKI mount |
 | `--common-name` | the signed-in identity | the common name to ask for |
@@ -303,7 +319,7 @@ or simply signing in as someone else, mints fresh rather than silently
 handing over the previous identity's certificate.
 
 The certificate returned is checked against the key before anything is
-written, exactly as `accessctl credential` used to. A role that will
+written, exactly as `sluisctl credential` used to. A role that will
 not sign the name asked for refuses, which is the right place for that
 decision.
 
@@ -334,30 +350,30 @@ the recommended repo pattern.
 
 | Code | When |
 |---|---|
-| `2` | a flag accessctl does not recognise before `--`; no OpenBAO address; a CA bundle that cannot be read or holds no certificate; an empty `--audience`; `pg` with no command; `--login-ns` (or `$ACCESSCTL_BAO_LOGIN_NAMESPACE`) that does not cover `-ns` |
-| `3` | not signed in (on a laptop): run `accessctl login` |
+| `2` | a flag sluisctl does not recognise before `--`; no OpenBAO address; a CA bundle that cannot be read or holds no certificate; an empty `--audience`; `pg` with no command; `--login-ns` (or `$SLUISCTL_BAO_LOGIN_NAMESPACE`) that does not cover `-ns` |
+| `3` | not signed in (on a laptop): run `sluisctl login` |
 | `4` | the issuer refused the exchange for `openbao`, or OpenBAO refused the login or the sign |
 | `5` | no `<command>` (or no `psql`) on `PATH`; the issuer or OpenBAO could not be reached |
 | the command's own | whatever `psql` or the command itself exits with, once it is run |
 
 ## `ssh known-hosts`: trust configured SSH host CAs before the first connect
 
-`accessctl ssh known-hosts` writes ONE file it owns,
-`~/.ssh/known_hosts.d/accessctl` by default, so a laptop trusts a
+`sluisctl ssh known-hosts` writes ONE file it owns,
+`~/.ssh/known_hosts.d/sluisctl` by default, so a laptop trusts a
 fleet's SSH host certificate authorities before the first connection
 instead of being prompted for one — see
 [connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca](../connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
 for the shape of what it replaces, and
 [docs/decisions/0016](../decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md)
 for why this is a laptop-configuration command rather than an OpenBAO
-one, despite one of its two sources being OpenBAO. `accessctl login`
+one, despite one of its two sources being OpenBAO. `sluisctl login`
 runs it automatically, but only when something is configured — most
 installations name nothing here at all, and a fresh sign-in never fails
 or prints anything over a feature it never opted into.
 
 **Nothing here ships in this binary.** The whole list of CAs to trust
 lives in `config.yaml`'s own `sshKnownHosts:` section, or
-`$ACCESSCTL_SSH_KNOWN_HOSTS` (the same YAML, as text) when the file
+`$SLUISCTL_SSH_KNOWN_HOSTS` (the same YAML, as text) when the file
 names none — the file's own list wins whenever it names anything at
 all. Each entry pairs one or more `ssh_config`-style host patterns with
 exactly one CA source:
@@ -365,7 +381,7 @@ exactly one CA source:
 ```yaml
 # config.yaml
 issuer: https://access.example
-clientId: accessctl
+clientId: sluisctl
 sshKnownHosts:
   - patterns: ["*.devel.example"]
     openbao:
@@ -378,7 +394,7 @@ sshKnownHosts:
 `openbao: {namespace, mount}` reads
 `<address>/v1/<mount>/public_key`, unauthenticated, with the namespace
 sent as `X-Vault-Namespace` — the same call `bao read ssh/config/ca`
-makes — joined with the address `accessctl bao` already resolves:
+makes — joined with the address `sluisctl bao` already resolves:
 `--address`, then `$BAO_ADDR`, then `$VAULT_ADDR` (`--ca-cert`, then
 `$BAO_CACERT`/`$VAULT_CACERT`, the same way). `url:` is a full URL
 answering with the CA's OpenSSH public key as its whole body, plain
@@ -408,14 +424,14 @@ substring check, the tilde form or the absolute path, whichever was
 written) and, when none does, prints the one line to add:
 
 ```
-UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl
+UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl
 ```
 
 ### Flags
 
 | Flag | Default | |
 |---|---|---|
-| `--file` | `~/.ssh/known_hosts.d/accessctl` | the managed file to write |
+| `--file` | `~/.ssh/known_hosts.d/sluisctl` | the managed file to write |
 | `--address` | `$BAO_ADDR`, then `$VAULT_ADDR` | the OpenBAO API for `openbao:` entries |
 | `--ca-cert` | `$BAO_CACERT`, then `$VAULT_CACERT` | a PEM bundle to trust, added to the system's roots |
 
@@ -428,15 +444,15 @@ UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/accessctl
 
 ## Installing it
 
-Each release carries `accessctl_<version>_nix-flake.tar.gz`,
+Each release carries `sluisctl_<version>_nix-flake.tar.gz`,
 a Nix flake over that release's own archives; a repository adds its URL
-with `#accessctl` to `devbox.json`
-([design](../design/accessctl.md#installing-it)). The release's archives
+with `#sluisctl` to `devbox.json`
+([design](../design/sluisctl.md#installing-it)). The release's archives
 are there too for a plain download.
 
 ## Where things are kept
 
-`<config>/config.yaml` (`~/.config/accessctl/config.yaml` on Linux; see
+`<config>/config.yaml` (`~/.config/sluisctl/config.yaml` on Linux; see
 [above](#where-things-are-kept) for the directory) holds the
 **default** issuer and the client id, written by `login`.
 
@@ -460,7 +476,7 @@ opening a session at the wrong estate. A `session.json` from before the
 split is adopted by whoever asks first and replaced by the next `login`.
 
 Nothing else changes: `config.yaml` still names the default issuer, so a
-bare `accessctl whoami` behaves as it always did, and every context
+bare `sluisctl whoami` behaves as it always did, and every context
 `kubeconfig` writes already passes its own `--issuer`.
 
 **A file rather than the OS keyring**, deliberately: a keyring is a
@@ -521,13 +537,13 @@ kubeconfig or from `aws eks update-kubeconfig`, and inventing one would
 be inventing an address to trust.
 
 **The AWS config, between two markers.** Everything between
-`# >>> accessctl >>>` and `# <<< accessctl <<<` is rewritten each run;
+`# >>> sluisctl >>>` and `# <<< sluisctl <<<` is rewritten each run;
 everything outside is left exactly as it was. Rewriting rather than
 appending matters: a profile for a role somebody no longer holds must not
 survive as an entry that fails only when used.
 
 Each profile is `<role>@<account>` with
-`credential_process = accessctl aws --audience aws:<account>:<role>`, and
+`credential_process = sluisctl aws --audience aws:<account>:<role>`, and
 holds no secret.
 
 ## In a job
@@ -556,6 +572,6 @@ retry a refusal.
 | `0` | ok |
 | `1` | anything the codes below do not name: read the message |
 | `2` | usage: something in the command line is wrong |
-| `3` | not signed in — run `accessctl login` |
+| `3` | not signed in — run `sluisctl login` |
 | `4` | that audience, or that App's token, is not granted to you (for `bao`, `pg` and `psql`, also OpenBAO's `403`); retrying will not help |
 | `5` | the issuer could not be reached (for `bao`, `pg` and `psql`, also OpenBAO); retrying might |

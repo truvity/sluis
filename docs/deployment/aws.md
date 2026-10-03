@@ -211,7 +211,7 @@ library. What gitops does at the switch:
 
 1. Create the new stack from the library: the roles, the bucket, the key and the
    table are new `sluis` resources. **No state move is needed**: the earlier
-   access-roster resources in eso-iam are empty and are deleted, not adopted.
+   sluis resources in eso-iam are empty and are deleted, not adopted.
 2. A ServiceAccount takes one association. Delete the serving
    ServiceAccount's association with the old role in the same apply that creates
    the library's, or the create fails; the pod loses its credentials for the

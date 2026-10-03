@@ -6,7 +6,7 @@ One repository, one tag, several deliverables, each installable or
 importable alone:
 
 ```
-cmd/access-roster         the one binary and image: `serve` (the
+cmd/sluis                 the one binary and image: `serve` (the
                           directory, the policy, the OpenID provider,
                           the login page, the console, and what it
                           records to the audit trail), `controller
@@ -16,9 +16,9 @@ cmd/access-roster         the one binary and image: `serve` (the
                           between storages, ADR 0031)
 cmd/resource-proxy        the sidecar that fronts a stock MCP server
                           with a resource server's front door
-cmd/accessctl             the CLI, for laptops and CI jobs
+cmd/sluisctl              the CLI, for laptops and CI jobs
 cmd/acceptance            the acceptance runner against a kind cluster
-charts/access-roster      the chart: the service and both controllers
+charts/sluis              the chart: the service and both controllers
 deploy/pulumi             the AWS infrastructure as a Pulumi Go library, a
                           Go module of its own
                           (github.com/truvity/sluis/deploy/pulumi,
@@ -26,7 +26,7 @@ deploy/pulumi             the AWS infrastructure as a Pulumi Go library, a
                           storage, the DynamoDB State table and the Pod
                           Identity roles; `just pulumi-test`
 action.yml                the GitHub Action, at the root so
-                          `uses: truvity/access-roster@<tag>` works
+                          `uses: truvity/sluis@<tag>` works
 identity/ tokens/ policy/ backend/
                           the Go module's public packages: the two
                           verifiers, the net/http middleware and
@@ -115,7 +115,7 @@ in order and skipping one is the usual mistake:
 ```
 just generate              # proto → gen/ (Go) and frontend/src/gen (TS)
 just console               # ts/dist first, then frontend/dist — built, never committed
-go build ./cmd/access-roster             # embeds frontend/dist
+go build ./cmd/sluis             # embeds frontend/dist
 ```
 
 A running `go run` keeps the bundle it started with; restart it after a
@@ -131,7 +131,7 @@ publicURL: http://localhost:8099/console
 listen: {address: ":8099"}
 probes: {address: ":7099"}
 EOF
-go run ./cmd/access-roster serve --config /tmp/demo.yaml
+go run ./cmd/sluis serve --config /tmp/demo.yaml
 ```
 
 Then open `http://localhost:8099/console/` and take *Continue with the
@@ -146,7 +146,7 @@ needs a real corporate OAuth client, so the code flow and token exchange
 are exercised by the tests rather than by hand.
 
 The console's rules are in
-[docs/design/access-roster.md](docs/design/access-roster.md), under "The
+[docs/design/sluis.md](docs/design/sluis.md), under "The
 console": two
 mirrored sides, every name a link, one meaning per visual form (a name is
 a link, a chip is a state and nothing else, facts are a label over a
@@ -210,9 +210,9 @@ its own set of anti-patterns, out of this file's scope — see
 ## Releasing
 
 Push a `v*` tag. The release workflow builds the binaries, the images
-(`ghcr.io/truvity/access-roster/access-roster`, and the sidecar
+(`ghcr.io/truvity/sluis/sluis`, and the sidecar
 `/resource-proxy`),
-the chart (`oci://ghcr.io/truvity/charts/access-roster`), `accessctl`'s
+the chart (`oci://ghcr.io/truvity/charts/sluis`), `sluisctl`'s
 archives and its Nix flake, and publishes the TypeScript package to GitHub
 Packages, all stamped with the tag.
 The Go module and the GitHub Action are the same tag; the Pulumi library, a

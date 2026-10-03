@@ -5,7 +5,7 @@
 
 ## Context
 
-access-roster runs today as Kubernetes workloads: the issuer and console as one
+sluis runs today as Kubernetes workloads: the issuer and console as one
 service, the GitHub and Slack controllers beside it, state in Kubernetes
 objects and Valkey. Part of an installation's own sign-in path (the cluster's
 API server, its dashboards and its metrics gateway) depends on the issuer,
@@ -20,7 +20,7 @@ platform-specific code path that only one installation exercises rots.
 
 ## Decision
 
-access-roster supports **two platforms, both maintained and both tested**:
+sluis supports **two platforms, both maintained and both tested**:
 
 - **Kubernetes**, installed by the Helm chart.
 - **AWS Lambda**: an HTTP function (the issuer, console and Connect services,

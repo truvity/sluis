@@ -3,9 +3,9 @@
 **Anchor:** OpenBAO's PKI engine. People and machines reach PostgreSQL —
 including a CloudNativePG cluster — with a client certificate that lives
 minutes, not a password that lives until somebody remembers to rotate it.
-`accessctl psql` / `accessctl pg --` are the couriers
-([reference](../reference/accessctl.md#pg--psql-a-postgres-client-certificate-then-a-command),
-replacing `accessctl credential db`, removed in v1.34.0 —
+`sluisctl psql` / `sluisctl pg --` are the couriers
+([reference](../reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command),
+replacing `sluisctl credential db`, removed in v1.34.0 —
 [ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)).
 This page is the database-specific half of
 [connect/openbao.md](openbao.md), which covers the shared contract — the
@@ -14,18 +14,18 @@ exchange, the JWT mount, the manager-side PKI role shape — in full.
 ## The flow
 
 ```sh
-accessctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
+sluisctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
 ```
 
-Four steps, read from `cmd/accessctl/pg.go` and `cmd/accessctl/bao.go`:
+Four steps, read from `cmd/sluisctl/pg.go` and `cmd/sluisctl/bao.go`:
 
-1. **`accessctl` exchanges the sign-in for OpenBAO's own audience**
+1. **`sluisctl` exchanges the sign-in for OpenBAO's own audience**
    (`--audience openbao` by default) — the same token exchange
-   `accessctl bao` and `accessctl token` make (`openBAOLogin`, shared
+   `sluisctl bao` and `sluisctl token` make (`openBAOLogin`, shared
    with `bao`, cached the same way).
 2. **It logs in to OpenBAO's JWT mount** — `jwt-roster` in `-ns` (or
    `BAO_NAMESPACE`) unless overridden, or at `--login-ns` (or
-   `$ACCESSCTL_BAO_LOGIN_NAMESPACE`) instead, when an installation keeps
+   `$SLUISCTL_BAO_LOGIN_NAMESPACE`) instead, when an installation keeps
    its logins at a parent namespace while `-ns` names a child (see
    [connect/openbao.md#logins-at-a-parent-namespace](openbao.md#logins-at-a-parent-namespace))
    — presenting the exchanged token. The OpenBAO token this returns is
@@ -38,7 +38,7 @@ Four steps, read from `cmd/accessctl/pg.go` and `cmd/accessctl/bao.go`:
 3. **OpenBAO's PKI role issues a client certificate**, if nothing cached
    still has enough life left (five minutes' margin — wider than the
    login token's own, because a certificate may be used for a whole
-   session rather than one round trip). `accessctl` generates an ECDSA
+   session rather than one round trip). `sluisctl` generates an ECDSA
    P-384 key on this machine, builds a certificate request for it, and
    calls `pki/sign/<role>` (`-role`, `db-client` by default) — never
    `pki/issue/...`, so the private key never crosses the wire and the
@@ -46,7 +46,7 @@ Four steps, read from `cmd/accessctl/pg.go` and `cmd/accessctl/bao.go`:
    signed-in identity unless `--common-name` overrides it, carried both
    in the CSR and in the request body, for a role that reads either. No
    TTL is sent — see [what decides access](#what-decides-access), below.
-4. **`accessctl` writes the key, the certificate and the CA file, and
+4. **`sluisctl` writes the key, the certificate and the CA file, and
    runs the command with libpq's own environment variables set.** Three
    files land under `<config>/credentials/<address-hash>/<ns>/<role>/`:
    `client.crt`, `client.key`, `client-ca.crt`, all `0600` in a `0700`
@@ -56,18 +56,18 @@ Four steps, read from `cmd/accessctl/pg.go` and `cmd/accessctl/bao.go`:
    is set to its own common name and `PGSSLMODE` to `verify-full`, but
    **only when the caller has not already chosen one** (an explicit
    `-U`/`user=`, or a service file's own `user=`, always wins; see
-   [reference/accessctl.md#the-environment](../reference/accessctl.md#the-environment)
+   [reference/sluisctl.md#the-environment](../reference/sluisctl.md#the-environment)
    for what was verified about libpq's precedence here). **`PGSSLROOTCERT`
    follows the same rule, and is skipped entirely when the role returned
    no CA at all.** The PKI's own CA — what the client certificate chains
    to — is not necessarily the CA that signed the database SERVER's own
-   certificate, so accessctl never assumes it is: a server behind a
+   certificate, so sluisctl never assumes it is: a server behind a
    different CA needs its root named some other way, either a
    repository's own service file (`sslrootcert=...`, below) or the
    caller's own `PGSSLROOTCERT`.
 
 `-h`/`-d` above, or a `service=<name>` from a libpq service file, both
-work: `accessctl` never touches connection parameters other than the
+work: `sluisctl` never touches connection parameters other than the
 ones above, and psql's own arguments pass through unchanged.
 
 **The recommended repo pattern is a committed, secret-free service
@@ -90,15 +90,15 @@ sslmode=verify-full
 
 ```sh
 export PGSERVICEFILE=$PWD/pg_service.conf   # from devbox.json or .envrc
-accessctl psql --address https://openbao.example:8200 -ns staging -- service=orders
+sluisctl psql --address https://openbao.example:8200 -ns staging -- service=orders
 ```
 
-`accessctl` never writes to this file — unlike the `pg_service` entry
-`accessctl credential db` used to write, this one is the repository's
-own, checked in, and reused by everyone who clones it; `accessctl` only
+`sluisctl` never writes to this file — unlike the `pg_service` entry
+`sluisctl credential db` used to write, this one is the repository's
+own, checked in, and reused by everyone who clones it; `sluisctl` only
 ever adds the certificate itself (`sslcert`/`sslkey`), through the
 environment. `sslmode` and `sslrootcert` are committed here so the
-repository is the one source of truth for them — accessctl sets its own
+repository is the one source of truth for them — sluisctl sets its own
 `PGSSLMODE`/`PGSSLROOTCERT` too, but only as a fallback for a caller with
 no service file at all, and never over a service file's own setting or
 an already-exported variable. **The PKI's own CA is not necessarily the
@@ -107,11 +107,11 @@ usually does) sign client certificates from a different CA than the one
 the server's own certificate chains to — so a server whose CA differs
 from the PKI's names its own root explicitly, either in the service file
 (`sslrootcert=`, commented out above) or by exporting `PGSSLROOTCERT`
-before running `accessctl psql`/`pg`.
+before running `sluisctl psql`/`pg`.
 
 ## What decides access
 
-**`accessctl` never asks for a lifetime.** No flag here can request a
+**`sluisctl` never asks for a lifetime.** No flag here can request a
 longer- or shorter-lived certificate; the OpenBAO PKI role's own `ttl` and
 `max_ttl` are the whole answer, so shortening the role shortens every
 certificate already in flight. What decides *whether* the call succeeds
@@ -141,7 +141,7 @@ its policy are declared.
 
 **Trust the PKI's CA for client certificates.** The server's client-CA
 trust store is the same `issuing_ca` (or `ca_chain`) OpenBAO's PKI role
-answers with — the file `accessctl` writes as `client-ca.crt`.
+answers with — the file `sluisctl` writes as `client-ca.crt`.
 
 **`pg_hba.conf`: `hostssl … cert`, with a `pg_ident.conf` map from the
 certificate's common name to the database role.** PostgreSQL's `cert`

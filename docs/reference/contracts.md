@@ -462,7 +462,7 @@ on the whole installation, needs the `all:access-roster:operator` group.
 
 ## The audit trail
 
-Not a service of this one. access-roster records into an audit
+Not a service of this one. sluis records into an audit
 installation ([truvity/audit](https://github.com/truvity/audit)) through its
 contracts: it registers its catalogue with the installation's
 `audit.v1.RegistryService` at start, and sends records to its
@@ -480,7 +480,7 @@ controllers record for themselves, each with its own service-account token.
 ## Installation tokens at `/token`
 
 Not a console service: the issuer's token endpoint, documented here
-because it is the contract a job, a script or `accessctl` codes against
+because it is the contract a job, a script or `sluisctl` codes against
 when it asks for a GitHub App installation token of a
 [catalogue App](../connect/github-apps-catalogue.md#minting-a-token). It
 is RFC 8693 token exchange on the same `/token` as every other exchange;
@@ -581,7 +581,7 @@ carries its roles and scopes beside the fields the Go module's
 ```sh
 # From a workload: its projected ServiceAccount token, minted for
 # config.exchange.audience, is the bearer.
-TOKEN=$(cat /var/run/secrets/access-roster/token)
+TOKEN=$(cat /var/run/secrets/sluis/token)
 
 # WhoAmI, over GET (Connect's idempotent-GET encoding)
 curl -s -H "authorization: Bearer $TOKEN" \

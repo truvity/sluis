@@ -1,3 +1,61 @@
+## Unreleased
+
+- **Breaking: renamed to sluis.** The product is now **sluis** and the
+  repository `truvity/sluis` ([ADR 0035](docs/decisions/0035-renamed-to-sluis.md)).
+  This ships as a minor release (v1.57.0, no `/v2`) by
+  [ADR 0007](docs/decisions/0007-breaking-changes-inside-1x.md). It lands only
+  after the GitHub rename, because the new module path resolves only then.
+  What a consumer changes:
+
+  - **Go module path:** `github.com/truvity/access-roster` becomes
+    `github.com/truvity/sluis` (packages `policy`, `identity`, `tokens`; the
+    `deploy/pulumi` library already was `github.com/truvity/sluis/deploy/pulumi`).
+    Change every import and `go get github.com/truvity/sluis@v1.57.0`.
+  - **Images:** `ghcr.io/truvity/access-roster/access-roster` becomes
+    `ghcr.io/truvity/sluis/sluis`, and `ghcr.io/truvity/access-roster/resource-proxy`
+    becomes `ghcr.io/truvity/sluis/resource-proxy`. The server binary is `sluis`
+    (it was `access-roster`), and the chart mounts its files at `/etc/sluis/`.
+  - **Chart:** `oci://ghcr.io/truvity/charts/access-roster` becomes
+    `oci://ghcr.io/truvity/charts/sluis`; the chart is named `sluis` and its
+    helpers `sluis.*`. `nameOverride` and `fullnameOverride` are honoured as
+    before: an installation that sets them (the estate sets both to
+    `access-issuer`) keeps every object name and every Deployment selector.
+    An installation that relied on the defaults now has to say what it relied
+    on (`fullnameOverride`, `nameOverride`, and `config.release: access-roster`
+    for the store prefix), because the default `release` is now `sluis`.
+  - **CLI:** `accessctl` is now **`sluisctl`**; release assets are
+    `sluisctl_<version>_<os>_<arch>` and the Nix flake `sluisctl`. `accessctl`
+    is kept as an alias for one or two releases: `accessctl_*` archives and an
+    `accessctl` flake carry the same program, which prints a deprecation notice
+    on stderr. Its settings are `SLUISCTL_*` (the `ACCESSCTL_*` names still
+    work). The OIDC client id `accessctl`, the config and cache directory, the
+    kubeconfig user names and the managed known-hosts file are unchanged.
+  - **Release assets:** `sluis_<version>_checksums.txt`,
+    `sluis_<version>_<os>_<arch>` for the service, and the deprecated Lambda
+    layer `sluis-lambda-layer_<version>_linux_<arch>.zip`.
+  - **KMS sealing context:** the encryption-context key is `sluis:binding`
+    (it was `access-roster:binding`). Nothing is sealed anywhere yet, so
+    nothing needs re-wrapping; a KMS grant that names the key must say
+    `sluis:binding`.
+  - **Environment:** the Lambda extension reads `SLUIS_*` first and falls back
+    to `ACCESS_ROSTER_*` (both work, `SLUIS_*` wins); `sluisctl` does the same
+    for `SLUISCTL_*` and `ACCESSCTL_*`
+    ([aws-lambda](docs/integrations/aws-lambda.md),
+    [sluisctl](docs/reference/sluisctl.md)).
+  - **npm:** `@truvity/access-roster` becomes `@truvity/sluis`. The release also
+    publishes the same build as `@truvity/access-roster` for one or two
+    releases, described as deprecated.
+  - **Schemas:** the `$id` of the configuration schemas is
+    `https://truvity.github.io/sluis/schemas/v1/config/...`.
+
+  What did **not** change, on purpose: the issuer URL and every OIDC client id;
+  the group names `all:access-roster:*` and the `groups: [access-roster]` thing;
+  the Kubernetes label and annotation keys `access-roster.truvity.github.io/*`;
+  `token-source: access-roster`, the `ACCESS_ROSTER_ISSUER` variable and the
+  grants preset `access-roster`; the audit source `roster`; metric, alert and
+  dashboard names and OTEL `service.name` (they change with the dashboards, at
+  B5). The full list is in the ADR.
+
 ## v1.56.0
 
 - **A Pulumi library for the AWS part of an installation:
@@ -1288,7 +1346,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   yet. (The controller ships in this same release, in the first bullet above.)
   `internal/slackapp` gains `UserInfo` (a member's address) and
   `SharedTeamIDs` on a channel. See
-  [docs/design/access-roster.md](docs/design/access-roster.md#the-slack-reconciler).
+  [docs/design/sluis.md](docs/design/sluis.md#the-slack-reconciler).
 - **Internal: `internal/rails` now holds what the GitHub controller and the
   reconcilers after it share: the pass loop with its policy-retry backoff
   (`Run`), the console's two questions gated by the policy digest
@@ -1296,7 +1354,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`Ledger`) and the last-good-report journal (`Journal`).** The GitHub
   controller calls them and keeps everything GitHub-shaped to itself. No
   user-visible change: same decisions, same audit records, same metrics.
-  See [docs/design/access-roster.md](docs/design/access-roster.md#reconciler-rails).
+  See [docs/design/sluis.md](docs/design/sluis.md#reconciler-rails).
 
 ## v1.40.0
 
@@ -1342,7 +1400,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `internal/rails` for these four pieces and keeps everything GitHub-shaped —
   teams, logins, invitations, deriving and deciding — to itself. No
   user-visible change: same decisions, same audit records, same metrics. See
-  [docs/design/access-roster.md](docs/design/access-roster.md#reconciler-rails).
+  [docs/design/sluis.md](docs/design/sluis.md#reconciler-rails).
 
 ## v1.39.2
 
@@ -1407,7 +1465,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `r2broker`'s own syntax, per
   [ADR 0014](docs/decisions/0014-minting-third-party-credentials-only-where-membership-is-governed.md).
   See
-  [docs/reference/accessctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged](docs/reference/accessctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)
+  [docs/reference/sluisctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged](docs/reference/sluisctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)
   and [docs/connect/r2-storage.md](docs/connect/r2-storage.md).
 
 ## v1.38.0
@@ -1437,7 +1495,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   file automatically once something is configured — a fresh sign-in
   never fails, or prints anything, over a feature it was never opted
   into. See
-  [docs/reference/accessctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](docs/reference/accessctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect),
+  [docs/reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](docs/reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect),
   [docs/connect/ssh.md](docs/connect/ssh.md) and
   [docs/decisions/0016](docs/decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md).
 
@@ -1576,7 +1634,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `--mount`, `--login-role`, `--forget`) go BEFORE the bao subcommand;
   bao's own flags, including `-namespace`, go after it, exactly where
   bao has always accepted them. See
-  [docs/reference/accessctl.md#bao-authenticate-then-run-bao-unchanged](docs/reference/accessctl.md#bao-authenticate-then-run-bao-unchanged)
+  [docs/reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged](docs/reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged)
   and [docs/connect/openbao.md](docs/connect/openbao.md).
 
 - **Added: `accessctl bao kv get ... -format=env` renders a KV secret as
@@ -1614,7 +1672,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   unchanged. accessctl no longer writes a `pg_service` entry: a
   repository keeps its own, committed and secret-free, and points
   `PGSERVICEFILE` at it. See
-  [docs/reference/accessctl.md#pg--psql-a-postgres-client-certificate-then-a-command](docs/reference/accessctl.md#pg--psql-a-postgres-client-certificate-then-a-command)
+  [docs/reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command](docs/reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command)
   and [docs/connect/postgresql.md](docs/connect/postgresql.md).
 
 - **Breaking: `accessctl credential ssh|db|client` is removed.**
@@ -2305,7 +2363,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   empty `.env`, which is the failure nobody notices. Only the key names
   are printed, never a value.
   [docs/connect/openbao.md](docs/connect/openbao.md),
-  [docs/reference/accessctl.md](docs/reference/accessctl.md).
+  [docs/reference/sluisctl.md](docs/reference/sluisctl.md).
 
 ## v1.21.0
 
@@ -2938,7 +2996,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `accessctl_<version>_nix-flake.tar.gz`, a Nix flake over that release's
   own archives. A repository adds its URL with `#accessctl` to
   `devbox.json`
-  ([docs/design/accessctl.md](docs/design/accessctl.md#installing-it)).
+  ([docs/design/sluisctl.md](docs/design/sluisctl.md#installing-it)).
 
 ## v1.6.5
 
@@ -4128,7 +4186,7 @@ the caller first.
   that ran its own flow holds its own cookie; `end_session` is
   front-channel and back-channel logout is not built, so Kargo answers
   until its own session expires however thoroughly you revoke here. Said
-  plainly in `docs/design/access-roster.md` rather than left to be
+  plainly in `docs/design/sluis.md` rather than left to be
   discovered twice.
 
 - **`hack/conformance-run.sh` runs a whole plan.** The suite's page has no
@@ -4557,7 +4615,7 @@ git history.
 
 - **One design document.** `docs/design/hub.md` and
   `docs/design/access-issuer.md` fold into
-  `docs/design/access-roster.md` — the directory model, freshness, the
+  `docs/design/sluis.md` — the directory model, freshness, the
   policy, the three proofs, the six grants, sessions and one origin, the
   console, the store, recovery, failure semantics — and end with an
   appendix naming everything that was removed and why, so nobody adds one

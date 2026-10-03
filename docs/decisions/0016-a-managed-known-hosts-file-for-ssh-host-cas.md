@@ -1,4 +1,4 @@
-# 0016 — A managed known_hosts file for SSH host CAs, distinct from `accessctl bao`
+# 0016 — A managed known_hosts file for SSH host CAs, distinct from `sluisctl bao`
 
 **Status:** Accepted; refines [0011](0011-ssh-people-opkssh-machines-and-hosts-openbao.md), distinguishes from [0013](0013-openbao-access-through-the-bao-cli.md)
 **Date:** 2026-09-28
@@ -18,7 +18,7 @@ and gets no easier for being small: forgetting it is not a failure, it is
 configured" rather than "one line was never added."
 
 [0013](0013-openbao-access-through-the-bao-cli.md) drew a hard line
-against growing `accessctl` with OpenBAO's own data plane: every new
+against growing `sluisctl` with OpenBAO's own data plane: every new
 secrets engine, every new flag on `sign`, is `bao`'s own surface to keep
 current, not a courier this repository re-implements one call at a time.
 A command that trusts an SSH CA looks, at a glance, like exactly that
@@ -27,7 +27,7 @@ answers.
 
 ## Decision
 
-**`accessctl ssh known-hosts` is a laptop-configuration command, not an
+**`sluisctl ssh known-hosts` is a laptop-configuration command, not an
 OpenBAO client**, and that is why it does not fall under 0013's line.
 0013 refuses to reimplement OpenBAO's *growing* data plane — `kv`,
 `sign`, `write`, and whatever engine comes next — one recipe at a time.
@@ -39,21 +39,21 @@ OpenBAO is only one of two sources it accepts — a plain `url:` does the
 identical job for an installation that fronts its CA another way. What
 this command grows with is nothing upstream; what it owns is a file on
 this laptop, the same category of thing `kubeconfig` and `aws-config`
-(`cmd/accessctl/config_writers.go`) already own.
+(`cmd/sluisctl/config_writers.go`) already own.
 
 **Input is entirely a config list this binary never gives a name to.**
 An entry pairs one or more `ssh_config`-style host patterns with a CA
 source — `url:` or `openbao: {namespace, mount}`, read the same way
-`accessctl bao` already resolves its own address ([0013](0013-openbao-access-through-the-bao-cli.md)):
+`sluisctl bao` already resolves its own address ([0013](0013-openbao-access-through-the-bao-cli.md)):
 `--address`, then `$BAO_ADDR`, then `$VAULT_ADDR`. The list lives in
 `config.yaml`'s own `sshKnownHosts:` section, or
-`$ACCESSCTL_SSH_KNOWN_HOSTS` when the file names none — the same
+`$SLUISCTL_SSH_KNOWN_HOSTS` when the file names none — the same
 "file, then one environment variable" shape every other setting in this
 tool already uses for a single value, applied here to a list. No estate
 name, domain or namespace is ever declared in this binary.
 
 **It owns exactly one file, and only that one**:
-`~/.ssh/known_hosts.d/accessctl` by default (`--file` names another),
+`~/.ssh/known_hosts.d/sluisctl` by default (`--file` names another),
 fully rewritten on every run — never `~/.ssh/known_hosts`, and never
 `~/.ssh/config`. It checks whether `~/.ssh/config` already points a
 `UserKnownHostsFile` line at that file (a plain substring check, tilde
@@ -78,7 +78,7 @@ is what keeps a misconfigured entry (the wrong mount, a stray answer from
 a different service entirely) from writing a `@cert-authority` line for
 a key type nothing here can reason about.
 
-**`accessctl login` refreshes this file automatically** when
+**`sluisctl login` refreshes this file automatically** when
 `sshKnownHosts` (file or environment) names at least one entry — the
 same shape `setup` already gives `kubeconfig` and `aws-config`, run once
 by hand after signing in. Its failure is a warning, never a login
@@ -121,9 +121,9 @@ someone signs in. That is exactly what already turned `kubeconfig` and
 one-liner does not keep that behaviour without reimplementing it worse,
 by hand, on every laptop.
 
-**Grow `accessctl bao` itself**, e.g. `accessctl bao ssh -mode=trust`,
+**Grow `sluisctl bao` itself**, e.g. `sluisctl bao ssh -mode=trust`,
 reusing the passthrough 0013 already built. Rejected: the whole point of
-that passthrough is that everything after `accessctl bao` is `bao`'s own
+that passthrough is that everything after `sluisctl bao` is `bao`'s own
 syntax, unchanged; teaching it to also rewrite a `known_hosts` file
 conflates *authenticate, then run `bao`* with *laptop configuration*, and
 would only ever work for an `openbao:` source, never a plain `url:` one.
