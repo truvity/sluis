@@ -12,7 +12,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/truvity/sluis/internal/lambdaext"
+	"github.com/truvity/observability/lambdaext"
 )
 
 func main() { os.Exit(run()) }
