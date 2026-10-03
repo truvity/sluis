@@ -25,7 +25,7 @@ func kernel() []config.Export {
 		{Source: "runner-app", Tier: "stable", Org: "truvity", Namespace: "kernel", Path: "arc/truvity"},
 	}
 	for _, b := range exports.Bundles {
-		path := "access-roster-backup/" + b
+		path := "sluis-backup/" + b
 		switch b {
 		case exports.BundleSlackCredentials:
 			path = "slack-state/credentials"

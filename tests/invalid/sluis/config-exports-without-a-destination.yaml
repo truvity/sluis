@@ -5,4 +5,4 @@ config:
   exports:
     - source: bundle
       bundle: github-apps
-      path: access-roster-backup/github-apps
+      path: sluis-backup/github-apps
