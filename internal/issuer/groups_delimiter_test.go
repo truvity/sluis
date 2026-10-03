@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // delimitedDemoPolicy is [demo.Policy] with `local-dev` pinning

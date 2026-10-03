@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 const sharePrefix = "share."

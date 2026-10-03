@@ -33,7 +33,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/truvity/access-roster/internal/version"
+	"github.com/truvity/sluis/internal/version"
 )
 
 // Enabled reports whether a collector is named in the environment for metrics.

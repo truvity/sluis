@@ -7,7 +7,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // meterName is the instrumentation scope every instrument here is under.

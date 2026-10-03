@@ -7,14 +7,14 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
-	"github.com/truvity/access-roster/internal/hub"
-	slackcatalogueapp "github.com/truvity/access-roster/internal/slackapp/catalogueapp"
-	slackconnection "github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/hub"
+	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
+	slackconnection "github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // The stores an export reads. Each is the read half of the interface the

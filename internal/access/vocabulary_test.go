@@ -3,9 +3,9 @@ package access_test
 import (
 	"testing"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/policy"
 )
 
 // TestHoldersOfSeesInheritedGroups is the closest proof this repository

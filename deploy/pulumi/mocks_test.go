@@ -156,7 +156,7 @@ func run(t *testing.T, program func(ctx *pulumi.Context, collect func(string, pu
 				return v
 			})
 		})
-	}, pulumi.WithMocks("access-roster-test", "test", rec))
+	}, pulumi.WithMocks("sluis-test", "test", rec))
 	wg.Wait()
 	return rec, got, err
 }

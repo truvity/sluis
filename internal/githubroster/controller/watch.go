@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // watched reports a mounted key whose change wakes a pass: an organisation's

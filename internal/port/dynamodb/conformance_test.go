@@ -13,9 +13,9 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	ddb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
-	"github.com/truvity/access-roster/internal/port"
-	dynamoport "github.com/truvity/access-roster/internal/port/dynamodb"
-	"github.com/truvity/access-roster/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port"
+	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
+	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // EnvURL names a LocalStack (or DynamoDB Local) endpoint the conformance run

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // slackBase is a valid policy with both workspaces declared; each refusal

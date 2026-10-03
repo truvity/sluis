@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/slackapp"
-	"github.com/truvity/access-roster/internal/slackapp/slackfake"
+	"github.com/truvity/sluis/internal/slackapp"
+	"github.com/truvity/sluis/internal/slackapp/slackfake"
 )
 
 // world is two workspaces, acme and globex, each with its bot.

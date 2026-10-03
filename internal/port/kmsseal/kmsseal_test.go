@@ -10,9 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/kmsseal"
-	"github.com/truvity/access-roster/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/kmsseal"
+	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 const arn = "arn:aws:kms:eu-west-1:111122223333:key/1234"
@@ -54,7 +54,7 @@ func (f *fake) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*kms.O
 
 func sealer(t *testing.T, f *fake) *kmsseal.Sealer {
 	t.Helper()
-	s, err := kmsseal.NewWithAPI(f, kmsseal.Config{KeyID: "alias/access-roster"})
+	s, err := kmsseal.NewWithAPI(f, kmsseal.Config{KeyID: "alias/sluis"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestTheBindingIsTheEncryptionContext(t *testing.T) {
 	if w.KeyID != arn {
 		t.Errorf("KeyID %q, want the ARN KMS reported", w.KeyID)
 	}
-	if got := f.encrypt[0].EncryptionContext[kmsseal.ContextKey]; got != "gh.org.acme" || *f.encrypt[0].KeyId != "alias/access-roster" {
+	if got := f.encrypt[0].EncryptionContext[kmsseal.ContextKey]; got != "gh.org.acme" || *f.encrypt[0].KeyId != "alias/sluis" {
 		t.Errorf("Encrypt was asked for context %q key %q", got, *f.encrypt[0].KeyId)
 	}
 	if _, err = s.Unwrap(ctx, w, "gh.org.other"); !errors.Is(err, port.ErrUnwrap) {
@@ -87,7 +87,7 @@ func TestTheBindingIsTheEncryptionContext(t *testing.T) {
 	if got, err := s.Unwrap(ctx, w, "gh.org.acme"); err != nil || !strings.HasPrefix(string(got), "0123") {
 		t.Fatalf("Unwrap: %q %v", got, err)
 	}
-	if *f.decrypt[len(f.decrypt)-1].KeyId != "alias/access-roster" {
+	if *f.decrypt[len(f.decrypt)-1].KeyId != "alias/sluis" {
 		t.Error("Decrypt did not pin the configured key")
 	}
 }

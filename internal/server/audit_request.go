@@ -9,7 +9,7 @@ import (
 	"github.com/truvity/audit/sdk/emit"
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // The bounds on what a record keeps of a request. Each value is chosen by

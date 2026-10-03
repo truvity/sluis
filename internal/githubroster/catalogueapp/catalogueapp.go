@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubroster/status"
 )
 
 // Version is the record version this build writes and reads.

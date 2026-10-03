@@ -11,7 +11,7 @@ import (
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // declaredResources is the lookup the middleware is given.

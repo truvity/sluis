@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/app"
+	"github.com/truvity/sluis/internal/app"
 )
 
 // The console's own session cookie is issued once, at sign-in, with a

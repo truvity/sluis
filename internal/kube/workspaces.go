@@ -12,7 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // recordKey is the one key in a workspace's ConfigMap.

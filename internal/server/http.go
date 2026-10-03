@@ -19,14 +19,14 @@ import (
 
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/gen/directoryroster/v1/directoryrosterv1connect"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/emailaddr"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/telemetry"
-	"github.com/truvity/access-roster/internal/version"
+	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/telemetry"
+	"github.com/truvity/sluis/internal/version"
 )
 
 // ForwardedIdentity configures how a bearer forwarded by an authenticating
@@ -516,7 +516,7 @@ func (s *ConsoleServer) loginPage(w http.ResponseWriter, r *http.Request) {
 		same room. <a href="%s/">Go to the console</a> and it will take you to the right one.</p>
 		<p class="note">Recovery below is the way in when the gateway is what is broken.</p>`, s.mount)
 	}
-	s.writePage(w, r, http.StatusOK, "Sign in", `<h1>access-roster</h1>
+	s.writePage(w, r, http.StatusOK, "Sign in", `<h1>sluis</h1>
 <p class="note">The console. Sign in to see who holds what, and why.</p>`+
 		elsewhere+sources.String()+recovery)
 }
@@ -564,7 +564,7 @@ func (s *ConsoleServer) writePage(w http.ResponseWriter, r *http.Request, status
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_, err := io.WriteString(w, `<!doctype html><meta charset="utf-8"><title>`+
-		html.EscapeString(title)+` — access-roster</title><style>`+consoleCSS+`</style><main>`+body+`</main>`)
+		html.EscapeString(title)+` — sluis</title><style>`+consoleCSS+`</style><main>`+body+`</main>`)
 	if err != nil {
 		s.log.WarnContext(r.Context(), "page could not be written", "title", title, "error", err)
 	}

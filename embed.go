@@ -1,5 +1,5 @@
-// Package accessroster carries the files this repository publishes as data.
-package accessroster
+// Package sluis carries the files this repository publishes as data.
+package sluis
 
 import "embed"
 

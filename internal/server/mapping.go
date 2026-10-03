@@ -10,10 +10,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/policy"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/policy"
 )
 
 // backendKind turns the contract's enum into a backend's own name.

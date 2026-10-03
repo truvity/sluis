@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/truvity/access-roster/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
 )
 
 // What the issuer counts, beyond the signing keys (keyring_metrics.go) and the

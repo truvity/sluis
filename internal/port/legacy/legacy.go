@@ -67,10 +67,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // Backend is today's storage as it has been opened: either part may be

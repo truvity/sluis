@@ -14,7 +14,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // AWSFederation is the set of AWS accounts whose roles may exchange their

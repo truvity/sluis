@@ -6,7 +6,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // client adapts a declared policy client to what the library needs. The
@@ -46,7 +46,7 @@ func (c *client) PostLogoutRedirectURIs() []string { return c.declared.SignedOut
 // ApplicationType decides how strictly the library treats the redirect
 // URI. A public client is a native one: it holds no secret, so PKCE is
 // what protects its code, and localhost redirects are legitimate because
-// that is where kubelogin and accessctl listen.
+// that is where kubelogin and sluisctl listen.
 func (c *client) ApplicationType() op.ApplicationType {
 	if c.declared.Kind == policy.KindPublic {
 		return op.ApplicationTypeNative

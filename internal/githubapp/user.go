@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
 )
 
 // linkNameSuffix names the link App after the organisation that owns it.

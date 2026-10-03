@@ -12,7 +12,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // The key arrives from somewhere else — cert-manager issuing one,

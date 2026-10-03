@@ -212,7 +212,7 @@ func VerifyClient(ctx context.Context, client OAuthClient) error {
 	}
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
-		"code":          {"access-roster-client-check"},
+		"code":          {"sluis-client-check"},
 		"client_id":     {client.ID},
 		"client_secret": {client.Secret},
 		"redirect_uri":  {client.ConsentRedirect()},

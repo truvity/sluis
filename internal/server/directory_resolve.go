@@ -8,9 +8,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/hub"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // The bounds of one resolution: how many groups one call may ask about, and

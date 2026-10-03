@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // reportPrefixes are the blobs a copy keeps: what each controller last reported.

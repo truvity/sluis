@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/tokens"
+	"github.com/truvity/sluis/tokens"
 )
 
 // unknownLifetime is assumed for a token the issuer gave no `expires_in`

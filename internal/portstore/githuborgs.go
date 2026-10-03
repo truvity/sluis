@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/port"
 )
 
 const (

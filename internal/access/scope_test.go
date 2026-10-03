@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/policy"
 )
 
 // A role over one workspace, so that connecting a second company's

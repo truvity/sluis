@@ -12,8 +12,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // SlackWorkspaces keeps connected Slack workspaces: a record per workspace

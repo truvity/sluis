@@ -22,7 +22,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
-	"github.com/truvity/access-roster/backend"
+	"github.com/truvity/sluis/backend"
 )
 
 // Scopes are the four read-only scopes the hub asks for. They are the

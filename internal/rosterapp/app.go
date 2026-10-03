@@ -1,4 +1,4 @@
-// Package rosterapp assembles the whole of access-roster as ONE process:
+// Package rosterapp assembles the whole of sluis as ONE process:
 // the directory connectors, the snapshot and its refresher, the policy,
 // the OpenID provider, the login page and the console.
 //
@@ -27,16 +27,16 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/app"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/exports"
-	"github.com/truvity/access-roster/internal/health"
-	"github.com/truvity/access-roster/internal/hublocal"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/issuerapp"
-	"github.com/truvity/access-roster/internal/server"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/app"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/exports"
+	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/hublocal"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/server"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // Config is both halves' configuration. Both are built from the one file the
@@ -189,7 +189,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		if err != nil || target.Scheme == "" || target.Host == "" {
 			directory.Close()
 			stores.Close()
-			return nil, fmt.Errorf("access-roster: audit.queryURL %q is not a URL", queryURL)
+			return nil, fmt.Errorf("sluis: audit.queryURL %q is not a URL", queryURL)
 		}
 		directory.ConsoleServer().UseAuditQuery(&server.AuditQuery{
 			URL:   target,
@@ -202,7 +202,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		stores.Close()
 		return nil, err
 	}
-	log.InfoContext(ctx, "access-roster assembled as one service: a login makes no network "+
+	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory")
 	return &App{directory: directory, issuer: assembled, stores: stores, log: log, exports: copies}, nil
 }
@@ -219,7 +219,7 @@ func (a *App) Run(ctx context.Context) error {
 		group.Go(func() error { return a.exports.Run(gctx) })
 	}
 	if err := group.Wait(); err != nil {
-		return fmt.Errorf("access-roster: %w", err)
+		return fmt.Errorf("sluis: %w", err)
 	}
 	return nil
 }

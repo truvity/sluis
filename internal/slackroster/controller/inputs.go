@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/apply"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/apply"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // sharedTTL is how long the inputs the ticks share are kept: long enough that

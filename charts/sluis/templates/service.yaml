@@ -1,0 +1,15 @@
+{{- if eq .Values.renders "app" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sluis.fullname" . }}
+  labels:
+    {{- include "sluis.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "sluis.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: issuer
+      port: {{ include "sluis.port" . }}
+      targetPort: issuer
+{{ end -}}

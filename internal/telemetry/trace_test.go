@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/truvity/access-roster/internal/telemetry"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // markers are what no span may carry out of the process: each is planted below

@@ -8,7 +8,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	"github.com/truvity/access-roster/internal/telemetry"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // With no collector named nothing is exported, and starting and stopping

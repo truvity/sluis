@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/backend/google"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/backend/google"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // Google connects a Google Workspace, both ways in: an administrator's

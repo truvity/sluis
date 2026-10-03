@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/testissuer"
+	"github.com/truvity/sluis/internal/testissuer"
 )
 
 const resURL = "https://mcp.example.com/metrics"

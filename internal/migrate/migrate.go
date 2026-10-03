@@ -1,6 +1,6 @@
 // Package migrate copies the service's State from any adapter to any other
 // through the ports and the domain stores (ADR 0031), and is the whole of
-// `access-roster migrate`.
+// `sluis migrate`.
 //
 // It copies through the BUSINESS interfaces, never raw bytes: a domain record
 // and its credential are read from the source's own store (the ConfigMaps and
@@ -42,8 +42,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // The domains a run can skip by name.

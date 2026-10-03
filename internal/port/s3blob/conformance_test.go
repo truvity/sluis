@@ -14,9 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/porttest"
-	"github.com/truvity/access-roster/internal/port/s3blob"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port/s3blob"
 )
 
 // EnvURL names a LocalStack (or any S3 and KMS endpoint) the conformance run

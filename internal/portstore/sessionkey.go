@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 const sessionKeyKey = "rec.console.session-key"

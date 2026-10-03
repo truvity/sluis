@@ -3,7 +3,7 @@ package rails_test
 import (
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // The same set of lines, in any order, names the same fingerprint: an

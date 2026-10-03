@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // snapshot is every live key under the prefix and its revision.

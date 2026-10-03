@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // TestHeldProtoReportsTheChain proves the wire side of the "why do I hold

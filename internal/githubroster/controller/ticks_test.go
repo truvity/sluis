@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/controller"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/policy"
 )
 
 // twoOrgs binds an organisation with no credential ("acme", which sorts first

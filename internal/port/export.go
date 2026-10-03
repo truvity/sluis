@@ -20,7 +20,7 @@ type Exported struct {
 
 // StateExporter is an optional State capability: every live record under a
 // prefix with its remaining lifetime, which a Get does not say. It is what
-// `access-roster migrate` copies a login's lifetime with (ADR 0031), so a
+// `sluis migrate` copies a login's lifetime with (ADR 0031), so a
 // session moved to another store expires when it would have. An adapter that
 // cannot say is not one a migration reads from.
 type StateExporter interface {

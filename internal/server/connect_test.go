@@ -14,10 +14,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/access-roster/backend"
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // stubConsent is a connector whose exchange always fails, so a test can

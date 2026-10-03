@@ -12,16 +12,16 @@ import (
 )
 
 var (
-	chartDir   = filepath.Join("..", "..", "charts", "access-roster")
-	alertsCase = filepath.Join("..", "cases", "access-roster", "alerts", "values.yaml")
-	rulesTest  = filepath.Join("..", "rules", "access-roster-alerts.test.yaml")
+	chartDir   = filepath.Join("..", "..", "charts", "sluis")
+	alertsCase = filepath.Join("..", "cases", "sluis", "alerts", "values.yaml")
+	rulesTest  = filepath.Join("..", "rules", "sluis-alerts.test.yaml")
 )
 
 // renderArgs renders the chart with the given extra `helm template` arguments
 // and returns every document.
 func renderArgs(t *testing.T, args ...string) []map[string]any {
 	t.Helper()
-	cmd := exec.Command(helm(t), append([]string{"template", "access-roster", chartDir}, args...)...)
+	cmd := exec.Command(helm(t), append([]string{"template", "sluis", chartDir}, args...)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -98,7 +98,7 @@ func TestAlertsCanBeAPrometheusRuleAndOneRuleCanBeOff(t *testing.T) {
 // `renders: dashboards` renders ConfigMaps for Grafana's sidecar and nothing
 // else, each holding a dashboard that is valid JSON.
 func TestDashboardsModeRendersOnlySidecarConfigMaps(t *testing.T) {
-	docs := renderArgs(t, "-f", filepath.Join("..", "cases", "access-roster", "dashboards", "values.yaml"))
+	docs := renderArgs(t, "-f", filepath.Join("..", "cases", "sluis", "dashboards", "values.yaml"))
 	if len(docs) == 0 {
 		t.Fatal("nothing rendered")
 	}
@@ -126,7 +126,7 @@ func TestDashboardsModeRendersOnlySidecarConfigMaps(t *testing.T) {
 // The default mode renders no alert and no dashboard, so installing the chart
 // as before changes nothing.
 func TestTheAppModeRendersNoAlertsAndNoDashboards(t *testing.T) {
-	docs := render(t, filepath.Join("..", "cases", "access-roster", "minimal", "values.yaml"), "default")
+	docs := render(t, filepath.Join("..", "cases", "sluis", "minimal", "values.yaml"), "default")
 	if len(docs) == 0 {
 		t.Fatal("the app rendered nothing")
 	}
@@ -203,7 +203,7 @@ func TestTheRulesFireOnWhatTheyShouldAndNotOnWhatTheyShouldNot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(dir, "access-roster-alerts.test.yaml")
+	file := filepath.Join(dir, "sluis-alerts.test.yaml")
 	if err := os.WriteFile(file, tests, 0o600); err != nil {
 		t.Fatal(err)
 	}

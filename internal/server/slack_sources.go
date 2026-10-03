@@ -9,8 +9,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 // checkSources is the console's side of the rule on a channel's sources and

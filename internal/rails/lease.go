@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // A tick runs under a lease on its target (docs/decisions/0029), taken from

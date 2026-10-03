@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 func write(t *testing.T, dir, name, content string) {

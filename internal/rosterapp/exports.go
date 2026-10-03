@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/truvity/access-roster/internal/app"
-	"github.com/truvity/access-roster/internal/exports"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/app"
+	"github.com/truvity/sluis/internal/exports"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // openExports builds the runner of the deployment's exports, or nil when it

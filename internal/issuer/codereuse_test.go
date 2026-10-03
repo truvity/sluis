@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // Reusing an authorization code ends the session it opened.

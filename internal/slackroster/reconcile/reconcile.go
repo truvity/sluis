@@ -64,10 +64,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/emailaddr"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/status"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // Holder is one account holding a group, as [rails.Holder].
@@ -485,7 +485,7 @@ type Input struct {
 	Workspace string
 	// Workspaces are every declared workspace: the channels bound in each.
 	Workspaces map[string]policy.SlackWorkspace
-	// Facts are what access-roster knows of each workspace at run time and
+	// Facts are what sluis knows of each workspace at run time and
 	// the policy does not say, by workspace key.
 	Facts map[string]Facts
 	// People links one person's addresses ([policy.Policy.People]).

@@ -1,7 +1,7 @@
 package issuer
 
 import (
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // Claims are what a token carries beyond the fixed identity fields: the

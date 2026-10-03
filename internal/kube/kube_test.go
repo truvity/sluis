@@ -14,10 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/settings"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/settings"
 )
 
 const namespace = "directory-roster"

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // Guards are what a decided organisation is checked against before

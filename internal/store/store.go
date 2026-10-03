@@ -13,18 +13,18 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/port"
-	dynamoport "github.com/truvity/access-roster/internal/port/dynamodb"
-	"github.com/truvity/access-roster/internal/port/kmsseal"
-	"github.com/truvity/access-roster/internal/port/legacy"
-	"github.com/truvity/access-roster/internal/port/memory"
-	natsport "github.com/truvity/access-roster/internal/port/nats"
-	"github.com/truvity/access-roster/internal/port/observe"
-	"github.com/truvity/access-roster/internal/port/openbao"
-	"github.com/truvity/access-roster/internal/port/s3blob"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port"
+	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
+	"github.com/truvity/sluis/internal/port/kmsseal"
+	"github.com/truvity/sluis/internal/port/legacy"
+	"github.com/truvity/sluis/internal/port/memory"
+	natsport "github.com/truvity/sluis/internal/port/nats"
+	"github.com/truvity/sluis/internal/port/observe"
+	"github.com/truvity/sluis/internal/port/openbao"
+	"github.com/truvity/sluis/internal/port/s3blob"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // The adapters `ports.adapter` names.
@@ -179,11 +179,11 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	return set, nil
 }
 
-// FromServe reads the configuration of `access-roster serve`.
+// FromServe reads the configuration of `sluis serve`.
 func FromServe(f *config.Serve) (Config, error) {
 	c := Config{
 		Adapter: adapterOf(f.Ports),
-		Release: orDefault(f.Release, "access-roster"),
+		Release: orDefault(f.Release, "sluis"),
 		Valkey:  valkeyOf(f.Release, f.Valkey),
 		Blob:    blobOf(f.Ports),
 		Sealer:  sealerOf(f.Ports),
@@ -221,7 +221,7 @@ func FromServe(f *config.Serve) (Config, error) {
 // and links are objects in its namespace, so it requires the cluster.
 func FromRoster(f *config.Roster) Config {
 	c := Config{
-		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "access-roster"), Kube: KubeRequired,
+		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
 		Blob: blobOf(f.Ports), Sealer: sealerOf(f.Ports), NATS: natsOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
 	}
 	if c.Adapter == AdapterMemory {
@@ -290,7 +290,7 @@ func orDefault(value, fallback string) string {
 }
 
 func valkeyOf(release string, v *config.Valkey) valkey.Config {
-	c := valkey.Config{Cluster: true, Prefix: orDefault(release, "access-roster")}
+	c := valkey.Config{Cluster: true, Prefix: orDefault(release, "sluis")}
 	if v != nil {
 		c.Address = v.Address
 		c.TLS = v.TLS

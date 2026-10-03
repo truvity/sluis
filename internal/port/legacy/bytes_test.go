@@ -11,13 +11,13 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/legacy"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/legacy"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // The adapter's whole claim is that it reaches the objects the domain stores

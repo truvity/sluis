@@ -638,8 +638,8 @@ const file_accessissuer_v1_session_proto_rawDesc = "" +
 	"\fHOW_EXCHANGE\x10\x032\xd0\x01\n" +
 	"\x0eSessionService\x12[\n" +
 	"\fListSessions\x12$.accessissuer.v1.ListSessionsRequest\x1a%.accessissuer.v1.ListSessionsResponse\x12a\n" +
-	"\x0eRevokeSessions\x12&.accessissuer.v1.RevokeSessionsRequest\x1a'.accessissuer.v1.RevokeSessionsResponseB\xc5\x01\n" +
-	"\x13com.accessissuer.v1B\fSessionProtoP\x01ZCgithub.com/truvity/access-roster/gen/accessissuer/v1;accessissuerv1\xa2\x02\x03AXX\xaa\x02\x0fAccessissuer.V1\xca\x02\x0fAccessissuer\\V1\xe2\x02\x1bAccessissuer\\V1\\GPBMetadata\xea\x02\x10Accessissuer::V1b\x06proto3"
+	"\x0eRevokeSessions\x12&.accessissuer.v1.RevokeSessionsRequest\x1a'.accessissuer.v1.RevokeSessionsResponseB\xbd\x01\n" +
+	"\x13com.accessissuer.v1B\fSessionProtoP\x01Z;github.com/truvity/sluis/gen/accessissuer/v1;accessissuerv1\xa2\x02\x03AXX\xaa\x02\x0fAccessissuer.V1\xca\x02\x0fAccessissuer\\V1\xe2\x02\x1bAccessissuer\\V1\\GPBMetadata\xea\x02\x10Accessissuer::V1b\x06proto3"
 
 var (
 	file_accessissuer_v1_session_proto_rawDescOnce sync.Once

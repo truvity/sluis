@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/portstore"
-	slackcatalogueapp "github.com/truvity/access-roster/internal/slackapp/catalogueapp"
-	slackconnection "github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/portstore"
+	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
+	slackconnection "github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 // replayedUnderAnotherKey copies the raw bytes at one key to another and says

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // watched reports a mounted key whose change wakes a pass: a workspace's own

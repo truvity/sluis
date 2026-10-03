@@ -396,8 +396,8 @@ const file_directoryroster_v1_settings_proto_rawDesc = "" +
 	"\x16CLIENT_SOURCE_DECLARED\x10\x01\x12\x19\n" +
 	"\x15CLIENT_SOURCE_CONSOLE\x10\x022q\n" +
 	"\x0fSettingsService\x12^\n" +
-	"\vGetSettings\x12&.directoryroster.v1.GetSettingsRequest\x1a'.directoryroster.v1.GetSettingsResponseB\xdb\x01\n" +
-	"\x16com.directoryroster.v1B\rSettingsProtoP\x01ZIgithub.com/truvity/access-roster/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
+	"\vGetSettings\x12&.directoryroster.v1.GetSettingsRequest\x1a'.directoryroster.v1.GetSettingsResponseB\xd3\x01\n" +
+	"\x16com.directoryroster.v1B\rSettingsProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
 	file_directoryroster_v1_settings_proto_rawDescOnce sync.Once

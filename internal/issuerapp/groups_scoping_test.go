@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // groupsScoping defaults to report and accepts off, report and enforce

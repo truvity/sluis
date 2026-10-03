@@ -3,7 +3,7 @@
 // them — and the part the console needs to connect a workspace in the
 // first place.
 //
-// Slack cannot read a token claim, so access-roster reconciles instead:
+// Slack cannot read a token claim, so sluis reconciles instead:
 // it finds or creates the channels a policy names, invites the people who
 // should be in them, removes the people who should not be from private
 // channels, and, between two workspaces of the same owner, links a channel

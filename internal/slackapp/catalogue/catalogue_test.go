@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/slackapp/catalogue"
 )
 
 func TestAValidCatalogueIsRead(t *testing.T) {

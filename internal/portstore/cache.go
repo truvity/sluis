@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 // UserCacheTTL is how long a Slack user's identity is remembered: the

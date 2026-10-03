@@ -11,7 +11,7 @@ const sentences = [roster];
  *
  *  The installation's own view: its profiles along the top, the ones this
  *  person may read (the installation says which); the qualifier box; and
- *  every record as the sentence access-roster's catalogue gives it. The
+ *  every record as the sentence sluis's catalogue gives it. The
  *  console only carries the calls, with a token for the person, so what
  *  anyone sees here is decided by the installation's grants and every
  *  read is itself recorded there. */

@@ -6,9 +6,9 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/slackapp"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/slackapp"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // probeGuestSides adds, to the report of the workspace that HOSTS a managed

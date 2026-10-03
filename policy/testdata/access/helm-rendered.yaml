@@ -59,7 +59,7 @@ groups:
       - service_account:
           cluster: beta
           name: exchange-probe
-          namespace: access-roster-probe
+          namespace: sluis-probe
 people:
   "ada":
     - "ada@example.com"
@@ -106,7 +106,7 @@ vocabulary:
     "alpha":
       sensitive: true
   things:
-    "access-roster":
+    "sluis":
       scopes:
         - "all"
       roles:

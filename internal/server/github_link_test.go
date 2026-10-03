@@ -16,12 +16,12 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubapp/githubfake"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/hub"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // memoryLinkApp keeps the link App in memory.

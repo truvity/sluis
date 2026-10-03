@@ -11,7 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/link"
 )
 
 // GitHubLinks keeps people's links between a GitHub account and their work
@@ -161,7 +161,7 @@ func (s *GitHubLinks) Invalidate(ctx context.Context, reason string, now time.Ti
 }
 
 // Restore writes one link exactly as given, its Revision and tokens included,
-// replacing the account's link if there is one. It is what `access-roster
+// replacing the account's link if there is one. It is what `sluis
 // migrate` writes a copied link with: every other write moves the revision,
 // which a copy must not.
 func (s *GitHubLinks) Restore(ctx context.Context, l link.Link) error {

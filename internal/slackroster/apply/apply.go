@@ -7,10 +7,10 @@ import (
 
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/slackapp"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/slackapp"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // Options say how a decision is carried out.

@@ -13,8 +13,8 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/tokens"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/tokens"
 )
 
 // tokenPath is the token endpoint, as [Provider] mounts it.

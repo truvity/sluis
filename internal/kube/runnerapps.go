@@ -11,7 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 )
 
 // GitHubRunnerApps keeps runner Apps: every App's record and key in one

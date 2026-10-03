@@ -18,9 +18,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/porttest"
-	"github.com/truvity/access-roster/internal/port/s3blob"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port/s3blob"
 )
 
 // fake is an in-memory S3 with If-Match, a page size of two, and the

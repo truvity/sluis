@@ -12,7 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // The property a redundant store exists for, in the form of a test: a

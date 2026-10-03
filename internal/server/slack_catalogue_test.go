@@ -15,14 +15,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit/audittest"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/slackapp"
-	slackcatalogue "github.com/truvity/access-roster/internal/slackapp/catalogue"
-	"github.com/truvity/access-roster/internal/slackapp/slackfake"
-	"github.com/truvity/access-roster/policy"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/slackapp"
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/slackapp/slackfake"
+	"github.com/truvity/sluis/policy"
 )
 
 const (

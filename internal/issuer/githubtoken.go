@@ -13,11 +13,11 @@ import (
 
 	auditv1 "github.com/truvity/audit/sdk/gen/audit/v1"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubapp/mints"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/mints"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 )
 
 // GitHubAppStore is where a created catalogue App's record and key are

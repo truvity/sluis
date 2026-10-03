@@ -11,8 +11,8 @@ import (
 
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/policy"
 )
 
 // Config is what the issuer needs to run beyond its policy and the hub.

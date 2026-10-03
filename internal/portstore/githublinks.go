@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/port"
 )
 
 const (
@@ -334,7 +334,7 @@ func (s *GitHubLinks) Update(ctx context.Context, changed []link.Link) ([]link.L
 }
 
 // Restore writes one link exactly as given, its Revision included, replacing the
-// account's link if there is one: the write of `access-roster migrate`, since
+// account's link if there is one: the write of `sluis migrate`, since
 // every other write moves the revision a copy must keep.
 func (s *GitHubLinks) Restore(ctx context.Context, l link.Link) error {
 	return s.b.editItem(ctx, ghLinkKey(l.ID), 0, func(*item) (*item, error) {

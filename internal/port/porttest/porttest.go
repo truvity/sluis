@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // Keys the suite writes. They are keys of the layout in ports.md, so an

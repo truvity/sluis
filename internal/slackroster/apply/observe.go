@@ -15,9 +15,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/slackapp"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/slackapp"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/policy"
 )
 
 // ErrWrongWorkspace is a bot token that belongs to another workspace than

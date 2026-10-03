@@ -15,9 +15,9 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/policy"
 )
 
 // Verifier turns a third-party subject token into a proof. It is the

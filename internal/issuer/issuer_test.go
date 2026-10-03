@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // fakeDirectory stands in for the hub. The issuer never reads a directory

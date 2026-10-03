@@ -1,7 +1,7 @@
 // Package identity turns a token somebody else issued into the caller a
 // listener acts on.
 //
-// It is the consumer half of access-roster: a service behind the gateway
+// It is the consumer half of sluis: a service behind the gateway
 // imports this, points it at the issuer, and gets back who is calling
 // and which internal groups they are in. There is no group re-mapping
 // anywhere in it — the name in the policy is the name in the token is
@@ -16,7 +16,7 @@
 // distinction — which matters, because the right anchor is decided by
 // how far away the caller is and that can change without the handler.
 //
-// access-roster uses this package itself rather than keeping a copy of
+// sluis uses this package itself rather than keeping a copy of
 // it. A library its own author does not use is a library nobody has
 // tested against a real listener.
 package identity
@@ -35,7 +35,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // ErrUnverified is returned when a token is not this verifier's to
@@ -94,7 +94,7 @@ func (v Verified) HasAny(groups ...string) bool {
 	return false
 }
 
-// Issuer verifies a token access-roster signed, against the key set it
+// Issuer verifies a token sluis signed, against the key set it
 // publishes.
 //
 // Discovery is lazy and cached: a service must start whether or not the
@@ -191,7 +191,7 @@ func (i *Issuer) resolve(ctx context.Context) (*op.AccessTokenVerifier, error) {
 // Review is supplied rather than built so that this package does not
 // drag Kubernetes client libraries into every consumer that only needs
 // the issuer. Pass [k8s.io/client-go]'s TokenReview, or the wrapper
-// access-roster's own `kube` package offers.
+// sluis's own `kube` package offers.
 type Cluster struct {
 	// Review asks the API server whether a token is genuine and for
 	// which audiences, and returns the authenticated username.

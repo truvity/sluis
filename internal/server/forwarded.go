@@ -4,16 +4,16 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/truvity/access-roster/identity"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/identity"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // forwardedBearer turns a token an authenticating gateway forwarded into
 // a principal, by verifying it against the issuer's published keys.
 //
 // The verification is [identity.Issuer] — the package this project
-// publishes for its consumers — and not a copy of it. access-roster uses
+// publishes for its consumers — and not a copy of it. sluis uses
 // the library it ships: a library its own author does not use is a
 // library nobody has tested against a real listener, and every gap in it
 // then surfaces first in whichever consumer is unlucky.

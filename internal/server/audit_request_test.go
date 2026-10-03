@@ -14,8 +14,8 @@ import (
 	auditv1 "github.com/truvity/audit/sdk/gen/audit/v1"
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit/audittest"
 )
 
 // read is the middleware's reading of a request with these headers from

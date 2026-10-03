@@ -12,10 +12,10 @@ import (
 
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/reconcile"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/reconcile"
 )
 
 // LinkStore is where people's links are kept. The controller rewrites a

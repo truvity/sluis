@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // served builds a resolver pointed at a test server, with that server's

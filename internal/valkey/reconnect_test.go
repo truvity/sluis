@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // The property Oleg asked for, in the form of a test: a client whose

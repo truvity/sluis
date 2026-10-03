@@ -34,34 +34,34 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/backend/google"
-	"github.com/truvity/access-roster/frontend"
-	"github.com/truvity/access-roster/gen/directory/v1/directoryv1connect"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/connector"
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/exports"
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubapp/mints"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
-	"github.com/truvity/access-roster/internal/health"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/server"
-	"github.com/truvity/access-roster/internal/settings"
-	slackcatalogue "github.com/truvity/access-roster/internal/slackapp/catalogue"
-	"github.com/truvity/access-roster/internal/store"
-	"github.com/truvity/access-roster/internal/version"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/backend/google"
+	"github.com/truvity/sluis/frontend"
+	"github.com/truvity/sluis/gen/directory/v1/directoryv1connect"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/connector"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/exports"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/mints"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/server"
+	"github.com/truvity/sluis/internal/settings"
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/version"
+	"github.com/truvity/sluis/policy"
 )
 
 // Config is the whole of the hub's configuration. The chart sets it from
@@ -164,7 +164,7 @@ func FromConfig(f *config.Serve) (Config, error) {
 		policyPath:       f.PolicyDir,
 		overlayPath:      f.OverlayFile,
 		store:            orDefault(f.Store, storeMemory),
-		release:          orDefault(f.Release, "access-roster"),
+		release:          orDefault(f.Release, "sluis"),
 	}
 	if r := f.Recovery; r != nil {
 		if r.Enabled != nil {

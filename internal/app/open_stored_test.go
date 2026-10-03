@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/backend/fake"
-	"github.com/truvity/access-roster/backend/google"
-	"github.com/truvity/access-roster/internal/app"
-	"github.com/truvity/access-roster/internal/connector"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/server"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/backend/fake"
+	"github.com/truvity/sluis/backend/google"
+	"github.com/truvity/sluis/internal/app"
+	"github.com/truvity/sluis/internal/connector"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/server"
 )
 
 // fakeConnector stands in for a second backend the console could connect

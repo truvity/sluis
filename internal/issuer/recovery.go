@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // Recovery is the way in when no directory can vouch for anybody.

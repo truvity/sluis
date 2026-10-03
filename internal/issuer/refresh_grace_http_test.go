@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // refreshWith posts one refresh and returns the status and the refresh

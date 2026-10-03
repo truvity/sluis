@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // portState is [State] over the ports: what the issuer keeps about a login in

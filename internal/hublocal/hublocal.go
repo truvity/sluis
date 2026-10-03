@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // Resolver is the part of the hub this needs: one method, so a test can

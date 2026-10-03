@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/emailaddr"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/emailaddr"
 )
 
 // ResolvedGroup is one directory group with its members resolved through

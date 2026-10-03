@@ -7,7 +7,7 @@ import (
 
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/truvity/access-roster/internal/slackapp/catalogueapp"
+	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
 func TestSlackCatalogueAppsAreKeptInOneSecretByCatalogueID(t *testing.T) {

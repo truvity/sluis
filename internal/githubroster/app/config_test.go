@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/githubroster/app"
+	"github.com/truvity/sluis/internal/githubroster/app"
 )
 
 func write(t *testing.T, body string) string {

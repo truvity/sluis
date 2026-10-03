@@ -13,9 +13,9 @@ import (
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 
-	"github.com/truvity/access-roster/internal/port"
-	natsport "github.com/truvity/access-roster/internal/port/nats"
-	"github.com/truvity/access-roster/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port"
+	natsport "github.com/truvity/sluis/internal/port/nats"
+	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // server starts an in-process nats-server with JetStream.

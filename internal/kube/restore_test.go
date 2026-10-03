@@ -15,11 +15,11 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
 )
 
 // Every console-connected workspace's credential is in one Secret, under a

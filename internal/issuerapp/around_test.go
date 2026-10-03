@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/issuerapp"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/issuerapp"
 )
 
 // Around wraps the one handler the issuer's listener serves. The merged

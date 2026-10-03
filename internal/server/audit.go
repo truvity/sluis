@@ -5,8 +5,8 @@ import (
 
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
 )
 
 // record writes down something done through the console. A console

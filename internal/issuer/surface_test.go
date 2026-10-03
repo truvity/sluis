@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // The endpoints a relying party actually looks for.

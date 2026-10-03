@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/policy"
 )
 
 // directory is a stand-in for the hub: whatever the test says the

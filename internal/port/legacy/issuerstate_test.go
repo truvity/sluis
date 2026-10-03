@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/port/memory"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/port/memory"
 )
 
 // The issuer's State, built over the ports, behaves as it always did over the

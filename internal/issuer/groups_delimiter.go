@@ -1,6 +1,6 @@
 package issuer
 
-import "github.com/truvity/access-roster/policy"
+import "github.com/truvity/sluis/policy"
 
 // applyGroupsDelimiter rewrites every `:` in each name under claims'
 // `groups` entry to audience's own `groups_delimiter` -- a temporary

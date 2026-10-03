@@ -14,8 +14,8 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/policy"
 )
 
 // What each ConfigMap is named for: where its config lives in the values, and
@@ -43,7 +43,7 @@ func helm(t *testing.T) string {
 
 func render(t *testing.T, values, namespace string) []map[string]any {
 	t.Helper()
-	cmd := exec.Command(helm(t), "template", "access-roster", filepath.Join("..", "..", "charts", "access-roster"),
+	cmd := exec.Command(helm(t), "template", "sluis", filepath.Join("..", "..", "charts", "sluis"),
 		"--namespace", namespace, "-f", values)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -117,8 +117,8 @@ func load(t *testing.T, path string) map[string]any {
 // holds exactly the block the values gave, with nothing added, renamed or
 // dropped, and that block is a file its binary accepts.
 func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
-	defaults := load(t, filepath.Join("..", "..", "charts", "access-roster", "values.yaml"))
-	cases, err := filepath.Glob(filepath.Join("..", "cases", "access-roster", "*", "values.yaml"))
+	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
+	cases, err := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
 	if err != nil || len(cases) == 0 {
 		t.Fatalf("no cases found: %v", err)
 	}
@@ -208,9 +208,9 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 // merged over the chart's defaults and a minimal install, is a file the
 // service accepts.
 func TestEveryShippedExampleConfigurationIsAccepted(t *testing.T) {
-	examples, _ := filepath.Glob(filepath.Join("..", "..", "charts", "access-roster", "examples", "*.yaml"))
-	defaults := load(t, filepath.Join("..", "..", "charts", "access-roster", "values.yaml"))
-	minimal := load(t, filepath.Join("..", "cases", "access-roster", "minimal", "values.yaml"))
+	examples, _ := filepath.Glob(filepath.Join("..", "..", "charts", "sluis", "examples", "*.yaml"))
+	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
+	minimal := load(t, filepath.Join("..", "cases", "sluis", "minimal", "values.yaml"))
 	for _, example := range examples {
 		values := merge(merge(defaults, minimal), load(t, example))
 		cfg, ok := dig(values, "config")
@@ -232,7 +232,7 @@ func TestEveryShippedExampleConfigurationIsAccepted(t *testing.T) {
 // group the document declared.
 func TestTheRenderedAccessDocumentLoads(t *testing.T) {
 	var data map[string]any
-	for _, doc := range render(t, filepath.Join("..", "cases", "access-roster", "access-document", "values.yaml"), "identity") {
+	for _, doc := range render(t, filepath.Join("..", "cases", "sluis", "access-document", "values.yaml"), "identity") {
 		if got, ok := dig(doc, "data"); ok && doc["kind"] == "ConfigMap" {
 			if m, isMap := got.(map[string]any); isMap && m["access.yaml"] != nil {
 				data = m

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // issuerPrefix is where the issuer keeps everything it holds about a login: the

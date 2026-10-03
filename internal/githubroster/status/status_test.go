@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/githubroster/status"
 )
 
 // What the controller writes is what the console reads, field for field.

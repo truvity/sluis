@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // A candidate ask cannot answer is skipped, not left with a zero value

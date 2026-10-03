@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // A DynamoDB table holds State, Index and Trigger; Blob, Sealer and Identity

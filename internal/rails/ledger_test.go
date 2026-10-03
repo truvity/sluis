@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 func TestLedgerRecordsEachKeyOnceWhileItStaysHeld(t *testing.T) {

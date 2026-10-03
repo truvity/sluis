@@ -11,9 +11,9 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/store"
 )
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))

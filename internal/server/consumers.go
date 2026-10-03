@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // Consumers is who may call the API listener.

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/access"
+	"github.com/truvity/sluis/internal/access"
 )
 
 // The owner a flow will record is chosen where the flow begins and rides in

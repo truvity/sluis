@@ -7,7 +7,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // The installation default is the PRIMARY key's own algorithm -- today's

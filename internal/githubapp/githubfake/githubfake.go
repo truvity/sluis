@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp"
 )
 
 // Org is the organisation's state.

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // Store implements [port.State], [port.Index], [port.Trigger], [port.Sealer]

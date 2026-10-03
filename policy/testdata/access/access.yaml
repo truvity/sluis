@@ -80,7 +80,7 @@ access:
     - name: alpha
       sensitive: true
     things:
-    - name: access-roster
+    - name: sluis
       scopes:
       - all
       roles:
@@ -163,7 +163,7 @@ overlay:
       matchers:
       - service_account:
           cluster: beta
-          namespace: access-roster-probe
+          namespace: sluis-probe
           name: exchange-probe
     all:access-roster:viewer:
       matchers:

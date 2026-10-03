@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 const absoluteBase = "version: 1\n" +

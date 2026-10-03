@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 func sample() status.Workspace {

@@ -6,8 +6,8 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // removal is one member a strict channel would remove.

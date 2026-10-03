@@ -11,8 +11,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 // kindSlackSharedRecords labels the ConfigMap the Slack controller reads

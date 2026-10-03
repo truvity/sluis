@@ -10,9 +10,9 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/kmsseal"
-	"github.com/truvity/access-roster/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/kmsseal"
+	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // EnvURL names a LocalStack with KMS. Unset, these tests skip; the CI job and

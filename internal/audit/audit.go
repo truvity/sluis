@@ -1,4 +1,4 @@
-// Package audit is what access-roster tells the audit trail.
+// Package audit is what sluis tells the audit trail.
 //
 // The trail is kept by an installation of github.com/truvity/audit of this
 // service's own, rendered beside it: a receiver that takes the records and
@@ -43,7 +43,7 @@ var files embed.FS
 const Source = "roster"
 
 // Tenant is the tenant every record is written under. An installation of
-// access-roster serves one organisation, and its trail is the installation's
+// sluis serves one organisation, and its trail is the installation's
 // own rather than a customer's.
 const Tenant = record.TenantPlatform
 

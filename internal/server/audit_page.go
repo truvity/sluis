@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // AuditQuery is the audit installation's query service, and how the console

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/truvity/access-roster/backend"
+	"github.com/truvity/sluis/backend"
 )
 
 // Op names an operation, so a test can fail exactly one of them.

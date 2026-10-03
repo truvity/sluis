@@ -1,7 +1,7 @@
 // The only file that touches the Connect clients. Views call these
 // functions and get view types back, so a contract change is a compile
 // error here rather than a runtime surprise in a table cell.
-import { fetchIdentity, type Identity } from "@truvity/access-roster";
+import { fetchIdentity, type Identity } from "@truvity/sluis";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { createQueryClient } from "@truvity/audit";
@@ -76,7 +76,7 @@ export { Backend, Role, How };
  *  two fields only this application has.
  *
  *  The base type comes from the package we publish rather than being
- *  declared again here — access-roster uses the library it ships, so the
+ *  declared again here — sluis uses the library it ships, so the
  *  contract has exactly one definition and this console is the first
  *  thing that breaks when it changes. A consumer's whoami may carry
  *  fields of its own, which is why extending is the shape rather than

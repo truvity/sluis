@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // stubPending is an authorization request waiting to be completed, with

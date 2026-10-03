@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/exports"
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/exports"
+	"github.com/truvity/sluis/internal/port"
 )
 
 func dur(d time.Duration) *config.Duration { c := config.Duration(d); return &c }

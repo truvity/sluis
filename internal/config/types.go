@@ -306,7 +306,7 @@ type (
 	}
 )
 
-// Serve is the configuration of `access-roster serve`: the issuer, the console
+// Serve is the configuration of `sluis serve`: the issuer, the console
 // and the directory hub, which run as one process.
 type Serve struct {
 	IssuerURL     string `json:"issuerURL"`
@@ -363,7 +363,7 @@ type Roster struct {
 	Audit      *RosterAudit `json:"audit,omitempty"`
 }
 
-// ControllerGitHub is the configuration of `access-roster controller github`.
+// ControllerGitHub is the configuration of `sluis controller github`.
 type ControllerGitHub struct {
 	Roster
 	AppsDir       string   `json:"appsDir,omitempty"`
@@ -371,7 +371,7 @@ type ControllerGitHub struct {
 	EnabledOrgs   []string `json:"enabledOrgs,omitempty"`
 }
 
-// ControllerSlack is the configuration of `access-roster controller slack`.
+// ControllerSlack is the configuration of `sluis controller slack`.
 type ControllerSlack struct {
 	Roster
 	CredentialsDir    string   `json:"credentialsDir,omitempty"`

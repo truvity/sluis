@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // methodScopes is every Slack Web API method package slackapp calls, with the

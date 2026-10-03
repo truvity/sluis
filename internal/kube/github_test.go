@@ -6,7 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/kube"
+	"github.com/truvity/sluis/internal/kube"
 )
 
 // The service creates the report, the controller replaces its data, the

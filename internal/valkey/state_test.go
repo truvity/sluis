@@ -8,8 +8,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // Both implementations are the same contract, so they are tested by the

@@ -21,15 +21,15 @@ import (
 	"github.com/truvity/audit/sdk/record"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/truvity/access-roster/internal/audit/audittest"
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubapp/githubfake"
-	"github.com/truvity/access-roster/internal/githubapp/mints"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
-	"github.com/truvity/access-roster/tokens"
+	"github.com/truvity/sluis/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubapp/mints"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/tokens"
 )
 
 // releaseWorkflow is the one workflow file the publisher grant is pinned to.

@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/backend/fake"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/backend/fake"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // Tenant is one demonstration workspace and the backend behind it.

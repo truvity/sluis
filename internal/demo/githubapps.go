@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubapp/mints"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/mints"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 )
 
 // The demonstration's Apps beyond the link App and the organisation's own:

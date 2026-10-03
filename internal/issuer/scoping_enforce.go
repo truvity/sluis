@@ -1,6 +1,6 @@
 package issuer
 
-import "github.com/truvity/access-roster/policy"
+import "github.com/truvity/sluis/policy"
 
 // scopeClaims narrows claims's `groups` entry to what [policy.Set.ScopeGroups]
 // keeps of held for audience, when mode is [GroupsScopingEnforce] -- see

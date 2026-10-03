@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/truvity/access-roster/identity"
+	"github.com/truvity/sluis/identity"
 )
 
 // record is what one audit line is made of. It holds names and numbers

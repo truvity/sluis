@@ -149,7 +149,7 @@ func EncodeLogs(resource []Attr, recs []*LogRecord) []byte {
 	for _, a := range resource {
 		res = appendAttr(res, 1, a)
 	}
-	scope := appendBytes(nil, 1, appendString(nil, 1, "access-roster-lambda-telemetry"))
+	scope := appendBytes(nil, 1, appendString(nil, 1, "sluis-lambda-telemetry"))
 	for _, r := range recs {
 		scope = appendRecord(scope, r)
 	}

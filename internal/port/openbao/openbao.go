@@ -47,7 +47,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // The login methods.

@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
-	slackcatalogueapp "github.com/truvity/access-roster/internal/slackapp/catalogueapp"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
 // Apps are `app.<kind>.<name>`: the record and the sealed credential in one

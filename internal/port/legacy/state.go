@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // State is [port.State] over the Valkey and ConfigMap objects of today; see

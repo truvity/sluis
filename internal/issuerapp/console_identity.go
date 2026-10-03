@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // signedIn reads the issuer's own browser session and hands the console

@@ -3,7 +3,7 @@ package rails_test
 import (
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // Act runs its function only when the switch is on.

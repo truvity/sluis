@@ -15,7 +15,7 @@ import (
 	"github.com/truvity/audit/sdk/record"
 	"github.com/truvity/audit/sdk/sink"
 
-	"github.com/truvity/access-roster/internal/audit"
+	"github.com/truvity/sluis/internal/audit"
 )
 
 // Recorder keeps what it is given, in order.

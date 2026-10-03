@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/identity"
+	"github.com/truvity/sluis/identity"
 )
 
 // A workload proven by its cluster and a person proven by the issuer

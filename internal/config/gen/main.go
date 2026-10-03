@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/truvity/access-roster/internal/config/schema"
+	"github.com/truvity/sluis/internal/config/schema"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 			fail(err)
 		}
 	}
-	chart := "charts/access-roster/values.schema.json"
+	chart := "charts/sluis/values.schema.json"
 	if len(os.Args) > 2 {
 		chart = os.Args[2]
 	}

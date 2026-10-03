@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/health"
+	"github.com/truvity/sluis/internal/health"
 )
 
 func get(t *testing.T, mux http.Handler, path string) *httptest.ResponseRecorder {

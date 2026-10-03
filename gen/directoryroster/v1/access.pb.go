@@ -3198,8 +3198,8 @@ const file_directoryroster_v1_access_proto_rawDesc = "" +
 	"\tGetPolicy\x12$.directoryroster.v1.GetPolicyRequest\x1a%.directoryroster.v1.GetPolicyResponse\x12v\n" +
 	"\x13ListDirectoryGroups\x12..directoryroster.v1.ListDirectoryGroupsRequest\x1a/.directoryroster.v1.ListDirectoryGroupsResponse\x12p\n" +
 	"\x11GetDirectoryGroup\x12,.directoryroster.v1.GetDirectoryGroupRequest\x1a-.directoryroster.v1.GetDirectoryGroupResponse\x12\x7f\n" +
-	"\x16ResolveDirectoryGroups\x121.directoryroster.v1.ResolveDirectoryGroupsRequest\x1a2.directoryroster.v1.ResolveDirectoryGroupsResponseB\xd9\x01\n" +
-	"\x16com.directoryroster.v1B\vAccessProtoP\x01ZIgithub.com/truvity/access-roster/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
+	"\x16ResolveDirectoryGroups\x121.directoryroster.v1.ResolveDirectoryGroupsRequest\x1a2.directoryroster.v1.ResolveDirectoryGroupsResponseB\xd1\x01\n" +
+	"\x16com.directoryroster.v1B\vAccessProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
 	file_directoryroster_v1_access_proto_rawDescOnce sync.Once

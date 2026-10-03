@@ -52,7 +52,7 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
     },
     {
       done: progress.clientConfigured,
-      title: "Give the client to access-roster",
+      title: "Give the client to sluis",
       body: (
         <Typography variant="body2" color="text.secondary">
           Paste the id and secret in <Ref to={paths.settings()}>Settings</Ref>, or declare them in the
@@ -72,7 +72,7 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
     },
     {
       done: progress.operators > 0,
-      title: "Say who operates access-roster",
+      title: "Say who operates sluis",
       body: (
         <Typography variant="body2" color="text.secondary">
           Attach a provider group to{" "}
@@ -93,7 +93,7 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
       title: "Turn off the recovery password",
       body: (
         <Typography variant="body2" color="text.secondary">
-          Set <Mono>access.recovery.enabled: false</Mono>, or run access-roster in a cluster, where recovery is a
+          Set <Mono>access.recovery.enabled: false</Mono>, or run sluis in a cluster, where recovery is a
           short-lived token proving access to the API server and no password is kept at all.
         </Typography>
       ),

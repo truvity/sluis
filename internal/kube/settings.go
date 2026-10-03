@@ -11,7 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/settings"
+	"github.com/truvity/sluis/internal/settings"
 )
 
 // The keys of the OAuth client Secret the hub writes ITSELF, when a

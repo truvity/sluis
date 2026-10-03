@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // Recovery is the one way in that no directory gates, so what it refuses

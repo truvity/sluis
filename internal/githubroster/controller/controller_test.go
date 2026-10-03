@@ -20,16 +20,16 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/gen/directoryroster/v1/directoryrosterv1connect"
-	"github.com/truvity/access-roster/internal/audit/audittest"
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubapp/githubfake"
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/controller"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/policy"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
+	"github.com/truvity/sluis/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // console answers the two questions the controller asks, from a directory

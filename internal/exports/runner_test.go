@@ -13,13 +13,13 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/exports"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/rails"
-	slackcatalogueapp "github.com/truvity/access-roster/internal/slackapp/catalogueapp"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/exports"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/rails"
+	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
 var (

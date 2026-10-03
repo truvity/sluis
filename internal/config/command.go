@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/truvity/access-roster/internal/version"
+	"github.com/truvity/sluis/internal/version"
 )
 
 // Command reads one subcommand's command line, which is `--config <file>` and
 // nothing else but `--version` and `--help`. command is what the person typed
-// to get here ("access-roster serve"), and schema names the configuration it
+// to get here ("sluis serve"), and schema names the configuration it
 // reads: schemas/config/<schema>.schema.json. A flag that overrides a key, or
 // stands in for one, is a second source of truth: the file is the whole of the
 // configuration.

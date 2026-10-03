@@ -20,7 +20,7 @@
 // Query on ONE partition with begins_with on sk, which returns the keys in
 // key order and pages by LastEvaluatedKey. A prefix with no dot (`ses`, “ or a
 // legacy `issuer:code:`) names no partition and is a Scan, sorted in memory:
-// an operator's listing, and what `access-roster migrate` does through the
+// an operator's listing, and what `sluis migrate` does through the
 // exporters. The partition is the key family on purpose: ADR 0027's IAM
 // condition dynamodb:LeadingKeys then grants a role the families it writes. A
 // hot partition is not a concern at this scale, and the one-item-per-key
@@ -79,7 +79,7 @@
 // # IAM
 //
 // dynamodb:GetItem, PutItem, DeleteItem and Query on the table, Scan for
-// `access-roster migrate` and a listing by a dotless prefix, and
+// `sluis migrate` and a listing by a dotless prefix, and
 // dynamodb:DescribeTable (the start-up check that the table is there and the
 // readiness probe). dynamodb:LeadingKeys may be restricted to the families a
 // role writes; `notify` and `lease` belong to every role that runs a tick.
@@ -101,7 +101,7 @@ import (
 	ddb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 var (

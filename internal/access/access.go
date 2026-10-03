@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/emailaddr"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/policy"
 )
 
 // ErrSuspended is returned when the directory says, authoritatively, that

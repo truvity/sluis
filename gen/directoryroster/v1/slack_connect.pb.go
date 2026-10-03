@@ -1085,8 +1085,8 @@ const file_directoryroster_v1_slack_connect_proto_rawDesc = "" +
 	"\x17ListSlackSharedChannels\x122.directoryroster.v1.ListSlackSharedChannelsRequest\x1a3.directoryroster.v1.ListSlackSharedChannelsResponse\x12\x85\x01\n" +
 	"\x18CreateSlackSharedChannel\x123.directoryroster.v1.CreateSlackSharedChannelRequest\x1a4.directoryroster.v1.CreateSlackSharedChannelResponse\x12\x85\x01\n" +
 	"\x18UpdateSlackSharedChannel\x123.directoryroster.v1.UpdateSlackSharedChannelRequest\x1a4.directoryroster.v1.UpdateSlackSharedChannelResponse\x12\x85\x01\n" +
-	"\x18DeleteSlackSharedChannel\x123.directoryroster.v1.DeleteSlackSharedChannelRequest\x1a4.directoryroster.v1.DeleteSlackSharedChannelResponseB\xdf\x01\n" +
-	"\x16com.directoryroster.v1B\x11SlackConnectProtoP\x01ZIgithub.com/truvity/access-roster/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
+	"\x18DeleteSlackSharedChannel\x123.directoryroster.v1.DeleteSlackSharedChannelRequest\x1a4.directoryroster.v1.DeleteSlackSharedChannelResponseB\xd7\x01\n" +
+	"\x16com.directoryroster.v1B\x11SlackConnectProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
 	file_directoryroster_v1_slack_connect_proto_rawDescOnce sync.Once

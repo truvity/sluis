@@ -21,10 +21,10 @@
       "type": "string"
     }
   },
-  "$id": "https://truvity.github.io/access-roster/schemas/v1/config/controller-github.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/v1/config/controller-github.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The configuration of `access-roster controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+  "description": "The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
   "properties": {
     "appsDir": {
       "default": "/var/run/github-roster/apps",
@@ -232,7 +232,7 @@
           "description": "The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.",
           "properties": {
             "bucket": {
-              "default": "access-roster",
+              "default": "sluis",
               "description": "The KV bucket.",
               "minLength": 1,
               "type": "string"
@@ -341,7 +341,7 @@
       "type": "string"
     },
     "release": {
-      "default": "access-roster",
+      "default": "sluis",
       "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
       "minLength": 1,
       "type": "string"
@@ -357,6 +357,6 @@
     "policyDir",
     "consoleURL"
   ],
-  "title": "access-roster controller github",
+  "title": "sluis controller github",
   "type": "object"
 }

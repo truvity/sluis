@@ -1,4 +1,4 @@
-# access-roster in a GitHub Actions job.
+# sluis in a GitHub Actions job.
 #
 # It prepares exactly what is ours to prepare and stops. A job's exchange
 # is one call to the token endpoint, which is why this is `curl` and `jq`
@@ -9,12 +9,12 @@
 # on top of the profiles below — ECR login, CodeArtifact tokens, anything
 # else. This does not wrap them, on purpose: many registries and many
 # artifact domains are many profiles and many `--profile` flags.
-name: access-roster
+name: sluis
 description: Exchange this job's identity token for the clusters, cloud roles and GitHub App tokens its rules grant.
 
 inputs:
   issuer:
-    description: The access-roster issuer, e.g. https://access.example.
+    description: The sluis issuer, e.g. https://access.example.
     required: true
   audiences:
     description: >-
@@ -111,7 +111,7 @@ runs:
           exit 1
         fi
 
-        work="${RUNNER_TEMP}/access-roster"
+        work="${RUNNER_TEMP}/sluis"
         mkdir -p "${work}"
         chmod 700 "${work}"
 

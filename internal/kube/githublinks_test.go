@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/kube"
+	"github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/kube"
 )
 
 // A check that read a link before the person linked again never overwrites

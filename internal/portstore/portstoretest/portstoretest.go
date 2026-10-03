@@ -16,10 +16,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/kmsseal"
-	"github.com/truvity/access-roster/internal/port/memory"
-	natsport "github.com/truvity/access-roster/internal/port/nats"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/kmsseal"
+	"github.com/truvity/sluis/internal/port/memory"
+	natsport "github.com/truvity/sluis/internal/port/nats"
 )
 
 // kmsFake is a KMS that "encrypts" by prefixing the context, so a different
@@ -74,7 +74,7 @@ func Envs(t *testing.T) []Env {
 	}
 	t.Cleanup(srv.Shutdown)
 
-	kmsSealer, err := kmsseal.NewWithAPI(&kmsFake{}, kmsseal.Config{KeyID: "alias/access-roster"})
+	kmsSealer, err := kmsseal.NewWithAPI(&kmsFake{}, kmsseal.Config{KeyID: "alias/sluis"})
 	if err != nil {
 		t.Fatal(err)
 	}

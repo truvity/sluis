@@ -4,11 +4,11 @@ import (
 	"maps"
 	"slices"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/status"
-	"github.com/truvity/access-roster/policy"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // The privacy words of a discovered side.

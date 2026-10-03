@@ -588,8 +588,8 @@ const file_directoryroster_v1_slack_apps_proto_rawDesc = "" +
 	"\x0fSlackAppService\x12d\n" +
 	"\rListSlackApps\x12(.directoryroster.v1.ListSlackAppsRequest\x1a).directoryroster.v1.ListSlackAppsResponse\x12g\n" +
 	"\x0eCreateSlackApp\x12).directoryroster.v1.CreateSlackAppRequest\x1a*.directoryroster.v1.CreateSlackAppResponse\x12j\n" +
-	"\x0fInstallSlackApp\x12*.directoryroster.v1.InstallSlackAppRequest\x1a+.directoryroster.v1.InstallSlackAppResponseB\xdc\x01\n" +
-	"\x16com.directoryroster.v1B\x0eSlackAppsProtoP\x01ZIgithub.com/truvity/access-roster/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
+	"\x0fInstallSlackApp\x12*.directoryroster.v1.InstallSlackAppRequest\x1a+.directoryroster.v1.InstallSlackAppResponseB\xd4\x01\n" +
+	"\x16com.directoryroster.v1B\x0eSlackAppsProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
 	file_directoryroster_v1_slack_apps_proto_rawDescOnce sync.Once

@@ -21,10 +21,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/truvity/access-roster/backend/fake"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/server"
+	"github.com/truvity/sluis/backend/fake"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/server"
 )
 
 func main() {
@@ -288,7 +288,7 @@ func (a *acceptance) serviceAccount(ctx context.Context, name string) (string, e
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: a.ns,
-			Labels:    map[string]string{"app.kubernetes.io/managed-by": "access-roster-acceptance"},
+			Labels:    map[string]string{"app.kubernetes.io/managed-by": "sluis-acceptance"},
 		},
 	}, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -323,7 +323,7 @@ func (a *acceptance) clean(ctx context.Context) {
 		},
 		func() error {
 			return a.api.CoreV1().ServiceAccounts(a.ns).DeleteCollection(ctx, metav1.DeleteOptions{},
-				metav1.ListOptions{LabelSelector: "app.kubernetes.io/managed-by=access-roster-acceptance"})
+				metav1.ListOptions{LabelSelector: "app.kubernetes.io/managed-by=sluis-acceptance"})
 		},
 	} {
 		if err := remove(); err != nil {

@@ -8,8 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 func TestSlackSharedKeepsOnlyItsOwnKeys(t *testing.T) {

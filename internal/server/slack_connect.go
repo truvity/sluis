@@ -10,13 +10,13 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
-	"github.com/truvity/access-roster/policy"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // SlackSharedRecords is where Slack Connect channel definitions are kept:

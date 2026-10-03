@@ -177,7 +177,7 @@ export function App() {
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Box sx={{ px: 2.5, pt: 2.25, pb: 1.5 }}>
         <Typography variant="subtitle1" sx={{ lineHeight: 1.2 }}>
-          access-roster
+          sluis
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
           {identityInfo?.version ?? ""}

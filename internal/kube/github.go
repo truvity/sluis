@@ -9,7 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/githubroster/status"
 )
 
 // GitHubStatus is the one ConfigMap the GitHub controller reports into

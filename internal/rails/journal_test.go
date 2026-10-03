@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 type report struct{ Note string }

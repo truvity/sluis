@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/identity"
+	"github.com/truvity/sluis/identity"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"

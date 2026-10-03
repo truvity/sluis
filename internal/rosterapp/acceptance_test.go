@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rosterapp"
+	"github.com/truvity/sluis/internal/rosterapp"
 )
 
 // load writes a configuration file and reads it the way the binary does, which

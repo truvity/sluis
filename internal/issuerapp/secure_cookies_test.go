@@ -3,7 +3,7 @@ package issuerapp
 import (
 	"testing"
 
-	"github.com/truvity/access-roster/internal/config"
+	"github.com/truvity/sluis/internal/config"
 )
 
 func ptr[T any](v T) *T { return &v }
