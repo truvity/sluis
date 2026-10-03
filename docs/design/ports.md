@@ -1,6 +1,6 @@
 # Ports
 
-The target shape of access-roster's storage, signalling and identity edges, and
+The target shape of sluis's storage, signalling and identity edges, and
 the contract each adapter must meet. The reasoning is in the records
 [0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)
 to [0034](../decisions/0034-exports-go-to-openbao-directly.md); this
@@ -16,7 +16,7 @@ credentials, GitHub organisations and Apps, a person's GitHub link, the Slack
 records) has an implementation on State and the Sealer
 ([The domain stores](#the-domain-stores)). With `ports.adapter`
 `legacy`, the default, the running service still keeps its state as described in
-[access-roster.md](access-roster.md#the-store) and
+[sluis.md](sluis.md#the-store) and
 [../operations/high-availability.md](../operations/high-availability.md); with any
 other adapter it keeps the domain records here. This
 page is what an adapter is built and tested against; the current layout stays
@@ -96,7 +96,7 @@ skew is bounded by the TTL being many times the renewal interval.
 `Get` does not say how long a record has left, and the Index cannot list its sets.
 A State or Index that can says so with two optional capabilities,
 `StateExporter` and `IndexExporter`: every live record or set under a prefix with
-its remaining lifetime. Nothing on a request path uses them. `access-roster
+its remaining lifetime. Nothing on a request path uses them. `sluis
 migrate` ([operations/migrate.md](../operations/migrate.md)) reads the issuer's
 state through them so a copied session keeps the lifetime it had; memory, NATS and
 the legacy adapter have them.
@@ -111,7 +111,7 @@ current store does.
 ## Key layout
 
 One layout, two renderings. NATS uses the dotted key as written, in a bucket
-`access-roster`. DynamoDB uses one table with a partition key `pk` and a sort
+`sluis`. DynamoDB uses one table with a partition key `pk` and a sort
 key `sk`: **`pk` is the key's first segment (`ses`, `rt`, `lease`) and `sk` is the
 whole key**, so a prefix listing that holds a dot (`ses.<person>.`, `ws.dir.`) is a
 `Query` on one partition with `begins_with` on `sk`, in key order and paged by
@@ -123,7 +123,7 @@ needs the adapter to know each family's shape, buys nothing at this scale, where
 hot partition is not a concern, and is dropped. A person's sessions are still one
 `Query`.) A prefix with **no dot** (`ses`, the empty prefix, a legacy
 `issuer:code:`) names no partition and is a `Scan` sorted in memory: an operator's
-listing and what `access-roster migrate` does. An `expires` attribute (epoch
+listing and what `sluis migrate` does. An `expires` attribute (epoch
 seconds) holds the expiry, the table's TTL attribute points at it, and a revision
 attribute `rev` is what conditional writes compare ([The DynamoDB
 adapter](#the-dynamodb-adapter)).
@@ -232,7 +232,7 @@ of the envelopes' data keys and never touches the ciphertext.
 Adapters: **KMS** (AWS; on Kubernetes through Pod Identity), **OpenBao Transit**,
 and a **mounted key** (a file, for an installation with neither). The signing-key
 schedule's private material is not stored by this port: the signing key stays a
-mounted file ([access-roster.md](access-roster.md#the-store)).
+mounted file ([sluis.md](sluis.md#the-store)).
 
 ## Export
 
@@ -305,7 +305,7 @@ credential from anywhere else.
 Records the service's own actions in an audit installation. Transports: `http`
 and `nats` on Kubernetes, `sqs` on AWS. A record that cannot be written durably
 refuses the action it describes where the action is a sign-in, as today
-([access-roster.md](access-roster.md#audit)).
+([sluis.md](sluis.md#audit)).
 
 ## Conformance
 
@@ -409,7 +409,7 @@ requires it, which keeps S3-compatible stores working.
 the Sealer, so the adapter uses `Encrypt`, not `GenerateDataKey`.
 
 - `Wrap(dataKey, binding)` is `kms:Encrypt` under the configured key with the
-  `EncryptionContext` `{"access-roster:binding": <binding>}`; `Wrapped.KeyID` is
+  `EncryptionContext` `{"sluis:binding": <binding>}`; `Wrapped.KeyID` is
   the key ARN KMS reports and `Wrapped.Blob` the ciphertext.
 - `Unwrap` is `kms:Decrypt` with the same context and the configured key as
   `KeyId`. A different binding, a ciphertext another key made, a disabled,
@@ -560,7 +560,7 @@ passes the suite on LocalStack, and has not yet run against AWS.
   different adapter (`lambda`), where the invocation is the delivery and there is no
   process to subscribe; it is not part of this one.
 - **Exporters.** `StateExporter` and `IndexExporter` read the live items with their
-  lifetime left from `expires`, so `access-roster migrate` can read from, and write
+  lifetime left from `expires`, so `sluis migrate` can read from, and write
   to, a DynamoDB side (the way back is the rollback). The index export is a `Scan`.
 - **The table.** `ports.dynamodb.create: false` (the default) binds to the table the
   infrastructure code made, which needs a string `pk`, a string `sk` and TTL on

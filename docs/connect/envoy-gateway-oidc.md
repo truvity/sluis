@@ -39,7 +39,7 @@ the authorization code
 `requires` is checked at sign-in and again at every refresh — the second
 check is why a grant withdrawn after a token was issued still ends at
 the next refresh rather than living out the token's full lifetime
-([design/access-roster.md#who-may-open-which-console](../design/access-roster.md#who-may-open-which-console)).
+([design/sluis.md#who-may-open-which-console](../design/sluis.md#who-may-open-which-console)).
 `ttl_cap` is the whole of this shape's revocation story, because there is
 no Back-Channel Logout receiver here (below) — see
 [Trap 1](#trap-1-per-request-refresh-races-rotating-refresh-tokens) before
@@ -181,7 +181,7 @@ So an operator's revoke somewhere else — the console's *Revoke a session*
 or *sign out everywhere*, a directory suspension — reaches this console
 only at its next refresh, bounded by the access token's own lifetime and
 the client's `ttl_cap`
-([design/access-roster.md#telling-the-relying-party-back-channel-logout](../design/access-roster.md#telling-the-relying-party-back-channel-logout)).
+([design/sluis.md#telling-the-relying-party-back-channel-logout](../design/sluis.md#telling-the-relying-party-back-channel-logout)).
 That is exactly the shape `access-proxy` always had, at the shorter of
 the two dials — this filter's own refresh cadence versus this client's
 `ttl_cap` — rather than a fixed one-minute `session.refresh`

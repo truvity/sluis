@@ -4,18 +4,18 @@
 speaks the same API — trusts it on a JWT auth mount and mints
 **short-lived certificates** for things that speak neither OpenID nor a
 cloud's own protocol: an SSH server, a database, a service that wants
-mutual TLS. `accessctl bao <args…>` authenticates and runs the real
+mutual TLS. `sluisctl bao <args…>` authenticates and runs the real
 `bao` binary unchanged for SSH and machine certificates (and everything
-else OpenBAO can do); `accessctl pg`/`psql` do the same and additionally
+else OpenBAO can do); `sluisctl pg`/`psql` do the same and additionally
 mint a Postgres client certificate
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md),
-[reference](../reference/accessctl.md#bao-authenticate-then-run-bao-unchanged),
-[reference](../reference/accessctl.md#pg--psql-a-postgres-client-certificate-then-a-command)).
-This replaces `accessctl credential`, removed in v1.34.0.
+[reference](../reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged),
+[reference](../reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command)).
+This replaces `sluisctl credential`, removed in v1.34.0.
 
 The contract between the two sides — the doors, the claims, the two
 clients, the credential paths and every failure mode — is
-[truvity/openbao's docs/integrations/access-roster.md](https://github.com/truvity/openbao/blob/master/docs/integrations/access-roster.md),
+[truvity/openbao's docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md),
 tested there against a real server; what this side must provide for it is
 [integrations/openbao.md](../integrations/openbao.md).
 
@@ -26,7 +26,7 @@ carries the same subject the issuer's audit trail does.
 ## The shape
 
 ```
-accessctl                the issuer               OpenBAO
+sluisctl                the issuer               OpenBAO
   sign-in  ──exchange──▶ aud=openbao ──login───▶  the jwt mount's role
                                                   ssh/sign/<role>
                                                   pki/sign/<role>
@@ -66,7 +66,7 @@ policy that admits it cannot drift apart.
 
 - **A JWT auth mount** per namespace, trusting the issuer's discovery
   document, with `bound_audiences: [openbao]` — the audience the exchange
-  mints, and the only one it accepts. `accessctl` logs in on `jwt-roster`
+  mints, and the only one it accepts. `sluisctl` logs in on `jwt-roster`
   with the role `roster` unless `--mount` and `--login-role` say
   otherwise. Short token lifetimes: the login exists to make one call.
 - **An SSH CA per environment**, with a role per group:
@@ -77,12 +77,12 @@ policy that admits it cannot drift apart.
     can be read against the issuer's audit trail;
   - `allow_user_key_ids: false`, so a caller cannot name itself;
   - `default_extensions` no wider than the group needs;
-  - `ttl` and `max_ttl` short. `accessctl` never asks for a lifetime, so
+  - `ttl` and `max_ttl` short. `sluisctl` never asks for a lifetime, so
     these two are the only answer, and shortening them shortens every
     certificate in flight.
 - **A PKI role for database clients** (`db-client`), used through
   `pki/sign/db-client`: `key_type: ec` with `key_bits: 384` (or `any`) —
-  `accessctl` sends a CSR for an ECDSA P-384 key — the common name is
+  `sluisctl` sends a CSR for an ECDSA P-384 key — the common name is
   the roster subject (`use_csr_common_name` reads it from the CSR, and it
   is also in the request for a role that does not), client-auth extended
   key usage only, a short `max_ttl` — and on the database side a `pg_ident` map from that subject
@@ -105,12 +105,12 @@ which is a decision to write down rather than to discover.
 ## Person side
 
 ```sh
-accessctl bao --address https://openbao.example:8200 ssh -mode=ca -role=user -ns=staging deploy@host.example
+sluisctl bao --address https://openbao.example:8200 ssh -mode=ca -role=user -ns=staging deploy@host.example
                                          # an interactive session; ssh's own agent handling applies
 
-accessctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
+sluisctl psql --address https://openbao.example:8200 -ns staging -- -h db.example -d orders
 
-accessctl bao --address https://openbao.example:8200 write -ns=staging -field=signed_key \
+sluisctl bao --address https://openbao.example:8200 write -ns=staging -field=signed_key \
     ssh/sign/user public_key=@key.pub > key-cert.pub    # for scp, git, CI and Ansible instead
 ```
 
@@ -120,7 +120,7 @@ which to set. For `bao`, the namespace is read out of `bao`'s own
 `-namespace` (or `BAO_NAMESPACE`, then `VAULT_NAMESPACE`) — the flag
 goes AFTER the subcommand, where `bao` has always accepted it; for
 `pg`/`psql`, the same variable is read through `-ns` (or the same two
-environment variables), a flag of accessctl's own since neither command
+environment variables), a flag of sluisctl's own since neither command
 has a subcommand to attach it to. A database role kept in a project's
 own namespace is reached the way the project's own OpenBAO layout
 requires — see that project's own documentation for its namespace path.
@@ -131,11 +131,11 @@ An installation can keep its logins at one namespace — an environment's
 own, say — while the data a caller actually asks for lives in a child
 namespace below it, one per project. A token minted by logging in to a
 namespace is valid there **and in its children**, so this works without
-asking OpenBAO for anything new: `accessctl` just has to log in
+asking OpenBAO for anything new: `sluisctl` just has to log in
 somewhere that covers the namespace it is about to operate in, rather
 than always at that namespace itself.
 
-`--login-ns` (or `$ACCESSCTL_BAO_LOGIN_NAMESPACE`, read when the flag is
+`--login-ns` (or `$SLUISCTL_BAO_LOGIN_NAMESPACE`, read when the flag is
 not given) says where the login happens, when that differs from the
 namespace the command targets. It defaults to the target namespace
 itself — today's behaviour, unchanged, for a caller who never sets
@@ -147,7 +147,7 @@ than left to fail later at OpenBAO as a permission-denied that reads as
 an outage.
 
 ```sh
-ACCESSCTL_BAO_LOGIN_NAMESPACE=<env> accessctl bao kv get -ns=<env>/<project> -mount=kv -format=env <path>
+SLUISCTL_BAO_LOGIN_NAMESPACE=<env> sluisctl bao kv get -ns=<env>/<project> -mount=kv -format=env <path>
 ```
 
 `bao` itself still runs against `-ns=<env>/<project>` unchanged — the
@@ -155,8 +155,8 @@ login alone happens at `<env>`. The same variable works for `pg`/`psql`,
 where it is read whenever `--login-ns` is not passed explicitly. Because
 the login token this mints is cached by the LOGIN namespace, not the
 target, two commands naming different projects under the same `<env>`
-share one login — `accessctl bao kv get -ns=<env>/a ...` and
-`accessctl bao kv get -ns=<env>/b ...` reuse it, rather than logging in
+share one login — `sluisctl bao kv get -ns=<env>/a ...` and
+`sluisctl bao kv get -ns=<env>/b ...` reuse it, rather than logging in
 twice for what is, underneath, the same identity asking the same door.
 
 A manager whose API certificate chains to a private root is reached by
@@ -180,7 +180,7 @@ The same commands run in a GitHub Actions job granted `id-token: write`:
 the job's own identity token is exchanged instead of a sign-in, and the
 `ci` rules decide which repository and ref may hold those groups
 ([github-actions.md](github-actions.md)). A job has no ssh-agent, so the
-`accessctl bao write ... > key-cert.pub` recipe (or `accessctl psql`,
+`sluisctl bao write ... > key-cert.pub` recipe (or `sluisctl psql`,
 which needs no agent at all) is what it uses.
 
 A job that needs one shared value is not one of the project's three
@@ -191,15 +191,15 @@ rather than the whole prefix.
 ## Sign in to OpenBAO
 
 The console is not where a person reads the manager. To reach one, use the
-manager's own OIDC login, `accessctl bao` (below), or the issuer as a broker
+manager's own OIDC login, `sluisctl bao` (below), or the issuer as a broker
 directly: the manager trusts the issuer, a person signs in to the issuer,
 and the issuer vouches for them. The console no longer reads a store's
 policies or groups (removed in v1.30.0, see
 [decisions/0002-mission-boundary-tokens-and-memberships.md](../decisions/0002-mission-boundary-tokens-and-memberships.md)).
 
-## `accessctl bao`, in full: any other OpenBAO command
+## `sluisctl bao`, in full: any other OpenBAO command
 
-The examples above cover SSH and machine certificates. `accessctl bao
+The examples above cover SSH and machine certificates. `sluisctl bao
 <args…>` runs anything else OpenBAO can do the same way — `bao kv get`,
 an engine this page does not mention — with the same exchange and
 JWT-mount login, then the real `bao` binary, unchanged, with the login
@@ -207,19 +207,19 @@ handed to it as `BAO_TOKEN`
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)).
 
 ```sh
-accessctl bao --address https://openbao.example:8200 kv get -ns=staging secret/app
-accessctl bao --address https://openbao.example:8200 kv get -ns=staging -format=env secret/app > .env
-accessctl bao --address https://openbao.example:8200 ssh -mode=ca -role=user ci@build-worker.example
-accessctl bao --address https://openbao.example:8200 write ssh/sign/user public_key=@key.pub -field=signed_key > key-cert.pub
+sluisctl bao --address https://openbao.example:8200 kv get -ns=staging secret/app
+sluisctl bao --address https://openbao.example:8200 kv get -ns=staging -format=env secret/app > .env
+sluisctl bao --address https://openbao.example:8200 ssh -mode=ca -role=user ci@build-worker.example
+sluisctl bao --address https://openbao.example:8200 write ssh/sign/user public_key=@key.pub -field=signed_key > key-cert.pub
 ```
 
-accessctl's own flags (`--address`, `--ca-cert`, `--mount`,
+sluisctl's own flags (`--address`, `--ca-cert`, `--mount`,
 `--login-role`, `--login-ns`, `--audience`, `--issuer`, `--client`,
 `--forget`) go BEFORE the bao subcommand; `bao`'s own — including
 `-namespace` (or its shortcut `-ns`), which decides which namespace
 `bao` operates in (and, without `--login-ns`, where the login itself
 happens too) — go AFTER it, exactly where `bao` has always accepted
 them. The token is cached under
-accessctl's own config directory, never `~/.vault-token` and never bao's
-own token helper file; `accessctl bao --forget` revokes and clears it.
-Full reference: [reference/accessctl.md#bao-authenticate-then-run-bao-unchanged](../reference/accessctl.md#bao-authenticate-then-run-bao-unchanged).
+sluisctl's own config directory, never `~/.vault-token` and never bao's
+own token helper file; `sluisctl bao --forget` revokes and clears it.
+Full reference: [reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged](../reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged).

@@ -1,6 +1,6 @@
 # 0011 — SSH: people on opkssh, machines and hosts on the secret store's OpenBAO
 
-**Status:** Accepted; amended by [0013](0013-openbao-access-through-the-bao-cli.md) (the machine path is now `accessctl bao ssh -mode=ca` / `accessctl bao write ... sign/<role>`, not a dedicated `accessctl credential ssh`); refined by [0015](0015-a-per-audience-groups-delimiter-for-opkssh.md), [0016](0016-a-managed-known-hosts-file-for-ssh-host-cas.md)
+**Status:** Accepted; amended by [0013](0013-openbao-access-through-the-bao-cli.md) (the machine path is now `sluisctl bao ssh -mode=ca` / `sluisctl bao write ... sign/<role>`, not a dedicated `sluisctl credential ssh`); refined by [0015](0015-a-per-audience-groups-delimiter-for-opkssh.md), [0016](0016-a-managed-known-hosts-file-for-ssh-host-cas.md)
 **Date:** 2026-09-26
 
 ## Context
@@ -8,7 +8,7 @@
 [0004](0004-ssh-opkssh-and-the-secret-stores-ca.md) decided people would
 move to opkssh — an OpenID Connect ID token verified straight into
 `sshd`, no broker in between — once opkssh could verify this
-installation's tokens, and that `accessctl credential ssh` would be
+installation's tokens, and that `sluisctl credential ssh` would be
 **removed** "once opkssh is adopted", because a courier in front of a
 certificate authority stops earning its keep once the direct path
 exists. The blocker it recorded was concrete: opkssh's verifier accepts
@@ -26,8 +26,8 @@ can be adopted for people now, without moving the installation's default.
 
 What 0004 did not separate is **who** was moving to opkssh. It says
 "people authenticate with opkssh" in its Decision, but writes the removal
-of `accessctl credential ssh` as though nothing else used it. Something
-else does: `accessctl credential ssh` is also how a CI job or a
+of `sluisctl credential ssh` as though nothing else used it. Something
+else does: `sluisctl credential ssh` is also how a CI job or a
 controller — a machine, holding a GitHub Actions OIDC token or a
 Kubernetes ServiceAccount token, never a person at a browser — gets a
 short-lived certificate today
@@ -49,7 +49,7 @@ default, which opkssh cannot verify at all), write `oidc:groups:<internal
 group>` policy on each server, and cut over. The mechanism is unchanged
 from 0004's Decision; only the blocker under it is different.
 
-**`accessctl credential ssh` stays — not as a courier for people, but as
+**`sluisctl credential ssh` stays — not as a courier for people, but as
 the supported path for machines.** A CI job or a controller exchanges its
 own identity at this issuer, logs in to OpenBAO's JWT mount with the
 result, and gets a short-lived signed SSH user certificate — the same
@@ -76,7 +76,7 @@ record.
 
 ## Consequences
 
-**`accessctl credential ssh`'s documentation stays live and is no longer
+**`sluisctl credential ssh`'s documentation stays live and is no longer
 a stopgap.** 0004 described it as the interim path for people; it is now
 the permanent, documented path for machines, and
 [connect/ssh.md](../connect/ssh.md) is where that is written down rather

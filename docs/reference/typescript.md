@@ -1,4 +1,4 @@
-# TypeScript package `@truvity/access-roster`
+# TypeScript package `@truvity/sluis`
 
 What a console needs from the identity it is behind: who the caller is,
 what that gets them, and the way out. The browser half parses no token —
@@ -38,15 +38,15 @@ npmScopes:
 ```
 
 ```sh
-yarn add @truvity/access-roster@^1.8.0
+yarn add @truvity/sluis@^1.8.0
 ```
 
-A git install (`github:truvity/access-roster#<tag>`) no longer works:
+A git install (`github:truvity/sluis#<tag>`) no longer works:
 `ts/dist` is not committed, and nothing builds it on install. `react` and `@mui/material` are optional peers: an
 application with neither pays for neither.
 
 ```tsx
-import { useIdentity, UserBadge } from "@truvity/access-roster/react";
+import { useIdentity, UserBadge } from "@truvity/sluis/react";
 
 function Header() {
   const me = useIdentity();          // asks /.access/whoami once
@@ -104,7 +104,7 @@ consumer. `fetchIdentity` is deliberately the whole of the network code.
 ## The server half
 
 ```ts
-import { Issuer, middleware, requireGroups, whoami, whoamiPath, identityOf } from "@truvity/access-roster/server";
+import { Issuer, middleware, requireGroups, whoami, whoamiPath, identityOf } from "@truvity/sluis/server";
 
 const issuer = new Issuer({ url: "https://access.example", audience: "url-shortener-dev" });
 

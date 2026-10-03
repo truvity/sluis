@@ -7,17 +7,17 @@ tables. For a map of every page in the repository, not just these, see
 [index.md](index.md).
 
 - [reference/configuration.md](reference/configuration.md) — every value
-  of the `access-roster` chart, the overlay format, every endpoint the
+  of the `sluis` chart, the overlay format, every endpoint the
   issuer serves, the objects the service writes, and each controller's
   environment
 - [reference/policy.md](reference/policy.md) — the policy file: groups,
   matchers, clients, resources, client documents, lifetimes, GitHub
   bindings, `people` and Slack channels
-- [reference/accessctl.md](reference/accessctl.md) — every command and
-  flag of `accessctl`, and its exit codes;
-  [`bao`](reference/accessctl.md#bao-authenticate-then-run-bao-unchanged),
-  [`pg` / `psql`](reference/accessctl.md#pg--psql-a-postgres-client-certificate-then-a-command)
-  and [`ssh known-hosts`](reference/accessctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect)
+- [reference/sluisctl.md](reference/sluisctl.md) — every command and
+  flag of `sluisctl`, and its exit codes;
+  [`bao`](reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged),
+  [`pg` / `psql`](reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command)
+  and [`ssh known-hosts`](reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect)
   for what OpenBAO and the secret stores mint
 - [connect/github-actions.md](connect/github-actions.md#workflow-side-the-action)
   — every input and output of the GitHub Action, and the
@@ -34,7 +34,7 @@ tables. For a map of every page in the repository, not just these, see
 - [`internal/audit/catalogue/roster.yaml`](../internal/audit/catalogue/roster.yaml)
   — every audited action and what it carries
 - [reference/go-module.md](reference/go-module.md) — the Go module
-  `github.com/truvity/access-roster`
+  `github.com/truvity/sluis`
 - [reference/typescript.md](reference/typescript.md) — the TypeScript
   package, and installing it from GitHub Packages
 - [conformance.md](conformance.md) — the last OpenID conformance run,

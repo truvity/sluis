@@ -29,12 +29,12 @@ The choice is made by **scope**, and never by preference:
 | a workload in **another cluster** | an issuer token | ServiceAccount tokens do not cross clusters, and a service that verified N clusters' key sets directly would be the N×M problem the issuer exists to collapse |
 | a **person** | an issuer token, obtained by a sign-in the issuer ran against a corporate directory | people hold no ServiceAccount |
 | a **CI job** | an issuer token, obtained by exchanging the platform's identity token | the organisation allow-list and the matchers — repository, ref, visibility — live in the issuer, once |
-| a **laptop over the network** | an issuer token, obtained by `accessctl` trading its own sign-in for the audience | same as a person: that is what it is. Of the issuer's own tokens, only the access token of a sign-in at a public client declaring `sign_in_exchange`, presented by that client, is a proof — never an ID token, which every relying party is handed |
+| a **laptop over the network** | an issuer token, obtained by `sluisctl` trading its own sign-in for the audience | same as a person: that is what it is. Of the issuer's own tokens, only the access token of a sign-in at a public client declaring `sign_in_exchange`, presented by that client, is a proof — never an ID token, which every relying party is handed |
 | the **break-glass** operator | a ServiceAccount token, minted by hand with cluster RBAC | see *Recovery* below — this is the root showing through, not a third anchor |
 
 A service that serves only local workloads needs only the cluster
 anchor. A service that serves only people needs only the issuer. A
-service that serves both — access-roster's own console API is the
+service that serves both — sluis's own console API is the
 reference — keeps them apart by **verifier**: two listeners, or one on
 which every route says which proof it takes, and an operator RPC never
 admitted on a workload's proof alone.
@@ -203,7 +203,7 @@ proof alone admits. The network policy admits the gateway to one and the
 consumers to the other, as the second layer — never the only one,
 because reaching a port proves nothing.
 
-access-roster itself serves both on one listener: the console's routes
+sluis itself serves both on one listener: the console's routes
 take the browser's own session, and its API takes an issuer token or a
 workload's ServiceAccount token — verified against the cluster's
 published key set, so the service holds access to no cluster — with the
@@ -260,7 +260,7 @@ ServiceAccount token: a check you supply, an audience, the names it
 admits). A service composes them per route. Both yield one `Verified`
 with `Groups []string`, so a handler never learns which anchor proved
 the caller and cannot come to depend on it. The TypeScript package,
-`@truvity/access-roster`, reads that from `/.access/whoami` and
+`@truvity/sluis`, reads that from `/.access/whoami` and
 translates nothing.
 
 There is no third verifier and no "trust this header" mode that outlives
@@ -281,7 +281,7 @@ a local run. See [libraries.md](libraries.md).
 
 ## Related
 
-- [access-roster.md](access-roster.md) — the whole service: what the
+- [sluis.md](sluis.md) — the whole service: what the
   estate anchor verifies and mints, the directory model behind it, and
   recovery.
 - [access-proxy.md](access-proxy.md) — the console exposure.

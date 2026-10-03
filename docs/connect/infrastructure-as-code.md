@@ -206,7 +206,7 @@ permissions:
   id-token: write
 steps:
   - id: access
-    uses: truvity/access-roster@v1.11.0
+    uses: truvity/sluis@v1.11.0
     with:
       issuer: https://access.example.com
       github-app: ci-automation      # the catalogue id
@@ -220,7 +220,7 @@ steps:
 The job holds no key, the token dies within the hour, and the request is
 in the audit trail with the grant it was decided under
 ([details](github-apps-catalogue.md#minting-a-token)). The same is
-available to a laptop and to any script as `accessctl github-token`.
+available to a laptop and to any script as `sluisctl github-token`.
 
 ## The copy is a real credential
 

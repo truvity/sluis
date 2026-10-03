@@ -1,6 +1,6 @@
 # 0002 — Mission boundary: tokens and memberships
 
-**Status:** Accepted; partly superseded by [0008](0008-credentials-only-where-we-govern-membership.md) and, for `accessctl credential db`/`client` specifically, by [0013](0013-openbao-access-through-the-bao-cli.md); its "next candidate, a chat workspace's channel membership" was built as the Slack reconciler, see [0017](0017-the-slack-reconciler-membership-only.md)
+**Status:** Accepted; partly superseded by [0008](0008-credentials-only-where-we-govern-membership.md) and, for `sluisctl credential db`/`client` specifically, by [0013](0013-openbao-access-through-the-bao-cli.md); its "next candidate, a chat workspace's channel membership" was built as the Slack reconciler, see [0017](0017-the-slack-reconciler-membership-only.md)
 **Date:** 2026-09-25
 
 ## Context
@@ -17,7 +17,7 @@ the same feature wearing different clothes:
 - a system that cannot — because it has its own membership model with no
   token in front of it — gets a **membership**, kept in step by a
   reconciler. GitHub teams are the one built today
-  ([design/access-roster.md#the-github-controller](../design/access-roster.md#the-github-controller));
+  ([design/sluis.md#the-github-controller](../design/sluis.md#the-github-controller));
   a chat workspace's channel membership is the next candidate for the
   same shape.
 
@@ -53,17 +53,17 @@ from this boundary:
   system's authorization model from inside this one — exactly what is now
   out of scope — and the chart carried a reader credential for no reason
   but that page.
-- **Removed:** `accessctl secrets`. Reading a team's shared values back
+- **Removed:** `sluisctl secrets`. Reading a team's shared values back
   out of a secret store's KV engine is that store's own job, once it can
   authenticate a person by this issuer's token; a courier command for it
   here duplicated a client the store itself should ship.
-- **Kept:** `accessctl token` — the core of the CLI, printing a token for
-  any audience, is squarely the token half of the mission. `accessctl
-  credential db` and `accessctl credential client` stay too, as thin
+- **Kept:** `sluisctl token` — the core of the CLI, printing a token for
+  any audience, is squarely the token half of the mission. `sluisctl
+  credential db` and `sluisctl credential client` stay too, as thin
   client-side couriers: one exchange for the store's own audience, then
   the store's own signing call, key generated on the caller's machine and
   never sent
-  ([design/accessctl.md#credential-the-broker-for-what-openbao-mints](../design/accessctl.md#credential-the-broker-for-what-openbao-mints)).
+  ([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../design/sluisctl.md#credential-the-broker-for-what-openbao-mints)).
   Nothing server-side reads the store's policy; the command is a courier
   for a proof, not a reader of another system's grants.
 - **Secret-store login moves to the store's own OIDC flow.** Rather than
@@ -85,11 +85,11 @@ from this boundary:
 An installation that wants a *dashboard* of who can reach what in a
 secret store builds or buys one against that store's own audit and policy
 API — this repository will not grow one back. A team that relied on
-`accessctl secrets` for local development points its tooling at the
+`sluisctl secrets` for local development points its tooling at the
 store's own client instead; the exchange and the groups it reads are
 unchanged, only which binary performs the last step.
 
-The boundary also answers the standing question of "should access-roster
+The boundary also answers the standing question of "should sluis
 learn to reach system X" without re-litigating it per system: if X can
 read a claim, it is a client or a resource, declared like any other; if
 it cannot, it is a reconciler, built the way the GitHub one is; if the
@@ -105,7 +105,7 @@ model this boundary exists to keep out; each store would need its own
 reader, its own credential, its own staleness story, permanently, for a
 view a store's own UI already gives its own operators.
 
-**Keep `accessctl secrets` and add more `secrets`-shaped subcommands as
+**Keep `sluisctl secrets` and add more `secrets`-shaped subcommands as
 other stores appear.** Rejected: every such subcommand is this
 repository re-implementing a client for somebody else's data plane, which
 is the shape [design/access-proxy.md](../design/access-proxy.md) already

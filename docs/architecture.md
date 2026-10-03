@@ -2,7 +2,7 @@
 
 Every container, what it holds, and why the pieces are arranged this way.
 Decisions and their reasons are in the design documents
-([trust](design/trust.md), [the service](design/access-roster.md));
+([trust](design/trust.md), [the service](design/sluis.md));
 contracts are under [reference/](reference/). Diagrams follow the C4 model
 as Mermaid, which GitHub renders inline.
 
@@ -26,12 +26,12 @@ re-mapped. There is no third anchor and no second vocabulary.
 
 ```mermaid
 flowchart TB
-  person["Engineer or operator<br/>browser, kubectl, accessctl"]
+  person["Engineer or operator<br/>browser, kubectl, sluisctl"]
   ci["CI job<br/>GitHub Actions"]
   workload["Workload<br/>a ServiceAccount, any cluster"]
   admin["Directory admin<br/>consents once per tenant"]
 
-  ar["access-roster<br/>verifies a proof · reads the directory<br/>applies the policy · mints tokens<br/>keeps teams and channels in step<br/>serves the login page and the console"]
+  ar["sluis<br/>verifies a proof · reads the directory<br/>applies the policy · mints tokens<br/>keeps teams and channels in step<br/>serves the login page and the console"]
 
   idp["Corporate directories<br/>Google Workspace tenants, Entra later<br/>sign-in and MFA live here"]
   rp["Relying parties<br/>Kubernetes API servers · AWS accounts<br/>ArgoCD · Kargo · consoles"]
@@ -53,9 +53,9 @@ flowchart TB
   ci --> rp
 ```
 
-Nothing in access-roster has a database of record. Nothing authenticates
+Nothing in sluis has a database of record. Nothing authenticates
 anyone. The directories hold the people; the relying parties hold their
-own roles; access-roster holds the policy, a snapshot of the directory,
+own roles; sluis holds the policy, a snapshot of the directory,
 the sessions it has open, and what an operator connected through the
 console: directory credentials, GitHub Apps, people's GitHub links, Slack
 workspace connections and the console's own Slack channel records.
@@ -71,11 +71,11 @@ namespace.
 ```mermaid
 flowchart TB
   browser["Browser"]
-  cli["accessctl · kubelogin"]
+  cli["sluisctl · kubelogin"]
   ci["GitHub Actions"]
   gw["Envoy Gateway<br/>one data plane, native OIDC per console"]
 
-  subgraph ar["access-roster — one chart, up to three Deployments"]
+  subgraph ar["sluis — one chart, up to three Deployments"]
     issuer["the issuer<br/>OpenID provider · six grants<br/>login page · session service"]
     dir["the directory<br/>snapshots · routing by domain<br/>authoritative per domain"]
     con["the console<br/>React, mounted at /console/"]
@@ -153,7 +153,7 @@ held-once ledger, the last-good-report journal, the removal breaker and its
 fingerprint, the dry-run switch, and the watch that wakes a pass when mounted
 credentials or records change or an operator asks for one. See
 [Connect a Slack workspace](connect/slack-workspace.md) and
-[the design](design/access-roster.md#the-slack-reconciler).
+[the design](design/sluis.md#the-slack-reconciler).
 
 **A login makes no network call except to the corporate directory** — and,
 for a client that identifies itself by a URL instead of a policy row, one
@@ -194,13 +194,13 @@ expressed in configuration and whether it is built.
 | Many of | Expressed as | Status |
 |---|---|---|
 | corporate directories | one workspace per tenant: credential, served domains, synced groups; Google today, Entra as a second backend behind the same workspace record | **built**; Entra designed, not built |
-| clusters, for people | each cluster's identity-provider association names the issuer; RBAC binds `<env>:k8s:<role>`; one kubeconfig whose exec plugin is `accessctl kube-token`, the same file for a laptop and a CI job | **built** |
+| clusters, for people | each cluster's identity-provider association names the issuer; RBAC binds `<env>:k8s:<role>`; one kubeconfig whose exec plugin is `sluisctl kube-token`, the same file for a laptop and a CI job | **built** |
 | clusters, for workloads | one row per cluster naming its ServiceAccount-token key set; token exchange | **built**. The issuer's own cluster is a row like any other, and the issuer holds access to none of them |
-| AWS accounts | the issuer registered once per account as an IAM OIDC provider; a `requires` list per role client; `accessctl aws` as the credential process, one `aws.ini` for a laptop and a job | **built** |
+| AWS accounts | the issuer registered once per account as an IAM OIDC provider; a `requires` list per role client; `sluisctl aws` as the credential process, one `aws.ini` for a laptop and a job | **built** |
 | GitHub organisations | one controller App per organisation, created and installed by its owner from the console; `github` bindings in the policy naming internal groups, with an `ignore` list per organisation; an account becomes a person's by their own link, a public-profile match or an import, and a link is checked every pass; one runner App per organisation per tier for self-hosted runners | **built and acting**: joiners, movers and leavers with nobody in the loop, and the controller stops itself where somebody is needed — seats, removals over half an organisation, owners |
 | Slack workspaces | one bot per workspace, connected from the console by pasting a configuration token once (the owning directory is chosen there); channels as **policy** (`slack.workspaces.<key>.channels`, internal groups) or as **console records** (directory groups and individual addresses, ordinary or Slack Connect); strict channels (private only) also remove; a person with no Slack account is waited for, never created | **built; acting only where listed in `controllerSlack.config.enabledWorkspaces`**: adds people, removes only from strict private channels and only on a directory-vouched answer under the breakers; never creates accounts, never touches user groups, never removes from a public channel |
-| CI platforms | one federated issuer row; `ci` rules on repository, ref and visibility | **built**: the verifier, `accessctl` inside a job, and the GitHub Action at the repository root — `curl` and `jq`, so nothing of ours is downloaded into a job |
-| consoles and applications | one client row each, with a display name and description the sign-in page shows; for consoles with no OpenID flow of their own, use gateway-native OIDC (Envoy Gateway) or run upstream oauth2-proxy yourself (other gateways); back-channel logout for applications that opt in | **built**: the directory console (it signs in as a client of the issuer it shares an origin with), Kargo and its CLI, `accessctl` as a public client |
+| CI platforms | one federated issuer row; `ci` rules on repository, ref and visibility | **built**: the verifier, `sluisctl` inside a job, and the GitHub Action at the repository root — `curl` and `jq`, so nothing of ours is downloaded into a job |
+| consoles and applications | one client row each, with a display name and description the sign-in page shows; for consoles with no OpenID flow of their own, use gateway-native OIDC (Envoy Gateway) or run upstream oauth2-proxy yourself (other gateways); back-channel logout for applications that opt in | **built**: the directory console (it signs in as a client of the issuer it shares an origin with), Kargo and its CLI, `sluisctl` as a public client |
 
 What never multiplies: the issuer URL, the signing key, the policy file,
 the console, the login page.
@@ -213,7 +213,7 @@ confirm in, and a machine that already holds a token.
 
 | Grant | For |
 |---|---|
-| authorization code + PKCE | every browser flow, and every CLI: `accessctl login` and kubelogin open a browser and listen on a loopback port |
+| authorization code + PKCE | every browser flow, and every CLI: `sluisctl login` and kubelogin open a browser and listen on a loopback port |
 | refresh | sessions that outlive a token |
 | userinfo | relying parties that ask |
 | `end_session` | sign-out ends the sign-in, not one application's cookie |
@@ -269,7 +269,7 @@ Three layers, and none is the fallback for another.
 
 ## Who owns what
 
-| | access-roster | the directories | the relying parties |
+| | sluis | the directories | the relying parties |
 |---|---|---|---|
 | holds | the policy, a directory snapshot, open sessions, one signing key, the directories' read credentials | the people: passwords, MFA, devices, groups | their own roles |
 | decides | who may hold a token for which client, and what groups it carries | who exists and who is in which group | what a group opens |
@@ -282,9 +282,9 @@ Three layers, and none is the fallback for another.
 |---|---|
 | opens a console for the first time | the gateway sends the browser to the issuer, the issuer to Google, Google back; the issuer asks the directory who this is, checks the client's `requires`, mints; the gateway sets its cookie |
 | opens a second console | the gateway sends the browser to the issuer; the issuer recognises its own session and completes silently |
-| runs `kubectl` | `accessctl kube-token`, the kubeconfig's exec plugin, exchanges the laptop sign-in for a token audienced at that cluster; the cluster trusts the issuer and reads `groups` |
-| needs AWS credentials | `accessctl aws`, the profile's credential process, exchanges the same sign-in for one audienced at AWS; STS trusts the issuer |
-| needs an SSH, database or client certificate | `accessctl bao ssh -mode=ca ...` / `accessctl bao write ...` / `accessctl psql` exchange the same sign-in for `openbao`, log in on the JWT mount and make ONE `sign` call; the certificate names the roster subject |
+| runs `kubectl` | `sluisctl kube-token`, the kubeconfig's exec plugin, exchanges the laptop sign-in for a token audienced at that cluster; the cluster trusts the issuer and reads `groups` |
+| needs AWS credentials | `sluisctl aws`, the profile's credential process, exchanges the same sign-in for one audienced at AWS; STS trusts the issuer |
+| needs an SSH, database or client certificate | `sluisctl bao ssh -mode=ca ...` / `sluisctl bao write ...` / `sluisctl psql` exchange the same sign-in for `openbao`, log in on the JWT mount and make ONE `sign` call; the certificate names the roster subject |
 | links their GitHub account | authorizes the link App once; every pass the controller checks the link and puts them in the teams the policy binds their groups to |
 | signs out | the gateway clears its cookie and calls `end_session`; the issuer ends the sign-in AND every session that browser opened, so every other console asks again rather than refreshing on |
 | leaves the company | the next snapshot no longer lists them; within the freshness window, the next refresh anywhere is refused |
@@ -329,7 +329,7 @@ refuses a changed document under a version it already holds.
 | A request would wait on the directory | it does not: the work runs detached and the answer is *first snapshot pending* |
 | A signed-in operator's own account turns non-authoritative | last granted role kept for a bounded window; nothing new granted |
 | A policy the issuer refuses to load | the new pod does not start and the previous pods keep serving the previous policy; nothing visible changes except the new clients are absent |
-| access-roster is down | no new sign-ins anywhere; existing sessions and tokens live to expiry; recovery is by cluster proof |
+| sluis is down | no new sign-ins anywhere; existing sessions and tokens live to expiry; recovery is by cluster proof |
 | the audit installation unreachable | records wait in each pod's queue and are delivered when its writer answers; the queue is bounded, and past its bound the oldest are dropped and counted; the Audit page cannot be read; a recovery sign-in is refused meanwhile |
 | a GitHub pass fails | the last report with rows stands; the pass is retried next interval; nothing is removed on a failed read |
 | the console answers the controller under another policy | the pass changes nothing and is tried again within seconds, six times at most before the interval resumes: a rollout restarts the two at different moments, and a removal decided across that gap would be wrong |

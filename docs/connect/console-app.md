@@ -42,7 +42,7 @@ the code, because the process holding the session is the one serving the
 page. That is the directory console, and it is a property of that pair
 rather than a pattern to copy. The directory console's areas (Overview,
 IDENTITY, ACCESS, SYSTEMS with GitHub and Slack, ADMIN) are described in
-[the design](../design/access-roster.md#the-console) and in
+[the design](../design/sluis.md#the-console) and in
 [Slack](slack-workspace.md) and [GitHub](github-organisation.md).
 
 ## What you write
@@ -54,12 +54,12 @@ IDENTITY, ACCESS, SYSTEMS with GitHub and Slack, ADMIN) are described in
   established. Serve `identity.WhoAmI(version)` at
   `identity.WhoAmIPath`, which is what the frontend asks.
 - **Backend in Node**: the same three pieces from
-  `@truvity/access-roster/server` — `middleware(issuer)`,
+  `@truvity/sluis/server` — `middleware(issuer)`,
   `requireGroups(...)`, and `whoami(version)` at `whoamiPath`, answering
   the same body Go does. Connect-style, so Express and Nest on Express
   take them as they are.
 - **Frontend**: `useIdentity()` and `<UserBadge/>` from the TypeScript
-  package, `@truvity/access-roster` on GitHub Packages
+  package, `@truvity/sluis` on GitHub Packages
   ([installing it](../reference/typescript.md)). Views in the URL
   fragment, dist embedded in the binary.
 - **Nothing else**: no login page, no session, no token parsing, no
@@ -82,7 +82,7 @@ http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
 
 ```ts
 import express from "express";
-import { Issuer, middleware, requireGroups, whoami, whoamiPath } from "@truvity/access-roster/server";
+import { Issuer, middleware, requireGroups, whoami, whoamiPath } from "@truvity/sluis/server";
 
 const issuer = new Issuer({ url: "https://access.example", audience: "myconsole.example.internal" });
 

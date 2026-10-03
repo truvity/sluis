@@ -1,4 +1,4 @@
-# accessctl and the GitHub Action
+# sluisctl and the GitHub Action
 
 **Status:** built; on laptops since 1.5.5 and inside GitHub Actions jobs since 1.4.0.
 
@@ -20,13 +20,13 @@ a login cache and an issuer configuration.
 |---|---|---|
 | `login` | authorization code with PKCE on a loopback port — the only browser flow served; caches the refresh token in a file with mode 0600. Its client is public and declares `sign_in_exchange: true`, the one thing that lets the exchange take a sign-in as a proof | people |
 | `whoami` | the identity and what the policy grants it | people |
-| `kubeconfig` | reads `/.access/grants`, writes a kubeconfig context per granted cluster, exec plugin `accessctl kube-token` (or kubelogin) | people |
+| `kubeconfig` | reads `/.access/grants`, writes a kubeconfig context per granted cluster, exec plugin `sluisctl kube-token` (or kubelogin) | people |
 | `kube-token` | a Kubernetes exec credential for one cluster audience; refreshes silently from the cached login | people |
-| `aws-config` | writes a profile per granted cloud role with `credential_process = accessctl aws --audience aws:<account>:<role>` | people |
+| `aws-config` | writes a profile per granted cloud role with `credential_process = sluisctl aws --audience aws:<account>:<role>` | people |
 | `aws` | exchanges the cached login for the role's audience and answers the credential-process JSON | people |
-| `token` | prints a token for one audience on stdout and nothing else, for a caller that is neither kubectl nor an AWS SDK: `accessctl token --audience openbao \| bao write -field=token auth/jwt-roster/login role=roster jwt=-`. The laptop sign-in, or the job's own token in CI | people, jobs |
+| `token` | prints a token for one audience on stdout and nothing else, for a caller that is neither kubectl nor an AWS SDK: `sluisctl token --audience openbao \| bao write -field=token auth/jwt-roster/login role=roster jwt=-`. The laptop sign-in, or the job's own token in CI | people, jobs |
 | `github-token` | prints a GitHub App installation token of a catalogue App, `--app <id>`, narrowed by `--repository` and `--permission name=level`, under the catalogue's grants; `--json` prints what GitHub granted beside it. The laptop sign-in, or the job's own token in CI | people, jobs |
-| `bao` | authenticates (the sign-in, or the job's own token, exchanged for `openbao`, then one login on the JWT mount), then runs the real `bao` CLI unchanged; accessctl's own flags go before the bao subcommand | people, jobs |
+| `bao` | authenticates (the sign-in, or the job's own token, exchanged for `openbao`, then one login on the JWT mount), then runs the real `bao` CLI unchanged; sluisctl's own flags go before the bao subcommand | people, jobs |
 | `psql` / `pg` | authenticate, mint a Postgres client certificate through OpenBAO's PKI, then run `psql` or any command with libpq's environment pointed at it | people, jobs |
 | `r2` | authenticates, then runs the real r2broker CLI unchanged | people, jobs |
 | `ssh known-hosts` | trusts the configured SSH host CAs before the first connect, in one file it owns | people |
@@ -48,7 +48,7 @@ One action, at the repository root, toggled by its inputs. It prepares
 exactly what is ours to prepare and stops:
 
 ```yaml
-- uses: truvity/access-roster@v1.8.0   # pin a release; there is no floating v1
+- uses: truvity/sluis@v1.8.0   # pin a release; there is no floating v1
   with:
     issuer: https://issuer.example.internal
     audiences: k8s:staging, aws:111122223333:deployer, aws:444455556666:artifacts-reader
@@ -83,7 +83,7 @@ version of ours moves when Amazon's tooling does. The recipes are in
 
 ## `bao`, `psql` / `pg`, `r2`: couriers for what a store mints
 
-`accessctl credential ssh|db|client` was removed in v1.34.0
+`sluisctl credential ssh|db|client` was removed in v1.34.0
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)): each
 reimplemented a slice of what the `bao` CLI already does, and that slice grew
 every time OpenBAO did. What replaced it is a courier, and the design is mostly
@@ -93,7 +93,7 @@ a list of decisions it does **not** make:
 |---|---|
 | the exchange client's `requires` | who may ask at all. A session revoked in the console stops issuance within the exchange's token cap, because every run exchanges afresh |
 | the OpenBAO role | the lifetime, the extensions, the key id, which principals and names are allowed. No request from here carries a TTL, so a role change reaches every credential in flight |
-| `bao` itself | everything after accessctl's own flags: its subcommands, its flags, its bugs and its fixes stay upstream |
+| `bao` itself | everything after sluisctl's own flags: its subcommands, its flags, its bugs and its fixes stay upstream |
 | the caller | which public key is signed, and which principals or names are asked for — a request, never a grant |
 
 **The key is generated for the certificate, not decorated by it.** For `psql`
@@ -116,27 +116,27 @@ process image is replaced where the platform allows it, so an interactive
 `bao ssh -mode=ca` gets the terminal as if run directly; `psql` and `pg` get
 libpq's own variables. What is printed is what an investigator needs, never the
 key. The commands' flags and exit codes are in
-[reference/accessctl.md](../reference/accessctl.md).
+[reference/sluisctl.md](../reference/sluisctl.md).
 
 ## Installing it
 
-Every release carries `accessctl_<version>_nix-flake.tar.gz` beside the
+Every release carries `sluisctl_<version>_nix-flake.tar.gz` beside the
 archives: a Nix flake that fetches that release's archives by sha256
 (linux amd64 and arm64, darwin arm64). A repository whose tools come from
 devbox names it in `devbox.json`, and `devbox.lock` pins it:
 
 ```json
-"https://github.com/truvity/access-roster/releases/download/v1.7.0/accessctl_1.7.0_nix-flake.tar.gz#accessctl": ""
+"https://github.com/truvity/sluis/releases/download/v1.7.0/sluisctl_1.7.0_nix-flake.tar.gz#sluisctl": ""
 ```
 
 Moving to a new version means changing the version in that URL. Anything
 else downloads the archive for its platform from the release.
 
-## `accessctl setup` on a laptop
+## `sluisctl setup` on a laptop
 
 The same boundary for people: one command that writes the kubeconfig
 contexts and the AWS profiles for everything the policy grants, with
-`accessctl aws` as the credential process behind each profile, and then
+`sluisctl aws` as the credential process behind each profile, and then
 prints the lines it will not write for you — the Docker credential-helper
 mapping and the CodeArtifact login commands. Idempotent; run it again
 after a policy change.
@@ -154,7 +154,7 @@ operator out of everything. `kube-token` and `aws` each keep one cache
 file per credential under `<config>/kube/` and `<config>/aws/`, `0600`,
 offered until shortly before expiry and dropped on any doubt, with a
 lock file beside each so a cold start by many callers is one exchange
-([reference](../reference/accessctl.md#where-things-are-kept)). None of
+([reference](../reference/sluisctl.md#where-things-are-kept)). None of
 it can mint its own successor; the refresh token is the one thing that
 can, and `login` replaces it. In a job there is no login cache — it
 exchanges the job's own token afresh, prints what the consumer expects

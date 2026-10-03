@@ -18,12 +18,12 @@ The Go module gives all three behind one `Verified` type; the TypeScript
 package gives a UI the first without parsing a token, and a Node service
 the same three the Go module gives.
 
-## Go module `github.com/truvity/access-roster`
+## Go module `github.com/truvity/sluis`
 
 | Package | Gives |
 |---|---|
 | `identity` | `Verified{Subject, Email, Name, GivenName, FamilyName, Groups, ServiceAccount}` and **exactly two verifiers**, one per anchor ([trust.md](trust.md)): `Issuer` (a bearer or forwarded token: the key set, issuer URL, audience) and `Cluster` (a ServiceAccount token: a check you supply — a TokenReview, or the cluster's published key set — an audience, and the names it admits). A net/http `Middleware` puts the `Verified` in the context, `Require(groups...)` gates a handler, `WhoAmI` serves `GET /.access/whoami` for the UI, `FromContext` reads it back. Both verifiers yield the same `Verified`, so a handler never learns which anchor proved the caller |
-| `tokens` | `Exchanger.Exchange(ctx, subject, kind, audience)` — `TypeJWT` for a proof from outside, `TypeAccessToken` for the CLI's own sign-in — and the encoders `accessctl` uses: the Kubernetes exec credential, `AssumeRoleWithWebIdentity` and the AWS `credential_process` |
+| `tokens` | `Exchanger.Exchange(ctx, subject, kind, audience)` — `TypeJWT` for a proof from outside, `TypeAccessToken` for the CLI's own sign-in — and the encoders `sluisctl` uses: the Kubernetes exec credential, `AssumeRoleWithWebIdentity` and the AWS `credential_process` |
 | `policy` | the policy engine and its schema — groups, claims, lifetimes, clients, github, slack, people — one loader for the issuer, the console and the two controllers, so all of them act on the same policy; `Evaluate` takes a person, a CI job or a workload as one `Input` |
 
 Not built, and additive when it is: `authz` (role helpers over
@@ -41,7 +41,7 @@ two verifiers, and keeps them apart by route or by listener, not because
 a page told it to. The worked example is
 [../connect/service-to-service.md](../connect/service-to-service.md).
 
-## TypeScript package `@truvity/access-roster`
+## TypeScript package `@truvity/sluis`
 
 Published to GitHub Packages at each release tag's version, with the
 `@truvity` scope pointed at `https://npm.pkg.github.com`. Three entry

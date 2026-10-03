@@ -142,8 +142,8 @@ Secrets: the credentials are sealed in State, and the service copies the five
 bundles into OpenBao itself, entry for entry as the Secrets held them, with
 `exports` of `source: bundle` ([Exports](../reference/configuration.md#exports-and-the-export-port)).
 The copy is made at start, within seconds of a change and every hour; it is never a
-dependency, and a failed one is the alert `AccessRosterExportFailing`
-([telemetry](telemetry.md#accessrosterexportfailing)). To restore from one, read the key
+dependency, and a failed one is the alert `SluisExportFailing`
+([telemetry](telemetry.md#sluisexportfailing)). To restore from one, read the key
 (`bao kv get`, [0013](../decisions/0013-openbao-access-through-the-bao-cli.md)), write each entry of its JSON object back as a key of the Secret
 of that name, and proceed as below. The service does not read an export back: the
 sealed State is the source of truth, and a lost State with its key-encryption key is
@@ -227,7 +227,7 @@ and must be re-entered; channels in Slack are untouched.
 **The Secrets and ConfigMaps are a projection, not a live source.**
 Nothing in the service watches them: writing a new value into one
 rotates nothing on a running pod. Which ones need a restart differs, so
-the rule is per object, as `charts/access-roster/values.yaml` states it:
+the rule is per object, as `charts/sluis/values.yaml` states it:
 
 > `workspace-credentials` — RESTART. The credential is read once, when
 > a replica first opens that workspace — at start, or at the console's
@@ -292,7 +292,7 @@ Per credential:
 
 ```sh
 kubectl -n access-issuer get secret,configmap \
-  -l app.kubernetes.io/managed-by=directory-roster -o yaml > access-roster-export.yaml
+  -l app.kubernetes.io/managed-by=directory-roster -o yaml > sluis-export.yaml
 ```
 
 The export contains credentials. Treat it as one.
@@ -563,7 +563,7 @@ with.
 
 ## Audit: what happened lately
 
-access-roster keeps no audit trail of its own. It records into an **audit
+sluis keeps no audit trail of its own. It records into an **audit
 installation** ([truvity/audit](https://github.com/truvity/audit)) of its
 own, rendered beside it in the same namespace: `audit.writer` and
 `audit.query` in the chart. What it records is its

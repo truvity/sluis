@@ -49,7 +49,7 @@ treat an empty list as admitting nobody rather than everybody. A
 NetworkPolicy admitting the caller's namespace is the second layer, never
 the only one.
 
-> **access-roster's own console API accepts exactly this**, for a
+> **sluis's own console API accepts exactly this**, for a
 > controller running beside the issuer. The GitHub controller reads
 > `AccessService.ListHolders` with its projected token, audience
 > `config.exchange.audience`, and the policy names it in a `service_account`
@@ -112,9 +112,9 @@ design is to hold almost no credential.
 
 A **CI job** does the same with its platform token: see
 [github-actions.md](github-actions.md). A **person** — a laptop over
-the network, a script an engineer runs — signs in once with `accessctl
-login` and exchanges from the cached login: `accessctl token --audience
-<client id>` prints the token, `accessctl exchange` the whole response.
+the network, a script an engineer runs — signs in once with `sluisctl
+login` and exchanges from the cached login: `sluisctl token --audience
+<client id>` prints the token, `sluisctl exchange` the whole response.
 
 That works because the CLI's own client, a `public` one, declares
 `sign_in_exchange: true`: of every token this issuer signs, the access
@@ -147,7 +147,7 @@ in it ([naming](../design/trust.md#naming)).
 Serve people and workloads with **one anchor each**, and never mount an
 operator RPC where a workload's proof alone admits. Two listeners is the
 plain way to keep them apart; one listener with both verifiers, which is
-what access-roster's own API does, works when every route says which
+what sluis's own API does, works when every route says which
 proof it takes:
 
 | Listener | Behind | Verifier | Accepts |
@@ -157,7 +157,7 @@ proof it takes:
 
 `Cluster` takes the check as a function: a TokenReview against your own
 API server, or a verification against the cluster's published key set
-as access-roster does, so that it holds no access to the cluster it runs
+as sluis does, so that it holds no access to the cluster it runs
 in.
 
 In Go, both verifiers come from the module as **structs** and a listener

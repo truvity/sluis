@@ -31,7 +31,7 @@ timeline and nothing is silently rewritten under an old date.
 | [0013](0013-openbao-access-through-the-bao-cli.md) | OpenBAO access through the `bao` CLI |
 | [0014](0014-minting-third-party-credentials-only-where-membership-is-governed.md) | Minting third-party credentials: only where membership is governed, brokers elsewhere |
 | [0015](0015-a-per-audience-groups-delimiter-for-opkssh.md) | A per-audience groups delimiter, for opkssh's colon-splitting bug |
-| [0016](0016-a-managed-known-hosts-file-for-ssh-host-cas.md) | A managed known_hosts file for SSH host CAs, distinct from `accessctl bao` |
+| [0016](0016-a-managed-known-hosts-file-for-ssh-host-cas.md) | A managed known_hosts file for SSH host CAs, distinct from `sluisctl bao` |
 | [0017](0017-the-slack-reconciler-membership-only.md) | The Slack reconciler keeps channel membership and nothing else |
 | [0018](0018-do-not-configure-what-the-product-knows.md) | Do not configure what the product already knows |
 | [0019](0019-two-kinds-of-slack-channel-never-mixed.md) | Two kinds of Slack channel, never mixed |
@@ -50,6 +50,7 @@ timeline and nothing is silently rewritten under an old date.
 | [0032](0032-one-configuration-file-one-binary-one-chart.md) | One configuration file, one binary, one chart |
 | [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) | A longer absolute limit for read-only resources, up to seven days |
 | [0034](0034-exports-go-to-openbao-directly.md) | Exports: the service copies its secrets into OpenBao itself |
+| [0035](0035-renamed-to-sluis.md) | Renamed to sluis: what changed and what deliberately did not |
 
 ## Template
 

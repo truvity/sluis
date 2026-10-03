@@ -1,7 +1,7 @@
 # OpenID Foundation conformance
 
 
-access-roster targets four OpenID Foundation profiles. A profile is
+sluis targets four OpenID Foundation profiles. A profile is
 claimed only once the suite says so, which is why this page carries
 the last run rather than an intention. The procedure for producing a
 run is [operations/conformance.md](operations/conformance.md); this page

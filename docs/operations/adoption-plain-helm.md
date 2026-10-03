@@ -1,6 +1,6 @@
 # Adopting it with plain Helm
 
-Nothing in access-roster assumes a GitOps controller. The `access-roster`
+Nothing in sluis assumes a GitOps controller. The `sluis`
 chart is an ordinary OCI Helm chart, every value an installation needs is in its
 own values file, and every Secret it reads is one the installation creates. This
 page installs the issuer with `helm install`, signs in for the first time, and
@@ -45,14 +45,14 @@ gateway, run upstream oauth2-proxy yourself (step 4).
    at the same version.
 
    ```sh
-   helm install access-roster oci://ghcr.io/truvity/charts/access-roster \
+   helm install sluis oci://ghcr.io/truvity/charts/sluis \
      --version X.Y.Z --namespace access-issuer --values issuer-values.yaml
    ```
 
    ```yaml
-   config:                                    # `access-roster serve`'s configuration file, as it stands
+   config:                                    # `sluis serve`'s configuration file, as it stands
      issuerURL: https://access.example.com    # stable for the life of the installation
-     release: access-roster                   # the release's full name
+     release: sluis                   # the release's full name
      publicRootURL: https://access.example.com
      publicURL: https://access.example.com/console
      valkey:
@@ -93,7 +93,7 @@ gateway, run upstream oauth2-proxy yourself (step 4).
      clients:
        access-console:
          kind: public
-         display_name: access-roster
+         display_name: sluis
          redirects: [https://access.example.com/console/]
          requires: [all:access-roster:operator, all:access-roster:viewer]
        dashboard.example.com:                 # a console's client: its id is the proxied host
@@ -156,7 +156,7 @@ From there each connection is one guide: a
 [cluster](../connect/kubernetes-cluster.md), an
 [AWS account](../connect/aws-account.md),
 [GitHub Actions](../connect/github-actions.md), a
-[laptop](../reference/accessctl.md).
+[laptop](../reference/sluisctl.md).
 
 ## Without ArgoCD or Kargo
 
@@ -173,9 +173,9 @@ Helm:
   render the pinned version and the new one with your values and compare.
 
   ```sh
-  helm template access-roster oci://ghcr.io/truvity/charts/access-roster \
+  helm template sluis oci://ghcr.io/truvity/charts/sluis \
     --version OLD --namespace access-issuer -f issuer-values.yaml > old.yaml
-  helm template access-roster oci://ghcr.io/truvity/charts/access-roster \
+  helm template sluis oci://ghcr.io/truvity/charts/sluis \
     --version NEW --namespace access-issuer -f issuer-values.yaml > new.yaml
   diff -u old.yaml new.yaml
   ```

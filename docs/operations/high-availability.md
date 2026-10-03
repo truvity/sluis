@@ -1,6 +1,6 @@
 # High availability
 
-Running `access-roster serve` at more than one replica, safely: what has to be
+Running `sluis serve` at more than one replica, safely: what has to be
 shared for that to work, what happens to each piece when the shared store
 is unreachable, and how key rotation stays safe across a rollout. For the
 directory (hub) half's own scaling and cache behaviour, see
@@ -110,7 +110,7 @@ from the code rather than assumed:
   specifically stops answering while Valkey is down even though the
   token itself is still good everywhere else. This matches
   [architecture.md#failure-semantics](../architecture.md#failure-semantics):
-  *"access-roster is down: no new sign-ins anywhere; existing sessions and
+  *"sluis is down: no new sign-ins anywhere; existing sessions and
   tokens live to expiry."*
 - **The key ring degrades gracefully, on purpose.** `KeyRing.Observe`
   never returns a state error to its caller: a briefly unreachable Valkey
@@ -221,7 +221,7 @@ GitHub link check) is ticked under a lease taken from the State port
 let two replicas divide the targets; but the leases keep another pod off only
 when the State is shared, and a controller is configured with no Valkey, so on
 today's storage its leases are in its own process and the chart stays at one
-replica. Two replicas wait for the NATS State. `access-roster tick <github|slack>
+replica. Two replicas wait for the NATS State. `sluis tick <github|slack>
 <target> --config <file>` runs one target's tick once under its lease, for an
 operator, but only with the controller scaled to 0 and `--unsafe-local-lease`:
 with no shared State the controller's lease does not exclude it, so it refuses
@@ -238,7 +238,7 @@ team.
 
 **The chart renders neither a PodDisruptionBudget nor any pod
 anti-affinity or topology-spread rule** (checked against
-`charts/access-roster/templates/`). An installation that wants replicas
+`charts/sluis/templates/`). An installation that wants replicas
 kept off the same node, or wants to guarantee at least one stays up
 through a voluntary disruption (a node drain, a cluster upgrade), adds
 these itself, for example:
@@ -247,14 +247,14 @@ these itself, for example:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: access-roster
+  name: sluis
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      # The chart's own selector labels (`access-roster.selectorLabels` in
+      # The chart's own selector labels (`sluis.selectorLabels` in
       # _helpers.tpl): the chart name (or `nameOverride`) and the release name together.
-      app.kubernetes.io/name: access-roster
+      app.kubernetes.io/name: sluis
       app.kubernetes.io/instance: <the release name>
 ```
 
@@ -262,7 +262,7 @@ spec:
 `values.yaml` at all.** The chart passes through `nodeSelector` and
 `tolerations` (both rendered in `deployment.yaml`), but there is no
 `affinity` or `topologySpreadConstraints` value anywhere in
-`charts/access-roster/values.schema.json` — and the schema's top level is
+`charts/sluis/values.schema.json` — and the schema's top level is
 `"additionalProperties": false`, so a stray `affinity:` key at the top of
 a values file is refused at render rather than silently ignored. An
 installation that wants pods spread across nodes has to patch the

@@ -1,6 +1,6 @@
 # Adoption
 
-What a platform needs to take access-roster into use: the prerequisites,
+What a platform needs to take sluis into use: the prerequisites,
 the order to install in, the first sign-in, connecting a directory and
 then each cluster, account and console, adopting objects or an identity
 provider that already exist, and moving between releases. The test for
@@ -67,7 +67,7 @@ fails every pass against a console older than the `ListServedDomains` RPC.
   broken logins
 - [operations/migration-from-google-group-sync.md](operations/migration-from-google-group-sync.md)
   — moving from a per-workspace directory reader
-- [reference/accessctl.md](reference/accessctl.md#installing-it) — putting
-  `accessctl` on laptops and into CI toolchains
+- [reference/sluisctl.md](reference/sluisctl.md#installing-it) — putting
+  `sluisctl` on laptops and into CI toolchains
 - [CHANGELOG.md](../CHANGELOG.md) — every release, and for a breaking
   one what to do first

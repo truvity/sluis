@@ -5,10 +5,10 @@
 
 ## Context
 
-`accessctl credential ssh` already gets a person a short-lived
+`sluisctl credential ssh` already gets a person a short-lived
 certificate from a secret store's SSH CA — a key made on the caller's
 machine, signed once, handed to the agent
-([design/accessctl.md#credential-the-broker-for-what-openbao-mints](../design/accessctl.md#credential-the-broker-for-what-openbao-mints),
+([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../design/sluisctl.md#credential-the-broker-for-what-openbao-mints),
 [connect/openbao.md](../connect/openbao.md)). That is a courier in front
 of a certificate authority: correct under
 [0002](0002-mission-boundary-tokens-and-memberships.md), but a detour
@@ -24,7 +24,7 @@ is for. The two problems should not share one answer.
 
 ## Decision
 
-**People authenticate with opkssh.** access-roster is opkssh's OIDC
+**People authenticate with opkssh.** sluis is opkssh's OIDC
 issuer: a public client row declaring opkssh's loopback redirects
 (`http://localhost:{3000,10001,11110}/login-callback`), and server-side
 policy written as `oidc:groups:<internal group>` — the same `groups`
@@ -44,7 +44,7 @@ the same as anywhere else a person's sign-in is the credential.
 never be a person's problem to rotate, and clients trust it with
 `@cert-authority` the way they always have.
 
-`accessctl credential ssh` is removed once opkssh is adopted, per
+`sluisctl credential ssh` is removed once opkssh is adopted, per
 [0007](0007-breaking-changes-inside-1x.md): a courier in front of a
 certificate authority stops earning its keep once the direct path exists.
 
@@ -54,7 +54,7 @@ certificate authority stops earning its keep once the direct path exists.
 and EdDSA ID tokens today, and access-issuer signs **ES384** by default
 ([0005](0005-es384-signing-algorithm.md)) — the one algorithm outside
 that list. Adoption waits on upstream OpenPubkey support for ES384, or on
-whichever alternative arrives first; `accessctl credential ssh` is not
+whichever alternative arrives first; `sluisctl credential ssh` is not
 removed, and stays the supported path for people, until one of those
 lands. An installation could work around the gap today by setting
 `signingKey.certificate: {algorithm: RSA, size: 2048, encoding: PKCS1}`
@@ -64,14 +64,14 @@ default this repository asks for.
 
 ## Consequences
 
-Until the blocker clears, `accessctl credential ssh` and opkssh are not
+Until the blocker clears, `sluisctl credential ssh` and opkssh are not
 both maintained in parallel as competing paths — the certificate broker
 stays the one documented way in for people, and this record is the
 tracked reason the direct path is not there yet. When ES384 support
 lands, the migration is: declare opkssh's client, write the
 `oidc:groups:` policy on each server, cut over, then remove the broker
 subcommand and its documentation, following the removal shape in
-[design/access-roster.md#appendix-what-was-removed-and-why](../design/access-roster.md#appendix-what-was-removed-and-why).
+[design/sluis.md#appendix-what-was-removed-and-why](../design/sluis.md#appendix-what-was-removed-and-why).
 
 ## Alternatives considered
 

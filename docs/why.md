@@ -1,4 +1,4 @@
-# Why access-roster exists
+# Why sluis exists
 
 The [README](../README.md) says what it is and where it sits among the
 alternatives. This page is the longer argument: the situation it starts
@@ -70,7 +70,7 @@ anywhere.
 | **Teleport, Boundary, an access mesh** | a full access plane with agents | its own agent model and identity store; SSO connectors are enterprise features; it replaces the gateway rather than sitting behind it |
 
 None of these is wrong. Each solves two or three of the seven problems.
-access-roster is the smallest set of parts that solves all seven with
+sluis is the smallest set of parts that solves all seven with
 the things the installation already has.
 
 ## Principles

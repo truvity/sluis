@@ -1,19 +1,19 @@
-# Go module `github.com/truvity/access-roster`
+# Go module `github.com/truvity/sluis`
 
 What a Go service behind the gateway imports. The shape follows
 [../design/trust.md](../design/trust.md): **exactly two verifiers**, one
 per anchor, and one `Verified` whichever proved the caller — so a handler
 never learns which anchor answered and cannot come to depend on it.
 
-access-roster uses this itself rather than keeping a copy. A library its
+sluis uses this itself rather than keeping a copy. A library its
 own author does not use is a library nobody has tested against a real
 listener.
 
 ```go
 import (
-    "github.com/truvity/access-roster/identity"
-    "github.com/truvity/access-roster/policy"
-    "github.com/truvity/access-roster/tokens"
+    "github.com/truvity/sluis/identity"
+    "github.com/truvity/sluis/policy"
+    "github.com/truvity/sluis/tokens"
 )
 ```
 
@@ -158,7 +158,7 @@ policy decides what it opens.
 ## Policy
 
 ```go
-declared, _ := policy.LoadDeclared("/etc/access-roster/policy")  // a file or a directory
+declared, _ := policy.LoadDeclared("/etc/sluis/policy")  // a file or a directory
 set, _ := policy.NewSet(declared)                                // validated once, at load
 
 result := set.Evaluate(policy.Input{

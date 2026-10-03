@@ -13,7 +13,7 @@ between, lowercase. *Role, on thing, in scope.*
 | Segment | Is | Examples |
 |---|---|---|
 | `scope` | an environment, a tenant id, or `all` | `kernel`, `prod`, `devel`, `C0north`, `all` |
-| `thing` | what the role is **on**: a subsystem, a project, an application | `k8s`, `argocd`, `grafana`, `shop`, `access-roster` |
+| `thing` | what the role is **on**: a subsystem, a project, an application | `k8s`, `argocd`, `grafana`, `shop`, `sluis` |
 | `role` | from that thing's own ladder | `viewer`, `operator`, `admin`, `deployer`, `editor` |
 
 So: `prod:k8s:admin`, `devel:argocd:deployer`, `all:grafana:viewer`,

@@ -1,16 +1,16 @@
-# access-roster chart
+# sluis chart
 
-Deploys the whole of access-roster: the directory reader, the policy,
+Deploys the whole of sluis: the directory reader, the policy,
 the OpenID provider, the login page, the console and the audit trail in
 one process, and, with `controllerGithub.enabled` and `controllerSlack.enabled`, the
-GitHub and Slack controllers beside it. The chart runs one image, `ghcr.io/truvity/access-roster/access-roster`,
-as three Deployments: `access-roster serve`, `access-roster controller github` and
-`access-roster controller slack`. Each controller has no listener, and is a dry run for every organisation or
+GitHub and Slack controllers beside it. The chart runs one image, `ghcr.io/truvity/sluis/sluis`,
+as three Deployments: `sluis serve`, `sluis controller github` and
+`sluis controller slack`. Each controller has no listener, and is a dry run for every organisation or
 workspace until it is listed in `controllerGithub.config.enabledOrgs` or `controllerSlack.config.enabledWorkspaces`.
 Each component is configured by one file, its `config` value, rendered as it
 stands and validated against the schema its binary uses; secrets reach a pod only
 through `secretEnv`. See [docs/reference/configuration.md](../../docs/reference/configuration.md).
-Published to `ghcr.io/truvity/charts/access-roster` on every
+Published to `ghcr.io/truvity/charts/sluis` on every
 `v*` tag of the repository; the tag is the chart's version.
 
 What the chart includes, what it expects and every value are documented in
@@ -88,7 +88,7 @@ for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 ([runbook](../../docs/operations/runbook.md#slack-state)).
 
 ```sh
-helm install access-roster oci://ghcr.io/truvity/charts/access-roster \
-  --namespace access-roster --create-namespace \
+helm install sluis oci://ghcr.io/truvity/charts/sluis \
+  --namespace sluis --create-namespace \
   --set config.issuerURL=https://issuer.example
 ```

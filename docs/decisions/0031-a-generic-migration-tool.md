@@ -14,7 +14,7 @@ cannot be rolled back separately.
 
 ## Decision
 
-One command, **`access-roster migrate --from <adapter> --to <adapter>`**, copies
+One command, **`sluis migrate --from <adapter> --to <adapter>`**, copies
 the State store from any adapter to any other through the port, and the same
 command with a file as one end is the **backup and export**. It is idempotent
 (a re-run copies what is missing, never overwrites a newer record) and verifies
@@ -58,7 +58,7 @@ attributed or reverted separately.
 
 ## Implementation note (B3-4)
 
-`access-roster migrate --from <config> --to <config>` is built
+`sluis migrate --from <config> --to <config>` is built
 ([the runbook](../operations/migrate.md)). Where this note and the text above
 differ, this is what exists.
 

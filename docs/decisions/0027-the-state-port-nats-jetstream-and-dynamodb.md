@@ -1,7 +1,7 @@
 # 0027 — The State port: NATS JetStream on Kubernetes, DynamoDB on AWS
 
 **Status:** Accepted; supersedes the store statement in
-[design/access-roster.md](../design/access-roster.md#the-store) ("plain
+[design/sluis.md](../design/sluis.md#the-store) ("plain
 Kubernetes objects … no cloud parameter store, no cache") once the migration
 in [0031](0031-a-generic-migration-tool.md) has run
 **Date:** 2026-10-02

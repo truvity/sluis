@@ -13,7 +13,7 @@ surface had gotten wrong or left out
 ([CHANGELOG.md](../../CHANGELOG.md)). Holding every such correction for a
 2.0.0 release would either delay a fix that closes a real gap — the
 `end_session` fix in particular closed a security hole
-([design/access-roster.md#sessions-and-sign-out](../design/access-roster.md#sessions-and-sign-out))
+([design/sluis.md#sessions-and-sign-out](../design/sluis.md#sessions-and-sign-out))
 — or force a 2.0.0 every few weeks, which stops meaning what a major
 version is supposed to mean.
 
@@ -24,7 +24,7 @@ schema is a **security-relevant** thing to get wrong. The schema already
 refuses unknown keys rather than ignoring them, precisely because a
 silently-ignored key is a grant somebody wrote, reviewed and merged that
 never took effect
-([design/access-roster.md#appendix-what-was-removed-and-why](../design/access-roster.md#appendix-what-was-removed-and-why)).
+([design/sluis.md#appendix-what-was-removed-and-why](../design/sluis.md#appendix-what-was-removed-and-why)).
 Keeping a removed key *accepted but inert*, purely to avoid a breaking
 release, would reintroduce exactly that failure mode on purpose.
 

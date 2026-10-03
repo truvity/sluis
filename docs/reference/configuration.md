@@ -1,11 +1,11 @@
-# access-roster — chart and configuration
+# sluis — chart and configuration
 
 How the service is configured: the chart's boundary, its values, the
 overlay format, the Kubernetes objects it owns, the roles, and the two
 things it expects the deployment to provide.
 
-**One chart, `charts/access-roster`, and one image, for the whole product.** It renders the
-whole of access-roster — the directory, the policy, the OpenID provider,
+**One chart, `charts/sluis`, and one image, for the whole product.** It renders the
+whole of sluis — the directory, the policy, the OpenID provider,
 the login page and the console — and, when enabled, the GitHub
 controller and the Slack controller beside it. It keeps no audit trail of its own: it records
 into an installation of [truvity/audit](https://github.com/truvity/audit)
@@ -44,13 +44,13 @@ service writes *itself*, where it is the producer and gets to choose.
 
 | Value | Default | Meaning |
 |---|---|---|
-| `config` | see [the file](#the-configuration-file) | **the service's configuration**, rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/access-roster/config.yaml`. Validated by `values.schema.json` against the schema the binary uses. Everything the service decides is here (the issuer URL, lifetimes, the store, Valkey, recovery, audit, the signing key's rotation); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate |
+| `config` | see [the file](#the-configuration-file) | **the service's configuration**, rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/sluis/config.yaml`. Validated by `values.schema.json` against the schema the binary uses. Everything the service decides is here (the issuer URL, lifetimes, the store, Valkey, recovery, audit, the signing key's rotation); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate |
 | `secretEnv[]` | `[]` | the only way a secret reaches a process: `{name, secretName, key, optional}` puts a Secret's key in the variable `name`, which the config names (`valkey.passwordEnv`, `oauthClient.secretEnv`, `adminPasswordEnv`). A secret is never in `config` |
 | `secretMounts[]` | `[]` | `{secretName, mountPath}`: a Secret mounted read-only as a directory, for a file the config names by path (`oauthClient.idFile`, `oauthClient.secretFile`). Each key is a file |
 | `controllerGithub.config` | see [the file](#the-configuration-file) | the GitHub controller's configuration, rendered as it stands into `<release>-github-roster-config`. `consoleURL` is required, and is this release's own Service |
 | `controllerSlack.config` | see [the file](#the-configuration-file) | the Slack controller's, into `<release>-slack-roster-config` |
 | `replicaCount` | `2` | two replicas need Valkey; one may use the in-memory store. Every replica serves every workspace, including one connected through the console on the other replica: a reader missing locally is opened from the stored credential on first use |
-| `image.repository` / `tag` | `ghcr.io/truvity/access-roster/access-roster` / app version | the one image: `serve` and both controllers are subcommands of it, each Deployment passing its own arguments |
+| `image.repository` / `tag` | `ghcr.io/truvity/sluis/sluis` / app version | the one image: `serve` and both controllers are subcommands of it, each Deployment passing its own arguments |
 | `nameOverride` / `fullnameOverride` | `""` / `""` | replace the chart name (the `app.kubernetes.io/name` label and the controllers' selectors) and the release's full name (the prefix of every object, and the value `config.release` must carry). For an installation moving from the access-issuer chart: [see below](#migrating-from-the-access-issuer-chart) |
 | `signingKey.existingSecret` / `.key` | `""` / `tls.key` | a Secret holding a PEM private key -- RSA, or ECDSA on P-256, P-384 or P-521. Empty renders a cert-manager `Certificate` instead. **Never minted by the service**: two replicas with two keys hand out tokens half the fleet cannot verify |
 | `signingKey.certificate.issuerName` / `.issuerKind` | `selfsigned` / `ClusterIssuer` | the cert-manager issuer that produces the key, when no `existingSecret` is named. The certificate is a by-product; only the key is used |
@@ -122,7 +122,7 @@ question, *what does this issuer serve*, but listing an endpoint under
 | `/revoke` | RFC 7009 | revokes a refresh token; what Revoke and "sign out everywhere" call underneath |
 | `/login`, `/logout`, `/signed-out` | ours | **the whole of the issuer's HTML**: the sign-in chooser — which names the application being signed in to from the client's declared `display_name` and `description`, and the host its redirect returns to, or says a program on this computer is asking when that redirect is loopback ([policy](policy.md#what-the-sign-in-page-calls-a-client)) — the sign-out a person follows, and where a sign-out lands when the client declares no page of its own. Each runs before there is anyone to authorize, which is why none can be a console page. Minimal HTML, same theme |
 | `/account` | ours | a redirect into the console's page for the signed-in person. The page itself lived here through 0.11 because it had to be same-origin with `SessionService`; the console is same-origin and now the same process, and its page for a person already lists the sessions and offers *sign out everywhere*. The address stays because it was linked to and bookmarked; the two POSTs behind it are gone |
-| `/.access/grants` | ours | the clients the caller's groups admit it to, and which group admits each — read by `accessctl kubeconfig` and `aws-config` so a laptop writes a context per cluster and a profile per role without keeping a list that drifts from the policy. A bearer, and it discloses nothing the caller could not work out from its own token |
+| `/.access/grants` | ours | the clients the caller's groups admit it to, and which group admits each — read by `sluisctl kubeconfig` and `aws-config` so a laptop writes a context per cluster and a profile per role without keeping a list that drifts from the policy. A bearer, and it discloses nothing the caller could not work out from its own token |
 | `/.access/simulate` | ours | **not built**: what would this identity get, for somebody other than the caller. The console's Rules page has a simulator that answers it, and `/.access/grants` answers it for the caller's own identity |
 | `SessionService` (ConnectRPC): `ListSessions{identity? \| client? \| contains?}` → `{sessions, sign_ins}`, `RevokeSessions{identity, client?, session_id?, sso?}` | ours | sessions per identity and per client, with client, how obtained, issued, expires, last refreshed; revoke per identity, per client, or one. Listing and revoking others is operator; listing and revoking your own is any signed-in identity; listing **every** session (neither identity nor client named) is operator-only, paged by `page_size`/`page_token`, and audited. `contains` reads `identity` and `client_id` as SUBSTRINGS rather than exact values — prefix, suffix and middle — and is **operator-only**, because a substring names an unknown set where an exact identity names the caller's own or nobody's. `RevokeSessions` has no such field: a revoke scoped to *anything containing this* is the control that ends more than its caller meant, with no undo. Authorized by the browser's SSO cookie on a same-origin call — which is what the console is — or by a bearer. The `console.origin` CORS gate is unused on one origin, which is the shipped shape, and stays empty there; it remains for a console served from somewhere else, and is the one other origin admitted |
 | back-channel logout | OIDC Back-Channel Logout 1.0 | opt-in per client with `backchannel_logout_uri`: a signed `logout+jwt` POSTed to every such client that signed the person in, by the `sid` it saw, when the sign-in ends |
@@ -325,8 +325,8 @@ first line, naming what a restart would lose.
 
 ## The configuration file
 
-Each subcommand of `access-roster` (`serve`, `controller github`, `controller slack`) is configured by **one YAML file**, given with `--config <file>`,
-and by nothing else: `--version` and `--help` are the only other flags. `access-roster tick github|slack <target>`
+Each subcommand of `sluis` (`serve`, `controller github`, `controller slack`) is configured by **one YAML file**, given with `--config <file>`,
+and by nothing else: `--version` and `--help` are the only other flags. `sluis tick github|slack <target>`
 runs one target's tick once and reads the same file as its controller (`controller-github`, `controller-slack`); the target
 comes first: an organisation's login or `github:links` for GitHub, a workspace's key for Slack. Until a shared State exists a tick
 refuses to run (a running controller's lease would not exclude it); with the controller scaled to 0, `--unsafe-local-lease` runs it.
@@ -362,14 +362,14 @@ default. What follows is the orientation: each key, its default when unset, and
 what to know. A key the table gives no default for is unset by default, which
 is the binary's own behaviour.
 
-### `serve` (the chart's `config`; `access-roster serve`)
+### `serve` (the chart's `config`; `sluis serve`)
 
 The issuer, the console and the directory hub, one process.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `issuerURL` | **required** | baked into every token and every relying party's trust. There is no default, because one would be a value nobody chose spread across an estate. An http or https URL with no credentials |
-| `release` | `access-roster` | the name this installation's objects carry (`<release>-github-orgs`, the prefix of its keys in Valkey). **The chart requires it to be the release's full name**, and says what to write |
+| `release` | `sluis` | the name this installation's objects carry (`<release>-github-orgs`, the prefix of its keys in Valkey). **The chart requires it to be the release's full name**, and says what to write |
 | `cluster` | unset | what this cluster is called, which becomes part of a ServiceAccount's subject: `<cluster>:k8s:<namespace>:<name>`. Empty keeps the older unqualified form |
 | `store` | `memory` (the chart: `kubernetes`) | where connected workspaces and their credentials are kept. `memory` makes a restart a fresh installation, which is right for a laptop and nothing else |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports ([design/ports.md](../design/ports.md)): `legacy` keeps state where it has always been kept (the namespace's ConfigMaps and Secrets, and Valkey when `valkey.address` is set); `nats` keeps State, the session index and the trigger in a JetStream KV bucket shared by every replica ([design/ports.md](../design/ports.md#the-nats-adapter)); `dynamodb` keeps the same in one DynamoDB table shared by every replica ([design/ports.md](../design/ports.md#the-dynamodb-adapter)); `memory` keeps all of it in the process, so a restart loses every login in progress, and is refused with `store: kubernetes` or `valkey.address`. With `nats` or `memory` the domain records too (directory workspaces and their credentials, GitHub organisations and Apps, people's links, the Slack records) are kept in that State, their secrets sealed, and the controllers read them there instead of from mounted files ([design/ports.md](../design/ports.md#the-domain-stores)); a Sealer is then required, so `nats` and `dynamodb` need `ports.sealer`, and the start is refused naming it without one |
@@ -383,7 +383,7 @@ The issuer, the console and the directory hub, one process.
 | `ports.sealer.kms.keyId` | (required) | a key id, ARN or alias the data keys are wrapped under; the role needs `kms:Encrypt` and `kms:Decrypt` on it |
 | `ports.sealer.kms.region`, `ports.sealer.kms.endpoint` | the SDK's, AWS | the key's region; LocalStack's address |
 | `ports.nats.url` | **required with `nats`** | the NATS servers, comma separated (`nats://host:4222`, `tls://` for TLS) |
-| `ports.nats.bucket` / `.replicas` / `.create` | `access-roster` / `3` / `true` | the JetStream KV bucket, its replica count when created, and whether to create or update it (off binds to one that exists, for an identity that may not manage streams) |
+| `ports.nats.bucket` / `.replicas` / `.create` | `sluis` / `3` / `true` | the JetStream KV bucket, its replica count when created, and whether to create or update it (off binds to one that exists, for an identity that may not manage streams) |
 | `ports.nats.tokenFile` / `.credsFile` / `.caFile` | unset | the projected ServiceAccount token presented as the NATS token (the auth callout validates it), read on every connect; or a NATS credentials file (one of the two); and a CA bundle for a server the system's authorities do not cover |
 | `ports.dynamodb.table` | **required with `dynamodb`** | the table: a string partition key `pk`, a string sort key `sk` and TTL on `expires` ([design/ports.md](../design/ports.md#the-dynamodb-adapter)) |
 | `ports.dynamodb.region` / `.endpoint` | the SDK's (`AWS_REGION`) / AWS | the table's region; LocalStack's or DynamoDB Local's address. Credentials are the platform's (Pod Identity, IRSA, a Lambda role) and are never configured |
@@ -529,7 +529,7 @@ What the service does, and does not do:
 The metrics, the two alerts and the dashboard row are in
 [telemetry](../operations/telemetry.md#the-exports).
 
-### `controller-github` (the chart's `controllerGithub.config`; `access-roster controller github`)
+### `controller-github` (the chart's `controllerGithub.config`; `sluis controller github`)
 
 The GitHub controller: it makes each organisation's teams match the policy's
 `github` table. It has no listener.
@@ -538,7 +538,7 @@ The GitHub controller: it makes each organisation's teams match the policy's
 |---|---|---|
 | `policyDir` | **required** | the same policy ConfigMap the service mounts; its `github` table is the bindings. The chart requires `/var/run/github-roster/policy` |
 | `consoleURL` | **required** | the console's API, which answers who holds a group. The chart requires this release's own Service plus `console.mount`, and prints it |
-| `release` | `access-roster` | the name the service's objects carry, so the controller finds `<release>-github-status`. The chart requires the release's full name |
+| `release` | `sluis` | the name the service's objects carry, so the controller finds `<release>-github-status`. The chart requires the release's full name |
 | `tokenFile` | `/var/run/secrets/github-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
 | `appsDir` | `/var/run/github-roster/apps` | the mounted `<release>-github-apps` Secret, one file per connected organisation |
 | `recordsDir` | `/var/run/github-roster/records` | the mounted `<release>-github-orgs` ConfigMap: the organisations' records and the console's requests for a pass. With `appsDir` it is looked at every 30 seconds, and a change (an install, a Refresh) runs a pass at once |
@@ -556,7 +556,7 @@ Secret `<release>-github-links` it rewrites as it checks links. The App
 keys and the console's records are volumes, so it holds no permission to read
 any other Secret or ConfigMap, and watching them for a change takes none.
 
-### `controller-slack` (the chart's `controllerSlack.config`; `access-roster controller slack`)
+### `controller-slack` (the chart's `controllerSlack.config`; `sluis controller slack`)
 
 The Slack controller: it makes each workspace's channels match the policy's
 `slack` table. It has no listener, and runs as one replica with `Recreate`: two
@@ -567,7 +567,7 @@ controllers would make every change twice.
 | `policyDir` | **required** | the same policy ConfigMap the service mounts; its `slack` and `people` tables are the bindings. The chart requires `/var/run/slack-roster/policy` |
 | `consoleURL` | **required** | as for `controller-github` |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `nats` or `dynamodb` it reads the console's records there, sealed by `ports.sealer` |
-| `release` | `access-roster` | as for `controller-github`; it finds `<release>-slack-status` |
+| `release` | `sluis` | as for `controller-github`; it finds `<release>-slack-status` |
 | `tokenFile` | `/var/run/secrets/slack-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
 | `credentialsDir` | `/var/run/slack-roster/credentials` | the mounted `<release>-slack-credentials` Secret, one file per connected workspace; optional |
 | `recordsDir` | `/var/run/slack-roster/workspaces` | the mounted `<release>-slack-workspaces` ConfigMap: workspace records, Slack Connect records, console channel records, confirmations and pass requests; optional |
@@ -586,31 +586,31 @@ workspace](../connect/slack-workspace.md).
 
 [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md)
 replaces three binaries, three images and the `access-issuer` chart with **one
-binary, `access-roster`, one image and one chart**. This is a breaking change
+binary, `sluis`, one image and one chart**. This is a breaking change
 in one release; nothing is kept as an alias.
 
 | Before | After |
 |---|---|
-| `oci://ghcr.io/truvity/charts/access-issuer` | `oci://ghcr.io/truvity/charts/access-roster` |
-| `ghcr.io/truvity/access-roster/access-issuer` | `ghcr.io/truvity/access-roster/access-roster`, run as `access-roster serve --config <file>` |
-| `ghcr.io/truvity/access-roster/github-roster` | the same image, run as `access-roster controller github --config <file>` |
-| `ghcr.io/truvity/access-roster/slack-roster` | the same image, run as `access-roster controller slack --config <file>` |
+| `oci://ghcr.io/truvity/charts/access-issuer` | `oci://ghcr.io/truvity/charts/sluis` |
+| `ghcr.io/truvity/sluis/access-issuer` | `ghcr.io/truvity/sluis/sluis`, run as `sluis serve --config <file>` |
+| `ghcr.io/truvity/sluis/github-roster` | the same image, run as `sluis controller github --config <file>` |
+| `ghcr.io/truvity/sluis/slack-roster` | the same image, run as `sluis controller slack --config <file>` |
 | `schemas/config/access-issuer.schema.json`, `github-roster.schema.json`, `slack-roster.schema.json` | `serve.schema.json`, `controller-github.schema.json`, `controller-slack.schema.json` |
 | values `githubRoster:`, `slackRoster:` | `controllerGithub:`, `controllerSlack:` (`enabled`, `config`, `resources` as before) |
 | values `githubRoster.image`, `slackRoster.image` | removed: a controller runs the chart's one `image` |
-| `config.release` and each controller's `config.release`, unset: `access-issuer` | unset: `access-roster` |
+| `config.release` and each controller's `config.release`, unset: `access-issuer` | unset: `sluis` |
 
-`access-roster migrate --from <config> --to <config>`
+`sluis migrate --from <config> --to <config>`
 ([0031](../decisions/0031-a-generic-migration-tool.md),
 [operations/migrate.md](../operations/migrate.md)) reads two `serve` files, one
-per storage, and takes its own flags beside them. `access-roster tick` (one reconciler
+per storage, and takes its own flags beside them. `sluis tick` (one reconciler
 pass, [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md))
 is a later change; the controllers' loops are `controller github` and
 `controller slack`.
 
 **What the chart renames.** The chart's name is part of the full name
 (`<release>-<chart>`, or the release alone when it is the chart's name), and so
-of every object. Moving to the `access-roster` chart without a value renames
+of every object. Moving to the `sluis` chart without a value renames
 **every** object: the Deployments, the Service, the ServiceAccounts and their
 Roles, every ConfigMap and the Secrets the chart generates (the cert-manager
 signing key's Secret among them, which would be a new key). `config.release`,
@@ -640,7 +640,7 @@ new signing key.
 |---|---|---|
 | Container names | `access-issuer`, `github-roster`, `slack-roster` | `serve`, `controller-github`, `controller-slack` |
 | `app.kubernetes.io/component` on the config ConfigMaps and the controllers' objects | `access-issuer`, `github-roster`, `slack-roster` | `serve`, `controller-github`, `controller-slack` |
-| Where the config file is mounted | `/etc/access-issuer/config.yaml`, `/etc/github-roster/config.yaml`, `/etc/slack-roster/config.yaml` | `/etc/access-roster/config.yaml`, `/etc/access-roster/controller-github.yaml`, `/etc/access-roster/controller-slack.yaml` |
+| Where the config file is mounted | `/etc/access-issuer/config.yaml`, `/etc/github-roster/config.yaml`, `/etc/slack-roster/config.yaml` | `/etc/sluis/config.yaml`, `/etc/sluis/controller-github.yaml`, `/etc/sluis/controller-slack.yaml` |
 
 **Names that do not change** (given the two overrides, or in a fresh
 installation they are `<full name>` plus): the controllers' Deployments,
@@ -662,18 +662,18 @@ a dashboard that selects on them still does.
    to `controllerSlack`, and delete `githubRoster.image` and `slackRoster.image`.
    Move nothing else: `config` stays where it is.
 3. If the values set `image.repository`, change it to
-   `ghcr.io/truvity/access-roster/access-roster` (or your mirror's name for it);
+   `ghcr.io/truvity/sluis/sluis` (or your mirror's name for it);
    if they do not, there is nothing to do. Pin or mirror one image instead of
    three.
 4. Add `nameOverride: access-issuer` and `fullnameOverride: <the old full name>`
    (the Deployment's name without a suffix). `config.release` and each
    controller's `config.release` stay the old full name, as the old chart
    required. **Write them out if the values left them unset**: the default was
-   `access-issuer` and is now `access-roster`, so an installation that relied on
+   `access-issuer` and is now `sluis`, so an installation that relied on
    it must now say `release: access-issuer`, or the render is refused and says
    what to write. Without the two overrides the installation is renamed
    (above).
-5. Point the chart reference at `oci://ghcr.io/truvity/charts/access-roster` at
+5. Point the chart reference at `oci://ghcr.io/truvity/charts/sluis` at
    this version: a Helm release, an Argo CD `Application`'s `chart:`, a
    `HelmRelease`. Run `helm template` first: a misspelt key or a `release` that
    is not the full name is refused at render, with the value to write.
@@ -682,7 +682,7 @@ a dashboard that selects on them still does.
    next pull.
 7. Anything outside the chart that ran `access-issuer`, `github-roster` or
    `slack-roster` by name (a `docker run`, a Compose file, a systemd unit) runs
-   `access-roster serve`, `access-roster controller github` or `access-roster
+   `sluis serve`, `sluis controller github` or `sluis
    controller slack` with the same `--config` file.
 
 ## Migrating from environment variables
@@ -702,7 +702,7 @@ longer sets them.
 | `ISSUER_URL` | `issuerURL` |
 | `PORT` | `listen.address` (`:<port>`) |
 | `HEALTH_PORT` | `probes.address` |
-| `API_PORT`, `CONSOLE_PORT` | none: the directory's own listeners are not served by `access-roster serve`; the console is on the issuer's listener |
+| `API_PORT`, `CONSOLE_PORT` | none: the directory's own listeners are not served by `sluis serve`; the console is on the issuer's listener |
 | `DEMO` | `demo` |
 | `ALLOW_INSECURE` | `allowInsecure` |
 | `IN_CLUSTER` | `inCluster` |
@@ -817,8 +817,8 @@ from.
 
 ## The repository
 
-access-roster ships from one repository: the `access-roster` chart with
-its one image — `serve`, `controller github` and `controller slack` are its subcommands — `accessctl`, the GitHub Action, the Go module and the TypeScript
+sluis ships from one repository: the `sluis` chart with
+its one image — `serve`, `controller github` and `controller slack` are its subcommands — `sluisctl`, the GitHub Action, the Go module and the TypeScript
 package, all stamped with one tag. Shared Go packages —
 the backends, the policy engine, the verifiers, the exchange — are
 importable behind interfaces.

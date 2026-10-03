@@ -3,7 +3,7 @@
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability, please report it privately via
-[GitHub Security Advisories](https://github.com/truvity/access-roster/security/advisories/new).
+[GitHub Security Advisories](https://github.com/truvity/sluis/security/advisories/new).
 
 Do NOT open a public issue for security vulnerabilities.
 
@@ -79,7 +79,7 @@ Only the latest release is supported with security updates.
   and a declared client in the policy always wins over a document one.
   See [docs/reference/policy.md](docs/reference/policy.md#clients-that-describe-themselves).
 - The **audit trail** is kept by an audit installation connected as a
-  plugin, which access-roster reaches as its own workload (a projected
+  plugin, which sluis reaches as its own workload (a projected
   service-account token) and holds no bucket or key for. Ordinary records
   never wait on it; a recovery sign-in does, and is refused when its record
   cannot be kept. The console's Audit page reads the installation with a

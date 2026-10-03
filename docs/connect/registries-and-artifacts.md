@@ -3,8 +3,8 @@
 
 ECR and CodeArtifact have no trust relationship of their own with the
 issuer. Both are an AWS credential plus a tool-specific handshake, and
-the credential is what access-roster prepared: a profile per granted role,
-named `<role>@<account>`, on a laptop with `accessctl aws` behind it and in
+the credential is what sluis prepared: a profile per granted role,
+named `<role>@<account>`, on a laptop with `sluisctl aws` behind it and in
 a job with a web-identity token file. Everything on this page is AWS's own
 tooling using those profiles. Many registries, many accounts, many
 artifact domains: many profiles and many `--profile` flags.
@@ -48,7 +48,7 @@ selected by environment:
 
 The helper reads the profile in `AWS_PROFILE`; when two registries need
 two roles, set the profile per shell or use the helper's per-registry
-profile mapping. `accessctl setup` prints this block for the registries
+profile mapping. `sluisctl setup` prints this block for the registries
 implied by your granted roles.
 
 ## CodeArtifact
@@ -69,8 +69,8 @@ One login per domain and tool, always with `--profile`:
 | Gradle | the same token in `gradle.properties` for the repository credentials |
 | generic | `aws codeartifact get-authorization-token` and the repository endpoint from `get-repository-endpoint --format generic` |
 
-Tokens live twelve hours. In a job, run the login after the access-roster
-step; on a laptop, `accessctl setup` prints the exact lines for the
+Tokens live twelve hours. In a job, run the login after the sluis
+step; on a laptop, `sluisctl setup` prints the exact lines for the
 domains your granted roles reach, and a shell alias per tool is the usual
 way to keep them handy.
 

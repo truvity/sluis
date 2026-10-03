@@ -5,8 +5,8 @@ requests its identity token, exchanges it at the issuer for the clients
 its groups admit it to, and uses the result.
 
 Two ways to do that, and they exchange the same thing: **the action** in
-this repository (`uses: truvity/access-roster@…`), which is `curl` and
-`jq` and downloads nothing of ours, and **`accessctl`** with the same
+this repository (`uses: truvity/sluis@…`), which is `curl` and
+`jq` and downloads nothing of ours, and **`sluisctl`** with the same
 kubeconfig and AWS profile a person uses. A shared workflow that wants no
 stored key picks the action through its own input — see
 [a reusable workflow](#in-a-reusable-workflow-token-source-access-roster).
@@ -71,7 +71,7 @@ permissions:
 steps:
   - id: access
     # Pin a release by commit; there is no floating `v1` tag.
-    uses: truvity/access-roster@<commit-sha>   # vX.Y.Z
+    uses: truvity/sluis@<commit-sha>   # vX.Y.Z
     with:
       issuer: https://access.example
       audiences: k8s:staging, aws:111122223333:deployer
@@ -145,7 +145,7 @@ jobs:
 ```yaml
 # inside the shared workflow's job
 - id: access
-  uses: truvity/access-roster@<commit-sha>   # vX.Y.Z
+  uses: truvity/sluis@<commit-sha>   # vX.Y.Z
   with:
     issuer: ${{ inputs.access-roster-issuer }}
     github-app: ${{ inputs.github-app }}
@@ -172,14 +172,14 @@ their own identity token as above.
 
 ## Or: the same files a laptop uses
 
-A repository that has `accessctl` in its toolchain — each release
-carries a Nix flake for devbox ([installing it](../design/accessctl.md#installing-it))
+A repository that has `sluisctl` in its toolchain — each release
+carries a Nix flake for devbox ([installing it](../design/sluisctl.md#installing-it))
 — needs no action and no second copy of its access files. The line a
 person's kubeconfig runs,
 
 ```yaml
 exec:
-  command: accessctl
+  command: sluisctl
   args: [kube-token, --audience, k8s:staging, --issuer, https://issuer.example.internal]
 ```
 
@@ -187,12 +187,12 @@ and the line a person's `aws.ini` runs,
 
 ```ini
 [profile test]
-credential_process = accessctl aws --audience aws:111122223333:test --issuer https://issuer.example.internal
+credential_process = sluisctl aws --audience aws:111122223333:test --issuer https://issuer.example.internal
 ```
 
 work unchanged in a job granted `id-token: write`. When
 `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN` are
-set, `accessctl` asks GitHub for the job's identity token — for the
+set, `sluisctl` asks GitHub for the job's identity token — for the
 issuer's URL, the one audience it accepts — and exchanges that, presenting
 the audience as its client exactly as the action does. Anywhere else it
 exchanges the cached sign-in. So one committed file serves both, and what
@@ -201,7 +201,7 @@ and the job's group together when both should reach it.
 
 Keep credentials off a committed `[default]`: in a job it would shadow
 the runner's own identity for every call. Select a named profile instead.
-A consumer that is neither kubectl nor an AWS SDK reads `accessctl token
+A consumer that is neither kubectl nor an AWS SDK reads `sluisctl token
 --audience <client>` from stdin, in a job and on a laptop alike.
 
 **Both targets go through the issuer, never directly.** A cluster trusts
