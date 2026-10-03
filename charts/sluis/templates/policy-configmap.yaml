@@ -1,0 +1,29 @@
+{{- if eq .Values.renders "app" -}}
+# The declared layer of the policy — the same file the hub reads, and the
+# same schema. See docs/reference/policy.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sluis.fullname" . }}-policy
+  labels:
+    {{- include "sluis.labels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    # The version belongs to the chart, not to the values: the loader
+    # refuses a document whose version it does not know, so a policy
+    # written without one is a service that will not start.
+    version: 1
+    {{- if .Values.policy }}
+    {{- toYaml (omit .Values.policy "version") | nindent 4 }}
+    {{- end }}
+  {{- /* The access document: the list-shaped sections an installation derives
+         from its access matrix, and the rows that are its own. The service
+         and the controllers reshape it into the policy they load, beside
+         policy.yaml (docs/reference/policy.md#the-access-document). The chart
+         does not interpret it. */}}
+  {{- if .Values.access }}
+  access.yaml: |
+    version: 1
+    {{- toYaml (dict "access" .Values.access "overlay" (.Values.overlay | default dict)) | nindent 4 }}
+  {{- end }}
+{{ end -}}

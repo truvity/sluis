@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // passTTL is how long an operator's request for a pass is kept. The controller

@@ -10,23 +10,23 @@ import (
 	"github.com/redis/go-redis/v9"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/githubroster/catalogueapp"
-	ghconn "github.com/truvity/access-roster/internal/githubroster/connection"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/migrate"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/legacy"
-	"github.com/truvity/access-roster/internal/port/memory"
-	slackcatalogueapp "github.com/truvity/access-roster/internal/slackapp/catalogueapp"
-	slconn "github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/store"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
+	ghconn "github.com/truvity/sluis/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/migrate"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/legacy"
+	"github.com/truvity/sluis/internal/port/memory"
+	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
+	slconn "github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 var ctx = context.Background()
@@ -52,8 +52,8 @@ func newLegacy(t *testing.T) *legacySide {
 	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = rc.Close() })
 	api := fake.NewSimpleClientset()
-	state := valkey.NewState(rc, "access-roster")
-	backendStores := &legacy.Backend{Kube: kube.NewClient(api, "ns", "access-roster"), Valkey: state}
+	state := valkey.NewState(rc, "sluis")
+	backendStores := &legacy.Backend{Kube: kube.NewClient(api, "ns", "sluis"), Valkey: state}
 	return &legacySide{
 		stores: &store.Stores{
 			Ports: backendStores.Ports(legacy.Options{}), Backend: backendStores,

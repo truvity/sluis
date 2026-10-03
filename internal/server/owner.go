@@ -9,15 +9,15 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/emailaddr"
-	"github.com/truvity/access-roster/internal/hub"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // An OWNER is the connected directory a Slack workspace or a GitHub
 // organisation belongs to. It is recorded in the connection's own record
-// when the connection is made, never declared in the policy: access-roster
+// when the connection is made, never declared in the policy: sluis
 // already knows which directories are connected and which domains each
 // serves, and a second copy in a file would only drift from the first.
 //

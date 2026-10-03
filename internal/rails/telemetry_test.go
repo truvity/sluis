@@ -14,8 +14,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 var (

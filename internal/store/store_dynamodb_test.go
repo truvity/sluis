@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/store"
 )
 
 func TestTheDynamoDBSettingsReachTheAdapter(t *testing.T) {

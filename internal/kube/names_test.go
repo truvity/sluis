@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
 )
 
 // A tenant id belongs to the backend, not to Kubernetes. Google's are

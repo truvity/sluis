@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // groupsScopingReportWindow is how long one (audience, subject,

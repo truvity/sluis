@@ -14,8 +14,8 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/verify"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/verify"
 )
 
 // fakeCluster stands in for a Kubernetes API server publishing the key

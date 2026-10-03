@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/portstore"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/portstore"
 )
 
 func selfLink(id int64, login string, emails ...string) link.Link {

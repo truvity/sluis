@@ -2,14 +2,14 @@
 // Protocol's authorization spec, for one protected resource.
 //
 // An MCP server is a resource a token is minted FOR (RFC 8707). This
-// package verifies a bearer token against access-roster -- signature
+// package verifies a bearer token against sluis -- signature
 // against the issuer's key set, `iss`, and `aud` equal to the server's
 // own resource URL -- publishes the server's own RFC 9728 Protected
 // Resource Metadata, and answers an unauthenticated request with the
 // challenge a compliant client needs to discover the issuer
 // (`WWW-Authenticate: Bearer resource_metadata="...", scope="..."`).
 //
-// Who may reach the resource is decided ONLY by access-roster's
+// Who may reach the resource is decided ONLY by sluis's
 // `resources.<url>.requires`; nothing here reads a group. A second
 // vocabulary for the same decision would be a second place for access to
 // mean something different.
@@ -27,7 +27,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/truvity/access-roster/identity"
+	"github.com/truvity/sluis/identity"
 )
 
 // MetadataPath is the well-known prefix RFC 9728 puts in front of a
@@ -36,7 +36,7 @@ const MetadataPath = "/.well-known/oauth-protected-resource"
 
 // Config declares one resource.
 type Config struct {
-	// IssuerURL is access-roster's URL, exactly as it appears in a
+	// IssuerURL is sluis's URL, exactly as it appears in a
 	// token's `iss`.
 	IssuerURL string
 	// ResourceURL is this resource's own externally reachable URL: the

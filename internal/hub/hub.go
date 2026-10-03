@@ -13,9 +13,9 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/emailaddr"
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/emailaddr"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // ErrInvalidAddress is returned for an address the hub cannot route.

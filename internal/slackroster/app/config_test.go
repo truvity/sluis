@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/slackroster/app"
+	"github.com/truvity/sluis/internal/slackroster/app"
 )
 
 func write(t *testing.T, body string) string {

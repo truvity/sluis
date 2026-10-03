@@ -9,7 +9,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
 )
 
 const valid = `
@@ -234,7 +234,7 @@ apps:
 // values schema and this parser describe one shape.
 func TestTheChartsCatalogueExampleParses(t *testing.T) {
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "tests", "cases", "access-roster", "catalogue", "values.yaml"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "tests", "cases", "sluis", "catalogue", "values.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

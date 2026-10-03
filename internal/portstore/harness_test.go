@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/portstore/portstoretest"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/portstore/portstoretest"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 var ctx = context.Background()

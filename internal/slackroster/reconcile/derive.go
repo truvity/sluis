@@ -5,7 +5,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 type resKind int

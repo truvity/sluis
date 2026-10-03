@@ -3,7 +3,7 @@ package policy_test
 import (
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // A ServiceAccount's subject names its cluster, because the same

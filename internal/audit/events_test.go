@@ -11,8 +11,8 @@ import (
 	auditv1 "github.com/truvity/audit/sdk/gen/audit/v1"
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/audit/audittest"
 )
 
 // every is one record of every action, built the way the code builds them.

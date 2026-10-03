@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 func awsRole(account, path, name string) *policy.AWSRole {

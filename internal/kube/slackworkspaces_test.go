@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 func TestSlackWorkspacesKeepARecordAndACredentialEach(t *testing.T) {

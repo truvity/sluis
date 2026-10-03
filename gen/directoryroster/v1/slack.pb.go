@@ -1613,9 +1613,9 @@ const file_directoryroster_v1_slack_proto_rawDesc = "" +
 	"\x10RequestSlackPass\x12+.directoryroster.v1.RequestSlackPassRequest\x1a,.directoryroster.v1.RequestSlackPassResponse\x12\x88\x01\n" +
 	"\x19ChangeSlackWorkspaceOwner\x124.directoryroster.v1.ChangeSlackWorkspaceOwnerRequest\x1a5.directoryroster.v1.ChangeSlackWorkspaceOwnerResponse\x12\x85\x01\n" +
 	"\x18DisconnectSlackWorkspace\x123.directoryroster.v1.DisconnectSlackWorkspaceRequest\x1a4.directoryroster.v1.DisconnectSlackWorkspaceResponse\x12y\n" +
-	"\x14ConfirmSlackRemovals\x12/.directoryroster.v1.ConfirmSlackRemovalsRequest\x1a0.directoryroster.v1.ConfirmSlackRemovalsResponseB\xd8\x01\n" +
+	"\x14ConfirmSlackRemovals\x12/.directoryroster.v1.ConfirmSlackRemovalsRequest\x1a0.directoryroster.v1.ConfirmSlackRemovalsResponseB\xd0\x01\n" +
 	"\x16com.directoryroster.v1B\n" +
-	"SlackProtoP\x01ZIgithub.com/truvity/access-roster/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
+	"SlackProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
 	file_directoryroster_v1_slack_proto_rawDescOnce sync.Once

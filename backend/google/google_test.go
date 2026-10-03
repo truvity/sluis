@@ -16,7 +16,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
-	"github.com/truvity/access-roster/backend"
+	"github.com/truvity/sluis/backend"
 )
 
 // The four scopes are read-only, and the console shows this same list for

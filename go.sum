@@ -199,6 +199,8 @@ github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+Q
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
+github.com/truvity/access-roster v1.56.0 h1:HM5C3NwU+OzJXAtdNwydhsVOr+E917vMdePVrudLdww=
+github.com/truvity/access-roster v1.56.0/go.mod h1:K2XA9NemuQ6zMKm/4FJEaXGgfbVyzYqFwTItTbdyaLg=
 github.com/truvity/audit/sdk v0.6.1 h1:85A+VChOihOVlHbSiSi1l3UrB4mVCUsJwads8G/ZPfM=
 github.com/truvity/audit/sdk v0.6.1/go.mod h1:jZxW78L/6GqoQNQyhBTBxcDaZ3DNjq+p2FcsZKkPdm8=
 github.com/truvity/policy v1.37.0 h1:fOHopBkTf3acFlvDtpmUHJhDQibpyqkkwLT5wBm9CBA=

@@ -11,7 +11,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // DefaultWatchPoll is how often mounted credentials and records are looked

@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/migrate"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/portstore/portstoretest"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/migrate"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/portstore/portstoretest"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // natsEnvs are the destinations the tests run over: an embedded JetStream, sealed
@@ -406,7 +406,7 @@ func TestNATSBackToLegacyIsTheRollback(t *testing.T) {
 	if _, ok, err := sessions.ByRefreshToken(ctx, "refresh-ada"); err != nil || !ok {
 		t.Fatalf("ByRefreshToken after the rollback = %v, %v", ok, err)
 	}
-	if ttl := back.redis.TTL("access-roster:" + "issuer:session-token:" + hashed(t, back)); ttl < 29*24*time.Hour || ttl > sessionLifetime {
+	if ttl := back.redis.TTL("sluis:" + "issuer:session-token:" + hashed(t, back)); ttl < 29*24*time.Hour || ttl > sessionLifetime {
 		t.Errorf("the restored refresh token has %s left", ttl)
 	}
 }
@@ -415,7 +415,7 @@ func TestNATSBackToLegacyIsTheRollback(t *testing.T) {
 func hashed(t *testing.T, l *legacySide) string {
 	t.Helper()
 	for _, k := range l.redis.Keys() {
-		if rest, ok := strings.CutPrefix(k, "access-roster:issuer:session-token:"); ok {
+		if rest, ok := strings.CutPrefix(k, "sluis:issuer:session-token:"); ok {
 			return rest
 		}
 	}

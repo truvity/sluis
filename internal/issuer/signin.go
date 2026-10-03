@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/policy"
 )
 
 // SignIn is a directory a person can prove who they are with.
@@ -320,7 +320,7 @@ func destination(pending Pending) string {
 
 	switch {
 	case loopback:
-		// kubelogin and accessctl listen on this computer, on a port
+		// kubelogin and sluisctl listen on this computer, on a port
 		// chosen at run time. The host and port say nothing a person can
 		// check; that a PROGRAM is asking, and which, is what they can.
 		fmt.Fprintf(&out, `<p class="note">A program on this computer, not a website, is asking you to sign in to `+

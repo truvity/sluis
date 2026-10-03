@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/emailaddr"
+	"github.com/truvity/sluis/internal/emailaddr"
 )
 
 // Slack binds internal groups to Slack channels, in one or more
@@ -22,7 +22,7 @@ import (
 // only the directory answers, so nothing about a Slack account appears
 // here; the only Slack-specific facts are the workspace's key and the channels
 // bound in it. Which team the key stands for, which directory owns it and
-// which domains its people use are not policy: access-roster records them
+// which domains its people use are not policy: sluis records them
 // when the workspace is connected and reads them from the directory.
 //
 // The Slack controller reads these keys and acts on them: it creates or

@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/issuerapp"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/issuerapp"
 )
 
 // Each of these assembles a whole issuer from the configuration the chart

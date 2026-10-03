@@ -13,7 +13,7 @@ import (
 
 // BaseID is where the schemas are named: the identifier is a name, and nothing
 // fetches it.
-const BaseID = "https://truvity.github.io/access-roster/schemas/v1/config/"
+const BaseID = "https://truvity.github.io/sluis/schemas/v1/config/"
 
 // The shared shapes this repository takes from truvity/policy, by the `$id`
 // they carry. The loader resolves them from its embedded copies.
@@ -173,7 +173,7 @@ func envField(description string) m {
 func serveSchema() m {
 	props := m{
 		"issuerURL":     m{"$ref": "#/$defs/url", "description": "The issuer: baked into every token and every relying party's trust, so there is no default. No trailing slash is kept."},
-		"release":       strDefault("The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name.", "access-roster"),
+		"release":       strDefault("The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name.", "sluis"),
 		"cluster":       str("Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject."),
 		"allowInsecure": boolean("Accept a plain-http issuer URL, for a local run."),
 		"demo":          boolean("Two tenants held in memory, which need no credential and no network."),
@@ -270,8 +270,8 @@ func serveSchema() m {
 			"forwardedForTrustedHops": integer("How many of the deployment's own proxies append to X-Forwarded-For; zero records the peer.", 0, 0),
 		}),
 	}
-	return document("serve", "access-roster serve",
-		"The configuration of `access-roster serve`: the issuer, the console and the directory hub, one process."+secretsNote,
+	return document("serve", "sluis serve",
+		"The configuration of `sluis serve`: the issuer, the console and the directory hub, one process."+secretsNote,
 		props, []string{"issuerURL"}, []string{"duration", "url", "envName"},
 		m{
 			"allOf": []any{
@@ -353,7 +353,7 @@ func exportsSchema() m {
 func portsNATSSchema() m {
 	return obj("The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.", m{
 		"url":       str("The server list, comma separated: `nats://host:4222`, or `tls://` for TLS."),
-		"bucket":    strDefault("The KV bucket.", "access-roster"),
+		"bucket":    strDefault("The KV bucket.", "sluis"),
 		"replicas":  m{"type": "integer", "minimum": 1, "maximum": 5, "default": 3, "description": "The bucket's replica count, applied when the bucket is created."},
 		"tokenFile": str("This pod's projected ServiceAccount token, presented as the NATS token for the auth callout to validate, and read afresh on every connect. Alternative to `credsFile`."),
 		"credsFile": str("A NATS credentials file. Alternative to `tokenFile`."),
@@ -406,7 +406,7 @@ func portsSealerSchema() m {
 
 func rosterProps(kind, mountDefault, recordsDefault string) m {
 	return m{
-		"release":    strDefault("The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.", "access-roster"),
+		"release":    strDefault("The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.", "sluis"),
 		"policyDir":  str("The directory the policy is mounted at: the bindings are the policy's " + kind + " table."),
 		"consoleURL": url("The console's API, which answers who holds a group."),
 		"tokenFile":  strDefault("This pod's projected ServiceAccount token, presented to the console and read afresh on every call.", mountDefault),
@@ -426,8 +426,8 @@ func controllerGitHubSchema() m {
 	props["appsDir"] = strDefault("One file per connected organisation: its App's credentials.", "/var/run/github-roster/apps")
 	props["catalogueFile"] = str("The GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. A missing or malformed one is never fatal here.")
 	props["enabledOrgs"] = list("The organisations the controller changes. Every other bound organisation is derived and reported, and left alone. Each must be one the policy binds.", m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"})
-	return document("controller-github", "access-roster controller github",
-		"The configuration of `access-roster controller github`: the controller that makes each GitHub organisation's teams match the policy's github table."+secretsNote,
+	return document("controller-github", "sluis controller github",
+		"The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table."+secretsNote,
 		props, []string{"policyDir", "consoleURL"}, []string{"duration", "url"}, nil)
 }
 
@@ -435,8 +435,8 @@ func controllerSlackSchema() m {
 	props := rosterProps("slack", "/var/run/secrets/slack-roster/token", "/var/run/slack-roster/workspaces")
 	props["credentialsDir"] = strDefault("One file per connected workspace: the app's credentials and its bot token.", "/var/run/slack-roster/credentials")
 	props["enabledWorkspaces"] = list("The workspaces the controller changes, by the policy's key. Each must be one the policy declares.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"})
-	return document("controller-slack", "access-roster controller slack",
-		"The configuration of `access-roster controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table."+secretsNote,
+	return document("controller-slack", "sluis controller slack",
+		"The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table."+secretsNote,
 		props, []string{"policyDir", "consoleURL"}, []string{"duration", "url"}, nil)
 }
 

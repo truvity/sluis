@@ -17,7 +17,7 @@ import (
 	auditv1 "github.com/truvity/audit/sdk/gen/audit/v1"
 	"github.com/truvity/audit/sdk/gen/audit/v1/auditv1connect"
 
-	"github.com/truvity/access-roster/internal/audit"
+	"github.com/truvity/sluis/internal/audit"
 )
 
 // installation is a receiver: it answers the catalogue's registration and

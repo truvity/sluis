@@ -13,7 +13,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // Back-Channel Logout tells a relying party, server to server, that a

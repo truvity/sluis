@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // ConsoleKey is where the console keeps one ordinary channel's record,

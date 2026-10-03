@@ -51,7 +51,7 @@ export function Directories({ operator, onDone }: { operator: boolean; onDone: (
   return (
     <Page
       title="Directories"
-      lede="Every identity provider access-roster holds a credential for, one row per domain it serves. Domains are discovered, never typed, and the groups and accounts behind them are what memberships and people are made of."
+      lede="Every identity provider sluis holds a credential for, one row per domain it serves. Domains are discovered, never typed, and the groups and accounts behind them are what memberships and people are made of."
       actions={
         <Button variant="contained" disabled={!operator || adding} onClick={() => setAdding(true)}>
           Add a provider
@@ -544,7 +544,7 @@ function Domains({
       title="Domains"
       hint={
         editing
-          ? "tick the ones access-roster should answer for. The rest stays discovered and visible, but nothing routes to it and its accounts are never read"
+          ? "tick the ones sluis should answer for. The rest stays discovered and visible, but nothing routes to it and its accounts are never read"
           : narrowed
             ? "discovered from the provider; only the served ones are routed and kept"
             : "discovered from the provider and re-read on every probe"
@@ -670,7 +670,7 @@ function SyncedGroups({
       title="Groups it syncs"
       hint={
         editing
-          ? "tick the groups access-roster should keep. The rest stays in the provider and is simply not read back"
+          ? "tick the groups sluis should keep. The rest stays in the provider and is simply not read back"
           : narrowed
             ? `${tenant.syncGroups.length} of ${discovered.length} groups this provider holds`
             : "every group in the served domains"

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/link"
 )
 
 // A link round-trips, and what does not decode never shows its content —

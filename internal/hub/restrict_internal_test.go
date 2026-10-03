@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/truvity/access-roster/backend"
+	"github.com/truvity/sluis/backend"
 )
 
 // What a narrowed workspace keeps is a data-minimisation claim, and the

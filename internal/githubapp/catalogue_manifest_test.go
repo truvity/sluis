@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/githubfake"
 )
 
 // The roster's own three Apps are catalogue entries now, built by the one

@@ -1,5 +1,5 @@
 /// <reference types="node" />
-/** access-roster's consumer half, for a Node service behind the gateway.
+/** sluis's consumer half, for a Node service behind the gateway.
  *
  * The same contract as the Go `identity` package: point it at the issuer
  * with this service's own client id, and it turns the token the gateway
@@ -105,7 +105,7 @@ interface Discovered {
  * document advertises nothing. */
 export const issuerAlgorithms: readonly string[] = ["RS256", "ES256", "ES384", "ES512"];
 
-/** Verifies a token access-roster signed, against the key set it publishes.
+/** Verifies a token sluis signed, against the key set it publishes.
  *
  * The signing algorithms accepted are the ones the issuer's discovery
  * document advertises as `id_token_signing_alg_values_supported`, as the
@@ -129,14 +129,14 @@ export class Issuer {
   private discovered?: Promise<Discovered>;
 
   constructor(options: IssuerOptions) {
-    if (!options.url) throw new Error("access-roster: an issuer url is required");
-    if (!options.audience) throw new Error("access-roster: an audience — this service's client id — is required");
+    if (!options.url) throw new Error("sluis: an issuer url is required");
+    if (!options.audience) throw new Error("sluis: an audience — this service's client id — is required");
     if (options.algorithms !== undefined) {
       const refused = options.algorithms.filter((alg) => !asymmetric(alg));
       if (refused.length > 0) {
-        throw new Error(`access-roster: ${refused.join(", ")} cannot verify against a published key set`);
+        throw new Error(`sluis: ${refused.join(", ")} cannot verify against a published key set`);
       }
-      if (options.algorithms.length === 0) throw new Error("access-roster: algorithms must name at least one");
+      if (options.algorithms.length === 0) throw new Error("sluis: algorithms must name at least one");
       this.narrowed = [...options.algorithms];
     }
     this.url = trimTrailingSlashes(options.url);
@@ -158,9 +158,9 @@ export class Issuer {
       }));
     } catch (cause) {
       if (unreachable(cause)) {
-        throw new IssuerUnreachable(`access-roster: the issuer's keys are out of reach: ${message(cause)}`);
+        throw new IssuerUnreachable(`sluis: the issuer's keys are out of reach: ${message(cause)}`);
       }
-      throw new Unverified("access-roster: the token did not verify", { cause });
+      throw new Unverified("sluis: the token did not verify", { cause });
     }
     return fromClaims(payload);
   }
@@ -187,15 +187,15 @@ export class Issuer {
       if (!response.ok) throw new Error(`discovery answered ${response.status}`);
       config = (await response.json()) as typeof config;
     } catch (cause) {
-      throw new IssuerUnreachable(`access-roster: discover ${this.url}: ${message(cause)}`);
+      throw new IssuerUnreachable(`sluis: discover ${this.url}: ${message(cause)}`);
     }
     // A discovery document naming another issuer is a misconfiguration, and
     // trusting its keys would verify tokens this issuer never signed.
     if (trimTrailingSlashes(config.issuer ?? "") !== this.url) {
-      throw new IssuerUnreachable(`access-roster: ${this.url} describes itself as ${config.issuer ?? "nothing"}`);
+      throw new IssuerUnreachable(`sluis: ${this.url} describes itself as ${config.issuer ?? "nothing"}`);
     }
     if (!config.jwks_uri) {
-      throw new IssuerUnreachable(`access-roster: ${this.url} publishes no key set`);
+      throw new IssuerUnreachable(`sluis: ${this.url} publishes no key set`);
     }
     return {
       keys: createRemoteJWKSet(new URL(config.jwks_uri), { timeoutDuration: 10_000 }),

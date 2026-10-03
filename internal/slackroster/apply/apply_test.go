@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/audit/audittest"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackapp"
-	"github.com/truvity/access-roster/internal/slackapp/slackfake"
-	"github.com/truvity/access-roster/internal/slackroster/apply"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackapp"
+	"github.com/truvity/sluis/internal/slackapp/slackfake"
+	"github.com/truvity/sluis/internal/slackroster/apply"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // world is two Slack workspaces behind one fake, a directory, and the policy

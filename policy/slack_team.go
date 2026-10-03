@@ -38,7 +38,7 @@ func (s *Set) Declared() Policy {
 // refuseRemovedKeys refuses, with a message that says where the value now
 // comes from, the keys that v1.41.0 briefly let a policy carry: a Slack
 // workspace's team_id, domains and owner, and a GitHub organisation's
-// owner. access-roster already knows all of them at runtime, so holding
+// owner. sluis already knows all of them at runtime, so holding
 // them in the policy as well was drift waiting to happen. Left to
 // KnownFields the refusal would be a bare "field not found" that says
 // nothing about the migration.

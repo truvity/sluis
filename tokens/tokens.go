@@ -1,7 +1,7 @@
 // Package tokens trades one token for another, and writes the two
 // shapes a credential helper has to speak.
 //
-// It is what `accessctl` runs on and what a workload uses directly. The
+// It is what `sluisctl` runs on and what a workload uses directly. The
 // exchange is RFC 8693 and carries no secret: a caller presents a token
 // something else already gave it — a GitHub Actions token, a
 // ServiceAccount token, or its own from a sign-in — and receives one
@@ -51,7 +51,7 @@ var ErrRefused = errors.New("tokens: the exchange was refused")
 
 // Exchanger trades a subject token for one audienced elsewhere.
 type Exchanger struct {
-	// Issuer is the access-roster issuer, e.g. https://access.example.
+	// Issuer is the sluis issuer, e.g. https://access.example.
 	Issuer string
 	// ClientID is the client this caller presents itself as. The library
 	// on the other side reads the exchange's client from HTTP Basic

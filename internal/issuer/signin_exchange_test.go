@@ -10,13 +10,13 @@ import (
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // cliPolicy is the demonstration policy with a CLI in it: the one client
-// whose sign-in may be exchanged, the way `accessctl` is declared.
+// whose sign-in may be exchanged, the way `sluisctl` is declared.
 var cliPolicy = strings.Replace(demo.Policy, "clients:\n",
 	"clients:\n  cli: { kind: public, redirects: [http://127.0.0.1/callback], "+
 		"requires: [devel:k8s:viewer, mgmt:k8s:admin], sign_in_exchange: true }\n", 1)
@@ -163,7 +163,7 @@ func TestAnIDTokenIsNotAProof(t *testing.T) {
 }
 
 // The laptop half of one kubeconfig and one aws.ini for a person and a
-// job: `accessctl login`, then `accessctl kube-token` or `accessctl aws`
+// job: `sluisctl login`, then `sluisctl kube-token` or `sluisctl aws`
 // trade that sign-in for the audience the target client admits.
 func TestASignInToTheCLIExchangesForAnAdmittedAudience(t *testing.T) {
 	t.Parallel()

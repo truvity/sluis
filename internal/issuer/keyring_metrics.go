@@ -10,7 +10,7 @@ import (
 )
 
 // keyRingMeterName is the instrumentation scope every instrument here is
-// under, matching the shape [github.com/truvity/access-roster/internal/githubroster/controller]
+// under, matching the shape [github.com/truvity/sluis/internal/githubroster/controller]
 // already uses.
 const keyRingMeterName = "github.com/truvity/access-roster/issuer"
 

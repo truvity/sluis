@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/truvity/access-roster/backend"
+	"github.com/truvity/sluis/backend"
 )
 
 // Two parameters decide whether this works at all, and both fail silently

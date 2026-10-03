@@ -1,7 +1,7 @@
 import { directoryLabel } from "./ownerModel";
 
 /** What a Slack channel's members are drawn from: DIRECTORY groups, by
- *  address, from the directories access-roster has connected. Never internal
+ *  address, from the directories sluis has connected. Never internal
  *  groups. The server decides which directories a form may offer (an ordinary
  *  channel its workspace's owning directory's, a Slack Connect channel any);
  *  this file only lays the answer out for a picker and says where the chosen

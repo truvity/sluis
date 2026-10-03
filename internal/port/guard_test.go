@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const module = "github.com/truvity/access-roster/"
+const module = "github.com/truvity/sluis/"
 
 // The storage engines are reached through the ports. Business code (the hub,
 // the server, the issuer, the rosters, the rails, the settings) names the

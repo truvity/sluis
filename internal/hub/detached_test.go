@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/backend/fake"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/backend/fake"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // slowBackend is a fake that will not finish a full read until it is let

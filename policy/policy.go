@@ -25,7 +25,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/truvity/access-roster/internal/emailaddr"
+	"github.com/truvity/sluis/internal/emailaddr"
 )
 
 // Every grant in this policy is named `<scope>:<thing>:<role>` — role,
@@ -518,8 +518,8 @@ type Client struct {
 	// TTLCap caps the lifetime the groups would otherwise grant.
 	TTLCap Duration `yaml:"ttl_cap,omitempty"`
 	// SignInExchange lets a person's sign-in to this client be traded for
-	// a token for another client: `accessctl login`, then `accessctl
-	// kube-token` or `accessctl aws`. Only the access token of a live
+	// a token for another client: `sluisctl login`, then `sluisctl
+	// kube-token` or `sluisctl aws`. Only the access token of a live
 	// session qualifies, presented by this same client, and what it opens
 	// is still decided by the TARGET client's `requires`.
 	//
@@ -1294,7 +1294,7 @@ func (p Policy) Unconsumed(catalogueGroups ...string) []string {
 
 	// This hub's own roles. The hub reads these directly from the token.
 	// Read through groupKeyTargets rather than the key itself, so a
-	// mapping wildcard that reaches access-roster is caught too.
+	// mapping wildcard that reaches sluis is caught too.
 	hubRoles := map[string]bool{
 		RoleOperator: true,
 		RoleViewer:   true,

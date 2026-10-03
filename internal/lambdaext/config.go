@@ -3,7 +3,7 @@
 //
 // The function exports to a proxy on 127.0.0.1 and holds no credential. The
 // proxy asks STS for an identity token for the role the function already
-// runs as, trades it at the access-roster issuer for a short-lived access
+// runs as, trades it at the sluis issuer for a short-lived access
 // token, and forwards each export with that token as a bearer. Everything is
 // fail-open: nothing here may block, slow or crash an invocation.
 package lambdaext
@@ -36,7 +36,7 @@ const (
 
 // Config is the extension's settings, all from the environment.
 type Config struct {
-	// Issuer is the access-roster issuer's base URL.
+	// Issuer is the sluis issuer's base URL.
 	Issuer string
 	// Audience is the audience asked of STS for the identity token. The
 	// issuer's AWS verifier decides what it must be; the function role's

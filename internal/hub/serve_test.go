@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/backend/fake"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend/fake"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // served is a hub over one tenant that owns two domains and serves one of

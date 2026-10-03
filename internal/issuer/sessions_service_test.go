@@ -8,9 +8,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	accessissuerv1 "github.com/truvity/access-roster/gen/accessissuer/v1"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // service returns the session contract with a stubbed verifier, so the

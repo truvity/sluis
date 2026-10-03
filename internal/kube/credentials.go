@@ -13,8 +13,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // The keys of a credential Secret releases before 1.7 wrote, one per

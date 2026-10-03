@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/identity"
-	"github.com/truvity/access-roster/identity/resource"
+	"github.com/truvity/sluis/identity"
+	"github.com/truvity/sluis/identity/resource"
 )
 
 // Headers that can carry the caller's token. None reaches the stock

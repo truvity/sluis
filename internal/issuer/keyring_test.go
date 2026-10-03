@@ -15,7 +15,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // settableClock is a clock a test moves forward explicitly, so that

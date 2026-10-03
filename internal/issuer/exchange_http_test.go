@@ -15,9 +15,9 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // fakeVerifier stands in for GitHub's keys and the organisation
@@ -587,7 +587,7 @@ func TestAnIssuerThatSignsNobodyInStillServesItsSessions(t *testing.T) {
 	}
 }
 
-// What a caller's own groups open, which is what `accessctl kubeconfig`
+// What a caller's own groups open, which is what `sluisctl kubeconfig`
 // and `aws-config` write a context and a profile from.
 //
 // The alternative to asking is a list kept on every laptop, and that

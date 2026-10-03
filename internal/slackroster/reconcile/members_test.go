@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // user is an individually listed address as the directory has it.

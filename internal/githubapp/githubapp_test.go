@@ -18,7 +18,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	"github.com/truvity/access-roster/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp"
 )
 
 // The package points at GitHub through two variables, so every test that

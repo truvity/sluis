@@ -11,7 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/truvity/access-roster/internal/slackapp/catalogueapp"
+	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
 // kindSlackCatalogueApps labels the Secret catalogue Slack Apps are kept in.

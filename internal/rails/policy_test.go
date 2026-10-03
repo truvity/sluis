@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // A guard with no digest of its own trusts nothing: a console too old to

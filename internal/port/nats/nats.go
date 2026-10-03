@@ -75,7 +75,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 var (
@@ -88,7 +88,7 @@ var (
 )
 
 // DefaultBucket is the bucket the layout names (docs/design/ports.md).
-const DefaultBucket = "access-roster"
+const DefaultBucket = "sluis"
 
 // DefaultReplicas is the bucket's replica count.
 const DefaultReplicas = 3
@@ -184,7 +184,7 @@ func Connect(cfg Config) (*nats.Conn, error) {
 		return nil, errors.New("nats: tokenFile and credsFile are alternatives; set one")
 	}
 	opts := []nats.Option{
-		nats.Name(orDefault(cfg.Name, "access-roster")),
+		nats.Name(orDefault(cfg.Name, "sluis")),
 		nats.MaxReconnects(-1),
 		nats.RetryOnFailedConnect(false),
 		nats.Timeout(5 * time.Second),

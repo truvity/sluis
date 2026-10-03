@@ -64,7 +64,7 @@ while true; do
 done
 `), 0o755))
 
-	name := fmt.Sprintf("access-roster-rie-%d", time.Now().UnixNano())
+	name := fmt.Sprintf("sluis-rie-%d", time.Now().UnixNano())
 	run := exec.Command("docker", "run", "--rm", "--name", name, "--network", "host",
 		"-v", filepath.Join(root, "opt", "extensions")+":/opt/extensions:ro",
 		"-v", filepath.Join(root, "task")+":/var/task:ro",

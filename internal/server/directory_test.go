@@ -11,11 +11,11 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/truvity/access-roster/backend/fake"
-	directoryv1 "github.com/truvity/access-roster/gen/directory/v1"
-	"github.com/truvity/access-roster/gen/directory/v1/directoryv1connect"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/server"
+	"github.com/truvity/sluis/backend/fake"
+	directoryv1 "github.com/truvity/sluis/gen/directory/v1"
+	"github.com/truvity/sluis/gen/directory/v1/directoryv1connect"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/server"
 )
 
 // serve wires a hub over one fake tenant behind a real Connect client, so

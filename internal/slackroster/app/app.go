@@ -22,17 +22,17 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/access-roster/gen/directoryroster/v1/directoryrosterv1connect"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/apply"
-	"github.com/truvity/access-roster/internal/slackroster/controller"
-	"github.com/truvity/access-roster/internal/store"
-	"github.com/truvity/access-roster/internal/telemetry"
-	"github.com/truvity/access-roster/internal/version"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/apply"
+	"github.com/truvity/sluis/internal/slackroster/controller"
+	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/telemetry"
+	"github.com/truvity/sluis/internal/version"
+	"github.com/truvity/sluis/policy"
 )
 
 // Config is what a deployment decides. It is built from the configuration
@@ -71,7 +71,7 @@ func Load(file string) (Config, error) {
 // schema cannot say is checked here, before anything starts.
 func FromConfig(f *config.ControllerSlack) (Config, error) {
 	c := Config{
-		release:        orDefault(f.Release, "access-roster"),
+		release:        orDefault(f.Release, "sluis"),
 		stores:         store.FromRoster(&f.Roster),
 		policyDir:      f.PolicyDir,
 		console:        strings.TrimSuffix(f.ConsoleURL, "/"),
@@ -136,7 +136,7 @@ type App struct {
 }
 
 // Tick runs one workspace's tick once, under its lease, and returns: the
-// workspace's key. It is what `access-roster tick slack` runs, and the shape
+// workspace's key. It is what `sluis tick slack` runs, and the shape
 // of a function that lives for one invocation. A workspace another runner
 // holds is left to it.
 func (a *App) Tick(ctx context.Context, target string, unsafeLocal bool) error {

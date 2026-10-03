@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 const wsDirPrefix = "ws.dir."

@@ -15,12 +15,12 @@ import (
 	"connectrpc.com/connect"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/slackapp/slackfake"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/slackapp/slackfake"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // wsHarness is the Slack harness with the workspace store and the
@@ -182,7 +182,7 @@ func TestAWorkspaceIsConnectedRecordedRefusedForAnotherTeamUpgradedAndDisconnect
 	}
 	if !slices.Equal(created.Scopes, connection.BotScopes) ||
 		!strings.Contains(created.Manifest, "https://access.example"+slackWorkspaceCallbackPath) ||
-		!strings.Contains(created.Manifest, `"name":"access-roster-acme"`) {
+		!strings.Contains(created.Manifest, `"name":"sluis-acme"`) {
 		t.Errorf("manifest = %s, scopes = %v", created.Manifest, created.Scopes)
 	}
 	if u := begun.Msg.GetUrl(); mustQuery(t, u, "redirect_uri") != "https://access.example"+slackWorkspaceCallbackPath ||

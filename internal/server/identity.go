@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/access-roster/internal/access"
+	"github.com/truvity/sluis/internal/access"
 )
 
 type identityKey struct{}

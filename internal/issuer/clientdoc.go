@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // A client that identifies itself with a URL.

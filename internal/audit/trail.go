@@ -18,7 +18,7 @@ import (
 	"github.com/truvity/audit/sdk/sink"
 	"go.opentelemetry.io/otel"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // Config says which installation to connect to, if any.

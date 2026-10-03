@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // BlobReports is a reconciler's reports in the blob port: one object per

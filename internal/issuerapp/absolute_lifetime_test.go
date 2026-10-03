@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/policy"
 )
 
 // lifetimes.absolute is refused, not defaulted, when it is set to

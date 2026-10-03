@@ -6,7 +6,7 @@
 // key it already has, so the adapter uses Encrypt (not GenerateDataKey):
 //
 //   - Wrap is kms:Encrypt of the data key under the configured key, with the
-//     EncryptionContext {"access-roster:binding": <binding>}. Wrapped.KeyID is
+//     EncryptionContext {"sluis:binding": <binding>}. Wrapped.KeyID is
 //     the ARN KMS reports, and Wrapped.Blob is the ciphertext.
 //   - Unwrap is kms:Decrypt with the same EncryptionContext and the configured
 //     key as KeyId. KMS refuses a context that differs, and refuses a
@@ -40,11 +40,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // ContextKey is the EncryptionContext key that carries the binding.
-const ContextKey = "access-roster:binding"
+const ContextKey = "sluis:binding"
 
 // Config names the key.
 type Config struct {

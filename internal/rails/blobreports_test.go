@@ -5,9 +5,9 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // plainBlob is a Blob with none of the optional capabilities, which is what

@@ -16,7 +16,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
-    "@truvity/access-roster": "file:../ts",
+    "@truvity/sluis": "file:../ts",
     "@truvity/audit": "github:truvity/audit#v0.6.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

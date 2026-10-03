@@ -1,3 +1,0 @@
-{{- if not (has .Values.renders (list "app" "alerts" "dashboards")) -}}
-{{- fail (printf "access-roster: `renders` is `app`, `alerts` or `dashboards`, not %q." .Values.renders) -}}
-{{- end -}}

@@ -45,7 +45,7 @@ type KeyRings struct {
 //
 // Two keys naming the same algorithm is refused: [KeyRings.Active] can
 // return only one key per algorithm, so a second one would be a key this
-// installation minted and never published — the [charts/access-roster]
+// installation minted and never published — the [charts/sluis]
 // values render the same refusal at the chart layer, but a value coming
 // from anywhere else (a test, a future caller) gets the same guarantee
 // here.

@@ -16,13 +16,13 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/slackapp"
-	slackcatalogue "github.com/truvity/access-roster/internal/slackapp/catalogue"
-	"github.com/truvity/access-roster/internal/slackapp/catalogueapp"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/slackapp"
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
 // SlackCatalogueApps is where catalogue Slack Apps are kept: every App's

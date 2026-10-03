@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 const declared = `
@@ -1088,7 +1088,7 @@ clients:
 			[]string{},
 		},
 		{
-			"an unrelated role on access-roster is reported",
+			"an unrelated role on sluis is reported",
 			`version: 1
 groups:
   all:access-roster:unknownrole: {}

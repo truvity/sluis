@@ -134,7 +134,7 @@ func extensionBinary(t *testing.T) string {
 			return
 		}
 		binPath = filepath.Join(dir, "access-roster-otlp")
-		out, err := exec.Command("go", "build", "-o", binPath, "../../cmd/access-roster-lambda").CombinedOutput()
+		out, err := exec.Command("go", "build", "-o", binPath, "../../cmd/sluis-lambda").CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("%v: %s", err, out)
 		}

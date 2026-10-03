@@ -10,9 +10,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	githubconnection "github.com/truvity/access-roster/internal/githubroster/connection"
-	githubstatus "github.com/truvity/access-roster/internal/githubroster/status"
-	slackstatus "github.com/truvity/access-roster/internal/slackroster/status"
+	githubconnection "github.com/truvity/sluis/internal/githubroster/connection"
+	githubstatus "github.com/truvity/sluis/internal/githubroster/status"
+	slackstatus "github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // ErrNoObject is a write to a ConfigMap that does not exist, where the

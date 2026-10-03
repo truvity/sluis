@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/access"
+	"github.com/truvity/sluis/internal/access"
 )
 
 func sessions(t *testing.T, now *time.Time) *access.Sessions {

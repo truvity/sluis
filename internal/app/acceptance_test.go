@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/app"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/app"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // issuerFile is the service's configuration file as a test states it: the

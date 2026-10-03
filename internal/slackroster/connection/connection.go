@@ -30,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // Version is the document version this build writes and reads.

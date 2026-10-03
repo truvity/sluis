@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // GrantsPath is where a caller asks what its own groups open.
@@ -30,7 +30,7 @@ type Opens struct {
 
 // grantsHandler answers what the caller's groups open.
 //
-// It exists so that `accessctl kubeconfig` and `aws-config` can write a
+// It exists so that `sluisctl kubeconfig` and `aws-config` can write a
 // context per cluster and a profile per role without being told what to
 // write. The alternative is a list kept on every laptop, which drifts
 // from the policy the moment anybody's groups change — and drifts

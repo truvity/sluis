@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 func TestHoldersAsksEachGroupOnceSortedAndKeepsWhatItIsTold(t *testing.T) {

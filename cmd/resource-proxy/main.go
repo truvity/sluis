@@ -1,5 +1,5 @@
 // Command resource-proxy fronts a service that knows nothing about
-// access-roster with an access-roster resource server's front door: it
+// sluis with a sluis resource server's front door: it
 // verifies the caller's token, serves the RFC 9728 metadata, writes an
 // audit line per request, and proxies to the service -- and, optionally,
 // gives the service an identity of its own for what it calls in turn.
@@ -22,8 +22,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/truvity/access-roster/internal/resourceproxy"
-	"github.com/truvity/access-roster/internal/version"
+	"github.com/truvity/sluis/internal/resourceproxy"
+	"github.com/truvity/sluis/internal/version"
 )
 
 func main() { os.Exit(run()) }
@@ -92,7 +92,7 @@ func parse(args []string, getenv func(string) string) (resourceproxy.Config, err
 
 	str(&cfg.Listen, "listen", ":8080", "inbound listen address")
 	str(&cfg.Upstream, "upstream", "", "the stock server, e.g. http://127.0.0.1:8081/mcp (required)")
-	str(&cfg.IssuerURL, "issuer-url", "", "access-roster issuer URL, as in a token's iss (required)")
+	str(&cfg.IssuerURL, "issuer-url", "", "sluis issuer URL, as in a token's iss (required)")
 	str(&cfg.ResourceURL, "resource-url", "", "this resource's own public URL, the token audience (required)")
 	str(&cfg.Scope, "scope", "openid", "scope advertised in metadata and in the 401 challenge; empty omits it")
 	fs.Int64Var(&cfg.MaxRequestBytes, "max-request-bytes", envInt(getenv, "MAX_REQUEST_BYTES", resourceproxy.DefaultMaxRequestBytes, &badEnv),

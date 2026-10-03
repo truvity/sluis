@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 // SharedKey is where the console keeps one shared channel's definition,

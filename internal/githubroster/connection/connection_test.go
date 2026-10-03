@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/connection"
 )
 
 // A credential is a private key, so nothing that reads one may put it in

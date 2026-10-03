@@ -16,9 +16,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	directoryv1 "github.com/truvity/access-roster/gen/directory/v1"
-	"github.com/truvity/access-roster/gen/directory/v1/directoryv1connect"
-	"github.com/truvity/access-roster/internal/hub"
+	directoryv1 "github.com/truvity/sluis/gen/directory/v1"
+	"github.com/truvity/sluis/gen/directory/v1/directoryv1connect"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // hubIdentity is what Describe reports as the backend when a hub serves

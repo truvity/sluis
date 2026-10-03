@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/openbao"
-	"github.com/truvity/access-roster/internal/port/porttest"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/openbao"
+	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // fake is a KV version 2 mount with the login the adapter uses: just enough of

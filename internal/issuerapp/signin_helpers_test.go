@@ -11,9 +11,9 @@ import (
 
 	"time"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/issuerapp"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/issuerapp"
 )
 
 // stubProvider stands in for a directory's sign-in screen: it redirects

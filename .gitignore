@@ -5,7 +5,7 @@ bin/
 ts/node_modules/
 # `go build ./cmd/<name>` drops the binary here, named for the command.
 /acceptance
-/accessctl
+/sluisctl
 # ko / goreleaser output.
 /dist/
 !frontend/dist/

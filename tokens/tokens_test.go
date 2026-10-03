@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/tokens"
+	"github.com/truvity/sluis/tokens"
 )
 
 // The exchange carries the client in HTTP BASIC and not in the form. The

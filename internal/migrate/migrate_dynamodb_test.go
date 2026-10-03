@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/migrate"
-	"github.com/truvity/access-roster/internal/port"
-	dynamoport "github.com/truvity/access-roster/internal/port/dynamodb"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/migrate"
+	"github.com/truvity/sluis/internal/port"
+	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // dynamoDest opens a fresh DynamoDB table on the endpoint hack/dynamodb-conformance.sh

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/hub"
+	"github.com/truvity/sluis/internal/hub"
 )
 
 // The workspace-credentials bundle is one entry per connected workspace, as

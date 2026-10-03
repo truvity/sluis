@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // Version is the document version this build writes and reads. A reader

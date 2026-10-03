@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/backend/fake"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/backend/fake"
 )
 
 func tenant() *fake.Backend {

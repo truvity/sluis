@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // Directory is what the issuer needs from the hub, and all it needs: is

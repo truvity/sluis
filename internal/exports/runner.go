@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 // Pacing of the attempts, as defaults a test replaces.

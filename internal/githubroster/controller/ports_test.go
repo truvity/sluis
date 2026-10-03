@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubroster/controller"
-	"github.com/truvity/access-roster/internal/githubroster/link"
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/portstore/portstoretest"
+	"github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/portstore/portstoretest"
 )
 
 // atBarrier makes every replica's first read of the links wait for the other,

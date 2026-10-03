@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/lambdaext"
+	"github.com/truvity/sluis/internal/lambdaext"
 )
 
 type clock struct {

@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/server"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/server"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // CappedSessionLifetimeForTest exposes cappedSessionLifetime to

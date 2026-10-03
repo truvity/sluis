@@ -20,7 +20,7 @@
 #     placeholder accounts (111122223333, 444455556666), the neutral values
 #     the docs, the tests and the action's examples use. Only those two.
 #   - 'arn:aws' skips an ARN whose account field is one of those two
-#     placeholders or a format verb (%s): accessctl and the action COMPOSE
+#     placeholders or a format verb (%s): sluisctl and the action COMPOSE
 #     role ARNs from an audience the caller supplies. Any other ARN still
 #     matches, including one with no account (an S3 bucket's).
 #   - '/secrets/' skips '/var/run/secrets/', the root Kubernetes mounts a

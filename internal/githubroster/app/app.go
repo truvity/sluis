@@ -19,18 +19,18 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/access-roster/gen/directoryroster/v1/directoryrosterv1connect"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
-	"github.com/truvity/access-roster/internal/githubroster/controller"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/internal/store"
-	"github.com/truvity/access-roster/internal/telemetry"
-	"github.com/truvity/access-roster/internal/version"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/telemetry"
+	"github.com/truvity/sluis/internal/version"
+	"github.com/truvity/sluis/policy"
 )
 
 // Config is what a deployment decides. It is built from the configuration
@@ -80,7 +80,7 @@ func Load(file string) (Config, error) {
 // schema cannot say is checked here, before anything starts.
 func FromConfig(f *config.ControllerGitHub) (Config, error) {
 	c := Config{
-		release:    orDefault(f.Release, "access-roster"),
+		release:    orDefault(f.Release, "sluis"),
 		stores:     store.FromRoster(&f.Roster),
 		policyDir:  f.PolicyDir,
 		console:    strings.TrimSuffix(f.ConsoleURL, "/"),
@@ -299,7 +299,7 @@ func (a *App) Run(ctx context.Context) error {
 
 // Tick runs one target's tick once, under its lease, and returns: an
 // organisation's login, or controller.LinksTarget. It is what
-// `access-roster tick github` runs, and the shape of a function that lives
+// `sluis tick github` runs, and the shape of a function that lives
 // for one invocation. A target another runner holds is left to it.
 func (a *App) Tick(ctx context.Context, target string, unsafeLocal bool) error {
 	if err := store.RequireSharedLease(a.sharedLease, unsafeLocal); err != nil {

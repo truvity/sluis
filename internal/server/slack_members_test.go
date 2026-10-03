@@ -7,8 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 func withMembers(d *directoryrosterv1.SlackChannelDefinition, members ...string) *directoryrosterv1.SlackChannelDefinition {

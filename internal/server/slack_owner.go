@@ -9,8 +9,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // slackBook is every connected Slack workspace's record by key. What the

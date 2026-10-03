@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // A demonstration run is how every page is walked through before a real

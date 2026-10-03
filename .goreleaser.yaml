@@ -1,11 +1,11 @@
-# Release: two images (access-roster and the resource-proxy sidecar) and
+# Release: two images (sluis and the resource-proxy sidecar) and
 # their binaries, from one tag.
 #
 # The tag is the sole version authority. The chart's own version field is
 # a placeholder the release workflow stamps, and this file stamps the
 # same tag into the binaries, so a console, an image label and a chart
 # never disagree about which build is running.
-project_name: access-roster
+project_name: sluis
 
 version: 2
 
@@ -18,12 +18,12 @@ version: 2
 before:
   hooks:
     # `just console`, NOT the npm commands written out again. The console
-    # imports @truvity/access-roster as file:../ts and resolves it
+    # imports @truvity/sluis as file:../ts and resolves it
     # through ts/dist, so ts has to be built first -- an ordering the
     # Justfile already declares. Restating it here got it wrong on the
     # first release after the bundles left git: the hook built the
     # console against a package that was not there yet, and goreleaser
-    # failed on `Cannot find module '@truvity/access-roster'`.
+    # failed on `Cannot find module '@truvity/sluis'`.
     #
     # One definition of the order, in the place that already had it.
     - just console
@@ -34,17 +34,17 @@ builds:
   # `migrate` is reserved for 0031. One image, one archive entry, one
   # version: a service and a controller from two releases cannot run
   # together by accident.
-  - id: access-roster
-    main: ./cmd/access-roster
-    binary: access-roster
+  - id: sluis
+    main: ./cmd/sluis
+    binary: sluis
     env: [CGO_ENABLED=0]
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X github.com/truvity/access-roster/internal/version.Version={{.Version}}
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
-  # The resource-server sidecar: verifies an access-roster token in front
-  # of a service that knows nothing about access-roster, and gives that
+  # The resource-server sidecar: verifies a sluis token in front
+  # of a service that knows nothing about sluis, and gives that
   # service an identity of its own for what it calls. Its own image,
   # because it runs beside somebody else's container and not in a pod
   # of ours.
@@ -55,7 +55,7 @@ builds:
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X github.com/truvity/access-roster/internal/version.Version={{.Version}}
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
   # Not an image either, and for a stronger reason than the one below:
   # this opens a browser and writes into somebody's own kubeconfig and
@@ -63,49 +63,73 @@ builds:
   #
   # Windows is built because a laptop is a laptop. The credential
   # helpers are what the AWS SDKs and kubectl run, and both exist there.
+  - id: sluisctl
+    main: ./cmd/sluisctl
+    binary: sluisctl
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
+
+  # The old name of the CLI, for one or two releases after the rename. The
+  # SAME program as sluisctl, built under its old name: the binary looks at
+  # the name it was started as and says on stderr that the name is
+  # deprecated (cmd/sluisctl/main.go). It is its own archive, accessctl_*,
+  # so that a download URL, a devbox package and a Nix flake that name it
+  # keep resolving while they are moved to sluisctl_*.
   - id: accessctl
-    main: ./cmd/accessctl
+    main: ./cmd/sluisctl
     binary: accessctl
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X github.com/truvity/access-roster/internal/version.Version={{.Version}}
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
   # Not an image: it is run by a person against a cluster they chose, and
   # a container that needs a kubeconfig and a namespace argument is a
   # worse way to hand somebody a command than a binary is.
   - id: acceptance
     main: ./cmd/acceptance
-    binary: access-roster-acceptance
+    binary: sluis-acceptance
     env: [CGO_ENABLED=0]
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X github.com/truvity/access-roster/internal/version.Version={{.Version}}
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
   # The Lambda extension layer: a runtime-agnostic binary that Lambda runs
   # from /opt/extensions, so the ARCHIVE must hold it at exactly
   # extensions/access-roster-otlp (the file name is the extension's name).
   # Linux only, both Lambda architectures. Not an image and not in the
   # `binaries` archive: it is the zip a layer version is published from.
-  - id: access-roster-lambda
-    main: ./cmd/access-roster-lambda
+  - id: sluis-lambda
+    main: ./cmd/sluis-lambda
     binary: extensions/access-roster-otlp
     env: [CGO_ENABLED=0]
     goos: [linux]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags:
-      - -s -w -X github.com/truvity/access-roster/internal/version.Version={{.Version}}
+      - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
 archives:
-  # TWO archives, because accessctl is the only thing built for Windows.
+  # TWO archives, because sluisctl is the only thing built for Windows.
   # In one archive that makes the Windows download hold a single binary
   # where every other holds four, and goreleaser refuses the mix rather
   # than publishing a set that is different depending on the platform.
   # It is also the download somebody actually wants on their own laptop,
   # so it is better on its own with a name that says what it is.
+  - id: sluisctl
+    ids: [sluisctl]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "sluisctl_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  # The deprecated alias, alone, under the name it always had.
   - id: accessctl
     ids: [accessctl]
     formats: [tar.gz]
@@ -117,7 +141,7 @@ archives:
   # The service and the acceptance runner: what an operator pulls to run
   # a build outside a container.
   - id: binaries
-    ids: [access-roster, resource-proxy, acceptance]
+    ids: [sluis, resource-proxy, acceptance]
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
@@ -126,25 +150,25 @@ archives:
   # is the layer root: extensions/access-roster-otlp. amd64 is Lambda's
   # x86_64.
   - id: lambda-layer
-    ids: [access-roster-lambda]
+    ids: [sluis-lambda]
     formats: [zip]
     wrap_in_directory: false
     # Nothing but the extension: the zip root IS /opt in the function, and a
     # README or LICENSE there is clutter in somebody else's layer.
     files: ["none*"]
-    name_template: "access-roster-lambda-layer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "sluis-lambda-layer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 kos:
   # base_import_paths appends the cmd directory's basename, so with the
-  # caller's ko-docker-repo ghcr.io/truvity/access-roster the published
-  # slug nests as access-roster/access-roster.
+  # caller's ko-docker-repo ghcr.io/truvity/sluis the published
+  # slug nests as sluis/sluis.
   #
   # One image for the whole product: the service and both controllers are
   # subcommands of the one binary, and the chart runs each with its own
   # arguments. (access-issuer, github-roster and slack-roster were three
   # images until 0032; they are no longer published.)
-  - id: access-roster
-    build: access-roster
+  - id: sluis
+    build: sluis
     tags:
       - "{{ .Version }}"
       - "{{ if not .IsSnapshot }}latest{{ end }}"
@@ -155,9 +179,9 @@ kos:
     base_image: gcr.io/distroless/static:nonroot
     sbom: none
     labels:
-      org.opencontainers.image.title: access-roster
+      org.opencontainers.image.title: sluis
       org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.source: https://github.com/truvity/access-roster
+      org.opencontainers.image.source: https://github.com/truvity/sluis
 
   # The resource-server sidecar's image. No chart of ours renders it: a
   # consumer's chart names it beside the stock container it fronts, pinned
@@ -176,22 +200,22 @@ kos:
     labels:
       org.opencontainers.image.title: resource-proxy
       org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.source: https://github.com/truvity/access-roster
+      org.opencontainers.image.source: https://github.com/truvity/sluis
 
 release:
   github:
     owner: truvity
-    name: access-roster
+    name: sluis
   header: |
-    ## access-roster {{ .Tag }}
+    ## sluis {{ .Tag }}
 
     | | |
     |---|---|
-    | Image | `ghcr.io/truvity/access-roster/access-roster:{{ .Version }}` |
-    | Sidecar image | `ghcr.io/truvity/access-roster/resource-proxy:{{ .Version }}` |
-    | Chart | `oci://ghcr.io/truvity/charts/access-roster:{{ .Version }}` |
-    | TypeScript | `@truvity/access-roster@{{ .Version }}` on GitHub Packages |
-    | Go | `go get github.com/truvity/access-roster@{{ .Tag }}` |
+    | Image | `ghcr.io/truvity/sluis/sluis:{{ .Version }}` |
+    | Sidecar image | `ghcr.io/truvity/sluis/resource-proxy:{{ .Version }}` |
+    | Chart | `oci://ghcr.io/truvity/charts/sluis:{{ .Version }}` |
+    | TypeScript | `@truvity/sluis@{{ .Version }}` on GitHub Packages |
+    | Go | `go get github.com/truvity/sluis@{{ .Tag }}` |
 
     The TypeScript package is published to GitHub Packages at this
     version; installing it needs a token that can read packages
@@ -200,12 +224,14 @@ release:
     `directory` are not built yet, and `docs/reference/go-module.md` says
     so.
 
-    The Lambda extension layer is `access-roster-lambda-layer_{{ .Version }}_linux_{{ "{amd64,arm64}" }}.zip`
+    The Lambda extension layer is `sluis-lambda-layer_{{ .Version }}_linux_{{ "{amd64,arm64}" }}.zip`
     (`docs/integrations/aws-lambda.md`); it is a zip to publish as a layer,
     not a published layer.
 
-    `accessctl` is its own archive, because it is the one thing here that
-    runs on somebody's own laptop.
+    `sluisctl` is its own archive, because it is the one thing here that
+    runs on somebody's own laptop. `accessctl_*` is the same program under
+    its old name, for one or two more releases: it says on stderr that the
+    name is deprecated, and does everything `sluisctl` does.
 
 changelog:
   use: github

@@ -21,18 +21,18 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/truvity/access-roster/backend/google"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/health"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/store"
-	"github.com/truvity/access-roster/internal/telemetry"
-	"github.com/truvity/access-roster/internal/verify"
-	"github.com/truvity/access-roster/internal/version"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/backend/google"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/internal/telemetry"
+	"github.com/truvity/sluis/internal/verify"
+	"github.com/truvity/sluis/internal/version"
+	"github.com/truvity/sluis/policy"
 )
 
 // Config is what a deployment decides. It is built from the configuration
@@ -109,7 +109,7 @@ func FromConfig(f *config.Serve) (Config, error) {
 		allowInsecure:    f.AllowInsecure,
 		policyPath:       f.PolicyDir,
 		inCluster:        f.InCluster,
-		release:          orDefault(f.Release, "access-roster"),
+		release:          orDefault(f.Release, "sluis"),
 		consoleOrigin:    "",
 		clientSecretsDir: f.ClientSecretsDir,
 		// Names this cluster in a ServiceAccount's subject. A pod cannot
@@ -503,7 +503,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	handler, err := issuer.HandlerWithSignIn(core, storage, issuer.SignInDeps{
 		Providers:     signIn,
 		Recovery:      openRecovery(ctx, cfg, stores, log),
-		State:         access.NewStateCodec(key.Derive("access-roster/sign-in-state"), signInWindow),
+		State:         access.NewStateCodec(key.Derive("sluis/sign-in-state"), signInWindow),
 		ConsoleOrigin: cfg.consoleOrigin,
 		// Where an old /account bookmark is sent. Empty when this
 		// deployment serves no console, and then the route is not served
@@ -562,7 +562,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		health.Follow("the session store", stores.Readiness()),
 	}, deps.Ready...)...)
 
-	log.InfoContext(ctx, "access-roster assembled",
+	log.InfoContext(ctx, "sluis assembled",
 		"issuer", cfg.issuerURL, "directory", directorySource(deps, cfg), "inCluster", cfg.inCluster,
 		"exchangeAudience", cfg.audience, "port", cfg.port, "health", cfg.healthPort,
 		"tokenLifetime", cfg.tokenLifetime, "refreshLifetime", cfg.refreshLifetime,

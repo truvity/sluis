@@ -1,9 +1,9 @@
-/** access-roster — what a console needs from the identity it is behind.
+/** sluis — what a console needs from the identity it is behind.
  *
  * Install from GitHub Packages, with the @truvity scope pointed at
  * https://npm.pkg.github.com (docs/reference/typescript.md):
  *
- *     yarn add @truvity/access-roster
+ *     yarn add @truvity/sluis
  *
  * The React half is under the "/react" subpath, so an application with no
  * React does not pay for it. The server half — verifying the token the

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubapp/githubfake"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubapp/githubfake"
 )
 
 // slept makes every rate-limit wait instant and returns what was waited,

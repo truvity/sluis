@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/hublocal"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/hublocal"
 )
 
 // fake stands in for the hub and records what freshness it was asked for.

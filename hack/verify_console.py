@@ -95,7 +95,7 @@ def sign_in(cdp, url):
 # gateway refuses `Python-urllib/3.x` with a 403 before the request ever
 # reaches the issuer, and that 403 reads exactly like an authorization
 # failure -- which cost an hour of looking at the session service.
-AGENT = "access-roster-verify/1.0 (+hack/verify_console.py)"
+AGENT = "sluis-verify/1.0 (+hack/verify_console.py)"
 
 
 class Observer:

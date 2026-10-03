@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/truvity/access-roster/tokens"
+	"github.com/truvity/sluis/tokens"
 )
 
 // STSAPI is the one STS call this uses.

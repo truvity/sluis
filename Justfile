@@ -1,10 +1,10 @@
-# Development commands for access-roster. Tools come from devbox
+# Development commands for sluis. Tools come from devbox
 # (`devbox shell`, or direnv); CI runs each recipe as its own job.
 
 # Disable go.work (a parent workspace interferes with standalone module builds)
 export GOWORK := "off"
 
-charts := "access-roster"
+charts := "sluis"
 
 # The tools `telemetry` fetches, pinned: dashboardlint is truvity/observability's
 # own lint of its dashboard contract, vmalert-tool is VictoriaMetrics' rule
@@ -20,7 +20,7 @@ fmt:
 build: fmt console cross
     go build ./...
 
-# Compile accessctl for every platform the release builds it for.
+# Compile sluisctl for every platform the release builds it for.
 #
 # `go build ./...` proves the host platform and nothing else, so a call
 # that does not exist elsewhere — syscall.Flock, which Windows has no
@@ -28,14 +28,14 @@ build: fmt console cross
 # refused by goreleaser, with the change already on master and a version
 # already burned on the tag (2026-09-22, v1.25.1).
 #
-# Only accessctl: it is the one binary .goreleaser.yaml builds for
+# Only sluisctl: it is the one binary .goreleaser.yaml builds for
 # Windows, on the grounds that a laptop is a laptop. The rest are Linux
 # and macOS, which `go build ./...` plus CI's own runner already cover.
 cross:
     #!/usr/bin/env bash
     set -euo pipefail
     for target in windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
-        GOOS="${target%%/*}" GOARCH="${target##*/}" go build -o /dev/null ./cmd/accessctl
+        GOOS="${target%%/*}" GOARCH="${target##*/}" go build -o /dev/null ./cmd/sluisctl
     done
 
 # Run unit tests
@@ -63,9 +63,9 @@ test-s3:
     #!/usr/bin/env bash
     set -euo pipefail
     # A name of its own: other checkouts run LocalStack too.
-    docker rm -f access-roster-s3-dynamodb >/dev/null 2>&1 || true
-    docker run -d --name access-roster-s3-dynamodb -p 4566:4566 -e SERVICES=s3,kms,sqs,dynamodb {{s3_image}} >/dev/null
-    trap 'docker rm -f access-roster-s3-dynamodb >/dev/null 2>&1 || true' EXIT
+    docker rm -f sluis-s3-dynamodb >/dev/null 2>&1 || true
+    docker run -d --name sluis-s3-dynamodb -p 4566:4566 -e SERVICES=s3,kms,sqs,dynamodb {{s3_image}} >/dev/null
+    trap 'docker rm -f sluis-s3-dynamodb >/dev/null 2>&1 || true' EXIT
     for i in $(seq 1 40); do
         curl -sf -m 3 http://localhost:4566/_localstack/health >/dev/null 2>&1 && break
         sleep 3
@@ -118,10 +118,10 @@ generate:
 # answer a TokenReview — which is what recovery and the API listener's
 # guard are built on.
 acceptance: console
-    kind create cluster --name access-roster-acceptance
-    kubectl --context kind-access-roster-acceptance create namespace acceptance
+    kind create cluster --name sluis-acceptance
+    kubectl --context kind-sluis-acceptance create namespace acceptance
     go run ./cmd/acceptance -namespace acceptance -kubeconfig ""
-    kind delete cluster --name access-roster-acceptance
+    kind delete cluster --name sluis-acceptance
 
 # Check the release configuration without cutting one.
 # The release path, as far as it can be exercised without a tag.
@@ -187,12 +187,12 @@ chart-lint:
       helm lint "charts/$chart" -f "tests/cases/$chart/minimal/values.yaml"
       # `if`, not `!`: under `set -e` a negated command that fails does
       # not stop the script, so `! cmd` would check nothing.
-      if helm template access-roster "charts/$chart" --set bogusKey=1 >/dev/null 2>&1; then
+      if helm template sluis "charts/$chart" --set bogusKey=1 >/dev/null 2>&1; then
         echo "$chart: an unknown key rendered" >&2
         exit 1
       fi
       for values in tests/invalid/"$chart"/*.yaml; do
-        if err="$(helm template access-roster "charts/$chart" -f "$values" 2>&1 >/dev/null)"; then
+        if err="$(helm template sluis "charts/$chart" -f "$values" 2>&1 >/dev/null)"; then
           echo "RENDERED BUT SHOULD HAVE FAILED: $values" >&2
           exit 1
         fi
@@ -212,7 +212,7 @@ chart-lint:
       # stranger; nothing else in this repository reads these files.
       for example in charts/"$chart"/examples/*.yaml; do
         [ -e "$example" ] || continue
-        helm template access-roster "charts/$chart" \
+        helm template sluis "charts/$chart" \
           -f "tests/cases/$chart/minimal/values.yaml" -f "$example" >/dev/null
       done
       echo "$chart: schema and $(ls tests/invalid/"$chart"/*.yaml | wc -l | tr -d ' ') negative fixtures OK"
@@ -222,7 +222,7 @@ chart-lint:
     # the committed files: a diff here is a builder changed without
     # `just config-schemas`.
     just config-schemas
-    git diff --exit-code -- schemas/config charts/access-roster/values.schema.json
+    git diff --exit-code -- schemas/config charts/sluis/values.schema.json
     # What the chart renders for each component's `config` is what the values
     # say, and is a file that component's binary accepts. Required rather than
     # skipped: a test that quietly does not run proves nothing.
@@ -231,14 +231,14 @@ chart-lint:
     # of an App's declaration: the service's loader refuses a key it does
     # not know, so an entry's push block reaching the rendered catalogue
     # would stop the service at start.
-    if grep -n '^      push:' tests/golden/access-roster/*.yaml; then
+    if grep -n '^      push:' tests/golden/sluis/*.yaml; then
       echo "a catalogue entry's push block reached the rendered catalogue" >&2
       exit 1
     fi
     # "/console" and "/console/" are the same place: both spellings must
     # render the same, and never a route to "/console//".
-    diff tests/golden/access-roster/route.yaml tests/golden/access-roster/route-trailing-slash.yaml
-    if grep -l 'console//' tests/golden/access-roster/*.yaml; then exit 1; fi
+    diff tests/golden/sluis/route.yaml tests/golden/sluis/route-trailing-slash.yaml
+    if grep -l 'console//' tests/golden/sluis/*.yaml; then exit 1; fi
     # Every backendRefs entry writes `weight` out. A desired/live
     # comparison normalises core-API defaults but not CRDs, so a field the
     # API server fills in is a permanent diff. Routes and policies alike.
@@ -272,13 +272,13 @@ chart-lint:
 telemetry:
     #!/usr/bin/env bash
     set -euo pipefail
-    python3 hack/dashboards/access-roster-overview.py | diff - charts/access-roster/dashboards/access-roster-overview.json
+    python3 hack/dashboards/access-roster-overview.py | diff - charts/sluis/dashboards/access-roster-overview.json
 
     tools=$(mktemp -d); trap 'rm -rf "$tools"' EXIT
     GOBIN="$tools" go install github.com/truvity/observability/cmd/dashboardlint@{{observability_version}}
-    "$tools/dashboardlint" charts/access-roster/dashboards/*.json
+    "$tools/dashboardlint" charts/sluis/dashboards/*.json
     # The refusal is real: the same dashboard with a literal datasource must fail.
-    sed 's/"uid": "${datasource}"/"uid": "a-literal-uid"/' charts/access-roster/dashboards/access-roster-overview.json > "$tools/pinned.json"
+    sed 's/"uid": "${datasource}"/"uid": "a-literal-uid"/' charts/sluis/dashboards/access-roster-overview.json > "$tools/pinned.json"
     if "$tools/dashboardlint" "$tools/pinned.json" 2>"$tools/pinned.err"; then
         echo "dashboardlint accepted a dashboard pinned to one datasource" >&2; exit 1
     fi
@@ -288,7 +288,7 @@ telemetry:
     case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "no vmutils for $(uname -m)" >&2; exit 1 ;; esac
     tarball="vmutils-$os-$arch-{{vmutils_version}}.tar.gz"
     base="https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/{{vmutils_version}}"
-    cache="${XDG_CACHE_HOME:-$HOME/.cache}/access-roster/vmutils-{{vmutils_version}}-$os-$arch"
+    cache="${XDG_CACHE_HOME:-$HOME/.cache}/sluis/vmutils-{{vmutils_version}}-$os-$arch"
     if [ ! -x "$cache/vmalert-tool-prod" ]; then
         mkdir -p "$cache"
         curl -fsSL "$base/$tarball" -o "$tools/$tarball"

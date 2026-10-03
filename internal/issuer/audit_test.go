@@ -17,12 +17,12 @@ import (
 	"github.com/truvity/audit/sdk/record"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit/audittest"
-	"github.com/truvity/access-roster/internal/demo"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/server"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/demo"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/server"
+	"github.com/truvity/sluis/policy"
 )
 
 // recordingStorage is an issuer's storage whose records land in a
@@ -172,7 +172,7 @@ func TestATokenExchangeKeepsItsRequest(t *testing.T) {
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("X-Forwarded-For", "198.51.100.40, 10.0.0.1")
-	request.Header.Set("User-Agent", "access-roster-action/1")
+	request.Header.Set("User-Agent", "sluis-action/1")
 	request.Header.Set("X-Request-Id", "gw-exchange")
 	request.SetBasicAuth("local-dev", "")
 	response, err := gateway.Client().Do(request)
@@ -189,7 +189,7 @@ func TestATokenExchangeKeepsItsRequest(t *testing.T) {
 		t.Fatalf("recorded %v, want the exchange", trail.Actions())
 	}
 	got := records[0].GetContext()
-	if emit.Client(got) != "198.51.100.40" || got.GetUserAgent() != "access-roster-action/1" || got.GetRequestId() != "gw-exchange" {
+	if emit.Client(got) != "198.51.100.40" || got.GetUserAgent() != "sluis-action/1" || got.GetRequestId() != "gw-exchange" {
 		t.Errorf("request = %v", got)
 	}
 }

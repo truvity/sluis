@@ -8,8 +8,8 @@ import (
 
 	"github.com/truvity/audit/sdk/record"
 
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/policy"
 )
 
 // Proof is a verified subject token, reduced to what the policy matches

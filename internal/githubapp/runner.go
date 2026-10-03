@@ -3,7 +3,7 @@ package githubapp
 import (
 	"strings"
 
-	"github.com/truvity/access-roster/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubapp/catalogue"
 )
 
 // RunnerApp is the App one tier's self-hosted runners register with in one

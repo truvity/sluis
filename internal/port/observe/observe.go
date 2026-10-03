@@ -25,8 +25,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/telemetry"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // The outcomes of a port call. The expected answers of a conditional write

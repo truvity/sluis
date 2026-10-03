@@ -28,7 +28,7 @@ var retiredIssuer = map[string]string{
 	"ISSUER_URL":                       "issuerURL",
 	"PORT":                             "listen.address",
 	"HEALTH_PORT":                      "probes.address",
-	"API_PORT":                         "nothing: the directory's own listeners are not served by access-roster serve",
+	"API_PORT":                         "nothing: the directory's own listeners are not served by sluis serve",
 	"CONSOLE_PORT":                     "nothing: the console is served on the issuer's listener",
 	"DEMO":                             "demo",
 	"ALLOW_INSECURE":                   "allowInsecure",
@@ -158,7 +158,7 @@ func RefuseRetired(binary string, environ []string) error {
 	}
 	slices.Sort(found)
 	var b strings.Builder
-	fmt.Fprintf(&b, "access-roster %s is configured by one file, --config <file>, and no longer reads these environment "+
+	fmt.Fprintf(&b, "sluis %s is configured by one file, --config <file>, and no longer reads these environment "+
 		"variables, which are set: ", strings.ReplaceAll(binary, "-", " "))
 	for i, name := range found {
 		if i > 0 {

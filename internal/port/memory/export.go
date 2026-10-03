@@ -5,7 +5,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // Export is the in-memory [port.Export]: the copies a test can read back and

@@ -5,7 +5,7 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // ExportEnv is one [port.Export] adapter under test, fresh for every call of

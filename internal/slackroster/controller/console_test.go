@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/slackapp/slackfake"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	"github.com/truvity/sluis/internal/slackapp/slackfake"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 const clubGroup = "club@acme.example"

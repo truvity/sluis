@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
+	"github.com/truvity/sluis/backend"
 )
 
 // Snapshot is the hub's copy of one workspace at one moment: every account

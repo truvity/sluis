@@ -5,14 +5,14 @@ import (
 
 	policyconfig "github.com/truvity/policy/config"
 
-	accessroster "github.com/truvity/access-roster"
+	sluis "github.com/truvity/sluis"
 )
 
 // schemaFor reads the committed schema of one binary: the one embedded in the
 // release, which is the one the chart's tests and a deployer's CI validate
 // against.
 func schemaFor(name string) []byte {
-	b, err := accessroster.ConfigSchemas.ReadFile(path.Join("schemas/config", name+".schema.json"))
+	b, err := sluis.ConfigSchemas.ReadFile(path.Join("schemas/config", name+".schema.json"))
 	if err != nil {
 		// Unreachable: the files are embedded at build time, so a missing one
 		// fails to compile rather than at run time.
@@ -36,19 +36,19 @@ func load[T any](file, name string) (*T, error) {
 	return &c, nil
 }
 
-// LoadServe reads and validates the configuration of `access-roster serve`. Defaults that
+// LoadServe reads and validates the configuration of `sluis serve`. Defaults that
 // depend on the other keys, and the checks that need what the issuer knows, are
 // the assembling packages': this reads the file and holds it to its schema.
 func LoadServe(file string) (*Serve, error) { return load[Serve](file, "serve") }
 
 // LoadControllerGitHub reads and validates the configuration of
-// `access-roster controller github`.
+// `sluis controller github`.
 func LoadControllerGitHub(file string) (*ControllerGitHub, error) {
 	return load[ControllerGitHub](file, "controller-github")
 }
 
 // LoadControllerSlack reads and validates the configuration of
-// `access-roster controller slack`.
+// `sluis controller slack`.
 func LoadControllerSlack(file string) (*ControllerSlack, error) {
 	return load[ControllerSlack](file, "controller-slack")
 }

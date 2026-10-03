@@ -13,8 +13,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // SnapshotBlobPrefix and SnapshotLeasePrefix are where the hub's snapshots

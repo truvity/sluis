@@ -15,11 +15,11 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/port/observe"
-	"github.com/truvity/access-roster/internal/port/porttest"
-	"github.com/truvity/access-roster/internal/telemetry"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/port/observe"
+	"github.com/truvity/sluis/internal/port/porttest"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // The wrapper changes nothing a caller can see: the same conformance suite the
@@ -27,13 +27,13 @@ import (
 func TestConformanceThroughTheObserver(t *testing.T) {
 	porttest.Run(t, func(*testing.T) porttest.Env {
 		s := memory.New()
-		s.Allow("workload-token", "system:serviceaccount:ns:sa", "access-roster")
+		s.Allow("workload-token", "system:serviceaccount:ns:sa", "sluis")
 		return porttest.Env{
 			Set:          observe.Set(s.Set()),
 			Advance:      s.Advance,
 			BlobPrefixes: []string{"reports/", "snapshots/"},
 			Proof: func() porttest.Proof {
-				return porttest.Proof{Token: "workload-token", Subject: "system:serviceaccount:ns:sa", Audience: "access-roster"}
+				return porttest.Proof{Token: "workload-token", Subject: "system:serviceaccount:ns:sa", Audience: "sluis"}
 			},
 		}
 	})

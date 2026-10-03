@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/truvity/access-roster/identity"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/identity"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // workloadBearer reads a ServiceAccount token a workload presents to the

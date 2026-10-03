@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // vocab is the example from docs/reference/policy.md's Vocabulary section:

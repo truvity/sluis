@@ -37,7 +37,7 @@ func CI(id string) Actor { return Actor{Kind: "ci", ID: id} }
 // Workload is a cluster workload, by its service account.
 func Workload(id string) Actor { return Actor{Kind: "workload", ID: id} }
 
-// System is access-roster acting on its own.
+// System is sluis acting on its own.
 func System() Actor { return Actor{Kind: "system"} }
 
 // Identified is whoever an identity string names, where only the string is
@@ -192,7 +192,7 @@ func WorkspaceGroupsChanged(actor Actor, workspace string, groups int) *record.R
 
 // ------------------------------------------------------ GitHub organisations
 
-// App is a GitHub App as the records name it: by the id access-roster
+// App is a GitHub App as the records name it: by the id sluis
 // catalogues it under where it has one, its slug otherwise, with GitHub's
 // id and, for a runner App, its tier in data.
 type App struct {

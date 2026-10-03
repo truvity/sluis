@@ -3,7 +3,7 @@ package exports
 import (
 	"context"
 
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // slackCredentials is `<workspace>.json`: the credential, carrying a copy of

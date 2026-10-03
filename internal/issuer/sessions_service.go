@@ -12,10 +12,10 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	accessissuerv1 "github.com/truvity/access-roster/gen/accessissuer/v1"
-	"github.com/truvity/access-roster/gen/accessissuer/v1/accessissuerv1connect"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/policy"
+	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
+	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/policy"
 )
 
 // SessionsService is the only thing this issuer answers about itself,

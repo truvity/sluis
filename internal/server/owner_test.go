@@ -11,12 +11,12 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/access-roster/backend/fake"
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/backend/fake"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // ownerHub is a hub over the directories the owner tests name: C0north,

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/port/memory"
-	"github.com/truvity/access-roster/internal/rails"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/rails"
 )
 
 func twoRunners(t *testing.T) (a, b *rails.Leases, store *memory.Store) {

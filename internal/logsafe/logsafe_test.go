@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/internal/logsafe"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // A value carrying a newline can forge a log record: a refusal that reads

@@ -4990,8 +4990,8 @@ const file_directoryroster_v1_github_proto_rawDesc = "" +
 	"\x11ImportGitHubLinks\x12,.directoryroster.v1.ImportGitHubLinksRequest\x1a-.directoryroster.v1.ImportGitHubLinksResponse\x12\x97\x01\n" +
 	"\x1eBeginGitHubCatalogueAppConnect\x129.directoryroster.v1.BeginGitHubCatalogueAppConnectRequest\x1a:.directoryroster.v1.BeginGitHubCatalogueAppConnectResponse\x12\x91\x01\n" +
 	"\x1cDisconnectGitHubCatalogueApp\x127.directoryroster.v1.DisconnectGitHubCatalogueAppRequest\x1a8.directoryroster.v1.DisconnectGitHubCatalogueAppResponse\x12\x82\x01\n" +
-	"\x17CheckGitHubCatalogueApp\x122.directoryroster.v1.CheckGitHubCatalogueAppRequest\x1a3.directoryroster.v1.CheckGitHubCatalogueAppResponseB\xd9\x01\n" +
-	"\x16com.directoryroster.v1B\vGithubProtoP\x01ZIgithub.com/truvity/access-roster/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
+	"\x17CheckGitHubCatalogueApp\x122.directoryroster.v1.CheckGitHubCatalogueAppRequest\x1a3.directoryroster.v1.CheckGitHubCatalogueAppResponseB\xd1\x01\n" +
+	"\x16com.directoryroster.v1B\vGithubProtoP\x01ZAgithub.com/truvity/sluis/gen/directoryroster/v1;directoryrosterv1\xa2\x02\x03DXX\xaa\x02\x12Directoryroster.V1\xca\x02\x12Directoryroster\\V1\xe2\x02\x1eDirectoryroster\\V1\\GPBMetadata\xea\x02\x13Directoryroster::V1b\x06proto3"
 
 var (
 	file_directoryroster_v1_github_proto_rawDescOnce sync.Once

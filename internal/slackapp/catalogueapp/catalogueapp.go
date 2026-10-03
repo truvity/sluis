@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/slackapp/catalogue"
 )
 
 // Version is the record version this build writes and reads.

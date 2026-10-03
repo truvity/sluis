@@ -18,11 +18,11 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/truvity/access-roster/internal/kube"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/port/legacy"
-	"github.com/truvity/access-roster/internal/port/porttest"
-	"github.com/truvity/access-roster/internal/valkey"
+	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/legacy"
+	"github.com/truvity/sluis/internal/port/porttest"
+	"github.com/truvity/sluis/internal/valkey"
 )
 
 // fixture is today's storage on a fake API server and a miniredis.
@@ -76,7 +76,7 @@ func newFixture(t *testing.T) *fixture {
 	api.PrependReactor("create", "tokenreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		review := action.(k8stesting.CreateAction).GetObject().(*authnv1.TokenReview)
 		out := review.DeepCopy()
-		if review.Spec.Token == "good" && slices.Contains(review.Spec.Audiences, "access-roster") {
+		if review.Spec.Token == "good" && slices.Contains(review.Spec.Audiences, "sluis") {
 			out.Status = authnv1.TokenReviewStatus{
 				Authenticated: true, User: authnv1.UserInfo{Username: "system:serviceaccount:ns:sa"},
 			}
@@ -110,7 +110,7 @@ func TestConformance(t *testing.T) {
 			BlobPrefixes:     []string{"snapshots/"},
 			TextBlobPrefixes: []string{"reports/github/", "reports/slack/"},
 			Proof: func() porttest.Proof {
-				return porttest.Proof{Token: "good", Subject: "system:serviceaccount:ns:sa", Audience: "access-roster"}
+				return porttest.Proof{Token: "good", Subject: "system:serviceaccount:ns:sa", Audience: "sluis"}
 			},
 			Skips: map[string]string{
 				"revisions/change-on-identical-rewrite": "a revision is the SHA-1 of the stored bytes: neither Valkey nor a " +

@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/truvity/access-roster/internal/telemetry"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // What a tick and a lease report.

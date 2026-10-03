@@ -4,7 +4,7 @@
 goreleaser refuses to publish an archive whose contents differ by
 platform, and it refuses at the ARCHIVES stage -- after four minutes of
 cross-compiling, and only when a tag is pushed. That is how v0.12.0 was
-cut and published nothing: accessctl is the one binary built for Windows,
+cut and published nothing: sluisctl is the one binary built for Windows,
 so the Windows archive held one where every other held four.
 
 `goreleaser check` does not catch it and `goreleaser build

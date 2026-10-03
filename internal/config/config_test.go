@@ -14,8 +14,8 @@ import (
 	policyconfig "github.com/truvity/policy/config"
 	yaml "go.yaml.in/yaml/v3"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/config/schema"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/config/schema"
 )
 
 func write(t *testing.T, body string) string {
@@ -45,7 +45,7 @@ func TestTheCommittedSchemasAreTheGeneratedOnes(t *testing.T) {
 			t.Errorf("%s is not what `just config-schemas` writes", name)
 		}
 	}
-	got, err := os.ReadFile(filepath.Join("..", "..", "charts", "access-roster", "values.schema.json"))
+	got, err := os.ReadFile(filepath.Join("..", "..", "charts", "sluis", "values.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,14 +262,14 @@ func TestTheSchemaRefusesWhatTheEnvironmentWasTrustedWith(t *testing.T) {
 
 func TestACommandLineIsTheFileAndNothingElse(t *testing.T) {
 	var out bytes.Buffer
-	file, done, err := config.Command("access-roster serve", "serve", []string{"--config", "/etc/c.yaml"}, &out)
+	file, done, err := config.Command("sluis serve", "serve", []string{"--config", "/etc/c.yaml"}, &out)
 	if err != nil || done || file != "/etc/c.yaml" {
 		t.Errorf("--config: %q %v %v", file, done, err)
 	}
-	if _, done, err = config.Command("access-roster serve", "serve", []string{"--version"}, &out); err != nil || !done {
+	if _, done, err = config.Command("sluis serve", "serve", []string{"--version"}, &out); err != nil || !done {
 		t.Errorf("--version: %v %v", done, err)
 	}
-	if _, done, err = config.Command("access-roster serve", "serve", []string{"--help"}, &out); err != nil || !done {
+	if _, done, err = config.Command("sluis serve", "serve", []string{"--help"}, &out); err != nil || !done {
 		t.Errorf("--help: %v %v", done, err)
 	}
 	for name, args := range map[string][]string{
@@ -278,7 +278,7 @@ func TestACommandLineIsTheFileAndNothingElse(t *testing.T) {
 		"an argument":   {"--config", "/c", "extra"},
 		"an empty file": {"--config", ""},
 	} {
-		if _, _, err := config.Command("access-roster serve", "serve", args, &out); err == nil {
+		if _, _, err := config.Command("sluis serve", "serve", args, &out); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
@@ -366,10 +366,10 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {region: eu-west-1}}\n")); err == nil {
 		t.Error("a dynamodb section with no table was accepted")
 	}
-	ddbFile := "ports:\n  adapter: dynamodb\n  dynamodb: {table: access-roster, region: eu-west-1, endpoint: 'http://localstack:4566', create: true}\n"
+	ddbFile := "ports:\n  adapter: dynamodb\n  dynamodb: {table: sluis, region: eu-west-1, endpoint: 'http://localstack:4566', create: true}\n"
 	if f, err := config.LoadServe(write(t, minimalIssuer+ddbFile)); err != nil {
 		t.Errorf("the dynamodb adapter was refused: %v", err)
-	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "access-roster" || d.Region != "eu-west-1" || !d.Create || d.Endpoint == "" {
+	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "sluis" || d.Region != "eu-west-1" || !d.Create || d.Endpoint == "" {
 		t.Errorf("ports.dynamodb = %+v", d)
 	}
 	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {table: t, accessKey: x}}\n")); err == nil {

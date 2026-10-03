@@ -233,7 +233,7 @@ func (c *Client) SessionKey(ctx context.Context, generate func() ([]byte, error)
 }
 
 // PutSessionKey replaces the key, creating the Secret if it is not there: what
-// `access-roster migrate` does to carry a key over. Every other writer creates
+// `sluis migrate` does to carry a key over. Every other writer creates
 // it only if absent.
 func (c *Client) PutSessionKey(ctx context.Context, key []byte) error {
 	api := c.api.CoreV1().Secrets(c.namespace)

@@ -29,7 +29,7 @@
       "type": "string"
     }
   },
-  "$id": "https://truvity.github.io/access-roster/schemas/v1/config/serve.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/v1/config/serve.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
@@ -73,7 +73,7 @@
       }
     }
   ],
-  "description": "The configuration of `access-roster serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+  "description": "The configuration of `sluis serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
   "properties": {
     "adminPasswordEnv": {
       "$ref": "#/$defs/envName",
@@ -786,7 +786,7 @@
           "description": "The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.",
           "properties": {
             "bucket": {
-              "default": "access-roster",
+              "default": "sluis",
               "description": "The KV bucket.",
               "minLength": 1,
               "type": "string"
@@ -924,7 +924,7 @@
       "type": "object"
     },
     "release": {
-      "default": "access-roster",
+      "default": "sluis",
       "description": "The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name.",
       "minLength": 1,
       "type": "string"
@@ -1026,6 +1026,6 @@
   "required": [
     "issuerURL"
   ],
-  "title": "access-roster serve",
+  "title": "sluis serve",
   "type": "object"
 }

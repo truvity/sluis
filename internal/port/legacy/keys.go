@@ -3,7 +3,7 @@ package legacy
 import (
 	"strings"
 
-	"github.com/truvity/access-roster/internal/githubroster/connection"
+	"github.com/truvity/sluis/internal/githubroster/connection"
 )
 
 // families maps a layout prefix onto the Valkey key prefix the issuer writes

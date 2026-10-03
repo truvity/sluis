@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/identity"
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/identity"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // A token says which session it belongs to, and when the person actually

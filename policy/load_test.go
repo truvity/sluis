@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // loadFiles writes each text as its own file, in order, and loads the

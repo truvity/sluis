@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/backend"
-	"github.com/truvity/access-roster/internal/app"
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/hub"
-	"github.com/truvity/access-roster/internal/port"
-	"github.com/truvity/access-roster/internal/portstore/portstoretest"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/app"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/portstore/portstoretest"
+	"github.com/truvity/sluis/internal/store"
 )
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))

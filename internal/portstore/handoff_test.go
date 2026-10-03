@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/portstore"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/slackroster/connection"
 )
 
 // The host's tick and the guest's tick run in separate processes: separate

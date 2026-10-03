@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp/mints"
+	"github.com/truvity/sluis/internal/githubapp/mints"
 )
 
 var start = time.Date(2026, 9, 17, 9, 0, 0, 0, time.UTC)

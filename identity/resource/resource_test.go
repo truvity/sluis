@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/identity"
-	"github.com/truvity/access-roster/identity/resource"
-	"github.com/truvity/access-roster/internal/testissuer"
+	"github.com/truvity/sluis/identity"
+	"github.com/truvity/sluis/identity/resource"
+	"github.com/truvity/sluis/internal/testissuer"
 )
 
 const resourceURL = "https://mcp.example.com/metrics"

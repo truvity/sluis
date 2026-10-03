@@ -26,10 +26,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/githubroster/runnerapp"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/internal/port"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/port"
 )
 
 // The sources an export reads, as `source` spells them.

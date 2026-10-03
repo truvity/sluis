@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubroster/reconcile"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubroster/reconcile"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/policy"
 )
 
 // binding is globex with one team fed in both roles, and the organisation

@@ -13,7 +13,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/truvity/access-roster/internal/issuer"
+	"github.com/truvity/sluis/internal/issuer"
 )
 
 // State is a login in progress, shared by every replica: the
@@ -313,7 +313,7 @@ type Entry struct {
 // Dump reads every key that starts with prefix, strings and sets, with the
 // lifetime each has left, sorted by key. A key of another type is skipped, and
 // one that expires between the scan and the read is gone. It is a SCAN, for an
-// operator and not a request: it is what `access-roster migrate` copies a login
+// operator and not a request: it is what `sluis migrate` copies a login
 // state with.
 func (s *State) Dump(ctx context.Context, prefix string) ([]Entry, error) {
 	keys, err := s.Keys(ctx, prefix)

@@ -1,12 +1,12 @@
 {
-  "name": "@truvity/access-roster",
+  "name": "@truvity/sluis",
   "version": "0.0.0",
   "description": "What a console needs from the identity it is behind: who the caller is, what that gets them, and the way out. Published to GitHub Packages at each release tag's version; see docs/reference/typescript.md.",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/truvity/access-roster.git"
+    "url": "https://github.com/truvity/sluis.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

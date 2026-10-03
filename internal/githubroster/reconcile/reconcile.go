@@ -33,10 +33,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truvity/access-roster/internal/githubapp"
-	"github.com/truvity/access-roster/internal/githubroster/status"
-	"github.com/truvity/access-roster/internal/rails"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/githubapp"
+	"github.com/truvity/sluis/internal/githubroster/status"
+	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/policy"
 )
 
 // Holder is one account holding a group, as the directory reports it. It

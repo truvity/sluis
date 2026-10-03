@@ -8,10 +8,10 @@ import (
 
 	natsserver "github.com/nats-io/nats-server/v2/server"
 
-	"github.com/truvity/access-roster/internal/config"
-	"github.com/truvity/access-roster/internal/port"
-	natsport "github.com/truvity/access-roster/internal/port/nats"
-	"github.com/truvity/access-roster/internal/store"
+	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/port"
+	natsport "github.com/truvity/sluis/internal/port/nats"
+	"github.com/truvity/sluis/internal/store"
 )
 
 func TestTheNATSAdapterSharesStateAndTheTriggerAcrossStores(t *testing.T) {

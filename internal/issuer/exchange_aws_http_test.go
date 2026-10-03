@@ -16,10 +16,10 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/truvity/access-roster/internal/audit/audittest"
-	"github.com/truvity/access-roster/internal/issuer"
-	"github.com/truvity/access-roster/internal/verify"
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/internal/audit/audittest"
+	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/verify"
+	"github.com/truvity/sluis/policy"
 )
 
 const awsExchangePolicy = `

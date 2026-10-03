@@ -16,8 +16,8 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/access-roster/gen/accessissuer/v1/accessissuerv1connect"
-	"github.com/truvity/access-roster/internal/telemetry"
+	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/internal/telemetry"
 )
 
 // Provider assembles the OpenID surface over the storage: discovery, the
@@ -223,7 +223,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 
 	mux.Handle(path, sessions)
 
-	// What the caller's own groups open, for `accessctl kubeconfig` and
+	// What the caller's own groups open, for `sluisctl kubeconfig` and
 	// `aws-config`. The same verifier, so a bearer cannot mean one thing
 	// here and another to the session service.
 	mux.Handle(GrantsPath, grantsHandler(iss.Policy(), func(ctx context.Context, bearer string) (string, []string, error) {

@@ -1,6 +1,6 @@
 // Package resourceproxy is the machinery of cmd/resource-proxy: a sidecar
-// that puts an access-roster resource server's front door on a stock
-// MCP server (or any HTTP service) that knows nothing about access-roster.
+// that puts a sluis resource server's front door on a stock
+// MCP server (or any HTTP service) that knows nothing about sluis.
 //
 // Two sides, independent:
 //

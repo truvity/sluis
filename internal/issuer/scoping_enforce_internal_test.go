@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // namesOfClaim reads a claims map's `groups` entry back into a sorted

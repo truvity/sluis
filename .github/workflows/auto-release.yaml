@@ -8,7 +8,7 @@
 # updates.
 #
 # NO APP KEY HERE. The job exchanges its own GitHub identity token at the
-# access-roster issuer for an installation token of the catalogue App,
+# sluis issuer for an installation token of the catalogue App,
 # narrowed to this repository and to `contents: write` +
 # `pull_requests: read`. Nothing to entitle this repository to, nothing
 # to rotate, nothing to leak. `id-token: write` below is what the

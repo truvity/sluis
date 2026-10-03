@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/access-roster/policy"
+	"github.com/truvity/sluis/policy"
 )
 
 // scopeVocabulary is the vocabulary every ScopeGroups test that needs one

@@ -11,14 +11,14 @@ import (
 
 	"connectrpc.com/connect"
 
-	directoryrosterv1 "github.com/truvity/access-roster/gen/directoryroster/v1"
-	"github.com/truvity/access-roster/internal/access"
-	"github.com/truvity/access-roster/internal/audit"
-	"github.com/truvity/access-roster/internal/logsafe"
-	"github.com/truvity/access-roster/internal/slackapp"
-	slackcatalogue "github.com/truvity/access-roster/internal/slackapp/catalogue"
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/status"
+	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
+	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/internal/slackapp"
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/status"
 )
 
 // SlackWorkspaces is where connected Slack workspaces are kept: each one's
@@ -82,7 +82,7 @@ func (c *Console) slackWorkspaceStore() (SlackWorkspaces, error) {
 // slackWorkspaceApp is the App the roster is created as in a workspace,
 // written into the same manifest shape the catalogue's Apps are.
 func slackWorkspaceApp(workspace string) slackcatalogue.App {
-	name := "access-roster-" + workspace
+	name := "sluis-" + workspace
 	if len(name) > slackcatalogue.NameLimit {
 		name = strings.TrimRight(name[:slackcatalogue.NameLimit], "-")
 	}

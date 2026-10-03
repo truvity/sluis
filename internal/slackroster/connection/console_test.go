@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/access-roster/internal/slackroster/connection"
-	"github.com/truvity/access-roster/internal/slackroster/reconcile"
+	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/internal/slackroster/reconcile"
 )
 
 func TestConsoleKeysReadBackAndDoNotCollide(t *testing.T) {
