@@ -21,7 +21,6 @@ require (
 	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.53.1
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/truvity/access-roster v1.56.0
 	github.com/truvity/audit/sdk v0.6.1
 	github.com/truvity/policy v1.37.0
 	github.com/zitadel/oidc/v3 v3.49.6
