@@ -1,5 +1,14 @@
 # AWS Lambda — telemetry with the function role's identity
 
+> **Deprecated: the extension moved to
+> [truvity/observability](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md).**
+> The source is `github.com/truvity/observability/lambdaext` and the layer is
+> `otlp-lambda-layer_<version>_linux_<arch>.zip` in that repository's
+> releases. This repository keeps building `sluis-lambda-layer` for one more
+> release so that a consumer can switch, and then stops. This page is kept for
+> that one release. The `SLUIS_*` names with the `ACCESS_ROSTER_*` fallback are
+> read by a wrapper in `cmd/sluis-lambda` until observability releases the same.
+
 A Lambda function can send its OpenTelemetry data to an OTLP endpoint that
 trusts sluis **without holding any secret**. The release carries an
 extension layer, `sluis-lambda-layer_<version>_linux_<arch>.zip`,
@@ -255,7 +264,7 @@ like function time; the proxy is idle between exports.
 
 ## Tests
 
-`internal/lambdaext` has unit tests (token cache, expiry after a freeze,
+The extension's package (now `github.com/truvity/observability/lambdaext`) has unit tests (token cache, expiry after a freeze,
 single flight, failure backoff, STS and exchange against fakes, proxy
 headers/body/encoding, 503 and refusals) and end-to-end tests that run the
 real binary against a fake Extensions API, STS, issuer and OTLP upstream. One

@@ -1,5 +1,14 @@
 ## Unreleased
 
+- **Deprecated: the Lambda extension layer (`sluis-lambda-layer`).** The
+  extension moved to `truvity/observability`
+  (`github.com/truvity/observability/lambdaext`, v0.47.0), which releases it as
+  `otlp-lambda-layer_<version>_linux_<arch>.zip`. This release still builds
+  `sluis-lambda-layer_<version>_linux_<arch>.zip`, from that package, so a
+  consumer can switch; it is dropped in the release after this.
+  `internal/lambdaext` is removed from this module. The protocol is unchanged,
+  and `SLUIS_*` settings work alongside the `ACCESS_ROSTER_*` ones.
+
 - **Breaking: renamed to sluis.** The product is now **sluis** and the
   repository `truvity/sluis` ([ADR 0035](docs/decisions/0035-renamed-to-sluis.md)).
   This ships as a minor release (v1.57.0, no `/v2`) by
@@ -37,6 +46,7 @@
     (it was `access-roster:binding`). Nothing is sealed anywhere yet, so
     nothing needs re-wrapping; a KMS grant that names the key must say
     `sluis:binding`.
+  - **OpenBao names:** `access-roster-backup/<bundle>` becomes `sluis-backup/<bundle>` and the role `access-roster-writer` becomes `sluis-writer` in examples and defaults; the estate sets its paths explicitly. Neutral paths (`slack-apps/*`, `arc/*`, ...) are unchanged.
   - **Environment:** the Lambda extension reads `SLUIS_*` first and falls back
     to `ACCESS_ROSTER_*` (both work, `SLUIS_*` wins); `sluisctl` does the same
     for `SLUISCTL_*` and `ACCESSCTL_*`
