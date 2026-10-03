@@ -37,6 +37,7 @@ names change with the dashboards and alerts, at the B5 step of the plan).
 | KMS sealing encryption-context key `access-roster:binding` | `sluis:binding` (nothing is sealed anywhere yet, so there is nothing to re-wrap) |
 | The default `release` name (the Kubernetes object-name prefix, the Valkey key prefix, the NATS bucket) `access-roster` | `sluis` |
 | `$id` of the configuration schemas under `truvity.github.io/access-roster/schemas/...` | `truvity.github.io/sluis/schemas/...` |
+| OpenBao names: the export paths `access-roster-backup/<bundle>`, the role `access-roster-writer` and any access-roster-named policy or ESO store | `sluis-backup/<bundle>`, `sluis-writer`, `sluis-*`; neutral paths (`slack-apps/*`, `slack-state/*`, `arc/*`, `github-apps/*`) are unchanged. The estate sets the paths explicitly and renames them in its own change |
 | npm package `@truvity/access-roster` | `@truvity/sluis`; the old name is published too for one or two releases (below) |
 | The `SLUISCTL_*`/`ACCESSCTL_*` and the Lambda extension's `ACCESS_ROSTER_*` environment | `SLUISCTL_*` and `SLUIS_*`; the old names are read as the fallback, and the new one wins |
 
@@ -67,8 +68,6 @@ change.
   together with the dashboards and alerts, at B5.
 - The GitHub App names and ids the product creates (`<org>-access-roster`,
   `...-link`): an installed App is found by them.
-- The OpenBAO paths and roles of the export examples (`access-roster-backup/...`,
-  `access-roster-writer`): they are named in the estate's OpenBAO.
 - The Lambda extension's file name `extensions/access-roster-otlp`, its log
   prefix and the AWS role-session-name fallback.
 - On a laptop: the `accessctl` configuration and cache directory, the

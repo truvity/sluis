@@ -20,7 +20,7 @@ config:
         auth:
           method: jwt
           mount: jwt-kernel
-          role: access-roster-writer
+          role: sluis-writer
           tokenFile: /var/run/openbao/token
   slack:
     catalogueFile: /var/run/access-issuer/slack-apps-catalogue.yaml
@@ -39,7 +39,7 @@ config:
     - source: bundle
       bundle: github-apps
       namespace: kernel
-      path: access-roster-backup/github-apps
+      path: sluis-backup/github-apps
 slackApps:
   - id: alerts
     workspace: truvity

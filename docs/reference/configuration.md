@@ -477,7 +477,7 @@ ports:
       auth:
         method: jwt                      # or kubernetes
         mount: jwt-kernel
-        role: access-roster-writer
+        role: sluis-writer
         tokenFile: /var/run/openbao/token                # exports.openbao.token.audience
 exports:
   - {source: slack-app, app: alerts, path: slack-apps/alerts}
@@ -487,11 +487,11 @@ exports:
   - {source: runner-app, tier: preview, org: truvity, namespace: devel, path: arc/truvity}
   - {source: runner-app, tier: stable, org: trust-form, path: arc/trustform}
   - {source: runner-app, tier: stable, org: truvity, path: arc/truvity}
-  - {source: bundle, bundle: workspace-credentials, path: access-roster-backup/workspace-credentials}
-  - {source: bundle, bundle: github-apps, path: access-roster-backup/github-apps}
-  - {source: bundle, bundle: github-links, path: access-roster-backup/github-links}
-  - {source: bundle, bundle: github-runner-apps, path: access-roster-backup/github-runner-apps}
-  - {source: bundle, bundle: github-catalogue-apps, path: access-roster-backup/github-catalogue-apps}
+  - {source: bundle, bundle: workspace-credentials, path: sluis-backup/workspace-credentials}
+  - {source: bundle, bundle: github-apps, path: sluis-backup/github-apps}
+  - {source: bundle, bundle: github-links, path: sluis-backup/github-links}
+  - {source: bundle, bundle: github-runner-apps, path: sluis-backup/github-runner-apps}
+  - {source: bundle, bundle: github-catalogue-apps, path: sluis-backup/github-catalogue-apps}
   - {source: bundle, bundle: slack-credentials, path: slack-state/credentials}
   - {source: bundle, bundle: slack-records, path: slack-state/records}
 ```

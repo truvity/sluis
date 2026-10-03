@@ -55,7 +55,7 @@ func wantExport(t *testing.T, e ExportEnv, target port.ExportTarget, want map[st
 }
 
 func exportReplaceExact(t *testing.T, e ExportEnv) {
-	target := port.ExportTarget{Path: "access-roster-backup/github-apps"}
+	target := port.ExportTarget{Path: "sluis-backup/github-apps"}
 	mustExport(t, e, target, map[string]string{"a.json": "1", "b.json": "2"}, port.ExportReplace)
 	mustExport(t, e, target, map[string]string{"b.json": "3"}, port.ExportReplace)
 	wantExport(t, e, target, map[string]string{"b.json": "3"})

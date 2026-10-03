@@ -69,7 +69,7 @@ ports:
       auth:
         method: jwt
         mount: jwt-kernel
-        role: access-roster-writer
+        role: sluis-writer
         tokenFile: /var/run/openbao/token
 exports:
   - name: slack-app.alerts
@@ -86,4 +86,4 @@ exports:
     path: arc/example
   - source: bundle
     bundle: github-apps
-    path: access-roster-backup/github-apps
+    path: sluis-backup/github-apps

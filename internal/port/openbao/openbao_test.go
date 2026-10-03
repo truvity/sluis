@@ -86,7 +86,7 @@ func (f *fake) login(w http.ResponseWriter, r *http.Request, ns, path string) {
 		reply(w, f.loginErr, map[string]any{"errors": []string{"invalid role"}})
 		return
 	}
-	if path != "auth/jwt-kernel/login" || body.Role != "access-roster-writer" {
+	if path != "auth/jwt-kernel/login" || body.Role != "sluis-writer" {
 		reply(w, http.StatusBadRequest, map[string]any{"errors": []string{"role could not be found"}})
 		return
 	}
@@ -179,7 +179,7 @@ func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Store
 		Address:   srv.URL,
 		Namespace: "kernel",
 		Auth: openbao.Auth{
-			Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "access-roster-writer",
+			Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "sluis-writer",
 			Token: func(context.Context) (string, error) { return "a-jwt", nil },
 		},
 	}

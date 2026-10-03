@@ -59,7 +59,7 @@ data:
       tier: preview
     - bundle: github-apps
       namespace: kernel
-      path: access-roster-backup/github-apps
+      path: sluis-backup/github-apps
       source: bundle
     github:
       runnerTiers:
@@ -84,7 +84,7 @@ data:
           auth:
             method: jwt
             mount: jwt-kernel
-            role: access-roster-writer
+            role: sluis-writer
             tokenFile: /var/run/openbao/token
           caFile: /var/run/access-issuer/openbao-ca/ca.pem
           mount: kv
@@ -301,7 +301,7 @@ spec:
         app.kubernetes.io/instance: sluis
       annotations:
         # A configuration change is a rollout: the file is read at start.
-        checksum/config: ba109e459d0a3d1087f3db8b6449131e6e316c50d849b0b641fafecf60b860e2
+        checksum/config: 2f3b3c8fdc3070d449ad96f2d79bc7b70a76a58610b2cd43dfe05ace32e4de89
         # A policy change is a rollout: the file is read at start.
         checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
         # Likewise the Slack catalogue: read once at start.
