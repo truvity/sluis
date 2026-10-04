@@ -10,6 +10,10 @@ package issuerapp
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -507,6 +511,11 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	}
 	if err != nil {
 		return nil, err
+	}
+	if kmsRefs != nil {
+		if err = checkStateSecret(ctx, shared, kmsRefs.Seed); err != nil {
+			return nil, err
+		}
 	}
 	additionalKeys, err := additionalSigningKeys(ctx, cfg, log)
 	if err != nil {
@@ -1132,9 +1141,13 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 func kmsSigningKeys(
 	ctx context.Context, cfg Config, api issuer.KMSAPI, log *slog.Logger,
 ) (*issuer.KMSKeyRefs, []*issuer.SigningKey, *issuer.SigningKey, error) {
-	seed, err := os.ReadFile(cfg.kmsStateSecretFile) //nolint:gosec // the path is deployment configuration
+	raw, err := os.ReadFile(cfg.kmsStateSecretFile) //nolint:gosec // the path is deployment configuration
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("read signingKey.kms.stateSecretFile: %w", err)
+	}
+	seed, err := parseStateSecret(raw)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("signingKey.kms.stateSecretFile: %w", err)
 	}
 	if api == nil {
 		var loaders []func(*awsconfig.LoadOptions) error
@@ -1180,7 +1193,7 @@ func watchKMSKeys(ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Du
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			for _, ref := range refs.Refs {
+			for i, ref := range refs.Refs {
 				one := issuer.KMSKeyRefs{API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
 				keys, err := one.Load(ctx)
 				if err != nil {
@@ -1188,7 +1201,15 @@ func watchKMSKeys(ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Du
 						"key", ref, "error", err)
 					continue
 				}
-				if err := storage.Rotate(ctx, keys[0]); err != nil {
+				// List order is age: only the LAST key may be newly recorded.
+				// The earlier ones are re-read to refresh a key the ring
+				// holds, and a retired one is never brought back by being
+				// listed.
+				rotate := storage.RotateKnown
+				if i == len(refs.Refs)-1 {
+					rotate = storage.Rotate
+				}
+				if err := rotate(ctx, keys[0]); err != nil {
 					log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", "key", ref, "error", err)
 				}
 			}
@@ -1228,6 +1249,64 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 		if len(cfg.kmsKeys) > 0 {
 			return errors.New("the signing adapter is file and signingKey.kms is set: a key is a file or a KMS key, not both")
 		}
+	}
+	return nil
+}
+
+// parseStateSecret reads the state secret file: one trailing newline trimmed,
+// then hex or base64 for at least 32 bytes that look random. A file of one
+// repeated character, or of a few distinct bytes, is a placeholder and not a
+// secret, and is refused.
+func parseStateSecret(raw []byte) ([]byte, error) {
+	text := strings.TrimSuffix(strings.TrimSuffix(string(raw), "\n"), "\r")
+	var decoded []byte
+	if b, err := hex.DecodeString(text); err == nil {
+		decoded = b
+	} else {
+		for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+			if b, err := enc.DecodeString(text); err == nil {
+				decoded = b
+				break
+			}
+		}
+	}
+	if len(decoded) < 32 {
+		return nil, errors.New("must be hex or base64 of at least 32 bytes (for example `openssl rand -base64 32`)")
+	}
+	distinct := map[byte]bool{}
+	for _, b := range decoded {
+		distinct[b] = true
+	}
+	if len(distinct) < 8 {
+		return nil, errors.New("looks like a placeholder, not a secret: it has too few distinct bytes")
+	}
+	return decoded, nil
+}
+
+// checkStateSecret publishes a short HMAC fingerprint of the state secret in
+// the shared state and refuses to start when it differs from the one already
+// there: replicas with different secrets would each reject the other's
+// sign-in state. The fingerprint reveals nothing of the secret.
+func checkStateSecret(ctx context.Context, state issuer.State, seed []byte) error {
+	mac := hmac.New(sha256.New, seed)
+	mac.Write([]byte("sluis/kms-state-secret-fingerprint"))
+	fingerprint := []byte(hex.EncodeToString(mac.Sum(nil)[:8]))
+	const key = "issuer:kms:state-secret-fingerprint"
+	won, err := state.SetIfAbsent(ctx, key, fingerprint, 30*24*time.Hour)
+	if err != nil {
+		return fmt.Errorf("record the state secret's fingerprint: %w", err)
+	}
+	if won {
+		return nil
+	}
+	stored, _, err := state.Get(ctx, key)
+	if err != nil {
+		return fmt.Errorf("read the state secret's fingerprint: %w", err)
+	}
+	if !hmac.Equal(stored, fingerprint) {
+		return errors.New("signingKey.kms.stateSecretFile differs from the secret other replicas use " +
+			"(fingerprint mismatch): every replica needs the same file. To rotate it deliberately, " +
+			"delete the shared state key " + key)
 	}
 	return nil
 }

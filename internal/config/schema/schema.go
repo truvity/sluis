@@ -255,7 +255,7 @@ func serveSchema() m {
 				"keys": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
 					"description": "ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each."},
 				"region":          str("The keys' region. Unset follows the AWS SDK's own resolution."),
-				"stateSecretFile": str("A file of at least 32 secret bytes, the same in every replica, from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
+				"stateSecretFile": str("A file holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
 			}, "keys", "stateSecretFile"),
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),

@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -63,6 +64,8 @@ func KMSSigningKey(ctx context.Context, api KMSAPI, ref string, seed []byte) (*S
 	if len(seed) < 32 {
 		return nil, errors.New("issuer: the KMS signing key's state secret must be at least 32 bytes")
 	}
+	ctx, cancel := context.WithTimeout(ctx, kmsSignTimeout)
+	defer cancel()
 	out, err := api.GetPublicKey(ctx, &kms.GetPublicKeyInput{KeyId: aws.String(ref)})
 	if err != nil {
 		var apiErr smithy.APIError
@@ -93,11 +96,13 @@ func KMSSigningKey(ctx context.Context, api KMSAPI, ref string, seed []byte) (*S
 	if err != nil {
 		return nil, err
 	}
+	// Never the ref in its place: an alias can move, and a signer addressed by
+	// it could sign with a key other than the one whose public half was read.
 	keyID := aws.ToString(out.KeyId)
 	if keyID == "" {
-		keyID = ref
+		return nil, fmt.Errorf("issuer: KMS returned no key id for %q", ref)
 	}
-	signer := &kmsSigner{api: api, keyID: keyID, kid: id, pub: pub, metrics: kmsMetrics()}
+	signer := &kmsSigner{api: api, keyID: keyID, kid: id, pub: pub, metrics: kmsMetricsOnce()}
 	return &SigningKey{id: id, key: signer, pub: pub, alg: jose.ES384, seed: append([]byte(nil), seed...)}, nil
 }
 
@@ -135,10 +140,14 @@ func (s *kmsSigner) SignPayload(payload []byte, alg jose.SignatureAlgorithm) ([]
 		SigningAlgorithm: types.SigningAlgorithmSpecEcdsaSha384,
 	})
 	if err != nil {
-		s.metrics.record(ctx, s.kid, "error")
+		s.metrics.record(ctx, s.kid, kmsResult(err))
 		return nil, fmt.Errorf("issuer: kms:Sign with %s: %w", s.keyID, err)
 	}
 	raw, err := derToRaw(out.Signature, es384Size)
+	if err == nil && !ecdsa.Verify(s.pub, digest[:],
+		new(big.Int).SetBytes(raw[:es384Size]), new(big.Int).SetBytes(raw[es384Size:])) {
+		err = errors.New("the signature does not verify against the key's public half")
+	}
 	if err != nil {
 		s.metrics.record(ctx, s.kid, "error")
 		return nil, fmt.Errorf("issuer: kms:Sign with %s: %w", s.keyID, err)
@@ -176,9 +185,24 @@ type kmsInstruments struct {
 	signatures metric.Int64Counter
 }
 
+var kmsMetricsOnce = sync.OnceValue(kmsMetrics)
+
+// kmsResult is the metric's result for a failed call: throttled is told apart
+// because the KMS request quota is the ceiling on token throughput.
+func kmsResult(err error) string {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "ThrottlingException", "Throttling", "TooManyRequestsException", "RequestLimitExceeded", "LimitExceededException":
+			return "throttled"
+		}
+	}
+	return "error"
+}
+
 func kmsMetrics() kmsInstruments {
 	signatures, _ := otel.Meter(keyRingMeterName).Int64Counter("access_issuer.kms_signatures",
-		metric.WithDescription("kms:Sign calls made to sign a token, by the signing key's kid and their result: ok or error."))
+		metric.WithDescription("kms:Sign calls made to sign a token, by the signing key's kid and their result: ok, throttled or error."))
 	return kmsInstruments{signatures: signatures}
 }
 

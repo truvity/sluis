@@ -6,7 +6,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,8 +42,19 @@ func (f kmsFake) Sign(_ context.Context, in *kms.SignInput, _ ...func(*kms.Optio
 
 func kmsConfig(t *testing.T, keys ...string) func(*config.Serve) {
 	t.Helper()
+	return kmsConfigWith(t, base64.StdEncoding.EncodeToString(randomBytes(32))+"\n", keys...)
+}
+
+func randomBytes(n int) []byte {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return b
+}
+
+func kmsConfigWith(t *testing.T, content string, keys ...string) func(*config.Serve) {
+	t.Helper()
 	secret := filepath.Join(t.TempDir(), "state")
-	if err := os.WriteFile(secret, []byte(strings.Repeat("x", 32)), 0o600); err != nil {
+	if err := os.WriteFile(secret, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return func(f *config.Serve) {
@@ -81,4 +95,38 @@ func TestKMSAndFileAreExclusive(t *testing.T) {
 	if _, err := issuerapp.FromConfig(f); err == nil || !strings.Contains(err.Error(), "exclusive") {
 		t.Fatalf("got %v", err)
 	}
+}
+
+func TestAPlaceholderStateSecretIsRefused(t *testing.T) {
+	t.Parallel()
+	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	for name, content := range map[string]string{
+		"repeated": strings.Repeat("x", 64), "short": "abcd", "few bytes": strings.Repeat("ab", 40),
+	} {
+		policyDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(policyDir, "policy.yaml"), []byte("version: 1\nlifetimes: { default: 12h }\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := issuerapp.FromConfig(&config.Serve{IssuerURL: "https://issuer.example", PolicyDir: policyDir,
+			Listen: &config.Address{Address: ":0"}, Probes: &config.Address{Address: ":0"},
+			SigningKey: &config.SigningKey{KMS: &config.SigningKeyKMS{Keys: []string{"a"},
+				StateSecretFile: writeTemp(t, content)}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = issuerapp.New(context.Background(), cfg,
+			issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"a": a}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if err == nil || !strings.Contains(err.Error(), "stateSecretFile") {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+}
+
+func writeTemp(t *testing.T, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "s")
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
