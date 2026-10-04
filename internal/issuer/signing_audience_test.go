@@ -99,6 +99,13 @@ func newMultiAlgServerWith(t *testing.T, primary, rsaKey *issuer.SigningKey) *ht
 
 func newMultiAlgServerKeys(t *testing.T, primary, rsaKey *issuer.SigningKey) (*httptest.Server, <-chan string) {
 	t.Helper()
+	return newMultiAlgServerState(t, primary, rsaKey, issuer.NewMemoryState())
+}
+
+// newMultiAlgServerState is the same over a shared state the caller may have
+// seeded: another replica's key already recorded there.
+func newMultiAlgServerState(t *testing.T, primary, rsaKey *issuer.SigningKey, state issuer.State) (*httptest.Server, <-chan string) {
+	t.Helper()
 
 	toldCh := make(chan string, 8)
 	backchannel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +127,6 @@ func newMultiAlgServerKeys(t *testing.T, primary, rsaKey *issuer.SigningKey) (*h
 	dir := &fakeDirectory{standing: map[string]issuer.Standing{
 		"ada@north.example": {Found: true, Authoritative: true},
 	}}
-	state := issuer.NewMemoryState()
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, dir, state)
 
 	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*issuer.SigningKey{rsaKey}, state)

@@ -451,15 +451,17 @@ func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
 	}
 
 	active := s.keys.Active(alg)
-	if active == nil {
-		// checkSigningAlgorithms refuses this at start for anything a
-		// policy row names, so reaching here means the ring for the
-		// DEFAULT itself is not ready yet (a fresh KeyRings whose first
-		// Observe has not returned) rather than a missing configuration
-		// -- and the default's own ring is seeded before [NewStorage]
-		// ever returns, so this is the anomaly to fall back from, not a
-		// token to fail over.
+	if active == nil && !s.keys.Has(alg) {
+		// No ring exists for this algorithm: checkSigningAlgorithms refuses
+		// that at start for anything a policy row names, so this is an
+		// algorithm nobody configured, and the default answers.
 		active = s.keys.Active(s.keys.Default())
+	}
+	if active == nil && s.keys.Has(alg) {
+		// The ring exists but has no signer yet (its key is unactivated, or
+		// retired): never a token of ANOTHER algorithm, which a relying
+		// party pinned to this one would reject or, worse, accept.
+		return nil, fmt.Errorf("issuer: no signing key is available yet for %s", alg)
 	}
 	if active == nil {
 		return nil, errors.New("issuer: no signing key is available yet")

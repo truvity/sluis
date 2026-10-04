@@ -304,6 +304,10 @@ func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) 
 			r.absorb(ctx)
 			if e, ok := r.entries[key.id]; ok {
 				e.signer = key
+			} else {
+				r.log.WarnContext(ctx, "a listed signing key that is not the newest is unknown to this installation "+
+					"and was not adopted (an alias re-pointed in a non-last position, or a key never seen)",
+					"kid", key.id, "algorithm", string(key.alg))
 			}
 			r.recompute(ctx, now)
 			return nil
