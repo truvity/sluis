@@ -120,6 +120,9 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		}
 		collect("signingKeyArn", l.SigningKeyArn)
 		collect("signingKeyAlias", l.SigningKeyAlias)
+		collect("signingKeyRS256Arn", l.SigningKeyRS256Arn)
+		collect("signingKeyRS256Alias", l.SigningKeyRS256Alias)
+		collect("signingKeyRS256ID", l.SigningKeyRS256ID)
 		collect("httpFunctionArn", l.HTTPFunctionArn)
 		collect("githubFunctionArn", l.GitHubFunctionArn)
 		collect("slackFunctionArn", l.SlackFunctionArn)
@@ -261,8 +264,11 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		arnp + "lambda:" + region + ":" + account + ":function:sluis-github", arnp + "lambda:" + region + ":" + account + ":function:sluis-slack"}) {
 		t.Errorf("http may invoke %v", got)
 	}
-	if got := httpG["kms:Sign"]; !reflect.DeepEqual(got, []string{out["signingKeyArn"]}) {
-		t.Errorf("http signs with %v, want %s", got, out["signingKeyArn"])
+	wantKeys := []string{out["signingKeyArn"], out["signingKeyRS256Arn"]}
+	for _, a := range []string{"kms:Sign", "kms:GetPublicKey"} {
+		if got := httpG[a]; !reflect.DeepEqual(got, wantKeys) {
+			t.Errorf("http %s on %v, want %v", a, got, wantKeys)
+		}
 	}
 	for _, d := range rec.ofType(policyType) {
 		for _, s := range statements(t, prop(d, "policy").StringValue()) {
@@ -279,17 +285,22 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		}
 	}
 
-	// A signing key and no sealer.
+	// Two signing keys, ES384 and RS256, and no sealer.
 	keys := rec.ofType("aws:kms/key:Key")
-	if len(keys) != 1 || keys[0].Name != "kernel-signing-key" {
+	if len(keys) != 2 {
 		t.Fatalf("keys: %v", rec.names())
 	}
-	k := keys[0]
-	if prop(k, "keyUsage").StringValue() != "SIGN_VERIFY" || prop(k, "customerMasterKeySpec").StringValue() != "ECC_NIST_P384" {
-		t.Errorf("signing key: %v", k.Inputs)
+	for name, spec := range map[string]string{"kernel-signing-key": "ECC_NIST_P384", "kernel-signing-key-rs256": "RSA_3072"} {
+		k := rec.one(t, "aws:kms/key:Key", name)
+		if prop(k, "keyUsage").StringValue() != "SIGN_VERIFY" || prop(k, "customerMasterKeySpec").StringValue() != spec {
+			t.Errorf("%s: %v", name, k.Inputs)
+		}
+		if !rec.isProtected("aws:kms/key:Key", name) {
+			t.Errorf("%s is not protected", name)
+		}
 	}
-	if out["signingKeyAlias"] != "alias/sluis-signing" {
-		t.Errorf("alias %q", out["signingKeyAlias"])
+	if out["signingKeyAlias"] != "alias/sluis-signing" || out["signingKeyRS256Alias"] != "alias/sluis-signing-rs256" || out["signingKeyRS256ID"] == "" {
+		t.Errorf("aliases %q %q", out["signingKeyAlias"], out["signingKeyRS256Alias"])
 	}
 	if rec.has("aws:kms/key:Key", "kernel-sealer-key") || rec.has("aws:kms/alias:Alias", "kernel-sealer-alias") {
 		t.Error("the sealer key is still declared")
@@ -447,7 +458,7 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 	if g := rolePolicy(t, rec, "slack"); len(g["kms:Sign"]) != 0 {
 		t.Error("slack signs")
 	}
-	if g := rolePolicy(t, rec, "http"); len(g["kms:Sign"]) != 1 || len(g["kms:GetPublicKey"]) != 1 {
+	if g := rolePolicy(t, rec, "http"); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
 		t.Errorf("http grants %v", g)
 	}
 	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "kernel-domain")
@@ -587,6 +598,8 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 		"no truststore":     func(a *arp.LambdaArgs) { a.API.TruststorePEM = "" },
 		"no domain":         func(a *arp.LambdaArgs) { a.API.DomainName = "" },
 		"bad alias":         func(a *arp.LambdaArgs) { a.SigningKeyAlias = "signing" },
+		"bad rs256 alias":   func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = "signing" },
+		"same alias":        func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = arp.DefaultSigningKeyAlias },
 		"bad rate":          func(a *arp.LambdaArgs) { a.Schedule.Rate = "5 minutes" },
 		"bad target":        func(a *arp.LambdaArgs) { a.Schedule.GitHubOrgs = []string{"a b"} },
 		"duplicate":         func(a *arp.LambdaArgs) { a.Schedule.SlackWorkspaces = []string{"T1", "T1"} },
@@ -632,7 +645,7 @@ func TestThePodIdentityRolesCarryNoSealerAndOnlyServeSigns(t *testing.T) {
 		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
 			Namespace: "sluis", Serve: arp.ProcessArgs{ServiceAccount: "sluis"}, GitHub: arp.ProcessArgs{ServiceAccount: "sluis-github"},
-			Storage: store.Grant(), SigningKeyArn: pulumi.String(signing),
+			Storage: store.Grant(), SigningKeyArns: []pulumi.StringInput{pulumi.String(signing), pulumi.String(signing + "-rs")},
 		})
 		return err
 	})
@@ -642,7 +655,7 @@ func TestThePodIdentityRolesCarryNoSealerAndOnlyServeSigns(t *testing.T) {
 	pol := func(n string) map[string][]string {
 		return grants(statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue()))
 	}
-	if g := pol("kernel-sluis-serve-policy"); len(g["kms:Sign"]) != 1 {
+	if g := pol("kernel-sluis-serve-policy"); len(g["kms:Sign"]) != 2 {
 		t.Errorf("serve: %v", g)
 	}
 	if g := pol("kernel-sluis-github-policy"); len(g["kms:Sign"]) != 0 || len(g["kms:Decrypt"]) != 0 {
@@ -691,5 +704,15 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 	_, out := mustLambda(t, estate{})
 	if out["stateSecretParameter"] != "/sluis/private/issuer/state-secret" {
 		t.Errorf("output: %q", out["stateSecretParameter"])
+	}
+}
+
+func TestTheRS256KeyCanBeLeftOut(t *testing.T) {
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.DisableSigningKeyRS256 = true }})
+	if len(rec.ofType("aws:kms/key:Key")) != 1 || out["signingKeyRS256Arn"] != "" {
+		t.Errorf("keys: %v", rec.names())
+	}
+	if got := rolePolicy(t, rec, "http")["kms:Sign"]; len(got) != 1 {
+		t.Errorf("http signs with %v", got)
 	}
 }

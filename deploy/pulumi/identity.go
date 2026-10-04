@@ -58,10 +58,10 @@ type KubernetesIdentityArgs struct {
 
 	// Storage is the blob bucket: every process keeps its reports in it. Required.
 	Storage *StorageGrant
-	// SigningKeyArn is the token-signing key (Lambda's SigningKeyArn). When it is
-	// set the serve process, and only it, may kms:Sign and kms:GetPublicKey with
-	// it. Optional.
-	SigningKeyArn pulumi.StringInput
+	// SigningKeyArns are the token-signing keys (Lambda's SigningKeyArn and
+	// SigningKeyRS256Arn). When any is set the serve process, and only it, may
+	// kms:Sign and kms:GetPublicKey with them. Optional.
+	SigningKeyArns []pulumi.StringInput
 	// State is the DynamoDB table of the State port. Nil when State is not in
 	// DynamoDB (it is on NATS), and the roles then carry no DynamoDB grant.
 	State *StateGrant
@@ -100,7 +100,7 @@ type processSpec struct {
 //     does not share another service's.
 //
 // The policy grants the storage (S3 get, put and delete of objects, list of the
-// bucket), kms:Sign and kms:GetPublicKey on SigningKeyArn to the serve process
+// bucket), kms:Sign and kms:GetPublicKey on SigningKeyArns to the serve process
 // only, and, when State is given, the DynamoDB adapter's
 // item calls and DescribeTable on the one table. Nothing else.
 func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIdentityArgs, opts ...pulumi.ResourceOption) (*KubernetesIdentity, error) {
@@ -206,7 +206,7 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 	suffix, roleName, sa, desc, trust string) (*iam.Role, error) {
 	child := pulumi.Parent(parent)
 
-	stateTable, stateKey, signKey := pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String(""))
+	stateTable, stateKey := pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String(""))
 	if a.State != nil {
 		stateTable = a.State.TableArn
 		if a.State.KeyArn != nil {
@@ -214,17 +214,24 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 		}
 	}
 	withState := a.State != nil
-	withSigning := a.SigningKeyArn != nil && suffix == "serve"
+	withSigning := len(a.SigningKeyArns) > 0 && suffix == "serve"
+	inputs := []any{a.Storage.BucketArn, stateTable, stateKey}
 	if withSigning {
-		signKey = a.SigningKeyArn
+		for _, k := range a.SigningKeyArns {
+			inputs = append(inputs, k)
+		}
 	}
-	doc := pulumi.All(a.Storage.BucketArn, stateTable, stateKey, signKey).ApplyT(func(v []any) (string, error) {
+	doc := pulumi.All(inputs...).ApplyT(func(v []any) (string, error) {
 		st := storageStatements(v[0].(string))
 		if withState {
 			st = append(st, stateStatements(v[1].(string), v[2].(string))...)
 		}
 		if withSigning {
-			st = append(st, signingStatement(v[3].(string)))
+			keys := make([]string, 0, len(v)-3)
+			for _, k := range v[3:] {
+				keys = append(keys, k.(string))
+			}
+			st = append(st, signingStatement(keys))
 		}
 		return document(st)
 	}).(pulumi.StringOutput)
