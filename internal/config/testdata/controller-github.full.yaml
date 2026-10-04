@@ -25,4 +25,4 @@ adapters:
 console:
   auth:
     aws:
-      audience: https://sluis.example/aws
+      audience: https://sluis.example/console
