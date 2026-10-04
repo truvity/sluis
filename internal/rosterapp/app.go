@@ -35,8 +35,10 @@ import (
 	"github.com/truvity/sluis/internal/hublocal"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/server"
 	"github.com/truvity/sluis/internal/store"
+	"github.com/truvity/sluis/policy"
 )
 
 // Config is both halves' configuration. Both are built from the one file the
@@ -100,6 +102,27 @@ func (a *App) Handler() http.Handler { return a.issuer.Handler() }
 
 // HealthHandler is liveness and readiness for both halves.
 func (a *App) HealthHandler() http.Handler { return a.issuer.HealthHandler() }
+
+// Policy is the policy the service decides by, loaded once and shared by both
+// halves.
+func (a *App) Policy() *policy.Set { return a.directory.Policy() }
+
+// Trigger is the Trigger the console notifies, as the plan chose it.
+func (a *App) Trigger() port.Trigger { return a.stores.Ports.Trigger }
+
+// Settle waits for the work a request left running after its response, which
+// a function that is frozen between invocations would otherwise never finish.
+func (a *App) Settle() { a.directory.Hub().Wait() }
+
+// FlushAudit waits until the audit records still queued are delivered, or ctx
+// ends. A Lambda function calls it before each invocation returns: the process
+// is frozen afterwards and the queue would wait for the next one.
+func (a *App) FlushAudit(ctx context.Context) error {
+	if f, ok := a.directory.Audit().(interface{ Flush(context.Context) error }); ok {
+		return f.Flush(ctx)
+	}
+	return nil
+}
 
 // Close releases what New opened.
 func (a *App) Close() {
