@@ -1349,9 +1349,15 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 	if !found || desc.Factory == nil {
 		return fmt.Errorf("adapters: the signing adapter %q cannot be built", choice.Adapter)
 	}
-	built, err := desc.Factory(ctx, choice.Settings)
-	if err != nil {
-		return fmt.Errorf("adapters.signing: %w", err)
+	// The adapter named with no settings of its own, over the legacy
+	// `signingKey.<adapter>` block that already says everything: nothing to build.
+	var built any
+	configured := choice.Adapter == "kms" && len(cfg.kmsKeys) > 0 || choice.Adapter == "kms-wrapped" && cfg.kmsWrapped != nil
+	if len(choice.Settings) > 0 || !configured {
+		var err error
+		if built, err = desc.Factory(ctx, choice.Settings); err != nil {
+			return fmt.Errorf("adapters.signing: %w", err)
+		}
 	}
 	switch choice.Adapter {
 	case "kms-wrapped":

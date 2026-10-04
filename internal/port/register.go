@@ -61,7 +61,7 @@ func init() {
 				return nil, err
 			}
 			if len(k.Keys) == 0 || k.StateSecretFile == "" {
-				return nil, errors.New("the kms adapter needs keys and stateSecretFile")
+				return nil, errors.New("the kms adapter needs keys and stateSecretFile (set `signingKey.kms` or `adapters.signing.settings`)")
 			}
 			return &k, nil
 		},
@@ -78,7 +78,7 @@ func init() {
 				return nil, err
 			}
 			if k.KeyID == "" || k.StateSecretFile == "" {
-				return nil, errors.New("the kms-wrapped adapter needs keyId and stateSecretFile (set `signingKey.kmsWrapped`)")
+				return nil, errors.New("the kms-wrapped adapter needs keyId and stateSecretFile (set `signingKey.kmsWrapped` or `adapters.signing.settings`)")
 			}
 			return &k, nil
 		},

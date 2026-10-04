@@ -1,5 +1,14 @@
 ## Unreleased
 
+### Changed
+
+- **A bare `adapters.signing: {adapter: kms}` no longer hides `signingKey.kms`.**
+  Naming the adapter with no `settings` used to build it from nothing and stop the
+  start with "the kms adapter needs keys and stateSecretFile", though
+  `signingKey.kms` was written beside it. An override with no settings of its own
+  now takes the settings of `signingKey.<adapter>` (`kms`, `kmsWrapped`) when that
+  block is for the same adapter; settings given in the override still win whole.
+
 ### Added
 
 - **`kms-wrapped` signing adapter, the default for the AWS presets.** Token

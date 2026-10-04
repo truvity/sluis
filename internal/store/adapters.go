@@ -126,6 +126,16 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 		for k, v := range c.sel.Adapters {
 			sel.Overrides[port.Concern(k)] = port.Override{Adapter: v.Adapter, Settings: v.Settings}
 		}
+		// A bare `adapters.signing: {adapter: kms}` names the adapter and leaves
+		// its settings where they have always been, `signingKey.kms`: an override
+		// with no settings of its own takes the legacy block's, when the block is
+		// for the same adapter. Settings given in the override win whole.
+		if o, ok := sel.Overrides[port.ConcernSigning]; ok && len(o.Settings) == 0 {
+			if legacy := sel.Legacy[port.ConcernSigning]; legacy.Adapter == o.Adapter && len(legacy.Settings) > 0 {
+				o.Settings = legacy.Settings
+				sel.Overrides[port.ConcernSigning] = o
+			}
+		}
 	}
 	table, err := port.Resolve(sel)
 	if err != nil {
