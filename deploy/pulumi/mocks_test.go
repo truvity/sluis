@@ -60,6 +60,20 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		set("keyId", a.Name)
 	case "aws:kms/alias:Alias":
 		set("arn", arnp+"kms:eu-west-1:"+account+":"+physical)
+	case "aws:lambda/function:Function":
+		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+physical)
+	case "aws:cloudwatch/logGroup:LogGroup":
+		set("arn", arnp+"logs:eu-west-1:"+account+":log-group:"+physical)
+	case "aws:s3/bucketObjectv2:BucketObjectv2":
+		set("versionId", "v1")
+	case "aws:apigatewayv2/api:Api":
+		set("apiEndpoint", "https://abc.execute-api.eu-west-1.amazonaws.com")
+		set("executionArn", arnp+"execute-api:eu-west-1:"+account+":abc")
+	case "aws:apigatewayv2/domainName:DomainName":
+		out["domainNameConfiguration"] = resource.NewObjectProperty(resource.PropertyMap{
+			"targetDomainName": resource.NewStringProperty("d-abc.execute-api.eu-west-1.amazonaws.com"),
+			"hostedZoneId":     resource.NewStringProperty("ZHOSTED"),
+		})
 	case "aws:dynamodb/table:Table":
 		set("arn", arnp+"dynamodb:eu-west-1:"+account+":table/"+physical)
 	default:

@@ -62,8 +62,6 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 		}
 		collect("bucketName", store.BucketName)
 		collect("bucketArn", store.BucketArn)
-		collect("keyArn", store.KeyArn)
-		collect("keyAlias", store.KeyAlias)
 		if !o.noState {
 			st, err := arp.NewState(ctx, "kernel", &arp.StateArgs{TableName: table, KeyArn: o.tableKey})
 			if err != nil {
@@ -146,37 +144,6 @@ func TestVersioningIsOptional(t *testing.T) {
 	v := rec.one(t, "aws:s3/bucketVersioningV2:BucketVersioningV2", "kernel-bucket-versioning")
 	if prop(v, "versioningConfiguration").ObjectValue()["status"].StringValue() != "Enabled" {
 		t.Errorf("versioning: %v", v.Inputs)
-	}
-}
-
-func TestTheSealerKeyRotatesWaitsThirtyDaysIsProtectedAndHasAnAlias(t *testing.T) {
-	rec, out := mustStack(t, opts{})
-	k := rec.one(t, "aws:kms/key:Key", "kernel-sealer-key")
-	if !prop(k, "enableKeyRotation").BoolValue() || prop(k, "deletionWindowInDays").NumberValue() != 30 {
-		t.Errorf("key inputs: %v", k.Inputs)
-	}
-	// Symmetric is the provider's default: neither a spec nor a usage is set.
-	for _, key := range []string{"customerMasterKeySpec", "keySpec", "keyUsage", "policy"} {
-		if prop(k, key).HasValue() {
-			t.Errorf("%s is set: the key is symmetric encrypt/decrypt with the default key policy", key)
-		}
-	}
-	if !rec.isProtected("aws:kms/key:Key", "kernel-sealer-key") {
-		t.Error("the key is not protected")
-	}
-	a := rec.one(t, "aws:kms/alias:Alias", "kernel-sealer-alias")
-	if prop(a, "name").StringValue() != "alias/kernel-sluis" || out["keyAlias"] != "alias/kernel-sluis" {
-		t.Errorf("alias: %v / %v", a.Inputs, out["keyAlias"])
-	}
-}
-
-func TestAKeyAliasMustBeAnAlias(t *testing.T) {
-	_, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		_, err := arp.NewStorage(ctx, "x", &arp.StorageArgs{BucketName: bucket, KeyAlias: "no-prefix"})
-		return err
-	})
-	if err == nil {
-		t.Fatal("an alias without the alias/ prefix was accepted")
 	}
 }
 
@@ -301,15 +268,12 @@ func TestTheTrustPolicyNamesTheClusterTheNamespaceAndOneServiceAccount(t *testin
 func TestEachRoleGetsExactlyTheStorageAndTheTable(t *testing.T) {
 	rec, _ := mustStack(t, opts{})
 	bucketArn := arnp + "s3:::" + bucket
-	keyArn := arnp + "kms:eu-west-1:" + account + ":key/kernel-sealer-key"
 	tableArn := arnp + "dynamodb:eu-west-1:" + account + ":table/" + table
 	want := map[string][]string{
 		"s3:GetObject":           {bucketArn + "/*"},
 		"s3:PutObject":           {bucketArn + "/*"},
 		"s3:DeleteObject":        {bucketArn + "/*"},
 		"s3:ListBucket":          {bucketArn},
-		"kms:Encrypt":            {keyArn},
-		"kms:Decrypt":            {keyArn},
 		"dynamodb:GetItem":       {tableArn},
 		"dynamodb:PutItem":       {tableArn},
 		"dynamodb:DeleteItem":    {tableArn},
@@ -334,45 +298,12 @@ func TestWithoutStateNoRoleCarriesADynamoDBGrant(t *testing.T) {
 		if strings.Contains(doc, "dynamodb") {
 			t.Errorf("%s has a DynamoDB grant without a table: %s", role, doc)
 		}
-		if got := len(statements(t, doc)); got != 3 {
-			t.Errorf("%s has %d statements, want the 3 of the storage", role, got)
+		if got := len(statements(t, doc)); got != 2 {
+			t.Errorf("%s has %d statements, want the 2 of the storage", role, got)
 		}
 	}
 	if len(rec.ofType("aws:dynamodb/table:Table")) != 0 {
 		t.Error("a table was made")
-	}
-}
-
-func TestTheSealerIsGrantedOnlyWithTheBindingContextAndTheContextIsMandatory(t *testing.T) {
-	rec, _ := mustStack(t, opts{})
-	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-serve-policy")
-	var n int
-	for _, s := range statements(t, prop(p, "policy").StringValue()) {
-		acts := strs(s["Action"])
-		if !contains(acts, "kms:Encrypt") && !contains(acts, "kms:Decrypt") {
-			continue
-		}
-		if s["Sid"] != "SluisSealer" {
-			continue
-		}
-		n++
-		c := s["Condition"].(map[string]any)
-		forAll := c["ForAllValues:StringEquals"].(map[string]any)
-		if got := strs(forAll["kms:EncryptionContextKeys"]); !reflect.DeepEqual(got, []string{"sluis:binding"}) {
-			t.Errorf("context keys %v, want only sluis:binding", got)
-		}
-		if c["Null"].(map[string]any)["kms:EncryptionContextKeys"] != "false" {
-			t.Errorf("Null: %v: without it a request with no context is admitted", c["Null"])
-		}
-		if len(c) != 2 {
-			t.Errorf("conditions %v", c)
-		}
-	}
-	if n != 1 {
-		t.Errorf("%d sealer statements", n)
-	}
-	if arp.BindingContextKey != "sluis:binding" {
-		t.Error(arp.BindingContextKey)
 	}
 }
 
@@ -498,10 +429,11 @@ func validate(t *testing.T, name string, ports map[string]any) error {
 // schemas/config fails here.
 func TestTheRenderedPortsValidateAgainstEveryBinarysSchema(t *testing.T) {
 	for _, p := range []arp.PortsArgs{
-		{BucketName: bucket, KeyID: arp.DefaultKeyAlias("kernel"), TableName: table, Region: "eu-west-1"},
+		{BucketName: bucket, KeyID: "alias/kernel-sluis", TableName: table, Region: "eu-west-1"},
 		{BucketName: bucket, KeyID: "alias/x", TableName: table},
 		{BucketName: bucket, KeyID: "alias/x", TableName: table, Adapter: "dynamodb", BlobPrefix: "/roster/"},
 		{BucketName: bucket, KeyID: "alias/x"},
+		{BucketName: bucket, TableName: table},
 	} {
 		ports, err := arp.RenderPorts(p)
 		if err != nil {
@@ -564,10 +496,19 @@ func TestWithoutATableNoStateAdapterIsRendered(t *testing.T) {
 	}
 }
 
+func TestWithoutAKeyNoSealerIsRendered(t *testing.T) {
+	ports, err := arp.RenderPorts(arp.PortsArgs{BucketName: bucket, TableName: table})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ports["ports"].(map[string]any)["sealer"]; ok {
+		t.Errorf("a sealer block without a key: %v", ports)
+	}
+}
+
 func TestPortsThatCannotBeRenderedAreRefused(t *testing.T) {
 	for name, p := range map[string]arp.PortsArgs{
 		"no bucket":         {KeyID: "alias/x", TableName: table},
-		"no key":            {BucketName: bucket, TableName: table},
 		"dynamodb no table": {BucketName: bucket, KeyID: "alias/x", Adapter: "dynamodb"},
 		"nats":              {BucketName: bucket, KeyID: "alias/x", Adapter: "nats"},
 	} {
@@ -588,13 +529,4 @@ func TestTheSchemaRefusesAWrongPortsBlock(t *testing.T) {
 	if err := validate(t, "serve", bad); err == nil {
 		t.Error("the schema accepted a blob block with a wrong key")
 	}
-}
-
-func contains(s []string, v string) bool {
-	for _, e := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
 }
