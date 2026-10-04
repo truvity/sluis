@@ -8,6 +8,8 @@ import (
 
 	authnv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/truvity/sluis/internal/access"
 )
 
 // ErrTokenRejected is returned for a token the API server does not
@@ -18,7 +20,7 @@ var ErrTokenRejected = errors.New("kube: the token was not accepted")
 
 // ServiceAccountSubject is how the API server spells a ServiceAccount.
 func ServiceAccountSubject(namespace, name string) string {
-	return "system:serviceaccount:" + namespace + ":" + name
+	return access.ServiceAccountSubject(namespace, name)
 }
 
 // ReviewToken asks the API server who a token authenticates, for the given

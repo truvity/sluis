@@ -12,3 +12,13 @@ enabledOrgs: [example-org]
 ports: {adapter: legacy}
 probes:
   address: ":7070"
+
+platform:
+  aws: true
+  kubernetes: true
+  openbao: true
+  runtime: lambda
+  replicas: 2
+preset: aws-hybrid
+adapters:
+  state: {adapter: dynamodb, settings: {table: sluis, region: eu-west-1}}

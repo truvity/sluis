@@ -14,16 +14,13 @@ import (
 	"log/slog"
 
 	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
-	"github.com/truvity/sluis/internal/port/legacy"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/port/observe"
 	"github.com/truvity/sluis/internal/port/openbao"
 	"github.com/truvity/sluis/internal/port/s3blob"
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
-	"github.com/truvity/sluis/internal/valkey"
 )
 
 // The adapters `ports.adapter` names.
@@ -65,13 +62,7 @@ type Config struct {
 	Adapter string
 	// Release prefixes the objects' names and the Valkey keys.
 	Release string
-	// Valkey is where the shared cache is; an empty address is none.
-	Valkey valkey.Config
-	Kube   KubeNeed
-	// KubeClient, when set, opens the namespace's objects in place of the
-	// pod's own ServiceAccount: an operator's tool that runs from a
-	// workstation (sluis migrate) names a kubeconfig this way.
-	KubeClient func(release string) (*kube.Client, error)
+	Kube    KubeNeed
 	// Blob replaces the port of the same name; nil keeps what Adapter brings.
 	Blob *config.PortsBlob
 	// DynamoDB is the table of the `dynamodb` adapter.
@@ -84,6 +75,10 @@ type Config struct {
 
 	// sel is what the file says about adapters beyond `ports.adapter`.
 	sel selection
+
+	// k8sConfig is what the Kubernetes build adds: the Valkey (store_k8s.go).
+	// The Lambda build has none (store_lambda.go).
+	k8sConfig
 }
 
 // validatePorts refuses a Blob the file names but this build has no
@@ -171,20 +166,11 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	return set, nil
 }
 
-// kubeClient opens the namespace's objects.
-func (c Config) kubeClient() (*kube.Client, error) {
-	if c.KubeClient != nil {
-		return c.KubeClient(c.Release)
-	}
-	return kube.InCluster(c.Release)
-}
-
 // FromServe reads the configuration of `sluis serve`.
 func FromServe(f *config.Serve) (Config, error) {
 	c := Config{
 		Adapter: adapterOf(f.Ports),
 		Release: orDefault(f.Release, "sluis"),
-		Valkey:  valkeyOf(f.Release, f.Valkey),
 		Blob:    blobOf(f.Ports),
 
 		DynamoDB: dynamoOf(f.Ports),
@@ -195,7 +181,7 @@ func FromServe(f *config.Serve) (Config, error) {
 	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
 		return Config{}, fmt.Errorf("ports.adapter: %s holds the shared state, so it cannot be combined with valkey.address", c.Adapter)
 	}
-	if c.Valkey.Password, err = secretOf(f.Valkey); err != nil {
+	if err = c.fromServeK8s(f); err != nil {
 		return Config{}, err
 	}
 	switch {
@@ -222,7 +208,7 @@ func FromRoster(f *config.Roster) Config {
 	c := Config{
 		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
 		Blob: blobOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
-		sel: selectionOf(f.Ports, nil, "", nil, f.Audit != nil && f.Audit.Writer != "", nil),
+		sel: selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", nil),
 	}
 	if c.Adapter == AdapterMemory {
 		c.Kube = KubeNone
@@ -268,29 +254,6 @@ func orDefault(value, fallback string) string {
 	return fallback
 }
 
-func valkeyOf(release string, v *config.Valkey) valkey.Config {
-	c := valkey.Config{Cluster: true, Prefix: orDefault(release, "sluis")}
-	if v != nil {
-		c.Address = v.Address
-		c.TLS = v.TLS
-		if v.Cluster != nil {
-			c.Cluster = *v.Cluster
-		}
-	}
-	return c
-}
-
-func secretOf(v *config.Valkey) (string, error) {
-	if v == nil || v.PasswordEnv == "" {
-		return "", nil
-	}
-	password, err := config.Secret(v.PasswordEnv)
-	if err != nil {
-		return "", fmt.Errorf("valkey.passwordEnv: %w", err)
-	}
-	return password, nil
-}
-
 // Stores is the ports, built once.
 type Stores struct {
 	// Ports is every port, over the chosen adapter.
@@ -302,7 +265,7 @@ type Stores struct {
 	// link, the Slack records) are on Ports for every adapter but `legacy`
 	// (internal/portstore), and in the ConfigMaps and Secrets this reaches for
 	// `legacy`. It is nil with the memory adapter, which has none.
-	Backend *legacy.Backend
+	Backend *Backend
 	// Adapter is the state adapter's name.
 	Adapter string
 	// Plan is the resolved adapter per concern, for the packages that wire a
@@ -383,10 +346,41 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 		}
 	}
 	st, err := open(ctx, cfg, log)
-	if st != nil {
-		st.Plan = plan
+	if err != nil {
+		return st, err
 	}
-	return st, err
+	st.Plan = plan
+	if err = st.applyTrigger(ctx, log); err != nil {
+		st.Close()
+		return nil, err
+	}
+	return st, nil
+}
+
+// applyTrigger replaces the Trigger the state adapter brought with the one the
+// plan names, when that is an adapter of its own: `invoke`, which starts a
+// controller function. The state adapters' triggers (the table's, the in-process
+// one) are theirs and stay.
+func (s *Stores) applyTrigger(ctx context.Context, log *slog.Logger) error {
+	choice, ok := s.Plan[port.ConcernTrigger]
+	if !ok || choice.Adapter == "" || choice.Adapter == s.Adapter || choice.Adapter == "legacy" {
+		return nil
+	}
+	d, ok := port.Default.Lookup(port.ConcernTrigger, choice.Adapter)
+	if !ok || d.Factory == nil {
+		return fmt.Errorf("adapters.trigger: %q is not built into this binary", choice.Adapter)
+	}
+	built, err := d.Factory(ctx, choice.Settings)
+	if err != nil {
+		return fmt.Errorf("adapters.trigger: %s: %w", choice.Adapter, err)
+	}
+	trigger, ok := built.(port.Trigger)
+	if !ok {
+		return fmt.Errorf("adapters.trigger: %s is not a trigger", choice.Adapter)
+	}
+	s.Ports.Trigger = trigger
+	log.InfoContext(ctx, "run-now notifications go through the trigger adapter", "adapter", choice.Adapter)
+	return nil
 }
 
 func open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
@@ -400,37 +394,32 @@ func open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 		}
 		return &Stores{Ports: observe.Set(set), Adapter: AdapterMemory, Usable: true}, nil
 	case AdapterLegacy:
-		return openLegacy(ctx, cfg, log)
+		// Kubernetes' own: the namespace's objects and Valkey. The Lambda build
+		// has none of them (store_lambda.go).
+		return openK8s(ctx, cfg, log)
 	case AdapterDynamoDB:
 		return openDynamoDB(ctx, cfg, log)
 	}
 	return nil, fmt.Errorf("ports.adapter: %q is none of %q, %q, %q", cfg.Adapter, AdapterLegacy, AdapterMemory, AdapterDynamoDB)
 }
 
-// openDynamoDB holds State, the session index and the trigger in the table,
-// and takes Blob and Identity from the legacy adapter.
+// openDynamoDB holds State, the session index and the trigger in the table.
+// Blob and Identity are the Kubernetes build's legacy adapter over the
+// namespace's objects, unless `ports.blob` names an adapter of its own; the
+// Lambda build has no such adapter, so it requires one.
 func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
-	backend := &legacy.Backend{}
-	st := &Stores{Backend: backend, Adapter: AdapterDynamoDB, Shared: true, Usable: true}
-	if cfg.Kube != KubeNone {
-		client, err := cfg.kubeClient()
-		switch {
-		case err == nil:
-			backend.Kube = client
-			backend.ReviewToken = client.ReviewToken
-		case cfg.Kube == KubeRequired:
-			return nil, err
-		default:
-			log.WarnContext(ctx, "the namespace's objects are not available", "error", err)
-		}
+	st := &Stores{Adapter: AdapterDynamoDB, Shared: true, Usable: true}
+	rest, backend, err := restPorts(ctx, cfg, log)
+	if err != nil {
+		return nil, err
 	}
+	st.Backend = backend
 	table, err := dynamoport.Open(ctx, cfg.DynamoDB)
 	if err != nil {
 		return nil, fmt.Errorf("ports.dynamodb: %w", err)
 	}
 	st.pinger = table
 	st.close = table.Close
-	rest := backend.Ports(legacy.Options{})
 	set := table.Set()
 	set.Blob, set.Identity = rest.Blob, rest.Identity
 	if set, err = cfg.compose(ctx, set, log); err != nil {
@@ -440,45 +429,5 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 	st.Ports = observe.Set(set)
 	log.InfoContext(ctx, "keeping state in DynamoDB", "adapter", AdapterDynamoDB,
 		"table", cfg.DynamoDB.Table, "region", cfg.DynamoDB.Region, "create", cfg.DynamoDB.Create)
-	return st, nil
-}
-
-func openLegacy(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
-	backend := &legacy.Backend{}
-	st := &Stores{Backend: backend, Adapter: AdapterLegacy}
-
-	if cfg.Kube != KubeNone {
-		client, err := cfg.kubeClient()
-		switch {
-		case err == nil:
-			backend.Kube = client
-			backend.ReviewToken = client.ReviewToken
-		case cfg.Kube == KubeRequired:
-			return nil, err
-		default:
-			log.WarnContext(ctx, "the namespace's objects are not available", "error", err)
-		}
-	}
-
-	if cfg.Valkey.Address != "" {
-		shared, err := valkey.OpenState(ctx, cfg.Valkey)
-		if err != nil {
-			return nil, err
-		}
-		backend.Valkey = shared
-		st.Shared, st.Usable, st.pinger = true, true, shared
-		st.close = func() { _ = shared.Close() }
-		log.InfoContext(ctx, "sharing state in Valkey",
-			"cache", "valkey", "address", cfg.Valkey.Address, "cluster", cfg.Valkey.Cluster)
-	}
-	// Observed once, here, where the adapter is chosen: every caller crosses
-	// the same seam, so every call is timed and counted without each of them
-	// knowing.
-	set, err := cfg.compose(ctx, backend.Ports(legacy.Options{}), log)
-	if err != nil {
-		st.Close()
-		return nil, err
-	}
-	st.Ports = observe.Set(set)
 	return st, nil
 }
