@@ -354,9 +354,9 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	rec, out := mustLambda(t, estate{
 		orgs: []string{"truvity", "trust-form"}, workspaces: []string{"T0TRUVITY"}, rate: "rate(2 minutes)", telemetry: true,
 		catalogues: map[string]string{"github-apps.yaml": "apps: []\n"},
-		mutate:     func(a *arp.LambdaArgs) { a.API.DomainName = "access.truvity.xyz" },
+		mutate:     func(a *arp.LambdaArgs) { a.API.DomainName = "access.one.example.test" },
 	})
-	shape(t, rec, out, "access.truvity.xyz")
+	shape(t, rec, out, "access.one.example.test")
 
 	want := map[string]string{
 		"sluis-github-truvity":    `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
@@ -405,11 +405,11 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 	rec, out := mustLambda(t, estate{
 		orgs: []string{"opwerm"}, keepDefaultEndpoint: false,
 		mutate: func(a *arp.LambdaArgs) {
-			a.API.DomainName = "access.excavador.xyz"
+			a.API.DomainName = "access.two.example.test"
 			a.SigningKeyAlias = ""
 		},
 	})
-	shape(t, rec, out, "access.excavador.xyz")
+	shape(t, rec, out, "access.two.example.test")
 	if got := schedules(t, rec); len(got) != 1 {
 		t.Errorf("schedules: %v", got)
 	}
@@ -443,7 +443,7 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 		t.Errorf("http grants %v", g)
 	}
 	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "kernel-domain")
-	if prop(dom, "domainName").StringValue() != "access.excavador.xyz" || !prop(dom, "mutualTlsAuthentication").IsObject() {
+	if prop(dom, "domainName").StringValue() != "access.two.example.test" || !prop(dom, "mutualTlsAuthentication").IsObject() {
 		t.Errorf("domain: %v", dom.Inputs)
 	}
 	if !prop(rec.one(t, "aws:apigatewayv2/api:Api", "kernel-api"), "disableExecuteApiEndpoint").BoolValue() {
