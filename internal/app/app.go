@@ -108,6 +108,9 @@ type Config struct {
 	oauthSecretName   string
 	oauthIDKey        string
 	oauthSecretKey    string
+	// oauthDeclared is the client declared by file, value or variable: set
+	// off-cluster, where there is no Secret to read it from.
+	oauthDeclared settings.OAuthClient
 	// audit is the audit installation this service connects to, if any.
 	audit audit.Config
 	// auditQuery is its query service, for the console's Audit page, and
@@ -196,6 +199,9 @@ func FromConfig(f *config.Serve) (Config, error) {
 		c.oauthSecretName = o.SecretName
 		c.oauthIDKey = o.IDKey
 		c.oauthSecretKey = o.SecretKey
+		if c.oauthDeclared, err = declaredOAuthClient(o); err != nil {
+			return Config{}, fmt.Errorf("oauthClient: %w", err)
+		}
 	}
 	// The instance is the pod, which is its hostname in a cluster: it names
 	// this replica on every audit record.
@@ -519,7 +525,7 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 			"the memberships added here and every session", "store", storeMemory)
 		return stores{
 			workspaces: hub.NewMemoryStore(),
-			settings:   settings.NewMemory(settings.OAuthClient{}),
+			settings:   settings.NewMemory(cfg.oauthDeclared),
 			sessionKey: key,
 		}, nil
 	}
@@ -546,7 +552,7 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	out := stores{
 		workspaces:          portstore.NewWorkspaces(base),
 		credentials:         portstore.NewCredentials(base),
-		settings:            settings.NewMemory(settings.OAuthClient{}),
+		settings:            settings.NewMemory(cfg.oauthDeclared),
 		sessionKey:          key,
 		githubReports:       rails.NewBlobReports(st.Ports.Blob, "reports/github/"),
 		slackReports:        rails.NewBlobReports(st.Ports.Blob, "reports/slack/"),

@@ -8,6 +8,7 @@ import (
 	"github.com/truvity/sluis/backend"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/server"
+	"github.com/truvity/sluis/internal/settings"
 	"github.com/truvity/sluis/internal/store"
 )
 
@@ -39,6 +40,8 @@ type KeptForTest struct {
 	GitHubLinks bool
 	SlackShared bool
 	SessionKey  []byte
+	// OAuthClient is the client the settings store hands the Google connector.
+	OAuthClient settings.OAuthClient
 }
 
 // OpenStoresForTest runs the one switch between the kube-backed domain stores
@@ -48,8 +51,13 @@ func OpenStoresForTest(ctx context.Context, cfg Config, st *store.Stores, log *s
 	if err != nil {
 		return KeptForTest{}, err
 	}
+	client, err := kept.settings.OAuthClient(ctx)
+	if err != nil {
+		return KeptForTest{}, err
+	}
 	return KeptForTest{
-		Workspaces: kept.workspaces, Credentials: kept.credentials, GitHubOrgs: kept.githubOrgs != nil,
+		OAuthClient: client,
+		Workspaces:  kept.workspaces, Credentials: kept.credentials, GitHubOrgs: kept.githubOrgs != nil,
 		GitHubLinks: kept.githubLinks != nil, SlackShared: kept.slackShared != nil, SessionKey: kept.sessionKey,
 	}, nil
 }

@@ -1,3 +1,12 @@
+## Unreleased
+
+### Fixed
+
+- The OAuth client declared by `oauthClient.id` / `idFile` and `secretFile` / `secretEnv` is now read.
+  Off-cluster (Lambda included) the issuer had no Google OAuth client, so the Google directory
+  could not be opened and every sign-in was refused. Declaring it both ways (with `secretName`)
+  is refused at start, as is a half-declared client or an unreadable file.
+
 ## v1.59.0
 
 On Lambda, the GitHub and Slack controllers authenticate to the console with their role's AWS web identity token (a console audience of its own), and exports run on a schedule.
