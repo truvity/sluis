@@ -23,29 +23,23 @@ release and what has landed since.
 | Piece | Kubernetes | AWS Lambda |
 |---|---|---|
 | State: in-memory (tests, one local process) | ✅ | — |
-| State, Blob, Trigger, Sealing, Identity: the ports' in-memory adapter (`internal/port/memory`) | 🧪 | — |
+| State, Blob, Trigger, Secrets, Identity: the ports' in-memory adapter (`internal/port/memory`) | 🧪 | — |
 | State: Kubernetes objects and Valkey (the current store) | ✅ | — |
 | State: the ports' `legacy` adapter over that store (temporary, until the migration of [0031](decisions/0031-a-generic-migration-tool.md) has run) | 🧪 | — |
-| State, session index and Trigger: NATS JetStream KV (`internal/port/nats`, `ports.adapter: nats`; per-key TTL needs nats-server 2.11 or later) | 🧪 | — |
-| Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (one item, token pair sealed, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Sealer) | 🧪 | 📄 |
+| Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (the token pair in Secrets, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Secrets adapter) | 🧪 | 📄 |
 | State, session index and Trigger: DynamoDB (`internal/port/dynamodb`, `ports.adapter: dynamodb`; one table, polling Watch and Trigger; run on LocalStack, not yet on AWS) | 🧪 | 🧪 |
 | Blob: S3 (reports, snapshots; `internal/port/s3blob`, `ports.blob`) | 🧪 | 🧪 |
 | Trigger: KV watch (across processes) | 🧪 | — |
 | Trigger: asynchronous invoke | — | 📄 |
-| Sealing: KMS (`internal/port/kmsseal`, `ports.sealer`) | 🧪 | 🧪 |
-| Sealing: OpenBao Transit | 📄 | — |
-| Sealing: mounted key | 📄 | — |
 | Export: copies of the secrets the console keeps (a Slack App's bot token, the runner and catalogue Apps, seven recovery bundles) written into OpenBao KV by the service itself, asynchronously, per-export lease, retried with backoff (`internal/port/openbao`, `internal/exports`, `ports.export` and `exports`, [0034](decisions/0034-exports-go-to-openbao-directly.md); needs a `ports.adapter` other than `legacy`) | 🧪 | 📄 |
 | Export: the `jwt` login with the web identity token of AWS outbound federation, for a function in the VPC reaching OpenBao through its internal load balancer (the adapter takes a `TokenSource`; no Lambda wiring yet) | — | 📄 |
 | Export: the External Secrets `PushSecret`s of the chart (`slackApps[].push`, `directory.push`, `githubApps.push`, `githubApps.catalogue[].push`, `slackState.push`; need `config.store: kubernetes`) | deprecated, replaced by the above | — |
 | Inputs: mounted ConfigMaps and Secrets | ✅ | — |
 | Inputs: file in the image or a parameter store | — | 📄 |
 | Audit sink: `http` | ✅ | — |
-| Audit sink: `nats` | 📄 | — |
 | Audit sink: `sqs` (`adapters.audit`; `internal/audit/sqs.go`; the writer Lambda consumes the queue) | 🧪 | 📄 |
 | Ports as Go interfaces (`internal/port`) and the apps depending on them | 🧪 | 📄 |
 | Port conformance suite: in-memory and legacy | 🧪 | — |
-| Port conformance suite: NATS (embedded nats-server, one node and a three-node cluster) | 🧪 | — |
 | Port conformance suite: Export (in-memory, and OpenBao against a fake KV mount) | 🧪 | 🧪 |
 | Port conformance suite: DynamoDB (LocalStack and an in-memory fake of the API; `migrate` into and out of it) | 🧪 | 🧪 |
 
@@ -54,10 +48,10 @@ release and what has landed since.
 | Piece | Kubernetes | AWS Lambda |
 |---|---|---|
 | Issuer, console and directory hub | ✅ | 📄 |
-| GitHub reconciler | ✅ (one replica; two with a NATS or DynamoDB State, 🧪) | 📄 |
-| Slack reconciler | ✅ (one replica; two with a NATS or DynamoDB State, 🧪) | 📄 |
+| GitHub reconciler | ✅ (one replica; two with a DynamoDB State, 🧪) | 📄 |
+| Slack reconciler | ✅ (one replica; two with a DynamoDB State, 🧪) | 📄 |
 | `Tick(target)` with a lease per target, a report per target, and a trigger that ticks only its target (on the legacy adapter: the lease is exclusive across pods only with a shared State, and a controller has none; the console reaches a controller through the mounted records, polled) | 🧪 | 📄 |
-| Two replicas of a reconciler | 🧪 (chart `replicas`: refused unless `ports.adapter` is `nats` or `dynamodb`) | — |
+| Two replicas of a reconciler | 🧪 (chart `replicas`: refused unless `ports.adapter` is `dynamodb`) | — |
 | Slack Connect handoff: the host's tick notifies the guest's; the guest-side probe is the host's tick's | 🧪 | 📄 |
 | Slack Connect handoff by pending-share record (`share.<host>.<channel>`: 14 days while pending, 7 days once accepted; needs a State both runners share) | 🧪 | 📄 |
 | Slack `users.info` cache on the State (`cache.slack.user.<workspace>.<id>`, 24 h; `slack_roster.user_cache` counts hits and misses) | 🧪 | 📄 |
@@ -88,7 +82,7 @@ is the part of the runtime that is built; the Lambda runtime itself is not.
 | `sluis migrate --from <config> --to <config>`: every domain store through its business interface, with `--dry-run`, create-if-absent and `--overwrite`, a plan before any write, and a read-back verification reported as JSON ([operations/migrate.md](operations/migrate.md)) | 🧪 | 📄 |
 | Backup and export through the same command (a file as one end) | 📄 (a follow-up: there is no file adapter yet) | 📄 |
 | Copy of Valkey sessions, refresh tokens and the keyring schedule into the new store, each with its remaining lifetime | 🧪 | — |
-| Rollback by the same command in the other direction (`--from nats --to legacy`) | 🧪 | — |
+| Rollback by the same command in the other direction (`--from dynamodb --to legacy`) | 🧪 | — |
 | Existing backup: a copy of named Secrets | ✅ | — |
 
 ## Telemetry

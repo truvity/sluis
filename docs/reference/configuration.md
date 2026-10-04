@@ -85,7 +85,7 @@ service writes *itself*, where it is the producer and gets to choose.
 | `controllerGithub.enabled` | `false` | render the GitHub controller beside the service. Refused without an `exchange.clusters` row for this cluster or a `console.mount`, because either is a controller that can read nothing |
 | `controllerSlack.enabled` | `false` | render the Slack controller beside the service. Refused without an `exchange.clusters` row for this cluster or a `console.mount`, for the same reason. The policy must put the controller's ServiceAccount (`<release>-slack-roster`) in `all:access-roster:viewer`; without it every pass fails on the first read. Roll the console before the controller when upgrading from before 1.42.0 (the controller needs `ListServedDomains`) |
 | `controllerGithub.resources`, `controllerSlack.resources` | `{}` | the controller pod's resources |
-| `controllerGithub.replicas`, `controllerSlack.replicas` | `1` | how many controller pods run. Above 1 the chart refuses to render unless that controller's `config.ports.adapter` is `nats` or `dynamodb`: with any other adapter each pod keeps its tick leases in its own memory, and every replica would act on every target ([high-availability](../operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)) |
+| `controllerGithub.replicas`, `controllerSlack.replicas` | `1` | how many controller pods run. Above 1 the chart refuses to render unless that controller's `config.ports.adapter` is `dynamodb`: with any other adapter each pod keeps its tick leases in its own memory, and every replica would act on every target ([high-availability](../operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)) |
 | `controllerGithub.strategy`, `controllerSlack.strategy` | `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1` | the Deployment's rollout. The default starts the new pod first and removes the old one only when it is Ready, so a release that crash-loops leaves the running controller alone ([runbook](../operations/runbook.md#a-controller-release-that-crash-loops)). `type: Recreate` stops the old pod first, and is refused with more than one replica; it renders no `rollingUpdate` |
 | `controllerGithub.minReadySeconds`, `controllerSlack.minReadySeconds` | `10` | how long a new pod must stay Ready before it counts as available |
 | `controllerGithub.podDisruptionBudget`, `controllerSlack.podDisruptionBudget` | `enabled: true`, `minAvailable: 1` | rendered only when `replicas` is above 1 |
@@ -376,7 +376,7 @@ The issuer, the console and the directory hub, one process.
 | `release` | `sluis` | the name this installation's objects carry (`<release>-github-orgs`, the prefix of its keys in Valkey). **The chart requires it to be the release's full name**, and says what to write |
 | `cluster` | unset | what this cluster is called, which becomes part of a ServiceAccount's subject: `<cluster>:k8s:<namespace>:<name>`. Empty keeps the older unqualified form |
 | `store` | `memory` (the chart: `kubernetes`) | where connected workspaces and their credentials are kept. `memory` makes a restart a fresh installation, which is right for a laptop and nothing else |
-| `ports.adapter` | `legacy` | the adapter behind the storage ports ([design/ports.md](../design/ports.md)): `legacy` keeps state where it has always been kept (the namespace's ConfigMaps and Secrets, and Valkey when `valkey.address` is set); `nats` keeps State, the session index and the trigger in a JetStream KV bucket shared by every replica ([design/ports.md](../design/ports.md#the-nats-adapter)); `dynamodb` keeps the same in one DynamoDB table shared by every replica ([design/ports.md](../design/ports.md#the-dynamodb-adapter)); `memory` keeps all of it in the process, so a restart loses every login in progress, and is refused with `store: kubernetes` or `valkey.address`. With `nats` or `memory` the domain records too (directory workspaces and their credentials, GitHub organisations and Apps, people's links, the Slack records) are kept in that State, their secrets sealed, and the controllers read them there instead of from mounted files ([design/ports.md](../design/ports.md#the-domain-stores)); a Sealer is then required, so `nats` and `dynamodb` need `ports.sealer`, and the start is refused naming it without one |
+| `ports.adapter` | `legacy` | the adapter behind the storage ports ([design/ports.md](../design/ports.md)): `legacy` keeps state where it has always been kept (the namespace's ConfigMaps and Secrets, and Valkey when `valkey.address` is set); `dynamodb` keeps the same in one DynamoDB table shared by every replica ([design/ports.md](../design/ports.md#the-dynamodb-adapter)); `memory` keeps all of it in the process, so a restart loses every login in progress, and is refused with `store: kubernetes` or `valkey.address`. With `dynamodb` or `memory` the domain records too (directory workspaces and their credentials, GitHub organisations and Apps, people's links, the Slack records) are kept in that State, their credentials in the Secrets port (`memory` has its own), and the controllers read them there instead of from mounted files ([design/ports.md](../design/ports.md#the-domain-stores)); a secrets adapter is then required, and the start is refused naming it without one. The `nats` adapter and `ports.sealer` were removed: a file that names either is refused |
 | `ports.blob.adapter` | (the Blob of `ports.adapter`) | `s3` replaces the Blob port (status reports, directory snapshots) with an S3 bucket, whatever `ports.adapter` is; `ports.blob.s3` is then required |
 | `platform`, `preset`, `adapters` | absent | choose the adapters by name, per concern ([design/ports.md](../design/ports.md#adapters-presets-and-the-platform)). `platform: {aws, kubernetes, openbao, runtime, replicas}` answers the preset decision tree; `preset` is one of `server`, `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid`, `aws-eks`; `adapters.<concern>: {adapter, settings}` (concerns: `state`, `secrets`, `blobs`, `signing`, `trigger`, `schedule`, `audit`) overrides one concern. Resolution: explicit override, then the preset, then the preset the answers derive. All absent, the `ports` keys decide as before. Start is refused for an adapter that needs an answer that is false, cannot run on the runtime, is `memory` with `replicas` above 1, or is planned and not built; the table is logged once and exported as `sluis_adapter_info{concern,adapter}` |
 | `ports.blob.s3.bucket` | (required) | the bucket, which must exist with public access blocked |
@@ -384,12 +384,6 @@ The issuer, the console and the directory hub, one process.
 | `ports.blob.s3.region` | the SDK's (`AWS_REGION`) | the bucket's region |
 | `ports.blob.s3.kmsKey` | (the bucket's default encryption) | a KMS key id, ARN or alias: every write asks for SSE-KMS under it |
 | `ports.blob.s3.endpoint`, `ports.blob.s3.pathStyle` | (AWS) | LocalStack or an S3-compatible store: its address, and path-style addressing |
-| `ports.sealer.adapter` | (the Sealer of `ports.adapter`) | `kms` replaces the Sealer port with AWS KMS; `ports.sealer.kms` is then required |
-| `ports.sealer.kms.keyId` | (required) | a key id, ARN or alias the data keys are wrapped under; the role needs `kms:Encrypt` and `kms:Decrypt` on it |
-| `ports.sealer.kms.region`, `ports.sealer.kms.endpoint` | the SDK's, AWS | the key's region; LocalStack's address |
-| `ports.nats.url` | **required with `nats`** | the NATS servers, comma separated (`nats://host:4222`, `tls://` for TLS) |
-| `ports.nats.bucket` / `.replicas` / `.create` | `sluis` / `3` / `true` | the JetStream KV bucket, its replica count when created, and whether to create or update it (off binds to one that exists, for an identity that may not manage streams) |
-| `ports.nats.tokenFile` / `.credsFile` / `.caFile` | unset | the projected ServiceAccount token presented as the NATS token (the auth callout validates it), read on every connect; or a NATS credentials file (one of the two); and a CA bundle for a server the system's authorities do not cover |
 | `ports.dynamodb.table` | **required with `dynamodb`** | the table: a string partition key `pk`, a string sort key `sk` and TTL on `expires` ([design/ports.md](../design/ports.md#the-dynamodb-adapter)) |
 | `ports.dynamodb.region` / `.endpoint` | the SDK's (`AWS_REGION`) / AWS | the table's region; LocalStack's or DynamoDB Local's address. Credentials are the platform's (Pod Identity, IRSA, a Lambda role) and are never configured |
 | `ports.dynamodb.create` | `false` | make the table at start when it is not there (on-demand, TTL on `expires`), for a test or a development installation. Off binds to the table the infrastructure code made; the role needs `dynamodb:GetItem`, `PutItem`, `DeleteItem`, `Query` and `DescribeTable` on it, and `Scan` for `migrate` |
@@ -448,7 +442,7 @@ The issuer, the console and the directory hub, one process.
 
 ### Exports and the export port
 
-`exports` copies the secrets the console keeps (they are sealed in State, and no
+`exports` copies the secrets the console keeps (they are in the Secrets port, and no
 Kubernetes Secret holds them) into OpenBao, where the programs that act as an App
 and cannot ask the service read them, and where the recovery bundles are kept
 ([0034](../decisions/0034-exports-go-to-openbao-directly.md)). `ports.export` says
@@ -471,7 +465,7 @@ nothing changed. `name` (default `<source>.<what>`, for instance
 `slack-app.alerts`) identifies the export in the log, the metrics and its lease.
 
 The full block that reproduces, on the kernel cluster, the External Secrets
-PushSecrets the estate ran before (`ports.adapter: nats` with a Sealer, the
+PushSecrets the estate ran before (`ports.adapter: dynamodb` with a secrets adapter, the
 `slackApps` and `github.runnerTiers` declared as usual):
 
 ```yaml
@@ -554,7 +548,7 @@ State (see `controllerGithub.replicas`).
 | `tokenFile` | `/var/run/secrets/github-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
 | `appsDir` | `/var/run/github-roster/apps` | the mounted `<release>-github-apps` Secret, one file per connected organisation |
 | `recordsDir` | `/var/run/github-roster/records` | the mounted `<release>-github-orgs` ConfigMap: the organisations' records and the console's requests for a pass. With `appsDir` it is looked at every 30 seconds, and a change (an install, a Refresh) runs a pass at once |
-| `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `nats` or `dynamodb` it reads the console's records there, sealed by `ports.sealer` |
+| `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `dynamodb` it reads the console's records there, and the credentials from the Secrets port |
 | `catalogueFile` | unset | the GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. Never fatal here |
 | `interval` | `15m` | how long between passes. Positive |
 | `enabledOrgs[]` | unset | the organisations the controller **changes**. Every other bound organisation is derived and reported, and left alone: an organisation is born disabled. Each must be bound by the policy: the controller refuses to start otherwise, and the chart refuses to render |
@@ -580,7 +574,7 @@ would make every change twice (see `controllerSlack.replicas`).
 | `probes.address` | `:7070` | as for `controller-github` |
 | `policyDir` | **required** | the same policy ConfigMap the service mounts; its `slack` and `people` tables are the bindings. The chart requires `/var/run/slack-roster/policy` |
 | `consoleURL` | **required** | as for `controller-github` |
-| `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `nats` or `dynamodb` it reads the console's records there, sealed by `ports.sealer` |
+| `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `dynamodb` it reads the console's records there, and the credentials from the Secrets port |
 | `release` | `sluis` | as for `controller-github`; it finds `<release>-slack-status` |
 | `tokenFile` | `/var/run/secrets/slack-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
 | `credentialsDir` | `/var/run/slack-roster/credentials` | the mounted `<release>-slack-credentials` Secret, one file per connected workspace; optional |

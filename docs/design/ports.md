@@ -7,13 +7,12 @@ to [0034](../decisions/0034-exports-go-to-openbao-directly.md); this
 page is the specification. Which adapter exists today is in
 [../capabilities.md](../capabilities.md).
 
-**Status: the ports and eight adapters are built, the domain stores are on them;
+**Status: the ports and their adapters are built, the domain stores are on them;
 DynamoDB has run on LocalStack and not yet on AWS.** The interfaces, an in-memory
-adapter, a temporary `legacy` adapter, a NATS JetStream adapter and a DynamoDB
-adapter for State, Index and Trigger, an S3 Blob and a KMS Sealer exist, and
-every domain store (workspaces and their
+adapter, a temporary `legacy` adapter and a DynamoDB adapter for State, Index and
+Trigger, and an S3 Blob exist, and every domain store (workspaces and their
 credentials, GitHub organisations and Apps, a person's GitHub link, the Slack
-records) has an implementation on State and the Sealer
+records) has an implementation on State and Secrets (the credentials)
 ([The domain stores](#the-domain-stores)). With `ports.adapter`
 `legacy`, the default, the running service still keeps its state as described in
 [sluis.md](sluis.md#the-store) and
@@ -31,14 +30,14 @@ business rule.
 
 | Port | What it is for | Kubernetes | AWS Lambda |
 |---|---|---|---|
-| [State](#state) | records, sealed secrets, sessions, tokens, leases, gates, caches, counters | NATS JetStream KV | DynamoDB |
+| [State](#state) | records, sessions, tokens, leases, gates, caches, counters (no credential: those are [Secrets](#secrets)) | Kubernetes objects, DynamoDB | DynamoDB |
 | [Blob](#blob) | status reports, directory snapshots | S3 | S3 |
 | [Trigger](#trigger) | a change becomes a tick | KV watch | asynchronous `lambda:Invoke` |
-| [Sealing](#sealing) | wraps the data key of a sealed secret | KMS, OpenBao Transit, or a mounted key | KMS |
+| [Secrets](#secrets) | dynamic secrets (the credentials of the domain stores) and the exports | memory, OpenBao, Kubernetes | SSM |
 | [Export](#export) | copies a secret out of the service, into a store a consumer reads | OpenBao KV | OpenBao KV |
 | [Inputs](#inputs) | policy, configuration, operator-managed secrets | mounted ConfigMaps and Secrets | file in the image, or a parameter store |
 | [Identity](#identity) | proves a workload to the issuer, and the service to the cloud | ServiceAccount token, AWS federation | the same |
-| [Audit sink](#audit-sink) | records what the service did | `http`, `nats` | `sqs` |
+| [Audit sink](#audit-sink) | records what the service did | `http` | `sqs` |
 
 ## Adapters, presets and the platform
 
@@ -99,7 +98,7 @@ decide, `ports.adapter: legacy` is the default, and the table is the legacy one
 
 Start is refused, naming every problem, when an adapter needs a platform answer
 that is false (only checked when `platform` or `preset` is given); cannot run on
-the current runtime (`legacy` and `nats` on `lambda`; the runtime is
+the current runtime (`legacy` on `lambda`; the runtime is
 `platform.runtime`, the preset's, or `lambda` when `AWS_LAMBDA_FUNCTION_NAME` is
 set); is process-local (`memory`) while `platform.replicas` is above 1; is a
 secrets adapter that is not a secret store while the platform has one; is
@@ -113,11 +112,11 @@ resolved`, one attribute per concern) and exposed as the gauge
 
 | Concern | Implemented | On request |
 |---|---|---|
-| state | dynamodb, legacy (until the kernel cutover), memory, nats (being removed) | kubernetes, postgres, valkey |
+| state | dynamodb, legacy (until the kernel cutover), memory | kubernetes, postgres, valkey |
 | secrets | memory, ssm | openbao, kubernetes, store |
 | blobs | s3, memory, legacy | postgres, off |
 | signing | file, kms | generated, transit |
-| trigger | memory, legacy, nats, dynamodb (invoke: later) | watch, http |
+| trigger | memory, legacy, dynamodb (invoke: later) | watch, http |
 | schedule | ticker (eventbridge: later) | |
 | audit | connect, log, sqs | |
 
@@ -251,7 +250,7 @@ A State or Index that can says so with two optional capabilities,
 `StateExporter` and `IndexExporter`: every live record or set under a prefix with
 its remaining lifetime. Nothing on a request path uses them. `sluis
 migrate` ([operations/migrate.md](../operations/migrate.md)) reads the issuer's
-state through them so a copied session keeps the lifetime it had; memory, NATS and
+state through them so a copied session keeps the lifetime it had; memory, DynamoDB and
 the legacy adapter have them.
 
 ### Error mapping
@@ -263,8 +262,8 @@ current store does.
 
 ## Key layout
 
-One layout, two renderings. NATS uses the dotted key as written, in a bucket
-`sluis`. DynamoDB uses one table with a partition key `pk` and a sort
+One layout, two renderings. The in-memory adapter uses the dotted key as
+written. DynamoDB uses one table with a partition key `pk` and a sort
 key `sk`: **`pk` is the key's first segment (`ses`, `rt`, `lease`) and `sk` is the
 whole key**, so a prefix listing that holds a dot (`ses.<person>.`, `ws.dir.`) is a
 `Query` on one partition with `begins_with` on `sk`, in key order and paged by
@@ -299,17 +298,17 @@ hot path.
 | `sso.<id>` | the browser-wide SSO session and the clients it covers | issuer | the session lifetime |
 | `tok.<jti>` | a minted token's own record, for userinfo and revocation | issuer | until the token expires |
 | `keyring.<kid>` | a signing key's schedule: first seen, activation | issuer replicas | 30 days, renewed on each poll |
-| `ws.dir.<id>` | a connected directory workspace: its record **and its sealed credential, one item** | console | permanent |
-| `ws.slack.<workspace>` | a connected Slack workspace: its record and its sealed client secret and bot token, one item | console | permanent |
-| `gh.org.<org>` | a connected GitHub organisation: its record and its sealed App key, one item | console | permanent |
-| `gh.link.<account>` | a GitHub account's link, keyed by the **account id**; the token pair is sealed inside the one item, the rest of the link, `RefreshingSince` and the `Revision` counter included, is plain | link flow, GitHub tick | permanent |
-| `app.gh.link` | the link App: record and sealed client secret | console | permanent |
-| `app.gh.runner.<tier>.<org>` | a runner App: record and sealed key | console | permanent |
-| `app.gh.cat.<id>` | a catalogue GitHub App: record and sealed key | console | permanent |
-| `app.slack.cat.<id>` | a catalogue Slack App: record and sealed client secret and bot token | console | permanent |
+| `ws.dir.<id>` | a connected directory workspace: its record, **with its credential in Secrets** (`private/ws.dir.<id>`) | console | permanent |
+| `ws.slack.<workspace>` | a connected Slack workspace: its record, with its client secret and bot token in Secrets | console | permanent |
+| `gh.org.<org>` | a connected GitHub organisation: its record, with its App key in Secrets | console | permanent |
+| `gh.link.<account>` | a GitHub account's link, keyed by the **account id**; the token pair is in Secrets, the rest of the link, `RefreshingSince` and the `Revision` counter included, is plain | link flow, GitHub tick | permanent |
+| `app.gh.link` | the link App: record, with the client secret in Secrets | console | permanent |
+| `app.gh.runner.<tier>.<org>` | a runner App: record, with the key in Secrets | console | permanent |
+| `app.gh.cat.<id>` | a catalogue GitHub App: record, with the key in Secrets | console | permanent |
+| `app.slack.cat.<id>` | a catalogue Slack App: record, with the client secret and bot token in Secrets | console | permanent |
 | `rec.slack.shared.<name>` | a Slack Connect channel's definition | console | permanent |
 | `rec.slack.channel.<workspace>.<name>` | a console channel's record | console | permanent |
-| `rec.console.session-key` | the key the console signs its sessions with, sealed; created by the first replica that starts | console | permanent |
+| `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`private/rec.console.session-key`); created by the first replica that starts | console | permanent |
 | `lease.<target>` | the holder of a target's tick, by id | ticks | seconds, renewed |
 | `gate.<target>.<name>` | a held-once ledger entry, a breaker, a fingerprint. Written today: `gate.github.<org>.confirm` and `.pass`, `gate.slack.<workspace>.confirm[.<channel>]` and `.pass` (an operator's confirmation of a removal set, 24 h; a request for a pass now, 24 h), `gate.github-claim.<account>` (the marker of a link claim, below) | ticks, console | by gate |
 | `share.<host>.<channel>` | a Slack Connect share: the guests that were invited and each side's state; written by the host's tick, its write enqueues the guest's tick, and the guest's tick marks its own side accepted | host tick, guest tick | 14 days while a guest is pending, then 7 days once every guest has accepted |
@@ -326,8 +325,10 @@ longer appears in this table is not written by the service. Names that go into a
 key (an id, a login, a channel) are written one segment each, every byte but a
 letter, a digit, `-` and `_` as `~XX`, so a dot in a name cannot end its segment.
 
-Secrets in a record are **sealed** before they reach the port
-([Sealing](#sealing)); the State store never sees a plaintext credential.
+A credential is never written to State. The domain stores put it in
+[Secrets](#secrets) under `private/<key>` and leave a marker in the record; the
+State store never sees a credential. (There was once a sealing step, an
+envelope under a KMS key. It is retired: ADR 0027's sealing is superseded.)
 
 ## Blob
 
@@ -366,26 +367,6 @@ target on a period as the backstop.
 A notification is a hint and may be duplicated or lost; the lease and the
 backstop make both harmless. Writing a `share.` record **is** a notification of
 the guest's tick.
-
-## Sealing
-
-Wraps and unwraps the data key of a sealed secret.
-
-| Operation | Meaning | Errors |
-|---|---|---|
-| `Wrap(plaintext key, context)` | returns the key wrapped by the key-encryption key, with the key's id | `ErrUnavailable` |
-| `Unwrap(wrapped, context)` | returns the data key | `ErrUnwrap` for a key not wrapped by this key, a wrong context, or a revoked key |
-
-A secret is sealed with AES-GCM under a fresh data key; the envelope holds the
-nonce, the ciphertext, the wrapped data key and the key id. The **context** (the
-record's key and kind) is authenticated additional data, so a sealed value copied
-under another key does not open. Rotation of the key-encryption key is a rewrap
-of the envelopes' data keys and never touches the ciphertext.
-
-Adapters: **KMS** (AWS; on Kubernetes through Pod Identity), **OpenBao Transit**,
-and a **mounted key** (a file, for an installation with neither). The signing-key
-schedule's private material is not stored by this port: the signing key stays a
-mounted file ([sluis.md](sluis.md#the-store)).
 
 ## Export
 
@@ -456,7 +437,7 @@ credential from anywhere else.
 ## Audit sink
 
 Records the service's own actions in an audit installation. Transports: `http`
-and `nats` on Kubernetes, `sqs` on AWS. A record that cannot be written durably
+on Kubernetes, `sqs` on AWS. A record that cannot be written durably
 refuses the action it describes where the action is a sign-in, as today
 ([sluis.md](sluis.md#audit)).
 
@@ -518,7 +499,7 @@ are the catalogue's, as for `connect`:
 ## Conformance
 
 One suite, written once against the port, runs against every adapter: **the
-in-memory one, NATS JetStream and DynamoDB** (a local emulator is not enough:
+in-memory one and DynamoDB** (a local emulator is not enough:
 the suite also runs against the real engine in CI for the adapter that has one
 available, and the emulator-only case is named as such: DynamoDB runs on
 LocalStack, an emulator, and has not yet run against AWS). It is the gate for
@@ -545,8 +526,7 @@ The suite asserts, at least:
   watcher that reconnects can recover by listing.
 - **Limits.** A value over the size limit is refused with `ErrTooLarge`, on every
   adapter alike.
-- **Sealing and blobs.** A sealed value does not open under another context;
-  `WriteIfVersion` loses to a newer write.
+- **Blobs.** `WriteIfVersion` loses to a newer write.
 
 An adapter that cannot pass an assertion for a stated engine reason documents the
 reason in its own page and the suite names the exception; a silent skip fails the
@@ -559,7 +539,7 @@ Business code uses the lease and the trigger as `rails.Leases` (`Acquire`,
 the lease is lost) and `port.Trigger`; a report of a target is one blob written
 alone (`rails.BlobReports.Put`).
 
-The Go interfaces are in `internal/port` (`State`, `Index`, `Blob`, `Trigger`, `Sealer`,
+The Go interfaces are in `internal/port` (`State`, `Index`, `Blob`, `Trigger`, `Secrets`,
 `Identity`; the audit sink is `audit.Recorder`, unchanged), the conformance
 suite is `internal/port/porttest`, and `internal/store` builds one set of ports
 from the `ports.adapter` key of the configuration file and hands it to the
@@ -580,16 +560,15 @@ above in three ways, all small:
 - `Identity` is `Verify(token, audiences) (subject, error)`, the seam over the
   existing verifiers; the legacy adapter is the cluster's `TokenReview`.
 
-### The S3 Blob and the KMS Sealer
+### The S3 Blob
 
-Two adapters of one port each, in `internal/port/s3blob` and
-`internal/port/kmsseal`. They are chosen by `ports.blob` and `ports.sealer`,
-which replace the Blob and the Sealer of whatever `ports.adapter` brings, so
-State `legacy` with Blob `s3` is a valid pair and so is, later, State NATS with
-Blob S3 and Sealer KMS. Both take their credentials from the platform (Pod
-Identity, IRSA, a Lambda role): no key is configured. They are marked 🧪 in
-[../capabilities.md](../capabilities.md): they pass the conformance suite on
-LocalStack, and have not yet run against AWS.
+An adapter of the Blob port, in `internal/port/s3blob`. It is chosen by
+`ports.blob`, which replaces the Blob of whatever `ports.adapter` brings, so
+State `legacy` with Blob `s3` is a valid pair and so is State DynamoDB with
+Blob S3. It takes its credentials from the platform (Pod Identity, IRSA, a
+Lambda role): no key is configured. It is marked 🧪 in
+[../capabilities.md](../capabilities.md): it passes the conformance suite on
+LocalStack, and has not yet run against AWS.
 
 **S3 Blob.** One bucket and one key prefix; a name `reports/<target>` is the
 object `<prefix>/reports/<target>`.
@@ -613,97 +592,19 @@ for a blob, so `If-None-Match: *` is not used. `ports.blob.s3.kmsKey` asks for
 SSE-KMS on every write; the request checksum is sent only where an operation
 requires it, which keeps S3-compatible stores working.
 
-**KMS Sealer.** `port.Seal` generates the 32-byte data key itself and hands it to
-the Sealer, so the adapter uses `Encrypt`, not `GenerateDataKey`.
-
-- `Wrap(dataKey, binding)` is `kms:Encrypt` under the configured key with the
-  `EncryptionContext` `{"sluis:binding": <binding>}`; `Wrapped.KeyID` is
-  the key ARN KMS reports and `Wrapped.Blob` the ciphertext.
-- `Unwrap` is `kms:Decrypt` with the same context and the configured key as
-  `KeyId`. A different binding, a ciphertext another key made, a disabled,
-  deleted-pending or unknown key, and an envelope whose key id is not the key
-  KMS used are `ErrUnwrap`; throttling, a missing permission and the network are
-  `ErrUnavailable`.
-- **There is no cache of unwrapped keys.** Every `Unwrap` is one `kms:Decrypt`
-  in CloudTrail, which is the audit of who opened which secret, and the port
-  allows no data key to outlive the call. A path that reads a sealed value per
-  request pays a KMS call for it.
-- Rotation of the key's material is KMS's own and transparent. Moving to another
-  key is a rewrap with the old key to read and the new to write, which this
-  adapter, holding one key, does not do on its own.
-
-**Conformance.** `porttest.RunGroups` runs the `blob/` and `sealing/` groups
-against each adapter: against a fake in `go test ./...`, and against LocalStack
-(S3, KMS) when `ACCESS_ROSTER_S3_URL` is set. `just test-s3` starts the pinned
+**Conformance.** `porttest.RunGroups` runs the `blob/` group against the
+adapter: against a fake in `go test ./...`, and against LocalStack (S3) when
+`ACCESS_ROSTER_S3_URL` is set. `just test-s3` starts the pinned
 LocalStack with `docker run`; CI runs the same script
 (`hack/s3-conformance.sh`) as the `s3` job, which **fails if a test skipped or
-did not run**. It also runs the Blob suite with SSE-KMS on, and checks that KMS
-itself refuses a wrong binding and a foreign key.
+did not run**. It also runs the Blob suite with SSE-KMS on.
 
 ### The in-memory adapter
 
 `internal/port/memory` implements every port in process memory, with the
 semantics above (revisions are a counter, expiry is judged by an injectable
-clock, `Watch` delivers put, delete and expiry, `Trigger` coalesces, `Sealer` is
-AES-GCM under a key that lives and dies with the store). It is what tests and the
-demonstration use, and what `ports.adapter: memory` selects.
-
-### The NATS adapter
-
-`internal/port/nats` implements State, the transitional Index and Trigger over
-one JetStream KV bucket (`ports.adapter: nats`, `ports.nats`:
-[configuration](../reference/configuration.md)). Blob, Sealer and Identity
-are not NATS's: with this adapter `internal/store` takes them from the legacy
-adapter, unless `ports.blob` and `ports.sealer` name the S3 and KMS adapters
-(which compose with any State). The package documentation holds the whole
-mapping; in short:
-
-| Operation | JetStream |
-|---|---|
-| `Get` | `kv.Get` |
-| `Create` | `kv.Create` (with the per-key TTL); over an expired record that the server has not reaped, a publish against its revision, so exactly one taker wins |
-| `Put`, `Update(rev)` | a publish to the key's subject with the expected-last-sequence header (what `kv.Put` and `kv.Update` send, with the TTL they cannot carry) |
-| `DeleteIfRevision` | `kv.Delete` with `LastRevision` (`kv.Purge` with a marker TTL when the bucket has limit markers) |
-| `List` | the stream's own subject listing under the prefix, sorted, a page token naming the last key, then a `kv.Get` per key |
-| `Watch` | a KV watch on the prefix, from now |
-| Index `Add`/`Remove`/`Members` | the key `idx.<set>.<member>` with an empty value and the lifetime; `Members` is a prefix listing |
-| Trigger `Notify`/`Subscribe` | `notify.<target>` written with a one-minute lifetime; `Subscribe` watches the prefix, so a notification crosses processes |
-
-- **Revisions are the stream sequence.** A rewrite of identical bytes changes
-  it, and a record that went A, B, A is not mistaken for one that never moved:
-  the legacy adapter's two skips do not apply, and no assertion is skipped for
-  State, Index or Trigger.
-- **Expiry is in the value and judged by the reader's clock**, nine bytes in front
-  of it, so `Get` and `List` never return an expired record whether or not the
-  server has reaped it, `Create` succeeds over one and `Update` finds it gone.
-  **On nats-server 2.11 or later** (JetStream API level 1) the bucket is also
-  created with message TTLs and limit markers, each write carries its TTL
-  (rounded up to the second) and the server reaps the record and a watcher sees
-  the expiry. **On an older server** the bucket is created without them, nothing
-  is reaped (a record is filtered, not removed, until it is written or deleted),
-  and a `Watch` reports an expiry from its own clock for records it saw written.
-- **Reads are the leader's.** A KV bucket answers `Get` from any replica by
-  default, which can be behind a write the caller was just acknowledged for; the
-  adapter turns direct gets off on its bucket, so a revoked session reads as
-  revoked, and lists from the stream's state, which the leader answers.
-- **A key is a subject.** Bytes a subject or the KV client does not allow (a `:`
-  of the legacy names) are written as `=XX`; the dots stay, so the layout is the
-  subject hierarchy.
-- **`List` scans the prefix's subjects on every page**: it is for the operator,
-  the watcher and the small per-person prefixes, not for a request over a large
-  one.
-- **The Index's expiry is per member.** An `Add` gives its member the lifetime
-  and does not extend the others'; the layout's `ses.<person>.` listing replaces
-  the Index.
-- **Credentials** are the pod's projected ServiceAccount token, presented as the
-  NATS token for the auth callout to validate (`ports.nats.tokenFile`, read afresh
-  on every connect), or a credentials file; never a value in the file.
-- **Conformance** runs against an embedded nats-server (a single node, a
-  single node without per-message TTL, and a three-node cluster with a
-  replicated bucket), with no container; State, Index and Trigger pass every
-  assertion. The Blob, Sealer and Identity assertions are skipped by name, as they
-  are other adapters' ports. A test with the real clock covers the server's own
-  TTL reaping.
+clock, `Watch` delivers put, delete and expiry, `Trigger` coalesces, and `Secrets` holds the
+values in process memory). It is what tests and the demonstration use, and what `ports.adapter: memory` selects.
 
 ### The DynamoDB adapter
 
@@ -711,9 +612,10 @@ mapping; in short:
 one DynamoDB table (`ports.adapter: dynamodb`, `ports.dynamodb`:
 [configuration](../reference/configuration.md)), with `aws-sdk-go-v2` and the
 platform's credentials (Pod Identity, IRSA, a Lambda role: none is configured).
-Like NATS it is shared by every replica and process, and Blob, Sealer and Identity
-are not its: with it `internal/store` takes them from the legacy adapter, unless
-`ports.blob` and `ports.sealer` name the S3 and KMS adapters. It is marked 🧪: it
+It is shared by every replica and process, and Blob and Identity are not its:
+with it `internal/store` takes them from the legacy adapter, unless `ports.blob`
+names the S3 adapter. A DynamoDB table holds no credential, so the domain
+stores need a secrets adapter beside it. It is marked 🧪: it
 passes the suite on LocalStack, and has not yet run against AWS.
 
 | Item attribute | Type | Meaning |
@@ -735,7 +637,7 @@ passes the suite on LocalStack, and has not yet run against AWS.
 | `Delete` | `DeleteItem` |
 | `List` | `Query` on the prefix's partition with `begins_with(sk, :p)`, consistent, filtered for expiry here, paged by a token naming the last key (`port.PageToken`); a dotless prefix is a `Scan` |
 | `Watch`, Trigger | polling, below |
-| Index `Add`/`Remove`/`Members` | an item in the partition `idx#<set>` with the member as sort key and the lifetime of the `Add`, so the lifetime is the member's (as on NATS); `Members` is one `Query` |
+| Index `Add`/`Remove`/`Members` | an item in the partition `idx#<set>` with the member as sort key and the lifetime of the `Add`, so the lifetime is the member's; `Members` is one `Query` |
 
 - **Conditional failures need no second call.** `Update` and `DeleteIfRevision`
   ask for `ReturnValuesOnConditionCheckFailure: ALL_OLD`: no old item, or an
@@ -786,14 +688,14 @@ passes the suite on LocalStack, and has not yet run against AWS.
 - **Conformance.** The suite runs over an in-memory fake of the DynamoDB API in
   `go test ./...` (the fake understands only the expressions the adapter sends) and
   over LocalStack in CI, each assertion on a table of its own, with only the other
-  ports' assertions (`blob/`, `sealing/`, `identity/`) skipped, each with its
+  ports' assertions (`blob/`, `identity/`) skipped, each with its
   reason. `hack/dynamodb-conformance.sh`, which `just test-s3` and the `s3` job run,
   fails if any other test skipped or did not run, and also runs a migration from
   memory into DynamoDB and back.
 
 ### The domain stores
 
-`internal/portstore` implements, on State and the Sealer, the interface each
+`internal/portstore` implements, on State and Secrets, the interface each
 domain store already had, so business code did not change; `internal/app` picks
 the implementation in one place (`openStores`): **any `ports.adapter` but
 `legacy` keeps the domain records on the ports, `legacy` keeps the ConfigMaps
@@ -805,9 +707,9 @@ directories, and are woken by a poll of the records' revisions, which is the
 digest of the mounted files made over keys and revisions (no value is read or
 opened for it). The kernel still runs `legacy`.
 
-| Domain (interface) | Keys | Sealed, bound to the key |
+| Domain (interface) | Keys | In Secrets (`private/<key>/<ref>`) |
 |---|---|---|
-| directory workspaces (`hub.Store`, `hub.CredentialStore`) | `ws.dir.<id>`: record and credential, one item | the credential |
+| directory workspaces (`hub.Store`, `hub.CredentialStore`) | `ws.dir.<id>`: the record, naming the credential | the credential |
 | GitHub organisations, the link App, confirmations, pass requests (`server.GitHubConnections`, `GitHubLinkApp`, `GitHubConfirmations`) | `gh.org.<org>`, `app.gh.link`, `gate.github.<org>.confirm`, `.pass` | the App key, the link App's client secret |
 | a person's GitHub link (`server.GitHubLinks`, `controller.LinkStore`) | `gh.link.<account>`, `gate.github-claim.<account>` | the token pair |
 | runner and catalogue Apps (`server.GitHubRunnerApps`, `GitHubCatalogueApps`, `SlackCatalogueApps`) | `app.gh.runner.<tier>.<org>`, `app.gh.cat.<id>`, `app.slack.cat.<id>` | the App key, or the client secret and bot token |
@@ -817,32 +719,36 @@ opened for it). The kernel still runs `legacy`.
 | `users.info` (`apply.MemberCache`) and the Slack Connect hand-off (`controller.Handoff`) | `cache.slack.user.<workspace>.<id>`, `share.<host>.<channel>` | — |
 | the OAuth client (`settings.Store`) | none: see below | — |
 
-- **Sealing.** A secret is `port.Seal`ed with **the item's own key as the
-  binding**, so an item copied under another key does not open (`ErrUnwrap`: the
-  tests copy raw items between keys and assert it, for the record store and for
-  every kind of App). A read opens only what it needs: listing the organisations,
-  workspaces or Apps never calls the Sealer, and with KMS an open is one
-  `kms:Decrypt` in CloudTrail. A link read with its tokens (the controller's
-  check) costs one per self-link; the console's page, which shows
-  `link.Public()`, reads the same list and pays the same today.
-  Starting on an adapter with no Sealer (the legacy one's, which refuses on
-  purpose, and NATS without `ports.sealer`) **stops the start**, naming
-  `ports.sealer`, instead of failing on the first credential an operator
-  connects.
-- **A record and its credential are one item**, written in one
-  compare-and-swap: the credential-first, record-second ordering of the kube
-  stores and the copy of the record inside the credential (which a restore read)
-  are not needed, and neither is the Slack records' recovery mirror. `ReconcileRecords`
-  is a no-op there. A directory workspace's record is rewritten by every probe
-  and carries its sealed credential along untouched; a credential saved before its
-  record is an item that is not listed.
+- **Secrets, not sealing.** A credential is written to Secrets under
+  `private/<key>/<ref>` and the item in State names it by its ref; State never
+  holds one. (The envelope-and-KMS sealing that was here is retired, together
+  with the `sluis:binding` encryption context and `ports.sealer`.) The ref is
+  fresh on every write, so a credential is never replaced in place: a writer
+  that loses the compare-and-swap of the item has written a secret nobody
+  names, which is removed, and cannot have replaced the one the winner's item
+  names (a spent single-use refresh token never overwrites the new pair). The
+  credential is written before the item that names it, and the one it replaces is
+  removed after (best effort: a leftover is unreachable). The copy of the record
+  inside the credential (which a restore read) and the Slack records' recovery
+  mirror are not needed, and `ReconcileRecords` is a no-op there. A directory
+  workspace's record is rewritten by every probe and carries its credential's
+  name along untouched; a credential saved before its record is an item that is
+  not listed. A read opens only what it needs: listing the organisations,
+  workspaces or Apps never reads Secrets, and a link read with its tokens (the
+  controller's check) costs one `Get` per self-link. Key characters a secret
+  path does not allow (the `~XX` of a name) are written as `u-` and the
+  segment's bytes in hex. Starting on an adapter set with no Secrets (the legacy
+  one's, and DynamoDB's until a secrets adapter is chosen) **stops the start**,
+  naming the secrets adapter, instead of failing on the first credential an
+  operator connects. A record and its credential are no longer one item: the
+  order above is what stands in for it.
 - **Every update is a compare-and-swap** (`editRaw`): read, change, `Update(rev)`
   or `Create`, retried against what a concurrent writer left, 16 times. The
   stores that took `decide` callbacks (`Apply`) keep their contract: `decide` runs
   again on every retry, and a conflict that outlasts them is
   `ErrSharedConflict` or `ErrChannelConflict`.
 - **A person's link is one item and one compare-and-swap.** `gh.link.<account>`
-  holds the link, its token pair sealed. The link's own `Revision` (which a check
+  holds the link, with its token pair named in Secrets. The link's own `Revision` (which a check
   uses so that a person who linked again meanwhile is never overwritten) is
   checked **under the key's revision**, so of two writers that read one link
   exactly one writes it. The refresh is the controller's two phase write, kept:
@@ -855,8 +761,8 @@ opened for it). The kernel still runs `legacy`.
   finished (the marker cleared, a pair that does not need renewing) it checks
   with the winner's pair, otherwise it leaves the link to the next pass. A crash
   between (1) and (3) leaves the marker, as before, and the next pass asks
-  whether the old token still works. The test runs two controllers over two
-  connections to one NATS bucket, with a barrier that makes both read the same
+  whether the old token still works. The test runs two controllers over one
+  State, with a barrier that makes both read the same
   revision before either writes, and counts the exchanges at the fake GitHub:
   exactly one. With the compare removed it fails with two.
 - **A claim spans keys, so it is steps with a marker.** `Claim` writes
@@ -872,13 +778,12 @@ opened for it). The kernel still runs `legacy`.
 - **The Slack Connect hand-off** is `share.<host>.<channel>`. After Slack accepts
   an invitation the host's tick writes the guest's side as `pending` (the write is
   the notification: it asks the guest's runner to tick through the Trigger, which
-  on NATS crosses processes; a lost notification is answered at the guest's next
+  crosses processes on a shared State; a lost notification is answered at the guest's next
   sweep), the guest's tick accepts the invitation and marks its side `accepted`,
   and the host reads it. The record lives 14 days while a guest is pending (as
   long as the invitation) and 7 days once every guest has accepted. The
   process-local hint stays when no hand-off is configured, and is used if the
-  write fails. The tests run the host and the guest as two controllers with two
-  connections to one bucket.
+  write fails. The tests run the host and the guest as two controllers over one State.
 - **The `users.info` cache** answers `Observe`'s who-is-this lookup of a channel's
   other members, 24 hours, shared by every runner; the account of an address, who
   the token is, the channels and their members are read from Slack every pass,
@@ -904,8 +809,7 @@ opened for it). The kernel still runs `legacy`.
   pass. The names a record is kept under are what each swap protects.
 - **Conformance.** `porttest` is unchanged: nothing generic was needed. The
   domain tests (`internal/portstore`, the two controllers and `internal/app`)
-  run each store over **memory and an embedded NATS, each sealed by the in-process
-  Sealer and by the KMS adapter over a fake KMS** (`portstoretest`), and open two
+  run each store over **memory State and Secrets** (`portstoretest`), and open two
   "processes" onto one State where the point is a second replica.
 
 ### The legacy adapter
@@ -960,9 +864,6 @@ thing, and the conformance suite names the exception:
 - **Tick leases are exclusive across processes only with a Valkey.** The
   controllers are configured with none, so with this adapter a controller's
   leases are held in its own memory and the chart refuses more than one replica.
-- **`Sealer` is `ErrUnsupported`** (`sealing/context` is skipped): nothing is
-  sealed today, and a process-local key would produce envelopes no restart could
-  open.
 - **Listing is a scan** (`SCAN` of every primary, or one `GET` of the ConfigMap),
   for an operator or a watcher and not a request path.
 

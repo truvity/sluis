@@ -189,7 +189,7 @@ and what lands in the store **is** the credential — name a store the
 installation already trusts with material of that weight.
 
 **On a State adapter** (`ports.adapter` other than `legacy`) there are no such
-Secrets: the credentials are sealed in State, and the service copies the five
+Secrets: the credentials are in the Secrets port, and the service copies the five
 bundles into OpenBao itself, entry for entry as the Secrets held them, with
 `exports` of `source: bundle` ([Exports](../reference/configuration.md#exports-and-the-export-port)).
 The copy is made at start, within seconds of a change and every hour; it is never a
@@ -197,7 +197,7 @@ dependency, and a failed one is the alert `SluisExportFailing`
 ([telemetry](telemetry.md#sluisexportfailing)). To restore from one, read the key
 (`bao kv get`, [0013](../decisions/0013-openbao-access-through-the-bao-cli.md)), write each entry of its JSON object back as a key of the Secret
 of that name, and proceed as below. The service does not read an export back: the
-sealed State is the source of truth, and a lost State with its key-encryption key is
+Secrets port is the source of truth, and a lost Secrets store is
 what the copy is for.
 
 **Restore** by putting the five Secrets back into the namespace, with
