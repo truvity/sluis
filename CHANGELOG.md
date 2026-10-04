@@ -1,5 +1,14 @@
 ## Unreleased
 
+## v1.61.2
+
+Released automatically as a patch: last-known groups of identities are now kept in the shared State, fixing identity refusals after a cold start on Lambda or during a rollout when the directory cannot be vouched for.
+
+### Fixed
+
+- **Last-known groups live in the shared State, not in process memory, so a new instance finds what the previous one learned.**
+  On Lambda or after a rollout that replaces a replica, a fresh instance had no last-known groups and refused every identity while the directory could not be vouched for. They now live under `issuer:held:<identity>` in the State with a lifetime of the hold window (groups and time only); memory is used only when there is no State or it fails.
+
 ## v1.61.1
 
 Released automatically as a patch: the Lambda directory snapshot was refreshed on demand and every 15 minutes, fixing sign-in failures after 30 minutes.
