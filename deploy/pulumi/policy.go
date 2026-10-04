@@ -325,6 +325,51 @@ type functionPolicyIn struct {
 	invokeFunctionArns []string
 }
 
+// privateStatements is a function's grant on /sluis/private, narrowed to what
+// the function does there.
+//
+//   - http reads all of it (the operator's config/*, and the credentials of its
+//     records) and writes only credentials/*: it never writes config/*, which is
+//     the operator's and the stack's.
+//   - a controller reads and writes what it is told to by name (its own secret
+//     files, its credentials/*), but config/* is the http function's: the recovery
+//     password, the state secret, the OAuth client and the declared clients. An
+//     explicit Deny, which wins over any Allow, keeps a leaked controller role
+//     from reading, replacing or deleting them.
+func privateStatements(in functionPolicyIn) []statement {
+	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
+	if in.role == RoleHTTP {
+		return []statement{
+			{
+				"Sid":      sidPrivate,
+				"Effect":   "Allow",
+				"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
+				"Resource": parameterArns(in.region, in.account, PrivateParameterPrefix),
+			},
+			{
+				"Sid":      sidPrivate + "Write",
+				"Effect":   "Allow",
+				"Action":   []string{ssmPutParameter, ssmDeleteParameter},
+				"Resource": parameterArns(in.region, in.account, CredentialsParameterPrefix),
+			},
+		}
+	}
+	return []statement{
+		{
+			"Sid":      sidPrivate,
+			"Effect":   "Allow",
+			"Action":   all,
+			"Resource": parameterArns(in.region, in.account, PrivateParameterPrefix),
+		},
+		{
+			"Sid":      sidPrivate + "NotConfig",
+			"Effect":   "Deny",
+			"Action":   all,
+			"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix),
+		},
+	}
+}
+
 // functionPolicy is the role of one function. All three get the storage, the
 // table, their secrets and the exports, the audit queue and their own logs; the
 // signing key and the right to run another function's pass are the http
@@ -338,20 +383,13 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	}}
 	st = append(st, storageStatements(in.bucketArn)...)
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
-	st = append(st,
-		statement{
-			"Sid":      sidPrivate,
-			"Effect":   "Allow",
-			"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter},
-			"Resource": parameterArns(in.region, in.account, PrivateParameterPrefix),
-		},
-		statement{
-			"Sid":      sidExport,
-			"Effect":   "Allow",
-			"Action":   []string{ssmPutParameter, ssmDeleteParameter},
-			"Resource": parameterArns(in.region, in.account, ExportParameterPrefix),
-		},
-	)
+	st = append(st, privateStatements(in)...)
+	st = append(st, statement{
+		"Sid":      sidExport,
+		"Effect":   "Allow",
+		"Action":   []string{ssmPutParameter, ssmDeleteParameter},
+		"Resource": parameterArns(in.region, in.account, ExportParameterPrefix),
+	})
 	st = append(st, parameterKeyStatements(in.parameterKeyArn)...)
 	st = append(st, statement{
 		"Sid":      sidAudit,

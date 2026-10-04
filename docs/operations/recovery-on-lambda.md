@@ -22,7 +22,13 @@ reads it:
 - exported by name only: the `RecoveryPasswordParameter` output holds
   `/sluis/private/config/recovery/password`, never the value.
 
-The github and slack functions are not given it.
+The github and slack functions are not given it, and their roles cannot read it:
+the library's policy denies them `ssm:Get*`, `Put` and `Delete` on everything under
+`/sluis/private/config/` (the recovery password, the state secret, the OAuth client
+and the declared clients), which is the http function's. A controller's own secret
+files therefore live outside `config/`, e.g. `/sluis/private/github/...`. The http
+role reads all of `/sluis/private/` but writes only `/sluis/private/credentials/`
+(and `/sluis/export/`): it never writes `config/`.
 
 ## Reading it
 
@@ -34,7 +40,8 @@ aws ssm get-parameter --with-decryption \
 
 Reading it needs `ssm:GetParameter` on `/sluis/private/config/*` (and `kms:Decrypt`
 on `ParameterKeyArn` when one is set), which is the stack's operators and not the
-Lambda roles' business. The password is read from a terminal and not pasted into a
+Lambda roles' business (the http role may read it, to write the file at cold start;
+the controllers' roles may not). The password is read from a terminal and not pasted into a
 ticket or a chat.
 
 ## Signing in
@@ -52,6 +59,14 @@ attempts`, `recovery sign-in is turned off`) and a failure to check as `failure`
 refused attempt names nobody (`anonymous`), and none carries the password. A
 successful one is written durably *before* the session exists, and no session is
 issued when the audit trail cannot be written.
+
+Refusals that cost nothing (recovery turned off, throttled) are recorded once a
+minute per instance with a count, so a loop of requests cannot flood the trail; every
+real check, right or wrong, is recorded.
+
+On Lambda the password is never generated: with recovery on and no
+`recovery.passwordFile` (or `adminPasswordEnv`) the service logs an ERROR and builds no
+recovery, rather than printing a password into the function's log.
 
 After ten refused attempts within a minute a function instance answers 429 for the
 next minute. The count lives in each instance, so it bounds the cost of guessing per
@@ -91,3 +106,12 @@ digests in constant time.
 service's own key: for any installation that is not in a cluster, the file the
 password is read from at start. Unset, the service takes `adminPasswordEnv`, or
 generates one and prints it once.
+
+## Hardening
+
+- `API.KeepDefaultEndpoint: true` (for a cutover's acceptance run) serves the
+  default `execute-api` endpoint without the custom domain's mutual TLS, so recovery
+  is then reachable without the client certificate. Leave it off in service.
+- Optionally cap the http function's reserved concurrency: each recovery check costs
+  memory on purpose, and the throttle is per instance, so a ceiling on instances is a
+  ceiling on guesses per minute.

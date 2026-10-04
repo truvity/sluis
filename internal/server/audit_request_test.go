@@ -248,3 +248,34 @@ func TestRecoveryTurnedOffRefusesWithAMessageAndARecord(t *testing.T) {
 		t.Errorf("written = %v, want one denied record saying it is off", trail.Actions())
 	}
 }
+
+// A refusal that costs nothing is anybody's to send in a loop: it is recorded
+// once a window with a count, while a real check is recorded every time.
+func TestCheapRecoveryRefusalsAreRecordedOncePerWindow(t *testing.T) {
+	t.Parallel()
+	var c cheapRefusals
+	start := time.Now()
+	if n, ok := c.note("off", start); !ok || n != 1 {
+		t.Fatalf("first = %d, %v", n, ok)
+	}
+	for i := 1; i <= 5; i++ {
+		if _, ok := c.note("off", start.Add(time.Duration(i)*time.Second)); ok {
+			t.Fatalf("attempt %d inside the window was recorded", i)
+		}
+	}
+	if _, ok := c.note("throttled", start.Add(time.Second)); !ok {
+		t.Error("another reason shares the window")
+	}
+	if n, ok := c.note("off", start.Add(cheapWindow)); !ok || n != 6 {
+		t.Errorf("next window = %d, %v, want one record standing for 6", n, ok)
+	}
+
+	trail := audittest.New(t)
+	handler := recoveryServer(t, trail, 0)
+	for range 3 {
+		recoverThroughConsole(handler)
+	}
+	if len(trail.Records()) != 3 {
+		t.Errorf("real checks recorded %d times, want 3", len(trail.Records()))
+	}
+}
