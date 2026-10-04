@@ -280,7 +280,7 @@ func serveSchema() m {
 		"audit": obj("The audit installation this service records to. Unset keeps the trail in the log only.", m{
 			"writer":                  url("The installation's receiver."),
 			"tokenFile":               str("This workload's projected service-account token, presented on every call."),
-			"queryURL":                url("The query service, for the console's Audit page. Needs `writer`."),
+			"queryURL":                url("The query service, for the console's Audit page. Its own setting: it needs no `writer`, so the page works with the `sqs` and `log` sinks. A path prefix (`https://audit.example/sluis`) is kept and the procedure path appended."),
 			"audience":                strDefault("The client whose audience the Audit page's tokens carry.", "audit"),
 			"forwardedForTrustedHops": integer("How many of the deployment's own proxies append to X-Forwarded-For; zero records the peer.", 0, 0),
 		}),
@@ -291,8 +291,6 @@ func serveSchema() m {
 		m{
 			"allOf": []any{
 				m{"if": m{"required": []string{"valkey"}}, "then": m{"properties": m{"valkey": m{"required": []string{"address"}}}}},
-				m{"if": m{"required": []string{"audit"}, "properties": m{"audit": m{"required": []string{"queryURL"}}}},
-					"then": m{"properties": m{"audit": m{"required": []string{"writer"}}}}},
 			},
 		})
 }

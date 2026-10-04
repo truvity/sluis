@@ -243,16 +243,15 @@ func TestAnEmptyOrMissingFileIsRefused(t *testing.T) {
 // one, an enum, a listener that is not an address.
 func TestTheSchemaRefusesWhatTheEnvironmentWasTrustedWith(t *testing.T) {
 	for name, extra := range map[string]string{
-		"a duration that is not one":           "lifetimes: {token: a while}\n",
-		"a zero absolute lifetime":             "lifetimes: {absolute: 0}\n",
-		"a log level that is not one":          "log: {level: chatty}\n",
-		"a store that is not one":              "store: postgres\n",
-		"a scoping mode that is not one":       "groupsScoping: sometimes\n",
-		"a runner tier that is not one":        "github: {runnerTiers: ['Not A Tier']}\n",
-		"a listener that is not an address":    "listen: {address: '8080'}\n",
-		"a negative trusted hop count":         "audit: {writer: 'http://a:1', forwardedForTrustedHops: -1}\n",
-		"the query service without the writer": "audit: {queryURL: 'http://q:1'}\n",
-		"a signing key list that is a string":  "signingKey: {additionalFiles: /k}\n",
+		"a duration that is not one":          "lifetimes: {token: a while}\n",
+		"a zero absolute lifetime":            "lifetimes: {absolute: 0}\n",
+		"a log level that is not one":         "log: {level: chatty}\n",
+		"a store that is not one":             "store: postgres\n",
+		"a scoping mode that is not one":      "groupsScoping: sometimes\n",
+		"a runner tier that is not one":       "github: {runnerTiers: ['Not A Tier']}\n",
+		"a listener that is not an address":   "listen: {address: '8080'}\n",
+		"a negative trusted hop count":        "audit: {writer: 'http://a:1', forwardedForTrustedHops: -1}\n",
+		"a signing key list that is a string": "signingKey: {additionalFiles: /k}\n",
 	} {
 		if _, err := config.LoadServe(write(t, minimalIssuer+extra)); err == nil {
 			t.Errorf("%s was accepted", name)
@@ -417,5 +416,24 @@ func TestThePortsBlobAndSealerAreChecked(t *testing.T) {
 	}
 	if _, err := config.LoadControllerGitHub(write(t, "policyDir: /p\nconsoleURL: http://c:8080\nports: {blob: {adapter: s3, s3: {bucket: b}}}\n")); err != nil {
 		t.Errorf("a controller refused ports.blob: %v", err)
+	}
+}
+
+// The Audit page's query service is its own setting: with the sqs or log sink
+// there is no writer, and the page must still be configurable.
+func TestTheQueryURLNeedsNoWriter(t *testing.T) {
+	for name, extra := range map[string]string{
+		"alone":             "audit: {queryURL: 'https://audit.example/sluis'}\n",
+		"with the sqs sink": "audit: {queryURL: 'https://audit.example/sluis'}\nadapters: {audit: {adapter: sqs, settings: {queueURL: 'https://sqs.eu-west-1.amazonaws.com/1/q', region: eu-west-1}}}\n",
+		"with the log sink": "audit: {queryURL: 'http://q:1', audience: audit}\nadapters: {audit: {adapter: log}}\n",
+	} {
+		f, err := config.LoadServe(write(t, minimalIssuer+extra))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if f.Audit == nil || f.Audit.QueryURL == "" || f.Audit.Writer != "" {
+			t.Errorf("%s: audit = %+v, want a query URL and no writer", name, f.Audit)
+		}
 	}
 }

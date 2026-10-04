@@ -226,6 +226,20 @@ of [GetWebIdentityToken](https://docs.aws.amazon.com/STS/latest/APIReference/API
    at the exchange, which shows up as a `503` plus the issuer's sentence in
    the extension's log line.
 
+## The console's Audit page on Lambda
+
+With the `sqs` audit sink there is no audit receiver, and the Audit page does not
+need one: `audit.queryURL` is its own setting. Point it at the query service,
+for example `https://audit.example.org/sluis`; a path prefix is kept and the
+procedure path appended (`.../sluis/audit.v1.QueryService/Search`).
+
+The browser never calls the query service. `sluis-http` forwards the page's
+calls from the console's own origin, server-side, with a token it mints for the
+person signed in (audience `audit.audience`, default `audit`). So the query host
+needs **no CORS policy**, and the function needs egress to it: the functions
+run outside any VPC, so the query host must be publicly reachable (through
+Cloudflare, for example) and accept those tokens.
+
 ## Attaching the layer
 
 Each release carries one zip per architecture:

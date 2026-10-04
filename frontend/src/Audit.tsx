@@ -31,8 +31,8 @@ export function AuditPage({ query, connected }: { query?: URLSearchParams; conne
       </AuditProvider>
       ) : (
         <Nothing>
-          No audit installation is connected to this console, so nothing is kept beyond the service's log. Set audit.writer,
-          audit.query to connect one.
+          No audit installation is connected to this console, so nothing is kept beyond the service's log. Set audit.queryURL
+          to show the trail, and audit.writer or an audit adapter to keep one.
         </Nothing>
       )}
     </Page>
