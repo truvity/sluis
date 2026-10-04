@@ -183,3 +183,46 @@ func TestSigningKeyIsTheLegacyMappingOfTheSigningAdapter(t *testing.T) {
 		t.Fatalf("signing = %s, want file", table.Name(port.ConcernSigning))
 	}
 }
+
+// A bare `adapters.signing: {adapter: kms}` leaves the settings where they have
+// always been, in `signingKey.kms`, and does not hide them.
+func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
+	ctx := context.Background()
+	kms := &config.SigningKeyKMS{Keys: []string{"alias/a"}, StateSecretFile: "/s"}
+	_, table, err := Config{Adapter: AdapterLegacy, sel: selection{
+		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms"}},
+	}}.plan(ctx, quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := table[port.ConcernSigning]
+	if got.Adapter != "kms" || got.Settings["stateSecretFile"] != "/s" || got.Source != port.SourceOverride {
+		t.Errorf("a bare kms adapter lost signingKey.kms: %+v", got)
+	}
+
+	// The wrapped adapter, too.
+	wrapped := &config.SigningKeyKMSWrapped{KeyID: "alias/w", StateSecretFile: "/s"}
+	_, table, err = Config{Adapter: AdapterLegacy, sel: selection{
+		SigningWrapped: wrapped, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms-wrapped"}},
+	}}.plan(ctx, quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := table[port.ConcernSigning]; got.Adapter != "kms-wrapped" || got.Settings["keyId"] != "alias/w" {
+		t.Errorf("a bare kms-wrapped adapter lost signingKey.kmsWrapped: %+v", got)
+	}
+
+	// Settings of its own win whole; another adapter's block is not borrowed.
+	_, table, _ = Config{Adapter: AdapterLegacy, sel: selection{
+		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms", Settings: map[string]any{"keys": []any{"alias/b"}, "stateSecretFile": "/other"}}},
+	}}.plan(ctx, quiet)
+	if got := table[port.ConcernSigning]; got.Settings["stateSecretFile"] != "/other" {
+		t.Errorf("the override's own settings were replaced: %+v", got)
+	}
+	_, table, _ = Config{Adapter: AdapterLegacy, sel: selection{
+		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms-wrapped"}},
+	}}.plan(ctx, quiet)
+	if got := table[port.ConcernSigning]; len(got.Settings) != 0 {
+		t.Errorf("kms-wrapped borrowed signingKey.kms: %+v", got)
+	}
+}
