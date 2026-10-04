@@ -6,6 +6,16 @@
   server-side, so the query host needs no CORS; a base URL with a path prefix
   (`https://audit.example.org/sluis`) is kept and the procedure path appended.
 
+- **`sluis migrate` moves a whole installation to AWS.** By default it copies the State
+  records, the secrets (to the Secrets port), the controllers' reports (to S3) and the
+  issuer's key ring schedule, and leaves the issuer's sessions, refresh tokens, codes in
+  flight and Index sets behind (`--with-sessions` copies them); `issuer:kms:*` is never
+  copied. `--dry-run` validates sizes against the State and Secrets limits and key
+  validity, prints a summary per concern and exits non-zero if anything would be
+  refused (so does a real run, before it writes). `--kubeconfig`, `--kube-context` and
+  `--namespace` read the legacy namespace from a workstation. The runbook has a "Cutover:
+  migrating an installation" section.
+
 - **Deployment guides and a generated adapter matrix.** `docs/guides/choosing-a-deployment.md`
   opens with the decision tree and modifiers, then the presets and support levels
   (`aws-hybrid` is the implemented, maintained path); `docs/guides/diy-adapter.md` is the

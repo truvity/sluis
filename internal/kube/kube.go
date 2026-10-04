@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Label keys the hub puts on everything it writes, so that a human — or a
@@ -106,6 +107,32 @@ func InCluster(prefix string) (*Client, error) {
 		return nil, err
 	}
 	return NewClient(api, ns, prefix), nil
+}
+
+// FromKubeconfig returns a client for an operator's workstation: the
+// kubeconfig's current context, or the named one, and the namespace named, or
+// the context's own. An empty kubeconfig is the default loading rules
+// ($KUBECONFIG, then ~/.kube/config).
+func FromKubeconfig(prefix, kubeconfig, kubeContext, namespace string) (*Client, error) {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if kubeconfig != "" {
+		rules.ExplicitPath = kubeconfig
+	}
+	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext})
+	cfg, err := cc.ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("kube: read the kubeconfig: %w", err)
+	}
+	if namespace == "" {
+		if namespace, _, err = cc.Namespace(); err != nil {
+			return nil, fmt.Errorf("kube: the kubeconfig's namespace: %w", err)
+		}
+	}
+	api, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("kube: build the client: %w", err)
+	}
+	return NewClient(api, namespace, prefix), nil
 }
 
 // NewClient returns a client over a given API, for tests and for a caller

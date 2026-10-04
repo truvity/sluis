@@ -273,6 +273,83 @@ with the records, so the first install after a total loss records the new team.
 Console channel and Slack Connect records, and each workspace's owner, are lost
 and must be re-entered; channels in Slack are untouched.
 
+## Cutover: migrating an installation
+
+Moving an installation from Kubernetes (the `legacy` adapter: ConfigMaps, Secrets and
+Valkey) to the AWS hybrid preset (DynamoDB for State, SSM for secrets, S3 for the
+controllers' reports) is one command, `sluis migrate`, run from an operator workstation
+with AWS credentials and kube access (the mechanics and the report are in
+[migrate.md](migrate.md); the decision is ADR 0031). The legacy objects are never
+changed or deleted, so the rollback is to scale the old Deployments back up.
+
+**What moves.** The State records (every key, value and lifetime; a record that has
+expired is not copied); the secrets the domain stores keep (a workspace credential, an App
+key, a link's token pair, the console's session key), written to the Secrets port under
+`private/...`; the controllers' last reports, to S3; and the issuer's **key ring
+schedule** (`issuer:keyring:*`, the tombstones of retired keys included), so that the old
+file key's public half stays published through its overlap and a token issued before the
+cutover keeps verifying. **What does not move.** The issuer's sessions, refresh tokens,
+codes in flight and Index sets (people sign in again: it is the one visible effect), and
+`issuer:kms:state-secret-fingerprint` (the new installation's secret differs, and a stale
+fingerprint would stop it from starting).
+
+**Before the window.**
+
+1. Write the destination `serve` configuration (`new.yaml`): `ports.adapter: dynamodb`
+   with the table and region, the `ssm` secrets adapter with its root, `ports.blob` with
+   the bucket. Keep the legacy file (`old.yaml`) as the Deployment reads it, with
+   `valkey.address` pointing at a `kubectl port-forward` to the Valkey, so that the key
+   ring can be read.
+2. For the cutover's Lambda configuration set `signingKey.activationDelay` to its minimum,
+   equal to the poll interval (for example `30s`). The old file key's signer is not on
+   Lambda, so the new KMS key signs only after the delay; token requests fail closed until
+   then. Expect about 30 to 60 seconds with no new tokens right after the switch.
+3. **Dry-run against the live installation.** It reads everything, converts, validates and
+   writes nothing, and needs no freeze:
+
+   ```
+   sluis migrate --from old.yaml --to new.yaml \
+     --kubeconfig ~/.kube/config --kube-context <context> --namespace <namespace> --dry-run
+   ```
+
+   The summary on stderr counts items and bytes per concern (state, secrets, blobs) and
+   lists what the destination would **refuse**: a record over the State limit (256 KiB,
+   inside DynamoDB's 400 KB item), a credential over the Secrets limit (8 KiB), an invalid
+   key. Anything refused makes the exit status non-zero, in the dry run and in the real
+   run; `--overwrite` does not override it. Fix what it names (or, for a record that is
+   truly dead, delete it) and dry-run again until it exits 0.
+
+**In the window.**
+
+4. **Freeze.** Scale the issuer, the console and both controllers to 0 and wait until the
+   pods are gone. Sign-in is down from here until the switch.
+5. **Run.**
+
+   ```
+   sluis migrate --from old.yaml --to new.yaml \
+     --kubeconfig ~/.kube/config --kube-context <context> --namespace <namespace> \
+     --i-have-stopped-writers
+   ```
+
+   It is idempotent: it creates what is absent, leaves what is already equal alone, and
+   after a failure the same command completes the copy. If the destination already holds a
+   **different** (possibly newer) value for a key, the run stops before writing anything and
+   names the key; pass `--overwrite` only when the source's value is the one to keep.
+6. **Verify counts.** The run reads both sides again; the report must say `ok: true`, and
+   `totals.verified` equal to `totals.source` less the refused (none). Compare the
+   `concerns` counts with the dry run's. Run `cmd/acceptance` against the API Gateway URL.
+7. **Switch.** Point DNS at the new origin. People sign in again; a token issued before
+   the cutover still verifies. The first tokens come after the activation delay (step 2).
+8. **Afterwards.** Leave the Deployments at 0 and the ConfigMaps, Secrets and Valkey as
+   they are until the new installation has been healthy for as long as you want a rollback
+   to stay cheap.
+
+**Rollback.** Before the switch: scale the old Deployments back up; nothing on the legacy
+side was written. After the switch: point DNS back and scale the old Deployments up. The
+legacy data was never deleted, but it does not have what the new installation wrote since
+the switch; to carry that back, stop the new writers and run `sluis migrate` the other way
+round with `--overwrite` (see migrate.md, Rollback).
+
 ## Rotating
 
 **The Secrets and ConfigMaps are a projection, not a live source.**

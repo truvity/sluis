@@ -41,6 +41,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/store"
@@ -81,6 +82,9 @@ var (
 		"--dry-run reads and writes nothing and needs neither")
 	// ErrConflict is a destination that already holds a different value.
 	ErrConflict = errors.New("migrate: the destination already holds a different value")
+	// ErrRefused is a source item the destination would refuse: nothing is
+	// written until it is dealt with, and --overwrite does not change that.
+	ErrRefused = errors.New("migrate: the destination would refuse source items")
 	// ErrMismatch is a copy that did not verify.
 	ErrMismatch = errors.New("migrate: the destination does not match the source after the copy")
 	// ErrUnreadable is a source item that cannot be presented through its store.
@@ -110,6 +114,11 @@ type Options struct {
 	// source. A copy is a snapshot: a write during it is a copy of neither
 	// state. A run that writes refuses without it.
 	WritersStopped bool
+	// Sessions also copies the issuer's logins in progress (sessions, refresh
+	// tokens, the codes in flight, the Index sets). An installation's move does
+	// not: people sign in again, and only the key ring's schedule is copied, so
+	// that a token issued before the move keeps verifying.
+	Sessions bool
 	// Skip names domains left out (see the Domain constants).
 	Skip []string
 	// Blobs says whether the controllers' reports are copied.
@@ -141,6 +150,26 @@ type Step struct {
 	// not.
 	Verified   int `json:"verified"`
 	Mismatched int `json:"mismatched,omitempty"`
+	// Refused is how many the destination would refuse (an item over a size
+	// limit, an invalid key): they are listed under refused and stop the run
+	// before anything is written.
+	Refused int `json:"refused,omitempty"`
+	// Bytes is the size of the readable source items (a record with its
+	// credentials, a blob, a State value); Secrets and SecretBytes are the
+	// credentials among them, which go to the Secrets port.
+	Bytes       int `json:"bytes"`
+	Secrets     int `json:"secrets,omitempty"`
+	SecretBytes int `json:"secretBytes,omitempty"`
+}
+
+// ConcernSummary is what a run moves for one concern of the installation:
+// state records, secrets, blobs. Items and Bytes are what the source holds and
+// the run would write; Refused is what the destination would not take.
+type ConcernSummary struct {
+	Concern string `json:"concern"`
+	Items   int    `json:"items"`
+	Bytes   int    `json:"bytes"`
+	Refused int    `json:"refused,omitempty"`
 }
 
 // Problem names one item that is not as it should be. Key is the item's key
@@ -170,6 +199,10 @@ type Report struct {
 	Conflicts   []Problem `json:"conflicts,omitempty"`
 	Unreadable  []Problem `json:"unreadable,omitempty"`
 	Mismatches  []Problem `json:"mismatches,omitempty"`
+	// Refused are the items the destination would refuse, and why.
+	Refused []Problem `json:"refused,omitempty"`
+	// Concerns is the summary per concern: state, secrets, blobs.
+	Concerns []ConcernSummary `json:"concerns,omitempty"`
 	// Notes say what was left out and why (a domain skipped, a side with
 	// nothing to read).
 	Notes []string `json:"notes,omitempty"`
@@ -195,6 +228,11 @@ type entry struct {
 	unreadable string
 	// shown is the key as a report names it.
 	shown string
+	// secrets are the sizes of the credentials the item carries, which the
+	// destination keeps in its Secrets port and not in State.
+	secrets []int
+	// refuse says why the destination would not take the item, "" if it would.
+	refuse string
 }
 
 // kit is what a step reads and writes: one side's domain stores and ports.
@@ -209,6 +247,9 @@ type step struct {
 	// write puts one entry on the destination; old is what the destination
 	// holds under the id now, nil when nothing.
 	write func(ctx context.Context, k kit, e entry, old *entry) error
+	// check says why the destination would refuse an entry, "" if it would
+	// take it. Optional: a step with none has only the generic checks.
+	check func(e entry) string
 	// lifetimes says the entries carry a lifetime that a copy must keep.
 	lifetimes bool
 }
@@ -301,9 +342,13 @@ func (r *run) steps(from, to Side) []step {
 	for _, k := range kinds() {
 		out = append(out, kindStep(k))
 	}
-	out = append(out, issuerSteps()...)
+	out = append(out, issuerSteps(r.opt.Sessions)...)
 	out = append(out, blobSteps()...)
 
+	if !r.opt.Sessions {
+		r.note("the issuer's sessions, refresh tokens, codes in flight and Index sets are not copied: " +
+			"people sign in again (--with-sessions copies them); the key ring's schedule is")
+	}
 	var kept []step
 	for _, s := range out {
 		switch {
@@ -365,6 +410,10 @@ func (r *run) execute(ctx context.Context, steps []step) error {
 	}
 	if len(r.report.Unreadable) > 0 {
 		r.note("%d source items cannot be read through their store and are not copied; they are listed under unreadable", len(r.report.Unreadable))
+	}
+	if n := len(r.report.Refused); n > 0 {
+		p := r.report.Refused[0]
+		return fmt.Errorf("%w: %d items, the first %s/%s %s (%s): nothing was written", ErrRefused, n, p.Domain, p.Kind, p.Key, p.Reason)
 	}
 	if n := len(r.report.Conflicts); n > 0 && !r.opt.Overwrite {
 		p := r.report.Conflicts[0]
@@ -453,6 +502,16 @@ func (r *run) plan(ctx context.Context, s step) (*stepRun, error) {
 			continue
 		}
 		sr.out.Source++
+		sr.out.Bytes += len(e.canon)
+		for _, n := range e.secrets {
+			sr.out.Secrets++
+			sr.out.SecretBytes += n
+		}
+		if why := refusal(s, e); why != "" {
+			sr.out.Refused++
+			r.report.Refused = append(r.report.Refused, Problem{s.domain, s.name, e.shown, why})
+			continue
+		}
 		old := have[e.id]
 		switch {
 		case old == nil:
@@ -547,8 +606,13 @@ func (r *run) total() {
 		t.Copied += s.Copied
 		t.Verified += s.Verified
 		t.Mismatched += s.Mismatched
+		t.Refused += s.Refused
+		t.Bytes += s.Bytes
+		t.Secrets += s.Secrets
+		t.SecretBytes += s.SecretBytes
 	}
 	r.report.Totals = t
+	r.concerns()
 }
 
 func trim(err error) string {
@@ -569,7 +633,7 @@ func kindStep(k kind) step {
 			}
 			out := make([]entry, 0, len(items))
 			for _, it := range items {
-				out = append(out, entry{id: it.id, canon: it.canon, val: it.val, unreadable: it.unreadable})
+				out = append(out, entry{id: it.id, canon: it.canon, val: it.val, unreadable: it.unreadable, secrets: it.secrets})
 			}
 			return out, nil
 		},
@@ -577,4 +641,79 @@ func kindStep(k kind) step {
 			return k.put(ctx, kt.d, item{id: e.id, val: e.val, canon: e.canon})
 		},
 	}
+}
+
+// concerns sums the steps per concern of the installation. A record is State,
+// its credentials are Secrets, a report is a Blob. Refused counts the items,
+// once, under the concern whose limit was hit (State for a record, Secrets for a
+// credential, Blobs for a blob).
+func (r *run) concerns() {
+	state, secrets, blobs := ConcernSummary{Concern: "state"}, ConcernSummary{Concern: "secrets"}, ConcernSummary{Concern: "blobs"}
+	for _, s := range r.report.Steps {
+		if s.Domain == DomainBlobs {
+			blobs.Items += s.Source
+			blobs.Bytes += s.Bytes
+			blobs.Refused += s.Refused
+			continue
+		}
+		state.Items += s.Source
+		state.Bytes += s.Bytes - s.SecretBytes
+		secrets.Items += s.Secrets
+		secrets.Bytes += s.SecretBytes
+	}
+	for _, p := range r.report.Refused {
+		switch {
+		case p.Domain == DomainBlobs:
+		case strings.HasPrefix(p.Reason, reasonSecret):
+			secrets.Refused++
+		default:
+			state.Refused++
+		}
+	}
+	r.report.Concerns = []ConcernSummary{state, secrets, blobs}
+}
+
+// The limits the destination's ports enforce, so that a dry run can say what a
+// real run would refuse. A DynamoDB item holds 400 KB; port.MaxValue is the
+// smaller of that and NATS's, with headroom, and port.MaxSecret is an SSM
+// advanced parameter's.
+const (
+	reasonSecret = "a credential "
+	maxKey       = 1024
+)
+
+// refusal says why the destination would not take an entry: a key that is not
+// one, a record over [port.MaxValue], a credential over [port.MaxSecret], or the
+// step's own check.
+func refusal(s step, e entry) string {
+	switch {
+	case e.id == "" || len(e.id) > maxKey || !validKey(e.id):
+		return "the key is empty, over 1024 bytes, or holds a control character or invalid UTF-8"
+	}
+	record := len(e.canon)
+	for _, n := range e.secrets {
+		if n > port.MaxSecret {
+			return fmt.Sprintf("%sof %d bytes is over the Secrets limit of %d (port.MaxSecret)", reasonSecret, n, port.MaxSecret)
+		}
+		record -= n
+	}
+	if s.domain != DomainBlobs && record > port.MaxValue {
+		return fmt.Sprintf("the record is %d bytes, over the State limit of %d (port.MaxValue, inside DynamoDB's 400 KB item)", record, port.MaxValue)
+	}
+	if s.check != nil {
+		return s.check(e)
+	}
+	return ""
+}
+
+func validKey(k string) bool {
+	if !utf8.ValidString(k) {
+		return false
+	}
+	for _, c := range k {
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
 }

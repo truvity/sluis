@@ -38,8 +38,26 @@ not a copy of bytes.)
 | `github` | organisations with the App key, the link App, runner and catalogue Apps, people's links (token pairs and the `Revision` counter exactly as they were), the operators' confirmations and requests for a pass | permanent; a confirmation or request keeps its own timestamp and the destination's store ages it as it ages its own |
 | `slack` | workspaces with their secrets, catalogue Apps, Slack Connect and console channel records, confirmations and requests for a pass | the same |
 | `console` | the console's session-signing key | permanent |
-| `issuer` | sessions with their person and client indices, refresh tokens and the markers of spent ones, the browser SSO, minted tokens' records, the signing keys' schedule, and the authorization requests and codes in flight | **each record is written with the lifetime it has left on the source**, so nobody signs in again and a session expires when it would have |
+| `issuer` | the signing keys' schedule (`issuer:keyring:*`, retired-key tombstones included), always. With `--with-sessions` also sessions with their person and client indices, refresh tokens and the markers of spent ones, the browser SSO, minted tokens' records, and the authorization requests and codes in flight | the schedule and, with `--with-sessions`, **each record is written with the lifetime it has left on the source**, so nobody signs in again and a session expires when it would have |
 | `blobs` | the controllers' last reports | none |
+
+**Sessions are left behind by default.** An installation's move to AWS (the runbook's
+"Cutover: migrating an installation") does not copy the issuer's sessions, refresh
+tokens, codes in flight or Index sets: people sign in again. Pass `--with-sessions` for a
+move that must keep them signed in (NATS or DynamoDB to DynamoDB, say). The key ring's
+schedule is always copied, so a token issued before the move keeps verifying, and
+`issuer:kms:*` (the fingerprint of a KMS-signed installation's state secret) is never
+copied.
+
+**What a destination would refuse is found first.** The plan checks each item against the
+destination's limits (a record over 256 KiB, a credential over 8 KiB, an empty or invalid
+key) and the dry run lists them under `refused`, with a summary per concern (`concerns`:
+state, secrets, blobs, with counts and bytes) also printed on stderr. Anything refused
+ends the run non-zero before a write, and `--overwrite` does not change that.
+
+**From a workstation** the source's namespace is read through `--kubeconfig`,
+`--kube-context` and `--namespace` (default: the pod's ServiceAccount); the Valkey of the
+source is reached through the address its configuration names, a port-forward from there.
 
 Left out on purpose: **leases** (transient, and owned by whoever runs), the hub's
 **snapshots** (a cache it rewrites on its first refresh), and the controllers'
