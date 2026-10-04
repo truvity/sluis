@@ -56,9 +56,12 @@ type KubernetesIdentityArgs struct {
 	// is never a grant for another.
 	Serve, GitHub, Slack ProcessArgs
 
-	// Storage is the blob bucket and the Sealer's key: every process reads its
-	// records through the Sealer and keeps its reports in the bucket. Required.
+	// Storage is the blob bucket: every process keeps its reports in it. Required.
 	Storage *StorageGrant
+	// SigningKeyArn is the token-signing key (Lambda's SigningKeyArn). When it is
+	// set the serve process, and only it, may kms:Sign and kms:GetPublicKey with
+	// it. Optional.
+	SigningKeyArn pulumi.StringInput
 	// State is the DynamoDB table of the State port. Nil when State is not in
 	// DynamoDB (it is on NATS), and the roles then carry no DynamoDB grant.
 	State *StateGrant
@@ -97,8 +100,8 @@ type processSpec struct {
 //     does not share another service's.
 //
 // The policy grants the storage (S3 get, put and delete of objects, list of the
-// bucket; KMS encrypt and decrypt only with the encryption context
-// `sluis:binding`) and, when State is given, the DynamoDB adapter's
+// bucket), kms:Sign and kms:GetPublicKey on SigningKeyArn to the serve process
+// only, and, when State is given, the DynamoDB adapter's
 // item calls and DescribeTable on the one table. Nothing else.
 func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIdentityArgs, opts ...pulumi.ResourceOption) (*KubernetesIdentity, error) {
 	if args == nil {
@@ -117,7 +120,7 @@ func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIde
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("sluispulumi: KubernetesIdentityArgs: required and empty: %v", sortedStrings(missing))
 	}
-	if a.Storage == nil || a.Storage.BucketArn == nil || a.Storage.KeyArn == nil {
+	if a.Storage == nil || a.Storage.BucketArn == nil {
 		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.Storage is required (Storage.Grant())")
 	}
 	if a.State != nil && a.State.TableArn == nil {
@@ -176,13 +179,13 @@ func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIde
 		roleName := a.RoleNamePrefix + "-sluis-" + s.suffix
 		desc := s.args.Description
 		if desc == "" {
-			desc = "sluis " + s.what + ": its reports in the sluis bucket and its sealed records under the sluis key; nothing else"
+			desc = "sluis " + s.what + ": its reports in the sluis bucket and its table; nothing else"
 		}
 		trustDoc, err := trust(s.args.ServiceAccount)
 		if err != nil {
 			return nil, fmt.Errorf("render trust policy: %w", err)
 		}
-		role, err := newProcessIdentity(ctx, out, &a, roleName, s.args.ServiceAccount, desc, trustDoc)
+		role, err := newProcessIdentity(ctx, out, &a, s.suffix, roleName, s.args.ServiceAccount, desc, trustDoc)
 		if err != nil {
 			return nil, fmt.Errorf("sluis %s identity: %w", s.suffix, err)
 		}
@@ -199,10 +202,11 @@ func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIde
 // newProcessIdentity is the policy, role, attachment and association of one
 // process. The children are named `<role>-policy`, `<role>-role`,
 // `<role>-attachment` and `<role>-pia`.
-func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *KubernetesIdentityArgs, roleName, sa, desc, trust string) (*iam.Role, error) {
+func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *KubernetesIdentityArgs,
+	suffix, roleName, sa, desc, trust string) (*iam.Role, error) {
 	child := pulumi.Parent(parent)
 
-	stateTable, stateKey := pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String(""))
+	stateTable, stateKey, signKey := pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String("")), pulumi.StringInput(pulumi.String(""))
 	if a.State != nil {
 		stateTable = a.State.TableArn
 		if a.State.KeyArn != nil {
@@ -210,10 +214,17 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 		}
 	}
 	withState := a.State != nil
-	doc := pulumi.All(a.Storage.BucketArn, a.Storage.KeyArn, stateTable, stateKey).ApplyT(func(v []any) (string, error) {
-		st := storageStatements(v[0].(string), v[1].(string))
+	withSigning := a.SigningKeyArn != nil && suffix == "serve"
+	if withSigning {
+		signKey = a.SigningKeyArn
+	}
+	doc := pulumi.All(a.Storage.BucketArn, stateTable, stateKey, signKey).ApplyT(func(v []any) (string, error) {
+		st := storageStatements(v[0].(string))
 		if withState {
-			st = append(st, stateStatements(v[2].(string), v[3].(string))...)
+			st = append(st, stateStatements(v[1].(string), v[2].(string))...)
+		}
+		if withSigning {
+			st = append(st, signingStatement(v[3].(string)))
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

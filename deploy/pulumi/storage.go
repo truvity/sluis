@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/kms"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -12,7 +11,7 @@ import (
 // StorageType is the Pulumi type token of the Storage component.
 const StorageType = "sluis:aws:Storage"
 
-// StorageArgs is the blob bucket and the Sealer's key.
+// StorageArgs is the blob bucket.
 type StorageArgs struct {
 	// BucketName is the bucket's name. Required: it is in the processes'
 	// configuration (`ports.blob.s3.bucket`), so it is known before anything is
@@ -25,37 +24,17 @@ type StorageArgs struct {
 	// compare-and-swap's version, so an unversioned bucket is the shape in use.
 	Versioning bool
 
-	// KeyAlias is the Sealer key's alias, which is what `ports.sealer.kms.keyId`
-	// names: an alias keeps the configuration free of a generated ARN. Default
-	// "alias/<name>-sluis" (see DefaultKeyAlias). It must start with "alias/".
-	KeyAlias string
-
-	// KeyDescription is the key's description. Default says what the key is for.
-	KeyDescription string
-
-	// Tags are put on the bucket and the key. Default none.
+	// Tags are put on the bucket. Default none.
 	Tags map[string]string
 }
 
-// DefaultKeyAlias is the Sealer key's alias when StorageArgs.KeyAlias is empty.
-func DefaultKeyAlias(name string) string { return "alias/" + name + "-sluis" }
-
-func (a *StorageArgs) validate(name string) (StorageArgs, error) {
+func (a *StorageArgs) validate() (StorageArgs, error) {
 	if a == nil {
 		return StorageArgs{}, errors.New("sluispulumi: StorageArgs is nil")
 	}
 	out := *a
 	if out.BucketName == "" {
 		return out, errors.New("sluispulumi: StorageArgs.BucketName is required")
-	}
-	if out.KeyAlias == "" {
-		out.KeyAlias = DefaultKeyAlias(name)
-	}
-	if len(out.KeyAlias) <= len("alias/") || out.KeyAlias[:len("alias/")] != "alias/" {
-		return out, fmt.Errorf("sluispulumi: StorageArgs.KeyAlias %q must start with \"alias/\"", out.KeyAlias)
-	}
-	if out.KeyDescription == "" {
-		out.KeyDescription = name + " Sealer: wraps the data key of every sealed credential"
 	}
 	return out, nil
 }
@@ -67,22 +46,16 @@ type Storage struct {
 	// BucketName and BucketArn are the blob bucket.
 	BucketName pulumi.StringOutput
 	BucketArn  pulumi.StringOutput
-	// KeyArn and KeyID are the Sealer's key; KeyAlias is its alias.
-	KeyArn   pulumi.StringOutput
-	KeyID    pulumi.StringOutput
-	KeyAlias pulumi.StringOutput
 }
 
-// StorageGrant is what a policy needs to name the storage: the ARN of the bucket
-// and of the key.
+// StorageGrant is what a policy needs to name the storage: the ARN of the bucket.
 type StorageGrant struct {
 	BucketArn pulumi.StringInput
-	KeyArn    pulumi.StringInput
 }
 
-// Grant is the storage as KubernetesIdentityArgs.Storage takes it.
+// Grant is the storage as KubernetesIdentityArgs.Storage and LambdaArgs.Storage take it.
 func (s *Storage) Grant() *StorageGrant {
-	return &StorageGrant{BucketArn: s.BucketArn, KeyArn: s.KeyArn}
+	return &StorageGrant{BucketArn: s.BucketArn}
 }
 
 func tagMap(t map[string]string) pulumi.StringMapInput {
@@ -94,18 +67,14 @@ func tagMap(t map[string]string) pulumi.StringMapInput {
 
 // NewStorage creates the component and everything under it.
 //
-// The bucket is encrypted with S3-managed keys (SSE-KMS under the Sealer's key
-// would make two kinds of thing share one key; the estate keeps one key per
-// kind), closed to the public and to plain HTTP, and protected. The key is
-// symmetric, rotates yearly (transparent to ciphertext), takes the 30-day
-// deletion window and is protected: losing it loses every sealed credential,
-// which an operator must then connect again. It keeps AWS's default key policy,
-// so the roles' policies are what grant its use.
+// The bucket is encrypted with S3-managed keys, closed to the public and to
+// plain HTTP, and protected. There is no key: sealing is retired, and a key that
+// an earlier release created is scheduled for deletion by the next apply.
 //
 // The AWS provider is the caller's to choose: pass pulumi.Providers(p) or
 // pulumi.Provider(p) as an option.
 func NewStorage(ctx *pulumi.Context, name string, args *StorageArgs, opts ...pulumi.ResourceOption) (*Storage, error) {
-	a, err := args.validate(name)
+	a, err := args.validate()
 	if err != nil {
 		return nil, err
 	}
@@ -179,35 +148,11 @@ func NewStorage(ctx *pulumi.Context, name string, args *StorageArgs, opts ...pul
 		}
 	}
 
-	key, err := kms.NewKey(ctx, name+"-sealer-key", &kms.KeyArgs{
-		Description:          pulumi.String(a.KeyDescription),
-		DeletionWindowInDays: pulumi.Int(30),
-		EnableKeyRotation:    pulumi.Bool(true),
-		Tags:                 tags,
-	}, child, pulumi.Protect(true))
-	if err != nil {
-		return nil, fmt.Errorf("sluis kms key: %w", err)
-	}
-
-	alias, err := kms.NewAlias(ctx, name+"-sealer-alias", &kms.AliasArgs{
-		Name:        pulumi.String(a.KeyAlias),
-		TargetKeyId: key.KeyId,
-	}, child)
-	if err != nil {
-		return nil, fmt.Errorf("sluis kms alias: %w", err)
-	}
-
 	out.BucketName = bucket.Bucket
 	out.BucketArn = bucket.Arn
-	out.KeyArn = key.Arn
-	out.KeyID = key.KeyId
-	out.KeyAlias = alias.Name
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
 		"bucketName": out.BucketName,
 		"bucketArn":  out.BucketArn,
-		"keyArn":     out.KeyArn,
-		"keyId":      out.KeyID,
-		"keyAlias":   out.KeyAlias,
 	}); err != nil {
 		return nil, err
 	}

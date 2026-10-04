@@ -9,7 +9,7 @@ import (
 )
 
 // PortsArgs is what the `ports:` block of the processes' configuration needs of
-// the infrastructure: where the blobs, the sealed credentials and, on DynamoDB,
+// the infrastructure: where the blobs, optionally the sealed credentials and, on DynamoDB,
 // the State are kept. Every name is an input of the components, so none waits
 // for a resource to exist.
 type PortsArgs struct {
@@ -30,8 +30,9 @@ type PortsArgs struct {
 	BlobPrefix string
 
 	// KeyID is the Sealer's key as the configuration names it: an alias, a key
-	// id or a key ARN. Use the alias (Storage's KeyAlias, or DefaultKeyAlias).
-	// Required.
+	// id or a key ARN. Sealing is retired and the library no longer creates a
+	// key, so it is optional: empty renders no `sealer:` block. Set it only for
+	// an installation still on a sealer key of its own.
 	KeyID string
 
 	// TableName is the State table (State's TableName). Required with the
@@ -47,7 +48,7 @@ type PortsArgs struct {
 //	  adapter: dynamodb
 //	  dynamodb: {table: ..., region: ...}
 //	  blob: {adapter: s3, s3: {bucket: ..., region: ...}}
-//	  sealer: {adapter: kms, kms: {keyId: ..., region: ...}}
+//	  sealer: {adapter: kms, kms: {keyId: ..., region: ...}}   # only with KeyID
 //
 // `create` is never rendered: the table is the infrastructure's, and the
 // adapter then binds to it and checks it with DescribeTable. Credentials are
@@ -56,9 +57,6 @@ func RenderPorts(p PortsArgs) (map[string]any, error) {
 	var errs []error
 	if p.BucketName == "" {
 		errs = append(errs, errors.New("BucketName is required"))
-	}
-	if p.KeyID == "" {
-		errs = append(errs, errors.New("KeyID is required"))
 	}
 	adapter := p.Adapter
 	if adapter == "" && p.TableName != "" {
@@ -88,8 +86,10 @@ func RenderPorts(p PortsArgs) (map[string]any, error) {
 		s3["prefix"] = strings.Trim(p.BlobPrefix, "/")
 	}
 	ports := map[string]any{
-		"blob":   map[string]any{"adapter": "s3", "s3": s3},
-		"sealer": map[string]any{"adapter": "kms", "kms": withRegion(map[string]any{"keyId": p.KeyID})},
+		"blob": map[string]any{"adapter": "s3", "s3": s3},
+	}
+	if p.KeyID != "" {
+		ports["sealer"] = map[string]any{"adapter": "kms", "kms": withRegion(map[string]any{"keyId": p.KeyID})}
 	}
 	if adapter == "dynamodb" {
 		ports["adapter"] = "dynamodb"
