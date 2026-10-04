@@ -180,8 +180,12 @@ func useCluster(out *stores, cfg Config, st *store.Stores) {
 		client := st.Backend.Kube
 		out.reviewToken = st.Ports.Identity.Verify
 		out.namespace = client.Namespace()
-		out.settings = kube.NewSettings(client, kube.DeclaredClient{
-			Name: cfg.oauthSecretName, IDKey: cfg.oauthIDKey, SecretKey: cfg.oauthSecretKey,
-		})
+		// A client declared by file or variable is already in out.settings;
+		// the Kubernetes settings store would replace it with an empty one.
+		if cfg.oauthSecretName != "" || !cfg.oauthDeclared.Configured() {
+			out.settings = kube.NewSettings(client, kube.DeclaredClient{
+				Name: cfg.oauthSecretName, IDKey: cfg.oauthIDKey, SecretKey: cfg.oauthSecretKey,
+			})
+		}
 	}
 }
