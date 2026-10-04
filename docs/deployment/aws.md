@@ -138,7 +138,7 @@ for another.
 | `Serve`, `GitHub`, `Slack` | | A `ProcessArgs`: `ServiceAccount` (empty creates no role; required for `Serve`) and `Description` (the policy's, which IAM cannot change once set). |
 | `Storage` | required | `Storage.Grant()`. |
 | `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the serve role (and only it) may `kms:Sign` and `kms:GetPublicKey` with them. |
-| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`: a dedicated key whose policy reserves the signing context to the signing roles (list this role in `WrappedSigning.AdditionalSigningRoleArns`). Set, the serve role (and only it) may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
+| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`: a key whose policy reserves the signing context to the signing roles (list this role in `WrappedSigning.AdditionalSigningRoleArns`, or in the denial merged into a shared key). Set, the serve role (and only it) may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
 | `State` | none | `State.Grant()`. Nil when the State is on NATS: the roles then carry no DynamoDB grant. |
 
 ### Outputs
@@ -419,9 +419,11 @@ context, and the ciphertext and that context are in the State. So:
 A remote key is not extractable at all. Choose `kms` where that matters more than
 rotation and quota.
 
-**Use a dedicated key.** Sluis signing uses its own symmetric key, the one the
-library creates; it is not the estate's shared application key, because every
-workload that may decrypt with a shared key could unwrap a signing key.
+**Own key or shared key.** The key is either the one the library creates (only
+sluis uses it) or an existing symmetric key you pass as `WrappedSigning.KeyArn`,
+which other workloads may share (an auto-unseal key, a secrets-provider key).
+Both are first-class. A shared key is safe only with the reserved-context
+denial below in its key policy.
 
 **How it works.** For each algorithm (ES384 on `ECC_NIST_P384`, RS256 on
 `RSA_3072`) the issuer calls `kms:GenerateDataKeyPairWithoutPlaintext` on the
@@ -462,7 +464,7 @@ nowhere else:
 {
   "Sid": "SluisWrappedSigning", "Effect": "Allow",
   "Action": ["kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"],
-  "Resource": "<the dedicated key's ARN>",
+  "Resource": "<the key's ARN>",
   "Condition": {
     "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
     "ForAllValues:StringEquals": {"kms:EncryptionContextKeys": ["purpose", "alg", "kid"]}
@@ -470,11 +472,10 @@ nowhere else:
 }
 ```
 
-`WrappedSigning.KeyArn` takes a key you created. The library then leaves its key
-policy alone, and the key policy MUST carry the reserved-context denial below
-(`sluispulumi.WrappedKeyReservedDeny(roleArns)` renders it); without it any
-principal that may `kms:Decrypt` on the key can unwrap a signing key. Unset (the
-default), the library creates the key (`SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, rotation
+`WrappedSigning.KeyArn` takes an existing, possibly shared, key. The library then
+leaves its key policy alone, and **the estate MUST merge the reserved-context
+denial below into it** (`sluispulumi.WrappedKeyPolicyStatements(roleArns)` returns
+it, `WrappedKeyReservedDeny` as a map). Unset, the library creates the key (`SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, rotation
 enabled, protected, alias `WrappedSigning.KeyAlias`, default
 `alias/sluis-signing-wrapped`) with this key policy, so a broader policy attached
 to the role later does not widen what it can do with the key:
@@ -488,7 +489,10 @@ to the role later does not widen what it can do with the key:
 | `SluisSigningRoleNothingElse` | Deny | `*` | `NotAction` the same two | a signing role |
 
 The roles are named in a condition, not as principals, so the key can exist
-before the roles. The mandatory statement, for a key passed as `KeyArn`:
+before the roles.
+
+**MANDATORY when `KeyArn` is shared:** merge this statement into the key's policy
+(the library puts it in the key it creates):
 
 ```json
 {
@@ -502,6 +506,14 @@ before the roles. The mandatory statement, for a key passed as `KeyArn`:
 }
 ```
 
+Why this is sufficient on a shared key: a wrapped signing key's ciphertext is
+bound to its encryption context, so decrypting it needs a request that presents
+`purpose=sluis-signing` (with the right `alg` and `kid`, which are in the State).
+The statement denies every principal but the signing roles any request that
+presents that purpose, so no one else can ever unwrap a signing key. The other
+users of the key (an unseal, a secrets provider) present no context or different
+ones, never `purpose=sluis-signing`, and are untouched. The signing roles'
+own denials (above) keep them to that context in the other direction.
 **Writes to the key ring.** With `WrappedSigning` (and with
 `KubernetesIdentityArgs.WrappedSigningKeyArn`) the github and slack roles carry
 `SluisNoKeyringWrites`: a Deny of `PutItem`, `UpdateItem`, `DeleteItem` and
@@ -550,7 +562,7 @@ supplies its settings):
 preset: aws-hybrid
 signingKey:
   kmsWrapped:
-    keyId: alias/sluis-signing-wrapped   # or the dedicated key's ARN
+    keyId: alias/sluis-signing-wrapped   # or the shared key's ARN
     stateSecretFile: /tmp/sluis/state-secret
     # algorithms: [ES384, RS256]         # the first is the default
     # rotateEvery: 24h

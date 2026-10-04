@@ -162,14 +162,14 @@ type LambdaArgs struct {
 // pair and to decrypt a private key, with the encryption context
 // purpose=sluis-signing (and no keys beside purpose, alg and kid).
 type WrappedSigningArgs struct {
-	// KeyArn is an existing symmetric key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT).
-	// Sluis signing uses a DEDICATED key, which is what leaving this unset gives:
-	// the library creates it, with rotation enabled, protected, and a key policy
-	// that reserves the signing encryption context to the signing roles. With
-	// KeyArn the library creates no key and leaves its policy alone, and the key
-	// policy MUST carry the statement WrappedKeyReservedDeny renders
-	// (docs/deployment/aws.md): without it any principal that may kms:Decrypt on
-	// the key can unwrap a signing key read from the State and forge tokens.
+	// KeyArn is an existing symmetric key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT),
+	// which other workloads may share (an auto-unseal key). Unset, the library
+	// creates the key, with rotation enabled, protected, and a key policy that
+	// reserves the signing encryption context to the signing roles. With KeyArn
+	// the library creates no key and leaves its policy alone, and the estate MUST
+	// merge WrappedKeyPolicyStatements into it (docs/deployment/aws.md): without
+	// it any principal that may kms:Decrypt on the key can unwrap a signing key
+	// read from the State and forge tokens.
 	KeyArn pulumi.StringInput
 	// AdditionalSigningRoleArns are the roles beside the http function's that
 	// sign with the key, for the key policy: the Kubernetes serve role, when

@@ -12,7 +12,7 @@
 ### Added
 
 - **`kms-wrapped` signing adapter, the default for the AWS presets.** Token
-  signing moves from one remote asymmetric KMS key per algorithm to ONE dedicated symmetric
+  signing moves from one remote asymmetric KMS key per algorithm to ONE symmetric
   key per estate and data key pairs: the issuer calls
   `kms:GenerateDataKeyPairWithoutPlaintext` (ES384 on `ECC_NIST_P384`, RS256 on
   `RSA_3072`), records the public key and the private key encrypted under the
@@ -29,15 +29,17 @@
   selectable and unchanged, and so does `aws-eks`. **Trade-off:** wrapped keys
   are decrypted into memory, so a leaked signing role can forge offline for as
   long as the keys are published, and write access to the State (the key ring)
-  is part of the trust boundary; a dedicated key whose policy reserves the
-  signing context to the signing roles is required. EdDSA is not supported yet. See
+  is part of the trust boundary; the key policy must reserve the signing context
+  to the signing roles (the library does it for the key it creates; a shared
+  `KeyArn` needs the denial merged in). EdDSA is not supported yet. See
   [Signing on AWS](docs/deployment/aws.md#signing-on-aws). A deployment that
   names `signingKey.kms` or `signingKey.file` keeps what it names.
-- **Pulumi library: `LambdaArgs.WrappedSigning`.** One dedicated symmetric key (created
+- **Pulumi library: `LambdaArgs.WrappedSigning`.** One symmetric key (created
   with rotation enabled, protected, and a key policy that denies every principal
   but the signing roles any use of the signing context and holds those roles to
   `kms:EncryptionContext:purpose = sluis-signing` and no context keys beside
-  `purpose`, `alg`, `kid`; an existing `KeyArn` must carry the same denial), a grant of only
+  `purpose`, `alg`, `kid`; an existing, possibly shared, `KeyArn` must carry the same denial,
+  `WrappedKeyPolicyStatements`), a grant of only
   `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on it with those
   conditions to the http function, and no asymmetric keys unless
   `KeepRemoteSigningKeys`. The github and slack roles may not write the key ring

@@ -63,9 +63,10 @@ type KubernetesIdentityArgs struct {
 	// kms:Sign and kms:GetPublicKey with them. Optional.
 	SigningKeyArns []pulumi.StringInput
 	// WrappedSigningKeyArn is the symmetric key of the `kms-wrapped` signing
-	// adapter: Lambda's WrappedSigningKeyArn, a dedicated key whose policy
-	// reserves the signing context to the signing roles (this role must be among
-	// WrappedSigningArgs.AdditionalSigningRoleArns). When set the serve process,
+	// adapter: Lambda's WrappedSigningKeyArn, whose policy reserves the signing
+	// context to the signing roles (this role must be among
+	// WrappedSigningArgs.AdditionalSigningRoleArns, or named in the denial merged
+	// into a shared key). When set the serve process,
 	// and only it, may generate data key pairs and decrypt with it, under the
 	// encryption context purpose=sluis-signing, and the other processes may not
 	// write the key ring in the table. Optional.
