@@ -1,0 +1,31 @@
+# The strategy is the operator's: Recreate, the chart's behaviour before
+# 2026-10-04, is still available for a deployment whose leases live in each
+# pod's memory and which would rather have a gap than a few seconds of two
+# pods. It renders `type: Recreate` and no `rollingUpdate`, which the API
+# server refuses beside it. One replica, no PodDisruptionBudget.
+config:
+  issuerURL: https://issuer.example
+  exchange:
+    clustersFile: /var/run/access-issuer/clusters.yaml
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+console:
+  mount: /console
+controllerGithub:
+  enabled: true
+  strategy:
+    type: Recreate
+  config:
+    consoleURL: http://sluis.default.svc:8080/console
+controllerSlack:
+  enabled: true
+  minReadySeconds: 0
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  config:
+    consoleURL: http://sluis.default.svc:8080/console

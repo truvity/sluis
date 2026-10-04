@@ -42,3 +42,18 @@ func TestTheControllerRefusesWhatItCannotDoWithout(t *testing.T) {
 		t.Errorf("the refusal does not name the key: %v", err)
 	}
 }
+
+// The probes listen on :7070 unless the file moves them, and a file that
+// gives them no address is refused by the schema rather than read as ":0".
+func TestTheProbesAddressIsConfigurable(t *testing.T) {
+	const ok = "policyDir: /p\nconsoleURL: http://console:8080/console/\n"
+	if _, err := app.Load(write(t, ok)); err != nil {
+		t.Fatalf("the default: %v", err)
+	}
+	if _, err := app.Load(write(t, ok+"probes: {address: ':9090'}\n")); err != nil {
+		t.Fatalf("a moved listener: %v", err)
+	}
+	if _, err := app.Load(write(t, ok+"probes: {}\n")); err == nil {
+		t.Error("probes with no address was accepted")
+	}
+}

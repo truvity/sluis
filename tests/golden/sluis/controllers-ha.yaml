@@ -1,4 +1,48 @@
 ---
+# Source: sluis/templates/controller-pdb.yaml
+# More than one replica is there to keep a controller running through a
+# voluntary disruption (a node drain, a cluster upgrade): without a budget a
+# drain may evict every replica at once.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-github-roster
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller-github
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis-github-roster
+      app.kubernetes.io/instance: sluis
+
+---
+# Source: sluis/templates/controller-pdb.yaml
+# More than one replica is there to keep a controller running through a
+# voluntary disruption (a node drain, a cluster upgrade): without a budget a
+# drain may evict every replica at once.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sluis-slack-roster
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller-slack
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis-slack-roster
+      app.kubernetes.io/instance: sluis
+
+---
 # Source: sluis/templates/controller-github.yaml
 # The controller's own account. It holds two permissions: updating its one
 # report, and updating the one Secret people's linked GitHub accounts are
@@ -85,8 +129,9 @@ metadata:
 data:
   clusters.yaml: |
     clusters:
-      - name: "example"
-        issuer: "https://oidc.example"
+      - name: "example-cluster"
+        issuer: "https://oidc.eu-example-1.example/id/EXAMPLE"
+        jwksUri: "https://oidc.eu-example-1.example/id/EXAMPLE/keys"
 
 ---
 # Source: sluis/templates/configmap.yaml
@@ -131,9 +176,6 @@ data:
       file: /var/run/access-issuer/signing-key/tls.key
       pollInterval: 30s
     store: kubernetes
-    valkey:
-      address: valkey.example.svc:6379
-      passwordEnv: VALKEY_PASSWORD
 
 ---
 # Source: sluis/templates/controller-github.yaml
@@ -157,6 +199,11 @@ data:
     consoleURL: http://sluis.default.svc:8080/console
     interval: 15m
     policyDir: /var/run/github-roster/policy
+    ports:
+      adapter: nats
+      nats:
+        tokenFile: /var/run/nats/token
+        url: nats://nats.nats.svc:4222
     recordsDir: /var/run/github-roster/records
     tokenFile: /var/run/secrets/github-roster/token
 
@@ -182,6 +229,13 @@ data:
     credentialsDir: /var/run/slack-roster/credentials
     interval: 15m
     policyDir: /var/run/slack-roster/policy
+    ports:
+      adapter: dynamodb
+      dynamodb:
+        region: eu-west-1
+        table: sluis
+    probes:
+      address: :9090
     recordsDir: /var/run/slack-roster/workspaces
     tokenFile: /var/run/secrets/slack-roster/token
 
@@ -420,7 +474,7 @@ spec:
   # at start) leaves the old pod running. More than one replica is safe only
   # on a shared State (see sluis.controllerRollout), and `replicas` is
   # refused above 1 without one.
-  replicas: 1
+  replicas: 2
   minReadySeconds: 10
   strategy:
     type: RollingUpdate
@@ -437,7 +491,7 @@ spec:
         app.kubernetes.io/name: sluis-github-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 7d9c36de48203a8ab483c65a8ef87a28bba5e1583f3cd60cc7b3ecfc9a9682e8
+        checksum/config: 523fffdb43650e4007c52f84c76dc15012f9ba89fbb2d14f59776c3b02fd5857
         # The bindings are read at start, like the service's policy.
         checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
     spec:
@@ -469,18 +523,6 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-          env:
-            
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://gateway.observability.svc:4318"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "http/protobuf"
-            - name: OTEL_SERVICE_NAME
-              value: "github-roster"
-            - name: OTEL_TRACES_SAMPLER
-              value: "parentbased_traceidratio"
-            - name: OTEL_TRACES_SAMPLER_ARG
-              value: "0.1"
           volumeMounts:
             - name: config
               mountPath: /etc/sluis/controller-github.yaml
@@ -551,8 +593,8 @@ spec:
   # at start) leaves the old pod running. More than one replica is safe only
   # on a shared State (see sluis.controllerRollout), and `replicas` is
   # refused above 1 without one.
-  replicas: 1
-  minReadySeconds: 10
+  replicas: 2
+  minReadySeconds: 30
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -568,7 +610,7 @@ spec:
         app.kubernetes.io/name: sluis-slack-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 5058d520ea883fa37eec0328cf541ec9103753ce3373620b44b432d340180427
+        checksum/config: 5a59957489adb15825596716ad7e9a74f5eba9721642927162e3e5837394d831
         # The bindings are read at start, like the service's policy.
         checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
     spec:
@@ -592,7 +634,7 @@ spec:
             - --config=/etc/sluis/controller-slack.yaml
           ports:
             - name: health
-              containerPort: 7070
+              containerPort: 9090
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
@@ -600,18 +642,6 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-          env:
-            
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://gateway.observability.svc:4318"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "http/protobuf"
-            - name: OTEL_SERVICE_NAME
-              value: "slack-roster"
-            - name: OTEL_TRACES_SAMPLER
-              value: "parentbased_traceidratio"
-            - name: OTEL_TRACES_SAMPLER_ARG
-              value: "0.1"
           volumeMounts:
             - name: config
               mountPath: /etc/sluis/controller-slack.yaml
@@ -688,13 +718,13 @@ spec:
         app.kubernetes.io/instance: sluis
       annotations:
         # A configuration change is a rollout: the file is read at start.
-        checksum/config: fb86c8a2d25bfc13f8cc3515903461e28377c49a137a444eeecd6bfb95a4cf39
+        checksum/config: 9acd5ee05144b250ffdda2237ddeaa6b6719e90e40be4e4eefaba86ae72dd526
         # A policy change is a rollout: the file is read at start.
         checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
         # A federated cluster is read once at start. A row added without a
         # rollout is a cluster whose workloads go on being refused, with
         # nothing to see but an error naming the wrong cause.
-        checksum/clusters: e3a91b74c4d3b80c87d9e749e44f076f7cda9b592646e01b22fc3c0cdd8b9383
+        checksum/clusters: 137423e4d6623f391e68ab91981ae128f045cfe43ac6764f71b2b7b716fc2983
     spec:
       serviceAccountName: sluis
       securityContext:
@@ -720,23 +750,6 @@ spec:
           args:
             - serve
             - --config=/etc/sluis/config.yaml
-          env:
-            - name: VALKEY_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: valkey
-                  key: password
-            
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://gateway.observability.svc:4318"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "http/protobuf"
-            - name: OTEL_SERVICE_NAME
-              value: "access-issuer"
-            - name: OTEL_TRACES_SAMPLER
-              value: "parentbased_traceidratio"
-            - name: OTEL_TRACES_SAMPLER_ARG
-              value: "0.1"
           volumeMounts:
             - name: config
               mountPath: /etc/sluis/config.yaml
