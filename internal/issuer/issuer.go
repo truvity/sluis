@@ -187,6 +187,11 @@ func New(cfg Config, set *policy.Set, dir Directory, state State) *Issuer {
 		sessions: NewSessions(state, cfg.RefreshLifetime, cfg.AbsoluteLifetime),
 		sso:      NewSSO(state, cfg.RefreshLifetime),
 	}
+	// Last-known groups live in the shared State, so that an instance that
+	// starts after the directory went quiet finds what the last one learned.
+	if state != nil {
+		i.resolver.UseState(state)
+	}
 	// The sessions index asks the policy, per session, for the limit its
 	// resources allow: it is read at every open and every refresh, so a
 	// cap removed from the policy shortens a chain at its next refresh.
@@ -233,7 +238,9 @@ func (i *Issuer) Config() Config { return i.cfg }
 // once the directory catches up. Without it, cutting someone off means
 // waiting for a refresh that may be minutes away.
 func (i *Issuer) Revoke(ctx context.Context, identity string) (int, error) {
-	i.resolver.Forget(identity)
+	if err := i.resolver.Forget(ctx, identity); err != nil {
+		return 0, err
+	}
 
 	return i.sessions.Revoke(ctx, Query{Identity: identity})
 }
