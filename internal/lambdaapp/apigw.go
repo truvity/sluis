@@ -32,7 +32,16 @@ type HTTP struct {
 	// settle is called when a request is over, for the work it left running
 	// after its response: a frozen process would never finish it.
 	settle func()
-	log    *slog.Logger
+	// exports runs one pass of the exports (the {"kind":"exports"} event); nil
+	// when this function owns none.
+	exports func(context.Context) (ExportsResult, error)
+	log     *slog.Logger
+}
+
+// WithExports makes the function answer {"kind":"exports"} events with run.
+func (h *HTTP) WithExports(run func(context.Context) (ExportsResult, error)) *HTTP {
+	h.exports = run
+	return h
 }
 
 // NewHTTP adapts handler. settle may be nil.
@@ -45,6 +54,13 @@ func NewHTTP(handler http.Handler, settle func(), log *slog.Logger) *HTTP {
 
 // Handle implements [Handler]: payload is an API Gateway HTTP API event.
 func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error) {
+	// An API Gateway event has no top-level `kind`; a scheduled one does.
+	var peek struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(payload, &peek); err == nil && peek.Kind != "" {
+		return h.scheduled(ctx, peek.Kind)
+	}
 	var event events.APIGatewayV2HTTPRequest
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return nil, fmt.Errorf("the event is not an API Gateway HTTP API event: %w", err)

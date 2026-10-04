@@ -110,6 +110,16 @@ func (a *App) Policy() *policy.Set { return a.directory.Policy() }
 // Trigger is the Trigger the console notifies, as the plan chose it.
 func (a *App) Trigger() port.Trigger { return a.stores.Ports.Trigger }
 
+// ExportsPass makes every declared export once under its lease and returns what
+// it did; declared is false when the deployment declares none. It is what a
+// function runs on a schedule in place of the loop [App.Run] starts.
+func (a *App) ExportsPass(ctx context.Context) (res exports.PassResult, declared bool) {
+	if a.exports == nil {
+		return exports.PassResult{}, false
+	}
+	return a.exports.Pass(ctx), true
+}
+
 // Settle waits for the work a request left running after its response, which
 // a function that is frozen between invocations would otherwise never finish.
 func (a *App) Settle() { a.directory.Hub().Wait() }

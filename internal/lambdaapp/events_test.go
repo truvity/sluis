@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -163,5 +164,44 @@ func TestATargetMustLookLikeALoginOrAKey(t *testing.T) {
 		if _, err := lambdaapp.ParseEvent(raw); err == nil {
 			t.Errorf("%q was accepted", target)
 		}
+	}
+}
+
+func exportsHandler(res lambdaapp.ExportsResult, err error, calls *int) *lambdaapp.HTTP {
+	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).WithExports(func(context.Context) (lambdaapp.ExportsResult, error) {
+		*calls++
+		return res, err
+	})
+}
+
+func TestAnExportsEventRunsOnePassAndAnAPIGatewayEventIsStillServed(t *testing.T) {
+	calls := 0
+	h := exportsHandler(lambdaapp.ExportsResult{Kind: "exports", Outcome: "ran", Exports: 2, Done: 2}, nil, &calls)
+	out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`))
+	if err != nil || calls != 1 {
+		t.Fatalf("%v, %d runs", err, calls)
+	}
+	if res := out.(lambdaapp.ExportsResult); res.Done != 2 || res.Outcome != "ran" {
+		t.Errorf("%+v", res)
+	}
+	// A request does not run exports.
+	request := json.RawMessage(`{"version":"2.0","rawPath":"/","requestContext":{"http":{"method":"GET"}}}`)
+	if _, err = h.Handle(context.Background(), request); err != nil || calls != 1 {
+		t.Errorf("a request: %v, %d runs", err, calls)
+	}
+}
+
+func TestAnExportsEventThatLeavesACopyStaleIsAnErrorAndAnUnknownKindIsRefused(t *testing.T) {
+	calls := 0
+	failing := exportsHandler(lambdaapp.ExportsResult{Exports: 2, Done: 1, Failed: 1}, nil, &calls)
+	if _, err := failing.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`)); err == nil {
+		t.Error("a stale copy was reported as success")
+	}
+	if _, err := failing.Handle(context.Background(), json.RawMessage(`{"kind":"reboot"}`)); err == nil {
+		t.Error("an unknown kind was accepted")
+	}
+	none := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
+	if _, err := none.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`)); err == nil {
+		t.Error("a function that owns no exports ran them")
 	}
 }

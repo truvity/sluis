@@ -162,8 +162,18 @@ func openHTTP(ctx context.Context, file string) (*Function, error) {
 			"is picked up at the controller's next scheduled tick")
 	}
 	return &Function{
-		Role:    RoleHTTP,
-		Handler: NewHTTP(service.Handler(), service.Settle, log),
+		Role: RoleHTTP,
+		Handler: NewHTTP(service.Handler(), service.Settle, log).WithExports(func(ctx context.Context) (ExportsResult, error) {
+			res, declared := service.ExportsPass(ctx)
+			out := ExportsResult{Kind: KindExports, Outcome: "ran", Exports: res.Exports, Done: res.Done, Contended: res.Contended, Failed: res.Failed}
+			switch {
+			case !declared:
+				out.Outcome = "none"
+			case res.Failed > 0:
+				out.Outcome = "failed"
+			}
+			return out, nil
+		}),
 		Flush: func(ctx context.Context) {
 			// Before the invocation returns: the records still queued for the audit
 			// sink would otherwise wait for the next one.

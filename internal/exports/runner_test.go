@@ -239,3 +239,36 @@ func TestARunnerWithNoExportsReturnsAtOnce(t *testing.T) {
 		t.Fatal("a runner with no exports blocked")
 	}
 }
+
+// A function with no process to keep the loop in makes every export once per
+// schedule, under the lease, and a second pass writes nothing new.
+func TestAPassMakesEveryExportOnceUnderItsLease(t *testing.T) {
+	r := newRig(t, "slack-app.pass")
+	r.install(t, "xoxb-PASS")
+	res := r.runner.Pass(ctx)
+	if res != (exports.PassResult{Exports: 1, Done: 1}) {
+		t.Fatalf("result %+v", res)
+	}
+	if !holds(r, "xoxb-PASS")() {
+		t.Fatal("the copy was not made")
+	}
+
+	// Another invocation holds the lease: this one leaves the copy to it.
+	other := &rails.Leases{State: r.state, Holder: "another-invocation"}
+	lease, err := other.Acquire(ctx, exports.KindExport, "slack-app.pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res = r.runner.Pass(ctx); res != (exports.PassResult{Exports: 1, Contended: 1}) {
+		t.Errorf("contended: %+v", res)
+	}
+	if err = lease.Release(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// A store that is down stales the copy and the pass says so.
+	r.out.Fail(errors.Join(port.ErrUnavailable, errors.New("down")))
+	if res = r.runner.Pass(ctx); res != (exports.PassResult{Exports: 1, Failed: 1}) {
+		t.Errorf("outage: %+v", res)
+	}
+}

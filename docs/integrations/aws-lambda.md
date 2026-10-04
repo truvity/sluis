@@ -93,6 +93,25 @@ both run. The controller refuses to run its pass when the State is not shared, s
 function that was configured with `memory` fails at its first event and not by
 acting twice.
 
+**`http` also receives `{"kind":"exports"}`**, from an EventBridge Scheduler
+schedule (by default every 15 minutes, on the `sluis-http` function). The
+Kubernetes process keeps the exports current with a loop that also watches the
+sources; a function has neither, so each invocation makes every declared export
+once (the secrets under `/sluis/export/...` and the other targets of `exports:`),
+each under its own lease in DynamoDB, and returns:
+
+```json
+{"kind":"exports","outcome":"ran","exports":2,"done":2,"contended":0,"failed":0}
+```
+
+A pass is idempotent (a copy of what is already there writes nothing), and two
+invocations cannot both make one export. `contended` exports are another
+invocation's. `outcome` is `none` when the deployment declares no export. If any
+export could not be made the invocation FAILS, so the schedule's retry and an
+alarm on the function's errors see a copy that is going stale. A change to a
+source is picked up at the next schedule, up to one interval later. Any other
+`kind` on `http` is refused.
+
 ### Run now
 
 The `http` function's console notifies the `trigger` port when a write concerns a
@@ -220,12 +239,56 @@ Each function has its own role (decision D5a), and only `http` can sign a token:
 | `ssm:GetParameters` on the parameters its variables and `SLUIS_SECRET_FILES` name, under `/sluis/private/*` (and `kms:Decrypt` on the key encrypting them) | yes | yes | yes |
 | `sqs:SendMessage` on the audit queue | yes | yes | yes |
 | `lambda:InvokeFunction` on the `github` and `slack` functions | yes | no | no |
+| `sts:GetWebIdentityToken` (the controller's proof to the console, see below) | no | yes | yes |
 | `logs:*` as usual | yes | yes | yes |
 
 Narrow the SSM permission to the parameters each function's variables name: a
 controller needs a GitHub App's key and not the OAuth client's secret. EventBridge
 Scheduler needs its own role, with `lambda:InvokeFunction` on the function it
 schedules.
+
+## How a controller authenticates to the console
+
+A controller reads the console's API (who holds a group, the organisations'
+credentials) as a workload. In a cluster that is its projected ServiceAccount
+token. On Lambda it is the function role's **outbound web identity token**: the
+controller calls `sts:GetWebIdentityToken` with one audience, caches the token
+until two minutes before its expiry (a warm execution environment reuses it
+across invocations), and presents it as the bearer of every call. The `http`
+function's issuer verifies it against the account's published key set, with the
+verifier token exchange already uses, and takes the role as the caller.
+
+In the `github.yaml` and `slack.yaml` files:
+
+```yaml
+console:
+  auth:
+    aws:
+      audience: https://sluis.example/aws   # the audience of the issuer's AWS federation file
+```
+
+Absent, the controller reads `tokenFile`, as on Kubernetes. Three things must agree:
+
+1. **IAM.** The `github` and `slack` roles are allowed `sts:GetWebIdentityToken`
+   (the account has outbound identity federation enabled).
+2. **The issuer.** The `http` function's `exchange.awsFile` lists the account
+   (`issuer` from `aws iam get-outbound-web-identity-federation-info`) and the
+   same `audience`. That one value is what an AWS token must be minted for, both
+   at token exchange and at the console.
+3. **The policy.** The role is entitled to what the policy's `aws` matchers say,
+   and to nothing without one. Declare the controllers as viewers (enough to read
+   who holds a group):
+
+```yaml
+groups:
+  all:sluis:viewer:
+    matchers:
+      - aws: { account: "111122223333", role: sluis-github }
+      - aws: { account: "111122223333", role: sluis-slack }
+```
+
+A role the policy does not name is nobody at the console, however well its token
+verifies.
 
 ## Cold start, and what is not here
 
@@ -238,7 +301,7 @@ schedules.
   before the response is returned to the platform.
 - `http` is one assembled service per execution environment, kept across
   invocations. A controller is assembled per invocation, as `sluis tick` does.
-- The exports' runner, a background loop, is not started.
+- The exports' runner, a background loop, is not started: the `exports` event makes the copies on a schedule instead.
 
 ## Telemetry
 
