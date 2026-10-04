@@ -22,3 +22,7 @@ platform:
 preset: aws-hybrid
 adapters:
   state: {adapter: dynamodb, settings: {table: sluis, region: eu-west-1}}
+console:
+  auth:
+    aws:
+      audience: https://sluis.example/aws

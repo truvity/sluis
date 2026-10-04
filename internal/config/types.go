@@ -304,6 +304,23 @@ type (
 		ForwardedForTrustedHops int    `json:"forwardedForTrustedHops,omitempty"`
 	}
 
+	// RosterConsole is how a controller authenticates to the console.
+	RosterConsole struct {
+		Auth *RosterConsoleAuth `json:"auth,omitempty"`
+	}
+
+	// RosterConsoleAuth chooses the proof; `aws` is the function role's web
+	// identity token.
+	RosterConsoleAuth struct {
+		AWS *RosterConsoleAWS `json:"aws,omitempty"`
+	}
+
+	// RosterConsoleAWS is the AWS proof.
+	RosterConsoleAWS struct {
+		// Audience is the one the issuer's AWS federation file names.
+		Audience string `json:"audience"`
+	}
+
 	// RosterAudit is the audit installation a controller records to.
 	RosterAudit struct {
 		Writer    string `json:"writer,omitempty"`
@@ -364,14 +381,17 @@ type Serve struct {
 
 // Roster is what the two controllers share.
 type Roster struct {
-	Release    string    `json:"release,omitempty"`
-	PolicyDir  string    `json:"policyDir"`
-	ConsoleURL string    `json:"consoleURL"`
-	TokenFile  string    `json:"tokenFile,omitempty"`
-	RecordsDir string    `json:"recordsDir,omitempty"`
-	Interval   *Duration `json:"interval,omitempty"`
-	Log        *Log      `json:"log,omitempty"`
-	Ports      *Ports    `json:"ports,omitempty"`
+	Release    string `json:"release,omitempty"`
+	PolicyDir  string `json:"policyDir"`
+	ConsoleURL string `json:"consoleURL"`
+	TokenFile  string `json:"tokenFile,omitempty"`
+	// Console says how the controller proves itself to the console when the
+	// pod's token file is not the way (AWS Lambda).
+	Console    *RosterConsole `json:"console,omitempty"`
+	RecordsDir string         `json:"recordsDir,omitempty"`
+	Interval   *Duration      `json:"interval,omitempty"`
+	Log        *Log           `json:"log,omitempty"`
+	Ports      *Ports         `json:"ports,omitempty"`
 	// Platform, Preset and Adapters choose the adapters by name, per concern, as
 	// they do in the serve configuration; the Lambda controllers need them for
 	// the audit sink (`sqs`) and the state they share with the service.

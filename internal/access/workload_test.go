@@ -67,3 +67,44 @@ groups:
 		t.Errorf("an account the policy does not name has role %q, want none", neighbour.Role)
 	}
 }
+
+// A Lambda controller's role is a workload too, and what it may do is the
+// policy's `aws` matchers: an empty policy admits it to nothing.
+func TestAnAWSRoleIsWhatItsMatchersMakeIt(t *testing.T) {
+	t.Parallel()
+
+	declared, err := policy.Parse([]byte(`
+version: 1
+groups:
+  all:access-roster:viewer:
+    matchers:
+      - aws: { account: "111122223333", role: sluis-github }
+`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatalf("NewSet: %v", err)
+	}
+	authorizer := access.NewAuthorizer(set, nil, 0)
+	role := func(name string) access.Principal {
+		r := policy.AWSRole{Account: "111122223333", Path: "/", Name: name}
+		return access.Principal{Subject: r.Subject(), Source: access.SourceWorkload, AWS: &r}
+	}
+
+	named, err := authorizer.Authorize(context.Background(), role("sluis-github"))
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if named.Role != access.RoleViewer || named.Source != access.SourceWorkload {
+		t.Errorf("the named role: role %q source %q, want viewer/workload", named.Role, named.Source)
+	}
+	other, err := authorizer.Authorize(context.Background(), role("someone-else"))
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if other.Role == access.RoleViewer || other.Role == access.RoleOperator {
+		t.Errorf("an unnamed role got %q", other.Role)
+	}
+}

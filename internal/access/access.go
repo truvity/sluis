@@ -98,6 +98,11 @@ type Principal struct {
 	// entitled to is the policy's `service_account` matchers, the same
 	// table that answers for a workload exchanging a token.
 	ServiceAccount *policy.ServiceAccountRef
+	// AWS is set when the bearer is an AWS IAM role's outbound identity
+	// federation token (a Lambda controller reading the console). What it is
+	// entitled to is the policy's `aws` matchers, the same table that answers
+	// for a role exchanging a token.
+	AWS *policy.AWSRole
 }
 
 // Identity is an authorized caller: a principal, the internal groups the
@@ -269,8 +274,11 @@ func (a *Authorizer) Authorize(ctx context.Context, p Principal) (Identity, erro
 	// A workload proof is not a person: there is no directory to ask, and
 	// the policy's matchers are the whole answer.
 	proof := Proof{Email: p.Email}
-	if p.ServiceAccount != nil {
+	switch {
+	case p.ServiceAccount != nil:
 		proof = Proof{ServiceAccount: p.ServiceAccount}
+	case p.AWS != nil:
+		proof = Proof{AWS: p.AWS}
 	}
 	explained, err := a.explain(ctx, proof, true)
 	if err != nil {
@@ -298,10 +306,11 @@ type Proof struct {
 	Email          string
 	GitHub         *policy.GitHubClaims
 	ServiceAccount *policy.ServiceAccountRef
+	AWS            *policy.AWSRole
 }
 
 // IsPerson reports whether the proof is an address.
-func (p Proof) IsPerson() bool { return p.GitHub == nil && p.ServiceAccount == nil }
+func (p Proof) IsPerson() bool { return p.GitHub == nil && p.ServiceAccount == nil && p.AWS == nil }
 
 // ClientAdmission is one relying party and whether a proof reaches it.
 type ClientAdmission struct {
@@ -338,7 +347,7 @@ func (a *Authorizer) Explain(ctx context.Context, proof Proof) (Explanation, err
 func (a *Authorizer) explain(ctx context.Context, proof Proof, refuseSuspended bool) (Explanation, error) {
 	email := strings.ToLower(strings.TrimSpace(proof.Email))
 	out := Explanation{Email: email}
-	in := policy.Input{Email: email, GitHub: proof.GitHub, ServiceAccount: proof.ServiceAccount}
+	in := policy.Input{Email: email, GitHub: proof.GitHub, ServiceAccount: proof.ServiceAccount, AWS: proof.AWS}
 
 	// The break-glass admin has no address, so there is nothing to resolve
 	// and nothing to look up: it holds its role by construction, not by

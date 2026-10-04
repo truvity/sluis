@@ -59,16 +59,23 @@ func workloadBearer(clusters issuer.Verifiers, log *slog.Logger) func(*http.Requ
 			}
 			return access.Principal{}, false
 		}
-		// A cluster verifier only ever proves a ServiceAccount, but the
-		// check is what keeps a future verifier in this list from
-		// admitting something that is not one through the workload door.
-		if proof.ServiceAccount == nil {
-			return access.Principal{}, false
+		// Only a workload gets in through this door: a cluster's ServiceAccount
+		// or an AWS role. The check is what keeps a future verifier in this
+		// list from admitting something else through it.
+		switch {
+		case proof.ServiceAccount != nil:
+			return access.Principal{
+				Subject:        proof.Subject(),
+				Source:         access.SourceWorkload,
+				ServiceAccount: proof.ServiceAccount,
+			}, true
+		case proof.AWS != nil:
+			return access.Principal{
+				Subject: proof.Subject(),
+				Source:  access.SourceWorkload,
+				AWS:     proof.AWS,
+			}, true
 		}
-		return access.Principal{
-			Subject:        proof.Subject(),
-			Source:         access.SourceWorkload,
-			ServiceAccount: proof.ServiceAccount,
-		}, true
+		return access.Principal{}, false
 	}
 }

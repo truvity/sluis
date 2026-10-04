@@ -193,6 +193,35 @@
       "minLength": 1,
       "type": "string"
     },
+    "console": {
+      "additionalProperties": false,
+      "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+      "properties": {
+        "auth": {
+          "additionalProperties": false,
+          "description": "The proof. Absent, `tokenFile`.",
+          "properties": {
+            "aws": {
+              "additionalProperties": false,
+              "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), cached until near its expiry. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+              "properties": {
+                "audience": {
+                  "description": "The audience requested from STS. It must equal the `audience` of the issuer's AWS federation file.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "audience"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "consoleURL": {
       "$ref": "#/$defs/url",
       "description": "The console's API, which answers who holds a group."
