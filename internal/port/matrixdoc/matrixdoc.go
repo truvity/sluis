@@ -71,7 +71,8 @@ presets and the platform fit together, see
 		b.WriteString("\n")
 	}
 
-	b.WriteString("## Presets\n\nThe adapter each preset names per concern. " + requested + " marks an adapter that is not built, so that preset is not usable until it is.\n\n")
+	b.WriteString("## Presets\n\nThe adapter each preset names per concern. " + requested +
+		" marks an adapter that is not built, so that preset is not usable until it is.\n\n")
 	b.WriteString("| Concern |")
 	sep := "|---|"
 	for _, p := range port.Presets {
