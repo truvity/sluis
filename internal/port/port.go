@@ -202,6 +202,9 @@ type Set struct {
 	Trigger  Trigger
 	Sealer   Sealer
 	Identity Identity
+	// Secrets is the store of dynamic secrets and exports. It is nil until
+	// an adapter for the secrets concern is chosen.
+	Secrets Secrets
 	// Export is the copy of a secret OUT of the service into a store a
 	// consumer reads. It is nil when no export is configured.
 	Export Export

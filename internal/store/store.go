@@ -83,6 +83,9 @@ type Config struct {
 	DynamoDB dynamoport.Config
 	// Export is the Export port's adapter; nil is none.
 	Export *config.PortsExport
+
+	// sel is what the file says about adapters beyond `ports.adapter`.
+	sel selection
 }
 
 // validatePorts refuses a Blob or Sealer the file names but this build has no
@@ -191,6 +194,7 @@ func FromServe(f *config.Serve) (Config, error) {
 
 		DynamoDB: dynamoOf(f.Ports),
 		Export:   exportConfigOf(f.Ports),
+		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != ""),
 	}
 	var err error
 	if (c.Adapter == AdapterNATS || c.Adapter == AdapterDynamoDB) && f.Valkey != nil && f.Valkey.Address != "" {
@@ -223,6 +227,7 @@ func FromRoster(f *config.Roster) Config {
 	c := Config{
 		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
 		Blob: blobOf(f.Ports), Sealer: sealerOf(f.Ports), NATS: natsOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
+		sel: selectionOf(f.Ports, nil, "", nil, f.Audit != nil && f.Audit.Writer != ""),
 	}
 	if c.Adapter == AdapterMemory {
 		c.Kube = KubeNone
@@ -324,8 +329,11 @@ type Stores struct {
 	// (internal/portstore), and in the ConfigMaps and Secrets this reaches for
 	// `legacy`. It is nil with the memory adapter, which has none.
 	Backend *legacy.Backend
-	// Adapter is the adapter's name.
+	// Adapter is the state adapter's name.
 	Adapter string
+	// Plan is the resolved adapter per concern, for the packages that wire a
+	// concern this package does not.
+	Plan port.Table
 	// Shared is true when the state is one every replica sees: a Valkey.
 	Shared bool
 	// Usable is whether the State, Index and snapshot Blob ports work at all:
@@ -394,6 +402,22 @@ func (s *Stores) Close() {
 
 // Open builds the ports for the adapter the configuration names.
 func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
+	var plan port.Table
+	switch cfg.Adapter {
+	case AdapterLegacy, AdapterMemory, AdapterNATS, AdapterDynamoDB:
+		var err error
+		if cfg, plan, err = cfg.plan(ctx, log); err != nil {
+			return nil, err
+		}
+	}
+	st, err := open(ctx, cfg, log)
+	if st != nil {
+		st.Plan = plan
+	}
+	return st, err
+}
+
+func open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	switch cfg.Adapter {
 	case AdapterMemory:
 		log.WarnContext(ctx, "the storage ports are in memory: a restart loses every login in progress, "+
