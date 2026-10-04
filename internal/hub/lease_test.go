@@ -2,6 +2,7 @@ package hub_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"sync"
@@ -214,5 +215,130 @@ func TestTheLeaseIsShorterThanTheIntervalThatSchedulesIt(t *testing.T) {
 	if store.ttl <= interval/2 {
 		t.Errorf("lease %s is under half the interval %s: a replica ticking soon after would read again",
 			store.ttl, interval)
+	}
+}
+
+// requestRefreshHarness is a hub over a shared store whose snapshot is taken
+// at the start and then aged by the test's clock.
+func requestRefreshHarness(t *testing.T) (*hub.Hub, *fake.Backend, *shared, *time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	clock := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	directory := fake.New("C0north", "north.example").WithAccount("ada@north.example", "Ada", "North")
+	snapshots := newShared()
+	h := hub.New(hub.NewMemoryStore(), snapshots, hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h.SetClock(func() time.Time { return clock })
+	if _, err := h.Adopt(ctx, hub.Workspace{Admin: "admin@north.example"}, directory); err != nil {
+		t.Fatalf("Adopt: %v", err)
+	}
+	h.Wait()
+	h.UseRequestRefresh(time.Second)
+	return h, directory, snapshots, &clock
+}
+
+func TestAStaleSnapshotIsRefreshedBeforeTheAnswerWhenRequestsRefresh(t *testing.T) {
+	t.Parallel()
+	h, directory, _, clock := requestRefreshHarness(t)
+	before := directory.Calls(fake.OpAccounts)
+	*clock = clock.Add(31 * time.Minute) // past the freshness window
+
+	got, err := h.ResolveUser(context.Background(), "ada@north.example", nil)
+	if err != nil {
+		t.Fatalf("ResolveUser: %v", err)
+	}
+	if !got.Authoritative {
+		t.Error("the answer is not authoritative: the stale snapshot was served instead of refreshed")
+	}
+	if n := directory.Calls(fake.OpAccounts) - before; n != 1 {
+		t.Errorf("the directory was read %d times, want 1", n)
+	}
+	if !got.SnapshotAt.Equal(*clock) {
+		t.Errorf("snapshot at %v, want the refreshed %v", got.SnapshotAt, *clock)
+	}
+}
+
+func TestADueSnapshotIsRefreshedAfterTheAnswerAndAFreshOneIsLeftAlone(t *testing.T) {
+	t.Parallel()
+	h, directory, _, clock := requestRefreshHarness(t)
+	ctx := context.Background()
+	before := directory.Calls(fake.OpAccounts)
+
+	*clock = clock.Add(5 * time.Minute)
+	if _, err := h.ResolveUser(ctx, "ada@north.example", nil); err != nil {
+		t.Fatal(err)
+	}
+	h.Wait()
+	if n := directory.Calls(fake.OpAccounts) - before; n != 0 {
+		t.Errorf("a fresh snapshot was refreshed (%d reads)", n)
+	}
+
+	*clock = clock.Add(11 * time.Minute) // 16 minutes: due, still authoritative
+	got, err := h.ResolveUser(ctx, "ada@north.example", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Authoritative {
+		t.Error("a snapshot inside the window answered non-authoritatively")
+	}
+	h.Wait()
+	if n := directory.Calls(fake.OpAccounts) - before; n != 1 {
+		t.Errorf("a due snapshot was read %d times, want 1", n)
+	}
+}
+
+func TestAFailedRequestRefreshServesTheStaleSnapshotNonAuthoritatively(t *testing.T) {
+	t.Parallel()
+	h, directory, _, clock := requestRefreshHarness(t)
+	directory.Fail(fake.OpAccounts, errors.New("directory down"))
+	*clock = clock.Add(31 * time.Minute)
+
+	got, err := h.ResolveUser(context.Background(), "ada@north.example", nil)
+	if err != nil {
+		t.Fatalf("ResolveUser: %v", err)
+	}
+	if got.Authoritative || !got.Found {
+		t.Errorf("%+v: want the stale answer, found but not authoritative", got)
+	}
+}
+
+func TestARequestRefreshRespectsTheLeaseAndIsOffByDefault(t *testing.T) {
+	t.Parallel()
+	h, directory, snapshots, clock := requestRefreshHarness(t)
+	before := directory.Calls(fake.OpAccounts)
+	snapshots.mu.Lock()
+	snapshots.leases["refresh:C0north"] = true // another instance is reading
+	snapshots.mu.Unlock()
+	*clock = clock.Add(31 * time.Minute)
+	if _, err := h.ResolveUser(context.Background(), "ada@north.example", nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := directory.Calls(fake.OpAccounts) - before; n != 0 {
+		t.Errorf("the directory was read %d times while another instance held the lease", n)
+	}
+
+	h.UseRequestRefresh(0)
+	snapshots.mu.Lock()
+	delete(snapshots.leases, "refresh:C0north")
+	snapshots.mu.Unlock()
+	got, _ := h.ResolveUser(context.Background(), "ada@north.example", nil)
+	if got.Authoritative || directory.Calls(fake.OpAccounts) != before {
+		t.Error("a hub with request refresh off refreshed on a request")
+	}
+}
+
+func TestRefreshPassReportsWhatItDid(t *testing.T) {
+	t.Parallel()
+	h, _, snapshots, clock := requestRefreshHarness(t)
+	*clock = clock.Add(20 * time.Minute)
+	res, err := h.RefreshPass(context.Background())
+	if err != nil || res.Workspaces != 1 || res.Ran != 1 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	// The lease outlives the work, so a second pass in the interval is refused.
+	snapshots.mu.Lock()
+	snapshots.leases["refresh:C0north"] = true
+	snapshots.mu.Unlock()
+	if res, _ = h.RefreshPass(context.Background()); res.Contended != 1 {
+		t.Errorf("%+v", res)
 	}
 }

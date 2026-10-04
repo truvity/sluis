@@ -205,3 +205,22 @@ func TestAnExportsEventThatLeavesACopyStaleIsAnErrorAndAnUnknownKindIsRefused(t 
 		t.Error("a function that owns no exports ran them")
 	}
 }
+
+func TestARefreshEventRunsOneDirectoryPassAndAFailedWorkspaceIsAnError(t *testing.T) {
+	calls := 0
+	res := lambdaapp.RefreshResult{Kind: "refresh", Workspaces: 2, Ran: 2}
+	run := func(context.Context) (lambdaapp.RefreshResult, error) { calls++; return res, nil }
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).WithRefresh(run)
+	out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"refresh"}`))
+	if err != nil || calls != 1 || out.(lambdaapp.RefreshResult).Ran != 2 {
+		t.Fatalf("%v, %d runs, %+v", err, calls, out)
+	}
+	res = lambdaapp.RefreshResult{Workspaces: 2, Ran: 1, Failed: 1}
+	if _, err = h.Handle(context.Background(), json.RawMessage(`{"kind":"refresh"}`)); err == nil {
+		t.Error("an unread workspace was reported as success")
+	}
+	none := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
+	if _, err = none.Handle(context.Background(), json.RawMessage(`{"kind":"refresh"}`)); err == nil {
+		t.Error("a function with no directory ran a refresh")
+	}
+}

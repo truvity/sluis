@@ -295,6 +295,7 @@ not a secret: secrets are SSM parameters, below.
 | `Schedule.GitHubOrgs`, `Schedule.SlackWorkspaces` | none | The targets, one schedule each. |
 | `Schedule.Rate` | `rate(5 minutes)` | The EventBridge Scheduler expression. |
 | `Exports.Function`, `Exports.Rate`, `Exports.Disabled` | `http`, `rate(15 minutes)`, false | The exports schedule: which function owns the exports (`http`, so `<prefix>-http`, `github` or `slack`) and how often it is invoked with `{"kind":"exports"}`. |
+| `DirectoryRefresh.Rate`, `DirectoryRefresh.Disabled` | `rate(15 minutes)`, false | The directory refresh schedule: how often the http function is invoked with `{"kind":"refresh"}` to take a new snapshot of every connected directory, under the refresh lease. Lambda has no refresh loop; a request that finds a snapshot due refreshes it too. |
 | `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the github and slack roles may ask STS for. |
 | `HTTP.SecretFiles` (and `GitHub`, `Slack`) | none | SSM parameters written to files under `/tmp/` at cold start, as `SLUIS_SECRET_FILES`. The http function always lists the issuer's state secret at `/tmp/sluis/state-secret`. |
 | `Telemetry.LayerArn`, `Telemetry.Env` | nil: no layer | The observability `otlp-lambda` layer and its `OTEL_*` settings. Optional, so an estate whose collector is not ready leaves it out. `OTEL_SERVICE_NAME` is the function's name unless given. |

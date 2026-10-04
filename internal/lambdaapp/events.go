@@ -158,10 +158,29 @@ type ExportsResult struct {
 	Failed    int    `json:"failed"`
 }
 
+// KindRefresh is the event an EventBridge Scheduler schedule sends the `http`
+// function to take a new snapshot of every connected workspace's directory:
+// {"kind":"refresh"}. The Kubernetes server does it on a ticker; there is no
+// loop on Lambda, and a snapshot that is not refreshed stops being
+// authoritative after the freshness window, which sign-in refuses on.
+const KindRefresh = "refresh"
+
+// RefreshResult is what a refresh invocation returns.
+type RefreshResult struct {
+	Kind       string `json:"kind"`
+	Workspaces int    `json:"workspaces"`
+	Ran        int    `json:"ran"`
+	Contended  int    `json:"contended"`
+	Failed     int    `json:"failed"`
+}
+
 // scheduled handles an event of the http function that is not a request.
 func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
+	if kind == KindRefresh {
+		return h.refreshDirectory(ctx)
+	}
 	if kind != KindExports {
-		return nil, fmt.Errorf("the event's kind is %q: the http function takes API Gateway events and {\"kind\":%q}", oneLine(kind), KindExports)
+		return nil, fmt.Errorf("the event's kind is %q: the http function takes API Gateway events and {\"kind\":%q} or {\"kind\":%q}", oneLine(kind), KindExports, KindRefresh)
 	}
 	if h.exports == nil {
 		return nil, errors.New("this function owns no exports")
@@ -179,6 +198,29 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	// the next one retries, but a copy that stays stale should be noticed.
 	if res.Failed > 0 {
 		return nil, fmt.Errorf("%d of %d exports could not be made", res.Failed, res.Exports)
+	}
+	return res, nil
+}
+
+// refreshDirectory runs one directory refresh pass.
+func (h *HTTP) refreshDirectory(ctx context.Context) (any, error) {
+	if h.refresh == nil {
+		return nil, errors.New("this function has no directory to refresh")
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	res, err := h.refresh(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// A workspace that could not be read is an error the schedule sees: the
+	// snapshot it has is untouched and the next pass retries, but a directory
+	// that stays unread loses its authority and should be noticed.
+	if res.Failed > 0 {
+		return nil, fmt.Errorf("%d of %d workspaces could not be refreshed", res.Failed, res.Workspaces)
 	}
 	return res, nil
 }

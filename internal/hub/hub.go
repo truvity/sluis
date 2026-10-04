@@ -124,6 +124,10 @@ type Hub struct {
 	// pending counts detached work in flight. Only Wait reads it.
 	pending sync.WaitGroup
 
+	// requestRefresh, when positive, makes a request that finds the snapshot
+	// due refresh it: see [Hub.UseRequestRefresh].
+	requestRefresh time.Duration
+
 	// reopener opens a workspace this replica has no reader for yet.
 	reopener Reopener
 	// opens collapses concurrent misses on one workspace into one open.
@@ -187,6 +191,18 @@ func (h *Hub) Attach(ctx context.Context, workspaceID string, b backend.Backend)
 	h.mu.Unlock()
 	return nil
 }
+
+// UseRequestRefresh makes the hub keep a snapshot fresh from the requests
+// that read it, for a deployment with no background loop (a Lambda function).
+//
+// A request that finds the snapshot older than the refresh interval starts a
+// refresh outside the request; one that finds it older than the freshness
+// window — so that it would answer non-authoritatively, which the issuer
+// refuses a sign-in on — waits for a refresh of up to timeout first. Both
+// take the same lease the scheduled pass takes, so concurrent instances read
+// a directory once between them. A refresh that fails or runs out of time
+// leaves the stale snapshot served, as ever. Call it before serving.
+func (h *Hub) UseRequestRefresh(timeout time.Duration) { h.requestRefresh = timeout }
 
 // SetClock replaces the hub's clock. For tests.
 func (h *Hub) SetClock(now func() time.Time) { h.now = now }
@@ -531,6 +547,9 @@ func (h *Hub) point(ctx context.Context, v view, email string, maxAge *time.Dura
 	if err != nil {
 		h.log.WarnContext(ctx, "snapshot unreadable", "workspace", ws.ID, "error", err)
 	}
+	if maxAge == nil {
+		snap = h.keepFresh(ctx, ws.ID, snap)
+	}
 
 	goLive := snap == nil
 	if !goLive && maxAge != nil && snap.Age(h.now()) > *maxAge {
@@ -807,7 +826,7 @@ func (h *Hub) ensureFresh(ctx context.Context, workspaceID string, maxAge *time.
 		if snap == nil {
 			h.refreshSoon(ctx, workspaceID, "first snapshot failed")
 		}
-		return snap
+		return h.keepFresh(ctx, workspaceID, snap)
 	}
 	if snap != nil && snap.Age(h.now()) <= *maxAge {
 		return snap
@@ -821,6 +840,57 @@ func (h *Hub) ensureFresh(ctx context.Context, workspaceID string, maxAge *time.
 		return snap
 	}
 	return fresh
+}
+
+// DefaultRequestRefreshTimeout is how long a request waits for a refresh
+// that [Hub.UseRequestRefresh] was given no timeout for: inside API
+// Gateway's 30 seconds, with room to answer.
+const DefaultRequestRefreshTimeout = 20 * time.Second
+
+// keepFresh is what a request that asked for no particular freshness does
+// about a snapshot that is due, when [Hub.UseRequestRefresh] is on. It
+// returns the snapshot to serve.
+func (h *Hub) keepFresh(ctx context.Context, workspaceID string, snap *Snapshot) *Snapshot {
+	if h.requestRefresh <= 0 || snap == nil {
+		return snap
+	}
+	age := snap.Age(h.now())
+	switch {
+	case age < h.cfg.RefreshInterval:
+		return snap
+	case age < h.cfg.FreshnessWindow:
+		// Due but still authoritative: nobody waits for it. Settle waits for
+		// it before the function is frozen.
+		h.refreshSoonLeased(ctx, workspaceID)
+		return snap
+	}
+	rctx, cancel := context.WithTimeout(ctx, h.requestRefresh)
+	defer cancel()
+	outcome := h.refreshLeased(rctx, workspaceID)
+	if outcome == RefreshFailed {
+		return snap
+	}
+	// Ran, or another replica holds the lease and has probably just stored one.
+	fresh, err := h.snapshots.Get(ctx, workspaceID)
+	if err != nil || fresh == nil {
+		return snap
+	}
+	return fresh
+}
+
+// refreshSoonLeased is [Hub.refreshSoon] under the refresh lease.
+func (h *Hub) refreshSoonLeased(ctx context.Context, workspaceID string) {
+	if _, already := h.refreshing.LoadOrStore(workspaceID, struct{}{}); already {
+		return
+	}
+	detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedTimeout)
+	h.pending.Add(1)
+	go func() {
+		defer h.pending.Done()
+		defer cancel()
+		defer h.refreshing.Delete(workspaceID)
+		h.refreshLeased(detached, workspaceID)
+	}()
 }
 
 // ---------------------------------------------------------------- writing

@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -165,7 +166,51 @@ func leaseFor(interval time.Duration) time.Duration {
 // expire on its own, and only a failed one hands it straight back —
 // because then somebody else should try, and a stale snapshot is exactly
 // what the freshness window is for.
-func (h *Hub) refreshOne(ctx context.Context, id string) {
+func (h *Hub) refreshOne(ctx context.Context, id string) { h.refreshLeased(ctx, id) }
+
+// RefreshOutcome is what one leased refresh of a workspace did.
+type RefreshOutcome string
+
+// The outcomes of a leased refresh.
+const (
+	// RefreshRan took a new snapshot.
+	RefreshRan RefreshOutcome = "ran"
+	// RefreshContended found the lease held: another replica has the pass.
+	RefreshContended RefreshOutcome = "contended"
+	// RefreshFailed could not take one; the snapshot it had is untouched.
+	RefreshFailed RefreshOutcome = "failed"
+)
+
+// RefreshResult is what [Hub.RefreshPass] did.
+type RefreshResult struct {
+	Workspaces, Ran, Contended, Failed int
+}
+
+// RefreshPass runs one scheduled refresh pass over every workspace, under the
+// same lease the background loop takes. It is what a function with no loop
+// runs on a schedule.
+func (h *Hub) RefreshPass(ctx context.Context) (RefreshResult, error) {
+	workspaces, err := h.store.List(ctx)
+	if err != nil {
+		return RefreshResult{}, fmt.Errorf("list workspaces: %w", err)
+	}
+	res := RefreshResult{Workspaces: len(workspaces)}
+	for i := range workspaces {
+		switch h.refreshLeased(ctx, workspaces[i].ID) {
+		case RefreshRan:
+			res.Ran++
+		case RefreshContended:
+			res.Contended++
+		default:
+			res.Failed++
+		}
+	}
+	return res, nil
+}
+
+// refreshLeased refreshes a workspace unless another replica has already
+// done it this interval.
+func (h *Hub) refreshLeased(ctx context.Context, id string) RefreshOutcome {
 	var release func(context.Context)
 	if locker, shared := h.snapshots.(Locker); shared {
 		taken, acquired, err := locker.Lock(ctx, "refresh:"+id, leaseFor(h.cfg.RefreshInterval))
@@ -178,7 +223,7 @@ func (h *Hub) refreshOne(ctx context.Context, id string) {
 			h.log.WarnContext(ctx, "refresh lease unavailable; refreshing anyway",
 				"workspace", id, "error", err)
 		case !acquired:
-			return
+			return RefreshContended
 		default:
 			release = taken
 		}
@@ -186,7 +231,10 @@ func (h *Hub) refreshOne(ctx context.Context, id string) {
 	if _, err := h.Refresh(ctx, id); err != nil {
 		h.log.WarnContext(ctx, "refresh failed", "workspace", id, "error", err)
 		if release != nil {
-			release(ctx)
+			// The context may be the one that just ran out.
+			release(context.WithoutCancel(ctx))
 		}
+		return RefreshFailed
 	}
+	return RefreshRan
 }

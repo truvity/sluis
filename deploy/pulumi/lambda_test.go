@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -385,11 +386,18 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
 		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-slack",
 		"sluis-exports":             `{"kind":"exports"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-http",
+		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-http",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
 	}
 	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
+		if prop(s, "name").StringValue() == "sluis-directory-refresh" {
+			if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" {
+				t.Errorf("directory refresh rate: %v", s.Inputs)
+			}
+			continue
+		}
 		if prop(s, "name").StringValue() == "sluis-exports" {
 			if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" {
 				t.Errorf("exports rate: %v", s.Inputs)
@@ -439,11 +447,11 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 		},
 	})
 	shape(t, rec, out, "access.two.example.test")
-	if got := schedules(t, rec); len(got) != 2 {
+	if got := schedules(t, rec); len(got) != 3 {
 		t.Errorf("schedules: %v", got)
 	}
 	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
-		if prop(s, "name").StringValue() == "sluis-exports" {
+		if n := prop(s, "name").StringValue(); n == "sluis-exports" || n == "sluis-directory-refresh" {
 			continue
 		}
 		if prop(s, "scheduleExpression").StringValue() != "rate(5 minutes)" {
@@ -773,7 +781,8 @@ func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 		t.Errorf("exports schedule: %v", s.Inputs)
 	}
 	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
-	if len(sp["lambda:InvokeFunction"]) != 2 {
+	// The http function is invoked by the directory refresh, not by the exports.
+	if len(sp["lambda:InvokeFunction"]) != 3 {
 		t.Errorf("scheduler grants %v", sp)
 	}
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = true }})
@@ -787,6 +796,37 @@ func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestTheDirectoryRefreshScheduleIsOnByDefaultAndConfigurable(t *testing.T) {
+	rec, _ := mustLambda(t, estate{})
+	s := rec.one(t, "aws:scheduler/schedule:Schedule", "kernel-directory-refresh")
+	tgt := prop(s, "target").ObjectValue()
+	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http") ||
+		tgt["input"].StringValue() != `{"kind":"refresh"}` {
+		t.Errorf("directory refresh schedule: %v", s.Inputs)
+	}
+	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
+	if !slices.ContainsFunc(sp["lambda:InvokeFunction"], func(a string) bool { return strings.HasSuffix(a, ":function:sluis-http") }) {
+		t.Errorf("the scheduler cannot invoke the http function: %v", sp)
+	}
+
+	// Left out, with the exports elsewhere, the scheduler has no reason to
+	// invoke http at all.
+	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.DirectoryRefresh = arp.DirectoryRefreshArgs{Disabled: true}
+		a.Exports.Function = "github"
+	}})
+	if rec.has("aws:scheduler/schedule:Schedule", "kernel-directory-refresh") {
+		t.Error("a disabled directory refresh schedule was made")
+	}
+	sp = grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
+	if len(sp["lambda:InvokeFunction"]) != 2 {
+		t.Errorf("scheduler grants %v", sp)
+	}
+	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.DirectoryRefresh.Rate = "hourly" }}); err == nil {
+		t.Error("a bad rate was accepted")
 	}
 }
 
