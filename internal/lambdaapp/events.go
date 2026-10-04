@@ -180,7 +180,8 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 		return h.refreshDirectory(ctx)
 	}
 	if kind != KindExports {
-		return nil, fmt.Errorf("the event's kind is %q: the http function takes API Gateway events and {\"kind\":%q} or {\"kind\":%q}", oneLine(kind), KindExports, KindRefresh)
+		return nil, fmt.Errorf("the event's kind is %q: the http function takes API Gateway events and {\"kind\":%q} or {\"kind\":%q}",
+			oneLine(kind), KindExports, KindRefresh)
 	}
 	if h.exports == nil {
 		return nil, errors.New("this function owns no exports")
