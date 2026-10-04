@@ -62,6 +62,7 @@ var stateRows = []struct{ key, kind, id string }{
 	{"issuer:session-rotated:h1", "issuer-session-rotated", "h1"},
 	{"issuer:keyring:entry:ES384:kid1", "keyring", "ES384/kid1"},
 	{"issuer:keyring:retired:ES384:kid1", "keyring-retired", "ES384/kid1"},
+	{"issuer:held:ada@acme.example", "issuer-held", "ada@acme.example"},
 	{"issuer:kms:state-secret-fingerprint", "issuer-guard", "state-secret-fingerprint"},
 	{"anything.else", port.KindOther, "anything.else"},
 }
