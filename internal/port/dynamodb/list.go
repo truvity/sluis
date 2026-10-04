@@ -80,6 +80,11 @@ func (s *Store) query(ctx context.Context, pk, skPrefix, prefix, after string, h
 	}
 	in.KeyConditionExpression = aws.String(keyCondSK)
 	in.ExpressionAttributeValues = map[string]types.AttributeValue{":pk": strAttr(pk), ":p": strAttr(skPrefix)}
+	if skPrefix == "" {
+		// begins_with takes no empty string: the whole partition is the pk alone.
+		in.KeyConditionExpression = aws.String(keyCond)
+		in.ExpressionAttributeValues = map[string]types.AttributeValue{":pk": strAttr(pk)}
+	}
 	if hint > 0 {
 		in.Limit = aws.Int32(int32(min(hint, 1000)))
 	}
