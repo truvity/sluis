@@ -128,6 +128,9 @@ type Options struct {
 	ReportBlob string
 	// Log receives progress. Nil is silent.
 	Log *slog.Logger
+	// Now is the clock the copied lifetimes are measured against; nil is
+	// time.Now. For tests, which inject the delay between reading and writing.
+	Now func() time.Time
 }
 
 // Step is the outcome of one collection.
@@ -265,6 +268,16 @@ type run struct {
 	report *Report
 	log    *slog.Logger
 	runs   []*stepRun
+	// readAt is when the source was read, which is what a lifetime read from it
+	// counts down from.
+	readAt time.Time
+}
+
+func (r *run) now() time.Time {
+	if r.opt.Now != nil {
+		return r.opt.Now()
+	}
+	return time.Now()
 }
 
 // Run copies from one side to the other and returns what it did. The report is
@@ -396,6 +409,7 @@ type stepRun struct {
 
 func (r *run) execute(ctx context.Context, steps []step) error {
 	// 1. Plan.
+	r.readAt = r.now()
 	runs := make([]*stepRun, 0, len(steps))
 	for _, s := range steps {
 		sr, err := r.plan(ctx, s)
@@ -432,6 +446,14 @@ func (r *run) execute(ctx context.Context, steps []step) error {
 			p := sr.items[i]
 			if p.action == "present" {
 				continue
+			}
+			// The lifetime was read at readAt: write what is LEFT now, so that the
+			// copy does not outlive the source by the time the run took, and a
+			// record that has run out meanwhile is not written.
+			if sr.step.lifetimes && p.e.ttl > 0 {
+				if p.e.ttl -= r.now().Sub(r.readAt); p.e.ttl <= 0 {
+					continue
+				}
 			}
 			if err := sr.step.write(ctx, r.to, p.e, p.old); err != nil {
 				return fmt.Errorf("copy %s/%s %s: %w", sr.step.domain, sr.step.name, p.e.shown, err)
