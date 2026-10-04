@@ -42,7 +42,8 @@ func TestACredentialIsAParameterUnderTheCredentialsPrefix(t *testing.T) {
 	base := portstore.New(set)
 	at := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 
-	if err := portstore.NewCredentials(base).Save(ctx, "C01ipl6j0", backend.Credential{Type: "service-account-key", Admin: "a@b.example", Data: []byte(`{"k":"v"}`)}); err != nil {
+	cred := backend.Credential{Type: "service-account-key", Admin: "a@b.example", Data: []byte(`{"k":"v"}`)}
+	if err := portstore.NewCredentials(base).Save(ctx, "C01ipl6j0", cred); err != nil {
 		t.Fatal(err)
 	}
 	if err := portstore.NewSlackWorkspaces(base).Put(ctx,
