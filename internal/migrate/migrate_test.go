@@ -24,7 +24,7 @@ func destEnvs(t *testing.T) []portstoretest.Env {
 	return portstoretest.Envs(t)
 }
 
-var stopped = migrate.Options{WritersStopped: true}
+var stopped = migrate.Options{WritersStopped: true, Sessions: true}
 
 // total of every item of a seeded side: workspaces 2, organisations 1, link App
 // 1, runner Apps 1, catalogue Apps 1, links 2, GitHub confirmations 1 and pass

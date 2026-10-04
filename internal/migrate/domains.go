@@ -180,6 +180,10 @@ type item struct {
 	val        any
 	canon      []byte
 	unreadable string
+	// secrets are the sizes of the credentials the item carries (as the JSON
+	// of the credential, a close upper bound of what the destination's Secrets
+	// port is given), for the limits a dry run checks.
+	secrets []int
 }
 
 // kind is one collection of a domain: how to read all of it from a side, and
@@ -196,6 +200,15 @@ func newItem(id string, val any) item {
 		return item{id: id, unreadable: err.Error()}
 	}
 	return item{id: id, val: val, canon: raw}
+}
+
+// withSecrets records the sizes of an item's credentials.
+func (it item) withSecrets(creds ...any) item {
+	for _, c := range creds {
+		raw, _ := json.Marshal(c)
+		it.secrets = append(it.secrets, len(raw))
+	}
+	return it
 }
 
 func bad(id, why string) item { return item{id: id, unreadable: why} }
@@ -315,7 +328,11 @@ func listWorkspaces(ctx context.Context, d *Domains) ([]item, error) {
 		if found {
 			doc.Credential = &cred
 		}
-		out = append(out, newItem(ws.ID, doc))
+		it := newItem(ws.ID, doc)
+		if found {
+			it = it.withSecrets(cred)
+		}
+		out = append(out, it)
 	}
 	return out, nil
 }
@@ -346,7 +363,7 @@ func listOrgs(ctx context.Context, d *Domains) ([]item, error) {
 			out = append(out, bad(r.Org, "it has a record and no credential"))
 		default:
 			cred.Record = nil
-			out = append(out, newItem(r.Org, orgDoc{Record: r, Credential: cred}))
+			out = append(out, newItem(r.Org, orgDoc{Record: r, Credential: cred}).withSecrets(cred))
 		}
 	}
 	return out, nil
@@ -365,7 +382,7 @@ func listLinkApp(ctx context.Context, d *Domains) ([]item, error) {
 		return []item{bad("link-app", "it has a record and no credential")}, nil
 	}
 	cred.Record = nil
-	return []item{newItem("link-app", linkAppDoc{App: app, Credential: cred})}, nil
+	return []item{newItem("link-app", linkAppDoc{App: app, Credential: cred}).withSecrets(cred)}, nil
 }
 
 func listRunnerApps(ctx context.Context, d *Domains) ([]item, error) {
@@ -382,7 +399,7 @@ func listRunnerApps(ctx context.Context, d *Domains) ([]item, error) {
 			out = append(out, bad(id, "its private key cannot be read"))
 			continue
 		}
-		out = append(out, newItem(id, runnerDoc{Record: r, PrivateKey: key}))
+		out = append(out, newItem(id, runnerDoc{Record: r, PrivateKey: key}).withSecrets(key))
 	}
 	return out, nil
 }
@@ -400,7 +417,7 @@ func listCatalogueApps(ctx context.Context, d *Domains) ([]item, error) {
 			out = append(out, bad(r.ID, "its private key cannot be read"))
 			continue
 		}
-		out = append(out, newItem(r.ID, catalogueDoc{Record: rec, PrivateKey: key}))
+		out = append(out, newItem(r.ID, catalogueDoc{Record: rec, PrivateKey: key}).withSecrets(key))
 	}
 	return out, nil
 }
@@ -412,7 +429,7 @@ func listLinks(ctx context.Context, d *Domains) ([]item, error) {
 	}
 	out := make([]item, 0, len(all))
 	for i := range all {
-		out = append(out, newItem(strconv.FormatInt(all[i].ID, 10), all[i]))
+		out = append(out, newItem(strconv.FormatInt(all[i].ID, 10), all[i]).withSecrets(all[i].AccessToken, all[i].RefreshToken))
 	}
 	return out, nil
 }
@@ -465,7 +482,7 @@ func listSlack(ctx context.Context, d *Domains) ([]item, error) {
 			out = append(out, bad(r.Workspace, "it has a record and no credential"))
 		default:
 			cred.Record = nil
-			out = append(out, newItem(r.Workspace, slackDoc{Record: rec, Credential: cred}))
+			out = append(out, newItem(r.Workspace, slackDoc{Record: rec, Credential: cred}).withSecrets(cred))
 		}
 	}
 	return out, nil
@@ -484,7 +501,7 @@ func listSlackApps(ctx context.Context, d *Domains) ([]item, error) {
 			out = append(out, bad(r.ID, "its credentials cannot be read"))
 			continue
 		}
-		out = append(out, newItem(r.ID, slackAppDoc{Record: rec, Credentials: creds}))
+		out = append(out, newItem(r.ID, slackAppDoc{Record: rec, Credentials: creds}).withSecrets(creds))
 	}
 	return out, nil
 }
@@ -575,5 +592,5 @@ func listSessionKey(ctx context.Context, d *Domains) ([]item, error) {
 	case err != nil:
 		return []item{bad("session-key", "it cannot be read: "+err.Error())}, nil
 	}
-	return []item{newItem("session-key", sessionKeyDoc{Key: key})}, nil
+	return []item{newItem("session-key", sessionKeyDoc{Key: key}).withSecrets(key)}, nil
 }

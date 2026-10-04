@@ -68,6 +68,10 @@ type Config struct {
 	// Valkey is where the shared cache is; an empty address is none.
 	Valkey valkey.Config
 	Kube   KubeNeed
+	// KubeClient, when set, opens the namespace's objects in place of the
+	// pod's own ServiceAccount: an operator's tool that runs from a
+	// workstation (sluis migrate) names a kubeconfig this way.
+	KubeClient func(release string) (*kube.Client, error)
 	// Blob replaces the port of the same name; nil keeps what Adapter brings.
 	Blob *config.PortsBlob
 	// DynamoDB is the table of the `dynamodb` adapter.
@@ -165,6 +169,14 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 		log.InfoContext(ctx, "secrets are kept by the secrets adapter", "adapter", c.secrets.Adapter)
 	}
 	return set, nil
+}
+
+// kubeClient opens the namespace's objects.
+func (c Config) kubeClient() (*kube.Client, error) {
+	if c.KubeClient != nil {
+		return c.KubeClient(c.Release)
+	}
+	return kube.InCluster(c.Release)
 }
 
 // FromServe reads the configuration of `sluis serve`.
@@ -401,7 +413,7 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 	backend := &legacy.Backend{}
 	st := &Stores{Backend: backend, Adapter: AdapterDynamoDB, Shared: true, Usable: true}
 	if cfg.Kube != KubeNone {
-		client, err := kube.InCluster(cfg.Release)
+		client, err := cfg.kubeClient()
 		switch {
 		case err == nil:
 			backend.Kube = client
@@ -436,7 +448,7 @@ func openLegacy(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, err
 	st := &Stores{Backend: backend, Adapter: AdapterLegacy}
 
 	if cfg.Kube != KubeNone {
-		client, err := kube.InCluster(cfg.Release)
+		client, err := cfg.kubeClient()
 		switch {
 		case err == nil:
 			backend.Kube = client
