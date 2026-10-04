@@ -137,7 +137,7 @@ for another.
 | `RoleNamePrefix` | the component's name | Roles are `<prefix>-sluis-serve`, `<prefix>-sluis-github` and `<prefix>-sluis-slack`; each role's managed policy has the role's name. |
 | `Serve`, `GitHub`, `Slack` | | A `ProcessArgs`: `ServiceAccount` (empty creates no role; required for `Serve`) and `Description` (the policy's, which IAM cannot change once set). |
 | `Storage` | required | `Storage.Grant()`. |
-| `SigningKeyArn` | none | The Lambda stack's signing key. Set, the serve role (and only it) may `kms:Sign` and `kms:GetPublicKey` with it. |
+| `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the serve role (and only it) may `kms:Sign` and `kms:GetPublicKey` with them. |
 | `State` | none | `State.Grant()`. Nil when the State is on NATS: the roles then carry no DynamoDB grant. |
 
 ### Outputs
@@ -162,7 +162,7 @@ Every role has the same grants; they are the whole of its policy.
 |---|---|---|
 | `SluisBlobs` | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | the bucket's objects |
 | `SluisBlobList` | `s3:ListBucket` | the bucket (a read of an absent key is a 404 only with it, a 403 without) |
-| `SluisSigning`, serve only, with `SigningKeyArn` | `kms:Sign`, `kms:GetPublicKey` | the signing key |
+| `SluisSigning`, serve only, with `SigningKeyArns` | `kms:Sign`, `kms:GetPublicKey` | the signing keys |
 | `SluisState`, with State | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | the table |
 | `SluisStateKey`, with a table key | `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey`, `kms:DescribeKey` | the table's key, only through DynamoDB (`kms:ViaService`) |
 
@@ -279,7 +279,8 @@ not a secret: secrets are SSM parameters, below.
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
 | `AuditQueueArn` | required | The audit stack's ingest queue. |
 | `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use. Absent, the AWS-managed key, which needs no grant. Present, each role may use it through SSM only. |
-| `SigningKeyAlias` | `alias/sluis-signing` | The signing key's alias. |
+| `SigningKeyAlias` | `alias/sluis-signing` | The ES384 signing key's alias. |
+| `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
 | `FunctionNamePrefix` | `sluis` | `<prefix>-http`, `-github`, `-slack`, and `<prefix>-scheduler`. |
 | `HTTP`, `GitHub`, `Slack` | 512 MB; 30 s for http, 300 s for a controller | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`, `Env`. |
 | `Env` | none | On all three functions. |
@@ -297,7 +298,8 @@ not a secret: secrets are SSM parameters, below.
 
 | Output | |
 |---|---|
-| `SigningKeyArn`, `SigningKeyID`, `SigningKeyAlias` | The token-signing key. |
+| `SigningKeyArn`, `SigningKeyID`, `SigningKeyAlias` | The ES384 token-signing key. |
+| `SigningKeyRS256Arn`, `SigningKeyRS256ID`, `SigningKeyRS256Alias` | The RS256 token-signing key (empty when disabled). |
 | `HTTPFunctionArn`, `GitHubFunctionArn`, `SlackFunctionArn` and the `...FunctionName`s | The functions. |
 | `HTTPRoleArn`, `GitHubRoleArn`, `SlackRoleArn` and the `...RoleName`s | Their roles. |
 | `APIID`, `APIURL` | The HTTP API and its default endpoint (it answers only with `KeepDefaultEndpoint`). |
@@ -342,10 +344,11 @@ granted on `*`.
 | SSM: `PutParameter`, `DeleteParameter` under `/sluis/export/*` | yes | yes | yes |
 | `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only (with the key) | yes | yes | yes |
 | `sqs:SendMessage` on the audit ingest queue | yes | yes | yes |
-| `kms:Sign`, `kms:GetPublicKey` on the signing key | **yes** | no | no |
+| `kms:Sign`, `kms:GetPublicKey` on both signing keys | **yes** | no | no |
 | `lambda:InvokeFunction` on the github and slack functions ("run a pass now") | **yes** | no | no |
 
-The signing key is `ECC_NIST_P384`, usage `SIGN_VERIFY`, protected, with a
+Both estates sign with two keys: `ECC_NIST_P384` (ES384) and `RSA_3072`
+(RS256), each usage `SIGN_VERIFY`, protected, with a
 30-day deletion window and AWS's default key policy, so the http role's policy is
 what grants its use. The roles carry a permissions boundary when
 `PermissionsBoundaryArn` is set.

@@ -1,5 +1,13 @@
 ## Unreleased
 
+- **The Pulumi library creates a second signing key, RS256.** `NewLambda` makes an
+  `RSA_3072` `SIGN_VERIFY` key beside the ES384 one (alias `SigningKeyRS256Alias`,
+  default `alias/sluis-signing-rs256`; `DisableSigningKeyRS256` leaves it out) and
+  outputs `SigningKeyRS256Arn`, `SigningKeyRS256ID` and `SigningKeyRS256Alias`. Only
+  the `sluis-http` role may `kms:Sign` and `kms:GetPublicKey` with it.
+  **Breaking:** `KubernetesIdentityArgs.SigningKeyArn` is now `SigningKeyArns`, a list.
+  A caller's next apply creates the key.
+
 - **The Audit page's query URL no longer needs `audit.writer`.** `audit.queryURL` is its
   own setting, so the console's Audit page works with the `sqs` and `log` audit sinks, which
   have no receiver (the Lambda target state). The console already forwards the page's calls
