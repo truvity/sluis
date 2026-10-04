@@ -46,6 +46,10 @@
   items (with any signing). `KubernetesIdentityArgs.WrappedSigningKeyArn` grants the serve role the
   same.
 
+- **`GET /` on the issuer's host redirects to `/console/`** (302, HEAD too) when the
+  console is mounted, instead of the issuer's bare 404. Only the exact path: every
+  other route keeps its handler.
+
 ## v1.60.0
 
 Storage layout v2 moves DynamoDB items to a per-kind table partition, SSM configs to a /config prefix, and exports to Secrets; re-migrate from legacy.
