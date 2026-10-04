@@ -46,6 +46,22 @@
   items (with any signing). `KubernetesIdentityArgs.WrappedSigningKeyArn` grants the serve role the
   same.
 
+- **Recovery on Lambda: a generated password, kept in SSM, with an off switch.**
+  `sluispulumi.NewLambda` now generates the recovery password (`random.RandomPassword`,
+  40 characters, no look-alikes), stores it as the SecureString
+  `/sluis/private/config/recovery/password`, writes it to `/tmp/sluis/recovery-password`
+  for the http function at cold start (the library names it as the new
+  `recovery.passwordFile`) and exports its NAME as `RecoveryPasswordParameter`, never the
+  value. `LambdaArgs.Recovery{Enabled *bool}` writes `recovery.enabled`; the default is
+  **on**, because a first installation has no other way in; turning it off keeps the
+  parameter and the file, refuses the sign-in with a message, and turning it on again
+  rotates nothing. Before this a Lambda generated a different password at every cold
+  start and printed it to the function's log. Every recovery attempt on the console,
+  refused ones too, is now the audit event `roster.recovery.signed_in` (outcome
+  `denied` or `failure` with the reason, actor `anonymous`); the catalogue is unchanged.
+  The setup checklist's step "Turn off the recovery password" names the setting and the
+  parameter. See [Recovery on Lambda](docs/operations/recovery-on-lambda.md).
+
 - **`GET /` on the issuer's host redirects to `/console/`** (302, HEAD too) when the
   console is mounted, instead of the issuer's bare 404. Only the exact path: every
   other route keeps its handler.

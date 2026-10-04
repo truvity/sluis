@@ -93,8 +93,11 @@ export function Setup({ progress, operator }: { progress: Progress; operator: bo
       title: "Turn off the recovery password",
       body: (
         <Typography variant="body2" color="text.secondary">
-          Set <Mono>access.recovery.enabled: false</Mono>, or run sluis in a cluster, where recovery is a
-          short-lived token proving access to the API server and no password is kept at all.
+          Once a directory works, set <Mono>recovery.enabled: false</Mono> in the configuration. The password
+          stays where it is kept (on AWS Lambda, the SSM parameter{" "}
+          <Mono>/sluis/private/config/recovery/password</Mono>), so turning it back on is the same one-line
+          change and nothing is rotated. Or run sluis in a cluster, where recovery is a short-lived token
+          proving access to the API server and no password is kept at all.
         </Typography>
       ),
     });

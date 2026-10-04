@@ -135,6 +135,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("exportReadPolicy", l.ExportReadPolicyJSON)
 		collect("schedulerRoleArn", l.SchedulerRoleArn)
 		collect("stateSecretParameter", l.StateSecretParameter)
+		collect("recoveryPasswordParameter", l.RecoveryPasswordParameter)
 		return nil
 	})
 }
@@ -509,7 +510,7 @@ func TestAChangedConfigOrCatalogueChangesThePackage(t *testing.T) {
 		return packageFiles(t, rec.one(t, fnType, "kernel-http"))
 	}
 	base := files(estate{config: "a: 1\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}})
-	if base["config/sluis.yaml"] != "a: 1\n" {
+	if base["config/sluis.yaml"] != "a: 1\nrecovery:\n  passwordFile: /tmp/sluis/recovery-password\n" {
 		t.Fatalf("the stale config in the zip won over the estate's: %q", base["config/sluis.yaml"])
 	}
 	if base["bootstrap"] != "#!binary\n" {
@@ -797,7 +798,8 @@ func TestTheSecretFilesAreTheEnvironmentTheAppReads(t *testing.T) {
 	env := func(r string) map[resource.PropertyKey]resource.PropertyValue {
 		return prop(rec.one(t, fnType, "kernel-"+r), "environment").ObjectValue()["variables"].ObjectValue()
 	}
-	wantHTTP := `[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"}]`
+	wantHTTP := `[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"},` +
+		`{"parameter":"/sluis/private/config/recovery/password","path":"/tmp/sluis/recovery-password"}]`
 	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != wantHTTP {
 		t.Errorf("http: %s", got)
 	}
@@ -1119,6 +1121,85 @@ func TestTheControllersNeverWriteTheKeyRingWhateverTheSigning(t *testing.T) {
 		}
 		if has != (r != "http") {
 			t.Errorf("%s: keyring-write denial %v", r, has)
+
+// The recovery password is generated once, kept as a SecureString under the
+// config/ prefix, written to a file the http function reads at cold start, and
+// its VALUE is in no output: only the parameter's name is.
+func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testing.T) {
+	key := arnp + "kms:" + region + ":" + account + ":key/params"
+	for _, k := range []string{"", key} {
+		rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = k }})
+		r := rec.one(t, "random:index/randomPassword:RandomPassword", "kernel-recovery-password")
+		if prop(r, "length").NumberValue() < 32 || prop(r, "special").BoolValue() || prop(r, "keepers").HasValue() {
+			t.Errorf("random password: %v: at least 32 characters, no special ones, and no keepers, or an apply rotates it", r.Inputs)
+		}
+		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-recovery-password")
+		if prop(p, "name").StringValue() != "/sluis/private/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
+			t.Errorf("parameter: %v", p.Inputs)
+		}
+		value := prop(p, "value")
+		if !value.IsSecret() {
+			t.Error("the password's value is not marked secret")
+		}
+		if got := value.SecretValue().Element.StringValue(); strings.ContainsAny(got, "0O1lI") || len(got) != 40 {
+			t.Errorf("the stored password %q has a look-alike or the wrong length", got)
+		}
+		if got := prop(p, "keyId"); got.HasValue() != (k != "") || (k != "" && got.StringValue() != key) {
+			t.Errorf("keyId %v with ParameterKeyArn %q", prop(p, "keyId"), k)
+		}
+		for name, v := range out {
+			if strings.Contains(v, "EfGhJkMn") || strings.Contains(v, "XyZaBc") {
+				t.Errorf("output %s carries the password: %q", name, v)
+			}
+		}
+	}
+	rec, out := mustLambda(t, estate{})
+	if out["recoveryPasswordParameter"] != "/sluis/private/config/recovery/password" {
+		t.Errorf("output: %q", out["recoveryPasswordParameter"])
+	}
+	env := prop(rec.one(t, fnType, "kernel-http"), "environment").ObjectValue()["variables"].ObjectValue()
+	if got := env["SLUIS_SECRET_FILES"].StringValue(); !strings.Contains(got, `"parameter":"/sluis/private/config/recovery/password","path":"/tmp/sluis/recovery-password"`) {
+		t.Errorf("http secret files: %s", got)
+	}
+	for _, role := range []string{"github", "slack"} {
+		e := prop(rec.one(t, fnType, "kernel-"+role), "environment").ObjectValue()["variables"].ObjectValue()
+		if f := e["SLUIS_SECRET_FILES"]; f.HasValue() && strings.Contains(f.StringValue(), "recovery") {
+			t.Errorf("%s was given the recovery password", role)
+		}
+	}
+}
+
+// The toggle is a configuration key, the library owns the file's path, and
+// turning recovery off keeps the parameter.
+func TestRecoveryEnabledIsWrittenIntoTheHTTPConfiguration(t *testing.T) {
+	off := false
+	on := true
+	configOf := func(e estate) string {
+		rec, _ := mustLambda(t, e)
+		return packageFiles(t, rec.one(t, fnType, "kernel-http"))["config/sluis.yaml"]
+	}
+	if got := configOf(estate{config: "issuerURL: https://x\n"}); strings.Contains(got, "enabled") || !strings.Contains(got, "passwordFile: /tmp/sluis/recovery-password") {
+		t.Errorf("default: %q, want the file named and the hub's own default (on) left alone", got)
+	}
+	for want, e := range map[string]*bool{"enabled: false": &off, "enabled: true": &on} {
+		got := configOf(estate{config: "# the issuer\nissuerURL: https://x\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: e} }})
+		if !strings.Contains(got, want) || !strings.Contains(got, "# the issuer") || !strings.Contains(got, "issuerURL: https://x") {
+			t.Errorf("Recovery.Enabled %v: %q", *e, got)
+		}
+	}
+	// A key the operator already wrote is kept, and may not disagree.
+	if got := configOf(estate{config: "recovery:\n  enabled: false\n  audience: x\n"}); !strings.Contains(got, "enabled: false") || !strings.Contains(got, "audience: x") {
+		t.Errorf("an operator's recovery.enabled was lost: %q", got)
+	}
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }})
+	rec.one(t, "aws:ssm/parameter:Parameter", "kernel-recovery-password")
+	for name, e := range map[string]estate{
+		"disagrees": {config: "recovery: {enabled: true}\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }},
+		"own file":  {config: "recovery: {passwordFile: /tmp/other}\n"},
+		"not a map": {config: "- a\n"},
+	} {
+		if _, _, err := buildLambda(t, e); err == nil {
+			t.Errorf("%s: accepted", name)
 		}
 	}
 }
