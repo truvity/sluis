@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -89,10 +90,10 @@ type Config struct {
 	consumersPath    string
 	loginDirectory   bool
 	adminPassword    string
-	// recoveryPasswordFile is where the password is read from instead of
+	// recoveryFile is where the password is read from instead of
 	// being generated, outside a cluster.
-	recoveryPasswordFile string
-	sessionLifetime      time.Duration
+	recoveryFile    string
+	sessionLifetime time.Duration
 	// absoluteLifetime caps the console's own session the same way it caps
 	// a per-client one in the issuer: read from the SAME key
 	// the issuer's config reads (lifetimes.absolute), because the
@@ -176,7 +177,7 @@ func FromConfig(f *config.Serve) (Config, error) {
 		}
 		c.recoveryAccount = orDefault(r.ServiceAccount, c.recoveryAccount)
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
-		c.recoveryPasswordFile = r.PasswordFile
+		c.recoveryFile = r.PasswordFile
 	}
 	if a := f.API; a != nil {
 		c.apiAudience = orDefault(a.Audience, c.apiAudience)
@@ -382,16 +383,21 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger
 	}
 	if kept.reviewToken == nil {
 		password := cfg.adminPassword
-		if cfg.recoveryPasswordFile != "" {
-			raw, err := os.ReadFile(cfg.recoveryPasswordFile)
+		if cfg.recoveryFile != "" {
+			raw, err := os.ReadFile(cfg.recoveryFile)
 			if err != nil {
-				return nil, fmt.Errorf("recovery.passwordFile: %w", err)
+				// The path is left out of the error: it travels to a log, and a
+				// name that says "password" is where a reader looks for one.
+				var pathErr *fs.PathError
+				if errors.As(err, &pathErr) {
+					err = pathErr.Err
+				}
+				return nil, fmt.Errorf("recovery.passwordFile could not be read: %w", err)
 			}
 			if password = strings.TrimSpace(string(raw)); password == "" {
-				return nil, fmt.Errorf("recovery.passwordFile: %s is empty", cfg.recoveryPasswordFile)
+				return nil, errors.New("recovery.passwordFile is empty")
 			}
-			log.InfoContext(ctx, "recovery sign-in is by the password in recovery.passwordFile",
-				"file", cfg.recoveryPasswordFile)
+			log.InfoContext(ctx, "recovery sign-in is by the secret file the configuration names")
 		}
 		if password == "" {
 			generated, err := generatedPassword()

@@ -23,7 +23,7 @@ func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
 	if err := os.WriteFile(file, []byte("a-long-generated-password\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	recovery, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryPasswordFile: file}, stores{}, log)
+	recovery, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryFile: file}, stores{}, log)
 	if err != nil || recovery == nil {
 		t.Fatalf("openRecovery = %v, %v", recovery, err)
 	}
@@ -39,7 +39,7 @@ func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
 
 	// Turned off keeps the file and builds nothing; turning it on again is
 	// the same file, no new password.
-	off, err := openRecovery(ctx, Config{recoveryEnabled: false, recoveryPasswordFile: file}, stores{}, log)
+	off, err := openRecovery(ctx, Config{recoveryEnabled: false, recoveryFile: file}, stores{}, log)
 	if err != nil || off != nil {
 		t.Errorf("recovery turned off = %v, %v, want none", off, err)
 	}
@@ -51,11 +51,11 @@ func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
 	if err = os.WriteFile(empty, []byte(" \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryPasswordFile: empty}, stores{}, log); err == nil ||
+	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryFile: empty}, stores{}, log); err == nil ||
 		!strings.Contains(err.Error(), "recovery.passwordFile") {
 		t.Errorf("an empty password file = %v, want a refusal naming the key", err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryPasswordFile: filepath.Join(dir, "absent")}, stores{}, log); err == nil {
+	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryFile: filepath.Join(dir, "absent")}, stores{}, log); err == nil {
 		t.Error("a missing password file was not refused")
 	}
 }
