@@ -1,0 +1,18 @@
+# controllerSlack.config.probes takes address and nothing else (config schema).
+# error: probes
+config:
+  issuerURL: https://issuer.example
+  exchange:
+    clustersFile: /var/run/access-issuer/clusters.yaml
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+console:
+  mount: /console
+controllerSlack:
+  enabled: true
+  config:
+    consoleURL: http://sluis.default.svc:8080/console
+    probes:
+      path: /ready

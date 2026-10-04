@@ -1,0 +1,17 @@
+# controllerSlack.replicas below 1 (values schema).
+# error: replicas
+config:
+  issuerURL: https://issuer.example
+  exchange:
+    clustersFile: /var/run/access-issuer/clusters.yaml
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+console:
+  mount: /console
+controllerSlack:
+  enabled: true
+  replicas: 0
+  config:
+    consoleURL: http://sluis.default.svc:8080/console

@@ -1,0 +1,18 @@
+# controllerGithub.strategy.type is RollingUpdate or Recreate (values schema).
+# error: strategy
+config:
+  issuerURL: https://issuer.example
+  exchange:
+    clustersFile: /var/run/access-issuer/clusters.yaml
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+console:
+  mount: /console
+controllerGithub:
+  enabled: true
+  strategy:
+    type: BlueGreen
+  config:
+    consoleURL: http://sluis.default.svc:8080/console

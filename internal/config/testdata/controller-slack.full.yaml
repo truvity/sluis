@@ -9,3 +9,5 @@ audit: {writer: "http://audit.access-issuer.svc:8080", tokenFile: /var/run/audit
 credentialsDir: /var/run/slack-roster/credentials
 enabledWorkspaces: [example]
 ports: {adapter: legacy}
+probes:
+  address: ":7070"

@@ -10,3 +10,5 @@ appsDir: /var/run/github-roster/apps
 catalogueFile: /var/run/github-roster/github-apps-catalogue.yaml
 enabledOrgs: [example-org]
 ports: {adapter: legacy}
+probes:
+  address: ":7070"

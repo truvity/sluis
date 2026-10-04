@@ -1,0 +1,42 @@
+# Both controllers at two replicas (owner decision R9a, 2026-10-04): what makes
+# a rollout safe. Two replicas need the tick leases in a State they share, so
+# each controller names a shared adapter (NATS for one, DynamoDB for the
+# other); the chart then renders a PodDisruptionBudget beside each. The rollout
+# and the readiness probe are the defaults: the new pod is Ready before the
+# old one goes, and Ready means the process finished starting.
+config:
+  issuerURL: https://issuer.example
+  exchange:
+    clustersFile: /var/run/access-issuer/clusters.yaml
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+      jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+console:
+  mount: /console
+controllerGithub:
+  enabled: true
+  replicas: 2
+  config:
+    consoleURL: http://sluis.default.svc:8080/console
+    ports:
+      adapter: nats
+      nats:
+        url: nats://nats.nats.svc:4222
+        tokenFile: /var/run/nats/token
+controllerSlack:
+  enabled: true
+  replicas: 2
+  minReadySeconds: 30
+  podDisruptionBudget:
+    minAvailable: 1
+  config:
+    consoleURL: http://sluis.default.svc:8080/console
+    probes:
+      address: ":9090"
+    ports:
+      adapter: dynamodb
+      dynamodb:
+        table: sluis
+        region: eu-west-1

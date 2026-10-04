@@ -1,0 +1,24 @@
+# Recreate with two replicas stops both at once: the outage the second replica is for (template fail).
+# error: controllerGithub.strategy.type is Recreate with 2 replicas
+config:
+  issuerURL: https://issuer.example
+  exchange:
+    clustersFile: /var/run/access-issuer/clusters.yaml
+exchange:
+  clusters:
+    - name: example-cluster
+      issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+console:
+  mount: /console
+controllerGithub:
+  enabled: true
+  replicas: 2
+  strategy:
+    type: Recreate
+  config:
+    consoleURL: http://sluis.default.svc:8080/console
+    ports:
+      adapter: nats
+      nats:
+        url: nats://nats.nats.svc:4222
+        tokenFile: /var/run/nats/token
