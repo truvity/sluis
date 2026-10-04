@@ -23,4 +23,11 @@ func init() {
 		Name: "log", Concern: ConcernAudit,
 		Summary: "Events written to the log only.",
 	})
+	Register(Descriptor{
+		Name: "sqs", Concern: ConcernAudit,
+		Summary: "Events published to an SQS queue the audit writer Lambda consumes " +
+			"(settings `queueURL`, `region`, `endpoint`, `timeout`; the catalogue travels with the writer's package).",
+		Requires: Requires{AWS: true},
+		Runtimes: []Runtime{RuntimeKubernetes, RuntimeLambda},
+	})
 }

@@ -42,7 +42,7 @@ release and what has landed since.
 | Inputs: file in the image or a parameter store | — | 📄 |
 | Audit sink: `http` | ✅ | — |
 | Audit sink: `nats` | 📄 | — |
-| Audit sink: `sqs` | — | 📄 |
+| Audit sink: `sqs` (`adapters.audit`; `internal/audit/sqs.go`; the writer Lambda consumes the queue) | 🧪 | 📄 |
 | Ports as Go interfaces (`internal/port`) and the apps depending on them | 🧪 | 📄 |
 | Port conformance suite: in-memory and legacy | 🧪 | — |
 | Port conformance suite: NATS (embedded nats-server, one node and a three-node cluster) | 🧪 | — |

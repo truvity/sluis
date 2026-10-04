@@ -898,6 +898,11 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		default:
 		}
 	}
+	// The audit concern of the resolved table decides the sink; the legacy
+	// `audit.writer` is what `connect` means.
+	if cfg.audit, err = audit.FromPlan(cfg.audit, st.Plan); err != nil {
+		return nil, err
+	}
 	recorder, err := audit.Open(ctx, cfg.audit)
 	if err != nil {
 		return nil, err

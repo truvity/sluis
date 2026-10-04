@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -29,6 +30,22 @@ type Config struct {
 	// every record is validated against the catalogue and written to the log,
 	// and kept nowhere else.
 	Writer string
+	// SQS, when set, publishes records to a queue instead of a receiver (the
+	// `sqs` adapter; see [FromPlan]). Writer is then unused: there is no
+	// receiver to register a catalogue with, and no token to present, because
+	// the queue is reached with the platform's own credentials.
+	SQS *SQSConfig
+	// SQSClient is the client SQS publishes with. Nil builds one from the
+	// default credential chain.
+	SQSClient SQSAPI
+	// Sync makes Record wait, bounded by SyncTimeout, until the emitter has
+	// delivered what it holds. It is for a runtime that freezes the process
+	// between calls (Lambda), where an async queue in memory would be lost.
+	// A record not delivered in time stays queued, and is retried if the
+	// process runs again; Record still never fails its caller.
+	Sync bool
+	// SyncTimeout bounds that wait. Default 3s.
+	SyncTimeout time.Duration
 	// TokenFile is this workload's projected service-account token, presented
 	// on every call. The installation knows the workload by it and stamps it
 	// as the observer of every record.
@@ -47,7 +64,7 @@ type Config struct {
 }
 
 // Connected reports whether the configuration names an installation.
-func (c Config) Connected() bool { return c.Writer != "" }
+func (c Config) Connected() bool { return c.Writer != "" || c.SQS != nil }
 
 // Trail is the recorder: an emitter bound to the catalogue, delivering to the
 // installation when one is configured.
@@ -57,8 +74,14 @@ type Trail struct {
 	log       *slog.Logger
 	connected bool
 	onFatal   func(error)
-	stop      context.CancelFunc
-	done      sync.WaitGroup
+	sync      bool
+	// degraded is set by a failed delivery and cleared once the queue is
+	// empty again. While it is set a synchronous trail does not wait: an SQS
+	// outage must cost a sign-in nothing, not syncWait on every one.
+	degraded atomic.Bool
+	syncWait time.Duration
+	stop     context.CancelFunc
+	done     sync.WaitGroup
 }
 
 // registerTimeout bounds each registration attempt, so that an installation
@@ -82,13 +105,18 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &Trail{log: log, catalogue: c, connected: cfg.Connected(), onFatal: cfg.OnFatal}
+	t := &Trail{log: log, catalogue: c, connected: cfg.Connected(), onFatal: cfg.OnFatal,
+		sync: cfg.Sync, syncWait: cfg.SyncTimeout}
+	if t.syncWait <= 0 {
+		t.syncWait = 3 * time.Second
+	}
 
 	hooks, err := emit.Instrument(emit.Hooks{
 		OnRefused: func(r *record.Record, err error) {
 			log.Error("an audit record does not satisfy the catalogue", "action", r.GetAction(), "error", logsafe.Error(err))
 		},
 		OnFailed: func(err error, delivery sink.Delivery, n int) {
+			t.degraded.Store(true)
 			if notTrusted(err) {
 				// Retrying will not mend a token the writer does not trust.
 				// Say what to look at, rather than "could not be reached"
@@ -124,6 +152,10 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 			return nil, err
 		}
 		return t, nil
+	}
+
+	if cfg.SQS != nil {
+		return t.openSQS(ctx, cfg, options)
 	}
 
 	if cfg.TokenFile == "" {
@@ -165,6 +197,41 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 		log.Info("audit installation connected", "audit", "connected",
 			"writer", cfg.Writer, "catalogue", c.Source+"@"+c.Version)
 	}
+	return t, nil
+}
+
+// openSQS opens a trail that publishes to a queue. There is no receiver, so
+// the catalogue is not registered: the audit writer's Lambda carries the
+// catalogue files in its own package, and registering would be a call to
+// nothing. That is said once here, and is neither an error nor retried.
+func (t *Trail) openSQS(ctx context.Context, cfg Config, options emit.Options) (*Trail, error) {
+	api := cfg.SQSClient
+	if api == nil {
+		var err error
+		if api, err = openSQSClient(ctx, *cfg.SQS); err != nil {
+			return nil, err
+		}
+	}
+	pub, err := newSQSPublisher(api, *cfg.SQS)
+	if err != nil {
+		return nil, err
+	}
+	options.Sink = pub
+	options.Timeout = pub.timeout
+	if t.sync {
+		// Records are waited for one by one, so do not let the emitter sit on
+		// one for its default second before the first attempt.
+		options.Flush = 10 * time.Millisecond
+	}
+	if t.emitter, err = emit.New(options); err != nil {
+		return nil, err
+	}
+	if err := emit.InstrumentQueue(t.emitter, otel.GetMeterProvider()); err != nil {
+		_ = t.Close()
+		return nil, err
+	}
+	t.log.Info("audit records are published to SQS; the catalogue is not registered, because it is delivered with the audit writer's package",
+		"audit", "sqs", "queue", cfg.SQS.QueueURL, "catalogue", t.catalogue.Source+"@"+t.catalogue.Version, "sync", t.sync)
 	return t, nil
 }
 
@@ -236,6 +303,40 @@ func (t *Trail) Record(ctx context.Context, r *record.Record) {
 		return
 	}
 	t.line(ctx, r, nil)
+	if t.sync {
+		if t.degraded.Load() {
+			if t.emitter.Pending() > 0 {
+				return
+			}
+			t.degraded.Store(false)
+		}
+		wait, cancel := context.WithTimeout(context.WithoutCancel(ctx), t.syncWait)
+		defer cancel()
+		if err := t.Flush(wait); err != nil {
+			t.log.WarnContext(ctx, "an audit record is still queued after the wait; it is retried while this process runs",
+				"audit.id", r.GetId(), "audit.action", r.GetAction(), "error", logsafe.Error(err))
+		}
+	}
+}
+
+// Flush returns once the emitter holds no record waiting for delivery, or ctx
+// is done. A Lambda handler calls it before returning, because the process is
+// frozen afterwards and what is still in the in-memory queue may never be
+// sent. It reports nothing when the trail keeps no queue.
+func (t *Trail) Flush(ctx context.Context) error {
+	if t == nil || t.emitter == nil {
+		return nil
+	}
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for t.emitter.Pending() > 0 {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("audit: %d records not yet delivered: %w", t.emitter.Pending(), ctx.Err())
+		case <-tick.C:
+		}
+	}
+	return nil
 }
 
 // RecordDurable implements [Recorder]: it returns once the record is kept,
