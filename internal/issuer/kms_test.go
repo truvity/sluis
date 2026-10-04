@@ -11,6 +11,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -205,4 +206,110 @@ func TestAKMSKeyDerivesFromItsStateSecret(t *testing.T) {
 
 func pemOf(kind string, der []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: kind, Bytes: der})
+}
+
+func ringAt(t *testing.T, state issuer.State, clock *settableClock) *issuer.KeyRing {
+	t.Helper()
+	ring := issuer.NewKeyRing(jose.ES384, state,
+		issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: 10 * time.Minute}, nil)
+	ring.SetClock(clock.now)
+	return ring
+}
+
+// H1: keys [A,B] listed forever. Once A retires, polling the whole list again
+// must not bring it back: A stays retired and B keeps signing.
+func TestARetiredKeyStaysRetiredWhileItIsStillListed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	state := issuer.NewMemoryState()
+	clock := newSettableClock(time.Now())
+	ring := ringAt(t, state, clock)
+	fake := newFakeKMS(t)
+	a, err := issuer.KMSSigningKey(ctx, fake, "a", kmsSeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeB := newFakeKMS(t)
+	b, _ := issuer.KMSSigningKey(ctx, fakeB, "b", kmsSeed)
+
+	_ = ring.Observe(ctx, a)
+	_ = ring.Observe(ctx, b) // new: waits the delay
+	clock.set(clock.now().Add(2 * time.Minute))
+	_ = ring.Observe(ctx, b)
+	if ring.Active().ID() != b.ID() {
+		t.Fatal("b should sign after the delay")
+	}
+	clock.set(clock.now().Add(time.Hour)) // past a's overlap
+	for range 5 {
+		_ = ring.ObserveKnown(ctx, a)
+		_ = ring.Observe(ctx, b)
+		clock.set(clock.now().Add(time.Hour))
+		if ring.Active().ID() != b.ID() {
+			t.Fatal("rotation undid itself")
+		}
+	}
+	assertPublished(t, ring, b.ID())
+
+	// Even a full Observe of a retired key, or a restarted replica, does not
+	// bring it back: the retirement is in the shared state.
+	_ = ring.Observe(ctx, a)
+	restarted := ringAt(t, state, clock)
+	_ = restarted.Observe(ctx, a)
+	_ = restarted.Observe(ctx, b)
+	assertPublished(t, restarted, b.ID())
+	if restarted.Active().ID() != b.ID() {
+		t.Fatal("a restart re-adopted the retired key")
+	}
+}
+
+// M1: the store already holds a file key; this replica now reads only KMS keys.
+// No KMS key signs before its activation delay: the request fails closed.
+func TestAMigrationDoesNotSignWithAKeyBeforeItsDelay(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	state := issuer.NewMemoryState()
+	clock := newSettableClock(time.Now())
+	file, err := issuer.NewSigningKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = ringAt(t, state, clock).Observe(ctx, file) // another replica, still on files
+
+	ring := ringAt(t, state, clock)
+	k, _ := issuer.KMSSigningKey(ctx, newFakeKMS(t), "k", kmsSeed)
+	_ = ring.Observe(ctx, k)
+	if got := ring.Active(); got != nil {
+		t.Fatalf("signing with %s before the delay", got.ID())
+	}
+	clock.set(clock.now().Add(2 * time.Minute))
+	_ = ring.Observe(ctx, k)
+	if got := ring.Active(); got == nil || got.ID() != k.ID() {
+		t.Fatal("the KMS key should sign after its delay")
+	}
+}
+
+// A signature KMS returns that does not verify against the published public
+// half is never handed to the library.
+func TestASignatureThatDoesNotVerifyIsRefused(t *testing.T) {
+	t.Parallel()
+	fake := newFakeKMS(t)
+	key, err := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	fake.key = other // KMS now signs with a different key than the one read
+	signer, _ := op.SignerFromKey(key)
+	if _, err := signer.Sign([]byte("{}")); err == nil {
+		t.Fatal("an unverifiable signature became a token")
+	}
+}
+
+func TestAnEmptyKeyIdIsRefused(t *testing.T) {
+	t.Parallel()
+	fake := newFakeKMS(t)
+	fake.arn = ""
+	if _, err := issuer.KMSSigningKey(context.Background(), fake, "alias/x", kmsSeed); err == nil {
+		t.Fatal("fell back to the alias")
+	}
 }

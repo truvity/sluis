@@ -139,6 +139,16 @@ func (k *KeyRings) Rotate(ctx context.Context, key *SigningKey) error {
 	return ring.Observe(ctx, key)
 }
 
+// RotateKnown is [KeyRings.Rotate] for a key that may only refresh one the
+// ring already holds; see [KeyRing.ObserveKnown].
+func (k *KeyRings) RotateKnown(ctx context.Context, key *SigningKey) error {
+	ring, ok := k.rings[key.SignatureAlgorithm()]
+	if !ok {
+		return fmt.Errorf("issuer: no key ring is configured for %s; adding an algorithm needs a restart", key.SignatureAlgorithm())
+	}
+	return ring.ObserveKnown(ctx, key)
+}
+
 // Configure applies the same activation delay and overlap to every ring:
 // one schedule shape, decided once a deployment's own token lifetime is
 // known, applied per algorithm exactly as [KeyRing.Configure] applies it

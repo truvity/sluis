@@ -1944,7 +1944,7 @@
                   "type": "string"
                 },
                 "stateSecretFile": {
-                  "description": "A file of at least 32 secret bytes, the same in every replica, from which the sign-in state is derived: a KMS key has no private bytes to derive from.",
+                  "description": "A file holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from.",
                   "minLength": 1,
                   "type": "string"
                 }

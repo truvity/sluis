@@ -429,7 +429,7 @@ The issuer, the console and the directory hub, one process.
 | `signingKey.file` | unset: a key generated for the process | the primary signing key, provisioned and never minted here. The chart requires `/var/run/access-issuer/signing-key/<signingKey.key>` |
 | `signingKey.kms.keys[]` | unset | sign with **AWS KMS** instead of a file: `ECC_NIST_P384` / `SIGN_VERIFY` keys as ids, ARNs or aliases (e.g. `alias/sluis-signing`), oldest first, **the last one signs**. Exclusive with `signingKey.file` (both is refused at load). The private key never leaves KMS: each token is a `kms:Sign` of the SHA-384 of the JWS signing input (`MessageType: DIGEST`, `ECDSA_SHA_384`), the DER signature is converted to raw `r\|\|s`, and the algorithm is ES384. The `kid` is the RFC 7638 thumbprint of the public key, the same as a file holding that key would have. A key of another spec or usage stops the start. **Rotate by appending** a key: it is published at once and signs only after `activationDelay`, the earlier one stays published for `overlap`, exactly as for files; the list is re-read every `pollInterval`, which also notices an alias moved to another key. Never insert a key before one already seen. `signingKey.additionalFiles` still works beside it for other algorithms |
 | `signingKey.kms.region` | the SDK's own | the keys' region |
-| `signingKey.kms.stateSecretFile` | required with `kms` | at least 32 secret bytes, identical in every replica, that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
+| `signingKey.kms.stateSecretFile` | required with `kms` | base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
 | `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
 | `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file (or each KMS key's public half) is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
 | `valkey.address` | unset | host:port of the shared store, with no credentials; unset keeps sessions and snapshots in memory, which is one replica only |
@@ -918,8 +918,15 @@ For an alias, grant on the key it points at (an alias does not match a
 key policy `Resource`; use a `kms:ResourceAliases` condition if the grant must
 follow the alias). Without `kms:GetPublicKey` the service refuses to start and
 the log line names the permission and the key; without `kms:Sign` it starts
-and fails every token, counted in `access_issuer.kms_signatures{result="error"}`.
+and fails every token, counted in `access_issuer.kms_signatures{result="error"}` (or `throttled`).
 `access_issuer.kms_signatures` counts every `kms:Sign` by the signing key's
-`kid` and `result` (`ok` or `error`). Every signature is also in CloudTrail.
+`kid` and `result` (`ok`, `throttled` or `error`). Every signature is also in CloudTrail.
 
-Rotation is appending a new key to `keys`; see the table above.
+Every token is one `kms:Sign` call, so the account's KMS request quota for
+asymmetric `Sign` (a regional, adjustable quota shared by everything in the
+account that signs) is the ceiling on token throughput; `result="throttled"`
+on the metric says it is being hit. Request a raise before it is.
+
+Rotation is appending a new key to `keys`; see the table above. List order is
+age: only the last key is ever newly adopted, and a key that has retired stays
+retired while it is still listed (remove it from the list when convenient).

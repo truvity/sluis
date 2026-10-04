@@ -406,6 +406,12 @@ func (s *Storage) Rotate(ctx context.Context, key *SigningKey) error {
 	return s.keys.Rotate(ctx, key)
 }
 
+// RotateKnown refreshes a signing key the rings already hold without ever
+// adopting a new one: the older keys of a KMS list.
+func (s *Storage) RotateKnown(ctx context.Context, key *SigningKey) error {
+	return s.keys.RotateKnown(ctx, key)
+}
+
 // ConfigureKeyRotation overrides every ring's activation delay and
 // overlap once a deployment's own settings are known — its token
 // lifetime, chiefly, which [KeyRingConfig.Overlap] must be at least as

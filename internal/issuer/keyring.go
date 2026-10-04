@@ -104,6 +104,16 @@ func (c KeyRingConfig) withDefaults() KeyRingConfig {
 func keyRingIndexKey(alg jose.SignatureAlgorithm) string {
 	return "issuer:keyring:index:" + string(alg)
 }
+
+// keyRingRetiredKey is the shared tombstone of a retired key id, so that a
+// replica restarting after the retirement does not adopt the key again.
+func keyRingRetiredKey(alg jose.SignatureAlgorithm, id string) string {
+	return "issuer:keyring:retired:" + string(alg) + ":" + id
+}
+
+// keyRingTombstoneTTL outlives any plausible time a stale key is still listed.
+const keyRingTombstoneTTL = 365 * 24 * time.Hour
+
 func keyRingEntryKey(alg jose.SignatureAlgorithm, id string) string {
 	return "issuer:keyring:entry:" + string(alg) + ":" + id
 }
@@ -167,6 +177,12 @@ type KeyRing struct {
 	cfg   KeyRingConfig
 
 	entries map[string]*ringEntry
+
+	// retiredIDs are the kids this ring has retired. A retired key is never
+	// adopted again: a poller that keeps feeding an old key it still reads
+	// would otherwise re-record it as NEW, schedule it after the key that
+	// replaced it, and undo the rotation, forever.
+	retiredIDs map[string]bool
 
 	// activeID and published are the LAST computed answer, kept only so
 	// that a transition (seen, activated, retired) is logged and counted
@@ -236,6 +252,18 @@ func (r *KeyRing) Configure(cfg KeyRingConfig) {
 // place. [KeyRing.refresh] retries the write on every later poll, so the
 // shared record catches up once the store answers again.
 func (r *KeyRing) Observe(ctx context.Context, key *SigningKey) error {
+	return r.observe(ctx, key, true)
+}
+
+// ObserveKnown refreshes a key the ring already knows and never records a new
+// one. It is for a key source whose older keys are listed beside the newest:
+// those are re-read only to keep their public half fresh, and one that is
+// absent (retired, or never seen) is not adopted by being read.
+func (r *KeyRing) ObserveKnown(ctx context.Context, key *SigningKey) error {
+	return r.observe(ctx, key, false)
+}
+
+func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) error {
 	if key == nil {
 		return errors.New("issuer: no signing key to observe")
 	}
@@ -261,6 +289,19 @@ func (r *KeyRing) Observe(ctx context.Context, key *SigningKey) error {
 		// the file on every poll is cheaper than caching that comparison.
 		existing.signer = key
 	} else {
+		if r.retiredIDs[key.id] || r.tombstoned(ctx, key.id) {
+			return nil
+		}
+		if !mayRecord {
+			// Known to the shared store from another replica, perhaps: take
+			// it from there rather than scheduling it afresh.
+			r.absorb(ctx)
+			if e, ok := r.entries[key.id]; ok {
+				e.signer = key
+			}
+			r.recompute(ctx, now)
+			return nil
+		}
 		r.entries[key.id] = r.record(ctx, now, key)
 	}
 
@@ -269,6 +310,12 @@ func (r *KeyRing) Observe(ctx context.Context, key *SigningKey) error {
 	r.recompute(ctx, now)
 
 	return nil
+}
+
+// tombstoned reports whether the shared state says a replica retired this key.
+func (r *KeyRing) tombstoned(ctx context.Context, id string) bool {
+	_, found, err := r.state.Get(ctx, keyRingRetiredKey(r.alg, id))
+	return err == nil && found
 }
 
 // record decides one new key's schedule and writes it to the shared
@@ -463,6 +510,11 @@ func (r *KeyRing) recompute(ctx context.Context, now time.Time) {
 		r.log.InfoContext(ctx, "a signing key retired", "kid", id, "algorithm", string(e.Algorithm))
 		r.metrics.recordTransition(ctx, "retired", string(e.Algorithm))
 		delete(r.entries, id)
+		if r.retiredIDs == nil {
+			r.retiredIDs = map[string]bool{}
+		}
+		r.retiredIDs[id] = true
+		_ = r.state.Set(ctx, keyRingRetiredKey(r.alg, id), []byte("1"), keyRingTombstoneTTL)
 		// Best-effort: leaving the record would only cost a little space
 		// in the shared store until keyRingEntryTTL, and a failure here
 		// must not stop this replica computing its own schedule.
@@ -499,9 +551,13 @@ func (r *KeyRing) Active() *SigningKey {
 		return entry.signer
 	}
 
+	// Only a key whose activation time has passed: before it, other replicas
+	// may not yet publish it, and a token signed with it would verify
+	// nowhere. With none, nil, and the request fails closed.
+	now := r.now()
 	var best *ringEntry
 	for _, e := range r.entries {
-		if e.signer == nil {
+		if e.signer == nil || e.ActivateAt.After(now) {
 			continue
 		}
 		if best == nil || e.ActivateAt.After(best.ActivateAt) {
