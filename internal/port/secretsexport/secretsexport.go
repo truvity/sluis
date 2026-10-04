@@ -1,0 +1,100 @@
+// Package secretsexport is the [port.Export] over the Secrets port: a copy of a
+// secret OUT of the service is the Secrets path `export/<path>`, which the ssm
+// adapter keeps at `/sluis/export/<path>` (docs/reference/storage-layout.md).
+// It is the export target whenever a Secrets adapter is configured and
+// `ports.export` is not (ADR 0034, as amended by the Secrets port).
+//
+// # Value
+//
+// One secret per target: a JSON object of the written properties, text values
+// only, keys in sorted order and no HTML escaping, for example
+//
+//	{"botToken":"xoxb-…","signingSecret":"…"}
+//
+// A consumer's External Secrets Operator reads a property with
+// `remoteRef: {key: /sluis/export/<path>, property: botToken}`. A replace writes
+// exactly the properties; a patch reads the object, sets the given properties
+// and keeps the others. Putting what the secret already holds writes nothing,
+// so SSM makes no new version.
+package secretsexport
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+
+	"github.com/truvity/sluis/internal/port"
+)
+
+// Export is the adapter.
+type Export struct{ secrets port.Secrets }
+
+var _ port.Export = (*Export)(nil)
+
+// New returns the export over a Secrets port.
+func New(secrets port.Secrets) *Export { return &Export{secrets: secrets} }
+
+// Path is the Secrets path of an export target.
+func Path(target port.ExportTarget) string { return port.ExportPrefix + target.Path }
+
+func (e *Export) path(target port.ExportTarget, check func() error) (string, error) {
+	if err := check(); err != nil {
+		return "", err
+	}
+	if target.Namespace != "" {
+		return "", fmt.Errorf("%w: the secrets export has no namespaces (%q)", port.ErrUnsupported, target.Namespace)
+	}
+	p := Path(target)
+	if err := port.CheckSecretPath(p); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+// Encode is the value of an export: the properties as one JSON object.
+func Encode(properties map[string]string) []byte {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(properties) // strings only; map keys are sorted
+	return bytes.TrimRight(b.Bytes(), "\n")
+}
+
+// Put implements [port.Export].
+func (e *Export) Put(ctx context.Context, target port.ExportTarget, properties map[string]string, mode port.ExportMode) error {
+	p, err := e.path(target, func() error { return port.CheckExport(target, properties, mode) })
+	if err != nil {
+		return err
+	}
+	cur, err := e.secrets.Get(ctx, p)
+	found := err == nil
+	if err != nil && !errors.Is(err, port.ErrNotFound) {
+		return err
+	}
+	next := properties
+	if mode == port.ExportPatch && found {
+		var have map[string]string
+		if json.Unmarshal(cur.Value, &have) == nil {
+			next = maps.Clone(have)
+			maps.Copy(next, properties)
+		}
+	}
+	value := Encode(next)
+	if found && bytes.Equal(cur.Value, value) {
+		return nil
+	}
+	_, err = e.secrets.Put(ctx, p, value)
+	return err
+}
+
+// Delete implements [port.Export].
+func (e *Export) Delete(ctx context.Context, target port.ExportTarget) error {
+	p, err := e.path(target, func() error { return port.CheckExportPath(target.Path) })
+	if err != nil {
+		return err
+	}
+	return e.secrets.Delete(ctx, p)
+}

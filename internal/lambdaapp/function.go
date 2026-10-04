@@ -130,7 +130,7 @@ func forceFlush(ctx context.Context) {
 func openHTTP(ctx context.Context, file string) (*Function, error) {
 	// The KMS signer's state secret (signingKey.kms.stateSecretFile, sluis#281) is
 	// a secret file like any other: SLUIS_SECRET_FILES writes it from
-	// /sluis/private/issuer/state-secret, and the configuration names its path.
+	// /sluis/private/config/issuer/state-secret, and the configuration names its path.
 	cfg, err := rosterapp.Load(file)
 	if err != nil {
 		return nil, err

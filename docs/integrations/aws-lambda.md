@@ -191,7 +191,7 @@ variable that holds a secret (`oauthClient.secretEnv: OAUTH_CLIENT_SECRET`), and
 function's environment says where to read it:
 
 ```text
-OAUTH_CLIENT_SECRET=ssm:/sluis/private/oauth/client-secret
+OAUTH_CLIENT_SECRET=ssm:/sluis/private/config/oauth/client-secret
 ```
 
 At cold start every variable whose value begins with `ssm:` is replaced by the
@@ -209,7 +209,7 @@ the variable `SLUIS_SECRET_FILES` lists parameters to write to files at cold sta
 before the configuration is read:
 
 ```text
-SLUIS_SECRET_FILES=[{"parameter":"/sluis/private/issuer/state-secret","path":"/tmp/sluis/state-secret"}]
+SLUIS_SECRET_FILES=[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"}]
 ```
 
 ```yaml
@@ -223,7 +223,7 @@ written byte for byte, with no newline added, to a path under `/tmp/`, mode 0600
 directories of mode 0700. A path anywhere else, one with `..`, or a parameter outside
 the roots stops the start. Every `*File` setting then works as it does on Kubernetes by
 naming one of those paths, and the secret never enters the zip. The issuer's state
-secret is generated into `/sluis/private/issuer/state-secret` (base64 of 32 random
+secret is generated into `/sluis/private/config/issuer/state-secret` (base64 of 32 random
 bytes) by the infrastructure code and read this way by every function.
 
 ## IAM: one role per function

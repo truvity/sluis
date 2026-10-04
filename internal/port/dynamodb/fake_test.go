@@ -261,14 +261,14 @@ func (f *fakeAPI) Scan(_ context.Context, in *ddb.ScanInput, _ ...func(*ddb.Opti
 		keep = func(it map[string]types.AttributeValue) bool { return !hasKind(it) }
 	case scanState:
 		keep = func(it map[string]types.AttributeValue) bool {
-			sk, _ := str(it, attrSK)
-			return !hasKind(it) && strings.HasPrefix(sk, prefix)
+			lk, _ := str(it, attrLKey)
+			return !hasKind(it) && strings.HasPrefix(lk, prefix)
 		}
 	case scanIndex:
 		keep = func(it map[string]types.AttributeValue) bool {
-			pk, _ := str(it, attrPK)
+			lk, _ := str(it, attrLKey)
 			k, _ := str(it, attrKind)
-			return k == kindIndex && strings.HasPrefix(pk, prefix)
+			return k == kindIndex && strings.HasPrefix(lk, prefix)
 		}
 	default:
 		return nil, fmt.Errorf("the fake does not know the scan filter %q", *in.FilterExpression)

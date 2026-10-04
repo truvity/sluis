@@ -39,8 +39,9 @@ const DefaultSigningKeyAlias = "alias/sluis-signing"
 // LambdaArgs.SigningKeyRS256Alias is empty.
 const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
 
-// StateSecretParameterName is the SSM parameter of the issuer's state secret.
-const StateSecretParameterName = PrivateParameterPrefix + "/issuer/state-secret"
+// StateSecretParameterName is the SSM parameter of the issuer's state secret,
+// `/sluis/private/config/issuer/state-secret`.
+const StateSecretParameterName = ConfigParameterPrefix + "/issuer/state-secret"
 
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
@@ -267,7 +268,7 @@ type Lambda struct {
 	ScheduleNames pulumi.StringArrayOutput
 
 	// StateSecretParameter is the name of the SSM SecureString that holds the
-	// issuer's OAuth-state secret, `/sluis/private/issuer/state-secret`: 32
+	// issuer's OAuth-state secret, `/sluis/private/config/issuer/state-secret`: 32
 	// random bytes, base64. The library generates it and keeps it across applies.
 	StateSecretParameter pulumi.StringOutput
 

@@ -13,7 +13,7 @@ import (
 )
 
 // Apps are `app.<kind>.<name>`: the record in State and the credential in
-// Secrets (`private/app.<kind>.<name>`)
+// Secrets (`credentials/<kind>/<id>/<ref>`)
 const (
 	ghRunnerPrefix   = "app.gh.runner."
 	ghCataloguePfx   = "app.gh.cat."

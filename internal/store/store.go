@@ -20,6 +20,7 @@ import (
 	"github.com/truvity/sluis/internal/port/observe"
 	"github.com/truvity/sluis/internal/port/openbao"
 	"github.com/truvity/sluis/internal/port/s3blob"
+	"github.com/truvity/sluis/internal/port/secretsexport"
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
 )
 
@@ -150,11 +151,6 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 		set.Blob = blob
 		log.InfoContext(ctx, "blobs are kept in S3", "adapter", BlobS3, "bucket", b.S3.Bucket, "prefix", b.S3.Prefix)
 	}
-	exp, err := c.exportOf()
-	if err != nil {
-		return port.Set{}, fmt.Errorf("ports.export: %w", err)
-	}
-	set.Export = exp
 	secrets, err := c.secretsOf(ctx)
 	if err != nil {
 		return port.Set{}, err
@@ -163,6 +159,17 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 		set.Secrets = secrets
 		log.InfoContext(ctx, "secrets are kept by the secrets adapter", "adapter", c.secrets.Adapter)
 	}
+	exp, err := c.exportOf()
+	if err != nil {
+		return port.Set{}, fmt.Errorf("ports.export: %w", err)
+	}
+	if exp == nil && secrets != nil {
+		// No `ports.export`: the copies go through the Secrets port, to
+		// `export/<path>` (SSM `/sluis/export/<path>`).
+		exp = secretsexport.New(secrets)
+		log.InfoContext(ctx, "exports are written through the secrets adapter", "adapter", c.secrets.Adapter, "prefix", port.ExportPrefix)
+	}
+	set.Export = exp
 	return set, nil
 }
 

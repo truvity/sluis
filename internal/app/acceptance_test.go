@@ -444,7 +444,7 @@ func where(t *testing.T, client *http.Client, url string) string {
 	return response.Header.Get("Location")
 }
 
-// An export names what the deployment declares and where to copy it, or the
+// An export names what the deployment declares, or the
 // service does not start: an export of an App nobody declared would copy
 // nothing for ever and say nothing.
 func TestExportsAreHeldToWhatTheDeploymentDeclares(t *testing.T) {
@@ -460,7 +460,6 @@ func TestExportsAreHeldToWhatTheDeploymentDeclares(t *testing.T) {
 		change func(*config.Serve)
 		want   string
 	}{
-		{"no place to copy to", func(f *config.Serve) { f.Demo, f.Exports = false, []config.Export{export} }, "ports.export"},
 		{"a demonstration", func(f *config.Serve) { f.Demo, f.Ports, f.Exports = true, to, []config.Export{export} }, "demonstration"},
 		{"an App nobody declared", func(f *config.Serve) { f.Demo, f.Ports, f.Exports = false, to, []config.Export{export} }, "not declared in slackApps"},
 		{"a source this build does not know", func(f *config.Serve) {
