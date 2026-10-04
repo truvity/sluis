@@ -35,6 +35,7 @@ presets and the platform fit together, see
 | `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Kubernetes Secrets the service writes; kept until the kernel cutover. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `openbao` | 💤 on request | — | — | needs | ✅ | ✅ | ✅ | Dynamic secrets and exports in an OpenBao KV mount. |
+| `ssm` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Dynamic secrets and exports as SecureString parameters in AWS SSM Parameter Store. |
 | `store` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | Secrets in the service's own encrypted store, for a platform with no secret store. |
 
 ## blobs
@@ -87,7 +88,7 @@ The adapter each preset names per concern. 💤 on request marks an adapter that
 | Concern | `server` | `k8s-minimal` | `k8s-openbao` | `aws-serverless` | `aws-hybrid` | `aws-eks` |
 |---|---|---|---|---|---|---|
 | state | `postgres` 💤 | `kubernetes` 💤 | `kubernetes` 💤 | `dynamodb` | `dynamodb` | `dynamodb` |
-| secrets | `store` 💤 | `kubernetes` 💤 | `openbao` 💤 | `ssm` 💤 | `ssm` 💤 | `ssm` 💤 |
+| secrets | `store` 💤 | `kubernetes` 💤 | `openbao` 💤 | `ssm` | `ssm` | `ssm` |
 | blobs | `postgres` 💤 | `off` 💤 | `off` 💤 | `s3` | `s3` | `s3` |
 | signing | `generated` 💤 | `file` | `transit` 💤 | `kms` 💤 | `kms` 💤 | `kms` 💤 |
 | trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `watch` 💤 |
