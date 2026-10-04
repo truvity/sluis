@@ -1,7 +1,6 @@
 // Package porttest is the conformance suite of docs/design/ports.md. It is
 // written once against the port interfaces and run against every adapter:
-// the in-memory one, the legacy one, and, in later changes, NATS JetStream
-// and DynamoDB, where it is the gate for adding or changing an adapter and
+// the in-memory one, the legacy one and DynamoDB, where it is the gate for adding or changing an adapter and
 // for the migration tool.
 //
 // An adapter that cannot pass an assertion for a stated engine reason lists
@@ -88,7 +87,6 @@ var Assertions = []string{
 	"blob/write-if-version",
 	"blob/list-delete",
 	"trigger/notify",
-	"sealing/context",
 	"identity/verify",
 }
 
@@ -99,7 +97,7 @@ func Run(t *testing.T, factory func(t *testing.T) Env) {
 }
 
 // RunGroups runs only the assertions whose name starts with one of the
-// prefixes (`blob/`, `sealing/`), for an adapter of one port. The adapter's
+// prefixes (`blob/`, `identity/`), for an adapter of one port. The adapter's
 // Env carries only that port; an assertion of another group is not run, and
 // nothing is skipped silently: a prefix that matches no assertion fails.
 func RunGroups(t *testing.T, factory func(t *testing.T) Env, prefixes ...string) {
@@ -151,7 +149,6 @@ func run(t *testing.T, factory func(t *testing.T) Env, groups []string) {
 		"blob/write-if-version":                 blobWriteIfVersion,
 		"blob/list-delete":                      blobListDelete,
 		"trigger/notify":                        triggerNotify,
-		"sealing/context":                       sealingContext,
 		"identity/verify":                       identityVerify,
 	}
 	for _, name := range Assertions {
@@ -760,24 +757,6 @@ func triggerNotify(t *testing.T, e Env) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("a notification was not delivered to this process")
-	}
-}
-
-func sealingContext(t *testing.T, e Env) {
-	secret := []byte("an App key")
-	sealed, err := port.Seal(ctx(), e.Set.Sealer, secret, "gh.org.acme")
-	if err != nil {
-		t.Fatalf("Seal: %v", err)
-	}
-	if bytes.Contains(sealed, secret) {
-		t.Fatal("the sealed value contains the plaintext")
-	}
-	got, err := port.Open(ctx(), e.Set.Sealer, sealed, "gh.org.acme")
-	if err != nil || !bytes.Equal(got, secret) {
-		t.Fatalf("Open under the same context: %v %q", err, got)
-	}
-	if _, err = port.Open(ctx(), e.Set.Sealer, sealed, "gh.org.other"); !errors.Is(err, port.ErrUnwrap) {
-		t.Fatalf("Open under another context: %v, want ErrUnwrap", err)
 	}
 }
 

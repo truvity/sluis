@@ -24,7 +24,7 @@ func ghLinkKey(id int64) string { return ghLinkPrefix + strconv.FormatInt(id, 10
 // claimTTL is how long a claim's marker waits for a reader to finish it.
 const claimTTL = 7 * 24 * time.Hour
 
-// tokens are what a link seals: the token pair and nothing else. The times
+// tokens are what a link keeps in Secrets: the token pair and nothing else. The times
 // beside them, and RefreshingSince above all, are not secret and stay in the
 // record, where a reader that only looks at state need not open anything.
 type tokens struct {
@@ -33,7 +33,7 @@ type tokens struct {
 }
 
 // GitHubLinks keeps people's GitHub links, one item per account:
-// `gh.link.<account>` holds the link's state and, sealed, its token pair, so a
+// `gh.link.<account>` holds the link's state and, in Secrets, its token pair, so a
 // refresh is a single compare-and-swap of one key. It is a server.GitHubLinks
 // and a controller.LinkStore.
 //
@@ -55,7 +55,7 @@ var _ interface {
 func NewGitHubLinks(b *Base) *GitHubLinks { return &GitHubLinks{b: b} }
 
 // encode is the item of a link: the record without the tokens, and the tokens
-// sealed.
+// in Secrets.
 func (s *GitHubLinks) encode(ctx context.Context, l link.Link) (*item, error) {
 	key := ghLinkKey(l.ID)
 	held := tokens{Access: l.AccessToken, Refresh: l.RefreshToken}
@@ -67,7 +67,7 @@ func (s *GitHubLinks) encode(ctx context.Context, l link.Link) (*item, error) {
 	it := &item{Record: json.RawMessage(raw)}
 	if held != (tokens{}) {
 		plain, _ := json.Marshal(held)
-		if it.Sealed, err = s.b.seal(ctx, key, plain); err != nil {
+		if it.Secret, err = s.b.newSecret(ctx, key, plain); err != nil {
 			return nil, err
 		}
 	}
@@ -80,14 +80,14 @@ func (s *GitHubLinks) decode(ctx context.Context, key string, it *item) (link.Li
 	if err != nil {
 		return link.Link{}, err
 	}
-	if len(it.Sealed) > 0 {
-		plain, err := s.b.open(ctx, key, it.Sealed)
+	if it.Secret != "" {
+		plain, err := s.b.getSecret(ctx, key, it.Secret)
 		if err != nil {
 			return link.Link{}, err
 		}
 		var held tokens
 		if err = json.Unmarshal(plain, &held); err != nil {
-			return link.Link{}, errors.New("link: the sealed tokens do not decode")
+			return link.Link{}, errors.New("link: the stored tokens do not decode")
 		}
 		l.AccessToken, l.RefreshToken = held.Access, held.Refresh
 	}

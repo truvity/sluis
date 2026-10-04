@@ -3,8 +3,8 @@
 //
 // Everything else names the interfaces of internal/port. The adapter is
 // chosen by the `ports.adapter` key of the configuration file: `legacy`
-// (the default, today's ConfigMaps, Secrets and Valkey, unchanged), `memory`,
-// `nats` or `dynamodb`.
+// (the default, today's ConfigMaps, Secrets and Valkey, unchanged), `memory`
+// or `dynamodb`.
 package store
 
 import (
@@ -17,10 +17,8 @@ import (
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
-	"github.com/truvity/sluis/internal/port/kmsseal"
 	"github.com/truvity/sluis/internal/port/legacy"
 	"github.com/truvity/sluis/internal/port/memory"
-	natsport "github.com/truvity/sluis/internal/port/nats"
 	"github.com/truvity/sluis/internal/port/observe"
 	"github.com/truvity/sluis/internal/port/openbao"
 	"github.com/truvity/sluis/internal/port/s3blob"
@@ -32,18 +30,14 @@ import (
 const (
 	AdapterLegacy = "legacy"
 	AdapterMemory = "memory"
-	AdapterNATS   = "nats"
 	// AdapterDynamoDB keeps State, the session index and the trigger in one
 	// DynamoDB table.
 	AdapterDynamoDB = "dynamodb"
 )
 
-// The adapters `ports.blob.adapter` and `ports.sealer.adapter` name. Each
-// replaces one port and composes with any `ports.adapter`.
-const (
-	BlobS3    = "s3"
-	SealerKMS = "kms"
-)
+// The adapter `ports.blob.adapter` names. It replaces one port and composes
+// with any `ports.adapter`.
+const BlobS3 = "s3"
 
 // The adapters `ports.export.adapter` names. The Export port has none unless
 // a deployment names one: nothing is copied out of the service by default.
@@ -74,12 +68,8 @@ type Config struct {
 	// Valkey is where the shared cache is; an empty address is none.
 	Valkey valkey.Config
 	Kube   KubeNeed
-	// Blob and Sealer replace the port of the same name; nil keeps what
-	// Adapter brings.
-	Blob   *config.PortsBlob
-	Sealer *config.PortsSealer
-	// NATS is the bucket of the `nats` adapter.
-	NATS natsport.Config
+	// Blob replaces the port of the same name; nil keeps what Adapter brings.
+	Blob *config.PortsBlob
 	// DynamoDB is the table of the `dynamodb` adapter.
 	DynamoDB dynamoport.Config
 	// Export is the Export port's adapter; nil is none.
@@ -92,7 +82,7 @@ type Config struct {
 	sel selection
 }
 
-// validatePorts refuses a Blob or Sealer the file names but this build has no
+// validatePorts refuses a Blob the file names but this build has no
 // adapter for, or names without its settings. The schema says the same; this is
 // the check for a Config that was not read from a file.
 func (c Config) validatePorts() error {
@@ -102,14 +92,6 @@ func (c Config) validatePorts() error {
 		}
 		if b.S3 == nil || b.S3.Bucket == "" {
 			return errors.New("ports.blob.s3.bucket: required with ports.blob.adapter: s3")
-		}
-	}
-	if s := c.Sealer; s != nil {
-		if s.Adapter != SealerKMS {
-			return fmt.Errorf("ports.sealer.adapter: %q is not %q", s.Adapter, SealerKMS)
-		}
-		if s.KMS == nil || s.KMS.KeyID == "" {
-			return errors.New("ports.sealer.kms.keyId: required with ports.sealer.adapter: kms")
 		}
 	}
 	return nil
@@ -152,8 +134,7 @@ func (c Config) exportOf() (port.Export, error) {
 	})
 }
 
-// compose replaces the Blob and the Sealer the base adapter brought with the
-// ones configured. It runs before the set is observed, so the replacements are
+// compose replaces the Blob the base adapter brought with the one configured. It runs before the set is observed, so the replacements are
 // timed and counted like every other port.
 func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (port.Set, error) {
 	if err := c.validatePorts(); err != nil {
@@ -169,14 +150,6 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 		}
 		set.Blob = blob
 		log.InfoContext(ctx, "blobs are kept in S3", "adapter", BlobS3, "bucket", b.S3.Bucket, "prefix", b.S3.Prefix)
-	}
-	if s := c.Sealer; s != nil {
-		sealer, err := kmsseal.New(ctx, kmsseal.Config{KeyID: s.KMS.KeyID, Region: s.KMS.Region, Endpoint: s.KMS.Endpoint})
-		if err != nil {
-			return port.Set{}, fmt.Errorf("ports.sealer: %w", err)
-		}
-		set.Sealer = sealer
-		log.InfoContext(ctx, "secrets are sealed by KMS", "adapter", SealerKMS)
 	}
 	exp, err := c.exportOf()
 	if err != nil {
@@ -201,15 +174,13 @@ func FromServe(f *config.Serve) (Config, error) {
 		Release: orDefault(f.Release, "sluis"),
 		Valkey:  valkeyOf(f.Release, f.Valkey),
 		Blob:    blobOf(f.Ports),
-		Sealer:  sealerOf(f.Ports),
-		NATS:    natsOf(f.Ports),
 
 		DynamoDB: dynamoOf(f.Ports),
 		Export:   exportConfigOf(f.Ports),
 		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", f.SigningKey),
 	}
 	var err error
-	if (c.Adapter == AdapterNATS || c.Adapter == AdapterDynamoDB) && f.Valkey != nil && f.Valkey.Address != "" {
+	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
 		return Config{}, fmt.Errorf("ports.adapter: %s holds the shared state, so it cannot be combined with valkey.address", c.Adapter)
 	}
 	if c.Valkey.Password, err = secretOf(f.Valkey); err != nil {
@@ -238,27 +209,13 @@ func FromServe(f *config.Serve) (Config, error) {
 func FromRoster(f *config.Roster) Config {
 	c := Config{
 		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
-		Blob: blobOf(f.Ports), Sealer: sealerOf(f.Ports), NATS: natsOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
+		Blob: blobOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
 		sel: selectionOf(f.Ports, nil, "", nil, f.Audit != nil && f.Audit.Writer != "", nil),
 	}
 	if c.Adapter == AdapterMemory {
 		c.Kube = KubeNone
 	}
 	return c
-}
-
-// natsOf reads the bucket's settings; natsport.Open refuses an incomplete or
-// contradictory set, naming it, when the adapter is the chosen one.
-func natsOf(p *config.Ports) natsport.Config {
-	if p == nil || p.NATS == nil {
-		return natsport.Config{}
-	}
-	n := p.NATS
-	return natsport.Config{
-		URL: n.URL, Bucket: n.Bucket, Replicas: n.Replicas,
-		TokenFile: n.TokenFile, CredsFile: n.CredsFile, CAFile: n.CAFile,
-		NoCreate: n.Create != nil && !*n.Create,
-	}
 }
 
 // dynamoOf reads the table's settings; dynamoport.Open refuses an incomplete
@@ -290,13 +247,6 @@ func exportConfigOf(p *config.Ports) *config.PortsExport {
 		return nil
 	}
 	return p.Export
-}
-
-func sealerOf(p *config.Ports) *config.PortsSealer {
-	if p == nil {
-		return nil
-	}
-	return p.Sealer
 }
 
 func orDefault(value, fallback string) string {
@@ -360,8 +310,6 @@ type Stores struct {
 // Name says where state lives, for a log line and the console's page.
 func (s *Stores) Name() string {
 	switch {
-	case s.Adapter == AdapterNATS:
-		return "nats"
 	case s.Adapter == AdapterDynamoDB:
 		return "dynamodb"
 	case s.Shared:
@@ -416,7 +364,7 @@ func (s *Stores) Close() {
 func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	var plan port.Table
 	switch cfg.Adapter {
-	case AdapterLegacy, AdapterMemory, AdapterNATS, AdapterDynamoDB:
+	case AdapterLegacy, AdapterMemory, AdapterDynamoDB:
 		var err error
 		if cfg, plan, err = cfg.plan(ctx, log); err != nil {
 			return nil, err
@@ -441,56 +389,14 @@ func open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 		return &Stores{Ports: observe.Set(set), Adapter: AdapterMemory, Usable: true}, nil
 	case AdapterLegacy:
 		return openLegacy(ctx, cfg, log)
-	case AdapterNATS:
-		return openNATS(ctx, cfg, log)
 	case AdapterDynamoDB:
 		return openDynamoDB(ctx, cfg, log)
 	}
-	return nil, fmt.Errorf("ports.adapter: %q is none of %q, %q, %q, %q", cfg.Adapter, AdapterLegacy, AdapterMemory, AdapterNATS, AdapterDynamoDB)
-}
-
-// openNATS holds State, the session index and the trigger in the bucket.
-// Blob, Sealer and Identity are the legacy adapter's over the namespace's
-// objects (so reports and snapshots are what they are today, and a sealed
-// value is refused, not sealed under a key no restart could open), unless
-// `ports.blob` and `ports.sealer` name adapters of their own.
-func openNATS(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
-	backend := &legacy.Backend{}
-	st := &Stores{Backend: backend, Adapter: AdapterNATS, Shared: true, Usable: true}
-	if cfg.Kube != KubeNone {
-		client, err := kube.InCluster(cfg.Release)
-		switch {
-		case err == nil:
-			backend.Kube = client
-			backend.ReviewToken = client.ReviewToken
-		case cfg.Kube == KubeRequired:
-			return nil, err
-		default:
-			log.WarnContext(ctx, "the namespace's objects are not available", "error", err)
-		}
-	}
-	bucket, err := natsport.Open(ctx, cfg.NATS)
-	if err != nil {
-		return nil, fmt.Errorf("ports.nats: %w", err)
-	}
-	st.pinger = bucket
-	st.close = bucket.Close
-	rest := backend.Ports(legacy.Options{})
-	set := bucket.Set()
-	set.Blob, set.Sealer, set.Identity = rest.Blob, rest.Sealer, rest.Identity
-	if set, err = cfg.compose(ctx, set, log); err != nil {
-		st.Close()
-		return nil, err
-	}
-	st.Ports = observe.Set(set)
-	log.InfoContext(ctx, "keeping state in NATS JetStream", "adapter", AdapterNATS,
-		"bucket", cfg.NATS.Bucket, "serverTTL", bucket.ServerTTL())
-	return st, nil
+	return nil, fmt.Errorf("ports.adapter: %q is none of %q, %q, %q", cfg.Adapter, AdapterLegacy, AdapterMemory, AdapterDynamoDB)
 }
 
 // openDynamoDB holds State, the session index and the trigger in the table,
-// and takes Blob, Sealer and Identity from the legacy adapter exactly as the
-// NATS adapter does.
+// and takes Blob and Identity from the legacy adapter.
 func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	backend := &legacy.Backend{}
 	st := &Stores{Backend: backend, Adapter: AdapterDynamoDB, Shared: true, Usable: true}
@@ -514,7 +420,7 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 	st.close = table.Close
 	rest := backend.Ports(legacy.Options{})
 	set := table.Set()
-	set.Blob, set.Sealer, set.Identity = rest.Blob, rest.Sealer, rest.Identity
+	set.Blob, set.Identity = rest.Blob, rest.Identity
 	if set, err = cfg.compose(ctx, set, log); err != nil {
 		st.Close()
 		return nil, err

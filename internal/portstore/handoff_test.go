@@ -9,7 +9,7 @@ import (
 )
 
 // The host's tick and the guest's tick run in separate processes: separate
-// stores over the same State, here the same NATS bucket. The share record is
+// stores over the same State, here the same in-memory State. The share record is
 // what carries the share between them.
 func TestAShareIsHandedFromTheHostToTheGuestAcrossProcesses(t *testing.T) {
 	each(t, func(t *testing.T, e env) {

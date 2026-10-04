@@ -24,7 +24,7 @@ const (
 func ghOrgKey(org string) string { return ghOrgPrefix + seg(org) }
 
 // GitHubOrgs keeps connected GitHub organisations: `gh.org.<org>` holds the
-// record and the sealed App credential in one item, and the link App is
+// record in State and the App credential in Secrets, and the link App is
 // `app.gh.link`, built the same way. It is a server.GitHubConnections, a
 // server.GitHubLinkApp and a server.GitHubConfirmations.
 //
@@ -50,12 +50,12 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 		return err
 	}
 	key := ghOrgKey(record.Org)
-	sealed, err := s.b.seal(ctx, key, rawCredential)
+	ref, err := s.b.newSecret(ctx, key, rawCredential)
 	if err != nil {
 		return err
 	}
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) {
-		return &item{Record: json.RawMessage(rawRecord), Sealed: sealed}, nil
+		return &item{Record: json.RawMessage(rawRecord), Secret: ref}, nil
 	})
 }
 
@@ -81,7 +81,7 @@ func (s *GitHubOrgs) SetOwner(ctx context.Context, org, owner string) (previous 
 		if err != nil {
 			return nil, err
 		}
-		return &item{Record: json.RawMessage(raw), Sealed: cur.Sealed}, nil
+		return &item{Record: json.RawMessage(raw), Secret: cur.Secret}, nil
 	})
 	return previous, found && err == nil, err
 }
@@ -112,10 +112,10 @@ func (s *GitHubOrgs) List(ctx context.Context) ([]connection.Record, error) {
 func (s *GitHubOrgs) Credential(ctx context.Context, org string) (connection.Credential, bool, error) {
 	key := ghOrgKey(org)
 	it, err := s.b.getItem(ctx, key)
-	if err != nil || it == nil || len(it.Sealed) == 0 {
+	if err != nil || it == nil || it.Secret == "" {
 		return connection.Credential{}, false, err
 	}
-	plain, err := s.b.open(ctx, key, it.Sealed)
+	plain, err := s.b.getSecret(ctx, key, it.Secret)
 	if err != nil {
 		return connection.Credential{}, false, err
 	}
@@ -125,7 +125,7 @@ func (s *GitHubOrgs) Credential(ctx context.Context, org string) (connection.Cre
 
 // Delete forgets one organisation, its pass request and its confirmation.
 func (s *GitHubOrgs) Delete(ctx context.Context, org string) error {
-	if err := s.b.State.Delete(ctx, ghOrgKey(org)); err != nil {
+	if err := s.b.deleteItem(ctx, ghOrgKey(org)); err != nil {
 		return err
 	}
 	for _, key := range []string{ghPassKey(org), ghConfirmKey(org)} {
@@ -136,8 +136,7 @@ func (s *GitHubOrgs) Delete(ctx context.Context, org string) error {
 	return nil
 }
 
-// PutLinkApp keeps the connected link App: record and sealed credential, one
-// item.
+// PutLinkApp keeps the connected link App: record in State, credential in Secrets.
 func (s *GitHubOrgs) PutLinkApp(ctx context.Context, record link.App, credential link.AppCredential) error {
 	rawRecord, err := link.EncodeApp(record)
 	if err != nil {
@@ -148,12 +147,12 @@ func (s *GitHubOrgs) PutLinkApp(ctx context.Context, record link.App, credential
 	if err != nil {
 		return err
 	}
-	sealed, err := s.b.seal(ctx, ghLinkAppKey, rawCredential)
+	ref, err := s.b.newSecret(ctx, ghLinkAppKey, rawCredential)
 	if err != nil {
 		return err
 	}
 	return s.b.editItem(ctx, ghLinkAppKey, 0, func(*item) (*item, error) {
-		return &item{Record: json.RawMessage(rawRecord), Sealed: sealed}, nil
+		return &item{Record: json.RawMessage(rawRecord), Secret: ref}, nil
 	})
 }
 
@@ -171,10 +170,10 @@ func (s *GitHubOrgs) LinkApp(ctx context.Context) (link.App, bool, error) {
 // person's authorization needs.
 func (s *GitHubOrgs) LinkAppCredential(ctx context.Context) (link.AppCredential, bool, error) {
 	it, err := s.b.getItem(ctx, ghLinkAppKey)
-	if err != nil || it == nil || len(it.Sealed) == 0 {
+	if err != nil || it == nil || it.Secret == "" {
 		return link.AppCredential{}, false, err
 	}
-	plain, err := s.b.open(ctx, ghLinkAppKey, it.Sealed)
+	plain, err := s.b.getSecret(ctx, ghLinkAppKey, it.Secret)
 	if err != nil {
 		return link.AppCredential{}, false, err
 	}
@@ -184,7 +183,7 @@ func (s *GitHubOrgs) LinkAppCredential(ctx context.Context) (link.AppCredential,
 
 // DeleteLinkApp forgets the link App.
 func (s *GitHubOrgs) DeleteLinkApp(ctx context.Context) error {
-	return s.b.State.Delete(ctx, ghLinkAppKey)
+	return s.b.deleteItem(ctx, ghLinkAppKey)
 }
 
 // ReconcileRecords has nothing to reconcile: a record and its credential are

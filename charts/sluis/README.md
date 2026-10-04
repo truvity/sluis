@@ -93,7 +93,7 @@ defaults to `RollingUpdate` with `maxUnavailable: 0` and `maxSurge: 1`, the pod 
 readiness probe on `/readyz` (`config.probes.address`, default `:7070`) that opens
 once the process has finished starting, and `minReadySeconds` defaults to 10.
 `replicas` defaults to 1, and above 1 needs the tick leases in a State the replicas
-share: the chart refuses it unless `config.ports.adapter` is `nats` or `dynamodb`,
+share: the chart refuses it unless `config.ports.adapter` is `dynamodb`,
 and then renders a `PodDisruptionBudget` (`podDisruptionBudget.minAvailable`,
 default 1). `strategy.type: Recreate` stops the old pod first, as the chart did before
 2026-10-04

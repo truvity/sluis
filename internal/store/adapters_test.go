@@ -24,7 +24,6 @@ func TestWithoutTheNewKeysTheLegacyKeysDecide(t *testing.T) {
 	}{
 		{AdapterLegacy, "legacy", "legacy", "legacy"},
 		{AdapterMemory, "memory", "memory", "memory"},
-		{AdapterNATS, "nats", "nats", "legacy"},
 		{AdapterDynamoDB, "dynamodb", "dynamodb", "legacy"},
 	} {
 		got, table, err := Config{Adapter: tc.adapter, Kube: KubeNone}.plan(context.Background(), quiet)
@@ -109,9 +108,10 @@ func TestLambdaRefusesLegacy(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "lambda") {
 		t.Errorf("legacy on Lambda: %v", err)
 	}
-	_, _, err = Config{Adapter: AdapterNATS}.plan(context.Background(), quiet)
+	// A retired adapter is no adapter at all.
+	_, _, err = Config{Adapter: "nats"}.plan(context.Background(), quiet)
 	if err == nil {
-		t.Error("nats on Lambda")
+		t.Error("nats was planned")
 	}
 }
 

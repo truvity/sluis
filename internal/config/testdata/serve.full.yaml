@@ -57,8 +57,7 @@ audit:
   audience: audit
   forwardedForTrustedHops: 1
 ports:
-  adapter: nats
-  nats: {url: "nats://nats.nats.svc:4222"}
+  adapter: memory
   export:
     adapter: openbao
     openbao:

@@ -24,7 +24,7 @@ import (
 
 // The domain stores are read and written through the business interfaces the
 // service itself uses, never as bytes, so that what a destination keeps is
-// sealed and laid out the way its own adapter keeps it. The interfaces below
+// laid out the way its own adapter keeps it. The interfaces below
 // are the parts of internal/server's and internal/hub's that a copy needs.
 
 type orgStore interface {
@@ -127,13 +127,13 @@ func (k portKey) Put(ctx context.Context, key []byte) error { return k.b.PutSess
 
 // OpenDomains builds the domain stores of one side by the switch the service
 // itself makes (internal/app): any adapter but `legacy` keeps them on the State
-// port with every credential sealed, and `legacy` keeps today's ConfigMaps and
+// port with every credential in Secrets, and `legacy` keeps today's ConfigMaps and
 // Secrets. A source is opened as it is; a destination (create) also makes the
 // objects a legacy store needs to exist, as the service does at its start.
 func OpenDomains(ctx context.Context, st *store.Stores, create bool) (*Domains, error) {
 	if st.Adapter != store.AdapterLegacy {
 		base := portstore.New(st.Ports)
-		if err := base.CheckSealer(ctx); err != nil {
+		if err := base.CheckSecrets(ctx); err != nil {
 			return nil, fmt.Errorf("ports.adapter %s: %w", st.Adapter, err)
 		}
 		orgs := portstore.NewGitHubOrgs(base)

@@ -67,13 +67,12 @@ func table(t *testing.T, url string, opts ...dynamoport.Option) *dynamoport.Stor
 	return s
 }
 
-// A DynamoDB table holds State, Index and Trigger; Blob, Sealer and Identity
-// are other adapters' ports, so their assertions are skipped here and run there.
+// A DynamoDB table holds State, Index and Trigger; Blob and Identity are
+// other adapters' ports, so their assertions are skipped here and run there.
 var otherPorts = map[string]string{
 	"blob/round-trip":       "Blob is not a DynamoDB port: the S3 and legacy adapters hold it",
 	"blob/write-if-version": "Blob is not a DynamoDB port: the S3 and legacy adapters hold it",
 	"blob/list-delete":      "Blob is not a DynamoDB port: the S3 and legacy adapters hold it",
-	"sealing/context":       "Sealer is not a DynamoDB port: the KMS adapter holds it",
 	"identity/verify":       "Identity is not a DynamoDB port: the TokenReview adapter holds it",
 }
 

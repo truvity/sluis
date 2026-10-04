@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The S3 Blob and KMS Sealer adapters against a real S3 and KMS API (LocalStack),
+# The S3 Blob adapter against a real S3 API (LocalStack),
 # and a refusal to call an empty run a pass.
 #
 # ACCESS_ROSTER_S3_URL names the endpoint. The tests SKIP when it is unset so
@@ -14,7 +14,7 @@ set -euo pipefail
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
 
-go test -count=1 -v ./internal/port/s3blob/ ./internal/port/kmsseal/ 2>&1 | tee "$out"
+go test -count=1 -v ./internal/port/s3blob/ 2>&1 | tee "$out"
 
 if grep -q -- '--- SKIP' "$out"; then
     echo "FAIL: a conformance test skipped although ACCESS_ROSTER_S3_URL is set:" >&2
@@ -29,9 +29,6 @@ required=(
     'TestConformance/blob/list-delete'
     'TestConformanceWithSSEKMS/blob/write-if-version'
     'TestAMissingBucketIsUnavailableNotNotFound'
-    'TestConformance/sealing/context'
-    'TestKMSRefusesAWrongBindingAndAForeignKey'
-    'TestAnAliasNamesTheKey'
 )
 for name in "${required[@]}"; do
     if ! grep -q -- "--- PASS: ${name} " "$out"; then

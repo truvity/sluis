@@ -234,14 +234,11 @@ type (
 	// docs/design/ports.md.
 	//
 	// Adapter picks the State, Index and Trigger (and, unless overridden below,
-	// the Blob and Sealer). Blob and Sealer each replace one port with an
-	// adapter that composes with any of them: State legacy with Blob s3 is
-	// valid.
+	// the Blob). Blob replaces one port with an adapter that composes with any
+	// of them: State legacy with Blob s3 is valid.
 	Ports struct {
-		Adapter string       `json:"adapter,omitempty"`
-		Blob    *PortsBlob   `json:"blob,omitempty"`
-		Sealer  *PortsSealer `json:"sealer,omitempty"`
-		NATS    *NATS        `json:"nats,omitempty"`
+		Adapter string     `json:"adapter,omitempty"`
+		Blob    *PortsBlob `json:"blob,omitempty"`
 		// DynamoDB is the table of the `dynamodb` adapter.
 		DynamoDB *DynamoDB `json:"dynamodb,omitempty"`
 		// Export replaces the Export port, which has no adapter by default:
@@ -259,19 +256,6 @@ type (
 		Create   bool   `json:"create,omitempty"`
 	}
 
-	// NATS is where the `nats` adapter keeps State, the transitional Index and
-	// the Trigger: one JetStream KV bucket. The credential is a file, never a
-	// value.
-	NATS struct {
-		URL       string `json:"url,omitempty"`
-		Bucket    string `json:"bucket,omitempty"`
-		Replicas  int    `json:"replicas,omitempty"`
-		TokenFile string `json:"tokenFile,omitempty"`
-		CredsFile string `json:"credsFile,omitempty"`
-		CAFile    string `json:"caFile,omitempty"`
-		Create    *bool  `json:"create,omitempty"`
-	}
-
 	// PortsBlob names the adapter behind the Blob port.
 	PortsBlob struct {
 		Adapter string       `json:"adapter,omitempty"`
@@ -287,19 +271,6 @@ type (
 		KMSKey    string `json:"kmsKey,omitempty"`
 		Endpoint  string `json:"endpoint,omitempty"`
 		PathStyle bool   `json:"pathStyle,omitempty"`
-	}
-
-	// PortsSealer names the adapter behind the Sealer port.
-	PortsSealer struct {
-		Adapter string          `json:"adapter,omitempty"`
-		KMS     *PortsSealerKMS `json:"kms,omitempty"`
-	}
-
-	// PortsSealerKMS is the key the KMS Sealer wraps data keys under.
-	PortsSealerKMS struct {
-		KeyID    string `json:"keyId,omitempty"`
-		Region   string `json:"region,omitempty"`
-		Endpoint string `json:"endpoint,omitempty"`
 	}
 
 	// GitHub is what the service knows of GitHub: whose CI it verifies and which

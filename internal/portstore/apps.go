@@ -12,8 +12,8 @@ import (
 	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
-// Apps are `app.<kind>.<name>`: the record and the sealed credential in one
-// item, so an App is never a record with no key or a key with no record.
+// Apps are `app.<kind>.<name>`: the record in State and the credential in
+// Secrets (`private/app.<kind>.<name>`)
 const (
 	ghRunnerPrefix   = "app.gh.runner."
 	ghCataloguePfx   = "app.gh.cat."
@@ -35,12 +35,12 @@ func (s *GitHubRunnerApps) Put(ctx context.Context, record runnerapp.Record, pri
 		return err
 	}
 	key := runnerKey(record.Tier, record.Org)
-	sealed, err := s.b.seal(ctx, key, []byte(privateKey))
+	ref, err := s.b.newSecret(ctx, key, []byte(privateKey))
 	if err != nil {
 		return err
 	}
 	raw := json.RawMessage(keys[runnerapp.RecordKey(record.Tier, record.Org)])
-	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Sealed: sealed}, nil })
+	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
 }
 
 // List returns every App's record, sorted by organisation, then tier.
@@ -72,10 +72,10 @@ func (s *GitHubRunnerApps) List(ctx context.Context) ([]runnerapp.Record, error)
 func (s *GitHubRunnerApps) PrivateKey(ctx context.Context, tier, org string) (string, bool, error) {
 	key := runnerKey(tier, org)
 	it, err := s.b.getItem(ctx, key)
-	if err != nil || it == nil || len(it.Sealed) == 0 {
+	if err != nil || it == nil || it.Secret == "" {
 		return "", false, err
 	}
-	plain, err := s.b.open(ctx, key, it.Sealed)
+	plain, err := s.b.getSecret(ctx, key, it.Secret)
 	if err != nil {
 		return "", false, err
 	}
@@ -84,7 +84,7 @@ func (s *GitHubRunnerApps) PrivateKey(ctx context.Context, tier, org string) (st
 
 // Delete forgets one App.
 func (s *GitHubRunnerApps) Delete(ctx context.Context, tier, org string) error {
-	return s.b.State.Delete(ctx, runnerKey(tier, org))
+	return s.b.deleteItem(ctx, runnerKey(tier, org))
 }
 
 // GitHubCatalogueApps keeps the catalogue GitHub Apps, `app.gh.cat.<id>`.
@@ -102,12 +102,12 @@ func (s *GitHubCatalogueApps) Put(ctx context.Context, record catalogueapp.Recor
 		return err
 	}
 	key := ghCatalogueKey(record.ID)
-	sealed, err := s.b.seal(ctx, key, []byte(privateKey))
+	ref, err := s.b.newSecret(ctx, key, []byte(privateKey))
 	if err != nil {
 		return err
 	}
 	raw := json.RawMessage(keys[catalogueapp.RecordKey(record.ID)])
-	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Sealed: sealed}, nil })
+	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
 }
 
 // List returns every App's record, sorted by id.
@@ -142,8 +142,8 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 		return catalogueapp.Record{}, "", false, err
 	}
 	var privateKey string
-	if len(it.Sealed) > 0 {
-		plain, err := s.b.open(ctx, key, it.Sealed)
+	if it.Secret != "" {
+		plain, err := s.b.getSecret(ctx, key, it.Secret)
 		if err != nil {
 			return catalogueapp.Record{}, "", false, err
 		}
@@ -154,7 +154,7 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 
 // Delete forgets one App.
 func (s *GitHubCatalogueApps) Delete(ctx context.Context, id string) error {
-	return s.b.State.Delete(ctx, ghCatalogueKey(id))
+	return s.b.deleteItem(ctx, ghCatalogueKey(id))
 }
 
 // SlackCatalogueApps keeps the catalogue Slack Apps, `app.slack.cat.<id>`.
@@ -166,7 +166,7 @@ func NewSlackCatalogueApps(b *Base) *SlackCatalogueApps { return &SlackCatalogue
 func slackCatalogueKey(id string) string { return slackCataloguePf + seg(id) }
 
 // Put writes one App, replacing what was kept for its id: the client secret
-// and the bot token are sealed together.
+// and the bot token are kept together as one secret.
 func (s *SlackCatalogueApps) Put(ctx context.Context, record slackcatalogueapp.Record, credentials slackcatalogueapp.Credentials) error {
 	keys, err := slackcatalogueapp.Encode(record, credentials)
 	if err != nil {
@@ -174,12 +174,12 @@ func (s *SlackCatalogueApps) Put(ctx context.Context, record slackcatalogueapp.R
 	}
 	key := slackCatalogueKey(record.ID)
 	plain, _ := json.Marshal(credentials)
-	sealed, err := s.b.seal(ctx, key, plain)
+	ref, err := s.b.newSecret(ctx, key, plain)
 	if err != nil {
 		return err
 	}
 	raw := json.RawMessage(keys[slackcatalogueapp.RecordKey(record.ID)])
-	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Sealed: sealed}, nil })
+	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
 }
 
 // List returns every App's record, sorted by id.
@@ -214,8 +214,8 @@ func (s *SlackCatalogueApps) Get(ctx context.Context, id string) (slackcatalogue
 		return slackcatalogueapp.Record{}, slackcatalogueapp.Credentials{}, false, err
 	}
 	var credentials slackcatalogueapp.Credentials
-	if len(it.Sealed) > 0 {
-		plain, err := s.b.open(ctx, key, it.Sealed)
+	if it.Secret != "" {
+		plain, err := s.b.getSecret(ctx, key, it.Secret)
 		if err != nil {
 			return slackcatalogueapp.Record{}, slackcatalogueapp.Credentials{}, false, err
 		}
@@ -228,5 +228,5 @@ func (s *SlackCatalogueApps) Get(ctx context.Context, id string) (slackcatalogue
 
 // Delete forgets one App.
 func (s *SlackCatalogueApps) Delete(ctx context.Context, id string) error {
-	return s.b.State.Delete(ctx, slackCatalogueKey(id))
+	return s.b.deleteItem(ctx, slackCatalogueKey(id))
 }

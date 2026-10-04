@@ -8,7 +8,6 @@ import (
 	_ "github.com/truvity/sluis/internal/port/dynamodb" // register
 	_ "github.com/truvity/sluis/internal/port/legacy"   // register
 	_ "github.com/truvity/sluis/internal/port/memory"   // register
-	_ "github.com/truvity/sluis/internal/port/nats"     // register
 	_ "github.com/truvity/sluis/internal/port/s3blob"   // register
 )
 

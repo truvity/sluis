@@ -38,6 +38,22 @@
   nothing chosen (every deployment today) nothing changes. IAM and the layout:
   `docs/design/ports.md`.
 
+- **Removed: the NATS adapter and the KMS sealer.** Configs that name `ports.adapter: nats`,
+  `ports.nats` or `ports.sealer` are refused. Sealing is retired entirely: the `Sealer`
+  port, `internal/port/kmsseal`, the envelope code (`port.Seal`, `port.Open`) and the
+  `sluis:binding` encryption context are gone, and so is `internal/port/nats` with its
+  registration, chart test cases and documentation. A dynamic secret (a workspace
+  credential, an App key, a link's token pair, the console's session key) is now
+  written to the Secrets port under `private/<key>/<ref>`, and the record in State only
+  names it; State never holds one. **Behaviour change for a non-`legacy` adapter:** it
+  needs a Secrets adapter (`memory` has one; the `ssm` adapter follows), and start is
+  refused naming it without one. A credential is written under a fresh ref and the
+  one it replaces is removed, so a writer that loses a compare-and-swap never
+  replaces the winner's secret. The chart accepts `replicas` above 1 only with
+  `ports.adapter: dynamodb` now. `legacy` (which never sealed), Valkey, `Index`,
+  `dynamodb`, `s3`, `memory`, file signing keys and the Export port are unchanged.
+  The `nats` ADR records and the sealing ADR carry a superseded note.
+
 - **Adapters are chosen by name, per concern.** `internal/port` gains an adapter registry:
   each adapter registers a descriptor (name, concern, what it needs of AWS, Kubernetes
   and OpenBao, the runtimes it works on, implemented or on request, and a factory from
@@ -49,7 +65,7 @@
   preset, which beats the preset the answers derive. **No behaviour change without the
   new keys:** `ports.adapter` (`legacy` by default) and `ports.blob` map onto the same
   table. Start now refuses an adapter that needs a platform answer that is false, cannot
-  run on the runtime (`legacy` and `nats` on Lambda), is `memory` with more than one
+  run on the runtime (`legacy` on Lambda), is `memory` with more than one
   replica, or is planned and not built, then logs the resolved table once and exposes
   `sluis_adapter_info{concern,adapter}`. Also a `Secrets` port (`Get`, `Put`,
   `PutIfVersion`, `Delete`, `List`; exports under `export/`) with a `memory` adapter and

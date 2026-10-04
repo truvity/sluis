@@ -6,9 +6,6 @@ package memory
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"fmt"
 	"slices"
 	"sort"
@@ -20,7 +17,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 )
 
-// Store implements [port.State], [port.Index], [port.Trigger], [port.Sealer]
+// Store implements [port.State], [port.Index], [port.Trigger]
 // and [port.Identity]; its blobs are [Store.Blobs], a separate type because
 // State and Blob both have a Delete. Every port shares one lock.
 type Store struct {
@@ -37,7 +34,6 @@ type Store struct {
 
 	*Trigger
 
-	kek    cipher.AEAD
 	tokens map[string]grant
 }
 
@@ -77,7 +73,6 @@ var (
 	_ port.Trigger       = (*Store)(nil)
 	_ port.StateExporter = (*Store)(nil)
 	_ port.IndexExporter = (*Store)(nil)
-	_ port.Sealer        = (*Store)(nil)
 	_ port.Identity      = (*Store)(nil)
 )
 
@@ -101,18 +96,12 @@ func New(opts ...Option) *Store {
 	for _, opt := range opts {
 		opt(s)
 	}
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		panic(err) // the system's randomness is gone; nothing here can continue
-	}
-	block, _ := aes.NewCipher(key)
-	s.kek, _ = cipher.NewGCM(block)
 	return s
 }
 
 // Set returns every port of the store.
 func (s *Store) Set() port.Set {
-	return port.Set{State: s, Index: s, Blob: s.Blobs(), Trigger: s, Sealer: s, Identity: s}
+	return port.Set{State: s, Index: s, Blob: s.Blobs(), Trigger: s, Identity: s, Secrets: NewSecrets()}
 }
 
 // Advance moves the store's clock forward and sweeps what expired, so a
@@ -441,32 +430,6 @@ func (b *Blobs) Replace(_ context.Context, prefix string, objects map[string][]b
 		b.s.putBlob(prefix+name, body)
 	}
 	return nil
-}
-
-// KeyID names the store's key-encryption key.
-const KeyID = "memory"
-
-// Wrap implements [port.Sealer] with a key that lives and dies with the
-// store.
-func (s *Store) Wrap(_ context.Context, dataKey []byte, binding string) (port.Wrapped, error) {
-	nonce := make([]byte, s.kek.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return port.Wrapped{}, fmt.Errorf("%w: %w", port.ErrUnavailable, err)
-	}
-	return port.Wrapped{KeyID: KeyID, Blob: s.kek.Seal(nonce, nonce, dataKey, []byte(binding))}, nil
-}
-
-// Unwrap implements [port.Sealer].
-func (s *Store) Unwrap(_ context.Context, w port.Wrapped, binding string) ([]byte, error) {
-	n := s.kek.NonceSize()
-	if w.KeyID != KeyID || len(w.Blob) < n {
-		return nil, port.ErrUnwrap
-	}
-	key, err := s.kek.Open(nil, w.Blob[:n], w.Blob[n:], []byte(binding))
-	if err != nil {
-		return nil, port.ErrUnwrap
-	}
-	return key, nil
 }
 
 // Allow makes a token prove subject for any of the audiences.

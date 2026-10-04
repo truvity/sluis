@@ -17,7 +17,7 @@ import (
 )
 
 // dynamoDest opens a fresh DynamoDB table on the endpoint hack/dynamodb-conformance.sh
-// names, with the in-process Sealer (a DynamoDB table holds no Sealer).
+// names, with the in-memory Secrets (a DynamoDB table holds none).
 func dynamoDest(t *testing.T) (*store.Stores, *dynamoport.Store) {
 	t.Helper()
 	url := os.Getenv("ACCESS_ROSTER_DYNAMODB_URL")
@@ -36,7 +36,7 @@ func dynamoDest(t *testing.T) (*store.Stores, *dynamoport.Store) {
 		t.Fatal(err)
 	}
 	set := tbl.Set()
-	set.Sealer = memory.New().Set().Sealer
+	set.Secrets = memory.NewSecrets()
 	return portSide(set, store.AdapterDynamoDB), tbl
 }
 

@@ -193,12 +193,12 @@ exclusive across pods only when the State that holds it is. With the `legacy`
 adapter a controller keeps its leases in its own memory, so two replicas would
 each act on every target and make every change twice (duplicate invitations
 and removals, which the platform answers with an error that reads as a
-failure). Only `ports.adapter: nats` or `dynamodb` shares them.
+failure). Only `ports.adapter: dynamodb` shares them.
 */}}
 {{- define "sluis.controllerRollout" -}}
 {{- $adapter := dig "ports" "adapter" "legacy" (.v.config | default dict) -}}
-{{- if and (gt (int .v.replicas) 1) (not (has $adapter (list "nats" "dynamodb"))) -}}
-{{- fail (printf "%s.replicas is %d, which needs the tick leases in a State every replica shares: set %s.config.ports.adapter to nats or dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicas at 1 otherwise: readiness gating and a rolling update already keep the old pod until the new one is Ready" .name (int .v.replicas) .name $adapter) -}}
+{{- if and (gt (int .v.replicas) 1) (not (has $adapter (list "dynamodb"))) -}}
+{{- fail (printf "%s.replicas is %d, which needs the tick leases in a State every replica shares: set %s.config.ports.adapter to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicas at 1 otherwise: readiness gating and a rolling update already keep the old pod until the new one is Ready" .name (int .v.replicas) .name $adapter) -}}
 {{- end -}}
 {{- if and (eq .v.strategy.type "Recreate") (gt (int .v.replicas) 1) -}}
 {{- fail (printf "%s.strategy.type is Recreate with %d replicas: Recreate stops every replica before the new ones start, which is the outage the replicas exist to prevent. Use RollingUpdate, or set replicas to 1" .name (int .v.replicas)) -}}

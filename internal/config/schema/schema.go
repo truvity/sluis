@@ -299,18 +299,15 @@ func serveSchema() m {
 // service copies secrets out of itself, so only its file may name an Export.
 func portsSchema(export bool) m {
 	o := obj("The adapters behind the storage ports (docs/design/ports.md).", m{
-		"adapter": enum("`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`. `nats` keeps State, the session index and the trigger in a NATS JetStream KV bucket (`ports.nats`), shared by every replica and process; its Blob and Sealer are `legacy`'s unless `ports.blob` and `ports.sealer` name their own. `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob and Sealer from `legacy` in the same way.", "legacy",
-			"legacy", "memory", "nats", "dynamodb"),
+		"adapter": enum("`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.", "legacy",
+			"legacy", "memory", "dynamodb"),
 		"blob":     portsBlobSchema(),
-		"sealer":   portsSealerSchema(),
-		"nats":     portsNATSSchema(),
 		"dynamodb": portsDynamoDBSchema(),
 	})
 	if export {
 		o["properties"].(m)["export"] = portsExportSchema()
 	}
 	o["allOf"] = []any{
-		m{"if": m{"properties": m{"adapter": m{"const": "nats"}}, "required": []string{"adapter"}}, "then": m{"required": []string{"nats"}}},
 		m{"if": m{"properties": m{"adapter": m{"const": "dynamodb"}}, "required": []string{"adapter"}}, "then": m{"required": []string{"dynamodb"}}},
 	}
 	return o
@@ -362,19 +359,6 @@ func exportsSchema() m {
 	return m{"type": "array", "items": item, "description": "The secrets this service copies out of itself into the store `ports.export` names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. Validated at start; an unknown source, a source this deployment does not declare and two exports that would write one key stop the service before it serves."}
 }
 
-// portsNATSSchema is `ports.nats`: the bucket of the `nats` adapter.
-func portsNATSSchema() m {
-	return obj("The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.", m{
-		"url":       str("The server list, comma separated: `nats://host:4222`, or `tls://` for TLS."),
-		"bucket":    strDefault("The KV bucket.", "sluis"),
-		"replicas":  m{"type": "integer", "minimum": 1, "maximum": 5, "default": 3, "description": "The bucket's replica count, applied when the bucket is created."},
-		"tokenFile": str("This pod's projected ServiceAccount token, presented as the NATS token for the auth callout to validate, and read afresh on every connect. Alternative to `credsFile`."),
-		"credsFile": str("A NATS credentials file. Alternative to `tokenFile`."),
-		"caFile":    str("A PEM bundle of the authorities that sign the server's certificate, when the system's do not."),
-		"create":    boolDefault("Create or update the bucket at start. Off binds to a bucket that exists, for an identity that may not manage streams.", true),
-	}, "url")
-}
-
 // portsDynamoDBSchema is `ports.dynamodb`: the table of the `dynamodb` adapter.
 func portsDynamoDBSchema() m {
 	return obj("The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.", m{
@@ -400,20 +384,6 @@ func portsBlobSchema() m {
 		}, "bucket"),
 	}, "adapter")
 	s["allOf"] = []any{m{"if": m{"properties": m{"adapter": m{"const": "s3"}}}, "then": m{"required": []string{"s3"}}}}
-	return s
-}
-
-// portsSealerSchema is `ports.sealer`.
-func portsSealerSchema() m {
-	s := obj("Replaces the Sealer port (wraps the data key of a sealed secret) with an adapter of its own, whatever `ports.adapter` is. Absent, the Sealer is `ports.adapter`'s.", m{
-		"adapter": enum("`kms` wraps data keys with AWS KMS.", "", "kms"),
-		"kms": obj("The key the KMS adapter wraps under. Credentials are the platform's and are never configured here. The role needs `kms:Encrypt` and `kms:Decrypt` on the key; every unwrap is a `kms:Decrypt` that CloudTrail records.", m{
-			"keyId":    str("A key id, key ARN or alias (`alias/name`)."),
-			"region":   str("The key's region. Absent, the SDK's own resolution (`AWS_REGION`)."),
-			"endpoint": url("Overrides the KMS address: LocalStack."),
-		}, "keyId"),
-	}, "adapter")
-	s["allOf"] = []any{m{"if": m{"properties": m{"adapter": m{"const": "kms"}}}, "then": m{"required": []string{"kms"}}}}
 	return s
 }
 

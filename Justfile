@@ -47,14 +47,14 @@ cross:
 test: console
     go test ./... -coverprofile=coverage.out
 
-# The LocalStack the S3 Blob and KMS Sealer adapters are tested against. Pinned
+# The LocalStack the S3 Blob and DynamoDB State adapters are tested against. Pinned
 # by digest, and the community 4.x line: LocalStack's `latest` and `stable` now
 # resolve to a licensed build that exits without a token, which would fail every
 # fork's CI with a message its author cannot fix. A moving tag also changes the
 # test. Keep it equal to the image in .github/workflows/ci.yaml.
 s3_image := "localstack/localstack@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a"
 
-# The S3 Blob, KMS Sealer and DynamoDB State adapters against LocalStack, started
+# The S3 Blob and DynamoDB State adapters against LocalStack, started
 # with `docker run` (no testcontainers) and removed afterwards. Not part of
 # `check`, which needs nothing but the checkout; CI runs it as its own job. It
 # fails if the conformance tests skipped (hack/s3-conformance.sh,

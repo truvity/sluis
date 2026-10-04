@@ -200,10 +200,10 @@ data:
     interval: 15m
     policyDir: /var/run/github-roster/policy
     ports:
-      adapter: nats
-      nats:
-        tokenFile: /var/run/nats/token
-        url: nats://nats.nats.svc:4222
+      adapter: dynamodb
+      dynamodb:
+        region: eu-west-1
+        table: sluis-github
     recordsDir: /var/run/github-roster/records
     tokenFile: /var/run/secrets/github-roster/token
 
@@ -491,7 +491,7 @@ spec:
         app.kubernetes.io/name: sluis-github-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 523fffdb43650e4007c52f84c76dc15012f9ba89fbb2d14f59776c3b02fd5857
+        checksum/config: 1cd43b93fee633d682228ba2a6d94a0abbb61b0bcd2ba9c0793d7e09e94fd21a
         # The bindings are read at start, like the service's policy.
         checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
     spec:
