@@ -48,3 +48,7 @@ func TestAnIdenticalExportMakesNoWrite(t *testing.T) {
 		t.Fatalf("%d writes for three identical puts, want 1", e.Writes())
 	}
 }
+
+func TestSecretsConformance(t *testing.T) {
+	porttest.RunSecrets(t, func(*testing.T) port.Secrets { return memory.NewSecrets() })
+}

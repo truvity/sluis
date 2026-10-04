@@ -205,6 +205,22 @@ type (
 		TokenFile string `json:"tokenFile,omitempty"`
 	}
 
+	// Platform is the answers to the questions that pick a preset: what the
+	// installation has to build on (docs/design/ports.md, "Adapters").
+	Platform struct {
+		AWS        bool   `json:"aws,omitempty"`
+		Kubernetes bool   `json:"kubernetes,omitempty"`
+		OpenBao    bool   `json:"openbao,omitempty"`
+		Runtime    string `json:"runtime,omitempty"`
+		Replicas   int    `json:"replicas,omitempty"`
+	}
+
+	// AdapterChoice names the adapter of one concern and its settings.
+	AdapterChoice struct {
+		Adapter  string         `json:"adapter"`
+		Settings map[string]any `json:"settings,omitempty"`
+	}
+
 	// Ports chooses the adapter behind the storage ports of
 	// docs/design/ports.md.
 	//
@@ -320,14 +336,21 @@ type Serve struct {
 	Probes *Address `json:"probes,omitempty"`
 	Log    *Log     `json:"log,omitempty"`
 
-	Store         string `json:"store,omitempty"`
-	Ports         *Ports `json:"ports,omitempty"`
-	PolicyDir     string `json:"policyDir,omitempty"`
-	OverlayFile   string `json:"overlayFile,omitempty"`
-	PublicURL     string `json:"publicURL,omitempty"`
-	PublicRootURL string `json:"publicRootURL,omitempty"`
-	SecureCookies *bool  `json:"secureCookies,omitempty"`
-	GroupsScoping string `json:"groupsScoping,omitempty"`
+	Store string `json:"store,omitempty"`
+	Ports *Ports `json:"ports,omitempty"`
+	// Platform, Preset and Adapters choose the adapters by name, per concern.
+	// Absent, the `ports` keys decide, exactly as before they existed.
+	Platform *Platform `json:"platform,omitempty"`
+	Preset   string    `json:"preset,omitempty"`
+	// Adapters maps a concern (state, secrets, blobs, signing, trigger,
+	// schedule, audit) to the adapter that replaces the preset's.
+	Adapters      map[string]AdapterChoice `json:"adapters,omitempty"`
+	PolicyDir     string                   `json:"policyDir,omitempty"`
+	OverlayFile   string                   `json:"overlayFile,omitempty"`
+	PublicURL     string                   `json:"publicURL,omitempty"`
+	PublicRootURL string                   `json:"publicRootURL,omitempty"`
+	SecureCookies *bool                    `json:"secureCookies,omitempty"`
+	GroupsScoping string                   `json:"groupsScoping,omitempty"`
 
 	ClientSecretsDir string `json:"clientSecretsDir,omitempty"`
 	AdminPasswordEnv string `json:"adminPasswordEnv,omitempty"`

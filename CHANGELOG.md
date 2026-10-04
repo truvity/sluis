@@ -1,5 +1,22 @@
 ## Unreleased
 
+- **Adapters are chosen by name, per concern.** `internal/port` gains an adapter registry:
+  each adapter registers a descriptor (name, concern, what it needs of AWS, Kubernetes
+  and OpenBao, the runtimes it works on, implemented or on request, and a factory from
+  its settings), and a static catalogue lists the planned adapters, so the
+  compatibility matrix is generated from the registry. The serve configuration takes
+  an optional `platform` block (`aws`, `kubernetes`, `openbao`, `runtime`, `replicas`),
+  an optional `preset` (`server`, `k8s-minimal`, `k8s-openbao`, `aws-serverless`,
+  `aws-hybrid`, `aws-eks`) and per-concern `adapters`; an explicit adapter beats the
+  preset, which beats the preset the answers derive. **No behaviour change without the
+  new keys:** `ports.adapter` (`legacy` by default) and `ports.blob` map onto the same
+  table. Start now refuses an adapter that needs a platform answer that is false, cannot
+  run on the runtime (`legacy` and `nats` on Lambda), is `memory` with more than one
+  replica, or is planned and not built, then logs the resolved table once and exposes
+  `sluis_adapter_info{concern,adapter}`. Also a `Secrets` port (`Get`, `Put`,
+  `PutIfVersion`, `Delete`, `List`; exports under `export/`) with a `memory` adapter and
+  a `porttest.RunSecrets` conformance suite. See `docs/design/ports.md`.
+
 - **The GitHub and Slack controllers roll safely.** The chart fixed each controller at
   one replica with `strategy: Recreate`, so a release whose pods crashed at start
   (sluis 1.57.0, 2026-10-04) deleted the running controller first and left it down for

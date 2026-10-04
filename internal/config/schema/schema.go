@@ -184,6 +184,9 @@ func serveSchema() m {
 		"store": enum("Where what an operator connected is kept: `memory` keeps nothing (a restart is a fresh installation), `kubernetes` keeps it in this namespace.", "memory",
 			"memory", "kubernetes"),
 		"ports":            portsSchema(true),
+		"platform":         platformSchema(),
+		"preset":           presetSchema(),
+		"adapters":         adaptersSchema(),
 		"policyDir":        str("The directory the policy is mounted at. Unset is the built-in two groups, or the demonstration policy under `demo`."),
 		"overlayFile":      str("The file of declared workspaces, mounted."),
 		"publicURL":        m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."},
@@ -466,4 +469,40 @@ func encode(v any) []byte {
 		panic(err)
 	}
 	return buf.Bytes()
+}
+
+// platformSchema is `platform`: the answers that pick a preset.
+func platformSchema() m {
+	return obj("What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.", m{
+		"aws":        boolean("AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge."),
+		"kubernetes": boolean("A Kubernetes cluster is available."),
+		"openbao":    boolean("An OpenBao is available."),
+		"runtime":    enum("Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.", "", "kubernetes", "lambda", "process"),
+		"replicas":   integer("How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).", 1, 1),
+	})
+}
+
+// presetSchema is `preset`.
+func presetSchema() m {
+	return enum("The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.", "",
+		"server", "k8s-minimal", "k8s-openbao", "aws-serverless", "aws-hybrid", "aws-eks")
+}
+
+// adaptersSchema is `adapters`: the per-concern overrides.
+func adaptersSchema() m {
+	choice := func(concern string) m {
+		return obj("The adapter for "+concern+", replacing the preset's.", m{
+			"adapter":  str("The adapter's name, as the compatibility matrix lists it."),
+			"settings": m{"type": "object", "description": "The adapter's own settings (an object; the adapter refuses a key it does not know)."},
+		}, "adapter")
+	}
+	return obj("Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.", m{
+		"state":    choice("state, sessions included"),
+		"secrets":  choice("secrets (dynamic secrets, exports under `export/`)"),
+		"blobs":    choice("blobs"),
+		"signing":  choice("token signing"),
+		"trigger":  choice("the \"run a pass now\" trigger"),
+		"schedule": choice("the schedule of passes"),
+		"audit":    choice("the audit sink"),
+	})
 }

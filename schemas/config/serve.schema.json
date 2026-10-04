@@ -75,6 +75,146 @@
   ],
   "description": "The configuration of `sluis serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
   "properties": {
+    "adapters": {
+      "additionalProperties": false,
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
+      "properties": {
+        "audit": {
+          "additionalProperties": false,
+          "description": "The adapter for the audit sink, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "blobs": {
+          "additionalProperties": false,
+          "description": "The adapter for blobs, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "schedule": {
+          "additionalProperties": false,
+          "description": "The adapter for the schedule of passes, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "signing": {
+          "additionalProperties": false,
+          "description": "The adapter for token signing, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "The adapter for state, sessions included, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "trigger": {
+          "additionalProperties": false,
+          "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "adminPasswordEnv": {
       "$ref": "#/$defs/envName",
       "description": "The NAME of the variable holding the hub's recovery password, for a run outside a cluster. Unset generates one and prints it once."
@@ -508,6 +648,39 @@
       "minLength": 1,
       "type": "string"
     },
+    "platform": {
+      "additionalProperties": false,
+      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+      "properties": {
+        "aws": {
+          "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
+          "type": "boolean"
+        },
+        "kubernetes": {
+          "description": "A Kubernetes cluster is available.",
+          "type": "boolean"
+        },
+        "openbao": {
+          "description": "An OpenBao is available.",
+          "type": "boolean"
+        },
+        "replicas": {
+          "default": 1,
+          "description": "How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "runtime": {
+          "description": "Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.",
+          "enum": [
+            "kubernetes",
+            "lambda",
+            "process"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "policyDir": {
       "description": "The directory the policy is mounted at. Unset is the built-in two groups, or the demonstration policy under `demo`.",
       "minLength": 1,
@@ -887,6 +1060,17 @@
         }
       },
       "type": "object"
+    },
+    "preset": {
+      "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
+      "enum": [
+        "server",
+        "k8s-minimal",
+        "k8s-openbao",
+        "aws-serverless",
+        "aws-hybrid",
+        "aws-eks"
+      ]
     },
     "probes": {
       "$ref": "https://github.com/truvity/policy/schemas/fragments/probes.json",

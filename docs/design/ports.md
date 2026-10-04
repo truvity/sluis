@@ -40,6 +40,98 @@ business rule.
 | [Identity](#identity) | proves a workload to the issuer, and the service to the cloud | ServiceAccount token, AWS federation | the same |
 | [Audit sink](#audit-sink) | records what the service did | `http`, `nats` | `sqs` |
 
+## Adapters, presets and the platform
+
+An adapter is chosen by name, **per concern**. The concerns are `state` (sessions
+are State under `ses.`, with a lifetime), `secrets` (dynamic secrets, and the
+exports under `export/`), `blobs`, `signing`, `trigger`, `schedule` and `audit`.
+Each adapter registers a descriptor in `internal/port` (`port.Register`): its
+name and concern, what it needs (AWS, Kubernetes, OpenBao), the runtimes it works
+on (`kubernetes`, `lambda`, `process`), its status (`implemented` or
+`on-request`) and a factory from its settings. `port.Catalogue` lists the
+adapters that are planned and not built; `port.Default.Matrix()` is the registry
+plus the catalogue, which is what the table below is generated from.
+
+**Only what Truvity and hive need is built.** Both run the `aws-hybrid` preset:
+sluis on Lambda, DynamoDB state, SSM secrets, KMS token signing, S3 blobs, SQS
+audit, EventBridge ticks and an asynchronous invoke for "run a pass now". Every
+other adapter is *on request*: it is in the matrix, and start refuses it.
+
+### Choosing a preset
+
+Four questions, in this order:
+
+```text
+AWS?        no  -> Kubernetes?   no  -> server
+                                 yes -> OpenBao?  yes -> k8s-openbao
+                                                  no  -> k8s-minimal
+            yes -> Kubernetes?   no  -> aws-serverless
+                                 yes -> sluis on Lambda?  yes -> aws-hybrid
+                                                          no  -> aws-eks
+```
+
+The answers are the `platform` block (`aws`, `kubernetes`, `openbao`, `runtime`,
+`replicas`); `preset` names one outright. A **modifier** overrides one concern
+(sessions to Valkey, say, is `adapters.state: {adapter: valkey}`).
+
+| Concern | `server` | `k8s-minimal` | `k8s-openbao` | `aws-serverless`, `aws-hybrid` | `aws-eks` |
+|---|---|---|---|---|---|
+| state | postgres | kubernetes | kubernetes | dynamodb | dynamodb |
+| secrets | store | kubernetes | openbao | ssm | ssm |
+| blobs | postgres | off | off | s3 | s3 |
+| signing | generated | file | transit | kms | kms |
+| trigger | http | watch | watch | invoke | watch |
+| schedule | ticker | ticker | ticker | eventbridge | ticker |
+| audit | log | log | log | sqs | sqs |
+
+### Resolution
+
+An explicit override wins over the preset, and the preset over what the
+decision tree derives from the `platform` answers: `adapters.<concern>` (with its
+`settings`), then the legacy keys written beside a preset (`ports.adapter`,
+`ports.blob`), then `preset`, then the preset the `platform` leads to. **With
+none of `platform`, `preset` and `adapters`, nothing changes:** the `ports` keys
+decide, `ports.adapter: legacy` is the default, and the table is the legacy one
+(state `legacy` or the named adapter, signing `file`, schedule `ticker`, audit
+`connect` when `audit.writer` is set and `log` otherwise).
+
+### Start-up validation
+
+Start is refused, naming every problem, when an adapter needs a platform answer
+that is false (only checked when `platform` or `preset` is given); cannot run on
+the current runtime (`legacy` and `nats` on `lambda`; the runtime is
+`platform.runtime`, the preset's, or `lambda` when `AWS_LAMBDA_FUNCTION_NAME` is
+set); is process-local (`memory`) while `platform.replicas` is above 1; is a
+secrets adapter that is not a secret store while the platform has one; is
+unknown; or is planned. The resolved table is then logged once (`adapters
+resolved`, one attribute per concern) and exposed as the gauge
+`sluis_adapter_info{concern,adapter} 1`.
+
+### The matrix
+
+`implemented` adapters; the *on request* ones are planned and not built.
+
+| Concern | Implemented | On request |
+|---|---|---|
+| state | dynamodb, legacy (until the kernel cutover), memory, nats (being removed) | kubernetes, postgres, valkey |
+| secrets | memory (ssm: in progress) | openbao, kubernetes, store |
+| blobs | s3, memory, legacy | postgres, off |
+| signing | file (kms: in progress) | generated, transit |
+| trigger | memory, legacy, nats, dynamodb (invoke: later) | watch, http |
+| schedule | ticker (eventbridge: later) | |
+| audit | connect, log (sqs: later) | |
+
+### Secrets
+
+`port.Secrets` (`internal/port/secrets.go`) is whole values under slash-separated
+paths, each with a version: `Get(path) (value, version)`, `Put`, `PutIfVersion`
+(`ErrConflict` when the version moved, `ErrNotFound` when gone, an empty version
+means "only if absent"), `Delete` and `List(prefix)` (names, never values, by whole
+segments). A value is at most `MaxSecret` (8 KiB, an SSM advanced parameter's
+limit). Exports live under `export/` (`port.ExportPrefix`). The suite is
+`porttest.RunSecrets`; the `memory` adapter passes it, and an adapter for a real
+store runs it against the engine.
+
 ## State
 
 A key-value store with a lifetime on every record, a revision on every write,
