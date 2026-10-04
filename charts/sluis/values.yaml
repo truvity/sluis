@@ -738,6 +738,34 @@ controllerGithub:
     # consoleURL: http://sluis.access.svc:8080/console
     # enabledOrgs: []
   resources: {}
+  # How many controller pods run. One is the default. More than one is safe
+  # ONLY when the tick leases are shared, which needs
+  # `config.ports.adapter` to be `nats` or `dynamodb`: with `legacy` each pod
+  # keeps its leases in its own memory and every replica would act on every
+  # target. The chart refuses `replicas` above 1 without a shared adapter.
+  # Beside a shared State, each target is ticked by one replica at a time and
+  # the others skip it.
+  replicas: 1
+  # The rollout. The default starts the new pod first and removes the old one
+  # only when the new one is Ready, so a release whose pods crash at start
+  # (2026-10-04, sluis 1.57.0) leaves the running controller alone. `Recreate`
+  # stops the old pod first and is the outage that day: a controller down for
+  # as long as the new pods take to become Ready, or never. Beside the legacy
+  # adapter the new pod's first pass can overlap the old pod's last for a few
+  # seconds, with leases in each pod's memory; set `Recreate` to forbid that
+  # overlap at the price of the gap.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  # A new pod must stay Ready this many seconds before it counts as available,
+  # so a pod that listens and then fails does not retire the old one.
+  minReadySeconds: 10
+  # Rendered only when `replicas` is above 1: a drain keeps this many pods.
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 # The Slack controller: makes each Slack workspace's channels match the
 # policy's `slack` table, and reports on the console's Slack page.
 #
@@ -773,6 +801,34 @@ controllerSlack:
     # consoleURL: http://sluis.access.svc:8080/console
     # enabledWorkspaces: []
   resources: {}
+  # How many controller pods run. One is the default. More than one is safe
+  # ONLY when the tick leases are shared, which needs
+  # `config.ports.adapter` to be `nats` or `dynamodb`: with `legacy` each pod
+  # keeps its leases in its own memory and every replica would act on every
+  # target. The chart refuses `replicas` above 1 without a shared adapter.
+  # Beside a shared State, each target is ticked by one replica at a time and
+  # the others skip it.
+  replicas: 1
+  # The rollout. The default starts the new pod first and removes the old one
+  # only when the new one is Ready, so a release whose pods crash at start
+  # (2026-10-04, sluis 1.57.0) leaves the running controller alone. `Recreate`
+  # stops the old pod first and is the outage that day: a controller down for
+  # as long as the new pods take to become Ready, or never. Beside the legacy
+  # adapter the new pod's first pass can overlap the old pod's last for a few
+  # seconds, with leases in each pod's memory; set `Recreate` to forbid that
+  # overlap at the price of the gap.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  # A new pod must stay Ready this many seconds before it counts as available,
+  # so a pod that listens and then fails does not retire the old one.
+  minReadySeconds: 10
+  # Rendered only when `replicas` is above 1: a drain keeps this many pods.
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 # Runner Apps: the GitHub App a self-hosted runner scale set in one tier
 # registers with, one per organisation per tier, created by an operator on
 # the console's GitHub page (Apps). The tiers an operator may create one for

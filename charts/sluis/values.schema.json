@@ -329,6 +329,24 @@
           },
           "type": "object"
         },
+        "probes": {
+          "additionalProperties": false,
+          "default": {
+            "address": ":7070"
+          },
+          "description": "The health listener. Separate from the service's own traffic, so that readiness is answerable when the service's listener is saturated, and so that a probe is not reachable from outside.",
+          "properties": {
+            "address": {
+              "description": "host:port for /health/live and /health/ready.",
+              "pattern": "^[^\\s]*:[0-9]{1,5}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "type": "object"
+        },
         "recordsDir": {
           "default": "/var/run/github-roster/records",
           "description": "The console's records, mounted.",
@@ -690,6 +708,24 @@
               "type": "object"
             }
           },
+          "type": "object"
+        },
+        "probes": {
+          "additionalProperties": false,
+          "default": {
+            "address": ":7070"
+          },
+          "description": "The health listener. Separate from the service's own traffic, so that readiness is answerable when the service's listener is saturated, and so that a probe is not reachable from outside.",
+          "properties": {
+            "address": {
+              "description": "host:port for /health/live and /health/ready.",
+              "pattern": "^[^\\s]*:[0-9]{1,5}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "address"
+          ],
           "type": "object"
         },
         "recordsDir": {
@@ -2385,7 +2421,70 @@
           "description": "Render the controller. Needs exchange.clusters to name this cluster and console.mount to be set.",
           "type": "boolean"
         },
+        "minReadySeconds": {
+          "description": "Seconds a new pod must stay Ready before it counts as available. Default 10.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "podDisruptionBudget": {
+          "additionalProperties": false,
+          "description": "Rendered only when replicas is above 1.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minAvailable": {
+              "minimum": 0,
+              "pattern": "^[0-9]+%$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "replicas": {
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1.",
+          "minimum": 1,
+          "type": "integer"
+        },
         "resources": {
+          "type": "object"
+        },
+        "strategy": {
+          "additionalProperties": false,
+          "description": "The Deployment's rollout. Default RollingUpdate with maxUnavailable 0 and maxSurge 1: the new pod must be Ready before the old one goes.",
+          "properties": {
+            "rollingUpdate": {
+              "additionalProperties": false,
+              "properties": {
+                "maxSurge": {
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "maxUnavailable": {
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "RollingUpdate",
+                "Recreate"
+              ]
+            }
+          },
           "type": "object"
         }
       },
@@ -2403,7 +2502,70 @@
           "description": "Render the controller. Needs exchange.clusters to name this cluster and console.mount to be set.",
           "type": "boolean"
         },
+        "minReadySeconds": {
+          "description": "Seconds a new pod must stay Ready before it counts as available. Default 10.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "podDisruptionBudget": {
+          "additionalProperties": false,
+          "description": "Rendered only when replicas is above 1.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minAvailable": {
+              "minimum": 0,
+              "pattern": "^[0-9]+%$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "replicas": {
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1.",
+          "minimum": 1,
+          "type": "integer"
+        },
         "resources": {
+          "type": "object"
+        },
+        "strategy": {
+          "additionalProperties": false,
+          "description": "The Deployment's rollout. Default RollingUpdate with maxUnavailable 0 and maxSurge 1: the new pod must be Ready before the old one goes.",
+          "properties": {
+            "rollingUpdate": {
+              "additionalProperties": false,
+              "properties": {
+                "maxSurge": {
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "maxUnavailable": {
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$",
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "RollingUpdate",
+                "Recreate"
+              ]
+            }
+          },
           "type": "object"
         }
       },

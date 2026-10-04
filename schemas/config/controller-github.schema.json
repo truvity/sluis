@@ -334,6 +334,12 @@
       },
       "type": "object"
     },
+    "probes": {
+      "$ref": "https://github.com/truvity/policy/schemas/fragments/probes.json",
+      "default": {
+        "address": ":7070"
+      }
+    },
     "recordsDir": {
       "default": "/var/run/github-roster/records",
       "description": "The console's records, mounted.",
