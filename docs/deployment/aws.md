@@ -109,8 +109,8 @@ adapter's documentation says:
 
 | Attribute | Type | |
 |---|---|---|
-| `pk` | S | the hash key: the first segment of the key (`ses`, `lease`, `rt`) |
-| `sk` | S | the range key: the whole key |
+| `pk` | S | the hash key: the record kind (`directory`, `github-org`, `issuer-token`) |
+| `sk` | S | the range key: the record's id, `/`-separated when compound (see [storage layout](../reference/storage-layout.md)) |
 | `rev` | N | the revision, written by the adapter on every write |
 | `expires` | N | the TTL attribute, epoch seconds |
 

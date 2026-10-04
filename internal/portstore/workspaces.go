@@ -15,7 +15,34 @@ import (
 
 const wsDirPrefix = "ws.dir."
 
-func wsDirKey(id string) string { return wsDirPrefix + seg(id) }
+// DefaultDirectoryProvider is the provider of a workspace whose record is not
+// there yet to say (a credential saved before its record) and whose backend
+// names none: the one identity directory sluis has.
+const DefaultDirectoryProvider = "google"
+
+// wsDirKey is the key of a directory workspace: `ws.dir.<provider>.<id>`, the
+// provider being the record's backend, so that the layout puts it at
+// `directory/<provider>/<id>` and another identity directory (Entra ID) is a
+// provider, not a family.
+func wsDirKey(provider, id string) string { return wsDirPrefix + seg(provider) + "." + seg(id) }
+
+// dirKey is the key of workspace id: the one it already has, whichever
+// provider it is under, or else the key a new one gets under the backend.
+func (b *Base) dirKey(ctx context.Context, id, backend string) (string, error) {
+	records, err := b.listAll(ctx, wsDirPrefix)
+	if err != nil {
+		return "", err
+	}
+	for _, rec := range records {
+		if strings.HasSuffix(rec.Key, "."+seg(id)) {
+			return rec.Key, nil
+		}
+	}
+	if backend == "" {
+		backend = DefaultDirectoryProvider
+	}
+	return wsDirKey(backend, id), nil
+}
 
 // wsRecord is the stored shape of a directory workspace, written out field by
 // field so that no credential can arrive in a record by accident.
@@ -61,7 +88,7 @@ type credentialDoc struct {
 }
 
 // Workspaces is a [hub.Store] and Credentials a [hub.CredentialStore] over
-// the same items: `ws.dir.<id>` holds the record and the credential in Secrets,
+// the same items: `ws.dir.<provider>.<id>` holds the record and the credential in Secrets,
 // so a probe that rewrites the record every minute carries the credential
 // along untouched, and a workspace's record and credential are never out of
 // step. An item with a credential and no record (the credential saved first)
@@ -102,7 +129,11 @@ func (w *Workspaces) List(ctx context.Context) ([]hub.Workspace, error) {
 
 // Get implements [hub.Store].
 func (w *Workspaces) Get(ctx context.Context, id string) (hub.Workspace, error) {
-	it, err := w.b.getItem(ctx, wsDirKey(id))
+	key, err := w.b.dirKey(ctx, id, "")
+	if err != nil {
+		return hub.Workspace{}, fmt.Errorf("portstore: read workspace %s: %w", id, err)
+	}
+	it, err := w.b.getItem(ctx, key)
 	if err != nil {
 		return hub.Workspace{}, fmt.Errorf("portstore: read workspace %s: %w", id, err)
 	}
@@ -126,7 +157,11 @@ func (w *Workspaces) Put(ctx context.Context, ws hub.Workspace) error {
 	if err != nil {
 		return err
 	}
-	err = w.b.editItem(ctx, wsDirKey(ws.ID), 0, func(cur *item) (*item, error) {
+	key, err := w.b.dirKey(ctx, ws.ID, ws.Backend)
+	if err != nil {
+		return fmt.Errorf("portstore: store workspace %s: %w", ws.ID, err)
+	}
+	err = w.b.editItem(ctx, key, 0, func(cur *item) (*item, error) {
 		next := &item{Record: raw}
 		if cur != nil {
 			next.Secret = cur.Secret
@@ -142,7 +177,11 @@ func (w *Workspaces) Put(ctx context.Context, ws hub.Workspace) error {
 // Delete implements [hub.Store]: the record goes, and the item with it unless
 // a credential is still kept (that is [Credentials.Delete]'s to remove).
 func (w *Workspaces) Delete(ctx context.Context, id string) error {
-	err := w.b.editItem(ctx, wsDirKey(id), 0, func(cur *item) (*item, error) {
+	key, err := w.b.dirKey(ctx, id, "")
+	if err != nil {
+		return fmt.Errorf("portstore: delete workspace %s: %w", id, err)
+	}
+	err = w.b.editItem(ctx, key, 0, func(cur *item) (*item, error) {
 		if cur == nil || cur.Secret == "" {
 			return nil, nil
 		}
@@ -164,7 +203,10 @@ func NewCredentials(b *Base) *Credentials { return &Credentials{b: b} }
 
 // Load implements [hub.CredentialStore].
 func (s *Credentials) Load(ctx context.Context, workspaceID string) (backend.Credential, bool, error) {
-	key := wsDirKey(workspaceID)
+	key, err := s.b.dirKey(ctx, workspaceID, "")
+	if err != nil {
+		return backend.Credential{}, false, fmt.Errorf("portstore: read the credential of %s: %w", workspaceID, err)
+	}
 	it, err := s.b.getItem(ctx, key)
 	if err != nil {
 		return backend.Credential{}, false, fmt.Errorf("portstore: read the credential of %s: %w", workspaceID, err)
@@ -186,7 +228,10 @@ func (s *Credentials) Load(ctx context.Context, workspaceID string) (backend.Cre
 // Save implements [hub.CredentialStore]: the credential is replaced, a record
 // kept beside it stays.
 func (s *Credentials) Save(ctx context.Context, workspaceID string, cred backend.Credential) error {
-	key := wsDirKey(workspaceID)
+	key, err := s.b.dirKey(ctx, workspaceID, "")
+	if err != nil {
+		return fmt.Errorf("portstore: write the credential of %s: %w", workspaceID, err)
+	}
 	plain, _ := json.Marshal(credentialDoc{Type: cred.Type, Admin: cred.Admin, Data: cred.Data})
 	ref, err := s.b.newSecret(ctx, key, plain)
 	if err != nil {
@@ -207,7 +252,11 @@ func (s *Credentials) Save(ctx context.Context, workspaceID string, cred backend
 
 // Delete implements [hub.CredentialStore].
 func (s *Credentials) Delete(ctx context.Context, workspaceID string) error {
-	err := s.b.editItem(ctx, wsDirKey(workspaceID), 0, func(cur *item) (*item, error) {
+	key, err := s.b.dirKey(ctx, workspaceID, "")
+	if err != nil {
+		return fmt.Errorf("portstore: delete the credential of %s: %w", workspaceID, err)
+	}
+	err = s.b.editItem(ctx, key, 0, func(cur *item) (*item, error) {
 		if cur == nil || len(cur.Record) == 0 {
 			return nil, nil
 		}

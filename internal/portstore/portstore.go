@@ -9,7 +9,7 @@
 // internal/kube by the adapter `ports.adapter` names. The layout is the one of
 // docs/design/ports.md:
 //
-//	ws.dir.<id>             a directory workspace: record, credential in Secrets
+//	ws.dir.<provider>.<id>  a directory workspace: record, credential in Secrets
 //	ws.slack.<workspace>    a Slack workspace: record, bot token in Secrets
 //	gh.org.<org>            a GitHub organisation: record, App key in Secrets
 //	gh.link.<account>       a person's GitHub link, tokens in Secrets

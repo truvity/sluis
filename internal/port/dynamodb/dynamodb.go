@@ -15,23 +15,26 @@
 //
 // # Mapping
 //
-// A key is split at its first dot: pk is the first segment (`ses`, `lease`,
-// `rt`), sk is the whole key. A prefix that ends at or after a dot is then a
-// Query on ONE partition with begins_with on sk, which returns the keys in
-// key order and pages by LastEvaluatedKey. A prefix with no dot (`ses`, “ or a
-// legacy `issuer:code:`) names no partition and is a Scan, sorted in memory:
-// an operator's listing, and what `sluis migrate` does through the
-// exporters. The partition is the key family on purpose: ADR 0027's IAM
-// condition dynamodb:LeadingKeys then grants a role the families it writes. A
-// hot partition is not a concern at this scale, and the one-item-per-key
-// layout leaves a split to the engine.
+// A key is a record KIND and an ID (internal/port/keys.go, storage layout v2,
+// docs/reference/storage-layout.md): pk is the kind (`directory`, `github-org`,
+// `issuer-token`) and sk the id, slash-separated when compound (`stable/opwerm`).
+// A prefix that lies in one kind (`ses.ada.`, `ws.dir.google.`) is a Query on that
+// partition with begins_with on sk, which returns the keys in key order and
+// pages by LastEvaluatedKey. A prefix that names no one kind (`ws.`, “, a legacy
+// `issuer:`) is a Scan filtered on `lkey`, the logical key the item was written
+// for, and sorted in memory: an operator's listing, and what `sluis migrate`
+// does through the exporters. The partition is the kind on purpose: ADR 0027's
+// IAM condition dynamodb:LeadingKeys then grants a role the kinds it writes.
+// A hot partition is not a concern at this scale.
 //
-// The Index is per set: the partition is `idx#<set>`, the sort key the member,
-// and an item marked `k` = `i` so that no State listing returns it.
+// The Index is per set: the partition is the set's kind (`keyring-index`), the
+// sort key `<set id>/<member>`, and an item marked `k` = `i` so that no State
+// listing returns it.
 //
 //	attribute  type  meaning
-//	pk         S     partition: the first segment of the key; `idx#<set>` for an Index member
-//	sk         S     the whole key; the member for an Index member
+//	pk         S     partition: the record kind; the set's kind for an Index member
+//	sk         S     the id; `<set id>/<member>` for an Index member
+//	lkey       S     the logical key written for (the set, for a member)
 //	v          B     the value (State only)
 //	rev        N     the revision: a random 64-bit number drawn on every write
 //	expires    N     epoch seconds the item is dead from; absent for a permanent record
@@ -373,11 +376,11 @@ func strAttr(v string) types.AttributeValue { return &types.AttributeValueMember
 
 type item struct {
 	pk, sk, key string // key is the logical key of a State record; the member of an Index item
-	value   []byte
-	rev     port.Revision
-	expires int64 // 0 is none
-	index   bool
-	set     string // the Index set
+	value       []byte
+	rev         port.Revision
+	expires     int64 // 0 is none
+	index       bool
+	set         string // the Index set
 }
 
 func parseItem(m map[string]types.AttributeValue) (item, bool) {
@@ -436,7 +439,7 @@ func (s *Store) build(pk, sk, lkey string, value []byte, ttl time.Duration, inde
 		attrPK:   strAttr(pk),
 		attrSK:   strAttr(sk),
 		attrLKey: strAttr(lkey),
-		attrRev: &types.AttributeValueMemberN{Value: rev},
+		attrRev:  &types.AttributeValueMemberN{Value: rev},
 	}
 	if index {
 		m[attrKind] = strAttr(kindIndex)

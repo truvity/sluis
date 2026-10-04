@@ -2,6 +2,38 @@
 
 Released automatically as a patch: the declared OAuth client is read off-cluster, so the issuer on Lambda can open the Google Workspace directory.
 
+### Changed
+
+- **Layout change for the non-legacy adapters (storage layout v2): re-migrate from legacy.**
+  What the `dynamodb`, `ssm` and Secrets-port adapters write is now clear and
+  consistent ([storage layout](docs/reference/storage-layout.md)). A record has a
+  kind and an id: DynamoDB `pk` is the kind (`directory`, `github-org`, `slack-workspace`,
+  `issuer-token`, `lease`, `keyring`, ...) and `sk` its id (`google/C01ipl6j0`,
+  `stable/opwerm`), where there were three conventions in one table; a credential
+  is `/sluis/private/credentials/<kind>/<id>/<ref>`, where it was
+  `/sluis/private/private/<key>/<ref>`; and the operator's secrets are
+  `/sluis/private/config/...` (`config/oauth/client-id`, `client-secret`,
+  `config/clients/<id>`, and the Pulumi-generated `config/issuer/state-secret`, now
+  `StateSecretParameterName` under `ConfigParameterPrefix`). The mapping is one table
+  (`internal/port/keys.go`); the legacy adapter and its key names are unchanged, and
+  `sluis migrate` writes layout v2. **Consequence:** data written by an earlier
+  non-legacy build is not found at its old place. There is no in-place relayout:
+  empty the table and the `/sluis/private/credentials` prefix and migrate again from
+  legacy. A deployment moves its `<NAME>=ssm:/sluis/private/oauth/...` environment
+  mappings and `SLUIS_SECRET_FILES` entries to the `config/` names. IAM is unchanged.
+  A directory workspace's State key gains its provider, `ws.dir.<provider>.<id>`
+  (the record's backend), so that another identity directory is a provider and not a
+  new kind.
+
+### Added
+
+- **Exports are written through the Secrets port.** With a Secrets adapter configured
+  and `ports.export` unset, an export is the secret `export/<path>` (SSM
+  `/sluis/export/<path>`), one JSON object of the export's properties, so ESO's SSM
+  provider reads a property with `remoteRef.property`; the `exports` event on Lambda
+  writes there. `ports.export: openbao` keeps working. The property names of each source
+  are in the storage layout reference.
+
 ### Fixed
 
 - The OAuth client declared by `oauthClient.id` / `idFile` and `secretFile` / `secretEnv` is now read.
