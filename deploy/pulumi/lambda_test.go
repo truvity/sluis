@@ -795,7 +795,8 @@ func TestTheSecretFilesAreTheEnvironmentTheAppReads(t *testing.T) {
 	env := func(r string) map[resource.PropertyKey]resource.PropertyValue {
 		return prop(rec.one(t, fnType, "kernel-"+r), "environment").ObjectValue()["variables"].ObjectValue()
 	}
-	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"}]` {
+	wantHTTP := `[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"}]`
+	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != wantHTTP {
 		t.Errorf("http: %s", got)
 	}
 	if got := env("github")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/github/app-key","path":"/tmp/sluis/github-app.pem"}]` {
