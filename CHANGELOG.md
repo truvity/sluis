@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.61.0
+
+kms-wrapped signing (one symmetric KMS key, wrapped data key pairs, free rotation) becomes the AWS presets' default; recovery on Lambda is a Pulumi-generated password in SSM with an off switch; controllers lose access to config/*; GET / redirects to the console.
+
 ### Changed
 
 - **A bare `adapters.signing: {adapter: kms}` no longer hides `signingKey.kms`.**
