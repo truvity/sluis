@@ -16,6 +16,8 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ssm"
+	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
@@ -32,6 +34,9 @@ const (
 // DefaultSigningKeyAlias is the token-signing key's alias when
 // LambdaArgs.SigningKeyAlias is empty.
 const DefaultSigningKeyAlias = "alias/sluis-signing"
+
+// StateSecretParameterName is the SSM parameter of the issuer's state secret.
+const StateSecretParameterName = PrivateParameterPrefix + "/issuer/state-secret"
 
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
@@ -53,9 +58,18 @@ type LambdaArgs struct {
 	// setting with a URL.
 	PackageSHA256 string
 
-	// Config is the estate's configuration file, which the package holds at
-	// config/sluis.yaml (SLUIS_CONFIG_FILE). Required. It holds no secret.
-	Config string
+	// Config, GitHubConfig and SlackConfig are the three functions' configuration
+	// files (a `serve`, a `controller-github` and a `controller-slack`
+	// configuration), which the package holds at config/sluis.yaml,
+	// config/github.yaml and config/slack.yaml; each function's
+	// SLUIS_CONFIG_FILE names its own. Required. They hold no secret: a secret is
+	// an `ssm:/sluis/private/...` value of a function's Env.
+	//
+	// The http file's `adapters.trigger.settings` names the two controller
+	// functions (`github: sluis-github`, `slack: sluis-slack`, that is
+	// FunctionNamePrefix + "-github" and "-slack"); the functions take no
+	// environment variable for it.
+	Config, GitHubConfig, SlackConfig string
 	// Catalogues are catalogue files the package holds at config/<name>, by file
 	// name. CataloguePaths are files on disk, read when the stack is evaluated
 	// and merged in under their base names; a name in both is refused unless the
@@ -198,12 +212,18 @@ type Lambda struct {
 	// ScheduleNames are the schedules, in the order GitHub then Slack targets.
 	ScheduleNames pulumi.StringArrayOutput
 
+	// StateSecretParameter is the name of the SSM SecureString that holds the
+	// issuer's OAuth-state secret, `/sluis/private/issuer/state-secret`: 32
+	// random bytes, base64. The library generates it and keeps it across applies.
+	StateSecretParameter pulumi.StringOutput
+
 	// ExportReadPolicyJSON is the IAM policy document a consumer's External
 	// Secrets Operator role attaches: read on /sluis/export/* and nothing else.
 	ExportReadPolicyJSON pulumi.StringOutput
 }
 
-var targetID = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,40}$`)
+// A target is a login or a workspace key, or `github:links` (the link check).
+var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 
 func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	if a == nil {
@@ -213,6 +233,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	var missing []string
 	for k, v := range map[string]string{
 		"Region": out.Region, "AccountID": out.AccountID, "Package": out.Package, "Config": strings.TrimSpace(out.Config),
+		"GitHubConfig": strings.TrimSpace(out.GitHubConfig), "SlackConfig": strings.TrimSpace(out.SlackConfig),
 		"API.DomainName": out.API.DomainName, "API.TruststorePEM": strings.TrimSpace(out.API.TruststorePEM),
 		"API.TruststoreBucketName": out.API.TruststoreBucketName,
 	} {
@@ -302,8 +323,8 @@ func mergeCatalogues(inline map[string]string, paths []string) (map[string]strin
 		merged[base] = string(body)
 	}
 	for k := range merged {
-		if k == "" || strings.ContainsAny(k, "/\\") || k == "." || k == ".." || k == configName {
-			return nil, fmt.Errorf("sluispulumi: Catalogues has %q: a catalogue is a file name, and not %s", k, configName)
+		if k == "" || strings.ContainsAny(k, "/\\") || k == "." || k == ".." || k == configName || k == githubConfigName || k == slackConfigName {
+			return nil, fmt.Errorf("sluispulumi: Catalogues has %q: a catalogue is a file name, and not one of the three configuration files", k)
 		}
 	}
 	return merged, nil
@@ -337,7 +358,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, err
 	}
-	added := map[string]string{configDir + "/" + configName: a.Config}
+	added := map[string]string{
+		configDir + "/" + configName:       a.Config,
+		configDir + "/" + githubConfigName: a.GitHubConfig,
+		configDir + "/" + slackConfigName:  a.SlackConfig,
+	}
 	for file, body := range catalogues {
 		added[configDir+"/"+file] = body
 	}
@@ -405,7 +430,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			env[k] = pulumi.String(v)
 		}
 		env["SLUIS_ROLE"] = pulumi.String(s.role)
-		env["SLUIS_CONFIG_FILE"] = pulumi.String(ConfigFilePath)
+		env["SLUIS_CONFIG_FILE"] = pulumi.String(ConfigFilePath(s.role))
 
 		code, err := buildArchive(entries, added)
 		if err != nil {
@@ -458,6 +483,28 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, err
 	}
 
+	// ---- the issuer's state secret (it HMAC-signs OAuth flow state; the signing
+	// key is KMS's and cannot). Generated once: RandomBytes with no keepers is
+	// stable, so an apply never rotates it, and the value is secret in state and
+	// in `pulumi up`'s output.
+	stateSecret, err := random.NewRandomBytes(ctx, name+"-state-secret", &random.RandomBytesArgs{Length: pulumi.Int(32)}, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis state secret: %w", err)
+	}
+	pargs := &ssm.ParameterArgs{
+		Name:  pulumi.String(StateSecretParameterName),
+		Type:  pulumi.String("SecureString"),
+		Value: pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput),
+		Tags:  tags,
+	}
+	if a.ParameterKeyArn != "" {
+		pargs.KeyId = pulumi.String(a.ParameterKeyArn)
+	}
+	stateParam, err := ssm.NewParameter(ctx, name+"-state-secret", pargs, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis state secret parameter: %w", err)
+	}
+
 	exportPolicy, err := ExportReadPolicy(a.Region, a.AccountID, a.ParameterKeyArn)
 	if err != nil {
 		return nil, err
@@ -486,6 +533,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.TruststoreBucketName = truststore.Bucket
 	out.TruststoreURI = pulumi.Sprintf("s3://%s/%s", truststore.Bucket, truststoreKey)
 	out.SchedulerRoleArn = schedRole.Arn
+	out.StateSecretParameter = stateParam.Name
 	out.ScheduleNames = schedNames
 	out.ExportReadPolicyJSON = pulumi.String(exportPolicy).ToStringOutput()
 
@@ -497,7 +545,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
-		"exportReadPolicyJson": out.ExportReadPolicyJSON,
+		"exportReadPolicyJson": out.ExportReadPolicyJSON, "stateSecretParameter": out.StateSecretParameter,
 	}); err != nil {
 		return nil, err
 	}
@@ -723,11 +771,11 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, gh, sl *lambd
 		if err != nil {
 			return nil, none, err
 		}
-		sname := fnName(t.role) + "-" + t.id
+		sname := fnName(t.role) + "-" + strings.ReplaceAll(t.id, ":", "-")
 		if len(sname) > 64 {
 			return nil, none, fmt.Errorf("sluispulumi: the schedule name %q is longer than 64 characters", sname)
 		}
-		if _, err := scheduler.NewSchedule(ctx, name+"-"+t.role+"-"+t.id, &scheduler.ScheduleArgs{
+		if _, err := scheduler.NewSchedule(ctx, name+"-"+t.role+"-"+strings.ReplaceAll(t.id, ":", "-"), &scheduler.ScheduleArgs{
 			Name:                       pulumi.String(sname),
 			Description:                pulumi.Sprintf("Ticks the %s controller for %s.", t.role, t.id),
 			ScheduleExpression:         pulumi.String(a.Schedule.Rate),

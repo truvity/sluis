@@ -46,6 +46,13 @@
   - One EventBridge schedule per GitHub organisation and Slack workspace,
     invoking the controller with `{"kind":"tick","target":"<id>"}` through a
     scheduler role that may invoke only those two functions.
+  - The three functions' configuration files go in the package as
+    `config/sluis.yaml`, `config/github.yaml` and `config/slack.yaml`
+    (`Config`, `GitHubConfig`, `SlackConfig`), each function's `SLUIS_CONFIG_FILE`
+    naming its own, as the Lambda app reads them. The issuer's OAuth-state secret is
+    generated (32 random bytes, an SSM SecureString at
+    `/sluis/private/issuer/state-secret`, output `StateSecretParameter`). The roles
+    also get `dynamodb:UpdateItem` (the leases).
   - A new token-signing KMS key (`ECC_NIST_P384`, `SIGN_VERIFY`, alias default
     `alias/sluis-signing`), and an optional observability `otlp-lambda` layer.
   - **Breaking: the Sealer's KMS key is removed.** `NewStorage` no longer creates

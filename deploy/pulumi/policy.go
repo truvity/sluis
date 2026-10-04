@@ -38,6 +38,7 @@ const (
 
 	ddbGetItem       = "dynamodb:GetItem"
 	ddbPutItem       = "dynamodb:PutItem"
+	ddbUpdateItem    = "dynamodb:UpdateItem"
 	ddbDeleteItem    = "dynamodb:DeleteItem"
 	ddbQuery         = "dynamodb:Query"
 	ddbScan          = "dynamodb:Scan"
@@ -85,7 +86,7 @@ func stateStatements(tableArn, keyArn string) []statement {
 	out := []statement{{
 		"Sid":      sidState,
 		"Effect":   "Allow",
-		"Action":   []string{ddbGetItem, ddbPutItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable},
+		"Action":   []string{ddbGetItem, ddbPutItem, ddbUpdateItem, ddbDeleteItem, ddbQuery, ddbScan, ddbDescribeTable},
 		"Resource": tableArn,
 	}}
 	if keyArn != "" {

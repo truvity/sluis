@@ -60,6 +60,8 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		set("keyId", a.Name)
 	case "aws:kms/alias:Alias":
 		set("arn", arnp+"kms:eu-west-1:"+account+":"+physical)
+	case "random:index/randomBytes:RandomBytes":
+		set("base64", "c3RhdGUtc2VjcmV0LXN0YXRlLXNlY3JldC1zdGF0ZSE=")
 	case "aws:lambda/function:Function":
 		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+physical)
 	case "aws:cloudwatch/logGroup:LogGroup":

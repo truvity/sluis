@@ -24,14 +24,26 @@ import (
 const (
 	packageRoot = "/var/task"
 	configDir   = "config"
-	// The name is joined so that a scan for emitted action names does not take it
-	// for one.
-	configName = "sluis" + ".yaml"
+	// The names are joined so that a scan for emitted action names does not take
+	// them for one.
+	configName       = "sluis" + ".yaml"
+	githubConfigName = "github" + ".yaml"
+	slackConfigName  = "slack" + ".yaml"
 )
 
-// ConfigFilePath is where the package holds the estate's configuration, which is
-// what SLUIS_CONFIG_FILE names.
-const ConfigFilePath = packageRoot + "/" + configDir + "/" + configName
+// ConfigFilePath is where the package holds the configuration of one function
+// (role http, github or slack), which is what that function's SLUIS_CONFIG_FILE
+// names: config/sluis.yaml, config/github.yaml and config/slack.yaml.
+func ConfigFilePath(role string) string {
+	name := configName
+	switch role {
+	case RoleGitHub:
+		name = githubConfigName
+	case RoleSlack:
+		name = slackConfigName
+	}
+	return packageRoot + "/" + configDir + "/" + name
+}
 
 // maxPackageBytes bounds a zip fetched from a URL: a Lambda package is 250 MB
 // unzipped at most, and a sluis release is a few MB.

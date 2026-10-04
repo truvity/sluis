@@ -163,7 +163,7 @@ Every role has the same grants; they are the whole of its policy.
 | `SluisBlobs` | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | the bucket's objects |
 | `SluisBlobList` | `s3:ListBucket` | the bucket (a read of an absent key is a 404 only with it, a 403 without) |
 | `SluisSigning`, serve only, with `SigningKeyArn` | `kms:Sign`, `kms:GetPublicKey` | the signing key |
-| `SluisState`, with State | `dynamodb:GetItem`, `PutItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | the table |
+| `SluisState`, with State | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | the table |
 | `SluisStateKey`, with a table key | `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey`, `kms:DescribeKey` | the table's key, only through DynamoDB (`kms:ViaService`) |
 
 `Scan` is `sluis migrate` and a listing by a prefix with no dot; `DescribeTable`
@@ -230,7 +230,9 @@ controller target.
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
 	Package:        "dist/sluis-lambda_1.58.0_linux_arm64.zip", // or an https URL
-	Config:         renderedSluisYAML,
+	Config:         sluisYAML,   // config/sluis.yaml: the http function's `serve` file
+	GitHubConfig:   githubYAML,  // config/github.yaml
+	SlackConfig:    slackYAML,   // config/slack.yaml
 	CataloguePaths: []string{"catalogues/github-apps.yaml"},
 	Storage:        store.Grant(),
 	State:          state.Grant(),
@@ -250,13 +252,15 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 `sluis-http`, `sluis-github` and `sluis-slack` (`FunctionNamePrefix`, default
 `sluis`) are one `bootstrap` on `provided.al2023`, arm64, **in no VPC**. The role
 a function plays is its environment: `SLUIS_ROLE` is `http`, `github` or `slack`,
-and `SLUIS_CONFIG_FILE` is `/var/task/config/sluis.yaml`. `Env` and each
+and `SLUIS_CONFIG_FILE` is its own file: `/var/task/config/sluis.yaml` (http),
+`/var/task/config/github.yaml` or `/var/task/config/slack.yaml`. `Env` and each
 function's `Env` add to these; the library owns those two.
 
 **The package** is the released `sluis-lambda_<version>_linux_arm64.zip` (with
 `bootstrap` at its root), read from a path or an https URL when the stack is
-evaluated, and `PackageSHA256` pins it. The library adds the estate's `Config` at
-`config/sluis.yaml` and each catalogue at `config/<name>` (`Catalogues` by name,
+evaluated, and `PackageSHA256` pins it. The library adds the three configuration files, `Config`, `GitHubConfig` and
+`SlackConfig`, at `config/sluis.yaml`, `config/github.yaml` and
+`config/slack.yaml`, and each catalogue at `config/<name>` (`Catalogues` by name,
 `CataloguePaths` by file, merged under their base names; a name in both with other
 content, an empty file and a name that is a path are refused before anything is
 created). The added files are part of the package: **a change to the
@@ -270,7 +274,7 @@ not a secret: secrets are SSM parameters, below.
 |---|---|---|
 | `Region`, `AccountID` | required | Name the SSM parameters and the other functions in the roles' policies. |
 | `Package`, `PackageSHA256` | required, none | The released zip; its expected digest. |
-| `Config` | required | The configuration file, at `config/sluis.yaml`. |
+| `Config`, `GitHubConfig`, `SlackConfig` | required | The three configuration files (`serve`, `controller-github`, `controller-slack`). The http file's `adapters.trigger.settings` must name the controllers, `github: <prefix>-github` and `slack: <prefix>-slack`: the functions take no environment variable for it. |
 | `Catalogues`, `CataloguePaths` | none | Catalogue files at `config/<name>`. |
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
 | `AuditQueueArn` | required | The audit stack's ingest queue. |
@@ -300,6 +304,7 @@ not a secret: secrets are SSM parameters, below.
 | `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
 | `TruststoreBucketName`, `TruststoreURI` | The client-CA bundle. |
 | `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
+| `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
 | `ExportReadPolicyJSON` | The policy document a consumer's External Secrets Operator role attaches (below). |
 
 ### The API
@@ -318,8 +323,8 @@ Cloudflare's origin-pull CA. The default endpoint is disabled unless
 
 One EventBridge schedule per target, `<prefix>-github-<org>` and
 `<prefix>-slack-<workspace>`, each invoking the github or the slack function with
-`{"kind":"tick","target":"<id>"}`. A target is letters, digits and `- _ .`, at
-most 40. The scheduler has a role of its own, `<prefix>-scheduler`, that may
+`{"kind":"tick","target":"<id>"}`. A target is letters, digits and `- _ . :`, at
+most 40 (`github:links` is the link check; a colon is a `-` in the schedule's name). The scheduler has a role of its own, `<prefix>-scheduler`, that may
 invoke those two functions and nothing else; no schedule and no controller
 function retries, because the next tick runs the pass again.
 
@@ -332,7 +337,7 @@ granted on `*`.
 |---|---|---|---|
 | Logs: `logs:CreateLogStream`, `logs:PutLogEvents` on its own log group | yes | yes | yes |
 | S3: `GetObject`, `PutObject`, `DeleteObject` on the bucket's objects; `ListBucket` on the bucket | yes | yes | yes |
-| DynamoDB: `GetItem`, `PutItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table (and its key, through DynamoDB only) | yes | yes | yes |
+| DynamoDB: `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table (and its key, through DynamoDB only) | yes | yes | yes |
 | SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` under `/sluis/private/*` | yes | yes | yes |
 | SSM: `PutParameter`, `DeleteParameter` under `/sluis/export/*` | yes | yes | yes |
 | `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only (with the key) | yes | yes | yes |
@@ -344,6 +349,18 @@ The signing key is `ECC_NIST_P384`, usage `SIGN_VERIFY`, protected, with a
 30-day deletion window and AWS's default key policy, so the http role's policy is
 what grants its use. The roles carry a permissions boundary when
 `PermissionsBoundaryArn` is set.
+
+### The issuer's state secret
+
+With KMS signing the issuer still needs a secret to HMAC-sign OAuth flow state.
+The library generates it: a `random.RandomBytes` of 32 bytes (no keepers, so an
+apply never rotates it), stored base64 as the SecureString
+`/sluis/private/issuer/state-secret` (under `ParameterKeyArn` when set), secret
+in state and in `pulumi up`'s output. `StateSecretParameter` is its name. Only
+`sluis-http` needs it, and it already reads `/sluis/private/*`; the function's
+`Env` maps it with `<NAME>=ssm:/sluis/private/issuer/state-secret`. Rotating it
+is `pulumi up --replace` on the `RandomBytes` resource, which signs everyone's
+in-flight sign-in out.
 
 ### SSM layout
 
