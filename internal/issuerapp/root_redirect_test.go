@@ -9,7 +9,7 @@ import (
 // The bare origin sends a person to the console, for GET and HEAD, and for
 // that exact path only: everything the issuer serves keeps answering.
 func TestTheRootRedirectsToTheConsoleAndShadowsNothing(t *testing.T) {
-	issuer := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	issuer := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Served-By", "issuer")
 		w.WriteHeader(http.StatusTeapot)
 	})
