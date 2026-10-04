@@ -1,6 +1,6 @@
 # 0007 — Breaking changes inside 1.x
 
-**Status:** Accepted
+**Status:** Accepted; extended by [0036](0036-configuration-is-immutable-per-instance.md)
 **Date:** 2026-09-25
 
 ## Context

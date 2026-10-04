@@ -51,6 +51,7 @@ timeline and nothing is silently rewritten under an old date.
 | [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) | A longer absolute limit for read-only resources, up to seven days |
 | [0034](0034-exports-go-to-openbao-directly.md) | Exports: the service copies its secrets into OpenBao itself |
 | [0035](0035-renamed-to-sluis.md) | Renamed to sluis: what changed and what deliberately did not |
+| [0036](0036-configuration-is-immutable-per-instance.md) | Configuration and policy are immutable per instance; credentials and State are read live |
 
 ## Template
 

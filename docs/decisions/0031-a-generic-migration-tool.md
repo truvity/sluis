@@ -1,6 +1,6 @@
 # 0031 — A generic migration tool, and the order of the move
 
-**Status:** Accepted
+**Status:** Accepted; amended by [0036](0036-configuration-is-immutable-per-instance.md)
 **Date:** 2026-10-02
 
 > **Amended (2026-10-04).** The NATS step of the order is gone with the adapter.
