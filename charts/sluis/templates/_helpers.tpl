@@ -427,3 +427,46 @@ endpoint (sluis.validateTelemetry).
 {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+A controller's rollout strategy, from its `strategy` value. RollingUpdate
+carries its two bounds; Recreate carries none, and the API server refuses
+`rollingUpdate` beside it. Takes the controller's values.
+*/}}
+{{- define "sluis.controllerStrategy" -}}
+type: {{ .strategy.type }}
+{{- if eq .strategy.type "RollingUpdate" }}
+rollingUpdate:
+  maxUnavailable: {{ .strategy.rollingUpdate.maxUnavailable | toYaml }}
+  maxSurge: {{ .strategy.rollingUpdate.maxSurge | toYaml }}
+{{- end }}
+{{- end }}
+
+{{/*
+A controller's probe port, from its own config's `probes.address`: the
+binary serves /healthz and /readyz there (default :7070). Takes
+(dict "name" "controllerGithub" "cfg" <its config>).
+*/}}
+{{- define "sluis.controllerProbePort" -}}
+{{- include "sluis.portOf" (dict "path" (printf "%s.config.probes.address" .name) "address" (dig "probes" "address" ":7070" .cfg)) -}}
+{{- end }}
+
+{{/*
+A controller container's port and probes. Liveness follows nothing outside the
+process. Readiness is the process saying its start-up succeeded (policy
+loaded, stores open, audit catalogue accepted): a pod that crashes before that
+never listens, so it is never Ready and a rolling update keeps the old pod.
+Takes (dict "name" "controllerGithub" "cfg" <its config>).
+*/}}
+{{- define "sluis.controllerProbes" -}}
+ports:
+  - name: health
+    containerPort: {{ include "sluis.controllerProbePort" . }}
+livenessProbe:
+  httpGet: { path: /healthz, port: health }
+readinessProbe:
+  httpGet: { path: /readyz, port: health }
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+{{- end }}

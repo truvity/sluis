@@ -329,6 +329,12 @@
       },
       "type": "object"
     },
+    "probes": {
+      "$ref": "https://github.com/truvity/policy/schemas/fragments/probes.json",
+      "default": {
+        "address": ":7070"
+      }
+    },
     "recordsDir": {
       "default": "/var/run/slack-roster/workspaces",
       "description": "The console's records, mounted.",

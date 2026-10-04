@@ -20,8 +20,11 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -99,4 +102,50 @@ func Mux(timeout time.Duration, deps ...Dependency) *http.ServeMux {
 	})
 
 	return mux
+}
+
+// Gate is a readiness dependency that is closed until the process says its
+// start-up is done. A controller has no store of its own to follow, so the
+// one thing its readiness can honestly answer is "did I start": the policy
+// loaded, the stores open, the audit catalogue accepted. A pod that crashes
+// before then never opens the listener at all, and one that is still
+// starting answers 503, so a rolling update does not remove the old pod
+// until the new one is past the point the last release died at.
+type Gate struct {
+	name  string
+	ready atomic.Bool
+}
+
+// NewGate returns a closed gate; name is what the probe's answer calls it.
+func NewGate(name string) *Gate { return &Gate{name: name} }
+
+// Open says start-up succeeded. Readiness answers 200 from then on.
+func (g *Gate) Open() { g.ready.Store(true) }
+
+// Dependency is the gate as something [Mux] follows.
+func (g *Gate) Dependency() Dependency {
+	return Dependency{Name: g.name, Check: func(context.Context) error {
+		if !g.ready.Load() {
+			return errors.New("has not finished starting")
+		}
+		return nil
+	}}
+}
+
+// Serve serves handler on addr until ctx ends, and returns the listener's
+// error when it cannot bind. A listener that shuts down on ctx is not an
+// error.
+func Serve(ctx context.Context, addr string, handler http.Handler, log *slog.Logger) error {
+	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdown)
+	}()
+	log.InfoContext(ctx, "listening", "listener", "health", "address", addr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("health listener: %w", err)
+	}
+	return nil
 }

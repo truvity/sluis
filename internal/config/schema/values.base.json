@@ -368,6 +368,69 @@
         },
         "resources": {
           "type": "object"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1."
+        },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Deployment's rollout. Default RollingUpdate with maxUnavailable 0 and maxSurge 1: the new pod must be Ready before the old one goes.",
+          "properties": {
+            "type": {
+              "enum": [
+                "RollingUpdate",
+                "Recreate"
+              ]
+            },
+            "rollingUpdate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxUnavailable": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$"
+                },
+                "maxSurge": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$"
+                }
+              }
+            }
+          }
+        },
+        "minReadySeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Seconds a new pod must stay Ready before it counts as available. Default 10."
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Rendered only when replicas is above 1.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minAvailable": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "minimum": 0,
+              "pattern": "^[0-9]+%$"
+            }
+          }
         }
       }
     },
@@ -382,6 +445,69 @@
         },
         "resources": {
           "type": "object"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1."
+        },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Deployment's rollout. Default RollingUpdate with maxUnavailable 0 and maxSurge 1: the new pod must be Ready before the old one goes.",
+          "properties": {
+            "type": {
+              "enum": [
+                "RollingUpdate",
+                "Recreate"
+              ]
+            },
+            "rollingUpdate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxUnavailable": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$"
+                },
+                "maxSurge": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "minimum": 0,
+                  "pattern": "^[0-9]+%$"
+                }
+              }
+            }
+          }
+        },
+        "minReadySeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Seconds a new pod must stay Ready before it counts as available. Default 10."
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Rendered only when replicas is above 1.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minAvailable": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "minimum": 0,
+              "pattern": "^[0-9]+%$"
+            }
+          }
         }
       }
     },
@@ -578,7 +704,7 @@
       }
     },
     "secretManagers": {
-      "description": "Removed in v1.30.0 \u2014 the console's secret-store view was removed. Setting this key fails the render with a clear message. See CHANGELOG.md and docs/decisions/0002-mission-boundary-tokens-and-memberships.md."
+      "description": "Removed in v1.30.0 — the console's secret-store view was removed. Setting this key fails the render with a clear message. See CHANGELOG.md and docs/decisions/0002-mission-boundary-tokens-and-memberships.md."
     },
     "audit": {
       "type": "object",
@@ -1437,7 +1563,7 @@
     },
     "duration": {
       "type": "string",
-      "pattern": "^[0-9]+(ns|us|\u00b5s|ms|s|m|h)([0-9]+(ns|us|\u00b5s|ms|s|m|h))*$"
+      "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)([0-9]+(ns|us|µs|ms|s|m|h))*$"
     },
     "secretEnv": {
       "type": "array",

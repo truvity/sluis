@@ -20,6 +20,7 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- include "sluis.controllerRollout" (dict "name" "controllerSlack" "v" .Values.controllerSlack) }}
 {{- $name := printf "%s-slack-roster" (include "sluis.fullname" .) }}
 ---
 # The controller's own account. It holds one permission: updating its one
@@ -88,11 +89,15 @@ metadata:
     {{- include "sluis.labels" . | nindent 4 }}
     app.kubernetes.io/component: controller-slack
 spec:
-  # One: two controllers would make every change twice, and Slack's answer
-  # to the second is an error that reads as a failure.
-  replicas: 1
+  # Rolled so that a new pod must be Ready before an old one goes: a
+  # start that fails (the 2026-10-04 rollout, where every new pod crashed
+  # at start) leaves the old pod running. More than one replica is safe only
+  # on a shared State (see sluis.controllerRollout), and `replicas` is
+  # refused above 1 without one.
+  replicas: {{ .Values.controllerSlack.replicas }}
+  minReadySeconds: {{ .Values.controllerSlack.minReadySeconds }}
   strategy:
-    type: Recreate
+    {{- include "sluis.controllerStrategy" .Values.controllerSlack | nindent 4 }}
   selector:
     matchLabels:
       {{- include "sluis.controllerSlackSelectorLabels" . | nindent 6 }}
@@ -123,6 +128,7 @@ spec:
             - controller
             - slack
             - --config=/etc/sluis/controller-slack.yaml
+          {{- include "sluis.controllerProbes" (dict "name" "controllerSlack" "cfg" $cfg) | nindent 10 }}
           {{- with include "sluis.otelEnv" (dict "root" . "service" "slack-roster") }}
           env:
             {{- . | nindent 12 }}

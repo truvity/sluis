@@ -361,6 +361,8 @@ type Roster struct {
 	Log        *Log         `json:"log,omitempty"`
 	Ports      *Ports       `json:"ports,omitempty"`
 	Audit      *RosterAudit `json:"audit,omitempty"`
+	// Probes is where /healthz and /readyz answer.
+	Probes *Address `json:"probes,omitempty"`
 }
 
 // ControllerGitHub is the configuration of `sluis controller github`.

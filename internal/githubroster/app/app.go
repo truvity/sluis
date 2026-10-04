@@ -24,6 +24,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
@@ -47,6 +48,8 @@ type Config struct {
 	interval   time.Duration
 	enabled    map[string]bool
 	logLevel   slog.Level
+	// probes is where /healthz and /readyz answer.
+	probes string
 	// audit is the audit installation the controller records to, with its
 	// own identity; without one it only logs what it did.
 	audit audit.Config
@@ -88,12 +91,16 @@ func FromConfig(f *config.ControllerGitHub) (Config, error) {
 		appsDir:    orDefault(f.AppsDir, "/var/run/github-roster/apps"),
 		recordsDir: orDefault(f.RecordsDir, "/var/run/github-roster/records"),
 		enabled:    map[string]bool{},
+		probes:     ":7070",
 		// The instance is the pod, which is its hostname in a cluster.
 		audit: audit.Config{Version: version.String()},
 		// Named exactly as the merged deployment's own is (internal/app),
 		// so the two never disagree about where the same catalogue file
 		// is mounted from.
 		catalogueFile: f.CatalogueFile,
+	}
+	if f.Probes != nil && f.Probes.Address != "" {
+		c.probes = f.Probes.Address
 	}
 	c.audit.Instance, _ = os.Hostname()
 	if a := f.Audit; a != nil {
@@ -143,6 +150,10 @@ type App struct {
 	// sharedLease is whether the tick leases are held in a State shared with
 	// every other runner.
 	sharedLease bool
+	// ready is closed until New has succeeded and Run has begun: the probe's
+	// answer to "did this pod start".
+	ready  *health.Gate
+	probes string
 	// fatal carries the one error that ends the process from outside a
 	// pass: the audit installation refusing the catalogue after the start.
 	fatal chan error
@@ -260,6 +271,8 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	return &App{
 		log:         log,
 		sharedLease: shared,
+		ready:       health.NewGate("the controller"),
+		probes:      cfg.probes,
 		trail:       trail,
 		fatal:       fatal,
 		controller: controller.New(controller.Config{Interval: cfg.interval, Enabled: cfg.enabled, AppsDir: cfg.appsDir, RecordsDir: cfg.recordsDir}, controller.Deps{
@@ -285,7 +298,17 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 func (a *App) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	done := make(chan error, 1)
+	done := make(chan error, 2)
+	// The probes listen before the loop starts, and readiness opens only now:
+	// New has returned, so the policy is loaded, the stores are open and the
+	// audit catalogue was accepted (a refusal stops New, and then there is no
+	// listener and no Ready pod at all).
+	go func() {
+		if err := health.Serve(ctx, a.probes, health.Mux(0, a.ready.Dependency()), a.log); err != nil {
+			done <- err
+		}
+	}()
+	a.ready.Open()
 	go func() { done <- a.controller.Run(ctx) }()
 	select {
 	case err := <-a.fatal:
