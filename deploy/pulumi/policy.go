@@ -25,6 +25,7 @@ const (
 	kmsDecrypt     = "kms:Decrypt"
 	kmsSign        = "kms:Sign"
 	kmsPublicKey   = "kms:GetPublicKey"
+	kmsGenerateKP  = "kms:GenerateDataKeyPairWithoutPlaintext"
 
 	ssmGetParameter        = "ssm:GetParameter"
 	ssmGetParameters       = "ssm:GetParameters"
@@ -131,15 +132,81 @@ func signingStatement(keyArns []string) statement {
 	}
 }
 
+// The encryption context every wrapped signing key is made and opened under
+// (internal/issuer/wrapped.go, EncryptionContext): purpose, algorithm and kid.
 const (
-	sidSigning = "SluisSigning"
-	sidLogs    = "SluisLogs"
-	sidPrivate = "SluisPrivateParameters"
-	sidExport  = "SluisExportParameters"
-	sidParamKy = "SluisParameterKey"
-	sidInvoke  = "SluisRunAPass"
-	sidAudit   = "SluisAuditIngest"
-	sidWebID   = "SluisWebIdentity"
+	// WrappedSigningPurpose is the one `purpose` the grants and the key policy
+	// admit; it is the adapter's issuer.WrapPurpose.
+	WrappedSigningPurpose = "sluis-signing"
+)
+
+// wrappedContextKeys are the encryption context's keys, and only they.
+var wrappedContextKeys = []string{"purpose", "alg", "kid"}
+
+// wrappedSigningStatement is the use of the symmetric application key by the
+// function that signs: generate a data key pair and decrypt a private key, on
+// that key only, and only with the encryption context the adapter uses
+// (purpose=sluis-signing and no keys but purpose, alg and kid). Never Encrypt,
+// Sign or a plaintext data-key call.
+func wrappedSigningStatement(keyArn string) statement {
+	return statement{
+		"Sid":      sidWrappedSigning,
+		"Effect":   "Allow",
+		"Action":   []string{kmsGenerateKP, kmsDecrypt},
+		"Resource": keyArn,
+		"Condition": map[string]any{
+			"StringEquals":              map[string]any{"kms:EncryptionContext:purpose": WrappedSigningPurpose},
+			"ForAllValues:StringEquals": map[string]any{"kms:EncryptionContextKeys": wrappedContextKeys},
+		},
+	}
+}
+
+// wrappedKeyPolicy is the key policy of the symmetric key the library creates:
+// the account's IAM policies govern it (the root statement every key has), and
+// the signing role is held to the same conditions as its own grant, so that a
+// broader policy attached to it later does not widen what it can do with the
+// key. The role is named by an ArnEquals on aws:PrincipalArn and not by a
+// principal, so the key can be created before the role exists.
+func wrappedKeyPolicy(account, signingRoleArn string) (string, error) {
+	// The conditions of one denial: the signing role, and one way of straying.
+	deny := func(sid string, notAction bool, stray map[string]any) statement {
+		cond := map[string]any{"ArnEquals": map[string]any{"aws:PrincipalArn": signingRoleArn}}
+		for op, v := range stray {
+			cond[op] = v
+		}
+		st := statement{"Sid": sid, "Effect": "Deny", "Principal": map[string]any{"AWS": "*"}, "Resource": "*", "Condition": cond}
+		if notAction {
+			st["NotAction"] = []string{kmsGenerateKP, kmsDecrypt}
+		} else {
+			st["Action"] = []string{kmsGenerateKP, kmsDecrypt}
+		}
+		return st
+	}
+	return document([]statement{
+		{
+			"Sid": "EnableIAMPolicies", "Effect": "Allow", "Resource": "*", "Action": "kms:*",
+			"Principal": map[string]any{"AWS": arnPrefix + "iam::" + account + ":root"},
+		},
+		deny("SluisSigningRolePurposeOnly", false, map[string]any{
+			"StringNotEquals": map[string]any{"kms:EncryptionContext:purpose": WrappedSigningPurpose},
+		}),
+		deny("SluisSigningRoleContextKeysOnly", false, map[string]any{
+			"ForAnyValue:StringNotEquals": map[string]any{"kms:EncryptionContextKeys": wrappedContextKeys},
+		}),
+		deny("SluisSigningRoleNothingElse", true, nil),
+	})
+}
+
+const (
+	sidWrappedSigning = "SluisWrappedSigning"
+	sidSigning        = "SluisSigning"
+	sidLogs           = "SluisLogs"
+	sidPrivate        = "SluisPrivateParameters"
+	sidExport         = "SluisExportParameters"
+	sidParamKy        = "SluisParameterKey"
+	sidInvoke         = "SluisRunAPass"
+	sidAudit          = "SluisAuditIngest"
+	sidWebID          = "SluisWebIdentity"
 )
 
 // SSM layout (decision D1a): `private` is sluis's alone, `export` is what
@@ -191,6 +258,7 @@ type functionPolicyIn struct {
 	tableArn, tableKey string
 	queueArn           string
 	signingKeyArns     []string
+	wrappedKeyArn      string
 	webIdentity        bool
 	webIdentityAud     string
 	parameterKeyArn    string
@@ -233,7 +301,13 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Resource": in.queueArn,
 	})
 	if in.role == RoleHTTP {
-		st = append(st, signingStatement(in.signingKeyArns), statement{
+		if len(in.signingKeyArns) > 0 {
+			st = append(st, signingStatement(in.signingKeyArns))
+		}
+		if in.wrappedKeyArn != "" {
+			st = append(st, wrappedSigningStatement(in.wrappedKeyArn))
+		}
+		st = append(st, statement{
 			"Sid":      sidInvoke,
 			"Effect":   "Allow",
 			"Action":   lambdaInvokeFunction,

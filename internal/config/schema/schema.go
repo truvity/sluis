@@ -46,6 +46,18 @@ func exclusive(o m, a, b string) m {
 	return o
 }
 
+// exclusiveOf is exclusive for any number of keys: no two of names are set together.
+func exclusiveOf(o m, names ...string) m {
+	var pairs []any
+	for i := range names {
+		for j := i + 1; j < len(names); j++ {
+			pairs = append(pairs, m{"required": []string{names[i], names[j]}})
+		}
+	}
+	o["not"] = m{"anyOf": pairs}
+	return o
+}
+
 func str(description string) m {
 	return m{"type": "string", "minLength": 1, "description": description}
 }
@@ -250,7 +262,7 @@ func serveSchema() m {
 			"idKey":      str("The key of the id in that Secret."),
 			"secretKey":  str("The key of the secret in that Secret."),
 		}),
-		"signingKey": exclusive(obj("The issuer's signing keys: provisioned, never minted here.", m{
+		"signingKey": exclusiveOf(obj("The issuer's signing keys: provisioned, never minted here.", m{
 			"file": str("The primary key. Unset generates one for this process, which a local run may do and nothing else should. Exclusive with `kms`."),
 			"kms": obj("Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`.", m{
 				"keys": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
@@ -264,11 +276,21 @@ func serveSchema() m {
 				"region":          str("The keys' region. Unset follows the AWS SDK's own resolution."),
 				"stateSecretFile": str("A file holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
 			}, "keys", "stateSecretFile"),
+			"kmsWrapped": obj("Sign with key pairs AWS KMS generates and wraps under ONE symmetric key (the `kms-wrapped` adapter): a new pair per algorithm every `rotateEvery`, published before it signs and kept after it is replaced. The private key is decrypted into process memory to sign. Exclusive with `file` and `kms`.", m{
+				"keyId":           str("The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing."),
+				"region":          str("The key's region. Unset follows the AWS SDK's own resolution."),
+				"stateSecretFile": str("A file holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."),
+				"algorithms": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"enum": []string{"ES384", "RS256"}},
+					"description": "The algorithms signed with, the first the installation default. Unset is ES384 and RS256. EdDSA is not supported yet."},
+				"rotateEvery": duration("How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h.", "24h"),
+				"prepublish":  duration("How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`.", "15m"),
+				"retain":      duration("How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`.", ""),
+			}, "keyId", "stateSecretFile"),
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),
 			"activationDelay": duration("How long a newly published key waits before a replica signs with it. At least `pollInterval`.", "15m"),
 			"overlap":         duration("How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew.", ""),
-		}), "file", "kms"),
+		}), "file", "kms", "kmsWrapped"),
 		"valkey": obj("The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.", m{
 			"address":     m{"type": "string", "allOf": []any{m{"pattern": `^[^\s/]+:[0-9]{1,5}$`}, m{"not": m{"pattern": "@"}}}, "description": "host:port, with no credentials."},
 			"passwordEnv": envField("The NAME of the variable holding the password."),

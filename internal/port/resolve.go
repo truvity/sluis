@@ -116,11 +116,11 @@ var presetTable = map[Preset]map[Concern]string{
 }
 
 // awsLambda is the table of sluis on Lambda: DynamoDB state, SSM secrets, S3
-// blobs, KMS token signing, SQS audit, EventBridge ticks and an asynchronous
+// blobs, KMS-wrapped token signing (`kms` for remote signing), SQS audit, EventBridge ticks and an asynchronous
 // invoke for "run a pass now". It is the target of both aws presets: they
 // differ in what else the platform has, not in the adapters.
 var awsLambda = map[Concern]string{
-	ConcernState: "dynamodb", ConcernSecrets: "ssm", ConcernBlobs: "s3", ConcernSigning: "kms",
+	ConcernState: "dynamodb", ConcernSecrets: "ssm", ConcernBlobs: "s3", ConcernSigning: "kms-wrapped",
 	ConcernTrigger: "invoke", ConcernSchedule: "eventbridge", ConcernAudit: "sqs",
 }
 

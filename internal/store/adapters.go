@@ -28,8 +28,9 @@ type selection struct {
 	// SigningFile and SigningKMS say `signingKey` names a key source, which is
 	// the legacy spelling of the signing adapter: beside a preset it
 	// overrides it, as `ports.adapter` does for state.
-	SigningFile bool
-	SigningKMS  *config.SigningKeyKMS
+	SigningFile    bool
+	SigningKMS     *config.SigningKeyKMS
+	SigningWrapped *config.SigningKeyKMSWrapped
 }
 
 func selectionOf(
@@ -41,7 +42,7 @@ func selectionOf(
 		PortsAdapter: p != nil && p.Adapter != "", PortsBlob: p != nil && p.Blob != nil,
 	}
 	if sk != nil {
-		sel.SigningFile, sel.SigningKMS = sk.File != "", sk.KMS
+		sel.SigningFile, sel.SigningKMS, sel.SigningWrapped = sk.File != "", sk.KMS, sk.KMSWrapped
 	}
 	return sel
 }
@@ -81,6 +82,22 @@ func (c Config) legacyTable() port.Table {
 		_ = json.Unmarshal(raw, &settings)
 		t[port.ConcernSigning] = port.Choice{Adapter: "kms", Settings: settings}
 	}
+	if k := c.sel.SigningWrapped; k != nil && !c.sel.SigningFile {
+		legacy := port.KMSWrappedSigning{KeyID: k.KeyID, Region: k.Region, StateSecretFile: k.StateSecretFile, Algorithms: k.Algorithms}
+		if k.RotateEvery != nil {
+			legacy.RotateEvery = k.RotateEvery.D().String()
+		}
+		if k.Prepublish != nil {
+			legacy.Prepublish = k.Prepublish.D().String()
+		}
+		if k.Retain != nil {
+			legacy.Retain = k.Retain.D().String()
+		}
+		raw, _ := json.Marshal(legacy)
+		var settings port.Settings
+		_ = json.Unmarshal(raw, &settings)
+		t[port.ConcernSigning] = port.Choice{Adapter: "kms-wrapped", Settings: settings}
+	}
 	if c.sel.AuditWriter {
 		t[port.ConcernAudit] = port.Choice{Adapter: "connect"}
 	}
@@ -101,7 +118,7 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 	if c.sel.PortsBlob {
 		sel.LegacySet = append(sel.LegacySet, port.ConcernBlobs)
 	}
-	if c.sel.SigningFile || c.sel.SigningKMS != nil {
+	if c.sel.SigningFile || c.sel.SigningKMS != nil || c.sel.SigningWrapped != nil {
 		sel.LegacySet = append(sel.LegacySet, port.ConcernSigning)
 	}
 	if len(c.sel.Adapters) > 0 {

@@ -58,6 +58,13 @@ type SigningKey struct {
 	pub  crypto.PublicKey
 	alg  jose.SignatureAlgorithm
 	seed []byte
+
+	// wrapped is the private half encrypted under a KMS key, set only for a
+	// key the `kms-wrapped` adapter generated: the ring records it beside the
+	// public half so that any replica can unwrap it. activateNow asks the ring
+	// to skip the pre-publish wait for it (see [KeyRing.record]).
+	wrapped     []byte
+	activateNow bool
 }
 
 // NewSigningKey generates one, for a local run. A deployment reads the

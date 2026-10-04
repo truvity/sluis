@@ -36,6 +36,8 @@ import (
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/verify"
@@ -88,6 +90,9 @@ type Config struct {
 	kmsAdditional      []config.SigningKeyKMSAlg
 	kmsRegion          string
 	kmsStateSecretFile string
+	// kmsWrapped, when set, replaces signingKeyFile: key pairs KMS generates
+	// and wraps under one symmetric key (the `kms-wrapped` adapter).
+	kmsWrapped *config.SigningKeyKMSWrapped
 
 	tokenLifetime    time.Duration
 	refreshLifetime  time.Duration
@@ -186,6 +191,13 @@ func FromConfig(f *config.Serve) (Config, error) {
 			c.kmsRegion = k.KMS.Region
 			c.kmsStateSecretFile = k.KMS.StateSecretFile
 		}
+		if k.KMSWrapped != nil {
+			if k.File != "" || k.KMS != nil {
+				return Config{}, errors.New("signingKey.kmsWrapped is exclusive with signingKey.file and signingKey.kms: " +
+					"a key is a file, a KMS key or a KMS-wrapped key pair")
+			}
+			c.kmsWrapped = k.KMSWrapped
+		}
 		// The files the deployment expects, named exactly: a deployment
 		// naming them is a deployment a missing mount fails LOUDLY for, at
 		// start, rather than one that silently signs with fewer algorithms
@@ -253,6 +265,11 @@ func FromConfig(f *config.Serve) (Config, error) {
 	// and re-read before any replica signs with it.
 	if c.keyActivationDelay < c.keyPollInterval {
 		return Config{}, fmt.Errorf("signingKey.activationDelay (%v) must be at least signingKey.pollInterval (%v)", c.keyActivationDelay, c.keyPollInterval)
+	}
+	if c.kmsWrapped != nil {
+		if _, err = c.wrappedConfig(); err != nil {
+			return Config{}, err
+		}
 	}
 	level := "info"
 	if f.Log != nil && f.Log.Level != "" {
@@ -323,6 +340,9 @@ type Deps struct {
 	// KMS is the client for signingKey.kms. Nil builds one from the AWS
 	// default credential chain; a test supplies a fake.
 	KMS issuer.KMSAPI
+	// KMSWrapped is the client for signingKey.kmsWrapped. Nil builds one from
+	// the AWS default credential chain; a test supplies a fake.
+	KMSWrapped issuer.KMSWrapAPI
 	// Stores is the storage ports, built once from configuration and shared
 	// with the directory half. Nil is a process with no shared state and no
 	// cluster: logins in progress are kept in this process, and recovery is
@@ -388,6 +408,8 @@ type Deps struct {
 type App struct {
 	// kms is set when the primary key lives in AWS KMS; Run polls it.
 	kms []*issuer.KMSKeyRefs
+	// wrapped is set when the keys are KMS-wrapped; Run keeps them rotating.
+	wrapped bool
 	// state is the shared state the secret fingerprint lives in.
 	state   issuer.State
 	handler http.Handler
@@ -518,9 +540,13 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		kmsRest []*issuer.SigningKey
 		kmsMore []*issuer.SigningKey
 	)
-	if len(cfg.kmsKeys) > 0 {
+	var wrapped *issuer.WrappedSigning
+	switch {
+	case cfg.kmsWrapped != nil:
+		wrapped, key, kmsMore, err = wrappedSigningKeys(ctx, cfg, deps, stores, shared, log)
+	case len(cfg.kmsKeys) > 0:
 		kmsRefs, kmsRest, key, kmsMore, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
-	} else {
+	default:
 		key, err = signingKey(ctx, cfg, log)
 	}
 	if err != nil {
@@ -566,6 +592,16 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		ActivationDelay: cfg.keyActivationDelay,
 		Overlap:         cfg.keyOverlap,
 	})
+	if wrapped != nil {
+		// The wrapped schedule's own pre-publish and retention, which default to
+		// the two settings above.
+		wc, wcErr := cfg.wrappedConfig()
+		if wcErr != nil {
+			return nil, wcErr
+		}
+		storage.ConfigureKeyRotation(issuer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
+		storage.UseWrappedSigning(wrapped)
+	}
 	// The earlier KMS keys, in order: refreshed if the installation knows
 	// them, never newly adopted.
 	for _, extra := range kmsRest {
@@ -655,7 +691,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, state: shared}, nil
+	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared}, nil
 }
 
 // directorySource says where the answer about a person comes from. There
@@ -731,6 +767,20 @@ func (a *App) Run(ctx context.Context) error {
 				return checkStateSecret(c, a.state, a.kms[0].Seed)
 			})
 			return nil
+		})
+	}
+	if a.wrapped {
+		group.Go(func() error {
+			ticker := time.NewTicker(a.cfg.keyPollInterval)
+			defer ticker.Stop()
+			for {
+				a.storage.MaintainKeys(gctx)
+				select {
+				case <-gctx.Done():
+					return nil
+				case <-ticker.C:
+				}
+			}
 		})
 	}
 	group.Go(func() error {
@@ -1304,10 +1354,29 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 		return fmt.Errorf("adapters.signing: %w", err)
 	}
 	switch choice.Adapter {
+	case "kms-wrapped":
+		k, _ := built.(*port.KMSWrappedSigning)
+		if cfg.signingKeyFile != "" || len(cfg.kmsKeys) > 0 {
+			return errors.New("the signing adapter is kms-wrapped and signingKey.file or signingKey.kms is set: " +
+				"a key is a file, a KMS key or a KMS-wrapped key pair, not several")
+		}
+		if cfg.kmsWrapped == nil && k != nil {
+			w, err := wrappedFromPort(k)
+			if err != nil {
+				return fmt.Errorf("adapters.signing: %w", err)
+			}
+			cfg.kmsWrapped = w
+		}
+		if _, err := cfg.wrappedConfig(); err != nil {
+			return err
+		}
 	case "kms":
 		k, _ := built.(*port.KMSSigning)
 		if cfg.signingKeyFile != "" {
 			return errors.New("the signing adapter is kms and signingKey.file is set: a key is a file or a KMS key, not both")
+		}
+		if cfg.kmsWrapped != nil {
+			return errors.New("the signing adapter is kms and signingKey.kmsWrapped is set: a key is a KMS key or a KMS-wrapped key pair, not both")
 		}
 		if len(cfg.kmsKeys) == 0 && k != nil {
 			cfg.kmsKeys, cfg.kmsRegion, cfg.kmsStateSecretFile = k.Keys, k.Region, k.StateSecretFile
@@ -1319,8 +1388,128 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 		if len(cfg.kmsKeys) > 0 {
 			return errors.New("the signing adapter is file and signingKey.kms is set: a key is a file or a KMS key, not both")
 		}
+		if cfg.kmsWrapped != nil {
+			return errors.New("the signing adapter is file and signingKey.kmsWrapped is set: a key is a file or a KMS-wrapped key pair, not both")
+		}
 	}
 	return nil
+}
+
+// wrappedFromPort is the adapter's settings as the file's `signingKey.kmsWrapped`.
+func wrappedFromPort(k *port.KMSWrappedSigning) (*config.SigningKeyKMSWrapped, error) {
+	out := &config.SigningKeyKMSWrapped{KeyID: k.KeyID, Region: k.Region, StateSecretFile: k.StateSecretFile, Algorithms: k.Algorithms}
+	for name, v := range map[string]struct {
+		in  string
+		out **config.Duration
+	}{
+		"rotateEvery": {k.RotateEvery, &out.RotateEvery},
+		"prepublish":  {k.Prepublish, &out.Prepublish},
+		"retain":      {k.Retain, &out.Retain},
+	} {
+		if v.in == "" {
+			continue
+		}
+		d, err := time.ParseDuration(v.in)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		cd := config.Duration(d)
+		*v.out = &cd
+	}
+	return out, nil
+}
+
+// wrappedConfig resolves `signingKey.kmsWrapped` against the rest of the
+// configuration: the algorithms default to ES384 and RS256, the rotation to
+// every 24h, the pre-publish to `signingKey.activationDelay` and the retention
+// to `signingKey.overlap` (the token lifetime plus a skew margin), and then the
+// schedule is held to what makes it safe (see [issuer.WrappedConfig.Validate]).
+func (c Config) wrappedConfig() (issuer.WrappedConfig, error) {
+	k := c.kmsWrapped
+	out := issuer.WrappedConfig{
+		KeyID:       strings.TrimSpace(k.KeyID),
+		RotateEvery: dur(k.RotateEvery, issuer.DefaultWrappedRotateEvery),
+		Prepublish:  dur(k.Prepublish, c.keyActivationDelay),
+		Retain:      dur(k.Retain, c.keyOverlap),
+		Interval:    c.keyPollInterval,
+	}
+	if k.StateSecretFile == "" {
+		return out, errors.New("signingKey.kmsWrapped.stateSecretFile is required")
+	}
+	algs := k.Algorithms
+	if len(algs) == 0 {
+		algs = []string{string(jose.ES384), string(jose.RS256)}
+	}
+	for _, a := range algs {
+		out.Algorithms = append(out.Algorithms, jose.SignatureAlgorithm(a))
+	}
+	if out.Prepublish < c.keyPollInterval {
+		return out, fmt.Errorf("signingKey.kmsWrapped.prepublish (%v) must be at least signingKey.pollInterval (%v)", out.Prepublish, c.keyPollInterval)
+	}
+	return out, out.Validate(c.tokenLifetime)
+}
+
+// wrappedSigningKeys opens the KMS-wrapped signing at start: the client, the
+// state secret, the lease that serialises key generation, and the key each
+// algorithm signs with (read from the shared state, or generated now). The
+// first algorithm's key is the primary.
+func wrappedSigningKeys(
+	ctx context.Context, cfg Config, deps Deps, stores *store.Stores, state issuer.State, log *slog.Logger,
+) (*issuer.WrappedSigning, *issuer.SigningKey, []*issuer.SigningKey, error) {
+	wcfg, err := cfg.wrappedConfig()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	raw, err := os.ReadFile(cfg.kmsWrapped.StateSecretFile) //nolint:gosec // the path is deployment configuration
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("read signingKey.kmsWrapped.stateSecretFile: %w", err)
+	}
+	seed, err := parseStateSecret(raw)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("signingKey.kmsWrapped.stateSecretFile: %w", err)
+	}
+	if err = checkStateSecret(ctx, state, seed); err != nil {
+		return nil, nil, nil, err
+	}
+	api := deps.KMSWrapped
+	if api == nil {
+		var loaders []func(*awsconfig.LoadOptions) error
+		if cfg.kmsWrapped.Region != "" {
+			loaders = append(loaders, awsconfig.WithRegion(cfg.kmsWrapped.Region))
+		}
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("load the AWS configuration for signingKey.kmsWrapped: %w", err)
+		}
+		api = kms.NewFromConfig(awsCfg)
+	}
+	// The lease is on the State port, as every controller's is: a Create with a
+	// lifetime. Without a shared store (a local run) it is this process's own.
+	leaseState := port.State(memory.New())
+	if stores != nil && stores.Usable {
+		leaseState = stores.Ports.State
+	}
+	leases := &rails.Leases{State: leaseState, Holder: rails.NewHolder(), Log: log}
+	lease := func(ctx context.Context, alg jose.SignatureAlgorithm, fn func(context.Context) error) (bool, error) {
+		var inner error
+		ran, err := leases.Do(ctx, "signing-keygen", string(alg), func(lctx context.Context) { inner = fn(lctx) })
+		if err != nil {
+			return false, err
+		}
+		return ran, inner
+	}
+	ws, err := issuer.NewWrappedSigning(wcfg, api, seed, lease, log)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	primary, more, err := ws.Bootstrap(ctx, state)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	log.InfoContext(ctx, "signing with KMS-wrapped keys", "key", wcfg.KeyID, "algorithms", wcfg.Algorithms,
+		"rotateEvery", wcfg.RotateEvery, "prepublish", wcfg.Prepublish, "retain", wcfg.Retain,
+		"kid", primary.ID(), "algorithm", primary.SignatureAlgorithm())
+	return ws, primary, more, nil
 }
 
 // parseStateSecret reads the state secret file: one trailing newline trimmed,

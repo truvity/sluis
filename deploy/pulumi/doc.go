@@ -36,7 +36,8 @@
 //
 // The three functions (sluis-http, sluis-github, sluis-slack) are one
 // `bootstrap` told apart by SLUIS_ROLE, in no VPC, each with a role of its own:
-// only sluis-http may kms:Sign with the signing key and invoke the controllers.
+// only sluis-http may kms:Sign with the signing key (or, with WrappedSigning, generate
+// and decrypt key pairs under the one symmetric key) and invoke the controllers.
 // The estate's configuration and its catalogues are added to the zip, so a change
 // to either changes the package and redeploys. The issuer's OAuth-state secret is
 // generated and kept in SSM (Lambda.StateSecretParameter). /sluis/private/* in SSM is
