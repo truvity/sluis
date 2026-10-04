@@ -203,6 +203,7 @@ type KeyRing struct {
 	// last ran, so a request path can call it freely.
 	wrap         *wrapHooks
 	lastMaintain time.Time
+	lastStaleLog time.Time
 
 	metrics keyRingInstruments
 }
@@ -325,7 +326,11 @@ func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) 
 			r.recompute(ctx, now)
 			return nil
 		}
-		r.entries[key.id] = r.record(ctx, now, key)
+		entry, err := r.record(ctx, now, key)
+		if err != nil {
+			return err
+		}
+		r.entries[key.id] = entry
 	}
 
 	r.absorb(ctx)
@@ -352,7 +357,10 @@ func (r *KeyRing) tombstoned(ctx context.Context, id string, failClosed bool) bo
 // values back rather than computing its own. That is what lets "wait
 // until every replica has seen it" mean something: there is exactly one
 // schedule, not one per replica's clock.
-func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *ringEntry {
+//
+// For a wrapped key a failed write is an error and the key is discarded: it
+// would otherwise sign tokens nobody else publishes a key for.
+func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) (*ringEntry, error) {
 	// The very FIRST key this installation has ever published needs no
 	// delay: there is no previous key signing anything for it to race
 	// against, and no other replica to give time to catch up. Every key
@@ -391,8 +399,14 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *r
 		// Cannot happen for a value built entirely of our own types with
 		// no cycles; kept as a log rather than a panic because a signing
 		// key is not worth crashing the process over a defect elsewhere.
+		if len(key.wrapped) > 0 {
+			return nil, fmt.Errorf("issuer: encode the signing key %s for the shared store: %w", key.id, err)
+		}
 		r.log.ErrorContext(ctx, "could not encode a signing key for the shared store", "kid", key.id, "error", err)
 	} else if won, err := r.state.SetIfAbsent(ctx, keyRingEntryKey(r.alg, key.id), encoded, keyRingEntryTTL); err != nil {
+		if len(key.wrapped) > 0 {
+			return nil, fmt.Errorf("issuer: record the signing key %s in the shared store: %w", key.id, err)
+		}
 		r.log.WarnContext(ctx, "could not record the signing key in the shared store; "+
 			"this replica keeps its own schedule for it and will retry", "kid", key.id, "error", err)
 	} else if !won {
@@ -407,6 +421,9 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *r
 	}
 
 	if err := r.state.Add(ctx, keyRingIndexKey(r.alg), key.id, keyRingEntryTTL); err != nil {
+		if len(key.wrapped) > 0 {
+			return nil, fmt.Errorf("issuer: index the signing key %s in the shared store: %w", key.id, err)
+		}
 		r.log.WarnContext(ctx, "could not index a signing key in the shared store", "kid", key.id, "error", err)
 	}
 
@@ -417,7 +434,7 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *r
 		"seenAt", entry.SeenAt, "activateAt", entry.ActivateAt, "immediate", entry.ActivateAt.Equal(entry.SeenAt))
 	r.metrics.recordTransition(ctx, "seen", string(key.alg))
 
-	return entry
+	return entry, nil
 }
 
 // absorb learns of every key id the shared store knows that this

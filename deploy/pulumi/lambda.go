@@ -162,13 +162,20 @@ type LambdaArgs struct {
 // pair and to decrypt a private key, with the encryption context
 // purpose=sluis-signing (and no keys beside purpose, alg and kid).
 type WrappedSigningArgs struct {
-	// KeyArn is an existing symmetric key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT):
-	// the estate's application key. The library then creates no key and leaves
-	// its key policy alone; the http role's grant carries the conditions, and the
-	// key's own policy should hold the role to them as the one the library
-	// creates does. Unset: the library creates the key, with rotation enabled,
-	// protected, and a key policy that enforces the conditions.
+	// KeyArn is an existing symmetric key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT).
+	// Sluis signing uses a DEDICATED key, which is what leaving this unset gives:
+	// the library creates it, with rotation enabled, protected, and a key policy
+	// that reserves the signing encryption context to the signing roles. With
+	// KeyArn the library creates no key and leaves its policy alone, and the key
+	// policy MUST carry the statement WrappedKeyReservedDeny renders
+	// (docs/deployment/aws.md): without it any principal that may kms:Decrypt on
+	// the key can unwrap a signing key read from the State and forge tokens.
 	KeyArn pulumi.StringInput
+	// AdditionalSigningRoleArns are the roles beside the http function's that
+	// sign with the key, for the key policy: the Kubernetes serve role, when
+	// KubernetesIdentityArgs.WrappedSigningKeyArn names this key. Ignored with
+	// KeyArn.
+	AdditionalSigningRoleArns []string
 	// KeyAlias is the created key's alias. Default DefaultWrappedSigningKeyAlias.
 	// It must start with "alias/". Ignored with KeyArn.
 	KeyAlias string
@@ -583,7 +590,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			wrappedArn = w.KeyArn
 			wrappedKeyArn = pulumi.StringInput(w.KeyArn).ToStringOutput()
 		} else {
-			policy, err := wrappedKeyPolicy(a.AccountID, arnPrefix+"iam::"+a.AccountID+":role/"+a.FunctionNamePrefix+"-"+RoleHTTP)
+			roles := append([]string{arnPrefix + "iam::" + a.AccountID + ":role/" + a.FunctionNamePrefix + "-" + RoleHTTP},
+				w.AdditionalSigningRoleArns...)
+			policy, err := wrappedKeyPolicy(a.AccountID, roles)
 			if err != nil {
 				return nil, err
 			}
@@ -835,7 +844,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 		return functionPolicy(functionPolicyIn{
 			role: role, region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
+			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), wrappedSigning: a.WrappedSigning != nil, signingKeyArns: stringsOf(v[6:]),
 			parameterKeyArn:    a.ParameterKeyArn,
 			invokeFunctionArns: []string{githubArn, slackArn},
 			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,

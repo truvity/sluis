@@ -227,3 +227,14 @@ func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
 		t.Errorf("kms-wrapped borrowed signingKey.kms: %+v", got)
 	}
 }
+
+func TestKMSWrappedSettingsInTwoPlacesAreRefused(t *testing.T) {
+	_, _, err := Config{Adapter: AdapterLegacy, sel: selection{
+		SigningWrapped: &config.SigningKeyKMSWrapped{KeyID: "alias/w", StateSecretFile: "/s"},
+		Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms-wrapped",
+			Settings: map[string]any{"keyId": "alias/x", "stateSecretFile": "/s"}}},
+	}}.plan(context.Background(), quiet)
+	if err == nil || !strings.Contains(err.Error(), "both set") {
+		t.Errorf("settings in two places: %v", err)
+	}
+}

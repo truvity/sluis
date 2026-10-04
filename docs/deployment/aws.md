@@ -138,7 +138,7 @@ for another.
 | `Serve`, `GitHub`, `Slack` | | A `ProcessArgs`: `ServiceAccount` (empty creates no role; required for `Serve`) and `Description` (the policy's, which IAM cannot change once set). |
 | `Storage` | required | `Storage.Grant()`. |
 | `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the serve role (and only it) may `kms:Sign` and `kms:GetPublicKey` with them. |
-| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`, or the estate's application key. Set, the serve role (and only it) may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
+| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`: a dedicated key whose policy reserves the signing context to the signing roles (list this role in `WrappedSigning.AdditionalSigningRoleArns`). Set, the serve role (and only it) may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
 | `State` | none | `State.Grant()`. Nil when the State is on NATS: the roles then carry no DynamoDB grant. |
 
 ### Outputs
@@ -394,14 +394,34 @@ adapter; `kms` (remote signing) stays selectable, and aws-eks keeps it.
 |---|---|---|
 | Keys | one asymmetric KMS key per algorithm, provisioned by hand or by this library | one symmetric "application" key per estate; the issuer generates the key pairs |
 | Signing | one `kms:Sign` per token; the private key never leaves KMS | local, with a private key decrypted into the process's memory (`kms:Decrypt` once per key per process) |
-| If the role leaks | the holder can sign only while it holds the role (every signature is in CloudTrail) | the holder can decrypt the wrapped keys in the state and **forge tokens until they rotate out** (about one rotation period plus the retention) |
+| If the signing role leaks | the holder can sign only while it holds the role (every signature is in CloudTrail) | the holder can decrypt the wrapped keys in the State and sign **offline, with no further trace**, for as long as those keys are published |
 | Throughput | the account's `Sign` request quota | none from KMS |
 | Rotation | append a key by hand | automatic, every `rotateEvery` (default 24h), free |
 
-The trade is deliberate: a wrapped key is extractable by whoever may call
-`kms:Decrypt` on the application key with the signing context, so that role is
-held to the conditions below and to nothing else on the key; a remote key is not
-extractable at all. Choose `kms` where that matters more than rotation and quota.
+The trade is deliberate, and it is larger than "until rotation": a wrapped key
+is extractable by whoever may call `kms:Decrypt` on the key with the signing
+context, and the ciphertext and that context are in the State. So:
+
+- the **State's write access is part of the trust boundary**. Whoever can write
+  the key ring items (`keyring`, `keyring-index`, `keyring-retired`, and the
+  `lease` `signing-keygen/<alg>`) can plant a public key into the JWKS, retire a
+  key early, or stop rotation, so that one key stays active and published
+  indefinitely; rotation is not a bound on a compromise that includes the State;
+- a signing key a leaked role has decrypted stays valid for as long as it is
+  published: its life as the active key plus `retain` after it (about one
+  rotation period plus the retention), **only if** the State is not also written
+  to keep it;
+- the use of the key is **reserved** to the signing roles by the key policy
+  (below), because the root delegation would otherwise let every role with
+  `kms:Decrypt` on it, a CI role or a PowerUser, read a wrapped key out of the
+  State and forge with no trace but a CloudTrail `Decrypt`.
+
+A remote key is not extractable at all. Choose `kms` where that matters more than
+rotation and quota.
+
+**Use a dedicated key.** Sluis signing uses its own symmetric key, the one the
+library creates; it is not the estate's shared application key, because every
+workload that may decrypt with a shared key could unwrap a signing key.
 
 **How it works.** For each algorithm (ES384 on `ECC_NIST_P384`, RS256 on
 `RSA_3072`) the issuer calls `kms:GenerateDataKeyPairWithoutPlaintext` on the
@@ -442,7 +462,7 @@ nowhere else:
 {
   "Sid": "SluisWrappedSigning", "Effect": "Allow",
   "Action": ["kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"],
-  "Resource": "<the application key's ARN>",
+  "Resource": "<the dedicated key's ARN>",
   "Condition": {
     "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
     "ForAllValues:StringEquals": {"kms:EncryptionContextKeys": ["purpose", "alg", "kid"]}
@@ -450,9 +470,11 @@ nowhere else:
 }
 ```
 
-`WrappedSigning.KeyArn` takes the estate's own application key (its key policy
-is then the estate's, and should hold the role to the same conditions). Unset,
-the library creates the key (`SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, rotation
+`WrappedSigning.KeyArn` takes a key you created. The library then leaves its key
+policy alone, and the key policy MUST carry the reserved-context denial below
+(`sluispulumi.WrappedKeyReservedDeny(roleArns)` renders it); without it any
+principal that may `kms:Decrypt` on the key can unwrap a signing key. Unset (the
+default), the library creates the key (`SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, rotation
 enabled, protected, alias `WrappedSigning.KeyAlias`, default
 `alias/sluis-signing-wrapped`) with this key policy, so a broader policy attached
 to the role later does not widen what it can do with the key:
@@ -460,12 +482,62 @@ to the role later does not widen what it can do with the key:
 | Sid | Effect | Principal | Action | Condition |
 |---|---|---|---|---|
 | `EnableIAMPolicies` | Allow | the account root | `kms:*` | none (IAM policies govern the key, and key administration is the account's) |
-| `SluisSigningRolePurposeOnly` | Deny | `*` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | `aws:PrincipalArn` is the http role, and `kms:EncryptionContext:purpose` is not `sluis-signing` |
-| `SluisSigningRoleContextKeysOnly` | Deny | `*` | the same two | the http role, and `ForAnyValue:StringNotEquals kms:EncryptionContextKeys` `["purpose","alg","kid"]` |
-| `SluisSigningRoleNothingElse` | Deny | `*` | `NotAction` the same two | the http role |
+| `SluisSigningContextReserved` | Deny | `*` | `kms:Decrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKeyPair*`, `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:CreateGrant` | `kms:EncryptionContext:purpose` is `sluis-signing`, and `aws:PrincipalArn` is **not** one of the signing roles (the http role, and `WrappedSigning.AdditionalSigningRoleArns`, the Kubernetes serve role) |
+| `SluisSigningRolePurposeOnly` | Deny | `*` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | `aws:PrincipalArn` is a signing role, and `kms:EncryptionContext:purpose` is not `sluis-signing` |
+| `SluisSigningRoleContextKeysOnly` | Deny | `*` | the same two | a signing role, and `ForAnyValue:StringNotEquals kms:EncryptionContextKeys` `["purpose","alg","kid"]` |
+| `SluisSigningRoleNothingElse` | Deny | `*` | `NotAction` the same two | a signing role |
 
-The role is named in a condition, not as a principal, so the key can exist
-before the role. Moving a stack from remote signing: set `WrappedSigning` with
+The roles are named in a condition, not as principals, so the key can exist
+before the roles. The mandatory statement, for a key passed as `KeyArn`:
+
+```json
+{
+  "Sid": "SluisSigningContextReserved", "Effect": "Deny", "Principal": {"AWS": "*"}, "Resource": "*",
+  "Action": ["kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKeyPair*",
+             "kms:GenerateDataKeyPairWithoutPlaintext", "kms:CreateGrant"],
+  "Condition": {
+    "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
+    "ArnNotEquals": {"aws:PrincipalArn": ["<the http role's ARN>", "<the Kubernetes serve role's ARN, if it signs>"]}
+  }
+}
+```
+
+**Writes to the key ring.** With `WrappedSigning` (and with
+`KubernetesIdentityArgs.WrappedSigningKeyArn`) the github and slack roles carry
+`SluisNoKeyringWrites`: a Deny of `PutItem`, `UpdateItem`, `DeleteItem` and
+`BatchWriteItem` on the table when `dynamodb:LeadingKeys` is `keyring`,
+`keyring-index` or `keyring-retired`. Only the signing roles may write them. The
+key-generation lease cannot be denied this way: it shares the `lease` partition
+with the controllers' own leases. Anyone else with write access to the table is
+inside the trust boundary above.
+
+**Monitoring rotation.** A rotation that keeps failing is a warning per attempt
+and the key keeps signing, so alert on it: the issuer logs at ERROR, at most
+hourly, once the active wrapped key is older than 1.5 times `rotateEvery`, and
+the gauge `access_issuer.signing_key.active_since_timestamp`
+(`access_issuer_signing_key_active_since_timestamp_seconds` in the store) gives
+the age. Alert on
+`time() - max by (algorithm) (access_issuer_signing_key_active_since_timestamp_seconds) > rotateEvery + prepublish + margin`
+(26h for the defaults). The chart's `AccessRosterSigningKeyRotationStalled` rule
+is this rule, with `alerts.rules.signingKeyRotationStalled.maxAgeSeconds`: set
+it to `93600` for a 24h rotation.
+
+**Known limits** (follow-ups, not in this release):
+
+- a process publishes a key it reads from the State without having unwrapped it
+  and matched it to its public half (only the active key is unwrapped, by the
+  process that signs with it);
+- foreign entries (public keys another source recorded) are published with no
+  migration allowlist, so whoever can write the State can add one;
+- the encryption context carries no creation time, so a wrapped key is not
+  refused for being older than `rotateEvery` + `prepublish` + `retain`;
+- a process that cannot unwrap the newest key signs with an older one, which can
+  be past its `retain` (accepted: signing beats not signing; the log says so);
+- the first key of a cutover is active at once, with no pre-publish (accepted: a
+  verifier that cached the JWKS before it rejects the new `kid` for up to its
+  cache lifetime).
+
+**Moving a stack from remote signing:** set `WrappedSigning` with
 `KeepRemoteSigningKeys: true` (the two asymmetric keys are protected and cannot
 be dropped from the program in one step), switch the configuration
 (`signingKey.kmsWrapped`), and drop the flag once nothing signs remotely.
@@ -478,7 +550,7 @@ supplies its settings):
 preset: aws-hybrid
 signingKey:
   kmsWrapped:
-    keyId: alias/sluis-signing-wrapped   # or the application key's ARN
+    keyId: alias/sluis-signing-wrapped   # or the dedicated key's ARN
     stateSecretFile: /tmp/sluis/state-secret
     # algorithms: [ES384, RS256]         # the first is the default
     # rotateEvery: 24h

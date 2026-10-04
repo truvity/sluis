@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -50,7 +52,24 @@ type wrapEnv struct {
 	clock  *wrapClock
 	algs   []jose.SignatureAlgorithm
 	deny   bool // the lease is always held by someone else
+	// failWrites makes the shared state refuse the key ring's entry writes.
+	failWrites bool
 }
+
+// flakyState is the shared state with writes of key ring entries that can fail.
+type flakyState struct {
+	*MemoryState
+	env *wrapEnv
+}
+
+func (f flakyState) SetIfAbsent(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	if f.env.failWrites && strings.HasPrefix(key, "issuer:keyring:entry:") {
+		return false, errors.New("state unavailable")
+	}
+	return f.MemoryState.SetIfAbsent(ctx, key, value, ttl)
+}
+
+func (e *wrapEnv) shared() State { return flakyState{MemoryState: e.state, env: e} }
 
 func newWrapEnv(algs ...jose.SignatureAlgorithm) *wrapEnv {
 	if len(algs) == 0 {
@@ -90,11 +109,11 @@ func (e *wrapEnv) start(t *testing.T) *replica {
 		t.Fatal(err)
 	}
 	ws.SetClock(e.clock.now)
-	primary, more, err := ws.Bootstrap(context.Background(), e.state)
+	primary, more, err := ws.Bootstrap(context.Background(), e.shared())
 	if err != nil {
 		t.Fatal(err)
 	}
-	rings, err := NewKeyRings(primary, more, e.state, ws.ringConfig(), nil)
+	rings, err := NewKeyRings(primary, more, e.shared(), ws.ringConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,4 +540,69 @@ func noLease(context.Context, jose.SignatureAlgorithm, func(context.Context) err
 
 func alwaysLease(ctx context.Context, _ jose.SignatureAlgorithm, fn func(context.Context) error) (bool, error) {
 	return true, fn(ctx)
+}
+
+// A key whose record cannot be written is discarded, not used: it would sign
+// tokens no other replica publishes a key for.
+func TestWrappedAKeyThatCannotBeRecordedIsNotUsed(t *testing.T) {
+	env := newWrapEnv(jose.ES384)
+	env.failWrites = true
+	ws, _ := NewWrappedSigning(env.config(), env.kms, make([]byte, 32), alwaysLease, nil)
+	if _, _, err := ws.Bootstrap(context.Background(), env.shared()); err == nil || !strings.Contains(err.Error(), "record the signing key") {
+		t.Fatalf("a first key that could not be recorded: %v", err)
+	}
+
+	env = newWrapEnv(jose.ES384)
+	r := env.start(t)
+	first := signAndVerify(t, r, jose.ES384)
+	env.failWrites = true
+	env.clock.advance(testRotate)
+	r.maintain()
+	if n := len(r.published(jose.ES384)); n != 1 {
+		t.Errorf("an unrecorded key is published: %d keys", n)
+	}
+	env.clock.advance(testPrepublish + time.Minute)
+	r.maintain()
+	if got := signAndVerify(t, r, jose.ES384); got != first {
+		t.Errorf("signing with %s, a key that was never recorded", got)
+	}
+	// Once the state answers again the next pass rotates.
+	env.failWrites = false
+	env.clock.advance(time.Minute)
+	r.maintain()
+	if n := len(r.published(jose.ES384)); n != 2 {
+		t.Errorf("rotation did not resume: %d keys", n)
+	}
+}
+
+type lines struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lines) Write(p []byte) (int, error) { l.mu.Lock(); defer l.mu.Unlock(); return l.b.Write(p) }
+func (l *lines) String() string              { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
+
+// Rotation that keeps failing is an error in the log once the active key is far
+// older than the rotation period, and not before.
+func TestWrappedAStuckRotationIsLoggedAsAnError(t *testing.T) {
+	var out lines
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	defer slog.SetDefault(prev)
+
+	env := newWrapEnv(jose.ES384)
+	r := env.start(t)
+	env.deny = true // the lease is never obtained: rotation cannot happen
+	env.clock.advance(time.Duration(1.4 * float64(testRotate)))
+	r.maintain()
+	if strings.Contains(out.String(), "far older") {
+		t.Fatal("logged before the key is 1.5 rotation periods old")
+	}
+	env.clock.advance(time.Duration(0.2 * float64(testRotate)))
+	r.maintain()
+	if got := out.String(); !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "far older") {
+		t.Fatalf("no error for a stuck rotation: %s", got)
+	}
+	signAndVerify(t, r, jose.ES384) // it keeps signing
 }

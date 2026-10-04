@@ -47,6 +47,7 @@ func (r *KeyRing) Maintain(ctx context.Context) {
 	defer cancel()
 
 	r.sync(ctx, h)
+	r.warnStale(ctx, h)
 	if !r.generationDue(h) {
 		return
 	}
@@ -146,4 +147,30 @@ func (k *KeyRings) Maintain(ctx context.Context) {
 	for _, ring := range k.rings {
 		ring.Maintain(ctx)
 	}
+}
+
+// staleFactor is how many rotation periods old the active wrapped key may get
+// before this logs an error: rotation that fails is otherwise only a warning
+// per attempt, and the key just keeps signing.
+const staleFactor = 1.5
+
+// warnStale logs at ERROR, at most hourly, while the active wrapped key is older
+// than staleFactor times rotateEvery. Alert on the same condition from the
+// metric (access_issuer.signing_key.active_since_timestamp, docs/deployment/aws.md).
+func (r *KeyRing) warnStale(ctx context.Context, h *wrapHooks) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.entries[r.activeID]
+	if !ok || len(e.Wrapped) == 0 {
+		return
+	}
+	now := r.now()
+	age := now.Sub(e.ActivateAt)
+	if float64(age) <= staleFactor*float64(h.rotateEvery) || now.Sub(r.lastStaleLog) < time.Hour {
+		return
+	}
+	r.lastStaleLog = now
+	r.log.ErrorContext(ctx, "the active signing key is far older than the rotation period: rotation is failing "+
+		"(KMS or State errors, or the key-generation lease is stuck); it keeps signing meanwhile",
+		"kid", e.ID, "algorithm", string(r.alg), "age", age.Round(time.Minute), "rotateEvery", h.rotateEvery)
 }
