@@ -169,7 +169,10 @@ type WrappedSigningArgs struct {
 	// the library creates no key and leaves its policy alone, and the estate MUST
 	// merge WrappedKeyPolicyStatements into it (docs/deployment/aws.md): without
 	// it any principal that may kms:Decrypt on the key can unwrap a signing key
-	// read from the State and forge tokens.
+	// read from the State and forge tokens. A multi-Region key (mrk-...) is
+	// accepted: the statements go in EVERY replica's key policy, since a wrapped
+	// key made with the primary decrypts on any replica. Principals with
+	// kms:PutKeyPolicy on a shared key are inside the signing trust boundary.
 	KeyArn pulumi.StringInput
 	// AdditionalSigningRoleArns are the roles beside the http function's that
 	// sign with the key, for the key policy: the Kubernetes serve role, when
@@ -844,7 +847,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 		return functionPolicy(functionPolicyIn{
 			role: role, region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), wrappedSigning: a.WrappedSigning != nil, signingKeyArns: stringsOf(v[6:]),
+			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
 			parameterKeyArn:    a.ParameterKeyArn,
 			invokeFunctionArns: []string{githubArn, slackArn},
 			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,

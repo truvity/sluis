@@ -483,7 +483,7 @@ to the role later does not widen what it can do with the key:
 | Sid | Effect | Principal | Action | Condition |
 |---|---|---|---|---|
 | `EnableIAMPolicies` | Allow | the account root | `kms:*` | none (IAM policies govern the key, and key administration is the account's) |
-| `SluisSigningContextReserved` | Deny | `*` | `kms:Decrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKeyPair*`, `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:CreateGrant` | `kms:EncryptionContext:purpose` is `sluis-signing`, and `aws:PrincipalArn` is **not** one of the signing roles (the http role, and `WrappedSigning.AdditionalSigningRoleArns`, the Kubernetes serve role) |
+| `SluisSigningContextReserved` | Deny | `*` | `kms:Decrypt`, `kms:Encrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKey*`, `kms:CreateGrant` | `kms:EncryptionContext:purpose` is `sluis-signing`, and `aws:PrincipalArn` is **not** one of the signing roles (the http role, and `WrappedSigning.AdditionalSigningRoleArns`, the Kubernetes serve role) |
 | `SluisSigningRolePurposeOnly` | Deny | `*` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | `aws:PrincipalArn` is a signing role, and `kms:EncryptionContext:purpose` is not `sluis-signing` |
 | `SluisSigningRoleContextKeysOnly` | Deny | `*` | the same two | a signing role, and `ForAnyValue:StringNotEquals kms:EncryptionContextKeys` `["purpose","alg","kid"]` |
 | `SluisSigningRoleNothingElse` | Deny | `*` | `NotAction` the same two | a signing role |
@@ -491,20 +491,56 @@ to the role later does not widen what it can do with the key:
 The roles are named in a condition, not as principals, so the key can exist
 before the roles.
 
-**MANDATORY when `KeyArn` is shared:** merge this statement into the key's policy
-(the library puts it in the key it creates):
+**MANDATORY when `KeyArn` is shared:** merge these four statements into the key's
+policy, beside whatever it already has (the library puts the same four in the key
+it creates; `sluispulumi.WrappedKeyPolicyStatements(roleArns)` returns them):
 
 ```json
-{
-  "Sid": "SluisSigningContextReserved", "Effect": "Deny", "Principal": {"AWS": "*"}, "Resource": "*",
-  "Action": ["kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKeyPair*",
-             "kms:GenerateDataKeyPairWithoutPlaintext", "kms:CreateGrant"],
-  "Condition": {
-    "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
-    "ArnNotEquals": {"aws:PrincipalArn": ["<the http role's ARN>", "<the Kubernetes serve role's ARN, if it signs>"]}
+[
+  {
+    "Sid": "SluisSigningContextReserved", "Effect": "Deny", "Principal": {"AWS": "*"}, "Resource": "*",
+    "Action": ["kms:Decrypt", "kms:Encrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant"],
+    "Condition": {
+      "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
+      "ArnNotEquals": {"aws:PrincipalArn": ["<the http role's ARN>", "<the Kubernetes serve role's ARN, if it signs>"]}
+    }
+  },
+  {
+    "Sid": "SluisSigningRolePurposeOnly", "Effect": "Deny", "Principal": {"AWS": "*"}, "Resource": "*",
+    "Action": ["kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"],
+    "Condition": {
+      "ArnEquals": {"aws:PrincipalArn": ["<the same signing role ARNs>"]},
+      "StringNotEquals": {"kms:EncryptionContext:purpose": "sluis-signing"}
+    }
+  },
+  {
+    "Sid": "SluisSigningRoleContextKeysOnly", "Effect": "Deny", "Principal": {"AWS": "*"}, "Resource": "*",
+    "Action": ["kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"],
+    "Condition": {
+      "ArnEquals": {"aws:PrincipalArn": ["<the same signing role ARNs>"]},
+      "ForAnyValue:StringNotEquals": {"kms:EncryptionContextKeys": ["purpose", "alg", "kid"]}
+    }
+  },
+  {
+    "Sid": "SluisSigningRoleNothingElse", "Effect": "Deny", "Principal": {"AWS": "*"}, "Resource": "*",
+    "NotAction": ["kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"],
+    "Condition": {"ArnEquals": {"aws:PrincipalArn": ["<the same signing role ARNs>"]}}
   }
-}
+]
 ```
+
+The last three name only the signing roles, so they confine those roles to the two
+calls and the one context on this key and touch no other principal. (`Encrypt`
+and `GenerateDataKey*` are in the first so that no other principal can mint a
+ciphertext of a key it chose under the signing context.)
+
+**Trust boundary of a shared key.** A principal with `kms:PutKeyPolicy` on the
+key (its OpenBao or Pulumi administrators) can remove these statements, so they
+are inside the signing trust boundary. **A multi-Region key** needs the
+statements in the key policy of EVERY replica: a wrapped key made with the
+primary decrypts on any replica, and each replica's policy is its own. The
+library accepts a `KeyArn` that names an `mrk-` key and does not touch any
+replica's policy.
 
 Why this is sufficient on a shared key: a wrapped signing key's ciphertext is
 bound to its encryption context, so decrypting it needs a request that presents
@@ -514,8 +550,8 @@ presents that purpose, so no one else can ever unwrap a signing key. The other
 users of the key (an unseal, a secrets provider) present no context or different
 ones, never `purpose=sluis-signing`, and are untouched. The signing roles'
 own denials (above) keep them to that context in the other direction.
-**Writes to the key ring.** With `WrappedSigning` (and with
-`KubernetesIdentityArgs.WrappedSigningKeyArn`) the github and slack roles carry
+**Writes to the key ring.** The github and slack roles always carry (with
+remote signing too; the Kubernetes identity's non-serve roles with a State)
 `SluisNoKeyringWrites`: a Deny of `PutItem`, `UpdateItem`, `DeleteItem` and
 `BatchWriteItem` on the table when `dynamodb:LeadingKeys` is `keyring`,
 `keyring-index` or `keyring-retired`. Only the signing roles may write them. The
@@ -531,8 +567,20 @@ the gauge `access_issuer.signing_key.active_since_timestamp`
 the age. Alert on
 `time() - max by (algorithm) (access_issuer_signing_key_active_since_timestamp_seconds) > rotateEvery + prepublish + margin`
 (26h for the defaults). The chart's `AccessRosterSigningKeyRotationStalled` rule
-is this rule, with `alerts.rules.signingKeyRotationStalled.maxAgeSeconds`: set
-it to `93600` for a 24h rotation.
+is this rule, with `alerts.rules.signingKeyRotationStalled.maxAgeSeconds`. Its
+default (350 days) is for certificate keys, and the chart cannot see the signing
+mode, so for wrapped signing **set it to `rotateEvery + prepublish + margin`**:
+`93600` (26h) for the defaults. A Lambda deployment has no chart; paste this into
+vmalert (or a PrometheusRule), with the cluster label of your store:
+
+```yaml
+- alert: SluisWrappedSigningKeyRotationStalled
+  expr: time() - max by (algorithm) (access_issuer_signing_key_active_since_timestamp_seconds) > 93600
+  for: 15m
+  labels: {severity: warning}
+  annotations:
+    summary: 'The {{ $labels.algorithm }} signing key has been active for {{ $value | humanizeDuration }}: rotation is failing'
+```
 
 **Known limits** (follow-ups, not in this release):
 

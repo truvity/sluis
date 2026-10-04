@@ -924,8 +924,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 	// would otherwise let any role with kms:Decrypt unwrap a key read from the State.
 	res := byID["SluisSigningContextReserved"]
 	if res == nil || res["Effect"] != "Deny" || !reflect.DeepEqual(res["Principal"], map[string]any{"AWS": "*"}) ||
-		!reflect.DeepEqual(strs(res["Action"]), []string{"kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKeyPair*",
-			"kms:GenerateDataKeyPairWithoutPlaintext", "kms:CreateGrant"}) ||
+		!reflect.DeepEqual(strs(res["Action"]), []string{"kms:Decrypt", "kms:Encrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant"}) ||
 		!reflect.DeepEqual(res["Condition"], map[string]any{
 			"StringEquals": map[string]any{"kms:EncryptionContext:purpose": "sluis-signing"},
 			"ArnNotEquals": map[string]any{"aws:PrincipalArn": []any{roleArn}},
@@ -1081,14 +1080,45 @@ func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
 	}
 }
 
-func TestTheSharedKeyStatementsAreExported(t *testing.T) {
+func TestTheSharedKeyStatementsAreTheWholeOfTheKeyPolicyBeyondTheRootStatement(t *testing.T) {
 	roles := []string{arnp + "iam::" + account + ":role/sluis-http"}
 	st := arp.WrappedKeyPolicyStatements(roles)
-	if len(st) != 1 || st[0]["Effect"] != "Deny" || st[0]["Sid"] != "SluisSigningContextReserved" {
-		t.Fatalf("%v", st)
+	var sids []string
+	for _, s := range st {
+		sids = append(sids, s["Sid"].(string))
+		if s["Effect"] != "Deny" {
+			t.Errorf("%v is not a denial", s["Sid"])
+		}
 	}
-	cond := st[0]["Condition"].(map[string]any)
-	if !reflect.DeepEqual(cond["ArnNotEquals"], map[string]any{"aws:PrincipalArn": roles}) {
-		t.Errorf("%v", cond)
+	want := []string{"SluisSigningContextReserved", "SluisSigningRolePurposeOnly", "SluisSigningRoleContextKeysOnly", "SluisSigningRoleNothingElse"}
+	if !reflect.DeepEqual(sids, want) {
+		t.Fatalf("statements %v, want %v", sids, want)
+	}
+	// What the library creates is the root statement and exactly these.
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }})
+	k := rec.one(t, "aws:kms/key:Key", "kernel-signing-key-wrapped")
+	got := statements(t, prop(k, "policy").StringValue())
+	if len(got) != 1+len(st) {
+		t.Errorf("the created key has %d statements", len(got))
+	}
+	// The three role denials name only the signing roles; the reserved denial is
+	// the only one that reaches other principals, and only under the signing context.
+	for _, s := range st[1:] {
+		if s["Condition"].(map[string]any)["ArnEquals"] == nil {
+			t.Errorf("%v reaches principals that are not signing roles", s["Sid"])
+		}
+	}
+}
+
+func TestTheControllersNeverWriteTheKeyRingWhateverTheSigning(t *testing.T) {
+	rec, _ := mustLambda(t, estate{}) // remote signing
+	for _, r := range []string{"http", "github", "slack"} {
+		has := false
+		for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
+			has = has || st["Sid"] == "SluisNoKeyringWrites"
+		}
+		if has != (r != "http") {
+			t.Errorf("%s: keyring-write denial %v", r, has)
+		}
 	}
 }
