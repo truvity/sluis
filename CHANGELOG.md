@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.60.0
+
+Storage layout v2 moves DynamoDB items to a per-kind table partition, SSM configs to a /config prefix, and exports to Secrets; re-migrate from legacy.
+
 ### Changed
 
 - **Layout change for the non-legacy adapters (storage layout v2): re-migrate from legacy.**
