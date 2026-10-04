@@ -2,8 +2,8 @@
 // wrapping today's storage exactly: the Kubernetes ConfigMaps and Secrets of
 // internal/kube and the Valkey of internal/valkey. It exists so that the
 // service can depend on the ports before the data moves (ADR 0031); it is
-// deleted when the migration has run and the NATS and DynamoDB adapters
-// carry the layout of docs/design/ports.md.
+// deleted when the migration has run and the DynamoDB adapter
+// carries the layout of docs/design/ports.md.
 //
 // Nothing here changes what is written where. The data model today is
 // per-domain objects, not a key-value store, so each port key is mapped onto
@@ -54,9 +54,6 @@
 //     sealed App key" is two objects here.
 //   - Trigger delivers within this process only. Cross-process ticks are the
 //     controllers' own polling interval, as today.
-//   - Sealer is [port.ErrUnsupported]: nothing is sealed today (the
-//     credentials are Secrets), and a process-local key would produce
-//     envelopes no other process or restart could open.
 //   - Index (a set) is carried by the port only for this adapter and the
 //     in-memory one; see [port.Index].
 package legacy
@@ -108,7 +105,6 @@ func (b *Backend) Ports(o Options) port.Set {
 		Index:    Index{b: b},
 		Blob:     &Blob{b: b, ttl: o.SnapshotTTL},
 		Trigger:  memory.NewTrigger(),
-		Sealer:   Sealer{},
 		Identity: Identity{review: b.ReviewToken},
 	}
 }
@@ -122,19 +118,6 @@ func unavailable(err error) error {
 		return err
 	}
 	return fmt.Errorf("%w: %w", port.ErrUnavailable, err)
-}
-
-// Sealer is [port.Sealer] where nothing is sealed.
-type Sealer struct{}
-
-// Wrap implements [port.Sealer].
-func (Sealer) Wrap(context.Context, []byte, string) (port.Wrapped, error) {
-	return port.Wrapped{}, unsupported("the legacy storage seals nothing: credentials are Secrets")
-}
-
-// Unwrap implements [port.Sealer].
-func (Sealer) Unwrap(context.Context, port.Wrapped, string) ([]byte, error) {
-	return nil, unsupported("the legacy storage seals nothing: credentials are Secrets")
 }
 
 // Identity is [port.Identity] over the cluster's TokenReview.

@@ -217,10 +217,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	switch {
 	case stores.Adapter != store.AdapterLegacy:
 		// Any adapter but `legacy` keeps the links, the organisations'
-		// credentials and the operators' requests on the State port, sealed,
+		// credentials and the operators' requests on the State and Secrets ports,
 		// and the controller reads them there.
 		base := portstore.New(stores.Ports)
-		if err = base.CheckSealer(ctx); err != nil {
+		if err = base.CheckSecrets(ctx); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)
 		}

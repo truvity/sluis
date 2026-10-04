@@ -25,7 +25,7 @@ const (
 func wsSlackKey(workspace string) string { return wsSlackPrefix + seg(workspace) }
 
 // SlackWorkspaces keeps connected Slack workspaces: `ws.slack.<workspace>`
-// holds the record and the sealed credential in one item, which is also what
+// holds the record, with the credential in Secrets, which is also what
 // the kube store's recovery mirror existed for: the one item is the whole
 // connection, so there is no second copy to reconcile. It is a
 // server.SlackWorkspaces.
@@ -49,12 +49,12 @@ func (s *SlackWorkspaces) Put(ctx context.Context, record connection.Record, cre
 		return err
 	}
 	key := wsSlackKey(record.Workspace)
-	sealed, err := s.b.seal(ctx, key, rawCredential)
+	ref, err := s.b.newSecret(ctx, key, rawCredential)
 	if err != nil {
 		return err
 	}
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) {
-		return &item{Record: json.RawMessage(rawRecord), Sealed: sealed}, nil
+		return &item{Record: json.RawMessage(rawRecord), Secret: ref}, nil
 	})
 }
 
@@ -79,7 +79,7 @@ func (s *SlackWorkspaces) SetOwner(ctx context.Context, workspace, owner string)
 		if err != nil {
 			return nil, err
 		}
-		return &item{Record: json.RawMessage(raw), Sealed: cur.Sealed}, nil
+		return &item{Record: json.RawMessage(raw), Secret: cur.Secret}, nil
 	})
 	return previous, found && err == nil, err
 }
@@ -109,10 +109,10 @@ func (s *SlackWorkspaces) List(ctx context.Context) ([]connection.Record, error)
 func (s *SlackWorkspaces) Get(ctx context.Context, workspace string) (connection.Record, connection.Credential, bool, error) {
 	key := wsSlackKey(workspace)
 	it, err := s.b.getItem(ctx, key)
-	if err != nil || it == nil || len(it.Sealed) == 0 {
+	if err != nil || it == nil || it.Secret == "" {
 		return connection.Record{}, connection.Credential{}, false, err
 	}
-	plain, err := s.b.open(ctx, key, it.Sealed)
+	plain, err := s.b.getSecret(ctx, key, it.Secret)
 	if err != nil {
 		return connection.Record{}, connection.Credential{}, false, err
 	}
@@ -129,7 +129,7 @@ func (s *SlackWorkspaces) Get(ctx context.Context, workspace string) (connection
 
 // Delete forgets one workspace, its confirmations and its pass request.
 func (s *SlackWorkspaces) Delete(ctx context.Context, workspace string) error {
-	if err := s.b.State.Delete(ctx, wsSlackKey(workspace)); err != nil {
+	if err := s.b.deleteItem(ctx, wsSlackKey(workspace)); err != nil {
 		return err
 	}
 	prefix := slackGatePrefix + seg(workspace) + "."

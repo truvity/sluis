@@ -35,8 +35,8 @@ jobs:
       policy-conformance-strict: true
       recipes: '["build","test","lint","chart-lint","telemetry","archive-check","docs-check","leak-canary","audit-catalogue","ts","console","pulumi-test"]'
 
-  # The S3 Blob, KMS Sealer and DynamoDB State adapters against a real S3, KMS
-  # and DynamoDB API. The image
+  # The S3 Blob and DynamoDB State adapters against a real S3 and DynamoDB
+  # API. The image
   # is pinned by digest (see `s3_image` in the Justfile, which `just test-s3`
   # uses locally: keep the two equal). The script fails when a conformance test
   # skipped or did not run, so an endpoint that stopped reaching the tests cannot

@@ -12,7 +12,6 @@ import (
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/hub"
-	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/portstore/portstoretest"
 	"github.com/truvity/sluis/internal/store"
 )
@@ -41,11 +40,11 @@ func TestTheLegacyAdapterKeepsTheDomainStoresItAlwaysHad(t *testing.T) {
 }
 
 // Any other adapter keeps them on the ports, and every replica of the service
-// sees the same stores, the same sealed credentials and the same session key.
+// sees the same stores, the same credentials and the same session key.
 func TestAnyOtherAdapterKeepsTheDomainStoresOnThePorts(t *testing.T) {
 	portstoretest.Each(t, func(t *testing.T, e portstoretest.Env) {
 		open := func() app.KeptForTest {
-			st := &store.Stores{Ports: e.Open(t), Adapter: store.AdapterNATS, Shared: true, Usable: true}
+			st := &store.Stores{Ports: e.Open(t), Adapter: store.AdapterDynamoDB, Shared: true, Usable: true}
 			kept, err := app.OpenStoresForTest(context.Background(), serveConfig(t), st, quiet)
 			if err != nil {
 				t.Fatal(err)
@@ -75,25 +74,15 @@ func TestAnyOtherAdapterKeepsTheDomainStoresOnThePorts(t *testing.T) {
 	})
 }
 
-type noSealer struct{}
-
-func (noSealer) Wrap(context.Context, []byte, string) (port.Wrapped, error) {
-	return port.Wrapped{}, port.ErrUnsupported
-}
-
-func (noSealer) Unwrap(context.Context, port.Wrapped, string) ([]byte, error) {
-	return nil, port.ErrUnsupported
-}
-
-// An adapter with no Sealer (the legacy one's, and NATS's without ports.sealer)
-// stops the start naming the setting, instead of failing on the first
-// credential an operator connects.
-func TestAnAdapterWithNoSealerStopsTheStartNamingTheSetting(t *testing.T) {
-	set := portstoretest.Envs(t)[2].Open(t)
-	set.Sealer = noSealer{}
-	_, err := app.OpenStoresForTest(context.Background(), serveConfig(t), &store.Stores{Ports: set, Adapter: store.AdapterNATS}, quiet)
-	if err == nil || !strings.Contains(err.Error(), "ports.sealer") {
-		t.Errorf("err = %v, want a refusal that names ports.sealer", err)
+// An adapter set with no Secrets (the legacy one's, and DynamoDB's until a
+// secrets adapter is chosen) stops the start naming the setting, instead of
+// failing on the first credential an operator connects.
+func TestAnAdapterWithNoSecretsStopsTheStartNamingTheSetting(t *testing.T) {
+	set := portstoretest.Envs(t)[0].Open(t)
+	set.Secrets = nil
+	_, err := app.OpenStoresForTest(context.Background(), serveConfig(t), &store.Stores{Ports: set, Adapter: store.AdapterDynamoDB}, quiet)
+	if err == nil || !strings.Contains(err.Error(), "secrets adapter") {
+		t.Errorf("err = %v, want a refusal that names the secrets adapter", err)
 	}
 }
 

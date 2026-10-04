@@ -2,7 +2,7 @@
 // the secret store a consumer reads (docs/decisions/0034).
 //
 // The service keeps a Slack App's bot token, a runner App's key, a connected
-// workspace's credential in State, sealed. A program that must act as the App
+// workspace's credential in Secrets. A program that must act as the App
 // when the service is not there to ask (Alertmanager posting as the Slack
 // bot, a runner scale set registering with its App) reads a copy from OpenBao
 // instead, and so do the disaster-recovery backups. This package keeps those

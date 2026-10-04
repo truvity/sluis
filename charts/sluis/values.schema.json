@@ -80,23 +80,6 @@
               "if": {
                 "properties": {
                   "adapter": {
-                    "const": "nats"
-                  }
-                },
-                "required": [
-                  "adapter"
-                ]
-              },
-              "then": {
-                "required": [
-                  "nats"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "adapter": {
                     "const": "dynamodb"
                   }
                 },
@@ -115,11 +98,10 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`. `nats` keeps State, the session index and the trigger in a NATS JetStream KV bucket (`ports.nats`), shared by every replica and process; its Blob and Sealer are `legacy`'s unless `ports.blob` and `ports.sealer` name their own. `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob and Sealer from `legacy` in the same way.",
+              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",
-                "nats",
                 "dynamodb"
               ]
             },
@@ -219,110 +201,6 @@
               },
               "required": [
                 "table"
-              ],
-              "type": "object"
-            },
-            "nats": {
-              "additionalProperties": false,
-              "description": "The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.",
-              "properties": {
-                "bucket": {
-                  "default": "sluis",
-                  "description": "The KV bucket.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "caFile": {
-                  "description": "A PEM bundle of the authorities that sign the server's certificate, when the system's do not.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "create": {
-                  "default": true,
-                  "description": "Create or update the bucket at start. Off binds to a bucket that exists, for an identity that may not manage streams.",
-                  "type": "boolean"
-                },
-                "credsFile": {
-                  "description": "A NATS credentials file. Alternative to `tokenFile`.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "replicas": {
-                  "default": 3,
-                  "description": "The bucket's replica count, applied when the bucket is created.",
-                  "maximum": 5,
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "tokenFile": {
-                  "description": "This pod's projected ServiceAccount token, presented as the NATS token for the auth callout to validate, and read afresh on every connect. Alternative to `credsFile`.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "url": {
-                  "description": "The server list, comma separated: `nats://host:4222`, or `tls://` for TLS.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "url"
-              ],
-              "type": "object"
-            },
-            "sealer": {
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "adapter": {
-                        "const": "kms"
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "kms"
-                    ]
-                  }
-                }
-              ],
-              "description": "Replaces the Sealer port (wraps the data key of a sealed secret) with an adapter of its own, whatever `ports.adapter` is. Absent, the Sealer is `ports.adapter`'s.",
-              "properties": {
-                "adapter": {
-                  "description": "`kms` wraps data keys with AWS KMS.",
-                  "enum": [
-                    "kms"
-                  ]
-                },
-                "kms": {
-                  "additionalProperties": false,
-                  "description": "The key the KMS adapter wraps under. Credentials are the platform's and are never configured here. The role needs `kms:Encrypt` and `kms:Decrypt` on the key; every unwrap is a `kms:Decrypt` that CloudTrail records.",
-                  "properties": {
-                    "endpoint": {
-                      "$ref": "#/definitions/config-controller-github.url",
-                      "description": "Overrides the KMS address: LocalStack."
-                    },
-                    "keyId": {
-                      "description": "A key id, key ARN or alias (`alias/name`).",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "region": {
-                      "description": "The key's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "keyId"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
               ],
               "type": "object"
             }
@@ -461,23 +339,6 @@
               "if": {
                 "properties": {
                   "adapter": {
-                    "const": "nats"
-                  }
-                },
-                "required": [
-                  "adapter"
-                ]
-              },
-              "then": {
-                "required": [
-                  "nats"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "adapter": {
                     "const": "dynamodb"
                   }
                 },
@@ -496,11 +357,10 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`. `nats` keeps State, the session index and the trigger in a NATS JetStream KV bucket (`ports.nats`), shared by every replica and process; its Blob and Sealer are `legacy`'s unless `ports.blob` and `ports.sealer` name their own. `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob and Sealer from `legacy` in the same way.",
+              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",
-                "nats",
                 "dynamodb"
               ]
             },
@@ -600,110 +460,6 @@
               },
               "required": [
                 "table"
-              ],
-              "type": "object"
-            },
-            "nats": {
-              "additionalProperties": false,
-              "description": "The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.",
-              "properties": {
-                "bucket": {
-                  "default": "sluis",
-                  "description": "The KV bucket.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "caFile": {
-                  "description": "A PEM bundle of the authorities that sign the server's certificate, when the system's do not.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "create": {
-                  "default": true,
-                  "description": "Create or update the bucket at start. Off binds to a bucket that exists, for an identity that may not manage streams.",
-                  "type": "boolean"
-                },
-                "credsFile": {
-                  "description": "A NATS credentials file. Alternative to `tokenFile`.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "replicas": {
-                  "default": 3,
-                  "description": "The bucket's replica count, applied when the bucket is created.",
-                  "maximum": 5,
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "tokenFile": {
-                  "description": "This pod's projected ServiceAccount token, presented as the NATS token for the auth callout to validate, and read afresh on every connect. Alternative to `credsFile`.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "url": {
-                  "description": "The server list, comma separated: `nats://host:4222`, or `tls://` for TLS.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "url"
-              ],
-              "type": "object"
-            },
-            "sealer": {
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "adapter": {
-                        "const": "kms"
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "kms"
-                    ]
-                  }
-                }
-              ],
-              "description": "Replaces the Sealer port (wraps the data key of a sealed secret) with an adapter of its own, whatever `ports.adapter` is. Absent, the Sealer is `ports.adapter`'s.",
-              "properties": {
-                "adapter": {
-                  "description": "`kms` wraps data keys with AWS KMS.",
-                  "enum": [
-                    "kms"
-                  ]
-                },
-                "kms": {
-                  "additionalProperties": false,
-                  "description": "The key the KMS adapter wraps under. Credentials are the platform's and are never configured here. The role needs `kms:Encrypt` and `kms:Decrypt` on the key; every unwrap is a `kms:Decrypt` that CloudTrail records.",
-                  "properties": {
-                    "endpoint": {
-                      "$ref": "#/definitions/config-controller-slack.url",
-                      "description": "Overrides the KMS address: LocalStack."
-                    },
-                    "keyId": {
-                      "description": "A key id, key ARN or alias (`alias/name`).",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "region": {
-                      "description": "The key's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "keyId"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
               ],
               "type": "object"
             }
@@ -1459,23 +1215,6 @@
               "if": {
                 "properties": {
                   "adapter": {
-                    "const": "nats"
-                  }
-                },
-                "required": [
-                  "adapter"
-                ]
-              },
-              "then": {
-                "required": [
-                  "nats"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "adapter": {
                     "const": "dynamodb"
                   }
                 },
@@ -1494,11 +1233,10 @@
           "properties": {
             "adapter": {
               "default": "legacy",
-              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`. `nats` keeps State, the session index and the trigger in a NATS JetStream KV bucket (`ports.nats`), shared by every replica and process; its Blob and Sealer are `legacy`'s unless `ports.blob` and `ports.sealer` name their own. `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob and Sealer from `legacy` in the same way.",
+              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
               "enum": [
                 "legacy",
                 "memory",
-                "nats",
                 "dynamodb"
               ]
             },
@@ -1711,110 +1449,6 @@
                   "required": [
                     "address",
                     "auth"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "nats": {
-              "additionalProperties": false,
-              "description": "The JetStream bucket of the `nats` adapter. Requires nats-server 2.11 or later for per-key TTL; an older server works with expiry judged on read only.",
-              "properties": {
-                "bucket": {
-                  "default": "sluis",
-                  "description": "The KV bucket.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "caFile": {
-                  "description": "A PEM bundle of the authorities that sign the server's certificate, when the system's do not.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "create": {
-                  "default": true,
-                  "description": "Create or update the bucket at start. Off binds to a bucket that exists, for an identity that may not manage streams.",
-                  "type": "boolean"
-                },
-                "credsFile": {
-                  "description": "A NATS credentials file. Alternative to `tokenFile`.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "replicas": {
-                  "default": 3,
-                  "description": "The bucket's replica count, applied when the bucket is created.",
-                  "maximum": 5,
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "tokenFile": {
-                  "description": "This pod's projected ServiceAccount token, presented as the NATS token for the auth callout to validate, and read afresh on every connect. Alternative to `credsFile`.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "url": {
-                  "description": "The server list, comma separated: `nats://host:4222`, or `tls://` for TLS.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "url"
-              ],
-              "type": "object"
-            },
-            "sealer": {
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "adapter": {
-                        "const": "kms"
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "kms"
-                    ]
-                  }
-                }
-              ],
-              "description": "Replaces the Sealer port (wraps the data key of a sealed secret) with an adapter of its own, whatever `ports.adapter` is. Absent, the Sealer is `ports.adapter`'s.",
-              "properties": {
-                "adapter": {
-                  "description": "`kms` wraps data keys with AWS KMS.",
-                  "enum": [
-                    "kms"
-                  ]
-                },
-                "kms": {
-                  "additionalProperties": false,
-                  "description": "The key the KMS adapter wraps under. Credentials are the platform's and are never configured here. The role needs `kms:Encrypt` and `kms:Decrypt` on the key; every unwrap is a `kms:Decrypt` that CloudTrail records.",
-                  "properties": {
-                    "endpoint": {
-                      "$ref": "#/definitions/config-serve.url",
-                      "description": "Overrides the KMS address: LocalStack."
-                    },
-                    "keyId": {
-                      "description": "A key id, key ARN or alias (`alias/name`).",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "region": {
-                      "description": "The key's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "keyId"
                   ],
                   "type": "object"
                 }
@@ -2666,7 +2300,7 @@
           "type": "object"
         },
         "replicas": {
-          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1.",
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `dynamodb`. The chart refuses it otherwise. Default 1.",
           "minimum": 1,
           "type": "integer"
         },
@@ -2747,7 +2381,7 @@
           "type": "object"
         },
         "replicas": {
-          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1.",
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `dynamodb`. The chart refuses it otherwise. Default 1.",
           "minimum": 1,
           "type": "integer"
         },

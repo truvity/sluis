@@ -6,8 +6,8 @@
 // business rule (ADR 0024: a port, not a framework). The adapters are
 // internal/port/memory (tests, the demonstration) and internal/port/legacy
 // (today's ConfigMaps, Secrets and Valkey, until the migration of ADR 0031
-// has run), internal/port/nats (State, Index and Trigger on JetStream KV) and
-// internal/port/dynamodb (the same on one DynamoDB table). internal/port/porttest
+// has run) and internal/port/dynamodb (State, Index and Trigger on one
+// DynamoDB table). internal/port/porttest
 // is the conformance suite every adapter passes.
 package port
 
@@ -34,9 +34,6 @@ var (
 	// ErrUnavailable is the store being down or answering something this
 	// package has no name for. Adapters wrap the cause.
 	ErrUnavailable = errors.New("port: store unavailable")
-	// ErrUnwrap is a wrapped key that this key-encryption key did not wrap,
-	// opened under a wrong context, or whose key is revoked.
-	ErrUnwrap = errors.New("port: cannot unwrap")
 	// ErrNoLifetime is a write with no lifetime to a key the layout does not
 	// mark permanent.
 	ErrNoLifetime = errors.New("port: the key needs a lifetime")
@@ -171,20 +168,6 @@ type Trigger interface {
 	Subscribe(handler func(target string)) (stop func())
 }
 
-// Wrapped is a data key wrapped by a key-encryption key.
-type Wrapped struct {
-	KeyID string
-	Blob  []byte
-}
-
-// Sealer wraps and unwraps the data key of a sealed secret. The binding
-// (the record's key and kind) is authenticated, so a sealed value copied
-// under another key does not open.
-type Sealer interface {
-	Wrap(ctx context.Context, dataKey []byte, binding string) (Wrapped, error)
-	Unwrap(ctx context.Context, wrapped Wrapped, binding string) ([]byte, error)
-}
-
 // Identity proves a workload to the service: it verifies a bearer token
 // minted for one of the audiences and returns the subject it proves. It is
 // the seam over the existing verifiers (ServiceAccount TokenReview, the
@@ -200,7 +183,6 @@ type Set struct {
 	Index    Index
 	Blob     Blob
 	Trigger  Trigger
-	Sealer   Sealer
 	Identity Identity
 	// Secrets is the store of dynamic secrets and exports. It is nil until
 	// an adapter for the secrets concern is chosen.

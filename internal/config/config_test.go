@@ -344,21 +344,16 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 			t.Errorf("adapter %s was refused: %v", adapter, err)
 		}
 	}
-	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: nats}\n")); err == nil {
-		t.Error("the nats adapter was accepted with no server named")
-	}
-	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: nats, nats: {bucket: b}}\n")); err == nil {
-		t.Error("a nats section with no url was accepted")
-	}
-	full := "ports:\n  adapter: nats\n  nats: {url: 'nats://n:4222', replicas: 3, tokenFile: /var/run/secrets/nats/token}\n"
-	if f, err := config.LoadServe(write(t, minimalIssuer+full)); err != nil {
-		t.Errorf("the nats adapter was refused: %v", err)
-	} else if f.Ports.NATS == nil || f.Ports.NATS.URL != "nats://n:4222" || f.Ports.NATS.TokenFile == "" {
-		t.Errorf("ports.nats = %+v", f.Ports.NATS)
-	}
-	withPassword := "ports: {adapter: nats, nats: {url: 'nats://n:4222', password: x}}\n"
-	if _, err := config.LoadServe(write(t, minimalIssuer+withPassword)); err == nil {
-		t.Error("a nats password in the file was accepted")
+	// The adapters that were retired are refused, naming nothing they hold.
+	for name, old := range map[string]string{
+		"the nats adapter":   "ports: {adapter: nats, nats: {url: 'nats://n:4222'}}\n",
+		"a nats section":     "ports: {adapter: memory, nats: {url: 'nats://n:4222'}}\n",
+		"a sealer":           "ports: {sealer: {adapter: kms, kms: {keyId: alias/ar}}}\n",
+		"a sealer of memory": "ports: {sealer: {adapter: memory}}\n",
+	} {
+		if _, err := config.LoadServe(write(t, minimalIssuer+old)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
 	}
 	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: dynamodb}\n")); err == nil {
 		t.Error("the dynamodb adapter was accepted with no table named")
@@ -386,30 +381,26 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 	}
 }
 
-// `ports.blob` and `ports.sealer` each name one adapter and its settings, and
-// compose with any `ports.adapter`.
-func TestThePortsBlobAndSealerAreChecked(t *testing.T) {
+// `ports.blob` names one adapter and its settings, and composes with any
+// `ports.adapter`.
+func TestThePortsBlobIsChecked(t *testing.T) {
 	good := minimalIssuer + `ports:
   adapter: legacy
   blob: {adapter: s3, s3: {bucket: b, prefix: ar, region: eu-west-1, kmsKey: alias/ar, endpoint: "http://localhost:4566", pathStyle: true}}
-  sealer: {adapter: kms, kms: {keyId: alias/ar, region: eu-west-1}}
 `
 	c, err := config.LoadServe(write(t, good))
 	if err != nil {
-		t.Fatalf("a Blob and a Sealer over the legacy State were refused: %v", err)
+		t.Fatalf("a Blob over the legacy State was refused: %v", err)
 	}
-	if c.Ports.Blob.S3.Bucket != "b" || !c.Ports.Blob.S3.PathStyle || c.Ports.Sealer.KMS.KeyID != "alias/ar" {
-		t.Errorf("decoded %+v %+v", c.Ports.Blob, c.Ports.Sealer)
+	if c.Ports.Blob.S3.Bucket != "b" || !c.Ports.Blob.S3.PathStyle {
+		t.Errorf("decoded %+v", c.Ports.Blob)
 	}
 	for name, bad := range map[string]string{
-		"an unknown blob adapter":   "ports: {blob: {adapter: gcs}}\n",
-		"s3 with no settings":       "ports: {blob: {adapter: s3}}\n",
-		"s3 with no bucket":         "ports: {blob: {adapter: s3, s3: {prefix: x}}}\n",
-		"an unknown s3 key":         "ports: {blob: {adapter: s3, s3: {bucket: b, accessKey: x}}}\n",
-		"an unknown sealer adapter": "ports: {sealer: {adapter: vault}}\n",
-		"kms with no settings":      "ports: {sealer: {adapter: kms}}\n",
-		"kms with no key":           "ports: {sealer: {adapter: kms, kms: {region: eu-west-1}}}\n",
-		"a blob with no adapter":    "ports: {blob: {s3: {bucket: b}}}\n",
+		"an unknown blob adapter": "ports: {blob: {adapter: gcs}}\n",
+		"s3 with no settings":     "ports: {blob: {adapter: s3}}\n",
+		"s3 with no bucket":       "ports: {blob: {adapter: s3, s3: {prefix: x}}}\n",
+		"an unknown s3 key":       "ports: {blob: {adapter: s3, s3: {bucket: b, accessKey: x}}}\n",
+		"a blob with no adapter":  "ports: {blob: {s3: {bucket: b}}}\n",
 	} {
 		if _, err := config.LoadServe(write(t, minimalIssuer+bad)); err == nil {
 			t.Errorf("%s was accepted", name)

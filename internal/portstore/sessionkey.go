@@ -11,19 +11,18 @@ import (
 const sessionKeyKey = "rec.console.session-key"
 
 // SessionKey returns the key the console signs its sessions with, creating it
-// the first time. It is sealed in State under one key, so every replica reads
-// the same one: the first writer wins the Create and the others read what it
-// wrote.
+// the first time. It is a secret, so every replica reads the same one: the
+// first writer wins the create and the others read what it wrote.
 func (b *Base) SessionKey(ctx context.Context, generate func() ([]byte, error)) ([]byte, error) {
+	if b.Secrets == nil {
+		return nil, errNoSecrets
+	}
+	path := secretPath(sessionKeyKey, "")
 	for range attempts {
-		rec, err := b.State.Get(ctx, sessionKeyKey)
+		got, err := b.Secrets.Get(ctx, path)
 		switch {
 		case err == nil:
-			key, oerr := b.open(ctx, sessionKeyKey, rec.Value)
-			if oerr != nil {
-				return nil, fmt.Errorf("portstore: open the session key: %w", oerr)
-			}
-			return key, nil
+			return got.Value, nil
 		case !errors.Is(err, port.ErrNotFound):
 			return nil, err
 		}
@@ -31,13 +30,9 @@ func (b *Base) SessionKey(ctx context.Context, generate func() ([]byte, error)) 
 		if err != nil {
 			return nil, err
 		}
-		sealed, err := b.seal(ctx, sessionKeyKey, key)
-		if err != nil {
-			return nil, err
-		}
-		if _, err = b.State.Create(ctx, sessionKeyKey, sealed, 0); err == nil {
+		if _, err = b.Secrets.PutIfVersion(ctx, path, key, ""); err == nil {
 			return key, nil
-		} else if !errors.Is(err, port.ErrExists) {
+		} else if !errors.Is(err, port.ErrConflict) {
 			return nil, err
 		}
 	}
@@ -47,30 +42,22 @@ func (b *Base) SessionKey(ctx context.Context, generate func() ([]byte, error)) 
 // PutSessionKey replaces the key the console signs its sessions with, which a
 // migration does when it carries the source's key over a different one.
 func (b *Base) PutSessionKey(ctx context.Context, key []byte) error {
-	sealed, err := b.seal(ctx, sessionKeyKey, key)
-	if err != nil {
-		return err
+	if b.Secrets == nil {
+		return errNoSecrets
 	}
-	_, err = b.State.Put(ctx, sessionKeyKey, sealed, 0)
+	_, err := b.Secrets.Put(ctx, secretPath(sessionKeyKey, ""), key)
 	return err
 }
 
-// CheckSealer proves the Sealer can seal and open, so that a deployment whose
-// adapter has none (the legacy one, whose Sealer is refused on purpose) stops
-// at start naming the setting, instead of failing on the first credential an
-// operator connects.
-func (b *Base) CheckSealer(ctx context.Context) error {
-	const probe = "rec.console.probe"
-	sealed, err := b.seal(ctx, probe, []byte("probe"))
-	if err == nil {
-		var plain []byte
-		if plain, err = b.open(ctx, probe, sealed); err == nil && string(plain) != "probe" {
-			err = errors.New("the sealer opened another value than it sealed")
-		}
+// CheckSecrets proves the Secrets port is there and answers, so that a
+// deployment whose adapters have none stops at start naming the setting,
+// instead of failing on the first credential an operator connects.
+func (b *Base) CheckSecrets(ctx context.Context) error {
+	if b.Secrets == nil {
+		return fmt.Errorf("credentials are kept in Secrets, and none is configured: choose a secrets adapter (adapters.secrets, or a preset): %w", errNoSecrets)
 	}
-	if err != nil {
-		return fmt.Errorf("the credentials are sealed before they are stored, and this adapter's Sealer cannot: "+
-			"set ports.sealer (for example kms): %w", err)
+	if _, err := b.Secrets.List(ctx, secretPrefix); err != nil {
+		return fmt.Errorf("the Secrets port does not answer: %w", err)
 	}
 	return nil
 }

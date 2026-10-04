@@ -372,7 +372,7 @@
         "replicas": {
           "type": "integer",
           "minimum": 1,
-          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1."
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `dynamodb`. The chart refuses it otherwise. Default 1."
         },
         "strategy": {
           "type": "object",
@@ -449,7 +449,7 @@
         "replicas": {
           "type": "integer",
           "minimum": 1,
-          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `nats` or `dynamodb`. The chart refuses it otherwise. Default 1."
+          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `dynamodb`. The chart refuses it otherwise. Default 1."
         },
         "strategy": {
           "type": "object",

@@ -37,7 +37,7 @@ func byID(t *testing.T, s *portstore.GitHubLinks, id int64) link.Link {
 	return link.Link{}
 }
 
-func TestALinkIsOneItemWithItsTokensSealed(t *testing.T) {
+func TestALinkIsOneItemWithItsTokensInSecrets(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		set := e.open(t)
 		s := portstore.NewGitHubLinks(portstore.New(set))

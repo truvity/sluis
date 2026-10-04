@@ -18,7 +18,7 @@ controllerGithub:
   config:
     consoleURL: http://sluis.default.svc:8080/console
     ports:
-      adapter: nats
-      nats:
-        url: nats://nats.nats.svc:4222
-        tokenFile: /var/run/nats/token
+      adapter: dynamodb
+      dynamodb:
+        table: sluis
+        region: eu-west-1

@@ -115,8 +115,6 @@ func TestConformance(t *testing.T) {
 			Skips: map[string]string{
 				"revisions/change-on-identical-rewrite": "a revision is the SHA-1 of the stored bytes: neither Valkey nor a " +
 					"ConfigMap entry keeps a version of a key, and adding one would change what is written",
-				"sealing/context": "nothing is sealed in today's storage (credentials are Secrets), and a " +
-					"process-local key would make envelopes no restart could open",
 			},
 		}
 	})

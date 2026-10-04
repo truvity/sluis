@@ -112,10 +112,9 @@ func call(ctx context.Context, portName, operation string) (context.Context, fun
 	}
 }
 
-// Set returns the ports with State, Index and Blob observed. Trigger, Sealer
-// and Identity are not: a trigger is a hint, and the other two are in-process
-// or are the identity provider's own latency, which the issuer's request
-// metrics already show.
+// Set returns the ports with State, Index and Blob observed. Trigger and
+// Identity are not: a trigger is a hint, and the identity provider's own
+// latency is already in the issuer's request metrics.
 func Set(s port.Set) port.Set {
 	if s.State != nil {
 		s.State = State(s.State)

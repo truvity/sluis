@@ -506,7 +506,7 @@ type stores struct {
 // prototype and catastrophic for a deployment, so it is never silent.
 func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (stores, error) {
 	// The one switch between the two storages: any adapter but `legacy` keeps
-	// the domain stores in State and seals their credentials. `legacy` keeps
+	// the domain records in State and their credentials in Secrets. `legacy` keeps
 	// today's ConfigMaps and Secrets, unchanged. A demonstration has fixed
 	// stores of its own and keeps them.
 	if st.Adapter != store.AdapterLegacy && !cfg.demo {
@@ -682,20 +682,20 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 }
 
 // openPortStores keeps the domain stores on the ports: records in State,
-// every credential sealed by the Sealer (internal/portstore). Nothing here is
+// every credential in Secrets (internal/portstore). Nothing here is
 // a ConfigMap or a Secret, so the cluster's objects are needed only for what
 // is still the cluster's: the token review, and the declared OAuth client
 // a deployment mounts, which is an input and not a record this service writes.
 func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (stores, error) {
 	base := portstore.New(st.Ports)
-	if err := base.CheckSealer(ctx); err != nil {
+	if err := base.CheckSecrets(ctx); err != nil {
 		return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
 	}
 	key, err := base.SessionKey(ctx, access.NewSessionKey)
 	if err != nil {
 		return stores{}, err
 	}
-	log.InfoContext(ctx, "keeping the domain records in the state port, credentials sealed",
+	log.InfoContext(ctx, "keeping the domain records in the state port, credentials in Secrets",
 		"adapter", st.Adapter, "shared", st.Shared)
 	out := stores{
 		workspaces:          portstore.NewWorkspaces(base),

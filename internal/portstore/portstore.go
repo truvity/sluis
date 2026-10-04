@@ -1,7 +1,7 @@
 // Package portstore keeps the domain stores (workspaces and their
 // credentials, GitHub organisations and their Apps, a person's GitHub link,
 // the Slack records) on the ports of internal/port: State for the records and
-// the Sealer for every secret.
+// Secrets for every credential.
 //
 // Each type here implements the interface the business code already names (a
 // hub.Store, a server.GitHubLinks, and so on), so nothing above it changes;
@@ -9,32 +9,36 @@
 // internal/kube by the adapter `ports.adapter` names. The layout is the one of
 // docs/design/ports.md:
 //
-//	ws.dir.<id>             a directory workspace: record, sealed credential
-//	ws.slack.<workspace>    a Slack workspace: record, sealed bot token
-//	gh.org.<org>            a GitHub organisation: record, sealed App key
-//	gh.link.<account>       a person's GitHub link, tokens sealed, ONE item
-//	app.gh.link             the link App: record, sealed client secret
-//	app.gh.runner.<tier>.<org>   a runner App: record, sealed key
-//	app.gh.cat.<id>         a catalogue GitHub App: record, sealed key
-//	app.slack.cat.<id>      a catalogue Slack App: record, sealed secrets
+//	ws.dir.<id>             a directory workspace: record, credential in Secrets
+//	ws.slack.<workspace>    a Slack workspace: record, bot token in Secrets
+//	gh.org.<org>            a GitHub organisation: record, App key in Secrets
+//	gh.link.<account>       a person's GitHub link, tokens in Secrets
+//	app.gh.link             the link App: record, client secret in Secrets
+//	app.gh.runner.<tier>.<org>   a runner App: record, key in Secrets
+//	app.gh.cat.<id>         a catalogue GitHub App: record, key in Secrets
+//	app.slack.cat.<id>      a catalogue Slack App: record, secrets in Secrets
 //	rec.slack.shared.<name> a Slack Connect channel definition
 //	rec.slack.channel.<workspace>.<name>   a console channel's record
-//	rec.console.session-key the console's session-signing key, sealed
+//	rec.console.session-key the console's session-signing key, in Secrets
 //	gate.github.<org>.confirm | .pass      held-once ledger entries
 //	gate.slack.<workspace>.confirm.<channel> | .pass
 //
-// A record and its credential are ONE item under one key, so they cannot
-// disagree and no recovery copy of either is needed. A credential is sealed
-// with [port.Seal] and the item's own key as the binding, so a sealed value
-// copied under another key does not open. Every update is a compare-and-swap
-// on the key's revision, retried against what a concurrent writer left; there
-// are no multi-key writes, and a flow that spans keys (a person claiming an
-// address another account held) is idempotent steps with a marker.
+// A credential is never written to State: it is a secret under
+// `private/<key>/<ref>` in the Secrets port (an SSM parameter in production),
+// and the item in State names it by its ref. A secret is written before the
+// item that names it, under a fresh ref, so a reader never finds a name without
+// its secret and a writer that loses the swap never replaces the winner's
+// secret; one it wrote for nothing is removed. Every update of State is a compare-and-swap on the
+// key's revision, retried against what a concurrent writer left; there are no
+// multi-key writes, and a flow that spans keys (a person claiming an address
+// another account held) is idempotent steps with a marker.
 package portstore
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,25 +59,28 @@ var errKeep = errors.New("portstore: keep")
 // attempts bounds a compare-and-swap loop.
 const attempts = 16
 
-// Base is what every store here shares: the State to write records into, the
-// Sealer for what must not be readable there, and the clock.
+// Base is what every store here shares: the State to write records into, Secrets
+// for what must not be readable there, and the clock.
 type Base struct {
-	State  port.State
-	Sealer port.Sealer
-	Now    func() time.Time
+	State   port.State
+	Secrets port.Secrets
+	Now     func() time.Time
 }
 
 // New returns the base over a set of ports.
 func New(set port.Set) *Base {
-	return &Base{State: set.State, Sealer: set.Sealer, Now: time.Now}
+	return &Base{State: set.State, Secrets: set.Secrets, Now: time.Now}
 }
 
-// item is a record with, beside it, one sealed secret. Both live under one
-// key, so a write changes both or neither.
+// item is a record with, beside it, the name of one secret kept in Secrets
+// under the item's key. The name and the record change in one write; the secret
+// is written first, under a name of its own (see [Base.newSecret]).
 type item struct {
 	Version int             `json:"v"`
 	Record  json.RawMessage `json:"record,omitempty"`
-	Sealed  []byte          `json:"sealed,omitempty"`
+	// Secret names the credential of the item in Secrets (see [Base.newSecret]);
+	// empty is none.
+	Secret string `json:"secret,omitempty"`
 }
 
 const itemVersion = 1
@@ -95,20 +102,90 @@ func encodeItem(it *item) []byte {
 	return raw
 }
 
-// seal encrypts plaintext for the key it is about to be written under.
-func (b *Base) seal(ctx context.Context, key string, plaintext []byte) ([]byte, error) {
-	if b.Sealer == nil {
-		return nil, errors.New("portstore: no Sealer: a secret is never written in the clear")
+// secretPrefix is where the credentials live in Secrets: `private/<key>/<ref>`,
+// the item's own key made a valid secret path by [secretPath], and the ref
+// the item names.
+const secretPrefix = "private/"
+
+// secretPath is the Secrets path of a credential of an item key. A key is
+// dot-separated segments written by [seg]; a segment holding '~' is not a
+// valid secret path segment, nor is an empty one or one that would be
+// mistaken for the rewritten form, so all of them become `u-` and the
+// segment's bytes in hex. The mapping is one to one. A ref, when there is one,
+// is a last segment of its own.
+func secretPath(key, ref string) string {
+	segs := strings.Split(key, ".")
+	for i, s := range segs {
+		if s == "" || strings.Contains(s, "~") || strings.HasPrefix(s, "u-") {
+			segs[i] = "u-" + fmt.Sprintf("%x", s)
+		}
 	}
-	return port.Seal(ctx, b.Sealer, plaintext, key)
+	p := secretPrefix + strings.Join(segs, ".")
+	if ref != "" {
+		p += "/" + ref
+	}
+	return p
 }
 
-// open reverses [Base.seal]; the key is the binding.
-func (b *Base) open(ctx context.Context, key string, sealed []byte) ([]byte, error) {
-	if b.Sealer == nil {
-		return nil, errors.New("portstore: no Sealer")
+var errNoSecrets = errors.New("portstore: no Secrets: a credential is never written in State")
+
+// newSecret writes a credential under a ref of its own and returns the ref,
+// for the item to name. A credential is never rewritten in place: a writer that
+// loses the compare-and-swap of the item has written a secret nobody names
+// (which [Base.editItem] removes), and cannot have replaced the one the
+// winner's item names. That is what keeps a single-use refresh token from
+// being overwritten by a stale writer.
+func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (string, error) {
+	if b.Secrets == nil {
+		return "", errNoSecrets
 	}
-	return port.Open(ctx, b.Sealer, sealed, key)
+	var raw [12]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("%w: %w", port.ErrUnavailable, err)
+	}
+	ref := hex.EncodeToString(raw[:])
+	if _, err := b.Secrets.Put(ctx, secretPath(key, ref), plaintext); err != nil {
+		return "", err
+	}
+	return ref, nil
+}
+
+// getSecret reads the credential an item names.
+func (b *Base) getSecret(ctx context.Context, key, ref string) ([]byte, error) {
+	if b.Secrets == nil {
+		return nil, errNoSecrets
+	}
+	s, err := b.Secrets.Get(ctx, secretPath(key, ref))
+	if err != nil {
+		return nil, err
+	}
+	return s.Value, nil
+}
+
+// dropSecrets removes credentials no item names any more. It is a clean-up
+// and best effort: a secret that is left behind is unreachable, and the next
+// removal of the key's item does not know it, so a failure is not an error.
+func (b *Base) dropSecrets(ctx context.Context, key string, refs ...string) {
+	if b.Secrets == nil {
+		return
+	}
+	for _, ref := range refs {
+		if ref != "" {
+			_ = b.Secrets.Delete(ctx, secretPath(key, ref))
+		}
+	}
+}
+
+// deleteItem forgets an item and, after it, the credential it named.
+func (b *Base) deleteItem(ctx context.Context, key string) error {
+	it, _ := b.getItem(ctx, key) // unreadable: the item goes, its secret stays unreachable
+	if err := b.State.Delete(ctx, key); err != nil {
+		return err
+	}
+	if it != nil {
+		b.dropSecrets(ctx, key, it.Secret)
+	}
+	return nil
 }
 
 // editRaw is one compare-and-swap read-modify-write of a key: change gets the
@@ -163,8 +240,18 @@ func (b *Base) editRaw(
 
 // editItem is [Base.editRaw] over an item: cur is nil when the key is absent,
 // and a nil next deletes it.
+//
+// It also looks after the credentials the items name. A next that names a
+// credential its cur did not is the writer's own (fresh), written before the
+// item. When the write lands, the credential it replaced is dropped; when it
+// does not (an error, or nothing to write), every fresh one is, so no
+// attempt leaves a credential behind and none ever removes one a landed item
+// still names.
 func (b *Base) editItem(ctx context.Context, key string, ttl time.Duration, change func(cur *item) (*item, error)) error {
-	return b.editRaw(ctx, key, ttl, func(raw []byte, exists bool) ([]byte, bool, error) {
+	var prev, landed string
+	var kept bool
+	fresh := map[string]bool{}
+	err := b.editRaw(ctx, key, ttl, func(raw []byte, exists bool) ([]byte, bool, error) {
 		var cur *item
 		if exists {
 			var err error
@@ -172,12 +259,45 @@ func (b *Base) editItem(ctx context.Context, key string, ttl time.Duration, chan
 				cur = nil // an unreadable item is replaced, as an unreadable entry is
 			}
 		}
+		prev, landed, kept = "", "", false
+		if cur != nil {
+			prev = cur.Secret
+		}
 		next, err := change(cur)
 		if err != nil || next == nil {
+			kept = errors.Is(err, errKeep)
 			return nil, false, err
+		}
+		if landed = next.Secret; landed != "" && landed != prev {
+			fresh[landed] = true
 		}
 		return encodeItem(next), true, nil
 	})
+	if err != nil || kept {
+		// Nothing landed: what this call wrote ahead of the item is unused.
+		b.dropSecrets(ctx, key, keys(fresh)...)
+		return err
+	}
+	// The item landed (or went): the credential it replaced is unreachable now,
+	// and so is every fresh one that lost a retry.
+	for ref := range fresh {
+		if ref != landed {
+			b.dropSecrets(ctx, key, ref)
+		}
+	}
+	if prev != landed {
+		b.dropSecrets(ctx, key, prev)
+	}
+	return nil
+}
+
+// keys lists a set.
+func keys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // getItem reads one item.

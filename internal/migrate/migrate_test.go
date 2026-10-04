@@ -17,17 +17,11 @@ import (
 	"github.com/truvity/sluis/internal/store"
 )
 
-// natsEnvs are the destinations the tests run over: an embedded JetStream, sealed
-// by the in-process Sealer and by the KMS adapter over a fake KMS.
-func natsEnvs(t *testing.T) []portstoretest.Env {
+// destEnvs are the destinations the tests run over: the in-memory State and
+// Secrets, labelled as the shared adapter a real destination is.
+func destEnvs(t *testing.T) []portstoretest.Env {
 	t.Helper()
-	var out []portstoretest.Env
-	for _, e := range portstoretest.Envs(t) {
-		if strings.HasPrefix(e.Name, "nats") {
-			out = append(out, e)
-		}
-	}
-	return out
+	return portstoretest.Envs(t)
 }
 
 var stopped = migrate.Options{WritersStopped: true}
@@ -38,13 +32,13 @@ var stopped = migrate.Options{WritersStopped: true}
 // channels 2, confirmations 2, pass requests 1, the session key 1.
 const seededItems = 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 1 + 1
 
-func TestLegacyToNATSCopiesEveryDomainAndVerifies(t *testing.T) {
-	for _, env := range natsEnvs(t) {
+func TestLegacyToSharedCopiesEveryDomainAndVerifies(t *testing.T) {
+	for _, env := range destEnvs(t) {
 		t.Run(env.Name, func(t *testing.T) {
 			src := newLegacy(t)
 			seed(t, src.stores)
 			session, token := seedLogins(t, src.stores)
-			dst := portSide(env.Open(t), store.AdapterNATS)
+			dst := portSide(env.Open(t), store.AdapterDynamoDB)
 
 			report, err := migrate.Run(ctx, side("old.yaml", src.stores), side("new.yaml", dst), stopped)
 			if err != nil {
@@ -82,7 +76,7 @@ func TestLegacyToNATSCopiesEveryDomainAndVerifies(t *testing.T) {
 				t.Errorf("issuer index = %+v, want the three session sets", s)
 			}
 
-			// The destination holds the credentials sealed, and a clear read through its
+			// The destination holds the credentials in its Secrets, and a clear read through its
 			// own stores gives back what the source had.
 			d, err := migrate.OpenDomains(ctx, dst, false)
 			if err != nil {
@@ -143,13 +137,13 @@ func TestLegacyToNATSCopiesEveryDomainAndVerifies(t *testing.T) {
 	}
 }
 
-func TestMemoryToNATS(t *testing.T) {
-	env := natsEnvs(t)[0]
+func TestMemoryToShared(t *testing.T) {
+	env := destEnvs(t)[0]
 	mem := memory.New()
 	src := portSide(mem.Set(), store.AdapterMemory)
 	seed(t, src)
 	seedLogins(t, src)
-	dst := portSide(env.Open(t), store.AdapterNATS)
+	dst := portSide(env.Open(t), store.AdapterDynamoDB)
 	report, err := migrate.Run(ctx, side("memory", src), side("new.yaml", dst), stopped)
 	if err != nil || !report.OK || report.Totals.Mismatched != 0 {
 		t.Fatalf("Run = %v\n%s", err, report.JSON())
@@ -160,7 +154,7 @@ func TestMemoryToNATS(t *testing.T) {
 }
 
 func TestARerunCopiesNothingAndAFailedRunCompletes(t *testing.T) {
-	env := natsEnvs(t)[0]
+	env := destEnvs(t)[0]
 	src := newLegacy(t)
 	seed(t, src.stores)
 	seedLogins(t, src.stores)
@@ -170,7 +164,7 @@ func TestARerunCopiesNothingAndAFailedRunCompletes(t *testing.T) {
 	flaky := &failing{State: healthy.State, after: 7}
 	set := healthy
 	set.State = flaky
-	dst := portSide(set, store.AdapterNATS)
+	dst := portSide(set, store.AdapterDynamoDB)
 
 	report, err := migrate.Run(ctx, side("old", src.stores), side("new", dst), stopped)
 	if err == nil || report.OK {
@@ -183,7 +177,7 @@ func TestARerunCopiesNothingAndAFailedRunCompletes(t *testing.T) {
 
 	// Run again against the healthy destination: what is missing is copied, and what is
 	// there is left alone.
-	dst = portSide(healthy, store.AdapterNATS)
+	dst = portSide(healthy, store.AdapterDynamoDB)
 	report, err = migrate.Run(ctx, side("old", src.stores), side("new", dst), stopped)
 	if err != nil || !report.OK {
 		t.Fatalf("the re-run = %v\n%s", err, report.JSON())
@@ -255,12 +249,12 @@ func (a altering) ExportState(ctx context.Context, prefix string, fn func(port.E
 }
 
 func TestACopyThatDoesNotVerifyFails(t *testing.T) {
-	env := natsEnvs(t)[0]
+	env := destEnvs(t)[0]
 	src := newLegacy(t)
 	seedLogins(t, src.stores)
 	set := env.Open(t)
 	set.State = altering{set.State}
-	report, err := migrate.Run(ctx, side("old", src.stores), side("new", portSide(set, store.AdapterNATS)), stopped)
+	report, err := migrate.Run(ctx, side("old", src.stores), side("new", portSide(set, store.AdapterDynamoDB)), stopped)
 	if !errors.Is(err, migrate.ErrMismatch) || report.OK || report.Totals.Mismatched != 1 {
 		t.Fatalf("Run = %v, %+v", err, report)
 	}
@@ -271,11 +265,11 @@ func TestACopyThatDoesNotVerifyFails(t *testing.T) {
 }
 
 func TestADifferentValueOnTheDestinationFailsTheRunBeforeAnythingIsWritten(t *testing.T) {
-	env := natsEnvs(t)[0]
+	env := destEnvs(t)[0]
 	src := newLegacy(t)
 	seed(t, src.stores)
 	seedLogins(t, src.stores)
-	dst := portSide(env.Open(t), store.AdapterNATS)
+	dst := portSide(env.Open(t), store.AdapterDynamoDB)
 
 	// The destination already has the organisation, with another owner.
 	d, err := migrate.OpenDomains(ctx, dst, false)
@@ -331,11 +325,11 @@ func countState(t *testing.T, st *store.Stores, prefix string) int {
 }
 
 func TestADryRunPlansAndTouchesNothing(t *testing.T) {
-	env := natsEnvs(t)[0]
+	env := destEnvs(t)[0]
 	src := newLegacy(t)
 	seed(t, src.stores)
 	seedLogins(t, src.stores)
-	dst := portSide(env.Open(t), store.AdapterNATS)
+	dst := portSide(env.Open(t), store.AdapterDynamoDB)
 
 	report, err := migrate.Run(ctx, side("old", src.stores), side("new", dst), migrate.Options{DryRun: true})
 	if err != nil || !report.OK || !report.DryRun {
@@ -384,14 +378,14 @@ func TestARunThatWritesNeedsTheSourceStopped(t *testing.T) {
 	}
 }
 
-// The way back: what was moved to NATS moves again into the old objects, which is
+// The way back: what was moved to the shared store moves again into the old objects, which is
 // the rollback of the runbook, and the second copy is the first's equal.
-func TestNATSBackToLegacyIsTheRollback(t *testing.T) {
-	env := natsEnvs(t)[0]
+func TestSharedBackToLegacyIsTheRollback(t *testing.T) {
+	env := destEnvs(t)[0]
 	src := newLegacy(t)
 	seed(t, src.stores)
 	seedLogins(t, src.stores)
-	mid := portSide(env.Open(t), store.AdapterNATS)
+	mid := portSide(env.Open(t), store.AdapterDynamoDB)
 	if _, err := migrate.Run(ctx, side("old", src.stores), side("new", mid), stopped); err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +418,7 @@ func hashed(t *testing.T, l *legacySide) string {
 }
 
 func TestUnreadableSourceItemsAreReportedAndTheRestIsCopied(t *testing.T) {
-	env := natsEnvs(t)[0]
+	env := destEnvs(t)[0]
 	mem := memory.New()
 	src := portSide(mem.Set(), store.AdapterMemory)
 	seed(t, src)
@@ -432,7 +426,7 @@ func TestUnreadableSourceItemsAreReportedAndTheRestIsCopied(t *testing.T) {
 	if _, err := mem.Put(ctx, "rec.slack.shared.broken", []byte("{not json"), 0); err != nil {
 		t.Fatal(err)
 	}
-	dst := portSide(env.Open(t), store.AdapterNATS)
+	dst := portSide(env.Open(t), store.AdapterDynamoDB)
 	report, err := migrate.Run(ctx, side("memory", src), side("new", dst), stopped)
 	if !errors.Is(err, migrate.ErrUnreadable) || report.OK {
 		t.Fatalf("Run = %v", err)

@@ -53,7 +53,7 @@ func (r wsRecord) workspace() hub.Workspace {
 	}
 }
 
-// credentialDoc is what a workspace's sealed credential holds.
+// credentialDoc is what a workspace's credential holds.
 type credentialDoc struct {
 	Type  string `json:"type"`
 	Admin string `json:"admin,omitempty"`
@@ -61,7 +61,7 @@ type credentialDoc struct {
 }
 
 // Workspaces is a [hub.Store] and Credentials a [hub.CredentialStore] over
-// the same items: `ws.dir.<id>` holds the record and the sealed credential,
+// the same items: `ws.dir.<id>` holds the record and the credential in Secrets,
 // so a probe that rewrites the record every minute carries the credential
 // along untouched, and a workspace's record and credential are never out of
 // step. An item with a credential and no record (the credential saved first)
@@ -116,7 +116,7 @@ func (w *Workspaces) Get(ctx context.Context, id string) (hub.Workspace, error) 
 	return r.workspace(), nil
 }
 
-// Put implements [hub.Store]: the record is replaced, the sealed credential
+// Put implements [hub.Store]: the record is replaced, the credential
 // beside it stays.
 func (w *Workspaces) Put(ctx context.Context, ws hub.Workspace) error {
 	if ws.ID == "" {
@@ -129,7 +129,7 @@ func (w *Workspaces) Put(ctx context.Context, ws hub.Workspace) error {
 	err = w.b.editItem(ctx, wsDirKey(ws.ID), 0, func(cur *item) (*item, error) {
 		next := &item{Record: raw}
 		if cur != nil {
-			next.Sealed = cur.Sealed
+			next.Secret = cur.Secret
 		}
 		return next, nil
 	})
@@ -143,10 +143,10 @@ func (w *Workspaces) Put(ctx context.Context, ws hub.Workspace) error {
 // a credential is still kept (that is [Credentials.Delete]'s to remove).
 func (w *Workspaces) Delete(ctx context.Context, id string) error {
 	err := w.b.editItem(ctx, wsDirKey(id), 0, func(cur *item) (*item, error) {
-		if cur == nil || len(cur.Sealed) == 0 {
+		if cur == nil || cur.Secret == "" {
 			return nil, nil
 		}
-		return &item{Sealed: cur.Sealed}, nil
+		return &item{Secret: cur.Secret}, nil
 	})
 	if err != nil {
 		return fmt.Errorf("portstore: delete workspace %s: %w", id, err)
@@ -169,10 +169,10 @@ func (s *Credentials) Load(ctx context.Context, workspaceID string) (backend.Cre
 	if err != nil {
 		return backend.Credential{}, false, fmt.Errorf("portstore: read the credential of %s: %w", workspaceID, err)
 	}
-	if it == nil || len(it.Sealed) == 0 {
+	if it == nil || it.Secret == "" {
 		return backend.Credential{}, false, nil
 	}
-	plain, err := s.b.open(ctx, key, it.Sealed)
+	plain, err := s.b.getSecret(ctx, key, it.Secret)
 	if err != nil {
 		return backend.Credential{}, false, fmt.Errorf("portstore: open the credential of %s: %w", workspaceID, err)
 	}
@@ -188,12 +188,12 @@ func (s *Credentials) Load(ctx context.Context, workspaceID string) (backend.Cre
 func (s *Credentials) Save(ctx context.Context, workspaceID string, cred backend.Credential) error {
 	key := wsDirKey(workspaceID)
 	plain, _ := json.Marshal(credentialDoc{Type: cred.Type, Admin: cred.Admin, Data: cred.Data})
-	sealed, err := s.b.seal(ctx, key, plain)
+	ref, err := s.b.newSecret(ctx, key, plain)
 	if err != nil {
-		return fmt.Errorf("portstore: seal the credential of %s: %w", workspaceID, err)
+		return fmt.Errorf("portstore: write the credential of %s: %w", workspaceID, err)
 	}
 	err = s.b.editItem(ctx, key, 0, func(cur *item) (*item, error) {
-		next := &item{Sealed: sealed}
+		next := &item{Secret: ref}
 		if cur != nil {
 			next.Record = cur.Record
 		}

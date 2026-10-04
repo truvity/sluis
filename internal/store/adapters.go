@@ -63,7 +63,7 @@ func (c Config) legacyTable() port.Table {
 		for _, c := range []port.Concern{port.ConcernSecrets, port.ConcernBlobs, port.ConcernTrigger} {
 			t[c] = port.Choice{Adapter: AdapterMemory}
 		}
-	case AdapterNATS, AdapterDynamoDB:
+	case AdapterDynamoDB:
 		t[port.ConcernTrigger] = port.Choice{Adapter: c.Adapter}
 	}
 	if c.Blob != nil {
@@ -139,16 +139,10 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 // run on another store than the one named, and logged for the rest.
 func (c Config) apply(t port.Table) (Config, error) {
 	switch st := t[port.ConcernState]; st.Adapter {
-	case AdapterLegacy, AdapterMemory, AdapterNATS, AdapterDynamoDB:
+	case AdapterLegacy, AdapterMemory, AdapterDynamoDB:
 		c.Adapter = st.Adapter
 		if len(st.Settings) > 0 {
 			switch st.Adapter {
-			case AdapterNATS:
-				var n config.NATS
-				if err := decodeStrict(st.Settings, &n); err != nil {
-					return c, fmt.Errorf("adapters.state.settings: %w", err)
-				}
-				c.NATS = natsOf(&config.Ports{NATS: &n})
 			case AdapterDynamoDB:
 				var d config.DynamoDB
 				if err := decodeStrict(st.Settings, &d); err != nil {

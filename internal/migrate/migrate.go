@@ -5,8 +5,8 @@
 // It copies through the BUSINESS interfaces, never raw bytes: a domain record
 // and its credential are read from the source's own store (the ConfigMaps and
 // Secrets of internal/kube, or the State records of internal/portstore) and
-// written to the destination's, so a credential is sealed under the
-// destination's Sealer with the destination's key as its binding, and a record
+// written to the destination's, so a credential lands in the
+// destination's Secrets, and a record
 // lands in the layout its adapter keeps. The issuer's logins in progress
 // (sessions, refresh tokens, the keyring's schedule) are not a domain store;
 // they are State records and Index sets under `issuer:`, which are copied with
@@ -20,7 +20,7 @@
 //     here, naming the keys, before a single write.
 //  2. Copy what is new (and, with Overwrite, what differs), item by item.
 //  3. Verify: read the source and the destination again, fresh, and compare
-//     every source item with the destination's, decrypted where sealed.
+//     every source item with the destination's, secrets read from each side's Secrets.
 //
 // A re-run after a failure plans again and so copies exactly what is missing:
 // the copy is idempotent, and an item the destination already holds equal is

@@ -76,7 +76,10 @@ data:
       address: :8080
     policyDir: /var/run/access-issuer/policy
     ports:
-      adapter: nats
+      adapter: dynamodb
+      dynamodb:
+        region: eu-west-1
+        table: sluis
       export:
         adapter: openbao
         openbao:
@@ -89,9 +92,6 @@ data:
           caFile: /var/run/access-issuer/openbao-ca/ca.pem
           mount: kv
           namespace: kernel
-      nats:
-        tokenFile: /var/run/nats/token
-        url: nats://nats.nats.svc:4222
     probes:
       address: :7070
     recovery:
@@ -301,7 +301,7 @@ spec:
         app.kubernetes.io/instance: sluis
       annotations:
         # A configuration change is a rollout: the file is read at start.
-        checksum/config: 2f3b3c8fdc3070d449ad96f2d79bc7b70a76a58610b2cd43dfe05ace32e4de89
+        checksum/config: 36237107a4b667e813a8cff4fc90eb8d1f52dda9a3b180c432a969540d3b4d29
         # A policy change is a rollout: the file is read at start.
         checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
         # Likewise the Slack catalogue: read once at start.

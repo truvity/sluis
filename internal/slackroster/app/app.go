@@ -195,7 +195,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		return nil, err
 	}
 	// Any adapter but `legacy` keeps the console's records and the workspaces'
-	// credentials on the State port (sealed), and the controller reads them
+	// credentials on the State port (Secrets), and the controller reads them
 	// there, not from mounted files; the hand-off of a Slack Connect share and
 	// the cache of who a member is live there too.
 	var (
@@ -205,7 +205,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	)
 	if stores.Adapter != store.AdapterLegacy {
 		base := portstore.New(stores.Ports)
-		if err = base.CheckSealer(ctx); err != nil {
+		if err = base.CheckSecrets(ctx); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)
 		}

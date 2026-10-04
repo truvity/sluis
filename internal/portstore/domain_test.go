@@ -2,7 +2,6 @@ package portstore_test
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"strings"
 	"sync"
@@ -23,7 +22,7 @@ import (
 )
 
 // replayedUnderAnotherKey copies the raw bytes at one key to another and says
-// whether the reader at the second still opens what the first sealed.
+// whether the reader at the second still finds the credential the first held.
 func copyRaw(t *testing.T, st port.State, from, to string) {
 	t.Helper()
 	rec, err := st.Get(ctx, from)
@@ -51,7 +50,7 @@ func noPlaintext(t *testing.T, st port.State, secret string) {
 	}
 }
 
-func TestWorkspacesAndTheirCredentialsAreOneSealedItem(t *testing.T) {
+func TestWorkspacesAndTheirCredentialsAreKeptApartAndOneItem(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		set := e.open(t)
 		b := portstore.New(set)
@@ -88,10 +87,10 @@ func TestWorkspacesAndTheirCredentialsAreOneSealedItem(t *testing.T) {
 		}
 		noPlaintext(t, set.State, "TOPSECRET")
 
-		// A sealed value copied under another key does not open.
+		// An item copied under another key has no credential there.
 		copyRaw(t, set.State, "ws.dir.C01", "ws.dir.C02")
-		if _, _, err = creds.Load(ctx, "C02"); !errors.Is(err, port.ErrUnwrap) {
-			t.Errorf("a credential replayed under another key opened: %v", err)
+		if _, _, err = creds.Load(ctx, "C02"); !errors.Is(err, port.ErrNotFound) {
+			t.Errorf("a credential replayed under another key was found: %v", err)
 		}
 		if err = ws.Delete(ctx, "C02"); err != nil {
 			t.Fatal(err)
@@ -134,7 +133,7 @@ func TestTwoReplicasSeeOneAnotherAndSortById(t *testing.T) {
 	})
 }
 
-func TestGitHubOrganisationsKeepRecordAndSealedKeyTogether(t *testing.T) {
+func TestGitHubOrganisationsKeepTheKeyInSecrets(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		set := e.open(t)
 		s := portstore.NewGitHubOrgs(portstore.New(set))
@@ -174,8 +173,8 @@ func TestGitHubOrganisationsKeepRecordAndSealedKeyTogether(t *testing.T) {
 		}
 
 		copyRaw(t, set.State, "gh.org.acme", "gh.org.evil")
-		if _, _, err = s.Credential(ctx, "evil"); !errors.Is(err, port.ErrUnwrap) {
-			t.Errorf("a credential replayed under another organisation opened: %v", err)
+		if _, _, err = s.Credential(ctx, "evil"); !errors.Is(err, port.ErrNotFound) {
+			t.Errorf("a credential replayed under another organisation was found: %v", err)
 		}
 
 		// The link App is built the same way.
@@ -273,7 +272,7 @@ func TestTheConsolesPassGapHoldsAcrossReplicas(t *testing.T) {
 	})
 }
 
-func TestAppsKeepTheirKeysSealed(t *testing.T) {
+func TestAppsKeepTheirKeysInSecrets(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		set := e.open(t)
 		b := portstore.New(set)
@@ -335,7 +334,7 @@ func TestAppsKeepTheirKeysSealed(t *testing.T) {
 		crec.ID = "evil"
 		if _, _, _, err = cat.Get(ctx, "evil"); err == nil {
 			// The record names another id, but the key is what is checked:
-			// opening the sealed key must fail.
+			// reading the key must fail.
 			t.Error("a catalogue key replayed under another id opened")
 		}
 		for _, del := range []func() error{
@@ -353,7 +352,7 @@ func TestAppsKeepTheirKeysSealed(t *testing.T) {
 	})
 }
 
-func TestSlackWorkspacesKeepRecordAndSealedTokenTogether(t *testing.T) {
+func TestSlackWorkspacesKeepTheTokenInSecrets(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		set := e.open(t)
 		s := portstore.NewSlackWorkspaces(portstore.New(set))
@@ -382,8 +381,8 @@ func TestSlackWorkspacesKeepRecordAndSealedTokenTogether(t *testing.T) {
 			t.Errorf("after SetOwner: %+v %+v", rec, got)
 		}
 		copyRaw(t, set.State, "ws.slack.acme", "ws.slack.evil")
-		if _, _, _, err = s.Get(ctx, "evil"); !errors.Is(err, port.ErrUnwrap) {
-			t.Errorf("a token replayed under another workspace opened: %v", err)
+		if _, _, _, err = s.Get(ctx, "evil"); !errors.Is(err, port.ErrNotFound) {
+			t.Errorf("a token replayed under another workspace was found: %v", err)
 		}
 		if err = s.Delete(ctx, "evil"); err != nil {
 			t.Fatal(err)
@@ -524,26 +523,60 @@ func TestAConsoleSessionKeyIsOneKeyForEveryReplica(t *testing.T) {
 			t.Fatalf("the second replica read %x, want the first's %x (%v)", second, first, err)
 		}
 		noPlaintext(t, set.State, string(first))
-		if err = a.CheckSealer(ctx); err != nil {
-			t.Errorf("CheckSealer = %v", err)
+		if err = a.CheckSecrets(ctx); err != nil {
+			t.Errorf("CheckSecrets = %v", err)
 		}
 	})
 }
 
-func TestASealerThatCannotSealIsRefusedAtStart(t *testing.T) {
-	b := portstore.New(port.Set{State: nil, Sealer: unsupportedSealer{}})
-	err := b.CheckSealer(ctx)
-	if err == nil || !strings.Contains(err.Error(), "ports.sealer") {
-		t.Errorf("CheckSealer = %v, want a refusal naming ports.sealer", err)
+func TestNoSecretsIsRefusedAtStart(t *testing.T) {
+	b := portstore.New(port.Set{State: nil})
+	err := b.CheckSecrets(ctx)
+	if err == nil || !strings.Contains(err.Error(), "secrets adapter") {
+		t.Errorf("CheckSecrets = %v, want a refusal naming the secrets adapter", err)
 	}
 }
 
-type unsupportedSealer struct{}
-
-func (unsupportedSealer) Wrap(context.Context, []byte, string) (port.Wrapped, error) {
-	return port.Wrapped{}, port.ErrUnsupported
-}
-
-func (unsupportedSealer) Unwrap(context.Context, port.Wrapped, string) ([]byte, error) {
-	return nil, port.ErrUnsupported
+// A credential lives in Secrets under private/<key>, and never in State.
+func TestACredentialIsInSecretsUnderThePrivatePrefix(t *testing.T) {
+	each(t, func(t *testing.T, e env) {
+		set := e.open(t)
+		b := portstore.New(set)
+		creds := portstore.NewCredentials(b)
+		cred := backend.Credential{Type: "service-account-key", Admin: "root@acme.example", Data: []byte(`{"private_key":"TOPSECRET"}`)}
+		// A workspace id with a dot and a '~' in it still makes a valid path.
+		for _, id := range []string{"C01", "a.b", "x~y", "u-1", ""} {
+			if err := creds.Save(ctx, id, cred); err != nil {
+				t.Fatalf("Save(%q): %v", id, err)
+			}
+		}
+		paths, err := set.Secrets.List(ctx, "private")
+		if err != nil || len(paths) != 5 {
+			t.Fatalf("Secrets under private/ = %v, %v, want 5", paths, err)
+		}
+		// Saving again replaces the credential and leaves no second one behind.
+		cred.Data = []byte(`{"private_key":"TOPSECRET2"}`)
+		if err = creds.Save(ctx, "C01", cred); err != nil {
+			t.Fatal(err)
+		}
+		if paths, err = set.Secrets.List(ctx, "private"); err != nil || len(paths) != 5 {
+			t.Fatalf("after a second Save: %v, %v, want 5", paths, err)
+		}
+		if got, _, _ := creds.Load(ctx, "C01"); string(got.Data) != string(cred.Data) {
+			t.Errorf("Load after a second Save = %s", got.Data)
+		}
+		// Deleting the credential removes the secret.
+		if err = creds.Delete(ctx, "a.b"); err != nil {
+			t.Fatal(err)
+		}
+		if paths, err = set.Secrets.List(ctx, "private"); err != nil || len(paths) != 4 {
+			t.Fatalf("after Delete: %v, %v, want 4", paths, err)
+		}
+		for _, id := range []string{"C01", "x~y", "u-1", ""} {
+			if _, found, err := creds.Load(ctx, id); err != nil || !found {
+				t.Errorf("Load(%q) = %v, %v", id, found, err)
+			}
+		}
+		noPlaintext(t, set.State, "TOPSECRET")
+	})
 }

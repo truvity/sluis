@@ -2,7 +2,7 @@
 // ports (docs/design/ports.md, ADR 0027): one table, shared by every replica
 // and every process, so a lease is exclusive across pods and a notification
 // crosses processes. It is the State of the AWS platform, and what a
-// Kubernetes deployment on AWS can use instead of NATS.
+// Kubernetes deployment on AWS can use.
 //
 // # Table
 //
@@ -70,7 +70,7 @@
 // the port's at-least-once, no-completeness contract, and a watcher reconciles
 // by listing. A Watch costs one Query per interval on its prefix.
 //
-// The Trigger is the same as on NATS: Notify writes `notify.<target>` for a
+// Notify writes `notify.<target>` for a
 // minute and Subscribe watches that prefix, so a notification reaches the
 // subscribers of every process. It is polling, so delivery takes up to one
 // poll interval; the asynchronous lambda:Invoke of ADR 0029 is another

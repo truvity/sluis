@@ -36,8 +36,8 @@ Copies the State of one installation's storage to another's, through the domain
 stores and the ports (docs/decisions/0031, docs/operations/migrate.md). Each side is
 the configuration file of 'sluis serve' for that storage: the ports.* keys
 (and, for the legacy storage, store, release and valkey) say where it is. Domain
-records and secrets are copied through their stores, so a secret is sealed under the
-destination's Sealer; the issuer's sessions, refresh tokens and keyring schedule are
+records and secrets are copied through their stores, so a secret is written to the
+destination's Secrets; the issuer's sessions, refresh tokens and keyring schedule are
 copied with the lifetime each has left.
 
 Nothing is written unless the source is quiet: stop every writer (scale the issuer,
