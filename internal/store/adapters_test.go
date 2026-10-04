@@ -114,3 +114,46 @@ func TestLambdaRefusesLegacy(t *testing.T) {
 		t.Error("nats on Lambda")
 	}
 }
+
+// A secrets adapter that nobody chose is not built, so the kernel and hive,
+// which name none, run as they did; one that was chosen is the Secrets port of
+// the set.
+func TestTheSecretsConcernIsWiredFromThePlan(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name string
+		cfg  Config
+		want bool
+	}{
+		{"legacy keys", Config{Adapter: AdapterLegacy, Kube: KubeNone}, false},
+		{"memory state names memory secrets, by the legacy table", Config{Adapter: AdapterMemory, Kube: KubeNone}, false},
+		{"memory chosen", Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: selection{
+			Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "memory"}}}}, true},
+		{"ssm chosen", Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: selection{
+			Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "ssm", Settings: map[string]any{"root": "/test"}}}}}, true},
+	} {
+		c, table, err := tc.cfg.plan(ctx, quiet)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		set, err := c.compose(ctx, port.Set{}, quiet)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got := set.Secrets != nil; got != tc.want {
+			t.Errorf("%s: Secrets set = %v, want %v (%s)", tc.name, got, tc.want, table)
+		}
+	}
+}
+
+func TestAnSsmSettingNobodyKnowsIsRefusedAtStart(t *testing.T) {
+	cfg := Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: selection{
+		Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "ssm", Settings: map[string]any{"rooot": "/x"}}}}}
+	c, _, err := cfg.plan(context.Background(), quiet)
+	if err == nil {
+		_, err = c.compose(context.Background(), port.Set{}, quiet)
+	}
+	if err == nil || !strings.Contains(err.Error(), "rooot") {
+		t.Fatalf("err = %v, want one naming the unknown setting", err)
+	}
+}

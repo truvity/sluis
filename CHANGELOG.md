@@ -19,6 +19,19 @@
   failed one, and `Trail.Flush` is there for a handler to call before it returns. The
   process needs `sqs:SendMessage` on the queue. See `docs/design/ports.md`.
 
+- **The `ssm` secrets adapter.** `internal/port/ssm` keeps `port.Secrets` in AWS SSM
+  Parameter Store as SecureString parameters (the AWS-managed key, or `kmsKeyId`).
+  A port path `p` is `/sluis/private/<p>`, and a path under `export/` is
+  `/sluis/export/<rest>` (the root is the `root` setting), so a consumer's ESO can be
+  granted `/sluis/export/*` alone. Versions are SSM's parameter versions; the tier
+  is Intelligent-Tiering (advanced only for a value over 4 KiB). Creating ("only if
+  absent") is atomic; `PutIfVersion` with a version is a read and a write, **not
+  atomic** (last writer wins), safe because the target lease serialises the
+  writers. The adapter is registered (AWS, kubernetes and lambda) and the secrets
+  concern is now wired from the plan: a chosen adapter is `Set.Secrets`. With
+  nothing chosen (every deployment today) nothing changes. IAM and the layout:
+  `docs/design/ports.md`.
+
 - **Adapters are chosen by name, per concern.** `internal/port` gains an adapter registry:
   each adapter registers a descriptor (name, concern, what it needs of AWS, Kubernetes
   and OpenBao, the runtimes it works on, implemented or on request, and a factory from
