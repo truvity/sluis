@@ -259,6 +259,11 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		default:
 		}
 	}
+	// The audit concern of the resolved table decides the sink; the legacy
+	// `audit.writer` is what `connect` means.
+	if cfg.audit, err = audit.FromPlan(cfg.audit, stores.Plan); err != nil {
+		return nil, err
+	}
 	trail, err := audit.Open(ctx, cfg.audit)
 	if err != nil {
 		return nil, err

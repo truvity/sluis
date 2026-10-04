@@ -6,6 +6,19 @@
   fixed checklist for adding an adapter in a fork. `docs/reference/adapters.md` is
   generated from the adapter registry and the preset table by `just adapters-doc`;
   `just docs-check` fails when it is stale.
+
+- **Audit records can go to an SQS queue.** The `audit` concern gains the `sqs` adapter
+  (needs AWS; Kubernetes and Lambda runtimes): `adapters.audit: {adapter: sqs, settings:
+  {queueURL, region, endpoint, timeout}}`, which the `aws-*` presets also name. The sink
+  is now chosen from the resolved table: `connect` is the legacy `audit.writer` mapping
+  and does not change, `log` keeps the log line only. On `sqs` there is no receiver, so
+  the catalogue registration is skipped (no error, no retry; logged once) because the
+  catalogue is delivered in the audit writer's package. A `block` action returns once
+  SQS has the message; async actions never block a sign-in. On Lambda the trail is
+  synchronous, waiting at most 3 seconds for the send and not waiting at all after a
+  failed one, and `Trail.Flush` is there for a handler to call before it returns. The
+  process needs `sqs:SendMessage` on the queue. See `docs/design/ports.md`.
+
 - **Adapters are chosen by name, per concern.** `internal/port` gains an adapter registry:
   each adapter registers a descriptor (name, concern, what it needs of AWS, Kubernetes
   and OpenBao, the runtimes it works on, implemented or on request, and a factory from

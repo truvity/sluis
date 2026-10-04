@@ -119,7 +119,7 @@ resolved`, one attribute per concern) and exposed as the gauge
 | signing | file (kms: in progress) | generated, transit |
 | trigger | memory, legacy, nats, dynamodb (invoke: later) | watch, http |
 | schedule | ticker (eventbridge: later) | |
-| audit | connect, log (sqs: later) | |
+| audit | connect, log, sqs | |
 
 ### Secrets
 
@@ -398,6 +398,61 @@ Records the service's own actions in an audit installation. Transports: `http`
 and `nats` on Kubernetes, `sqs` on AWS. A record that cannot be written durably
 refuses the action it describes where the action is a sign-in, as today
 ([sluis.md](sluis.md#audit)).
+
+The sink is chosen by the `audit` concern of the resolved table: `connect` (the
+legacy `audit.writer`, unchanged), `log` (the log line only) or `sqs`.
+
+### The `sqs` adapter
+
+Settings (`adapters.audit.settings`, or the preset's `aws-eks`, `aws-hybrid` and
+`aws-serverless` with a queue named there):
+
+| Key | Meaning |
+|---|---|
+| `queueURL` | **required.** The queue the audit writer Lambda consumes. A URL ending in `.fifo` makes each record's tenant the message group and its id the deduplication id. |
+| `region` | the queue's region; empty is the default chain's. |
+| `endpoint` | an emulator's endpoint (LocalStack); empty on AWS. |
+| `timeout` | one send, retries included. Default `5s`. |
+
+The wire format is the one of `sink/sqssink` in truvity/audit: the body is the
+canonical record, and the message attribute `record-id` carries its id, which
+the writer dedupes on (a standard queue can deliver twice). It is not imported:
+that module sits in the same repository as the receiver and the writer and
+depends on sluis itself.
+
+**IAM.** The role the process runs as (the Lambda's execution role, or the Pod
+Identity role) needs `sqs:SendMessage` on the queue, and nothing else on it.
+`SendMessageBatch` is authorised by the same action. If the queue is encrypted
+with a customer-managed KMS key the role also needs `kms:GenerateDataKey` and
+`kms:Decrypt` on that key. The consumer's `sqs:ReceiveMessage`,
+`sqs:DeleteMessage` and `sqs:ChangeMessageVisibility` belong to the writer's role,
+not sluis's.
+
+**The catalogue travels with the writer.** There is no receiver on this path to
+answer `RegisterCatalogue`, so sluis skips the registration: no call, no error,
+no retry loop, and one log line at start (`audit records are published to SQS;
+the catalogue is not registered ...`). The catalogue files (`internal/audit/catalogue`)
+are in the writer Lambda's package, so a change to a catalogue document, with
+its version bumped, redeploys the writer. Nothing refuses a mismatch at start,
+because nothing is asked.
+
+**Durability.** `Queued`: SQS has the message on several servers. Delivery modes
+are the catalogue's, as for `connect`:
+
+- A `block` action (a recovery sign-in) returns only once SQS has accepted it,
+  within `timeout`, and refuses the sign-in when it has not.
+- Every other action is `async`: it waits in the emitter's in-memory queue and
+  is retried until SQS takes it, so an SQS outage never blocks a sign-in.
+- **On Lambda** the process is frozen once the handler returns, and an in-memory
+  queue would be lost with it. The trail is therefore synchronous there
+  (`AWS_LAMBDA_FUNCTION_NAME` set): `Record` waits, for at most 3 seconds, until
+  the record is on the queue, then returns whatever happened and never fails its
+  caller. After a failed send the trail stops waiting (a degraded flag, cleared
+  when the queue empties), so an outage costs one sign-in the bounded wait and
+  the rest nothing; the record stays queued and is retried if the container is
+  warm. A handler may also call `Trail.Flush(ctx)` before it returns.
+  Records still queued at a freeze are the trade-off: an outage that outlasts the
+  container loses the async records made during it, which is what `async` means.
 
 ## Conformance
 
