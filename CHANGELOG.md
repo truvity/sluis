@@ -1,3 +1,17 @@
+## Unreleased
+
+- **Fixed: the audit catalogue is now version 1.7.0.** v1.57.0 renamed the
+  product through every file, including `internal/audit/catalogue/roster.yaml`
+  and its released fixtures, so the document changed (three descriptions say
+  `sluis` where they said `access-roster`) while its version stayed `1.6.0`.
+  An audit installation refuses a changed document under a registered version,
+  and every sluis process stopped at start with `roster version 1.6.0 is
+  already registered with a different document`. The source stays `roster`;
+  renaming it is catalogue 2.0.0. The released fixtures 1.0.0 to 1.6.0 are
+  restored to the bytes of v1.54.0, and `TestAReleasedFixtureIsNeverRewritten`
+  pins each fixture's SHA-256 in `testdata/released/SHA256SUMS`, so a sweeping
+  edit can no longer rewrite a released document and its fixture together.
+
 ## v1.57.0
 
 - **Deprecated: the Lambda extension layer (`sluis-lambda-layer`).** The

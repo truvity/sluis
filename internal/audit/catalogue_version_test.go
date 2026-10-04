@@ -1,6 +1,8 @@
 package audit_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -57,5 +59,53 @@ func TestAReleasedCatalogueVersionIsNeverChanged(t *testing.T) {
 	_ = seen // a version with no fixture is new: it is not yet released
 	if strings.TrimSpace(current) == "" {
 		t.Fatal("empty catalogue version")
+	}
+}
+
+// A released fixture is the record of what an installation holds, so it is
+// frozen too. The test above compares roster.yaml with the fixture of its
+// version, which proves nothing when both were edited together: a rename that
+// rewrote every catalogue document in the repository (v1.57.0) changed
+// roster.yaml and all of its fixtures alike, the comparison still passed, and
+// every deployment refused the "same" 1.6.0. SHA256SUMS pins each fixture's
+// bytes. A new version adds a line; an existing line changes only if a
+// deployment's registered document did, which is never.
+func TestAReleasedFixtureIsNeverRewritten(t *testing.T) {
+	dir := filepath.Join("catalogue", "testdata", "released")
+	raw, err := os.ReadFile(filepath.Join(dir, "SHA256SUMS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		sum, name, ok := strings.Cut(line, "  ")
+		if !ok {
+			t.Fatalf("SHA256SUMS: malformed line %q", line)
+		}
+		pinned[name] = sum
+	}
+	fixtures, err := filepath.Glob(filepath.Join(dir, "roster-*.yaml"))
+	if err != nil || len(fixtures) == 0 {
+		t.Fatalf("no released fixtures found (err %v)", err)
+	}
+	for _, fixture := range fixtures {
+		name := filepath.Base(fixture)
+		body, err := os.ReadFile(fixture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(body)
+		want, ok := pinned[name]
+		switch {
+		case !ok:
+			t.Errorf("%s is not in SHA256SUMS: add its line (sha256sum %s) when you release a new version", name, name)
+		case hex.EncodeToString(sum[:]) != want:
+			t.Errorf("%s was rewritten after release: a released document is never edited, "+
+				"an installation holds the old bytes. Restore it, and bump the version for the change", name)
+		}
+		delete(pinned, name)
+	}
+	for name := range pinned {
+		t.Errorf("SHA256SUMS lists %s, which is gone: a released fixture is never removed", name)
 	}
 }
