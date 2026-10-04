@@ -313,3 +313,47 @@ func TestAnEmptyKeyIdIsRefused(t *testing.T) {
 		t.Fatal("fell back to the alias")
 	}
 }
+
+// Hardening 1: a replica that starts with [A,B,C] on a state that knows none of
+// them records only C; A and B are never adopted, so the oldest cannot sign.
+func TestOnlyTheLastListedKeyIsRecordedAsNew(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clock := newSettableClock(time.Now())
+	ring := ringAt(t, issuer.NewMemoryState(), clock)
+	var keys []*issuer.SigningKey
+	for _, ref := range []string{"a", "b", "c"} {
+		k, err := issuer.KMSSigningKey(ctx, newFakeKMS(t), ref, kmsSeed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, k)
+	}
+	_ = ring.ObserveKnown(ctx, keys[0])
+	_ = ring.ObserveKnown(ctx, keys[1])
+	_ = ring.Observe(ctx, keys[2])
+	assertPublished(t, ring, keys[2].ID())
+	if ring.Active().ID() != keys[2].ID() {
+		t.Fatal("the newest key should sign")
+	}
+}
+
+// failingGets is a state whose Get fails, as a state outage does.
+type failingGets struct{ issuer.State }
+
+func (failingGets) Get(context.Context, string) ([]byte, bool, error) {
+	return nil, false, errors.New("state unavailable")
+}
+
+// Hardening 2: when the state cannot say whether a key was retired, a non-last
+// key is treated as retired; the last is still recorded.
+func TestAStateErrorTreatsAnEarlierKeyAsRetired(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ring := ringAt(t, failingGets{issuer.NewMemoryState()}, newSettableClock(time.Now()))
+	a, _ := issuer.KMSSigningKey(ctx, newFakeKMS(t), "a", kmsSeed)
+	b, _ := issuer.KMSSigningKey(ctx, newFakeKMS(t), "b", kmsSeed)
+	_ = ring.ObserveKnown(ctx, a)
+	_ = ring.Observe(ctx, b)
+	assertPublished(t, ring, b.ID())
+}

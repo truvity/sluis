@@ -289,7 +289,13 @@ func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) 
 		// the file on every poll is cheaper than caching that comparison.
 		existing.signer = key
 	} else {
-		if r.retiredIDs[key.id] || r.tombstoned(ctx, key.id) {
+		// A non-last ref fails closed: if the state cannot say whether the
+		// key was retired, it is treated as retired.
+		if r.retiredIDs[key.id] || r.tombstoned(ctx, key.id, !mayRecord) {
+			if mayRecord {
+				r.log.WarnContext(ctx, "a retired signing key is listed as the newest; this installation "+
+					"retired it and will not adopt it again", "kid", key.id, "algorithm", string(key.alg))
+			}
 			return nil
 		}
 		if !mayRecord {
@@ -313,9 +319,13 @@ func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) 
 }
 
 // tombstoned reports whether the shared state says a replica retired this key.
-func (r *KeyRing) tombstoned(ctx context.Context, id string) bool {
+// A state error reads as tombstoned when failClosed, as not otherwise.
+func (r *KeyRing) tombstoned(ctx context.Context, id string, failClosed bool) bool {
 	_, found, err := r.state.Get(ctx, keyRingRetiredKey(r.alg, id))
-	return err == nil && found
+	if err != nil {
+		return failClosed
+	}
+	return found
 }
 
 // record decides one new key's schedule and writes it to the shared
@@ -407,6 +417,11 @@ func (r *KeyRing) absorb(ctx context.Context) {
 
 	for _, id := range ids {
 		if _, known := r.entries[id]; known {
+			continue
+		}
+		if r.retiredIDs[id] || r.tombstoned(ctx, id, false) {
+			// Retired, and another replica's index has not caught up yet:
+			// adopting it would put it back in the JWKS for a moment.
 			continue
 		}
 

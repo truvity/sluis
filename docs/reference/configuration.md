@@ -929,4 +929,4 @@ on the metric says it is being hit. Request a raise before it is.
 
 Rotation is appending a new key to `keys`; see the table above. List order is
 age: only the last key is ever newly adopted, and a key that has retired stays
-retired while it is still listed (remove it from the list when convenient).
+retired while it is still listed (remove it from the list when convenient). At start only the last key is newly adopted; earlier ones are published only if the installation already knows them.

@@ -62,8 +62,8 @@ func kmsConfigWith(t *testing.T, content string, keys ...string) func(*config.Se
 	}
 }
 
-// Every listed KMS key is published at once, before any of the later ones
-// signs: the JWKS shows both the first and the appended key.
+// On an installation that has seen none of them, only the LAST listed key is
+// adopted: an older one is never newly recorded, so it cannot sign.
 func TestKMSKeysArePublishedFromTheList(t *testing.T) {
 	t.Parallel()
 	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
@@ -80,11 +80,8 @@ func TestKMSKeysArePublishedFromTheList(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &jwks); err != nil {
 		t.Fatal(err)
 	}
-	if len(jwks.Keys) != 2 || jwks.Keys[0].Alg != "ES384" || jwks.Keys[0].Crv != "P-384" {
+	if len(jwks.Keys) != 1 || jwks.Keys[0].Alg != "ES384" || jwks.Keys[0].Crv != "P-384" {
 		t.Fatalf("keys = %+v", jwks.Keys)
-	}
-	if jwks.Keys[0].Kid == jwks.Keys[1].Kid {
-		t.Fatal("two keys, one kid")
 	}
 }
 
