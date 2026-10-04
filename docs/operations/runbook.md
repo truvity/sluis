@@ -285,7 +285,7 @@ changed or deleted, so the rollback is to scale the old Deployments back up.
 **What moves.** The State records (every key, value and lifetime; a record that has
 expired is not copied); the secrets the domain stores keep (a workspace credential, an App
 key, a link's token pair, the console's session key), written to the Secrets port under
-`private/...`; the controllers' last reports, to S3; and the issuer's **key ring
+`credentials/<kind>/<id>/<ref>` (storage layout v2); the controllers' last reports, to S3; and the issuer's **key ring
 schedule** (`issuer:keyring:*`, the tombstones of retired keys included), so that the old
 file key's public half stays published through its overlap and a token issued before the
 cutover keeps verifying. **What does not move.** The issuer's sessions, refresh tokens,

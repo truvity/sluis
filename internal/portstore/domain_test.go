@@ -88,7 +88,7 @@ func TestWorkspacesAndTheirCredentialsAreKeptApartAndOneItem(t *testing.T) {
 		noPlaintext(t, set.State, "TOPSECRET")
 
 		// An item copied under another key has no credential there.
-		copyRaw(t, set.State, "ws.dir.C01", "ws.dir.C02")
+		copyRaw(t, set.State, "ws.dir.google.C01", "ws.dir.google.C02")
 		if _, _, err = creds.Load(ctx, "C02"); !errors.Is(err, port.ErrNotFound) {
 			t.Errorf("a credential replayed under another key was found: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestWorkspacesAndTheirCredentialsAreKeptApartAndOneItem(t *testing.T) {
 		if err = creds.Delete(ctx, "C01"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = set.State.Get(ctx, "ws.dir.C01"); !errors.Is(err, port.ErrNotFound) {
+		if _, err = set.State.Get(ctx, "ws.dir.google.C01"); !errors.Is(err, port.ErrNotFound) {
 			t.Errorf("the item outlived both halves: %v", err)
 		}
 		if err = creds.Delete(ctx, "C01"); err != nil {

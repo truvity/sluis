@@ -93,7 +93,7 @@ func TestLegacyToSharedCopiesEveryDomainAndVerifies(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				"credentials/workspace/C01/", "credentials/github-org/acme/", "credentials/github-app/link/",
+				"credentials/directory/google/C01/", "credentials/github-org/acme/", "credentials/github-app/link/",
 				"credentials/github-app/renovate/", "credentials/github-runner-app/stable/acme/",
 				"credentials/slack-workspace/acme/", "credentials/slack-app/notifier/", "credentials/console/session-key",
 			} {

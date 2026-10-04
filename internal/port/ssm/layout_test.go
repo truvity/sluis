@@ -59,7 +59,7 @@ func TestACredentialIsAParameterUnderTheCredentialsPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []*regexp.Regexp{
-		regexp.MustCompile(`^/sluis/private/credentials/workspace/C01ipl6j0/[0-9a-f]{24}$`),
+		regexp.MustCompile(`^/sluis/private/credentials/directory/google/C01ipl6j0/[0-9a-f]{24}$`),
 		regexp.MustCompile(`^/sluis/private/credentials/slack-workspace/acme/[0-9a-f]{24}$`),
 		regexp.MustCompile(`^/sluis/private/credentials/slack-app/alerts/[0-9a-f]{24}$`),
 		regexp.MustCompile(`^/sluis/private/credentials/console/session-key$`),

@@ -345,7 +345,7 @@ func TestTheTriggerCrossesStoresOnOneTable(t *testing.T) {
 // the id (docs/reference/storage-layout.md).
 func TestEveryKindIsAnItemOfItsKindAndId(t *testing.T) {
 	for _, c := range []struct{ key, pk, sk string }{
-		{"ws.dir.C01ipl6j0", "workspace", "C01ipl6j0"},
+		{"ws.dir.google.C01ipl6j0", "directory", "google/C01ipl6j0"},
 		{"gh.org.opwerm", "github-org", "opwerm"},
 		{"app.gh.link", "github-app", "link"},
 		{"gh.link.299386", "github-link", "299386"},

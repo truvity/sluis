@@ -65,7 +65,9 @@ type keyRule struct {
 var keyRules = []keyRule{
 	// Domain records (internal/portstore); the ones with a credential keep it
 	// in Secrets under the same kind.
-	{prefix: "ws.dir.", kind: "workspace", conv: convDots},
+	// A directory workspace is `directory/<provider>/<id>`: the provider (the
+	// record's backend: google, later entra) is a segment, not a family.
+	{prefix: "ws.dir.", kind: "directory", conv: convDots},
 	{prefix: "ws.slack.", kind: "slack-workspace"},
 	{prefix: "gh.org.", kind: "github-org"},
 	{prefix: "gh.link.", kind: "github-link"},

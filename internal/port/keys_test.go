@@ -12,7 +12,8 @@ import (
 // several shapes): the logical key, and where the layout puts it. A kind added
 // to internal/port/keys.go without a row here fails TestEveryKindIsPinned.
 var stateRows = []struct{ key, kind, id string }{
-	{"ws.dir.C01ipl6j0", "workspace", "C01ipl6j0"},
+	{"ws.dir.google.C01ipl6j0", "directory", "google/C01ipl6j0"},
+	{"ws.dir.entra.4b1f", "directory", "entra/4b1f"},
 	{"ws.slack.T01", "slack-workspace", "T01"},
 	{"gh.org.opwerm", "github-org", "opwerm"},
 	{"gh.link.299386", "github-link", "299386"},
@@ -125,8 +126,9 @@ func TestAPrefixIsAQueryOnlyWhenItNamesOneKind(t *testing.T) {
 		prefix, kind, id string
 		ok               bool
 	}{
-		{"ws.dir.", "workspace", "", true},
-		{"ws.dir.C01", "workspace", "C01", true},
+		{"ws.dir.", "directory", "", true},
+		{"ws.dir.google.", "directory", "google/", true},
+		{"ws.dir.google.C01", "directory", "google/C01", true},
 		{"rec.slack.channel.acme.", "slack-channel", "acme/", true},
 		{"gate.github.opwerm.", "github-gate", "opwerm/", true},
 		{"gate.slack.acme.confirm.", "slack-gate", "acme/confirm/", true},

@@ -148,7 +148,10 @@ or alias; unset is the AWS-managed `alias/aws/ssm`), `region`, `endpoint`
 (LocalStack).
 
 **Layout:** a port path `p` is the parameter `<root>/private/<p>`, except a path
-under `export/`, which is `<root>/export/<rest>`. A consumer's External Secrets
+under `export/`, which is `<root>/export/<rest>`. The domain stores keep a
+credential at the port path `credentials/<kind>/<id>/<ref>`, and the operator's
+secrets are `<root>/private/config/...`: the whole of it, with the DynamoDB layout,
+is [reference/storage-layout.md](../reference/storage-layout.md). A consumer's External Secrets
 Operator reads `<root>/export/*` and nothing else.
 
 **Values:** a text value is stored as it is, so an export reads as the secret itself;
@@ -262,20 +265,19 @@ current store does.
 
 ## Key layout
 
-One layout, two renderings. The in-memory adapter uses the dotted key as
-written. DynamoDB uses one table with a partition key `pk` and a sort
-key `sk`: **`pk` is the key's first segment (`ses`, `rt`, `lease`) and `sk` is the
-whole key**, so a prefix listing that holds a dot (`ses.<person>.`, `ws.dir.`) is a
-`Query` on one partition with `begins_with` on `sk`, in key order and paged by
-`LastEvaluatedKey`, and the partition is the key family that ADR 0027's IAM
-condition `dynamodb:LeadingKeys` grants a role. The adapter knows no more of the
-layout than that, so a family needs no code of its own. (The first draft of this
-page split some families finer, `SES#<person>` for a person's sessions; that
-needs the adapter to know each family's shape, buys nothing at this scale, where a
-hot partition is not a concern, and is dropped. A person's sessions are still one
-`Query`.) A prefix with **no dot** (`ses`, the empty prefix, a legacy
-`issuer:code:`) names no partition and is a `Scan` sorted in memory: an operator's
-listing and what `sluis migrate` does. An `expires` attribute (epoch
+One logical layout, two renderings. The in-memory and the legacy adapters use the
+key as written. The adapters of the AWS platform use **storage layout v2**
+([reference/storage-layout.md](../reference/storage-layout.md)): a key is a record
+*kind* and an *id*, derived in one place (`internal/port/keys.go`). DynamoDB uses one
+table with a partition key `pk` and a sort key `sk`: **`pk` is the kind
+(`workspace`, `github-org`, `issuer-token`) and `sk` is the id** (`stable/opwerm`
+when compound), so a prefix listing that lies in one kind (`ses.<person>.`,
+`ws.dir.`) is a `Query` on one partition with `begins_with` on `sk`, in key order and
+paged by `LastEvaluatedKey`, and the partition is the kind that ADR 0027's IAM
+condition `dynamodb:LeadingKeys` grants a role. A prefix that names no one kind
+(`ws.`, the empty prefix, a legacy `issuer:`) is a `Scan` filtered on the logical
+key (`lkey`) and sorted in memory: an operator's listing and what `sluis migrate`
+does. An `expires` attribute (epoch
 seconds) holds the expiry, the table's TTL attribute points at it, and a revision
 attribute `rev` is what conditional writes compare ([The DynamoDB
 adapter](#the-dynamodb-adapter)).
@@ -298,7 +300,7 @@ hot path.
 | `sso.<id>` | the browser-wide SSO session and the clients it covers | issuer | the session lifetime |
 | `tok.<jti>` | a minted token's own record, for userinfo and revocation | issuer | until the token expires |
 | `keyring.<kid>` | a signing key's schedule: first seen, activation | issuer replicas | 30 days, renewed on each poll |
-| `ws.dir.<id>` | a connected directory workspace: its record, **with its credential in Secrets** (`private/ws.dir.<id>`) | console | permanent |
+| `ws.dir.<id>` | a connected directory workspace: its record, **with its credential in Secrets** (`credentials/workspace/<id>/<ref>`) | console | permanent |
 | `ws.slack.<workspace>` | a connected Slack workspace: its record, with its client secret and bot token in Secrets | console | permanent |
 | `gh.org.<org>` | a connected GitHub organisation: its record, with its App key in Secrets | console | permanent |
 | `gh.link.<account>` | a GitHub account's link, keyed by the **account id**; the token pair is in Secrets, the rest of the link, `RefreshingSince` and the `Revision` counter included, is plain | link flow, GitHub tick | permanent |
@@ -308,7 +310,7 @@ hot path.
 | `app.slack.cat.<id>` | a catalogue Slack App: record, with the client secret and bot token in Secrets | console | permanent |
 | `rec.slack.shared.<name>` | a Slack Connect channel's definition | console | permanent |
 | `rec.slack.channel.<workspace>.<name>` | a console channel's record | console | permanent |
-| `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`private/rec.console.session-key`); created by the first replica that starts | console | permanent |
+| `rec.console.session-key` | the key the console signs its sessions with, in Secrets (`credentials/console/session-key`); created by the first replica that starts | console | permanent |
 | `lease.<target>` | the holder of a target's tick, by id | ticks | seconds, renewed |
 | `gate.<target>.<name>` | a held-once ledger entry, a breaker, a fingerprint. Written today: `gate.github.<org>.confirm` and `.pass`, `gate.slack.<workspace>.confirm[.<channel>]` and `.pass` (an operator's confirmation of a removal set, 24 h; a request for a pass now, 24 h), `gate.github-claim.<account>` (the marker of a link claim, below) | ticks, console | by gate |
 | `share.<host>.<channel>` | a Slack Connect share: the guests that were invited and each side's state; written by the host's tick, its write enqueues the guest's tick, and the guest's tick marks its own side accepted | host tick, guest tick | 14 days while a guest is pending, then 7 days once every guest has accepted |
@@ -326,7 +328,7 @@ key (an id, a login, a channel) are written one segment each, every byte but a
 letter, a digit, `-` and `_` as `~XX`, so a dot in a name cannot end its segment.
 
 A credential is never written to State. The domain stores put it in
-[Secrets](#secrets) under `private/<key>` and leave a marker in the record; the
+[Secrets](#secrets) under `credentials/<kind>/<id>` and leave a marker in the record; the
 State store never sees a credential. (There was once a sealing step, an
 envelope under a KMS key. It is retired: ADR 0027's sealing is superseded.)
 
@@ -620,8 +622,9 @@ passes the suite on LocalStack, and has not yet run against AWS.
 
 | Item attribute | Type | Meaning |
 |---|---|---|
-| `pk` | S | partition key: the key's first segment (`ses`), or `idx#<set>` for an Index member |
-| `sk` | S | sort key: the whole key (at most 1 KiB), or the member |
+| `pk` | S | partition key: the record kind (`workspace`, `issuer-token`), or the Index set's kind for a member |
+| `sk` | S | sort key: the id (at most 1 KiB), or `<set id>/<member>` |
+| `lkey` | S | the logical key the item was written for (the set, for a member) |
 | `v` | B | the value (State) |
 | `rev` | N | the revision: a random 64-bit number drawn on every write |
 | `expires` | N | epoch seconds the item is dead from; absent when permanent. The table's TTL attribute |
@@ -635,9 +638,9 @@ passes the suite on LocalStack, and has not yet run against AWS.
 | `Update(rev)` | `PutItem` with `rev = :rev AND (attribute_not_exists(expires) OR expires > :now)` |
 | `DeleteIfRevision` | `DeleteItem` with the same condition |
 | `Delete` | `DeleteItem` |
-| `List` | `Query` on the prefix's partition with `begins_with(sk, :p)`, consistent, filtered for expiry here, paged by a token naming the last key (`port.PageToken`); a dotless prefix is a `Scan` |
+| `List` | `Query` on the prefix's partition with `begins_with(sk, :p)`, consistent, filtered for expiry here, paged by a token naming the last key (`port.PageToken`); a prefix that names no one kind is a `Scan` |
 | `Watch`, Trigger | polling, below |
-| Index `Add`/`Remove`/`Members` | an item in the partition `idx#<set>` with the member as sort key and the lifetime of the `Add`, so the lifetime is the member's; `Members` is one `Query` |
+| Index `Add`/`Remove`/`Members` | an item in the set's kind partition with `<set id>/<member>` as sort key and the lifetime of the `Add`, so the lifetime is the member's; `Members` is one `Query` |
 
 - **Conditional failures need no second call.** `Update` and `DeleteIfRevision`
   ask for `ReturnValuesOnConditionCheckFailure: ALL_OLD`: no old item, or an
@@ -707,7 +710,7 @@ directories, and are woken by a poll of the records' revisions, which is the
 digest of the mounted files made over keys and revisions (no value is read or
 opened for it). The kernel still runs `legacy`.
 
-| Domain (interface) | Keys | In Secrets (`private/<key>/<ref>`) |
+| Domain (interface) | Keys | In Secrets (`credentials/<kind>/<id>/<ref>`) |
 |---|---|---|
 | directory workspaces (`hub.Store`, `hub.CredentialStore`) | `ws.dir.<id>`: the record, naming the credential | the credential |
 | GitHub organisations, the link App, confirmations, pass requests (`server.GitHubConnections`, `GitHubLinkApp`, `GitHubConfirmations`) | `gh.org.<org>`, `app.gh.link`, `gate.github.<org>.confirm`, `.pass` | the App key, the link App's client secret |
@@ -720,7 +723,7 @@ opened for it). The kernel still runs `legacy`.
 | the OAuth client (`settings.Store`) | none: see below | — |
 
 - **Secrets, not sealing.** A credential is written to Secrets under
-  `private/<key>/<ref>` and the item in State names it by its ref; State never
+  `credentials/<kind>/<id>/<ref>` and the item in State names it by its ref; State never
   holds one. (The envelope-and-KMS sealing that was here is retired, together
   with the `sluis:binding` encryption context and `ports.sealer`.) The ref is
   fresh on every write, so a credential is never replaced in place: a writer

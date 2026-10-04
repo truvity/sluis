@@ -26,7 +26,7 @@ schema. There is no second configuration to keep in step.
 
 It copies **through the business interfaces, never as bytes**: a workspace and its
 credential are read from the source's own store and written to the destination's,
-so a secret is written to the destination's Secrets (`private/<key>/<ref>`) and
+so a secret is written to the destination's Secrets (`credentials/<kind>/<id>/<ref>`) and
 a record lands in the layout its adapter keeps. (For the same reason a
 destination that is not the legacy storage needs a working Secrets adapter: a
 copy is a read through the source's store and a write through the destination's,
