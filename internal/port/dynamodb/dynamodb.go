@@ -133,9 +133,11 @@ const (
 	attrRev     = "rev"
 	attrExpires = "expires"
 	attrKind    = "k"
+	// attrLKey is the logical key the item was written for (the layout maps it
+	// to pk and sk, so a listing by a prefix that names no kind filters on it).
+	attrLKey = "lkey"
 
 	kindIndex = "i"
-	idxPrefix = "idx#"
 )
 
 // The expressions. They are constants, and the fake of the unit tests
@@ -147,8 +149,8 @@ const (
 	keyCondSK  = "pk = :pk AND begins_with(sk, :p)"
 	filterAll  = "attribute_not_exists(k)"
 	filterIdx  = "k = :i"
-	scanState  = "attribute_not_exists(k) AND begins_with(sk, :p)"
-	scanIndex  = "k = :i AND begins_with(pk, :p)"
+	scanState  = "attribute_not_exists(k) AND begins_with(lkey, :p)"
+	scanIndex  = "k = :i AND begins_with(lkey, :p)"
 )
 
 // API is the part of the DynamoDB client the adapter uses, so a test can put a
@@ -324,23 +326,17 @@ func unavailable(err error) error {
 
 // --- keys, revisions, lifetimes ---
 
-// partition is the key's partition: its first segment.
-func partition(key string) (string, error) {
-	pk, _, _ := strings.Cut(key, ".")
-	if pk == "" {
-		return "", fmt.Errorf("%w: a key starts with a segment (%q)", port.ErrUnsupported, key)
+// locate is where a key lives: its kind (pk) and its id (sk), by the layout of
+// internal/port (keys.go), which every adapter shares.
+func locate(key string) (pk, sk string, err error) {
+	a, err := port.Locate(key)
+	if err != nil {
+		return "", "", err
 	}
-	if len(key) > maxKey {
-		return "", fmt.Errorf("%w: a key of %d bytes is over DynamoDB's sort key limit of %d", port.ErrUnsupported, len(key), maxKey)
+	if len(a.ID) > maxKey {
+		return "", "", fmt.Errorf("%w: a key of %d bytes is over DynamoDB's sort key limit of %d", port.ErrUnsupported, len(a.ID), maxKey)
 	}
-	return pk, nil
-}
-
-// prefixPartition is the one partition a prefix lies in: known only when the
-// prefix holds a dot.
-func prefixPartition(prefix string) (string, bool) {
-	pk, _, found := strings.Cut(prefix, ".")
-	return pk, found && pk != ""
+	return a.Kind, a.ID, nil
 }
 
 func newRev() string {
@@ -376,11 +372,12 @@ func numAttr(n int64) types.AttributeValue {
 func strAttr(v string) types.AttributeValue { return &types.AttributeValueMemberS{Value: v} }
 
 type item struct {
-	pk, key string
+	pk, sk, key string // key is the logical key of a State record; the member of an Index item
 	value   []byte
 	rev     port.Revision
 	expires int64 // 0 is none
 	index   bool
+	set     string // the Index set
 }
 
 func parseItem(m map[string]types.AttributeValue) (item, bool) {
@@ -390,11 +387,16 @@ func parseItem(m map[string]types.AttributeValue) (item, bool) {
 	} else {
 		return it, false
 	}
-	if v, ok := m[attrSK].(*types.AttributeValueMemberS); ok {
+	sk, ok := m[attrSK].(*types.AttributeValueMemberS)
+	if !ok {
+		return it, false
+	}
+	if v, ok := m[attrLKey].(*types.AttributeValueMemberS); ok {
 		it.key = v.Value
 	} else {
 		return it, false
 	}
+	it.sk = sk.Value
 	if v, ok := m[attrValue].(*types.AttributeValueMemberB); ok {
 		it.value = v.Value
 	}
@@ -406,6 +408,9 @@ func parseItem(m map[string]types.AttributeValue) (item, bool) {
 	}
 	if v, ok := m[attrKind].(*types.AttributeValueMemberS); ok && v.Value == kindIndex {
 		it.index = true
+		// An Index item's sk is `<set id>/<member>`; its lkey is the set.
+		it.set = it.key
+		_, it.key, _ = strings.Cut(it.sk, "/")
 	}
 	return it, true
 }
@@ -423,11 +428,14 @@ func (s *Store) remaining(it item) time.Duration {
 	return time.Millisecond
 }
 
-func (s *Store) build(pk, sk string, value []byte, ttl time.Duration, index bool) (map[string]types.AttributeValue, string) {
+// build is an item: lkey is the logical key of a State record, or the set of an
+// Index member.
+func (s *Store) build(pk, sk, lkey string, value []byte, ttl time.Duration, index bool) (map[string]types.AttributeValue, string) {
 	rev := newRev()
 	m := map[string]types.AttributeValue{
-		attrPK:  strAttr(pk),
-		attrSK:  strAttr(sk),
+		attrPK:   strAttr(pk),
+		attrSK:   strAttr(sk),
+		attrLKey: strAttr(lkey),
 		attrRev: &types.AttributeValueMemberN{Value: rev},
 	}
 	if index {
@@ -462,13 +470,13 @@ func (s *Store) live(ctx context.Context, pk, sk string) (item, error) {
 
 // Get implements [port.State].
 func (s *Store) Get(ctx context.Context, key string) (port.Record, error) {
-	pk, err := partition(key)
+	pk, sk, err := locate(key)
 	if err != nil {
 		return port.Record{}, port.ErrNotFound
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	it, err := s.live(ctx, pk, key)
+	it, err := s.live(ctx, pk, sk)
 	if err != nil {
 		return port.Record{}, err
 	}
@@ -480,36 +488,36 @@ func (s *Store) Get(ctx context.Context, key string) (port.Record, error) {
 
 // Put implements [port.State].
 func (s *Store) Put(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
-	pk, err := s.checkWrite(key, value, ttl)
+	pk, sk, err := s.checkWrite(key, value, ttl)
 	if err != nil {
 		return "", err
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	m, rev := s.build(pk, key, value, ttl, false)
+	m, rev := s.build(pk, sk, key, value, ttl, false)
 	if _, err = s.api.PutItem(ctx, &ddb.PutItemInput{TableName: &s.table, Item: m}); err != nil {
 		return "", unavailable(err)
 	}
 	return port.Revision(rev), nil
 }
 
-func (s *Store) checkWrite(key string, value []byte, ttl time.Duration) (string, error) {
-	if err := port.CheckWrite(key, value, ttl); err != nil {
-		return "", err
+func (s *Store) checkWrite(key string, value []byte, ttl time.Duration) (pk, sk string, err error) {
+	if err = port.CheckWrite(key, value, ttl); err != nil {
+		return "", "", err
 	}
-	return partition(key)
+	return locate(key)
 }
 
 // Create implements [port.State]: the write is conditioned on the key being
 // absent or expired, so exactly one of several takers of an expired lease wins.
 func (s *Store) Create(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
-	pk, err := s.checkWrite(key, value, ttl)
+	pk, sk, err := s.checkWrite(key, value, ttl)
 	if err != nil {
 		return "", err
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	m, rev := s.build(pk, key, value, ttl, false)
+	m, rev := s.build(pk, sk, key, value, ttl, false)
 	_, err = s.api.PutItem(ctx, &ddb.PutItemInput{
 		TableName: &s.table, Item: m,
 		ConditionExpression:       aws.String(condCreate),
@@ -553,19 +561,19 @@ func validRev(rev port.Revision) bool {
 
 // Update implements [port.State].
 func (s *Store) Update(ctx context.Context, key string, value []byte, ttl time.Duration, rev port.Revision) (port.Revision, error) {
-	pk, err := s.checkWrite(key, value, ttl)
+	pk, sk, err := s.checkWrite(key, value, ttl)
 	if err != nil {
 		return "", err
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
 	if !validRev(rev) {
-		if _, err = s.live(ctx, pk, key); err != nil {
+		if _, err = s.live(ctx, pk, sk); err != nil {
 			return "", err
 		}
 		return "", port.ErrConflict
 	}
-	m, next := s.build(pk, key, value, ttl, false)
+	m, next := s.build(pk, sk, key, value, ttl, false)
 	_, err = s.api.PutItem(ctx, &ddb.PutItemInput{
 		TableName: &s.table, Item: m,
 		ConditionExpression: aws.String(condLive),
@@ -578,20 +586,20 @@ func (s *Store) Update(ctx context.Context, key string, value []byte, ttl time.D
 	case err == nil:
 		return port.Revision(next), nil
 	case isConditionFailed(err):
-		return "", s.failedWith(ctx, err, pk, key)
+		return "", s.failedWith(ctx, err, pk, sk)
 	}
 	return "", unavailable(err)
 }
 
 // Delete implements [port.State].
 func (s *Store) Delete(ctx context.Context, key string) error {
-	pk, err := partition(key)
+	pk, sk, err := locate(key)
 	if err != nil {
 		return nil // such a key was never written
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	if _, err = s.api.DeleteItem(ctx, &ddb.DeleteItemInput{TableName: &s.table, Key: keyOf(pk, key)}); err != nil {
+	if _, err = s.api.DeleteItem(ctx, &ddb.DeleteItemInput{TableName: &s.table, Key: keyOf(pk, sk)}); err != nil {
 		return unavailable(err)
 	}
 	return nil
@@ -599,20 +607,20 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 
 // DeleteIfRevision implements [port.State].
 func (s *Store) DeleteIfRevision(ctx context.Context, key string, rev port.Revision) error {
-	pk, err := partition(key)
+	pk, sk, err := locate(key)
 	if err != nil {
 		return port.ErrNotFound
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
 	if !validRev(rev) {
-		if _, err = s.live(ctx, pk, key); err != nil {
+		if _, err = s.live(ctx, pk, sk); err != nil {
 			return err
 		}
 		return port.ErrConflict
 	}
 	_, err = s.api.DeleteItem(ctx, &ddb.DeleteItemInput{
-		TableName: &s.table, Key: keyOf(pk, key),
+		TableName: &s.table, Key: keyOf(pk, sk),
 		ConditionExpression: aws.String(condLive),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":rev": &types.AttributeValueMemberN{Value: string(rev)}, ":now": numAttr(s.nowSec()),
@@ -623,7 +631,7 @@ func (s *Store) DeleteIfRevision(ctx context.Context, key string, rev port.Revis
 	case err == nil:
 		return nil
 	case isConditionFailed(err):
-		return s.failedWith(ctx, err, pk, key)
+		return s.failedWith(ctx, err, pk, sk)
 	}
 	return unavailable(err)
 }

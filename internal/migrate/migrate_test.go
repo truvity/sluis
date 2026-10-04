@@ -86,6 +86,26 @@ func TestLegacyToSharedCopiesEveryDomainAndVerifies(t *testing.T) {
 			if err != nil || !found || !bytes.Contains(cred.Data, []byte("TOPSECRET-WS")) {
 				t.Fatalf("the workspace credential on the destination = %+v, %v, %v", cred, found, err)
 			}
+			// Slack and the rest land in storage layout v2: the credentials of each kind
+			// under `credentials/<kind>/<id>/`, and the records under their kind.
+			paths, err := dst.Ports.Secrets.List(ctx, port.CredentialsPrefix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				"credentials/workspace/C01/", "credentials/github-org/acme/", "credentials/github-app/link/",
+				"credentials/github-app/renovate/", "credentials/github-runner-app/stable/acme/",
+				"credentials/slack-workspace/acme/", "credentials/slack-app/notifier/", "credentials/console/session-key",
+			} {
+				if !slices.ContainsFunc(paths, func(p string) bool { return strings.HasPrefix(p, want) }) {
+					t.Errorf("no credential under %s in the destination: %v", want, paths)
+				}
+			}
+			for _, prefix := range []string{"ws.slack.", "app.slack.cat.", "rec.slack.shared.", "rec.slack.channel.", "gate.slack."} {
+				if page, err := dst.Ports.State.List(ctx, prefix, "", 10); err != nil || len(page.Records) == 0 {
+					t.Errorf("the destination holds no Slack record under %s (%v)", prefix, err)
+				}
+			}
 			for _, prefix := range []string{"ws.", "gh.", "app.", "rec."} {
 				page, err := dst.Ports.State.List(ctx, prefix, "", 1000)
 				if err != nil {

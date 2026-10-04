@@ -17,11 +17,12 @@ import (
 // after `after`, in key order, until fn returns false. hint is how many items
 // the caller expects to want, to size a Query's pages.
 //
-// A prefix with a dot lies in one partition and is a Query. One without names
-// no partition, so it is a Scan of the table, sorted here.
+// A prefix that lies in one kind (internal/port/keys.go) is a Query on its
+// partition. Any other names no one partition, so it is a Scan of the table,
+// sorted here.
 func (s *Store) iterate(ctx context.Context, prefix, after string, hint int, fn func(item) bool) error {
-	if pk, ok := prefixPartition(prefix); ok {
-		return s.query(ctx, pk, prefix, after, hint, fn)
+	if pk, skPrefix, ok := port.LocatePrefix(prefix); ok {
+		return s.query(ctx, pk, skPrefix, prefix, after, hint, fn)
 	}
 	var all []item
 	err := s.scan(ctx, scanFilterState(prefix), func(it item) bool {
@@ -71,19 +72,21 @@ func (s *Store) scan(ctx context.Context, in *ddb.ScanInput, fn func(item) bool)
 }
 
 // query pages one partition's items under the prefix, in key order.
-func (s *Store) query(ctx context.Context, pk, prefix, after string, hint int, fn func(item) bool) error {
+func (s *Store) query(ctx context.Context, pk, skPrefix, prefix, after string, hint int, fn func(item) bool) error {
 	in := &ddb.QueryInput{
 		TableName:        &s.table,
 		ConsistentRead:   aws.Bool(true),
 		FilterExpression: aws.String(filterAll),
 	}
 	in.KeyConditionExpression = aws.String(keyCondSK)
-	in.ExpressionAttributeValues = map[string]types.AttributeValue{":pk": strAttr(pk), ":p": strAttr(prefix)}
+	in.ExpressionAttributeValues = map[string]types.AttributeValue{":pk": strAttr(pk), ":p": strAttr(skPrefix)}
 	if hint > 0 {
 		in.Limit = aws.Int32(int32(min(hint, 1000)))
 	}
 	if after != "" && after >= prefix {
-		in.ExclusiveStartKey = keyOf(pk, after)
+		if _, sk, err := locate(after); err == nil {
+			in.ExclusiveStartKey = keyOf(pk, sk)
+		}
 	}
 	return s.queryPages(ctx, in, fn)
 }

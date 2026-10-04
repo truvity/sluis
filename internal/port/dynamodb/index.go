@@ -13,33 +13,38 @@ import (
 	"github.com/truvity/sluis/internal/port"
 )
 
-// The Index is the transitional set of the port. A set is a partition,
-// `idx#<set>`, and a member is an item in it with the member as its sort key
-// and the lifetime of the Add that wrote it, so the lifetime is the member's
-// and an Add does not extend the others'. `k` = `i` keeps a member out of every
-// State listing.
+// The Index is the transitional set of the port. A set is a kind of its own
+// (`keyring-index`, `sessions-of`: internal/port/keys.go) and a member is an
+// item in that partition with the sort key `<set id>/<member>`, carrying the
+// lifetime of the Add that wrote it, so the lifetime is the member's and an Add
+// does not extend the others'. `k` = `i` keeps a member out of every State
+// listing, and `lkey` is the set's logical name.
 
-func indexPK(set string) string { return idxPrefix + set }
-
-func (s *Store) indexKeys(set, member string) (string, error) {
+// indexKeys is the partition and the sort key of a member.
+func (s *Store) indexKeys(set, member string) (pk, sk string, err error) {
 	if set == "" || member == "" {
-		return "", fmt.Errorf("%w: an index set and member are not empty", port.ErrUnsupported)
+		return "", "", fmt.Errorf("%w: an index set and member are not empty", port.ErrUnsupported)
 	}
-	if len(member) > maxKey {
-		return "", fmt.Errorf("%w: a member of %d bytes is over DynamoDB's sort key limit", port.ErrUnsupported, len(member))
+	a, err := port.LocateSet(set)
+	if err != nil {
+		return "", "", err
 	}
-	return indexPK(set), nil
+	sk = a.ID + "/" + member
+	if len(sk) > maxKey {
+		return "", "", fmt.Errorf("%w: a member of %d bytes is over DynamoDB's sort key limit", port.ErrUnsupported, len(sk))
+	}
+	return a.Kind, sk, nil
 }
 
 // Add implements [port.Index].
 func (s *Store) Add(ctx context.Context, key, member string, ttl time.Duration) error {
-	pk, err := s.indexKeys(key, member)
+	pk, sk, err := s.indexKeys(key, member)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	m, _ := s.build(pk, member, nil, ttl, true)
+	m, _ := s.build(pk, sk, key, nil, ttl, true)
 	if _, err = s.api.PutItem(ctx, &ddb.PutItemInput{TableName: &s.table, Item: m}); err != nil {
 		return unavailable(err)
 	}
@@ -48,28 +53,34 @@ func (s *Store) Add(ctx context.Context, key, member string, ttl time.Duration) 
 
 // Remove implements [port.Index].
 func (s *Store) Remove(ctx context.Context, key, member string) error {
-	pk, err := s.indexKeys(key, member)
+	pk, sk, err := s.indexKeys(key, member)
 	if err != nil {
 		return nil // never written
 	}
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	if _, err = s.api.DeleteItem(ctx, &ddb.DeleteItemInput{TableName: &s.table, Key: keyOf(pk, member)}); err != nil {
+	if _, err = s.api.DeleteItem(ctx, &ddb.DeleteItemInput{TableName: &s.table, Key: keyOf(pk, sk)}); err != nil {
 		return unavailable(err)
 	}
 	return nil
 }
 
 func (s *Store) members(ctx context.Context, set string) ([]item, error) {
+	a, err := port.LocateSet(set)
+	if err != nil {
+		return nil, nil
+	}
 	in := &ddb.QueryInput{
-		TableName:                 &s.table,
-		ConsistentRead:            aws.Bool(true),
-		KeyConditionExpression:    aws.String(keyCond),
-		FilterExpression:          aws.String(filterIdx),
-		ExpressionAttributeValues: map[string]types.AttributeValue{":pk": strAttr(indexPK(set)), ":i": strAttr(kindIndex)},
+		TableName:              &s.table,
+		ConsistentRead:         aws.Bool(true),
+		KeyConditionExpression: aws.String(keyCondSK),
+		FilterExpression:       aws.String(filterIdx),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": strAttr(a.Kind), ":p": strAttr(a.ID + "/"), ":i": strAttr(kindIndex),
+		},
 	}
 	var out []item
-	err := s.queryPages(ctx, in, func(it item) bool {
+	err = s.queryPages(ctx, in, func(it item) bool {
 		out = append(out, it)
 		return true
 	})
@@ -105,7 +116,7 @@ func (s *Store) ExportIndex(ctx context.Context, prefix string, fn func(port.Exp
 		ConsistentRead:   aws.Bool(true),
 		FilterExpression: aws.String(scanIndex),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":i": strAttr(kindIndex), ":p": strAttr(idxPrefix + prefix),
+			":i": strAttr(kindIndex), ":p": strAttr(prefix),
 		},
 	}
 	sets := map[string]*port.Exported{}
@@ -115,7 +126,7 @@ func (s *Store) ExportIndex(ctx context.Context, prefix string, fn func(port.Exp
 		if !it.index || s.dead(it) {
 			return true
 		}
-		set := it.pk[len(idxPrefix):]
+		set := it.set
 		x, ok := sets[set]
 		if !ok {
 			x = &port.Exported{Key: set}

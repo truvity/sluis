@@ -147,6 +147,14 @@ const (
 const (
 	// PrivateParameterPrefix is where sluis keeps its own secrets.
 	PrivateParameterPrefix = "/sluis/private"
+	// ConfigParameterPrefix is the operator's and the stack's: the secrets a
+	// person seeds (`config/oauth/client-id`, `config/clients/<id>`) and the one
+	// Pulumi generates (`config/issuer/state-secret`). sluis only reads them; its
+	// own writes are under `credentials/` (docs/reference/storage-layout.md).
+	ConfigParameterPrefix = PrivateParameterPrefix + "/config"
+	// CredentialsParameterPrefix is where sluis writes the credentials of its
+	// records, by kind.
+	CredentialsParameterPrefix = PrivateParameterPrefix + "/credentials"
 	// ExportParameterPrefix is where sluis writes what consumers read.
 	ExportParameterPrefix = "/sluis/export"
 )

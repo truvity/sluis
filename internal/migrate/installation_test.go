@@ -51,15 +51,15 @@ func TestAnInstallationMovesTheKeyRingAndNotTheSessions(t *testing.T) {
 			t.Errorf("the destination holds %d records under %s (%v), want %d", n, c.prefix, err, c.want)
 		}
 	}
-	// The credentials went to the Secrets port under private/<key>/<ref>, and State
+	// The credentials went to the Secrets port under credentials/<kind>/<id>/<ref>, and State
 	// holds only the records that name them.
-	paths, err := dst.Ports.Secrets.List(ctx, "private")
+	paths, err := dst.Ports.Secrets.List(ctx, "credentials")
 	if err != nil || len(paths) < 6 {
-		t.Fatalf("the destination's Secrets hold %v (%v), want the credentials under private/", paths, err)
+		t.Fatalf("the destination's Secrets hold %v (%v), want the credentials under credentials/", paths, err)
 	}
 	for _, p := range paths {
-		if !strings.HasPrefix(p, "private/") {
-			t.Errorf("secret %s is not under private/", p)
+		if !strings.HasPrefix(p, "credentials/") {
+			t.Errorf("secret %s is not under credentials/", p)
 		}
 	}
 	got, err := dst.Ports.Secrets.Get(ctx, paths[0])

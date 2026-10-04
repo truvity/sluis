@@ -384,10 +384,10 @@ what grants its use. The roles carry a permissions boundary when
 With KMS signing the issuer still needs a secret to HMAC-sign OAuth flow state.
 The library generates it: a `random.RandomBytes` of 32 bytes (no keepers, so an
 apply never rotates it), stored base64 as the SecureString
-`/sluis/private/issuer/state-secret` (under `ParameterKeyArn` when set), secret
+`/sluis/private/config/issuer/state-secret` (under `ParameterKeyArn` when set), secret
 in state and in `pulumi up`'s output. `StateSecretParameter` is its name. Only
 `sluis-http` needs it, and it already reads `/sluis/private/*`; the function's
-`Env` maps it with `<NAME>=ssm:/sluis/private/issuer/state-secret`. Rotating it
+`Env` maps it with `<NAME>=ssm:/sluis/private/config/issuer/state-secret`. Rotating it
 is `pulumi up --replace` on the `RandomBytes` resource, which signs everyone's
 in-flight sign-in out.
 

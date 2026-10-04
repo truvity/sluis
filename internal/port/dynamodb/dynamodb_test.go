@@ -45,7 +45,7 @@ func TestConformanceOverTheFake(t *testing.T) {
 
 func ctx() context.Context { return context.Background() }
 
-func TestAKeyMapsToItsFamilysPartition(t *testing.T) {
+func TestAKeyMapsToItsKindsPartition(t *testing.T) {
 	f := newFake()
 	s := fakeStore(t, f)
 	for _, key := range []string{"ses.ada.s1", "ses.ada.s2", "ses.bob.s3", "rt.h1", "lease"} {
@@ -54,14 +54,14 @@ func TestAKeyMapsToItsFamilysPartition(t *testing.T) {
 		}
 	}
 	tbl := f.tables[s.table]
-	if got := len(tbl["ses"]); got != 3 {
-		t.Errorf("partition ses has %d items, want 3 (one family, one partition)", got)
+	if got := len(tbl["session"]); got != 3 {
+		t.Errorf("partition session has %d items, want 3 (one kind, one partition)", got)
 	}
-	if _, ok := tbl["ses"]["ses.ada.s1"]; !ok {
-		t.Errorf("the sort key is the whole key: %v", tbl["ses"])
+	if _, ok := tbl["session"]["ada/s1"]; !ok {
+		t.Errorf("the sort key is the id: %v", tbl["session"])
 	}
-	if len(tbl["rt"]) != 1 {
-		t.Errorf("partition rt = %v", tbl["rt"])
+	if len(tbl["issuer-session-token"]) != 1 {
+		t.Errorf("partition issuer-session-token = %v", tbl["issuer-session-token"])
 	}
 	// A prefix with a dot is one Query; the listing never scans.
 	before := f.calls["Scan"]
@@ -107,7 +107,7 @@ func TestAReadFiltersAnItemTheEngineHasNotReaped(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Advance(2 * time.Minute)
-	if len(f.tables[s.table]["tok"]) != 1 {
+	if len(f.tables[s.table]["issuer-token"]) != 1 {
 		t.Fatal("the fake reaped the item: the test would prove nothing")
 	}
 	if _, err := s.Get(ctx(), "tok.x"); !errors.Is(err, port.ErrNotFound) {
@@ -170,8 +170,8 @@ func TestErrorsMapToThePortsNames(t *testing.T) {
 	if _, err = s.Update(ctx(), "tok.k", []byte("y"), time.Minute, r+"1"); !errors.Is(err, port.ErrConflict) {
 		t.Errorf("Update with another revision: %v, want ErrConflict", err)
 	}
-	if _, err = s.Put(ctx(), ".bad", []byte("x"), time.Minute); !errors.Is(err, port.ErrUnsupported) {
-		t.Errorf("a key with no first segment: %v, want ErrUnsupported", err)
+	if _, err = s.Put(ctx(), "", []byte("x"), time.Minute); !errors.Is(err, port.ErrUnsupported) {
+		t.Errorf("an empty key: %v, want ErrUnsupported", err)
 	}
 	if _, err = s.Put(ctx(), "tok."+strings.Repeat("x", 2000), []byte("x"), time.Minute); !errors.Is(err, port.ErrUnsupported) {
 		t.Errorf("a key over the sort key limit: %v, want ErrUnsupported", err)
@@ -224,7 +224,7 @@ func TestTheIndexIsPerMemberAndStaysOutOfState(t *testing.T) {
 	if page, _ := s.List(ctx(), "", "", 0); len(page.Records) != 0 {
 		t.Fatalf("an index member is a State record: %v", page.Records)
 	}
-	if page, _ := s.List(ctx(), "idx#sessions.ada", "", 0); len(page.Records) != 0 {
+	if page, _ := s.List(ctx(), "sessions.ada", "", 0); len(page.Records) != 0 {
 		t.Fatalf("an index member is a State record: %v", page.Records)
 	}
 	s.Advance(2 * time.Minute)
@@ -338,5 +338,76 @@ func TestTheTriggerCrossesStoresOnOneTable(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("a notification did not reach the other process")
+	}
+}
+
+// Storage layout v2: the item every kind of record becomes, pk the kind and sk
+// the id (docs/reference/storage-layout.md).
+func TestEveryKindIsAnItemOfItsKindAndId(t *testing.T) {
+	for _, c := range []struct{ key, pk, sk string }{
+		{"ws.dir.C01ipl6j0", "workspace", "C01ipl6j0"},
+		{"gh.org.opwerm", "github-org", "opwerm"},
+		{"app.gh.link", "github-app", "link"},
+		{"gh.link.299386", "github-link", "299386"},
+		{"app.gh.runner.stable.opwerm", "github-runner-app", "stable/opwerm"},
+		{"ws.slack.T01", "slack-workspace", "T01"},
+		{"app.slack.cat.alerts", "slack-app", "alerts"},
+		{"rec.slack.shared.partners", "slack-shared", "partners"},
+		{"rec.slack.channel.acme.ops", "slack-channel", "acme/ops"},
+		{"lease.slack-tick:acme", "lease", "slack-tick/acme"},
+		{"issuer:keyring:entry:ES384:kid1", "keyring", "ES384/kid1"},
+		{"issuer:request:r1", "issuer-request", "r1"},
+		{"issuer:token:j1", "issuer-token", "j1"},
+		{"issuer:kms:state-secret-fingerprint", "issuer-guard", "state-secret-fingerprint"},
+	} {
+		f := newFake()
+		s := fakeStore(t, f)
+		if _, err := s.Put(ctx(), c.key, []byte("v"), time.Hour); err != nil {
+			t.Fatalf("Put(%q): %v", c.key, err)
+		}
+		if _, ok := f.tables[s.table][c.pk][c.sk]; !ok {
+			t.Errorf("%q is not the item %s / %s: %v", c.key, c.pk, c.sk, f.tables[s.table])
+		}
+		if rec, err := s.Get(ctx(), c.key); err != nil || rec.Key != c.key {
+			t.Errorf("Get(%q) = %v, %v", c.key, rec, err)
+		}
+	}
+}
+
+func TestAnIndexSetIsItsKindsPartition(t *testing.T) {
+	f := newFake()
+	s := fakeStore(t, f)
+	if err := s.Add(ctx(), "issuer:keyring:index:ES384", "kid1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.tables[s.table]["keyring-index"]["ES384/kid1"]; !ok {
+		t.Errorf("the member is not keyring-index / ES384/kid1: %v", f.tables[s.table])
+	}
+	if got, _ := s.Members(ctx(), "issuer:keyring:index:ES384"); !slices.Equal(got, []string{"kid1"}) {
+		t.Errorf("Members = %v", got)
+	}
+}
+
+// A prefix that names one kind is a Query with the id's prefix; one that names
+// several is a Scan, in key order.
+func TestAListingByAPrefixIsAQueryOnTheKindOrAScan(t *testing.T) {
+	f := newFake()
+	s := fakeStore(t, f)
+	for _, key := range []string{"rec.slack.channel.acme.ops", "rec.slack.channel.acme.dev", "rec.slack.channel.globex.ops", "rec.slack.shared.p"} {
+		if _, err := s.Put(ctx(), key, []byte("v"), time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := f.calls["Scan"]
+	page, err := s.List(ctx(), "rec.slack.channel.acme.", "", 0)
+	if err != nil || len(page.Records) != 2 || f.calls["Scan"] != before {
+		t.Fatalf("List = %v, %v, scans %d -> %d", page.Records, err, before, f.calls["Scan"])
+	}
+	if page.Records[0].Key != "rec.slack.channel.acme.dev" {
+		t.Errorf("the listing is not in key order, and keyed by the logical key: %v", page.Records)
+	}
+	page, err = s.List(ctx(), "rec.slack.", "", 0)
+	if err != nil || len(page.Records) != 4 || f.calls["Scan"] == before {
+		t.Fatalf("List(rec.slack.) = %d records (%v), scans %d: want a Scan of 4", len(page.Records), err, f.calls["Scan"])
 	}
 }

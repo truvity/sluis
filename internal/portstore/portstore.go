@@ -24,7 +24,7 @@
 //	gate.slack.<workspace>.confirm.<channel> | .pass
 //
 // A credential is never written to State: it is a secret under
-// `private/<key>/<ref>` in the Secrets port (an SSM parameter in production),
+// `credentials/<kind>/<id>/<ref>` in the Secrets port (an SSM parameter in production),
 // and the item in State names it by its ref. A secret is written before the
 // item that names it, under a fresh ref, so a reader never finds a name without
 // its secret and a writer that loses the swap never replaces the winner's
@@ -102,29 +102,41 @@ func encodeItem(it *item) []byte {
 	return raw
 }
 
-// secretPrefix is where the credentials live in Secrets: `private/<key>/<ref>`,
-// the item's own key made a valid secret path by [secretPath], and the ref
-// the item names.
-const secretPrefix = "private/"
+// secretPrefix is where the credentials live in Secrets:
+// `credentials/<kind>/<id>/<ref>`, the kind and id being the item's address in
+// the storage layout (internal/port/keys.go; docs/reference/storage-layout.md).
+const secretPrefix = port.CredentialsPrefix
 
-// secretPath is the Secrets path of a credential of an item key. A key is
-// dot-separated segments written by [seg]; a segment holding '~' is not a
-// valid secret path segment, nor is an empty one or one that would be
-// mistaken for the rewritten form, so all of them become `u-` and the
-// segment's bytes in hex. The mapping is one to one. A ref, when there is one,
-// is a last segment of its own.
+// secretPath is the Secrets path of a credential of an item key: the item's
+// address, kind and id, and the ref the item names (none for a single stable
+// item such as the console's session key). A segment of the id that a secret
+// path cannot hold (a `~`, an empty one, or one that would be mistaken for the
+// rewritten form) becomes `u-` and its bytes in hex; the mapping is one to
+// one. A key no rule names is kept under the kind `other`, whole.
 func secretPath(key, ref string) string {
-	segs := strings.Split(key, ".")
+	addr, err := port.Locate(key)
+	if err != nil {
+		addr = port.Address{Kind: port.KindOther, ID: key}
+	}
+	segs := strings.Split(addr.ID, "/")
+	if addr.Kind == port.KindOther {
+		segs = []string{addr.ID}
+	}
 	for i, s := range segs {
-		if s == "" || strings.Contains(s, "~") || strings.HasPrefix(s, "u-") {
+		if s == "" || strings.Contains(s, "~") || strings.HasPrefix(s, "u-") || !validSecretSegment(s) {
 			segs[i] = "u-" + fmt.Sprintf("%x", s)
 		}
 	}
-	p := secretPrefix + strings.Join(segs, ".")
+	p := secretPrefix + addr.Kind + "/" + strings.Join(segs, "/")
 	if ref != "" {
 		p += "/" + ref
 	}
 	return p
+}
+
+// validSecretSegment is a segment [port.CheckSecretPath] accepts.
+func validSecretSegment(s string) bool {
+	return s != "." && s != ".." && port.CheckSecretPath(s) == nil
 }
 
 var errNoSecrets = errors.New("portstore: no Secrets: a credential is never written in State")

@@ -16,7 +16,7 @@ import (
 )
 
 // SSMPrefix marks an environment variable whose value is not the value but where
-// to read it: `OAUTH_CLIENT_SECRET=ssm:/sluis/private/oauth/client-secret`. The
+// to read it: `OAUTH_CLIENT_SECRET=ssm:/sluis/private/config/oauth/client-secret`. The
 // configuration file names the variable that holds a secret (`secretEnv`), and
 // on Lambda the deployment fills that variable at cold start from SSM Parameter
 // Store, so the file, which is in the zip, never holds the secret and the

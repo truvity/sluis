@@ -701,7 +701,7 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 			t.Errorf("random bytes: %v: 32 bytes and no keepers, or an apply rotates it", r.Inputs)
 		}
 		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-state-secret")
-		if prop(p, "name").StringValue() != "/sluis/private/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
+		if prop(p, "name").StringValue() != "/sluis/private/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		if !prop(p, "value").IsSecret() {
@@ -712,7 +712,7 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 		}
 	}
 	_, out := mustLambda(t, estate{})
-	if out["stateSecretParameter"] != "/sluis/private/issuer/state-secret" {
+	if out["stateSecretParameter"] != "/sluis/private/config/issuer/state-secret" {
 		t.Errorf("output: %q", out["stateSecretParameter"])
 	}
 }
@@ -795,7 +795,7 @@ func TestTheSecretFilesAreTheEnvironmentTheAppReads(t *testing.T) {
 	env := func(r string) map[resource.PropertyKey]resource.PropertyValue {
 		return prop(rec.one(t, fnType, "kernel-"+r), "environment").ObjectValue()["variables"].ObjectValue()
 	}
-	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/issuer/state-secret","path":"/tmp/sluis/state-secret"}]` {
+	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"}]` {
 		t.Errorf("http: %s", got)
 	}
 	if got := env("github")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/github/app-key","path":"/tmp/sluis/github-app.pem"}]` {

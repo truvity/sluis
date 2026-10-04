@@ -537,8 +537,8 @@ func TestNoSecretsIsRefusedAtStart(t *testing.T) {
 	}
 }
 
-// A credential lives in Secrets under private/<key>, and never in State.
-func TestACredentialIsInSecretsUnderThePrivatePrefix(t *testing.T) {
+// A credential lives in Secrets under credentials/<key>, and never in State.
+func TestACredentialIsInSecretsUnderTheCredentialsPrefix(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		set := e.open(t)
 		b := portstore.New(set)
@@ -550,16 +550,16 @@ func TestACredentialIsInSecretsUnderThePrivatePrefix(t *testing.T) {
 				t.Fatalf("Save(%q): %v", id, err)
 			}
 		}
-		paths, err := set.Secrets.List(ctx, "private")
+		paths, err := set.Secrets.List(ctx, "credentials")
 		if err != nil || len(paths) != 5 {
-			t.Fatalf("Secrets under private/ = %v, %v, want 5", paths, err)
+			t.Fatalf("Secrets under credentials/ = %v, %v, want 5", paths, err)
 		}
 		// Saving again replaces the credential and leaves no second one behind.
 		cred.Data = []byte(`{"private_key":"TOPSECRET2"}`)
 		if err = creds.Save(ctx, "C01", cred); err != nil {
 			t.Fatal(err)
 		}
-		if paths, err = set.Secrets.List(ctx, "private"); err != nil || len(paths) != 5 {
+		if paths, err = set.Secrets.List(ctx, "credentials"); err != nil || len(paths) != 5 {
 			t.Fatalf("after a second Save: %v, %v, want 5", paths, err)
 		}
 		if got, _, _ := creds.Load(ctx, "C01"); string(got.Data) != string(cred.Data) {
@@ -569,7 +569,7 @@ func TestACredentialIsInSecretsUnderThePrivatePrefix(t *testing.T) {
 		if err = creds.Delete(ctx, "a.b"); err != nil {
 			t.Fatal(err)
 		}
-		if paths, err = set.Secrets.List(ctx, "private"); err != nil || len(paths) != 4 {
+		if paths, err = set.Secrets.List(ctx, "credentials"); err != nil || len(paths) != 4 {
 			t.Fatalf("after Delete: %v, %v, want 4", paths, err)
 		}
 		for _, id := range []string{"C01", "x~y", "u-1", ""} {

@@ -579,9 +579,8 @@ func (c *Config) readExports(f *config.Serve) error {
 	if c.demo {
 		return errors.New("exports: a demonstration keeps no credential worth copying")
 	}
-	if f.Ports == nil || f.Ports.Export == nil {
-		return errors.New("exports: nothing says where to copy to: set ports.export")
-	}
+	// Where the copies go is `ports.export`, or else the secrets adapter's
+	// `export/` (SSM `/sluis/export/`); start refuses when neither exists.
 	declared := exports.Declared{
 		SlackApps:   []string{},
 		GitHubApps:  []string{},
