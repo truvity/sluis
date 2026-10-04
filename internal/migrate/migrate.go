@@ -231,8 +231,6 @@ type entry struct {
 	// secrets are the sizes of the credentials the item carries, which the
 	// destination keeps in its Secrets port and not in State.
 	secrets []int
-	// refuse says why the destination would not take the item, "" if it would.
-	refuse string
 }
 
 // kit is what a step reads and writes: one side's domain stores and ports.
@@ -430,7 +428,8 @@ func (r *run) execute(ctx context.Context, steps []step) error {
 
 	// 2. Copy.
 	for _, sr := range runs {
-		for _, p := range sr.items {
+		for i := range sr.items {
+			p := sr.items[i]
 			if p.action == "present" {
 				continue
 			}
@@ -495,7 +494,8 @@ func (r *run) plan(ctx context.Context, s step) (*stepRun, error) {
 		have[dst[i].id] = &dst[i]
 	}
 	sr := &stepRun{step: s, out: &Step{Domain: s.domain, Kind: s.name}}
-	for _, e := range src {
+	for i := range src {
+		e := src[i]
 		if e.unreadable != "" {
 			sr.out.Unreadable++
 			r.report.Unreadable = append(r.report.Unreadable, Problem{s.domain, s.name, e.shown, e.unreadable})
@@ -547,7 +547,8 @@ func (r *run) verify(ctx context.Context, sr *stepRun) error {
 	for i := range dst {
 		have[dst[i].id] = &dst[i]
 	}
-	for _, e := range src {
+	for i := range src {
+		e := src[i]
 		if e.unreadable != "" {
 			continue
 		}
@@ -597,7 +598,8 @@ func lifetimeProblem(src, dst time.Duration) string {
 // total sums the steps.
 func (r *run) total() {
 	t := Step{Domain: "all", Kind: "all"}
-	for _, s := range r.report.Steps {
+	for i := range r.report.Steps {
+		s := r.report.Steps[i]
 		t.Source += s.Source
 		t.Unreadable += s.Unreadable
 		t.New += s.New
@@ -649,7 +651,8 @@ func kindStep(k kind) step {
 // credential, Blobs for a blob).
 func (r *run) concerns() {
 	state, secrets, blobs := ConcernSummary{Concern: "state"}, ConcernSummary{Concern: "secrets"}, ConcernSummary{Concern: "blobs"}
-	for _, s := range r.report.Steps {
+	for i := range r.report.Steps {
+		s := r.report.Steps[i]
 		if s.Domain == DomainBlobs {
 			blobs.Items += s.Source
 			blobs.Bytes += s.Bytes
@@ -686,8 +689,7 @@ const (
 // one, a record over [port.MaxValue], a credential over [port.MaxSecret], or the
 // step's own check.
 func refusal(s step, e entry) string {
-	switch {
-	case e.id == "" || len(e.id) > maxKey || !validKey(e.id):
+	if e.id == "" || len(e.id) > maxKey || !validKey(e.id) {
 		return "the key is empty, over 1024 bytes, or holds a control character or invalid UTF-8"
 	}
 	record := len(e.canon)
