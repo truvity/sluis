@@ -1,4 +1,6 @@
-## Unreleased
+## v1.57.1
+
+Released automatically as a patch: the roster audit catalogue bumped to 1.7.0 after its document changed in 1.57.0.
 
 - **Fixed: the audit catalogue is now version 1.7.0.** v1.57.0 renamed the
   product through every file, including `internal/audit/catalogue/roster.yaml`
