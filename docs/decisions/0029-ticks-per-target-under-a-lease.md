@@ -4,7 +4,7 @@
 **Date:** 2026-10-02
 
 > **Note (2026-10-04).** Where this record names NATS or the KMS Sealer for two
-> replicas, read DynamoDB: both were removed (INF-1268).
+> replicas, read DynamoDB: both were removed.
 
 ## Context
 

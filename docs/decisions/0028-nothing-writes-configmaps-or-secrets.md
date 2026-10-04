@@ -3,7 +3,7 @@
 **Status:** Accepted; extended by [0034](0034-exports-go-to-openbao-directly.md)
 **Date:** 2026-10-02
 
-> **Superseded (2026-10-04).** Sealing is retired entirely (INF-1268): the Sealing
+> **Superseded (2026-10-04).** Sealing is retired entirely: the Sealing
 > port, the KMS sealer, the `sluis:binding` encryption context and `ports.sealer`
 > are gone. A dynamic secret is written to the Secrets port (SSM in production)
 > under `private/<key>/<ref>`, and State holds only the record that names it
