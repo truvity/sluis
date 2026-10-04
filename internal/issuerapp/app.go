@@ -377,7 +377,9 @@ type Deps struct {
 // App is an assembled issuer.
 type App struct {
 	// kms is set when the primary key lives in AWS KMS; Run polls it.
-	kms     *issuer.KMSKeyRefs
+	kms *issuer.KMSKeyRefs
+	// state is the shared state the secret fingerprint lives in.
+	state   issuer.State
 	handler http.Handler
 	health  http.Handler
 	issuer  *issuer.Issuer
@@ -543,11 +545,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		ActivationDelay: cfg.keyActivationDelay,
 		Overlap:         cfg.keyOverlap,
 	})
-	// The rest of the KMS list, in order, AFTER the delays are set: the
-	// first key the installation ever saw is active at once, every later
-	// one waits out the activation delay, so the last listed signs last.
+	// The earlier KMS keys, in order: refreshed if the installation knows
+	// them, never newly adopted.
 	for _, extra := range kmsRest {
-		if err = storage.Rotate(ctx, extra); err != nil {
+		if err = storage.RotateKnown(ctx, extra); err != nil {
 			return nil, fmt.Errorf("adopt a KMS signing key: %w", err)
 		}
 	}
@@ -633,7 +634,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs}, nil
+	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, state: shared}, nil
 }
 
 // directorySource says where the answer about a person comes from. There
@@ -705,7 +706,9 @@ func (a *App) Run(ctx context.Context) error {
 	group.Go(func() error { return serve(gctx, a.cfg.healthPort, a.health, "health", a.log) })
 	if a.kms != nil {
 		group.Go(func() error {
-			watchKMSKeys(gctx, a.kms, a.cfg.keyPollInterval, a.storage, a.log)
+			watchKMSKeys(gctx, a.kms, a.cfg.keyPollInterval, a.storage, a.log, func(c context.Context) error {
+				return checkStateSecret(c, a.state, a.kms.Seed)
+			})
 			return nil
 		})
 	}
@@ -1127,13 +1130,11 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 
 // kmsSigningKeys reads every KMS key in signingKey.kms at start, in order.
 //
-// The FIRST is returned as the primary and the rest apart: the ring gives the
-// first key it ever sees an immediate schedule and every later one an
-// activation delay, so feeding them in list order makes the last one signs
-// last. A fresh installation with two keys listed therefore signs with the
-// first until the delay passes; an existing one already has them recorded.
-// Only ever append a key: listing a key that sorts before one the ring has
-// already seen would give it a LATER activation and make it the signer.
+// The LAST is returned as the primary, the only key ever recorded as new; the
+// earlier ones are returned apart and fed through RotateKnown, which refreshes
+// a key the installation already knows and never adopts one it does not. So
+// state lost without tombstones cannot make a replica start by signing with
+// the oldest key. Only ever append a key.
 //
 // A key the role cannot read stops the start, with the missing permission
 // named; starting without it would sign with fewer keys than the deployment
@@ -1174,7 +1175,8 @@ func kmsSigningKeys(
 		log.InfoContext(ctx, "signing with an AWS KMS key",
 			"key", cfg.kmsKeys[i], "kid", key.ID(), "algorithm", key.SignatureAlgorithm(), "active", i == len(keys)-1)
 	}
-	return refs, keys[1:], keys[0], nil
+	last := len(keys) - 1
+	return refs, keys[:last], keys[last], nil
 }
 
 // watchKMSKeys re-reads every KMS key's public half on an interval and feeds
@@ -1182,7 +1184,10 @@ func kmsSigningKeys(
 // its own, so one that fails does not hide the others, and a failure keeps the
 // previous key as a file read that fails does. Re-reading is what notices an
 // alias moved to another key: it reads as a new kid and is scheduled as one.
-func watchKMSKeys(ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger) {
+func watchKMSKeys(
+	ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger,
+	checkSecret func(context.Context) error,
+) {
 	if interval <= 0 {
 		interval = issuer.DefaultKeyPollInterval
 	}
@@ -1193,6 +1198,10 @@ func watchKMSKeys(ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Du
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Re-written if the record lapsed; a mismatch is logged, not fatal.
+			if err := checkSecret(ctx); err != nil {
+				log.WarnContext(ctx, "the KMS state secret check failed", "error", err)
+			}
 			for i, ref := range refs.Refs {
 				one := issuer.KMSKeyRefs{API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
 				keys, err := one.Load(ctx)
@@ -1292,7 +1301,7 @@ func checkStateSecret(ctx context.Context, state issuer.State, seed []byte) erro
 	mac.Write([]byte("sluis/kms-state-secret-fingerprint"))
 	fingerprint := []byte(hex.EncodeToString(mac.Sum(nil)[:8]))
 	const key = "issuer:kms:state-secret-fingerprint"
-	won, err := state.SetIfAbsent(ctx, key, fingerprint, 30*24*time.Hour)
+	won, err := state.SetIfAbsent(ctx, key, fingerprint, 365*24*time.Hour)
 	if err != nil {
 		return fmt.Errorf("record the state secret's fingerprint: %w", err)
 	}
