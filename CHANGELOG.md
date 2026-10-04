@@ -1,5 +1,36 @@
 ## Unreleased
 
+### Added
+
+- **`kms-wrapped` signing adapter, the default for the AWS presets.** Token
+  signing moves from one remote asymmetric KMS key per algorithm to ONE symmetric
+  application key per estate and data key pairs: the issuer calls
+  `kms:GenerateDataKeyPairWithoutPlaintext` (ES384 on `ECC_NIST_P384`, RS256 on
+  `RSA_3072`), records the public key and the private key encrypted under the
+  symmetric key in its key ring, and signs locally with the key it decrypts
+  (`kms:Decrypt`, same encryption context
+  `{purpose: sluis-signing, alg, kid}`) into process memory. Rotation is
+  automatic and free: a new pair per algorithm every `rotateEvery` (24h), under
+  the State lease `lease.signing-keygen:<alg>`, published for `prepublish` (15m,
+  longer than a verifier caches the JWKS) before it signs and kept for `retain`
+  (`lifetimes.token` + 5m) after it is replaced. Configure it with
+  `signingKey.kmsWrapped: {keyId, stateSecretFile, algorithms, rotateEvery,
+  prepublish, retain}` or `adapters.signing`. `aws-serverless` and `aws-hybrid`
+  now default to it; `kms` (remote signing, non-extractable keys) stays
+  selectable and unchanged, and so does `aws-eks`. **Trade-off:** wrapped keys
+  are decrypted into memory, so a leaked role can forge tokens until the key
+  rotates out. EdDSA is not supported yet. See
+  [Signing on AWS](docs/deployment/aws.md#signing-on-aws). A deployment that
+  names `signingKey.kms` or `signingKey.file` keeps what it names.
+- **Pulumi library: `LambdaArgs.WrappedSigning`.** One symmetric key (created
+  with rotation enabled, protected, and a key policy that holds the http role to
+  `kms:EncryptionContext:purpose = sluis-signing` and no context keys beside
+  `purpose`, `alg`, `kid`, or an existing `KeyArn`), a grant of only
+  `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on it with those
+  conditions to the http function, and no asymmetric keys unless
+  `KeepRemoteSigningKeys`. `KubernetesIdentityArgs.WrappedSigningKeyArn` grants
+  the serve role the same.
+
 ## v1.60.0
 
 Storage layout v2 moves DynamoDB items to a per-kind table partition, SSM configs to a /config prefix, and exports to Secrets; re-migrate from legacy.

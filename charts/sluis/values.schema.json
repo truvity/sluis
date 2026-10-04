@@ -1941,9 +1941,25 @@
           "additionalProperties": false,
           "description": "The issuer's signing keys: provisioned, never minted here.",
           "not": {
-            "required": [
-              "file",
-              "kms"
+            "anyOf": [
+              {
+                "required": [
+                  "file",
+                  "kms"
+                ]
+              },
+              {
+                "required": [
+                  "file",
+                  "kmsWrapped"
+                ]
+              },
+              {
+                "required": [
+                  "kms",
+                  "kmsWrapped"
+                ]
+              }
             ]
           },
           "properties": {
@@ -2024,6 +2040,58 @@
               },
               "required": [
                 "keys",
+                "stateSecretFile"
+              ],
+              "type": "object"
+            },
+            "kmsWrapped": {
+              "additionalProperties": false,
+              "description": "Sign with key pairs AWS KMS generates and wraps under ONE symmetric key (the `kms-wrapped` adapter): a new pair per algorithm every `rotateEvery`, published before it signs and kept after it is replaced. The private key is decrypted into process memory to sign. Exclusive with `file` and `kms`.",
+              "properties": {
+                "algorithms": {
+                  "description": "The algorithms signed with, the first the installation default. Unset is ES384 and RS256. EdDSA is not supported yet.",
+                  "items": {
+                    "enum": [
+                      "ES384",
+                      "RS256"
+                    ]
+                  },
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "keyId": {
+                  "description": "The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "prepublish": {
+                  "$ref": "#/definitions/config-serve.duration",
+                  "default": "15m",
+                  "description": "How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`."
+                },
+                "region": {
+                  "description": "The key's region. Unset follows the AWS SDK's own resolution.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "retain": {
+                  "$ref": "#/definitions/config-serve.duration",
+                  "description": "How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`."
+                },
+                "rotateEvery": {
+                  "$ref": "#/definitions/config-serve.duration",
+                  "default": "24h",
+                  "description": "How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h."
+                },
+                "stateSecretFile": {
+                  "description": "A file holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "keyId",
                 "stateSecretFile"
               ],
               "type": "object"

@@ -123,6 +123,8 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("signingKeyRS256Arn", l.SigningKeyRS256Arn)
 		collect("signingKeyRS256Alias", l.SigningKeyRS256Alias)
 		collect("signingKeyRS256ID", l.SigningKeyRS256ID)
+		collect("wrappedSigningKeyArn", l.WrappedSigningKeyArn)
+		collect("wrappedSigningKeyAlias", l.WrappedSigningKeyAlias)
 		collect("httpFunctionArn", l.HTTPFunctionArn)
 		collect("githubFunctionArn", l.GitHubFunctionArn)
 		collect("slackFunctionArn", l.SlackFunctionArn)
@@ -823,5 +825,178 @@ func TestTheSecretFilesAreTheEnvironmentTheAppReads(t *testing.T) {
 		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// The conditions the signing role's use of the symmetric key carries: only the
+// purpose the adapter uses, and no context keys beside the three it sets.
+func wantWrappedCondition(t *testing.T, who string, cond any) {
+	t.Helper()
+	c, _ := cond.(map[string]any)
+	if got := c["StringEquals"]; !reflect.DeepEqual(got, map[string]any{"kms:EncryptionContext:purpose": "sluis-signing"}) {
+		t.Errorf("%s: StringEquals %v", who, got)
+	}
+	if got := c["ForAllValues:StringEquals"]; !reflect.DeepEqual(got, map[string]any{"kms:EncryptionContextKeys": []any{"purpose", "alg", "kid"}}) {
+		t.Errorf("%s: ForAllValues:StringEquals %v", who, got)
+	}
+}
+
+func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T) {
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }})
+
+	keys := rec.ofType("aws:kms/key:Key")
+	if len(keys) != 1 {
+		t.Fatalf("keys: %v", rec.names())
+	}
+	k := rec.one(t, "aws:kms/key:Key", "kernel-signing-key-wrapped")
+	if prop(k, "keyUsage").StringValue() != "ENCRYPT_DECRYPT" || prop(k, "customerMasterKeySpec").StringValue() != "SYMMETRIC_DEFAULT" ||
+		!prop(k, "enableKeyRotation").BoolValue() {
+		t.Errorf("key: %v", k.Inputs)
+	}
+	if !rec.isProtected("aws:kms/key:Key", "kernel-signing-key-wrapped") {
+		t.Error("the wrapped signing key is not protected")
+	}
+	if prop(rec.one(t, "aws:kms/alias:Alias", "kernel-signing-alias-wrapped"), "name").StringValue() != "alias/sluis-signing-wrapped" {
+		t.Error("alias")
+	}
+	if out["signingKeyArn"] != "" || out["signingKeyRS256Arn"] != "" || out["wrappedSigningKeyArn"] == "" {
+		t.Errorf("outputs: %v", out)
+	}
+
+	// Only http may use it, and never to sign remotely.
+	wantKey := out["wrappedSigningKeyArn"]
+	for _, r := range []string{"http", "github", "slack"} {
+		g := rolePolicy(t, rec, r)
+		if len(g["kms:Sign"]) != 0 || len(g["kms:GetPublicKey"]) != 0 {
+			t.Errorf("%s signs remotely: %v", r, g)
+		}
+		for _, a := range []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"} {
+			if got := g[a]; (r == "http") != (len(got) > 0) || (r == "http" && !reflect.DeepEqual(got, []string{wantKey})) {
+				t.Errorf("%s: %s on %v", r, a, got)
+			}
+		}
+	}
+	found := false
+	for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if st["Sid"] != "SluisWrappedSigning" {
+			continue
+		}
+		found = true
+		wantWrappedCondition(t, "the http role", st["Condition"])
+		if st["Effect"] != "Allow" || !reflect.DeepEqual(strs(st["Action"]), []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"}) {
+			t.Errorf("statement: %v", st)
+		}
+	}
+	if !found {
+		t.Error("no SluisWrappedSigning statement")
+	}
+
+	// The key policy holds the role to the same conditions, whatever else is
+	// attached to it, and gives it nothing else on this key.
+	roleArn := arnp + "iam::" + account + ":role/sluis-http"
+	byID := map[string]map[string]any{}
+	for _, st := range statements(t, prop(k, "policy").StringValue()) {
+		byID[st["Sid"].(string)] = st
+	}
+	if root := byID["EnableIAMPolicies"]; root == nil || root["Effect"] != "Allow" || root["Action"] != "kms:*" ||
+		!reflect.DeepEqual(root["Principal"], map[string]any{"AWS": arnp + "iam::" + account + ":root"}) {
+		t.Errorf("admin statement: %v", root)
+	}
+	for sid, want := range map[string]string{
+		"SluisSigningRolePurposeOnly":     "StringNotEquals",
+		"SluisSigningRoleContextKeysOnly": "ForAnyValue:StringNotEquals",
+	} {
+		st := byID[sid]
+		if st == nil || st["Effect"] != "Deny" || !reflect.DeepEqual(strs(st["Action"]), []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"}) {
+			t.Errorf("%s: %v", sid, st)
+			continue
+		}
+		cond := st["Condition"].(map[string]any)
+		if !reflect.DeepEqual(cond["ArnEquals"], map[string]any{"aws:PrincipalArn": roleArn}) || cond[want] == nil {
+			t.Errorf("%s: condition %v", sid, cond)
+		}
+	}
+	if st := byID["SluisSigningRoleNothingElse"]; st == nil || st["Effect"] != "Deny" || st["Action"] != nil ||
+		!reflect.DeepEqual(strs(st["NotAction"]), []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"}) {
+		t.Errorf("the deny of everything else: %v", st)
+	}
+	if len(byID) != 4 {
+		t.Errorf("key policy statements: %v", byID)
+	}
+}
+
+func TestWrappedSigningWithAnExistingKeyCreatesNoKey(t *testing.T) {
+	app := arnp + "kms:" + region + ":" + account + ":key/application"
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.WrappedSigning = &arp.WrappedSigningArgs{KeyArn: pulumi.String(app)}
+	}})
+	if n := len(rec.ofType("aws:kms/key:Key")); n != 0 || len(rec.ofType("aws:kms/alias:Alias")) != 0 {
+		t.Errorf("created keys: %v", rec.names())
+	}
+	if out["wrappedSigningKeyArn"] != app || out["wrappedSigningKeyAlias"] != "" {
+		t.Errorf("outputs: %v", out)
+	}
+	if got := rolePolicy(t, rec, "http")["kms:Decrypt"]; !reflect.DeepEqual(got, []string{app}) {
+		t.Errorf("http decrypts with %v", got)
+	}
+	if got := rolePolicy(t, rec, "slack")["kms:Decrypt"]; len(got) != 0 {
+		t.Errorf("slack decrypts with %v", got)
+	}
+}
+
+func TestWrappedSigningCanKeepTheRemoteKeysWhileAStackMoves(t *testing.T) {
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.WrappedSigning = &arp.WrappedSigningArgs{KeepRemoteSigningKeys: true, KeyAlias: "alias/acme-wrapped"}
+	}})
+	if n := len(rec.ofType("aws:kms/key:Key")); n != 3 {
+		t.Errorf("keys: %v", rec.names())
+	}
+	g := rolePolicy(t, rec, "http")
+	if len(g["kms:Sign"]) != 2 || len(g["kms:Decrypt"]) != 1 || out["signingKeyArn"] == "" {
+		t.Errorf("http: %v %v", g, out)
+	}
+	if prop(rec.one(t, "aws:kms/alias:Alias", "kernel-signing-alias-wrapped"), "name").StringValue() != "alias/acme-wrapped" {
+		t.Error("alias")
+	}
+}
+
+func TestWrappedSigningAliasMustBeAnAlias(t *testing.T) {
+	_, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{KeyAlias: "wrapped"} }})
+	if err == nil || !strings.Contains(err.Error(), "alias/") {
+		t.Errorf("a bad alias: %v", err)
+	}
+}
+
+func TestThePodIdentityServeRoleMayUseTheWrappedKeyAndNoOtherRoleMay(t *testing.T) {
+	app := arnp + "kms:" + region + ":" + account + ":key/application"
+	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
+		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
+		if err != nil {
+			return err
+		}
+		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
+			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
+			Namespace: "sluis", Serve: arp.ProcessArgs{ServiceAccount: "sluis"}, GitHub: arp.ProcessArgs{ServiceAccount: "sluis-github"},
+			Storage: store.Grant(), WrappedSigningKeyArn: pulumi.String(app),
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pol := func(n string) []map[string]any {
+		return statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue())
+	}
+	serve := grants(pol("kernel-sluis-serve-policy"))
+	if !reflect.DeepEqual(serve["kms:Decrypt"], []string{app}) || !reflect.DeepEqual(serve["kms:GenerateDataKeyPairWithoutPlaintext"], []string{app}) {
+		t.Errorf("serve: %v", serve)
+	}
+	for _, st := range pol("kernel-sluis-serve-policy") {
+		if st["Sid"] == "SluisWrappedSigning" {
+			wantWrappedCondition(t, "serve", st["Condition"])
+		}
+	}
+	if g := grants(pol("kernel-sluis-github-policy")); len(g["kms:Decrypt"]) != 0 || len(g["kms:GenerateDataKeyPairWithoutPlaintext"]) != 0 {
+		t.Errorf("github: %v", g)
 	}
 }

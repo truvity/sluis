@@ -412,6 +412,18 @@ func (s *Storage) RotateKnown(ctx context.Context, key *SigningKey) error {
 	return s.keys.RotateKnown(ctx, key)
 }
 
+// UseWrappedSigning makes the key rings generate, wrap and rotate their own
+// keys (the `kms-wrapped` signing adapter), and starts the rotation: from here
+// every signing and every JWKS request, and [Storage.MaintainKeys], keep it going.
+func (s *Storage) UseWrappedSigning(ws *WrappedSigning) {
+	s.keys.UseWrapped(ws)
+}
+
+// MaintainKeys runs the wrapped keys' rotation once: cheap, and a no-op until
+// the interval has passed. A process with a loop of its own calls it on a
+// timer, so rotation does not wait for traffic.
+func (s *Storage) MaintainKeys(ctx context.Context) { s.keys.Maintain(ctx) }
+
 // ConfigureKeyRotation overrides every ring's activation delay and
 // overlap once a deployment's own settings are known — its token
 // lifetime, chiefly, which [KeyRingConfig.Overlap] must be at least as
@@ -445,6 +457,7 @@ func (s *Storage) ConfigureKeyRotation(cfg KeyRingConfig) {
 // marked the carrier would look, from here, identical to one that was
 // never asked to be anything but the default.
 func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
+	s.keys.Maintain(ctx)
 	alg := s.keys.Default()
 	if id, ok := signingAudienceFrom(ctx).get(); ok {
 		alg = s.signingAlgorithmFor(id)
@@ -509,7 +522,8 @@ func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorith
 
 // KeySet implements [op.AuthStorage]: every key currently published, by
 // every configured algorithm, signing or retiring — see [KeyRings.Published].
-func (s *Storage) KeySet(context.Context) ([]op.Key, error) {
+func (s *Storage) KeySet(ctx context.Context) ([]op.Key, error) {
+	s.keys.Maintain(ctx)
 	return s.keys.Published(), nil
 }
 

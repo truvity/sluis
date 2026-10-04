@@ -62,6 +62,12 @@ type KubernetesIdentityArgs struct {
 	// SigningKeyRS256Arn). When any is set the serve process, and only it, may
 	// kms:Sign and kms:GetPublicKey with them. Optional.
 	SigningKeyArns []pulumi.StringInput
+	// WrappedSigningKeyArn is the symmetric key of the `kms-wrapped` signing
+	// adapter (Lambda's WrappedSigningKeyArn, or the estate's application key).
+	// When set the serve process, and only it, may generate data key pairs and
+	// decrypt with it, under the encryption context purpose=sluis-signing.
+	// Optional.
+	WrappedSigningKeyArn pulumi.StringInput
 	// State is the DynamoDB table of the State port. Nil when State is not in
 	// DynamoDB (it is on NATS), and the roles then carry no DynamoDB grant.
 	State *StateGrant
@@ -215,7 +221,12 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 	}
 	withState := a.State != nil
 	withSigning := len(a.SigningKeyArns) > 0 && suffix == "serve"
-	inputs := []any{a.Storage.BucketArn, stateTable, stateKey}
+	withWrapped := a.WrappedSigningKeyArn != nil && suffix == "serve"
+	wrapped := pulumi.StringInput(pulumi.String(""))
+	if withWrapped {
+		wrapped = a.WrappedSigningKeyArn
+	}
+	inputs := []any{a.Storage.BucketArn, stateTable, stateKey, wrapped}
 	if withSigning {
 		for _, k := range a.SigningKeyArns {
 			inputs = append(inputs, k)
@@ -227,11 +238,14 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 			st = append(st, stateStatements(v[1].(string), v[2].(string))...)
 		}
 		if withSigning {
-			keys := make([]string, 0, len(v)-3)
-			for _, k := range v[3:] {
+			keys := make([]string, 0, len(v)-4)
+			for _, k := range v[4:] {
 				keys = append(keys, k.(string))
 			}
 			st = append(st, signingStatement(keys))
+		}
+		if withWrapped {
+			st = append(st, wrappedSigningStatement(v[3].(string)))
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

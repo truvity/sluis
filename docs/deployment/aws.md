@@ -138,6 +138,7 @@ for another.
 | `Serve`, `GitHub`, `Slack` | | A `ProcessArgs`: `ServiceAccount` (empty creates no role; required for `Serve`) and `Description` (the policy's, which IAM cannot change once set). |
 | `Storage` | required | `Storage.Grant()`. |
 | `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the serve role (and only it) may `kms:Sign` and `kms:GetPublicKey` with them. |
+| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`, or the estate's application key. Set, the serve role (and only it) may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
 | `State` | none | `State.Grant()`. Nil when the State is on NATS: the roles then carry no DynamoDB grant. |
 
 ### Outputs
@@ -163,6 +164,7 @@ Every role has the same grants; they are the whole of its policy.
 | `SluisBlobs` | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | the bucket's objects |
 | `SluisBlobList` | `s3:ListBucket` | the bucket (a read of an absent key is a 404 only with it, a 403 without) |
 | `SluisSigning`, serve only, with `SigningKeyArns` | `kms:Sign`, `kms:GetPublicKey` | the signing keys |
+| `SluisWrappedSigning`, serve only, with `WrappedSigningKeyArn` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | the symmetric key, only with `kms:EncryptionContext:purpose` = `sluis-signing` and no context keys beside `purpose`, `alg`, `kid` |
 | `SluisState`, with State | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | the table |
 | `SluisStateKey`, with a table key | `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey`, `kms:DescribeKey` | the table's key, only through DynamoDB (`kms:ViaService`) |
 
@@ -281,6 +283,7 @@ not a secret: secrets are SSM parameters, below.
 | `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use. Absent, the AWS-managed key, which needs no grant. Present, each role may use it through SSM only. |
 | `SigningKeyAlias` | `alias/sluis-signing` | The ES384 signing key's alias. |
 | `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
+| `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([Signing on AWS](#signing-on-aws)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`), `KeepRemoteSigningKeys` (also create the two asymmetric keys and their grant). Set, the two asymmetric keys are not created unless kept. |
 | `FunctionNamePrefix` | `sluis` | `<prefix>-http`, `-github`, `-slack`, and `<prefix>-scheduler`. |
 | `HTTP`, `GitHub`, `Slack` | 512 MB; 30 s for http, 300 s for a controller | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`, `Env`. |
 | `Env` | none | On all three functions. |
@@ -303,6 +306,7 @@ not a secret: secrets are SSM parameters, below.
 |---|---|
 | `SigningKeyArn`, `SigningKeyID`, `SigningKeyAlias` | The ES384 token-signing key. |
 | `SigningKeyRS256Arn`, `SigningKeyRS256ID`, `SigningKeyRS256Alias` | The RS256 token-signing key (empty when disabled). |
+| `WrappedSigningKeyArn`, `WrappedSigningKeyAlias` | The symmetric key of `WrappedSigning` (`KeyArn` when given; the alias is empty then, and without `WrappedSigning`). |
 | `HTTPFunctionArn`, `GitHubFunctionArn`, `SlackFunctionArn` and the `...FunctionName`s | The functions. |
 | `HTTPRoleArn`, `GitHubRoleArn`, `SlackRoleArn` and the `...RoleName`s | Their roles. |
 | `APIID`, `APIURL` | The HTTP API and its default endpoint (it answers only with `KeepDefaultEndpoint`). |
@@ -369,15 +373,123 @@ granted on `*`.
 | SSM: `PutParameter`, `DeleteParameter` under `/sluis/export/*` | yes | yes | yes |
 | `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only (with the key) | yes | yes | yes |
 | `sqs:SendMessage` on the audit ingest queue | yes | yes | yes |
-| `kms:Sign`, `kms:GetPublicKey` on both signing keys | **yes** | no | no |
+| `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not created with `WrappedSigning`) | **yes** | no | no |
+| `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` on the symmetric key, with the conditions in [Signing on AWS](#signing-on-aws) (`WrappedSigning`) | **yes** | no | no |
 | `lambda:InvokeFunction` on the github and slack functions ("run a pass now") | **yes** | no | no |
 | `sts:GetWebIdentityToken` (on `*`: the action takes no resource; with `WebIdentityAudience`, only for that audience), so a controller authenticates to the console with its role's outbound token | no | **yes** | **yes** |
 
-Both estates sign with two keys: `ECC_NIST_P384` (ES384) and `RSA_3072`
-(RS256), each usage `SIGN_VERIFY`, protected, with a
-30-day deletion window and AWS's default key policy, so the http role's policy is
-what grants its use. The roles carry a permissions boundary when
+With remote signing (no `WrappedSigning`) both estates sign with two keys:
+`ECC_NIST_P384` (ES384) and `RSA_3072` (RS256), each usage `SIGN_VERIFY`,
+protected, with a 30-day deletion window and AWS's default key policy, so the
+http role's policy is what grants its use. With `WrappedSigning` there is one
+symmetric key instead (below). The roles carry a permissions boundary when
 `PermissionsBoundaryArn` is set.
+
+### Signing on AWS
+
+The aws-serverless and aws-hybrid presets sign tokens with the `kms-wrapped`
+adapter; `kms` (remote signing) stays selectable, and aws-eks keeps it.
+
+| | `kms` (remote) | `kms-wrapped` |
+|---|---|---|
+| Keys | one asymmetric KMS key per algorithm, provisioned by hand or by this library | one symmetric "application" key per estate; the issuer generates the key pairs |
+| Signing | one `kms:Sign` per token; the private key never leaves KMS | local, with a private key decrypted into the process's memory (`kms:Decrypt` once per key per process) |
+| If the role leaks | the holder can sign only while it holds the role (every signature is in CloudTrail) | the holder can decrypt the wrapped keys in the state and **forge tokens until they rotate out** (about one rotation period plus the retention) |
+| Throughput | the account's `Sign` request quota | none from KMS |
+| Rotation | append a key by hand | automatic, every `rotateEvery` (default 24h), free |
+
+The trade is deliberate: a wrapped key is extractable by whoever may call
+`kms:Decrypt` on the application key with the signing context, so that role is
+held to the conditions below and to nothing else on the key; a remote key is not
+extractable at all. Choose `kms` where that matters more than rotation and quota.
+
+**How it works.** For each algorithm (ES384 on `ECC_NIST_P384`, RS256 on
+`RSA_3072`) the issuer calls `kms:GenerateDataKeyPairWithoutPlaintext` on the
+application key and records the public key and the private key *encrypted under
+it* in the key ring of the State port (`issuer:keyring:entry:<alg>:<kid>`; the
+private half is the `wrapped` field and is never plaintext). To sign, a process
+calls `kms:Decrypt`, keeps the key in memory and signs locally. The `kid` is a
+random 128-bit id chosen before the pair is generated, and the encryption
+context is `{"purpose": "sluis-signing", "alg": "<alg>", "kid": "<kid>"}`, on
+both calls: a ciphertext moved under another kid or algorithm does not decrypt.
+
+**Rotation.** A new pair per algorithm every `rotateEvery`, generated under the
+State lease `lease.signing-keygen:<alg>` (a replica that finds it held does
+nothing; a lost race costs one more published key, never a wrong token). The new
+key is published in the JWKS at once and signs only after `prepublish`; a
+replaced key stays published for `retain`. The defaults: `rotateEvery` 24h,
+`prepublish` 15m (the issuer sends the JWKS with no `Cache-Control`, and Envoy's
+`jwt_authn` caches a key set for 10 minutes and does not refetch on an unknown
+`kid`, so a key must be published for longer than that before it signs),
+`retain` = `lifetimes.token` + 5m (a token is valid for at most `lifetimes.token`
+after it was signed, plus clock skew). The settings are checked at start:
+`retain` at least that, `rotateEvery` longer than `prepublish` and at most 168h.
+A process looks for work at most every `pollInterval` (30s), on a request, and
+on Kubernetes also on a timer, so a Lambda with no traffic rotates at its next
+request. The first key of an estate, and the first wrapped key beside keys of
+another source (a migrated file or KMS key, which stay published until they
+retire), is active at once: there is nothing wrapped to wait behind.
+
+**Algorithms.** `ES384` and `RS256` (the one EKS's OIDC provider and Kargo need).
+EdDSA is not supported yet: KMS can generate `ECC_NIST_EDWARDS25519` pairs and
+go-jose signs EdDSA, but the policy's `signing_alg`, the issuer's verifiers and
+discovery know only RSA and ECDSA; it is refused with a message that says so.
+
+**IAM and key policy.** The http function's role (only it) gets, on the key and
+nowhere else:
+
+```json
+{
+  "Sid": "SluisWrappedSigning", "Effect": "Allow",
+  "Action": ["kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"],
+  "Resource": "<the application key's ARN>",
+  "Condition": {
+    "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
+    "ForAllValues:StringEquals": {"kms:EncryptionContextKeys": ["purpose", "alg", "kid"]}
+  }
+}
+```
+
+`WrappedSigning.KeyArn` takes the estate's own application key (its key policy
+is then the estate's, and should hold the role to the same conditions). Unset,
+the library creates the key (`SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, rotation
+enabled, protected, alias `WrappedSigning.KeyAlias`, default
+`alias/sluis-signing-wrapped`) with this key policy, so a broader policy attached
+to the role later does not widen what it can do with the key:
+
+| Sid | Effect | Principal | Action | Condition |
+|---|---|---|---|---|
+| `EnableIAMPolicies` | Allow | the account root | `kms:*` | none (IAM policies govern the key, and key administration is the account's) |
+| `SluisSigningRolePurposeOnly` | Deny | `*` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | `aws:PrincipalArn` is the http role, and `kms:EncryptionContext:purpose` is not `sluis-signing` |
+| `SluisSigningRoleContextKeysOnly` | Deny | `*` | the same two | the http role, and `ForAnyValue:StringNotEquals kms:EncryptionContextKeys` `["purpose","alg","kid"]` |
+| `SluisSigningRoleNothingElse` | Deny | `*` | `NotAction` the same two | the http role |
+
+The role is named in a condition, not as a principal, so the key can exist
+before the role. Moving a stack from remote signing: set `WrappedSigning` with
+`KeepRemoteSigningKeys: true` (the two asymmetric keys are protected and cannot
+be dropped from the program in one step), switch the configuration
+(`signingKey.kmsWrapped`), and drop the flag once nothing signs remotely.
+
+**Configuration** (the http function's file; `preset: aws-hybrid` or
+`aws-serverless` makes `kms-wrapped` the signing adapter, and `signingKey.kmsWrapped`
+supplies its settings):
+
+```yaml
+preset: aws-hybrid
+signingKey:
+  kmsWrapped:
+    keyId: alias/sluis-signing-wrapped   # or the application key's ARN
+    stateSecretFile: /tmp/sluis/state-secret
+    # algorithms: [ES384, RS256]         # the first is the default
+    # rotateEvery: 24h
+    # prepublish: 15m
+    # retain: 65m
+```
+
+`stateSecretFile` is as for `signingKey.kms`: the sign-in state is derived from
+it, not from a key that is replaced daily. The adapter can also be named in
+`adapters.signing` (`adapter: kms-wrapped`), with the same settings under
+`settings:`.
 
 ### The issuer's state secret
 

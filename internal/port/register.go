@@ -22,6 +22,19 @@ type KMSSigningAlg struct {
 	Keys []string `json:"keys"`
 }
 
+// KMSWrappedSigning is the kms-wrapped signing adapter's settings, the same as
+// `signingKey.kmsWrapped`. The durations are Go duration strings; an empty one
+// takes the default.
+type KMSWrappedSigning struct {
+	KeyID           string   `json:"keyId"`
+	Region          string   `json:"region,omitempty"`
+	StateSecretFile string   `json:"stateSecretFile"`
+	Algorithms      []string `json:"algorithms,omitempty"`
+	RotateEvery     string   `json:"rotateEvery,omitempty"`
+	Prepublish      string   `json:"prepublish,omitempty"`
+	Retain          string   `json:"retain,omitempty"`
+}
+
 // The adapters of the concerns whose wiring is the process's own: the
 // signing keys are read by the issuer, the schedule is the controllers'
 // ticker, the audit sink is the audit package's. They are described here so
@@ -49,6 +62,23 @@ func init() {
 			}
 			if len(k.Keys) == 0 || k.StateSecretFile == "" {
 				return nil, errors.New("the kms adapter needs keys and stateSecretFile")
+			}
+			return &k, nil
+		},
+	})
+	Register(Descriptor{
+		Name: "kms-wrapped", Concern: ConcernSigning,
+		Summary: "Token signing by key pairs AWS KMS generates and wraps under one symmetric key, rotated automatically (ES384 and RS256); " +
+			"the private key is decrypted into process memory to sign (`signingKey.kmsWrapped`).",
+		Requires: Requires{AWS: true},
+		Runtimes: []Runtime{RuntimeKubernetes, RuntimeLambda},
+		Factory: func(_ context.Context, s Settings) (any, error) {
+			var k KMSWrappedSigning
+			if err := s.Decode(&k); err != nil {
+				return nil, err
+			}
+			if k.KeyID == "" || k.StateSecretFile == "" {
+				return nil, errors.New("the kms-wrapped adapter needs keyId and stateSecretFile (set `signingKey.kmsWrapped`)")
 			}
 			return &k, nil
 		},

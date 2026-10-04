@@ -141,6 +141,13 @@ type ringEntry struct {
 	SeenAt     time.Time               `json:"seenAt"`
 	ActivateAt time.Time               `json:"activateAt"`
 
+	// Wrapped is the private half of a key the `kms-wrapped` signing adapter
+	// generated, encrypted under the estate's symmetric KMS key. It is
+	// ciphertext: only kms:Decrypt with the key's encryption context
+	// (purpose, algorithm and kid) opens it. Empty for a key read from a file
+	// or a KMS signing key.
+	Wrapped []byte `json:"wrapped,omitempty"`
+
 	// signer is set only where THIS replica holds the private half: the
 	// key it read from its own mounted file. An entry learned of only
 	// through the shared store carries none, and this replica can publish
@@ -190,6 +197,12 @@ type KeyRing struct {
 	// finds nothing new.
 	activeID  string
 	published map[string]bool
+
+	// wrap is set only for a ring whose keys are generated and wrapped by KMS
+	// (see [KeyRing.UseWrapped]); lastMaintain is when [KeyRing.Maintain]
+	// last ran, so a request path can call it freely.
+	wrap         *wrapHooks
+	lastMaintain time.Time
 
 	metrics keyRingInstruments
 }
@@ -354,6 +367,11 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *r
 		immediate = len(members) == 0
 	}
 
+	// A wrapped key generated while this installation has no wrapped key of its
+	// own to sign with has nothing to wait behind: the keys the ring already
+	// holds were read from elsewhere and cannot sign here.
+	immediate = immediate || key.activateNow
+
 	activateAt := now
 	if !immediate {
 		activateAt = now.Add(r.cfg.ActivationDelay)
@@ -365,6 +383,7 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *r
 		Algorithm:  key.alg,
 		SeenAt:     now,
 		ActivateAt: activateAt,
+		Wrapped:    key.wrapped,
 	}
 
 	encoded, err := json.Marshal(entry)

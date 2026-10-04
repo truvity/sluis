@@ -39,6 +39,10 @@ const DefaultSigningKeyAlias = "alias/sluis-signing"
 // LambdaArgs.SigningKeyRS256Alias is empty.
 const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
 
+// DefaultWrappedSigningKeyAlias is the symmetric key's alias when
+// WrappedSigningArgs.KeyAlias is empty and the library creates the key.
+const DefaultWrappedSigningKeyAlias = "alias/sluis-signing-wrapped"
+
 // StateSecretParameterName is the SSM parameter of the issuer's state secret,
 // `/sluis/private/config/issuer/state-secret`.
 const StateSecretParameterName = ConfigParameterPrefix + "/issuer/state-secret"
@@ -111,6 +115,14 @@ type LambdaArgs struct {
 	SigningKeyRS256Alias   string
 	DisableSigningKeyRS256 bool
 
+	// WrappedSigning switches token signing to the `kms-wrapped` adapter: ONE
+	// symmetric KMS key, from which the issuer generates and wraps its signing
+	// key pairs (`signingKey.kmsWrapped` in the http function's configuration
+	// names the key). Nil keeps remote signing with the two asymmetric keys
+	// above. With it set the asymmetric keys are not created, unless
+	// WrappedSigning.KeepRemoteSigningKeys.
+	WrappedSigning *WrappedSigningArgs
+
 	// FunctionNamePrefix starts the functions' and roles' names:
 	// `<prefix>-http`, `<prefix>-github` and `<prefix>-slack`. Default "sluis".
 	FunctionNamePrefix string
@@ -143,6 +155,28 @@ type LambdaArgs struct {
 
 	// Tags are put on everything that takes tags. Default none.
 	Tags map[string]string
+}
+
+// WrappedSigningArgs is the symmetric key of the `kms-wrapped` signing adapter.
+// The http function, and only it, may use it, and only to generate a data key
+// pair and to decrypt a private key, with the encryption context
+// purpose=sluis-signing (and no keys beside purpose, alg and kid).
+type WrappedSigningArgs struct {
+	// KeyArn is an existing symmetric key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT):
+	// the estate's application key. The library then creates no key and leaves
+	// its key policy alone; the http role's grant carries the conditions, and the
+	// key's own policy should hold the role to them as the one the library
+	// creates does. Unset: the library creates the key, with rotation enabled,
+	// protected, and a key policy that enforces the conditions.
+	KeyArn pulumi.StringInput
+	// KeyAlias is the created key's alias. Default DefaultWrappedSigningKeyAlias.
+	// It must start with "alias/". Ignored with KeyArn.
+	KeyAlias string
+	// KeepRemoteSigningKeys also creates the two asymmetric keys, and grants
+	// kms:Sign and kms:GetPublicKey on them, which is what a stack that signed
+	// remotely before needs until it has dropped them deliberately (they are
+	// protected, so removing them from the program is refused).
+	KeepRemoteSigningKeys bool
 }
 
 // ExportsArgs is the exports schedule: one EventBridge schedule invoking the
@@ -243,6 +277,11 @@ type Lambda struct {
 	SigningKeyRS256Arn   pulumi.StringOutput
 	SigningKeyRS256ID    pulumi.StringOutput
 	SigningKeyRS256Alias pulumi.StringOutput
+	// WrappedSigningKeyArn and WrappedSigningKeyAlias are the symmetric key of
+	// WrappedSigning: the key the library created, or KeyArn; the alias is empty
+	// with KeyArn and without WrappedSigning.
+	WrappedSigningKeyArn   pulumi.StringOutput
+	WrappedSigningKeyAlias pulumi.StringOutput
 
 	// The functions and their roles.
 	HTTPFunctionArn, GitHubFunctionArn, SlackFunctionArn    pulumi.StringOutput
@@ -280,6 +319,12 @@ type Lambda struct {
 // A target is a login or a workspace key, or `github:links` (the link check).
 var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 
+// remoteSigning is whether the two asymmetric signing keys are created: always,
+// but with WrappedSigning, which replaces them unless it keeps them.
+func (a *LambdaArgs) remoteSigning() bool {
+	return a.WrappedSigning == nil || a.WrappedSigning.KeepRemoteSigningKeys
+}
+
 func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	if a == nil {
 		return LambdaArgs{}, nil, errors.New("sluispulumi: LambdaArgs is nil")
@@ -313,14 +358,27 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	if out.SigningKeyRS256Alias == "" {
 		out.SigningKeyRS256Alias = DefaultSigningKeyRS256Alias
 	}
-	if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
-		return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
+	if w := out.WrappedSigning; w != nil {
+		if w.KeyAlias == "" {
+			cp := *w
+			cp.KeyAlias = DefaultWrappedSigningKeyAlias
+			out.WrappedSigning = &cp
+			w = &cp
+		}
+		if w.KeyArn == nil && (!strings.HasPrefix(w.KeyAlias, "alias/") || len(w.KeyAlias) == len("alias/")) {
+			return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.WrappedSigning.KeyAlias %q must start with \"alias/\"", w.KeyAlias)
+		}
 	}
-	if !out.DisableSigningKeyRS256 && out.SigningKeyRS256Alias == out.SigningKeyAlias {
-		return out, nil, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is the ES384 key's alias too")
-	}
-	if !strings.HasPrefix(out.SigningKeyAlias, "alias/") || len(out.SigningKeyAlias) == len("alias/") {
-		return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyAlias %q must start with \"alias/\"", out.SigningKeyAlias)
+	if out.remoteSigning() {
+		if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
+			return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
+		}
+		if !out.DisableSigningKeyRS256 && out.SigningKeyRS256Alias == out.SigningKeyAlias {
+			return out, nil, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is the ES384 key's alias too")
+		}
+		if !strings.HasPrefix(out.SigningKeyAlias, "alias/") || len(out.SigningKeyAlias) == len("alias/") {
+			return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyAlias %q must start with \"alias/\"", out.SigningKeyAlias)
+		}
 	}
 	if out.FunctionNamePrefix == "" {
 		out.FunctionNamePrefix = "sluis"
@@ -435,8 +493,11 @@ type fnSpec struct {
 //   - all three: logs to their own group; S3 on the blob bucket; DynamoDB on the
 //     table; SSM Get, GetByPath, Put and Delete under /sluis/private/* and Put and
 //     Delete under /sluis/export/*; sqs:SendMessage on the audit queue;
-//   - http alone: kms:Sign and kms:GetPublicKey on the signing key, and
-//     lambda:InvokeFunction on the github and slack functions (run a pass now).
+//   - http alone: kms:Sign and kms:GetPublicKey on the signing keys (remote
+//     signing) or, with WrappedSigning, kms:GenerateDataKeyPairWithoutPlaintext and
+//     kms:Decrypt on the symmetric key under the encryption context
+//     purpose=sluis-signing; and lambda:InvokeFunction on the github and slack
+//     functions (run a pass now).
 //
 // The API is an HTTP API with payload format 2.0 and a $default route to the
 // http function, behind a regional custom domain with mutual TLS. The
@@ -466,45 +527,88 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	child := pulumi.Parent(out)
 	tags := tagMap(a.Tags)
 
-	// ---- the signing key
-	key, err := kms.NewKey(ctx, name+"-signing-key", &kms.KeyArgs{
-		Description:           pulumi.String(name + " token signing: the issuer signs its tokens with it"),
-		KeyUsage:              pulumi.String("SIGN_VERIFY"),
-		CustomerMasterKeySpec: pulumi.String("ECC_NIST_P384"),
-		DeletionWindowInDays:  pulumi.Int(30),
-		Tags:                  tags,
-	}, child, pulumi.Protect(true))
-	if err != nil {
-		return nil, fmt.Errorf("sluis signing key: %w", err)
-	}
-	alias, err := kms.NewAlias(ctx, name+"-signing-alias", &kms.AliasArgs{
-		Name: pulumi.String(a.SigningKeyAlias), TargetKeyId: key.KeyId,
-	}, child)
-	if err != nil {
-		return nil, fmt.Errorf("sluis signing alias: %w", err)
-	}
-	signingArns := []pulumi.StringInput{key.Arn}
+	// ---- the signing keys: remote (two asymmetric keys, KMS signs), wrapped (one
+	// symmetric key, the issuer signs with the key pairs it generates under it), or
+	// both while a stack moves from one to the other
 	rsEmpty := pulumi.String("").ToStringOutput()
+	sgArn, sgID, sgAlias := rsEmpty, rsEmpty, rsEmpty
 	rsArn, rsID, rsAlias := rsEmpty, rsEmpty, rsEmpty
-	if !a.DisableSigningKeyRS256 {
-		rsKey, err := kms.NewKey(ctx, name+"-signing-key-rs256", &kms.KeyArgs{
-			Description:           pulumi.String(name + " token signing: the issuer signs its RS256 tokens with it"),
+	var signingArns []pulumi.StringInput
+	if a.remoteSigning() {
+		key, err := kms.NewKey(ctx, name+"-signing-key", &kms.KeyArgs{
+			Description:           pulumi.String(name + " token signing: the issuer signs its tokens with it"),
 			KeyUsage:              pulumi.String("SIGN_VERIFY"),
-			CustomerMasterKeySpec: pulumi.String("RSA_3072"),
+			CustomerMasterKeySpec: pulumi.String("ECC_NIST_P384"),
 			DeletionWindowInDays:  pulumi.Int(30),
 			Tags:                  tags,
 		}, child, pulumi.Protect(true))
 		if err != nil {
-			return nil, fmt.Errorf("sluis RS256 signing key: %w", err)
+			return nil, fmt.Errorf("sluis signing key: %w", err)
 		}
-		rsAl, err := kms.NewAlias(ctx, name+"-signing-alias-rs256", &kms.AliasArgs{
-			Name: pulumi.String(a.SigningKeyRS256Alias), TargetKeyId: rsKey.KeyId,
+		alias, err := kms.NewAlias(ctx, name+"-signing-alias", &kms.AliasArgs{
+			Name: pulumi.String(a.SigningKeyAlias), TargetKeyId: key.KeyId,
 		}, child)
 		if err != nil {
-			return nil, fmt.Errorf("sluis RS256 signing alias: %w", err)
+			return nil, fmt.Errorf("sluis signing alias: %w", err)
 		}
-		signingArns = append(signingArns, rsKey.Arn)
-		rsArn, rsID, rsAlias = rsKey.Arn, rsKey.KeyId, rsAl.Name
+		signingArns = append(signingArns, key.Arn)
+		sgArn, sgID, sgAlias = key.Arn, key.KeyId, alias.Name
+		if !a.DisableSigningKeyRS256 {
+			rsKey, err := kms.NewKey(ctx, name+"-signing-key-rs256", &kms.KeyArgs{
+				Description:           pulumi.String(name + " token signing: the issuer signs its RS256 tokens with it"),
+				KeyUsage:              pulumi.String("SIGN_VERIFY"),
+				CustomerMasterKeySpec: pulumi.String("RSA_3072"),
+				DeletionWindowInDays:  pulumi.Int(30),
+				Tags:                  tags,
+			}, child, pulumi.Protect(true))
+			if err != nil {
+				return nil, fmt.Errorf("sluis RS256 signing key: %w", err)
+			}
+			rsAl, err := kms.NewAlias(ctx, name+"-signing-alias-rs256", &kms.AliasArgs{
+				Name: pulumi.String(a.SigningKeyRS256Alias), TargetKeyId: rsKey.KeyId,
+			}, child)
+			if err != nil {
+				return nil, fmt.Errorf("sluis RS256 signing alias: %w", err)
+			}
+			signingArns = append(signingArns, rsKey.Arn)
+			rsArn, rsID, rsAlias = rsKey.Arn, rsKey.KeyId, rsAl.Name
+		}
+	}
+	// The wrapped key. The http role is named by its (deterministic) ARN in the
+	// key policy, which is what keeps the key from depending on the role.
+	var wrappedArn pulumi.StringInput
+	wrappedKeyArn, wrappedAlias := rsEmpty, rsEmpty
+	if w := a.WrappedSigning; w != nil {
+		if w.KeyArn != nil {
+			wrappedArn = w.KeyArn
+			wrappedKeyArn = pulumi.StringInput(w.KeyArn).ToStringOutput()
+		} else {
+			policy, err := wrappedKeyPolicy(a.AccountID, arnPrefix+"iam::"+a.AccountID+":role/"+a.FunctionNamePrefix+"-"+RoleHTTP)
+			if err != nil {
+				return nil, err
+			}
+			wk, err := kms.NewKey(ctx, name+"-signing-key-wrapped", &kms.KeyArgs{
+				Description: pulumi.String(name + " token signing: wraps the key pairs the issuer signs its tokens with"),
+				KeyUsage:    pulumi.String("ENCRYPT_DECRYPT"),
+				// Automatic rotation is of the key material; the key id, which every
+				// wrapped private key records, stays.
+				CustomerMasterKeySpec: pulumi.String("SYMMETRIC_DEFAULT"),
+				EnableKeyRotation:     pulumi.Bool(true),
+				Policy:                pulumi.String(policy),
+				DeletionWindowInDays:  pulumi.Int(30),
+				Tags:                  tags,
+			}, child, pulumi.Protect(true))
+			if err != nil {
+				return nil, fmt.Errorf("sluis wrapped signing key: %w", err)
+			}
+			wa, err := kms.NewAlias(ctx, name+"-signing-alias-wrapped", &kms.AliasArgs{
+				Name: pulumi.String(w.KeyAlias), TargetKeyId: wk.KeyId,
+			}, child)
+			if err != nil {
+				return nil, fmt.Errorf("sluis wrapped signing alias: %w", err)
+			}
+			wrappedArn, wrappedKeyArn, wrappedAlias = wk.Arn, wk.Arn, wa.Name
+		}
 	}
 
 	// ---- the functions
@@ -524,7 +628,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		if err != nil {
 			return nil, fmt.Errorf("sluis %s log group: %w", s.role, err)
 		}
-		role, err := newFunctionRole(ctx, name, fnName(s.role), s.role, &a, signingArns, logs.Arn, fnArn(RoleGitHub), fnArn(RoleSlack), tags, child)
+		role, err := newFunctionRole(ctx, name, fnName(s.role), s.role, &a, signingArns, wrappedArn, logs.Arn, fnArn(RoleGitHub), fnArn(RoleSlack), tags, child)
 		if err != nil {
 			return nil, fmt.Errorf("sluis %s role: %w", s.role, err)
 		}
@@ -637,7 +741,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, err
 	}
 
-	out.SigningKeyArn, out.SigningKeyID, out.SigningKeyAlias = key.Arn, key.KeyId, alias.Name
+	out.SigningKeyArn, out.SigningKeyID, out.SigningKeyAlias = sgArn, sgID, sgAlias
+	out.WrappedSigningKeyArn, out.WrappedSigningKeyAlias = wrappedKeyArn, wrappedAlias
 	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
 	out.HTTPFunctionArn, out.HTTPFunctionName = fns[RoleHTTP].Arn, fns[RoleHTTP].Name
 	out.GitHubFunctionArn, out.GitHubFunctionName = fns[RoleGitHub].Arn, fns[RoleGitHub].Name
@@ -667,6 +772,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
+		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
 		"httpFunctionArn": out.HTTPFunctionArn, "githubFunctionArn": out.GitHubFunctionArn, "slackFunctionArn": out.SlackFunctionArn,
 		"httpRoleArn": out.HTTPRoleArn, "githubRoleArn": out.GitHubRoleArn, "slackRoleArn": out.SlackRoleArn,
@@ -702,7 +808,8 @@ func lambdaTrust() string {
 // newFunctionRole is the role of one function and its inline policy, both named
 // after the function. The function's own ARN is computed from its name, which is
 // what keeps the http role's grant on the other two from being a cycle.
-func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaArgs, signingKeyArns []pulumi.StringInput, logGroupArn pulumi.StringInput,
+func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
+	wrappedKeyArn, logGroupArn pulumi.StringInput,
 	githubArn, slackArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	rargs := &iam.RoleArgs{Name: pulumi.String(fnName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
@@ -716,7 +823,11 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 	if a.State.KeyArn != nil {
 		stateKey = a.State.KeyArn
 	}
-	inputs := []any{a.Storage.BucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn}
+	wrapped := pulumi.StringInput(pulumi.String(""))
+	if wrappedKeyArn != nil && role == RoleHTTP {
+		wrapped = wrappedKeyArn
+	}
+	inputs := []any{a.Storage.BucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn, wrapped}
 	for _, k := range signingKeyArns {
 		inputs = append(inputs, k)
 	}
@@ -724,7 +835,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 		return functionPolicy(functionPolicyIn{
 			role: role, region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), logGroupArn: v[4].(string), signingKeyArns: stringsOf(v[5:]),
+			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
 			parameterKeyArn:    a.ParameterKeyArn,
 			invokeFunctionArns: []string{githubArn, slackArn},
 			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,

@@ -147,6 +147,30 @@ type (
 		Overlap         *Duration `json:"overlap,omitempty"`
 		// KMS signs with AWS KMS keys instead of a file. Exclusive with File.
 		KMS *SigningKeyKMS `json:"kms,omitempty"`
+		// KMSWrapped signs with key pairs KMS generates and wraps under one
+		// symmetric key, rotated automatically. Exclusive with File and KMS.
+		KMSWrapped *SigningKeyKMSWrapped `json:"kmsWrapped,omitempty"`
+	}
+
+	// SigningKeyKMSWrapped is the `kms-wrapped` signing adapter's settings: one
+	// symmetric KMS key, the algorithms signed with, and the rotation schedule.
+	SigningKeyKMSWrapped struct {
+		// KeyID is the symmetric application key: an id, an ARN or an alias.
+		KeyID  string `json:"keyId"`
+		Region string `json:"region,omitempty"`
+		// StateSecretFile is the sign-in state's secret, as for `kms`.
+		StateSecretFile string `json:"stateSecretFile,omitempty"`
+		// Algorithms are ES384 and/or RS256, the first the default. Unset is
+		// ES384 and RS256.
+		Algorithms []string `json:"algorithms,omitempty"`
+		// RotateEvery is how often a new key pair is generated. Default 24h.
+		RotateEvery *Duration `json:"rotateEvery,omitempty"`
+		// Prepublish is how long a new key is published before it signs.
+		// Default `signingKey.activationDelay` (15m).
+		Prepublish *Duration `json:"prepublish,omitempty"`
+		// Retain is how long a superseded key stays published. Default
+		// `signingKey.overlap`, which is `lifetimes.token` plus a skew margin.
+		Retain *Duration `json:"retain,omitempty"`
 	}
 
 	// SigningKeyKMS is the AWS KMS source of the primary signing key.

@@ -140,7 +140,7 @@ what the legacy adapter keeps) and what it is now, for every kind:
 | `issuer:sso:<id>`, `issuer:sso-of:<identity>` | `issuer-sso`, `issuer-sso-of` | none |
 | `issuer:session:<id>` | `issuer-session` / `<id>` | none |
 | `issuer:session-token:<hash>`, `issuer:session-rotated:<hash>` | `issuer-session-token`, `issuer-session-rotated` | none |
-| `issuer:keyring:entry:<alg>:<kid>` | `keyring` / `<alg>/<kid>` | none |
+| `issuer:keyring:entry:<alg>:<kid>` | `keyring` / `<alg>/<kid>` | none (a `kms-wrapped` entry also carries `wrapped`, the private key encrypted under the symmetric KMS key; never plaintext) |
 | `issuer:keyring:retired:<alg>:<kid>` | `keyring-retired` / `<alg>/<kid>` | none |
 | `issuer:keyring:index:<alg>` (Index) | `keyring-index` / `<alg>/<kid>` | none |
 | `issuer:kms:state-secret-fingerprint` | `issuer-guard` / `state-secret-fingerprint` | none |

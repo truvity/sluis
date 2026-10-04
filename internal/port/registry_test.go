@@ -1,6 +1,7 @@
 package port_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -29,6 +30,7 @@ func fake() *port.Registry {
 	add(port.ConcernSecrets, "memory", port.Descriptor{ProcessLocal: true})
 	add(port.ConcernBlobs, "s3", port.Descriptor{Requires: aws})
 	add(port.ConcernSigning, "kms", port.Descriptor{Requires: aws})
+	add(port.ConcernSigning, "kms-wrapped", port.Descriptor{Requires: aws})
 	add(port.ConcernTrigger, "invoke", port.Descriptor{Requires: aws})
 	add(port.ConcernSchedule, "eventbridge", port.Descriptor{Requires: aws})
 	add(port.ConcernAudit, "sqs", port.Descriptor{Requires: aws})
@@ -219,5 +221,30 @@ func TestSettingsDecodeRefusesAnUnknownKey(t *testing.T) {
 	}
 	if err := (port.Settings{"keyid": "k", "typo": 1}).Decode(&v); err == nil {
 		t.Fatal("an unknown key was accepted")
+	}
+}
+
+func TestTheAWSLambdaPresetsSignWithWrappedKeys(t *testing.T) {
+	for _, p := range []port.Preset{port.PresetAWSServerless, port.PresetAWSHybrid} {
+		if got := port.PresetTable(p)[port.ConcernSigning]; got != "kms-wrapped" {
+			t.Errorf("%s signs with %q", p, got)
+		}
+	}
+	if got := port.PresetTable(port.PresetAWSEKS)[port.ConcernSigning]; got != "kms" {
+		t.Errorf("aws-eks signs with %q: it keeps remote signing", got)
+	}
+	d, ok := port.Default.Lookup(port.ConcernSigning, "kms-wrapped")
+	if !ok || d.Factory == nil || !d.Requires.AWS {
+		t.Fatalf("kms-wrapped: %+v", d)
+	}
+	if _, err := d.Factory(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "signingKey.kmsWrapped") {
+		t.Errorf("no settings: %v", err)
+	}
+	built, err := d.Factory(context.Background(), port.Settings{"keyId": "alias/k", "stateSecretFile": "/s", "rotateEvery": "12h"})
+	if k, _ := built.(*port.KMSWrappedSigning); err != nil || k == nil || k.KeyID != "alias/k" || k.RotateEvery != "12h" {
+		t.Errorf("%+v %v", built, err)
+	}
+	if _, err := d.Factory(context.Background(), port.Settings{"keyId": "k", "stateSecretFile": "/s", "typo": "x"}); err == nil {
+		t.Error("an unknown setting was accepted")
 	}
 }
