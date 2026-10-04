@@ -35,7 +35,7 @@ const (
 	AdapterDynamoDB = "dynamodb"
 )
 
-// The adapter `ports.blob.adapter` names. It replaces one port and composes
+// BlobS3 is the adapter `ports.blob.adapter` names. It replaces one port and composes
 // with any `ports.adapter`.
 const BlobS3 = "s3"
 
