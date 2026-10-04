@@ -2,6 +2,18 @@
 
 sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM secrets, KMS token signing (ES384 and RS256), S3 blobs and SQS audit; adapters are chosen by name from presets; the sealer and the NATS adapter are removed.
 
+- **The Lambda controllers authenticate to the console, and the exports keep running.**
+  A controller's console client can present the function role's AWS outbound web
+  identity token (`sts:GetWebIdentityToken`, one audience, cached until two minutes
+  before expiry) instead of a projected ServiceAccount token: set
+  `console.auth.aws.audience` in the controller's file (it must equal the audience of
+  the issuer's AWS federation file). The console's workload door now accepts an AWS
+  role as it does a cluster's ServiceAccount, and the policy's `aws` matchers decide
+  what it may do. The `http` function also answers `{"kind":"exports"}` from a
+  schedule: one pass of every export, each under its lease, failing the invocation if
+  a copy could not be made. Kubernetes behaviour is unchanged. See
+  [aws-lambda](docs/integrations/aws-lambda.md).
+
 - **The Pulumi library creates a second signing key, RS256.** `NewLambda` makes an
   `RSA_3072` `SIGN_VERIFY` key beside the ES384 one (alias `SigningKeyRS256Alias`,
   default `alias/sluis-signing-rs256`; `DisableSigningKeyRS256` leaves it out) and

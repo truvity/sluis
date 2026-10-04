@@ -141,3 +141,44 @@ func ParseEvent(payload json.RawMessage) (invoke.Event, error) {
 func oneLine(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\r", " ")
 }
+
+// KindExports is the event an EventBridge Scheduler schedule sends the `http`
+// function to keep the exports (the copies of secrets under /sluis/export/...)
+// current: {"kind":"exports"}. There is no loop to do it on Lambda.
+const KindExports = "exports"
+
+// ExportsResult is what an exports invocation returns.
+type ExportsResult struct {
+	Kind string `json:"kind"`
+	// Outcome is "ran", "none" (no export is declared) or "failed".
+	Outcome   string `json:"outcome"`
+	Exports   int    `json:"exports"`
+	Done      int    `json:"done"`
+	Contended int    `json:"contended"`
+	Failed    int    `json:"failed"`
+}
+
+// scheduled handles an event of the http function that is not a request.
+func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
+	if kind != KindExports {
+		return nil, fmt.Errorf("the event's kind is %q: the http function takes API Gateway events and {\"kind\":%q}", oneLine(kind), KindExports)
+	}
+	if h.exports == nil {
+		return nil, errors.New("this function owns no exports")
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	res, err := h.exports(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// A failed copy is an error the schedule sees: the pass is idempotent and
+	// the next one retries, but a copy that stays stale should be noticed.
+	if res.Failed > 0 {
+		return nil, fmt.Errorf("%d of %d exports could not be made", res.Failed, res.Exports)
+	}
+	return res, nil
+}

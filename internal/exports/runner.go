@@ -94,6 +94,49 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
+// PassResult is what one [Runner.Pass] did, by export.
+type PassResult struct {
+	// Exports is how many are declared.
+	Exports int `json:"exports"`
+	// Done made the copy, found it made, or had nothing to copy.
+	Done int `json:"done"`
+	// Contended were held by another runner, which makes the copy.
+	Contended int `json:"contended"`
+	// Failed could not be made; the copy is stale until the next pass.
+	Failed int `json:"failed"`
+}
+
+// Pass makes every export once, each under its lease, and returns. It is the
+// run of a platform with no process to keep the loop in (a Lambda function
+// invoked on a schedule): the same attempt as the loop's, with no watch, no
+// stagger and no backoff, since the next schedule is the retry. It is
+// idempotent: a copy of what is already there writes nothing.
+func (r *Runner) Pass(ctx context.Context) PassResult {
+	res := PassResult{Exports: len(r.Specs)}
+	for i := range r.Specs {
+		spec := &r.Specs[i]
+		done := true
+		ran, err := r.Leases.Do(ctx, KindExport, spec.Name, func(held context.Context) {
+			done = r.once(held, *spec, 0)
+		})
+		switch {
+		case err != nil:
+			meters.attempts.Add(context.WithoutCancel(ctx), 1, attemptAttrs(spec.Name, OutcomeFailed))
+			r.log().WarnContext(ctx, "an export could not take its lease, so the copy is stale",
+				"export", spec.Name, "error", err)
+			res.Failed++
+		case !ran:
+			meters.contended.Add(ctx, 1, nameAttr(spec.Name))
+			res.Contended++
+		case !done:
+			res.Failed++
+		default:
+			res.Done++
+		}
+	}
+	return res
+}
+
 // work is one export's loop.
 func (r *Runner) work(ctx context.Context, spec Spec, wake <-chan struct{}) {
 	first := time.Duration(0)
