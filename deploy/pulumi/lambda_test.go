@@ -1080,3 +1080,15 @@ func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
 		t.Error("only the serve role may write the key ring")
 	}
 }
+
+func TestTheSharedKeyStatementsAreExported(t *testing.T) {
+	roles := []string{arnp + "iam::" + account + ":role/sluis-http"}
+	st := arp.WrappedKeyPolicyStatements(roles)
+	if len(st) != 1 || st[0]["Effect"] != "Deny" || st[0]["Sid"] != "SluisSigningContextReserved" {
+		t.Fatalf("%v", st)
+	}
+	cond := st[0]["Condition"].(map[string]any)
+	if !reflect.DeepEqual(cond["ArnNotEquals"], map[string]any{"aws:PrincipalArn": roles}) {
+		t.Errorf("%v", cond)
+	}
+}

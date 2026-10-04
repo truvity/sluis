@@ -143,7 +143,7 @@ const (
 // wrappedContextKeys are the encryption context's keys, and only they.
 var wrappedContextKeys = []string{"purpose", "alg", "kid"}
 
-// wrappedSigningStatement is the use of the dedicated symmetric key by the
+// wrappedSigningStatement is the use of the symmetric key by the
 // function that signs: generate a data key pair and decrypt a private key, on
 // that key only, and only with the encryption context the adapter uses
 // (purpose=sluis-signing and no keys but purpose, alg and kid). Never Encrypt,
@@ -180,8 +180,7 @@ func keyringWriteDenial(tableArn string) statement {
 	}
 }
 
-// wrappedKeyPolicy is the key policy of the dedicated symmetric key the library
-// creates. The account's IAM policies govern it (the root statement every key
+// wrappedKeyPolicy is the key policy of the symmetric key the library creates. The account's IAM policies govern it (the root statement every key
 // has), and everything that can open a wrapped signing key is pinned to the
 // signing roles (signingRoleArns: the http function's role, and the Kubernetes
 // serve role when one signs too):
@@ -229,8 +228,14 @@ func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) 
 	})
 }
 
+// WrappedKeyPolicyStatements is WrappedKeyReservedDeny as the statements to merge
+// into a shared key's policy document (a list of one, so that it can grow).
+func WrappedKeyPolicyStatements(signingRoleArns []string) []map[string]any {
+	return []map[string]any{WrappedKeyReservedDeny(signingRoleArns)}
+}
+
 // WrappedKeyReservedDeny is the statement every wrapped signing key's policy
-// MUST carry: nothing but the signing roles may use the key under the signing
+// MUST carry, a shared key's included: nothing but the signing roles may use the key under the signing
 // context. The library puts it on the key it creates; a key passed as
 // WrappedSigningArgs.KeyArn needs the same statement (docs/deployment/aws.md).
 func WrappedKeyReservedDeny(signingRoleArns []string) map[string]any {
