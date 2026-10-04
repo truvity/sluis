@@ -155,6 +155,8 @@ func TestAnSsmSettingNobodyKnowsIsRefusedAtStart(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "rooot") {
 		t.Fatalf("err = %v, want one naming the unknown setting", err)
+	}
+}
 
 // `signingKey.kms` is the legacy spelling of the kms signing adapter, and a
 // `signingKey.file` beside a preset that picks kms still means file.
