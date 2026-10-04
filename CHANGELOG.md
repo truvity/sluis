@@ -1,4 +1,6 @@
-## Unreleased
+## v1.58.0
+
+sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM secrets, KMS token signing (ES384 and RS256), S3 blobs and SQS audit; adapters are chosen by name from presets; the sealer and the NATS adapter are removed.
 
 - **The Pulumi library creates a second signing key, RS256.** `NewLambda` makes an
   `RSA_3072` `SIGN_VERIFY` key beside the ES384 one (alias `SigningKeyRS256Alias`,
