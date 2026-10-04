@@ -636,3 +636,22 @@ func TestThePodIdentityRolesCarryNoSealerAndOnlyServeSigns(t *testing.T) {
 		t.Errorf("github: %v", g)
 	}
 }
+
+func TestAPackageEntryOutsideTheRootIsRefused(t *testing.T) {
+	for _, name := range []string{"../evil", "a/../../evil", "/abs"} {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		for _, n := range []string{"bootstrap", name} {
+			w, _ := zw.Create(n)
+			_, _ = w.Write([]byte("x"))
+		}
+		_ = zw.Close()
+		p := filepath.Join(t.TempDir(), "x.zip")
+		if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := buildLambda(t, estate{pkg: p}); err == nil {
+			t.Errorf("%q accepted", name)
+		}
+	}
+}
