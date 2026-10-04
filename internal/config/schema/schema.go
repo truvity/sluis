@@ -254,6 +254,12 @@ func serveSchema() m {
 			"kms": obj("Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`.", m{
 				"keys": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
 					"description": "ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each."},
+				"additional": list("Every OTHER algorithm this installation signs with at once, each on its own rotation track, as `signingKey.additionalFiles` does for files. RS256 is the one that exists: for relying parties that need it (Kargo, EKS's OIDC provider).",
+					obj("One algorithm's keys.", m{
+						"alg": m{"enum": []string{"RS256"}, "description": "The algorithm."},
+						"keys": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
+							"description": "RSA_2048, RSA_3072 or RSA_4096 SIGN_VERIFY keys, oldest first, the last signing; same rotation rules as `keys`."},
+					}, "alg", "keys")),
 				"region":          str("The keys' region. Unset follows the AWS SDK's own resolution."),
 				"stateSecretFile": str("A file holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
 			}, "keys", "stateSecretFile"),

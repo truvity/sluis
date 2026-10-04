@@ -25,6 +25,7 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	jose "github.com/go-jose/go-jose/v4"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/truvity/sluis/backend/google"
@@ -80,6 +81,7 @@ type Config struct {
 	// first, the last signing. kmsStateSecretFile is what the sign-in state
 	// derives from, since a KMS key has no private bytes of its own.
 	kmsKeys            []string
+	kmsAdditional      []config.SigningKeyKMSAlg
 	kmsRegion          string
 	kmsStateSecretFile string
 
@@ -175,6 +177,7 @@ func FromConfig(f *config.Serve) (Config, error) {
 				return Config{}, errors.New("signingKey.kms needs keys and stateSecretFile")
 			}
 			c.kmsKeys = k.KMS.Keys
+			c.kmsAdditional = k.KMS.Additional
 			c.kmsRegion = k.KMS.Region
 			c.kmsStateSecretFile = k.KMS.StateSecretFile
 		}
@@ -376,7 +379,7 @@ type Deps struct {
 // App is an assembled issuer.
 type App struct {
 	// kms is set when the primary key lives in AWS KMS; Run polls it.
-	kms *issuer.KMSKeyRefs
+	kms []*issuer.KMSKeyRefs
 	// state is the shared state the secret fingerprint lives in.
 	state   issuer.State
 	handler http.Handler
@@ -502,11 +505,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	}
 	var (
 		key     *issuer.SigningKey
-		kmsRefs *issuer.KMSKeyRefs
+		kmsRefs []*issuer.KMSKeyRefs
 		kmsRest []*issuer.SigningKey
+		kmsMore []*issuer.SigningKey
 	)
 	if len(cfg.kmsKeys) > 0 {
-		kmsRefs, kmsRest, key, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
+		kmsRefs, kmsRest, key, kmsMore, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
 	} else {
 		key, err = signingKey(ctx, cfg, log)
 	}
@@ -514,7 +518,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		return nil, err
 	}
 	if kmsRefs != nil {
-		if err = checkStateSecret(ctx, shared, kmsRefs.Seed); err != nil {
+		if err = checkStateSecret(ctx, shared, kmsRefs[0].Seed); err != nil {
 			return nil, err
 		}
 	}
@@ -522,6 +526,9 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
+	// Each KMS algorithm's newest key is its ring's primary, beside any files
+	// (a file and a KMS key for the same algorithm clash, as two files do).
+	additionalKeys = append(additionalKeys, kmsMore...)
 	if err = readClient(&cfg); err != nil {
 		return nil, err
 	}
@@ -706,7 +713,7 @@ func (a *App) Run(ctx context.Context) error {
 	if a.kms != nil {
 		group.Go(func() error {
 			watchKMSKeys(gctx, a.kms, a.cfg.keyPollInterval, a.storage, a.log, func(c context.Context) error {
-				return checkStateSecret(c, a.state, a.kms.Seed)
+				return checkStateSecret(c, a.state, a.kms[0].Seed)
 			})
 			return nil
 		})
@@ -1140,14 +1147,14 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 // declared.
 func kmsSigningKeys(
 	ctx context.Context, cfg Config, api issuer.KMSAPI, log *slog.Logger,
-) (*issuer.KMSKeyRefs, []*issuer.SigningKey, *issuer.SigningKey, error) {
+) (refs []*issuer.KMSKeyRefs, earlier []*issuer.SigningKey, primary *issuer.SigningKey, more []*issuer.SigningKey, err error) {
 	raw, err := os.ReadFile(cfg.kmsStateSecretFile) //nolint:gosec // the path is deployment configuration
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("read signingKey.kms.stateSecretFile: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("read signingKey.kms.stateSecretFile: %w", err)
 	}
 	seed, err := parseStateSecret(raw)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("signingKey.kms.stateSecretFile: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("signingKey.kms.stateSecretFile: %w", err)
 	}
 	if api == nil {
 		var loaders []func(*awsconfig.LoadOptions) error
@@ -1156,26 +1163,42 @@ func kmsSigningKeys(
 		}
 		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("load the AWS configuration for signingKey.kms: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("load the AWS configuration for signingKey.kms: %w", err)
 		}
 		api = kms.NewFromConfig(awsCfg)
 	}
-	refs := &issuer.KMSKeyRefs{API: api, Refs: cfg.kmsKeys, Seed: seed}
-	keys, err := refs.Load(ctx)
-	if err != nil {
-		return nil, nil, nil, err
+	sets := []*issuer.KMSKeyRefs{{Alg: jose.ES384, API: api, Refs: cfg.kmsKeys, Seed: seed}}
+	for _, a := range cfg.kmsAdditional {
+		if jose.SignatureAlgorithm(a.Alg) != jose.RS256 || len(a.Keys) == 0 {
+			return nil, nil, nil, nil, fmt.Errorf("signingKey.kms.additional: %q needs alg RS256 and keys", a.Alg)
+		}
+		sets = append(sets, &issuer.KMSKeyRefs{Alg: jose.SignatureAlgorithm(a.Alg), API: api, Refs: a.Keys, Seed: seed})
 	}
 	seen := map[string]string{}
-	for i, key := range keys {
-		if prev, dup := seen[key.ID()]; dup {
-			return nil, nil, nil, fmt.Errorf("signingKey.kms.keys %q and %q are the same key", prev, cfg.kmsKeys[i])
+	for n, set := range sets {
+		keys, err := set.Load(ctx)
+		if err != nil {
+			return nil, nil, nil, nil, err
 		}
-		seen[key.ID()] = cfg.kmsKeys[i]
-		log.InfoContext(ctx, "signing with an AWS KMS key",
-			"key", cfg.kmsKeys[i], "kid", key.ID(), "algorithm", key.SignatureAlgorithm(), "active", i == len(keys)-1)
+		for i, key := range keys {
+			if prev, dup := seen[key.ID()]; dup {
+				return nil, nil, nil, nil, fmt.Errorf("signingKey.kms: %q and %q are the same key", prev, set.Refs[i])
+			}
+			seen[key.ID()] = set.Refs[i]
+			log.InfoContext(ctx, "signing with an AWS KMS key",
+				"key", set.Refs[i], "kid", key.ID(), "algorithm", key.SignatureAlgorithm(), "active", i == len(keys)-1)
+		}
+		// The LAST of each list is that algorithm's ring primary; the rest are
+		// only ever refreshed.
+		last := len(keys) - 1
+		earlier = append(earlier, keys[:last]...)
+		if n == 0 {
+			primary = keys[last]
+		} else {
+			more = append(more, keys[last])
+		}
 	}
-	last := len(keys) - 1
-	return refs, keys[:last], keys[last], nil
+	return sets, earlier, primary, more, nil
 }
 
 // watchKMSKeys re-reads every KMS key's public half on an interval and feeds
@@ -1184,7 +1207,7 @@ func kmsSigningKeys(
 // previous key as a file read that fails does. Re-reading is what notices an
 // alias moved to another key: it reads as a new kid and is scheduled as one.
 func watchKMSKeys(
-	ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger,
+	ctx context.Context, sets []*issuer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger,
 	checkSecret func(context.Context) error,
 ) {
 	if interval <= 0 {
@@ -1201,26 +1224,32 @@ func watchKMSKeys(
 			if err := checkSecret(ctx); err != nil {
 				log.WarnContext(ctx, "the KMS state secret check failed", "error", err)
 			}
-			for i, ref := range refs.Refs {
-				one := issuer.KMSKeyRefs{API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
-				keys, err := one.Load(ctx)
-				if err != nil {
-					log.WarnContext(ctx, "could not re-read a KMS signing key; keeping the previous one",
-						"key", ref, "error", err)
-					continue
-				}
-				// List order is age: only the LAST key may be newly recorded.
-				// The earlier ones are re-read to refresh a key the ring
-				// holds, and a retired one is never brought back by being
-				// listed.
-				rotate := storage.RotateKnown
-				if i == len(refs.Refs)-1 {
-					rotate = storage.Rotate
-				}
-				if err := rotate(ctx, keys[0]); err != nil {
-					log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", "key", ref, "error", err)
-				}
+			for _, refs := range sets {
+				pollKMSRefs(ctx, refs, storage, log)
 			}
+		}
+	}
+}
+
+// pollKMSRefs re-reads one algorithm's list.
+func pollKMSRefs(ctx context.Context, refs *issuer.KMSKeyRefs, storage *issuer.Storage, log *slog.Logger) {
+	for i, ref := range refs.Refs {
+		one := issuer.KMSKeyRefs{Alg: refs.Alg, API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
+		keys, err := one.Load(ctx)
+		if err != nil {
+			log.WarnContext(ctx, "could not re-read a KMS signing key; keeping the previous one",
+				"key", ref, "error", err)
+			continue
+		}
+		// List order is age: only the LAST key may be newly recorded. The
+		// earlier ones are re-read to refresh a key the ring holds, and a
+		// retired one is never brought back by being listed.
+		rotate := storage.RotateKnown
+		if i == len(refs.Refs)-1 {
+			rotate = storage.Rotate
+		}
+		if err := rotate(ctx, keys[0]); err != nil {
+			log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", "key", ref, "error", err)
 		}
 	}
 }
@@ -1252,6 +1281,9 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 		}
 		if len(cfg.kmsKeys) == 0 && k != nil {
 			cfg.kmsKeys, cfg.kmsRegion, cfg.kmsStateSecretFile = k.Keys, k.Region, k.StateSecretFile
+			for _, a := range k.Additional {
+				cfg.kmsAdditional = append(cfg.kmsAdditional, config.SigningKeyKMSAlg{Alg: a.Alg, Keys: a.Keys})
+			}
 		}
 	case "file":
 		if len(cfg.kmsKeys) > 0 {

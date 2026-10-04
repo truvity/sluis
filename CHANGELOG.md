@@ -13,6 +13,14 @@
   restricts the audience); and `SLUIS_SECRET_FILES` per function (`SecretFiles`; the
   http function always lists the state secret at `/tmp/sluis/state-secret`).
 
+- **KMS-backed RS256.** `signingKey.kms.additional: [{alg: RS256, keys: [...]}]` signs RS256
+  with `RSA_2048`, `RSA_3072` or `RSA_4096` KMS keys beside the ES384 ones, for relying
+  parties that need it (Kargo, EKS's OIDC provider); a client or resource pinned to
+  `signing_alg: RS256` is signed by that ring. `RSASSA_PKCS1_V1_5_SHA_256` over a SHA-256
+  digest, every signature verified before it is returned, kid the RFC 7638 thumbprint, each
+  algorithm rotating on its own track by the same rules. The role needs `kms:Sign` and
+  `kms:GetPublicKey` on both keys.
+
 - **The Audit page's query URL no longer needs `audit.writer`.** `audit.queryURL` is its
   own setting, so the console's Audit page works with the `sqs` and `log` audit sinks, which
   have no receiver (the Lambda target state). The console already forwards the page's calls

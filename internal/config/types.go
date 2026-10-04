@@ -150,6 +150,15 @@ type (
 		Keys            []string `json:"keys,omitempty"`
 		Region          string   `json:"region,omitempty"`
 		StateSecretFile string   `json:"stateSecretFile,omitempty"`
+		// Additional is every OTHER algorithm signed at once, each on its own
+		// ordered key list, beside Keys (ES384).
+		Additional []SigningKeyKMSAlg `json:"additional,omitempty"`
+	}
+
+	// SigningKeyKMSAlg is one more algorithm's KMS keys.
+	SigningKeyKMSAlg struct {
+		Alg  string   `json:"alg"`
+		Keys []string `json:"keys"`
 	}
 
 	// Valkey is the shared store for logins in progress and snapshots.

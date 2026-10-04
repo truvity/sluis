@@ -53,7 +53,7 @@ presets and the platform fit together, see
 |---|---|---|---|---|---|---|---|---|
 | `file` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | Signing keys read from files the platform mounts (`signingKey`). |
 | `generated` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | A token-signing key generated at start and shared through state. |
-| `kms` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Token signing by AWS KMS ECC_NIST_P384 keys; the private key never leaves KMS (`signingKey.kms`). |
+| `kms` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Token signing by AWS KMS keys (ES384 on ECC_NIST_P384, and RS256 on RSA); the private key never leaves KMS (`signingKey.kms`). |
 | `transit` | 💤 on request | — | — | needs | ✅ | ✅ | ✅ | Token signing by an OpenBao transit key. |
 
 ## trigger

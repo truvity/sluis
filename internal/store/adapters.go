@@ -72,7 +72,11 @@ func (c Config) legacyTable() port.Table {
 	if k := c.sel.SigningKMS; k != nil && !c.sel.SigningFile {
 		// What `signingKey.kms` has always meant, as settings. Marshalling a
 		// struct of strings cannot fail.
-		raw, _ := json.Marshal(port.KMSSigning{Keys: k.Keys, Region: k.Region, StateSecretFile: k.StateSecretFile})
+		legacy := port.KMSSigning{Keys: k.Keys, Region: k.Region, StateSecretFile: k.StateSecretFile}
+		for _, a := range k.Additional {
+			legacy.Additional = append(legacy.Additional, port.KMSSigningAlg{Alg: a.Alg, Keys: a.Keys})
+		}
+		raw, _ := json.Marshal(legacy)
 		var settings port.Settings
 		_ = json.Unmarshal(raw, &settings)
 		t[port.ConcernSigning] = port.Choice{Adapter: "kms", Settings: settings}

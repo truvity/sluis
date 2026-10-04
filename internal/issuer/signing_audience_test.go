@@ -81,6 +81,24 @@ resources:
 // needs it; every other test simply never reads from it.
 func newMultiAlgServer(t *testing.T) (server *httptest.Server, told <-chan string, primary, rsaKey *issuer.SigningKey) {
 	t.Helper()
+	primary, err := issuer.NewSigningKey() // P-384 / ES384, matching the chart's own default
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsaKey = rsaSigningKey(t) // defined in keyring_test.go, same test binary
+	server, told = newMultiAlgServerKeys(t, primary, rsaKey)
+	return server, told, primary, rsaKey
+}
+
+// newMultiAlgServerWith is the same server over the keys the caller made.
+func newMultiAlgServerWith(t *testing.T, primary, rsaKey *issuer.SigningKey) *httptest.Server {
+	t.Helper()
+	server, _ := newMultiAlgServerKeys(t, primary, rsaKey)
+	return server
+}
+
+func newMultiAlgServerKeys(t *testing.T, primary, rsaKey *issuer.SigningKey) (*httptest.Server, <-chan string) {
+	t.Helper()
 
 	toldCh := make(chan string, 8)
 	backchannel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -105,12 +123,6 @@ func newMultiAlgServer(t *testing.T) (server *httptest.Server, told <-chan strin
 	state := issuer.NewMemoryState()
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, dir, state)
 
-	primary, err = issuer.NewSigningKey() // P-384 / ES384, matching the chart's own default
-	if err != nil {
-		t.Fatal(err)
-	}
-	rsaKey = rsaSigningKey(t) // defined in keyring_test.go, same test binary
-
 	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*issuer.SigningKey{rsaKey}, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
@@ -124,10 +136,10 @@ func newMultiAlgServer(t *testing.T) (server *httptest.Server, told <-chan strin
 		t.Fatalf("handler: %v", err)
 	}
 
-	server = httptest.NewServer(handler)
+	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	return server, toldCh, primary, rsaKey
+	return server, toldCh
 }
 
 // verifiedHeader fetches the server's REAL published JWKS, verifies raw
