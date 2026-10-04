@@ -526,6 +526,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
+	if len(kmsRefs) > 0 {
+		for _, f := range additionalKeys {
+			log.WarnContext(ctx, "signingKey.kms is set but this algorithm is still signed by a file key",
+				"algorithm", f.SignatureAlgorithm(), "kid", f.ID())
+		}
+	}
 	// Each KMS algorithm's newest key is its ring's primary, beside any files
 	// (a file and a KMS key for the same algorithm clash, as two files do).
 	additionalKeys = append(additionalKeys, kmsMore...)

@@ -10,8 +10,10 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -533,5 +535,44 @@ func TestAPinnedRS256ClientIsSignedByTheKMSRSAKey(t *testing.T) {
 	plain, _ := verifiedHeader(t, server, pinned["id_token"].(string))
 	if plain["alg"] != string(jose.ES384) || plain["kid"] != es.ID() {
 		t.Fatalf("default id token header = %v, want ES384 by the KMS EC key", plain)
+	}
+}
+
+// M1: a client pinned to RS256 whose ring has no active signer (its only key
+// is another replica's old one, and this replica's new key is not yet
+// activated) gets an error, never an ES384 token.
+func TestAPinnedRS256ClientNeverFallsBackToES384(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	state := issuer.NewMemoryState()
+	// Another replica recorded an RSA key, immediately active there.
+	other := issuer.NewKeyRing(jose.RS256, state, issuer.KeyRingConfig{}, nil)
+	if err := other.Observe(ctx, mustKMSKey(t, newFakeRSAKMS(t), jose.RS256)); err != nil {
+		t.Fatal(err)
+	}
+	es := mustKMSKey(t, newFakeKMS(t), jose.ES384)
+	fresh := mustKMSKey(t, newFakeRSAKMS(t), jose.RS256) // new here: waits its delay
+	server, _ := newMultiAlgServerState(t, es, fresh, state)
+
+	b := newBrowser(t, server)
+	b.signIn()
+	sentTo := b.authorize("&resource=" + url.QueryEscape("https://resource.example/rs256"))
+	for strings.HasPrefix(sentTo, "/") {
+		_, sentTo, _ = b.do(http.MethodGet, sentTo)
+	}
+	back, _ := url.Parse(sentTo)
+	form := url.Values{
+		"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")},
+		"redirect_uri": {"http://localhost:8000/callback"}, "client_id": {"local-dev"}, "code_verifier": {pkceVerifier},
+	}
+	resp, err := http.Post(server.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode())) //nolint:noctx // a test
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if tok, ok := body["access_token"].(string); ok {
+		t.Fatalf("an RS256-pinned request got a token (%s...) while the RS256 ring had no signer", tok[:10])
 	}
 }
