@@ -112,6 +112,57 @@ only thing left to trust is the API server.
 The rule consumers follow makes every row above safe: **a
 non-authoritative answer holds, it never removes.**
 
+## A controller release that crash-loops
+
+**What happened, 2026-10-04.** The rollout of sluis 1.57.0 on kernel crash-looped
+every pod at start. The service (`serve`) kept its old pods, because it runs two
+replicas under `RollingUpdate`, so sign-in stayed up. The GitHub and Slack
+controllers were fixed at one replica with `strategy: Recreate`: their old pods were
+deleted first, so both controllers were down for about 15 minutes, until the fix was
+rolled. Nothing was lost (every pass recomputes from the console and the target
+system), but nothing was reconciled for that time either.
+
+**What the chart does now.** Each controller's Deployment rolls with
+`maxUnavailable: 0` and `maxSurge: 1`, with a readiness probe on `/readyz`
+(`probes.address`, default `:7070`), and `minReadySeconds: 10`. The new pod becomes
+Ready only after it has finished starting: the policy loaded, the stores open and
+the audit catalogue accepted. A pod that crashes at start never listens, so it is
+never Ready, and the rollout stalls with the old pod still running. The symptom is
+then a Deployment that does not complete, not an outage.
+
+**Reading a stalled rollout.**
+
+```sh
+kubectl -n <ns> rollout status deploy/<release>-github-roster --timeout=120s
+kubectl -n <ns> get pods -l app.kubernetes.io/name=<name>-github-roster
+kubectl -n <ns> logs <the new pod> --previous
+```
+
+The old pod is the one that is Running and Ready; the new one is `CrashLoopBackOff`
+or `Running` and not Ready. Its log names the refusal. The ones seen: the audit
+installation refusing the catalogue (`the audit installation refused the catalogue`:
+the catalogue version the binary carries is newer than the audit installation
+accepts, which is what 1.57.0 hit, fixed in 1.57.1 by moving to the `roster 1.7.0`
+catalogue), a policy the binary refuses, or `enabledOrgs` / `enabledWorkspaces`
+naming something the policy does not bind. Fix the cause and roll again; **do not
+scale the old Deployment down or delete its pod** to "make room", which is the
+`Recreate` outage by hand. Argo CD reports the Deployment as Progressing until the
+`progressDeadlineSeconds` (ten minutes) passes, and then as Degraded; the old pod
+keeps running throughout.
+
+**Alert on it.** A controller that is down, or that ticks and fails, is visible
+in the series the controllers emit on every tick: see
+[telemetry](telemetry.md#the-controllers-and-the-rails).
+`access_roster.tick.last_success_timestamp` (per `kind`, `target`) is the one to
+alert on for a controller that has stopped; the chart's `AccessRosterTickStale`
+([SluisTickStale](telemetry.md#sluistickstale)) ages it. The series is **absent**
+when a controller has never ticked, and after a day of silence, so an alert on a
+controller that is gone for good needs `absent_over_time(...)` beside it.
+
+**More replicas.** With a shared State a controller may run two replicas, so a node
+loss does not pause reconciling: see
+[high-availability](high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe).
+
 ## Backing up, and restoring, what the console holds
 
 Everything a console added that cannot be minted again is in five

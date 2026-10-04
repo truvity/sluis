@@ -1,3 +1,26 @@
+## Unreleased
+
+- **The GitHub and Slack controllers roll safely.** The chart fixed each controller at
+  one replica with `strategy: Recreate`, so a release whose pods crashed at start
+  (sluis 1.57.0, 2026-10-04) deleted the running controller first and left it down for
+  about 15 minutes, while the `serve` Deployment kept its old pods. Now:
+
+  - `controllerGithub` and `controllerSlack` take `replicas` (default 1), `strategy`
+    (default `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1`), `minReadySeconds`
+    (default 10) and `podDisruptionBudget` (rendered when `replicas` is above 1).
+    A new pod must be Ready before an old one is removed. **Behaviour change:** a
+    deployment that relied on `Recreate` sets `strategy.type: Recreate`; with the
+    `legacy` adapter the new pod's first pass can overlap the old pod's last for a few
+    seconds.
+  - The controllers serve `/healthz` and `/readyz` on `probes.address` (default
+    `:7070`), and the chart probes them. Ready means the process finished starting:
+    the policy loaded, the stores open, the audit catalogue accepted.
+  - More than one replica is refused at render unless the controller's
+    `ports.adapter` is `nats` or `dynamodb`. With `legacy` or `memory` the tick leases
+    are in each pod's memory and every replica would act on every target.
+  - See [the runbook](docs/operations/runbook.md#a-controller-release-that-crash-loops)
+    and [high availability](docs/operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe).
+
 ## v1.57.1
 
 Released automatically as a patch: the roster audit catalogue bumped to 1.7.0 after its document changed in 1.57.0.
