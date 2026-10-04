@@ -7,6 +7,11 @@
   the `sluis-http` role may `kms:Sign` and `kms:GetPublicKey` with it.
   **Breaking:** `KubernetesIdentityArgs.SigningKeyArn` is now `SigningKeyArns`, a list.
   A caller's next apply creates the key.
+  Also: an exports schedule (`Exports`: `<prefix>-exports`, default every 15 minutes,
+  invoking `sluis-http` with `{"kind":"exports"}`, the function configurable);
+  `sts:GetWebIdentityToken` on the github and slack roles (`WebIdentityAudience`
+  restricts the audience); and `SLUIS_SECRET_FILES` per function (`SecretFiles`; the
+  http function always lists the state secret at `/tmp/sluis/state-secret`).
 
 - **The Audit page's query URL no longer needs `audit.writer`.** `audit.queryURL` is its
   own setting, so the console's Audit page works with the `sqs` and `log` audit sinks, which

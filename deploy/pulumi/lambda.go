@@ -128,6 +128,14 @@ type LambdaArgs struct {
 	API APIArgs
 	// Schedule is the controllers' tick: one schedule per target.
 	Schedule ScheduleArgs
+	// Exports is the schedule that runs the exports.
+	Exports ExportsArgs
+	// WebIdentityAudience restricts the audience of the outbound web identity
+	// token the github and slack roles may ask STS for
+	// (`sts:IdentityTokenAudience`), normally the console's URL. Empty allows any
+	// audience. The roles hold `sts:GetWebIdentityToken` either way, and the
+	// account must have outbound identity federation enabled.
+	WebIdentityAudience string
 	// Telemetry is the OpenTelemetry layer. Nil: no layer and no OTEL
 	// environment, which is how an estate whose collector is not ready runs.
 	Telemetry *TelemetryArgs
@@ -136,6 +144,34 @@ type LambdaArgs struct {
 	Tags map[string]string
 }
 
+// ExportsArgs is the exports schedule: one EventBridge schedule invoking the
+// function that owns the exports with `{"kind":"exports"}`.
+type ExportsArgs struct {
+	// Disabled leaves the schedule out.
+	Disabled bool
+	// Function is the role of the function that owns the exports: "http" (the
+	// default, `<prefix>-http`), "github" or "slack".
+	Function string
+	// Rate is the schedule expression. Default DefaultExportsSchedule.
+	Rate string
+}
+
+// DefaultExportsSchedule is the exports' tick when ExportsArgs.Rate is empty.
+const DefaultExportsSchedule = "rate(15 minutes)"
+
+// SecretFile is an SSM parameter the function writes to a file at cold start
+// (SLUIS_SECRET_FILES, a JSON array of {parameter, path}).
+type SecretFile struct {
+	// Parameter is under /sluis/private/ or /sluis/export/.
+	Parameter string `json:"parameter"`
+	// Path is under /tmp/.
+	Path string `json:"path"`
+}
+
+// StateSecretPath is where the http function finds the issuer's state secret
+// (the library lists it in the http function's SLUIS_SECRET_FILES).
+const StateSecretPath = "/tmp/sluis/state-secret"
+
 // FunctionArgs tunes one function.
 type FunctionArgs struct {
 	// MemoryMB defaults to 512.
@@ -143,8 +179,11 @@ type FunctionArgs struct {
 	// TimeoutSeconds defaults to 30 for http, and to 300 for a controller (a
 	// pass over a whole organisation).
 	TimeoutSeconds int
-	// Env is set on this function alone.
+	// Env is set on this function alone. SLUIS_SECRET_FILES is the library's.
 	Env map[string]string
+	// SecretFiles are written to files at cold start, beside the http function's
+	// state secret, which the library always lists.
+	SecretFiles []SecretFile
 }
 
 // APIArgs is the HTTP API (payload format 2.0) and its custom domain.
@@ -297,6 +336,35 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 		}
 		if f.fa.TimeoutSeconds == 0 {
 			f.fa.TimeoutSeconds = f.timeout
+		}
+	}
+	switch out.Exports.Function {
+	case "":
+		out.Exports.Function = RoleHTTP
+	case RoleHTTP, RoleGitHub, RoleSlack:
+	default:
+		return out, nil, fmt.Errorf("sluispulumi: Exports.Function %q is http, github or slack", out.Exports.Function)
+	}
+	if out.Exports.Rate == "" {
+		out.Exports.Rate = DefaultExportsSchedule
+	}
+	if r := out.Exports.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
+		return out, nil, fmt.Errorf("sluispulumi: Exports.Rate %q is not an EventBridge Scheduler expression", r)
+	}
+	for _, f := range []*FunctionArgs{&out.HTTP, &out.GitHub, &out.Slack} {
+		if _, has := f.Env["SLUIS_SECRET_FILES"]; has {
+			return out, nil, errors.New("sluispulumi: SLUIS_SECRET_FILES is the library's: use FunctionArgs.SecretFiles")
+		}
+		if _, has := out.Env["SLUIS_SECRET_FILES"]; has {
+			return out, nil, errors.New("sluispulumi: SLUIS_SECRET_FILES is the library's: use FunctionArgs.SecretFiles")
+		}
+		for _, sf := range f.SecretFiles {
+			if !strings.HasPrefix(sf.Parameter, PrivateParameterPrefix+"/") && !strings.HasPrefix(sf.Parameter, ExportParameterPrefix+"/") {
+				return out, nil, fmt.Errorf("sluispulumi: SecretFiles: %q is not under %s/ or %s/", sf.Parameter, PrivateParameterPrefix, ExportParameterPrefix)
+			}
+			if !strings.HasPrefix(sf.Path, "/tmp/") || strings.Contains(sf.Path, "..") {
+				return out, nil, fmt.Errorf("sluispulumi: SecretFiles: %q is not a path under /tmp/", sf.Path)
+			}
 		}
 	}
 	if out.Schedule.Rate == "" {
@@ -476,6 +544,17 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		for k, v := range s.args.Env {
 			env[k] = pulumi.String(v)
 		}
+		files := append([]SecretFile(nil), s.args.SecretFiles...)
+		if s.role == RoleHTTP {
+			files = append([]SecretFile{{Parameter: StateSecretParameterName, Path: StateSecretPath}}, files...)
+		}
+		if len(files) > 0 {
+			raw, err := json.Marshal(files)
+			if err != nil {
+				return nil, err
+			}
+			env["SLUIS_SECRET_FILES"] = pulumi.String(string(raw))
+		}
 		env["SLUIS_ROLE"] = pulumi.String(s.role)
 		env["SLUIS_CONFIG_FILE"] = pulumi.String(ConfigFilePath(s.role))
 
@@ -525,7 +604,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 
 	// ---- the schedules
-	schedRole, schedNames, err := newSchedules(ctx, name, &a, fns[RoleGitHub], fns[RoleSlack], fnName, tags, child)
+	schedRole, schedNames, err := newSchedules(ctx, name, &a, fns, fnName, tags, child)
 	if err != nil {
 		return nil, err
 	}
@@ -647,6 +726,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 			queueArn: v[3].(string), logGroupArn: v[4].(string), signingKeyArns: stringsOf(v[5:]),
 			parameterKeyArn:    a.ParameterKeyArn,
 			invokeFunctionArns: []string{githubArn, slackArn},
+			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,
 		})
 	}).(pulumi.StringOutput)
 	if _, err := iam.NewRolePolicy(ctx, name+"-"+role+"-policy", &iam.RolePolicyArgs{
@@ -785,7 +865,7 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 
 // newSchedules is the scheduler's role, which may invoke the two controller
 // functions and nothing else, and one schedule per target.
-func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, gh, sl *lambda.Function, fnName func(string) string,
+func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[string]*lambda.Function, fnName func(string) string,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
 	trust, _ := json.Marshal(map[string]any{
@@ -803,12 +883,17 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, gh, sl *lambd
 	if err != nil {
 		return nil, none, err
 	}
+	gh, sl := fns[RoleGitHub], fns[RoleSlack]
+	invokeArns := []any{gh.Arn, sl.Arn}
+	if !a.Exports.Disabled && a.Exports.Function == RoleHTTP {
+		invokeArns = append(invokeArns, fns[RoleHTTP].Arn)
+	}
 	if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
 		Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), Role: role.Name,
-		Policy: pulumi.All(gh.Arn, sl.Arn).ApplyT(func(v []any) (string, error) {
+		Policy: pulumi.All(invokeArns...).ApplyT(func(v []any) (string, error) {
 			return document([]statement{{
 				"Sid": "SluisTick", "Effect": "Allow", "Action": lambdaInvokeFunction,
-				"Resource": []string{v[0].(string), v[1].(string)},
+				"Resource": stringsOf(v),
 			}})
 		}).(pulumi.StringOutput),
 	}, opts...); err != nil {
@@ -853,6 +938,26 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, gh, sl *lambd
 			return nil, none, fmt.Errorf("sluis schedule %s: %w", sname, err)
 		}
 		names = append(names, pulumi.String(sname))
+	}
+	if !a.Exports.Disabled {
+		ef := fns[a.Exports.Function]
+		ename := a.FunctionNamePrefix + "-exports"
+		if _, err := scheduler.NewSchedule(ctx, name+"-exports", &scheduler.ScheduleArgs{
+			Name:                       pulumi.String(ename),
+			Description:                pulumi.Sprintf("Runs the exports in the %s function.", a.Exports.Function),
+			ScheduleExpression:         pulumi.String(a.Exports.Rate),
+			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
+			Target: &scheduler.ScheduleTargetArgs{
+				Arn: ef.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"exports"}`),
+				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
+					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
+				},
+			},
+		}, opts...); err != nil {
+			return nil, none, fmt.Errorf("sluis exports schedule: %w", err)
+		}
+		names = append(names, pulumi.String(ename))
 	}
 	return role, names.ToStringArrayOutput(), nil
 }
