@@ -788,29 +788,6 @@
               }
             }
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "audit": {
-                "required": [
-                  "queryURL"
-                ]
-              }
-            },
-            "required": [
-              "audit"
-            ]
-          },
-          "then": {
-            "properties": {
-              "audit": {
-                "required": [
-                  "writer"
-                ]
-              }
-            }
-          }
         }
       ],
       "description": "The configuration of `sluis serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
@@ -999,7 +976,7 @@
             },
             "queryURL": {
               "$ref": "#/definitions/config-serve.url",
-              "description": "The query service, for the console's Audit page. Needs `writer`."
+              "description": "The query service, for the console's Audit page. Its own setting: it needs no `writer`, so the page works with the `sqs` and `log` sinks. A path prefix (`https://audit.example/sluis`) is kept and the procedure path appended."
             },
             "tokenFile": {
               "description": "This workload's projected service-account token, presented on every call.",

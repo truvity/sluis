@@ -1,5 +1,11 @@
 ## Unreleased
 
+- **The Audit page's query URL no longer needs `audit.writer`.** `audit.queryURL` is its
+  own setting, so the console's Audit page works with the `sqs` and `log` audit sinks, which
+  have no receiver (the Lambda target state). The console already forwards the page's calls
+  server-side, so the query host needs no CORS; a base URL with a path prefix
+  (`https://audit.example.org/sluis`) is kept and the procedure path appended.
+
 - **Deployment guides and a generated adapter matrix.** `docs/guides/choosing-a-deployment.md`
   opens with the decision tree and modifiers, then the presets and support levels
   (`aws-hybrid` is the implemented, maintained path); `docs/guides/diy-adapter.md` is the

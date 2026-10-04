@@ -157,3 +157,28 @@ func TestAKeptTokenIsReplacedBeforeItExpires(t *testing.T) {
 		t.Fatal("a token in its last minute was kept")
 	}
 }
+
+// A query URL with a path prefix (the service published under
+// https://audit.example/sluis) keeps the prefix and gets the procedure path
+// appended.
+func TestAQueryURLWithAPathPrefixKeepsIt(t *testing.T) {
+	t.Parallel()
+	service := &upstream{response: `{"items":[]}`}
+	srv := httptest.NewServer(service)
+	t.Cleanup(srv.Close)
+	target, err := url.Parse(srv.URL + "/sluis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &ConsoleServer{log: slog.New(slog.DiscardHandler)}
+	s.UseAuditQuery(&AuditQuery{URL: target, Token: func(context.Context, access.Identity) (string, time.Time, error) {
+		return "t", time.Now().Add(5 * time.Minute), nil
+	}})
+	w := ask(s, http.MethodPost, "/audit/audit.v1.QueryService/Search", &access.Identity{Email: "ada@north.example"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("search = %d %s", w.Code, w.Body)
+	}
+	if got, want := service.paths[0], "/sluis/audit.v1.QueryService/Search"; got != want {
+		t.Errorf("the service was asked %q, want %q", got, want)
+	}
+}
