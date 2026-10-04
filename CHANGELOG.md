@@ -1,4 +1,6 @@
-## Unreleased
+## v1.59.1
+
+Released automatically as a patch: the declared OAuth client is read off-cluster, so the issuer on Lambda can open the Google Workspace directory.
 
 ### Fixed
 
