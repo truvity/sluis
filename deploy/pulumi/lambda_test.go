@@ -273,7 +273,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	for _, d := range rec.ofType(policyType) {
 		for _, s := range statements(t, prop(d, "policy").StringValue()) {
 			for _, r := range strs(s["Resource"]) {
-				if r == "*" {
+				if r == "*" && s["Action"] != "sts:GetWebIdentityToken" {
 					t.Errorf("%s: a grant on every resource: %v", d.Name, s)
 				}
 			}
@@ -381,11 +381,18 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
 		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
 		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-slack",
+		"sluis-exports":             `{"kind":"exports"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-http",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
 	}
 	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
+		if prop(s, "name").StringValue() == "sluis-exports" {
+			if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" {
+				t.Errorf("exports rate: %v", s.Inputs)
+			}
+			continue
+		}
 		if prop(s, "scheduleExpression").StringValue() != "rate(2 minutes)" {
 			t.Errorf("%s: %v", s.Name, s.Inputs)
 		}
@@ -393,9 +400,9 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 			t.Errorf("%s: not the scheduler's role", s.Name)
 		}
 	}
-	// The scheduler's role invokes the two controllers and nothing else.
+	// The scheduler's role invokes the two controllers and the exports' function.
 	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
-	if len(sp) != 1 || len(sp["lambda:InvokeFunction"]) != 2 {
+	if len(sp) != 1 || len(sp["lambda:InvokeFunction"]) != 3 {
 		t.Errorf("scheduler grants %v", sp)
 	}
 
@@ -429,10 +436,13 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 		},
 	})
 	shape(t, rec, out, "access.two.example.test")
-	if got := schedules(t, rec); len(got) != 1 {
+	if got := schedules(t, rec); len(got) != 2 {
 		t.Errorf("schedules: %v", got)
 	}
 	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
+		if prop(s, "name").StringValue() == "sluis-exports" {
+			continue
+		}
 		if prop(s, "scheduleExpression").StringValue() != "rate(5 minutes)" {
 			t.Errorf("default rate: %v", s.Inputs)
 		}
@@ -714,5 +724,103 @@ func TestTheRS256KeyCanBeLeftOut(t *testing.T) {
 	}
 	if got := rolePolicy(t, rec, "http")["kms:Sign"]; len(got) != 1 {
 		t.Errorf("http signs with %v", got)
+	}
+}
+
+func TestOnlyTheControllersMayAskForAWebIdentityToken(t *testing.T) {
+	rec, _ := mustLambda(t, estate{})
+	for r, want := range map[string]bool{"http": false, "github": true, "slack": true} {
+		g := rolePolicy(t, rec, r)["sts:GetWebIdentityToken"]
+		if (len(g) > 0) != want {
+			t.Errorf("%s: %v", r, g)
+		}
+		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
+			if s["Sid"] == "SluisWebIdentity" && s["Condition"] != nil {
+				t.Errorf("%s: a condition without an audience: %v", r, s)
+			}
+		}
+	}
+	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://access.example.test" }})
+	for _, r := range []string{"github", "slack"} {
+		var n int
+		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
+			if s["Sid"] != "SluisWebIdentity" {
+				continue
+			}
+			n++
+			c := s["Condition"].(map[string]any)["ForAllValues:StringEquals"].(map[string]any)
+			if !reflect.DeepEqual(strs(c["sts:IdentityTokenAudience"]), []string{"https://access.example.test"}) {
+				t.Errorf("%s: %v", r, c)
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s: %d statements", r, n)
+		}
+	}
+}
+
+func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.Exports = arp.ExportsArgs{Function: "github", Rate: "rate(1 hour)"}
+	}})
+	s := rec.one(t, "aws:scheduler/schedule:Schedule", "kernel-exports")
+	tgt := prop(s, "target").ObjectValue()
+	if prop(s, "scheduleExpression").StringValue() != "rate(1 hour)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-github") ||
+		tgt["input"].StringValue() != `{"kind":"exports"}` {
+		t.Errorf("exports schedule: %v", s.Inputs)
+	}
+	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
+	if len(sp["lambda:InvokeFunction"]) != 2 {
+		t.Errorf("scheduler grants %v", sp)
+	}
+	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = true }})
+	if rec.has("aws:scheduler/schedule:Schedule", "kernel-exports") {
+		t.Error("a disabled exports schedule was made")
+	}
+	for name, mutate := range map[string]func(*arp.LambdaArgs){
+		"bad function": func(a *arp.LambdaArgs) { a.Exports.Function = "nobody" },
+		"bad rate":     func(a *arp.LambdaArgs) { a.Exports.Rate = "hourly" },
+	} {
+		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestTheSecretFilesAreTheEnvironmentTheAppReads(t *testing.T) {
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.GitHub.SecretFiles = []arp.SecretFile{{Parameter: "/sluis/private/github/app-key", Path: "/tmp/sluis/github-app.pem"}}
+		a.GitHub.Env = map[string]string{"GITHUB_APP_KEY": "ssm:/sluis/private/github/app-key"}
+	}})
+	env := func(r string) map[resource.PropertyKey]resource.PropertyValue {
+		return prop(rec.one(t, fnType, "kernel-"+r), "environment").ObjectValue()["variables"].ObjectValue()
+	}
+	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/issuer/state-secret","path":"/tmp/sluis/state-secret"}]` {
+		t.Errorf("http: %s", got)
+	}
+	if got := env("github")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/github/app-key","path":"/tmp/sluis/github-app.pem"}]` {
+		t.Errorf("github: %s", got)
+	}
+	if env("github")["GITHUB_APP_KEY"].StringValue() != "ssm:/sluis/private/github/app-key" {
+		t.Error("an ssm: mapping did not pass through")
+	}
+	if env("slack")["SLUIS_SECRET_FILES"].HasValue() {
+		t.Error("slack lists no secret files")
+	}
+	for name, mutate := range map[string]func(*arp.LambdaArgs){
+		"outside /tmp": func(a *arp.LambdaArgs) {
+			a.Slack.SecretFiles = []arp.SecretFile{{Parameter: "/sluis/private/x", Path: "/var/task/x"}}
+		},
+		"traversal": func(a *arp.LambdaArgs) {
+			a.Slack.SecretFiles = []arp.SecretFile{{Parameter: "/sluis/private/x", Path: "/tmp/../x"}}
+		},
+		"outside /sluis": func(a *arp.LambdaArgs) {
+			a.Slack.SecretFiles = []arp.SecretFile{{Parameter: "/other/x", Path: "/tmp/x"}}
+		},
+		"the library's own": func(a *arp.LambdaArgs) { a.HTTP.Env = map[string]string{"SLUIS_SECRET_FILES": "[]"} },
+	} {
+		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

@@ -291,6 +291,9 @@ not a secret: secrets are SSM parameters, below.
 | `API.KeepDefaultEndpoint` | false | Leaves the default `execute-api` endpoint on, for the cutover's acceptance suite to run against `ApiUrl` before the DNS switch. Turn it off again after: it is a way round the client certificate. |
 | `Schedule.GitHubOrgs`, `Schedule.SlackWorkspaces` | none | The targets, one schedule each. |
 | `Schedule.Rate` | `rate(5 minutes)` | The EventBridge Scheduler expression. |
+| `Exports.Function`, `Exports.Rate`, `Exports.Disabled` | `http`, `rate(15 minutes)`, false | The exports schedule: which function owns the exports (`http`, so `<prefix>-http`, `github` or `slack`) and how often it is invoked with `{"kind":"exports"}`. |
+| `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the github and slack roles may ask STS for. |
+| `HTTP.SecretFiles` (and `GitHub`, `Slack`) | none | SSM parameters written to files under `/tmp/` at cold start, as `SLUIS_SECRET_FILES`. The http function always lists the issuer's state secret at `/tmp/sluis/state-secret`. |
 | `Telemetry.LayerArn`, `Telemetry.Env` | nil: no layer | The observability `otlp-lambda` layer and its `OTEL_*` settings. Optional, so an estate whose collector is not ready leaves it out. `OTEL_SERVICE_NAME` is the function's name unless given. |
 | `Tags` | none | On everything that takes tags. |
 
@@ -330,6 +333,28 @@ most 40 (`github:links` is the link check; a colon is a `-` in the schedule's na
 invoke those two functions and nothing else; no schedule and no controller
 function retries, because the next tick runs the pass again.
 
+### The exports schedule
+
+`<prefix>-exports` invokes the function that owns the exports (`Exports.Function`,
+default `http`, that is `sluis-http`) with `{"kind":"exports"}`, every
+`Exports.Rate` (default 15 minutes), through the same scheduler role, which may
+invoke that function too. Whether the function understands the event is the
+app's: the app side lands separately. The controllers' outbound web identity
+needs outbound identity federation enabled in the account (STS answers
+`OutboundWebIdentityFederationDisabled` otherwise); the library does not enable
+it.
+
+### The environment the app reads
+
+Per function the library sets `SLUIS_ROLE`, `SLUIS_CONFIG_FILE` (that function's
+own file) and `SLUIS_SECRET_FILES`, a JSON array of `{"parameter","path"}` with
+paths under `/tmp/` (SSM parameters under `/sluis/private/` or `/sluis/export/`
+written to files at cold start; the http function's list always has the state
+secret). `Env` adds the rest, including `<NAME>=ssm:/sluis/private/...` mappings
+and `OTEL_*`. The library owns `SLUIS_SECRET_FILES` and refuses it in `Env`. The
+http file names the controllers in `adapters.trigger.settings` (`github:
+<prefix>-github`, `slack: <prefix>-slack`).
+
 ### IAM: one role per function
 
 Each function has a role and an inline policy named after it, and nothing is
@@ -346,6 +371,7 @@ granted on `*`.
 | `sqs:SendMessage` on the audit ingest queue | yes | yes | yes |
 | `kms:Sign`, `kms:GetPublicKey` on both signing keys | **yes** | no | no |
 | `lambda:InvokeFunction` on the github and slack functions ("run a pass now") | **yes** | no | no |
+| `sts:GetWebIdentityToken` (on `*`: the action takes no resource; with `WebIdentityAudience`, only for that audience), so a controller authenticates to the console with its role's outbound token | no | **yes** | **yes** |
 
 Both estates sign with two keys: `ECC_NIST_P384` (ES384) and `RSA_3072`
 (RS256), each usage `SIGN_VERIFY`, protected, with a

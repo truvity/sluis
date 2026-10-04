@@ -32,6 +32,7 @@ const (
 	ssmPutParameter        = "ssm:PutParameter"
 	ssmDeleteParameter     = "ssm:DeleteParameter"
 	lambdaInvokeFunction   = "lambda:InvokeFunction"
+	stsGetWebIdentityToken = "sts:GetWebIdentityToken"
 	sqsSendMessage         = "sqs:SendMessage"
 	logsCreateStream       = "logs:CreateLogStream"
 	logsPutEvents          = "logs:PutLogEvents"
@@ -138,6 +139,7 @@ const (
 	sidParamKy = "SluisParameterKey"
 	sidInvoke  = "SluisRunAPass"
 	sidAudit   = "SluisAuditIngest"
+	sidWebID   = "SluisWebIdentity"
 )
 
 // SSM layout (decision D1a): `private` is sluis's alone, `export` is what
@@ -181,6 +183,8 @@ type functionPolicyIn struct {
 	tableArn, tableKey string
 	queueArn           string
 	signingKeyArns     []string
+	webIdentity        bool
+	webIdentityAud     string
 	parameterKeyArn    string
 	logGroupArn        string
 	invokeFunctionArns []string
@@ -228,7 +232,31 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 			"Resource": in.invokeFunctionArns,
 		})
 	}
+	if in.webIdentity && in.role != RoleHTTP {
+		st = append(st, webIdentityStatement(in.webIdentityAud))
+	}
 	return document(st)
+}
+
+// webIdentityStatement lets a controller ask STS for its role's outbound web
+// identity token, which is how it authenticates to the console. The action
+// takes no resource, so the statement is on "*" (the one such grant here). With
+// an audience the request must carry it and no other: the key is multi-valued
+// (the API takes a list), so it is ForAllValues:StringEquals, which also passes
+// an empty set and is safe only because the audience is a required parameter.
+func webIdentityStatement(audience string) statement {
+	st := statement{
+		"Sid":      sidWebID,
+		"Effect":   "Allow",
+		"Action":   stsGetWebIdentityToken,
+		"Resource": "*",
+	}
+	if audience != "" {
+		st["Condition"] = map[string]any{
+			"ForAllValues:StringEquals": map[string]any{"sts:IdentityTokenAudience": []string{audience}},
+		}
+	}
+	return st
 }
 
 // ExportReadPolicy is the IAM policy document a consumer's External Secrets
