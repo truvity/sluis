@@ -910,11 +910,11 @@ key listed in `signingKey.kms.keys`:
 {
   "Effect": "Allow",
   "Action": ["kms:Sign", "kms:GetPublicKey"],
-  "Resource": ["arn:aws:kms:<region>:<account>:key/<key-id>"]
+  "Resource": ["<the ARN of each key in signingKey.kms.keys>"]
 }
 ```
 
-For an alias, grant on the key it points at (an alias ARN does not match a
+For an alias, grant on the key it points at (an alias does not match a
 key policy `Resource`; use a `kms:ResourceAliases` condition if the grant must
 follow the alias). Without `kms:GetPublicKey` the service refuses to start and
 the log line names the permission and the key; without `kms:Sign` it starts
