@@ -33,7 +33,6 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/issuer"
-	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/telemetry"
@@ -769,11 +768,11 @@ func openRecovery(ctx context.Context, cfg Config, st *store.Stores, log *slog.L
 			"a cluster, and this service is not running in one with an account and audience named")
 		return nil
 	}
-	if st.Backend == nil || st.Backend.Kube == nil {
+	namespace, ok := clusterNamespace(st)
+	if !ok {
 		log.WarnContext(ctx, "recovery could not be built: the namespace's objects are not available")
 		return nil
 	}
-	namespace := st.Backend.Kube.Namespace()
 	log.InfoContext(ctx, "recovery sign-in is available: a token for this account signs in "+
 		"without a directory, and the policy's service_account matchers decide what it gets",
 		"namespace", namespace, "account", cfg.recoveryAccount, "audience", cfg.recoveryAudience)
@@ -782,7 +781,7 @@ func openRecovery(ctx context.Context, cfg Config, st *store.Stores, log *slog.L
 		Namespace: namespace,
 		Account:   cfg.recoveryAccount,
 		Audience:  cfg.recoveryAudience,
-		Subjects:  []string{kube.ServiceAccountSubject(namespace, cfg.recoveryAccount)},
+		Subjects:  []string{access.ServiceAccountSubject(namespace, cfg.recoveryAccount)},
 		Cluster:   cfg.cluster,
 	}
 }

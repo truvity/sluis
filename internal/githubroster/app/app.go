@@ -12,8 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,7 +27,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/health"
-	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
@@ -144,6 +146,9 @@ func orDefault(value, fallback string) string {
 
 // App is an assembled controller.
 type App struct {
+	// targets are the targets the policy declares: a pass runs a target by the
+	// policy's own spelling of it, never by a string a caller made.
+	targets    []string
 	controller *controller.Controller
 	trail      *audit.Trail
 	log        *slog.Logger
@@ -225,8 +230,8 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)
 		}
 		links, appSource = portstore.NewGitHubLinks(base), portstore.NewGitHubOrgs(base)
-	case stores.Backend != nil && stores.Backend.Kube != nil:
-		links = kube.NewGitHubLinks(stores.Backend.Kube)
+	default:
+		links = clusterLinks(stores)
 	}
 
 	// Every call to the console carries this pod's own projected token,
@@ -274,6 +279,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			"adapter", stores.Adapter)
 	}
 	return &App{
+		targets:     append(slices.Collect(maps.Keys(declared.GitHub)), controller.LinksTarget),
 		log:         log,
 		sharedLease: shared,
 		ready:       health.NewGate("the controller"),
@@ -330,14 +336,29 @@ func (a *App) Run(ctx context.Context) error {
 // `sluis tick github` runs, and the shape of a function that lives
 // for one invocation. A target another runner holds is left to it.
 func (a *App) Tick(ctx context.Context, target string, unsafeLocal bool) error {
-	if err := store.RequireSharedLease(a.sharedLease, unsafeLocal); err != nil {
-		return err
-	}
-	ran, _, err := a.controller.RunTarget(ctx, target)
-	if err == nil && !ran {
-		a.log.InfoContext(ctx, "the target is leased to another runner: nothing to do", "target", target)
-	}
+	_, err := a.Pass(ctx, target, unsafeLocal)
 	return err
+}
+
+// Pass is [App.Tick] that says whether the pass ran: false, with no error, when
+// another runner holds the target's lease and the pass is left to it. It is what
+// a Lambda invocation runs (cmd/sluis-lambda), which reports a contended
+// invocation as such and not as a success.
+func (a *App) Pass(ctx context.Context, target string, unsafeLocal bool) (ran bool, err error) {
+	if err := store.RequireSharedLease(a.sharedLease, unsafeLocal); err != nil {
+		return false, err
+	}
+	// Resolved to the declared spelling, so that what is logged and keyed below
+	// is the policy's and not the caller's.
+	i := slices.Index(a.targets, target)
+	if i < 0 {
+		return false, controller.ErrUnknownTarget
+	}
+	ran, _, err = a.controller.RunTarget(ctx, a.targets[i])
+	if err == nil && !ran {
+		a.log.InfoContext(ctx, "the target is leased to another runner: nothing to do", "target", logsafe.Value(target))
+	}
+	return ran, err
 }
 
 func keys(m map[string]bool) []string {

@@ -397,6 +397,9 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 		"interval":   duration("How long between passes. Positive.", "15m"),
 		"log":        logLevel(),
 		"ports":      portsSchema(false),
+		"platform":   platformSchema(),
+		"preset":     presetSchema(),
+		"adapters":   adaptersSchema(),
 		"probes":     probes(":7070"),
 		"audit": obj("The audit installation the controller records to, as its own workload. Unset only logs what it did.", m{
 			"writer":    url("The installation's receiver."),

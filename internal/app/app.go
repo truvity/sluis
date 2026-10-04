@@ -52,8 +52,6 @@ import (
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
-	"github.com/truvity/sluis/internal/kube"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/server"
@@ -383,7 +381,7 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger
 		return server.NewPasswordRecovery(password), nil
 	}
 
-	subject := kube.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
+	subject := access.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
 	log.InfoContext(ctx, "recovery is by cluster access; nothing is stored",
 		"serviceAccount", cfg.recoveryAccount, "audience", cfg.recoveryAudience, "subject", subject)
 	return &server.TokenRecovery{
@@ -424,7 +422,7 @@ func consumers(
 	if declared != nil {
 		for i := range declared.Consumers {
 			consumer := &declared.Consumers[i]
-			subject := kube.ServiceAccountSubject(consumer.Namespace, consumer.ServiceAccount)
+			subject := access.ServiceAccountSubject(consumer.Namespace, consumer.ServiceAccount)
 			allowed = append(allowed, subject)
 			if grant := consumer.Grant(); grant != nil {
 				grants[subject] = grant
@@ -526,159 +524,7 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 		}, nil
 	}
 
-	// Today's ConfigMaps and Secrets, opened once by the ports' factory.
-	var client *kube.Client
-	if st.Backend != nil {
-		client = st.Backend.Kube
-	}
-	if client == nil {
-		return stores{}, errors.New("store: kubernetes needs the namespace's objects, and this process has none")
-	}
-	key, err := client.SessionKey(ctx, access.NewSessionKey)
-	if err != nil {
-		return stores{}, err
-	}
-	log.InfoContext(ctx, "keeping state in this namespace",
-		"store", storeKubernetes, "namespace", client.Namespace(),
-		"sessionKeySecret", client.SessionKeyName(),
-		"oauthClientSecret", cfg.oauthSecretName)
-	// The report the GitHub controller writes into is created HERE, by the
-	// service, so that the controller's Role can name the one object it
-	// updates: `create` cannot be narrowed to a name. Cheap and idempotent,
-	// so it is done whether or not a controller is deployed, and a failure
-	// is a warning — the directory works without it.
-	github := kube.NewGitHubStatus(client)
-	if err = github.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the GitHub status report could not be created; the GitHub page will show bindings only",
-			"configMap", github.Name(), "error", err)
-	}
-	// The Slack controller's report, created here for the same reason.
-	slackStatus := kube.NewSlackStatus(client)
-	if err = slackStatus.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Slack status report could not be created; the Slack controller cannot report until it exists",
-			"configMap", slackStatus.Name(), "error", err)
-	}
-	// And the two objects connecting an organisation writes into, empty,
-	// so the controller's Secret volume always has a Secret behind it.
-	githubOrgs := kube.NewGitHubOrgs(client)
-	if err = githubOrgs.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the objects GitHub organisations are connected into could not be created",
-			"configMap", githubOrgs.ConfigMapName(), "secret", githubOrgs.SecretName(), "error", err)
-	}
-	// And the Secret people's links are written into, so the controller's
-	// Role can name an object that exists.
-	githubLinks := kube.NewGitHubLinks(client)
-	if err = githubLinks.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Secret GitHub accounts are linked into could not be created",
-			"secret", githubLinks.Name(), "error", err)
-	}
-	// And the Secret runner Apps are kept in, so a deployment copying it
-	// finds it before the first App is created.
-	githubRunnerApps := kube.NewGitHubRunnerApps(client)
-	if err = githubRunnerApps.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Secret runner Apps are kept in could not be created",
-			"secret", githubRunnerApps.SecretName(), "error", err)
-	}
-	// And the Secret catalogue Apps are kept in, for the same reason.
-	githubCatalogueApps := kube.NewGitHubCatalogueApps(client)
-	if err = githubCatalogueApps.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Secret catalogue Apps are kept in could not be created",
-			"secret", githubCatalogueApps.SecretName(), "error", err)
-	}
-	// And the Secret Slack workspaces are connected into, empty, so the
-	// Slack controller's volume always has a Secret behind it. The records'
-	// ConfigMap beside it is slackShared's, ensured once below.
-	slackWorkspaces := kube.NewSlackWorkspaces(client)
-	if err = slackWorkspaces.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Secret Slack workspaces are connected into could not be created",
-			"secret", slackWorkspaces.SecretName(), "error", err)
-	}
-	// And the Secret catalogue Slack Apps are kept in, for the same reason.
-	slackCatalogueApps := kube.NewSlackCatalogueApps(client)
-	if err = slackCatalogueApps.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Secret catalogue Slack Apps are kept in could not be created",
-			"secret", slackCatalogueApps.SecretName(), "error", err)
-	}
-	// And the ConfigMap Slack Connect channel definitions are kept in,
-	// beside the workspaces' records the controller mounts.
-	slackShared := kube.NewSlackShared(client)
-	if err = slackShared.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the ConfigMap Slack Connect channels are kept in could not be created",
-			"configMap", slackShared.ConfigMapName(), "error", err)
-	}
-	// The records ConfigMap has a mirror Secret, the thing the chart's
-	// recovery copy pushes (a PushSecret reads Secrets only). A ConfigMap
-	// left with no records beside a mirror that has them is a restore, and
-	// the records come back; otherwise the mirror is brought up to date.
-	if restored, err := slackWorkspaces.ReconcileRecords(ctx); err != nil {
-		log.WarnContext(ctx, "the Slack records and their recovery copy could not be reconciled",
-			"configMap", slackWorkspaces.ConfigMapName(), "secret", slackWorkspaces.RecordsSecretName(), "error", logsafe.Error(err))
-	} else if len(restored) > 0 {
-		log.InfoContext(ctx, "restored Slack records from their recovery copy", "keys", restored)
-	}
-	// Each connection's credential carries its record, so the GitHub Apps
-	// Secret alone restores every organisation: put back a record a
-	// restore left missing, and copy records into credentials written
-	// before they carried one.
-	if changed, err := githubOrgs.ReconcileRecords(ctx); err != nil {
-		log.WarnContext(ctx, "the GitHub connections' records and credentials could not be reconciled",
-			"configMap", githubOrgs.ConfigMapName(), "secret", githubOrgs.SecretName(), "error", err)
-	} else if len(changed) > 0 {
-		log.InfoContext(ctx, "reconciled GitHub connection records with their credentials", "keys", changed)
-	}
-	// Workspace credentials are one Secret, each entry carrying its
-	// workspace's record, for the same reason. An older release kept one
-	// Secret per workspace: those move in, and records a restore left
-	// missing come back before the stored workspaces are reopened. A
-	// failure warns rather than stops: an unmoved credential is still read
-	// where it is.
-	workspaces := kube.NewWorkspaces(client)
-	credentials := kube.NewCredentials(client)
-	if err = credentials.Ensure(ctx); err != nil {
-		log.WarnContext(ctx, "the Secret workspace credentials are kept in could not be created",
-			"secret", credentials.SecretName(), "error", err)
-	}
-	if moved, err := credentials.Migrate(ctx, workspaces); err != nil {
-		log.WarnContext(ctx, "not every workspace credential could be moved into one Secret; the rest are read where they are",
-			"secret", credentials.SecretName(), "moved", moved, "error", err)
-	} else if len(moved) > 0 {
-		log.InfoContext(ctx, "moved workspace credentials into one Secret",
-			"secret", credentials.SecretName(), "workspaces", moved)
-	}
-	if restored, err := credentials.RestoreRecords(ctx, workspaces); err != nil {
-		log.WarnContext(ctx, "workspace records missing beside their credentials could not be restored",
-			"secret", credentials.SecretName(), "restored", restored, "error", err)
-	} else if len(restored) > 0 {
-		log.InfoContext(ctx, "restored workspace records from their credentials", "workspaces", restored)
-	}
-	return stores{
-		// The controllers' reports are read through the blob port, which is
-		// the same two ConfigMaps in this adapter.
-		githubReports: rails.NewBlobReports(st.Ports.Blob, "reports/github/"),
-		slackReports:  rails.NewBlobReports(st.Ports.Blob, "reports/slack/"),
-		githubOrgs:    githubOrgs,
-		githubLinks:   githubLinks,
-		// runner Apps are created only for declared tiers, but the store
-		// is kept either way: an App created before a tier was dropped
-		// stays visible, so it can be disconnected.
-		githubRunnerApps: githubRunnerApps,
-		// Likewise an App whose entry the catalogue no longer declares.
-		githubCatalogueApps: githubCatalogueApps,
-		slackCatalogueApps:  slackCatalogueApps,
-		slackShared:         slackShared,
-		slackChannels:       kube.NewSlackChannels(client),
-		slackWorkspaces:     slackWorkspaces,
-		workspaces:          workspaces,
-		credentials:         credentials,
-		settings: kube.NewSettings(client, kube.DeclaredClient{
-			Name:      cfg.oauthSecretName,
-			IDKey:     cfg.oauthIDKey,
-			SecretKey: cfg.oauthSecretKey,
-		}),
-		sessionKey:  key,
-		reviewToken: st.Ports.Identity.Verify,
-		namespace:   client.Namespace(),
-	}, nil
+	return openKubeStores(ctx, cfg, st, log)
 }
 
 // openPortStores keeps the domain stores on the ports: records in State,
@@ -713,14 +559,7 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 		slackChannels:       portstore.NewSlackChannels(base),
 		slackWorkspaces:     portstore.NewSlackWorkspaces(base),
 	}
-	if st.Backend != nil && st.Backend.Kube != nil {
-		client := st.Backend.Kube
-		out.reviewToken = st.Ports.Identity.Verify
-		out.namespace = client.Namespace()
-		out.settings = kube.NewSettings(client, kube.DeclaredClient{
-			Name: cfg.oauthSecretName, IDKey: cfg.oauthIDKey, SecretKey: cfg.oauthSecretKey,
-		})
-	}
+	useCluster(&out, cfg, st)
 	return out, nil
 }
 

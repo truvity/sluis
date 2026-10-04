@@ -26,6 +26,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/apply"
@@ -131,6 +132,9 @@ func orDefault(value, fallback string) string {
 
 // App is an assembled controller.
 type App struct {
+	// targets are the targets the policy declares: a pass runs a target by the
+	// policy's own spelling of it, never by a string a caller made.
+	targets    []string
 	controller *controller.Controller
 	trail      *audit.Trail
 	log        *slog.Logger
@@ -151,14 +155,29 @@ type App struct {
 // of a function that lives for one invocation. A workspace another runner
 // holds is left to it.
 func (a *App) Tick(ctx context.Context, target string, unsafeLocal bool) error {
-	if err := store.RequireSharedLease(a.sharedLease, unsafeLocal); err != nil {
-		return err
-	}
-	ran, _, err := a.controller.RunTarget(ctx, target)
-	if err == nil && !ran {
-		a.log.InfoContext(ctx, "the workspace is leased to another runner: nothing to do", "workspace", target)
-	}
+	_, err := a.Pass(ctx, target, unsafeLocal)
 	return err
+}
+
+// Pass is [App.Tick] that says whether the pass ran: false, with no error, when
+// another runner holds the target's lease and the pass is left to it. It is what
+// a Lambda invocation runs (cmd/sluis-lambda), which reports a contended
+// invocation as such and not as a success.
+func (a *App) Pass(ctx context.Context, target string, unsafeLocal bool) (ran bool, err error) {
+	if err := store.RequireSharedLease(a.sharedLease, unsafeLocal); err != nil {
+		return false, err
+	}
+	// Resolved to the declared spelling, so that what is logged and keyed below
+	// is the policy's and not the caller's.
+	i := slices.Index(a.targets, target)
+	if i < 0 {
+		return false, controller.ErrUnknownTarget
+	}
+	ran, _, err = a.controller.RunTarget(ctx, a.targets[i])
+	if err == nil && !ran {
+		a.log.InfoContext(ctx, "the workspace is leased to another runner: nothing to do", "workspace", logsafe.Value(target))
+	}
+	return ran, err
 }
 
 // Close closes the audit emitter, which delivers what its queue holds within
@@ -259,6 +278,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			"adapter", stores.Adapter)
 	}
 	return &App{
+		targets:     slices.Collect(maps.Keys(declared.Slack.Workspaces)),
 		log:         log,
 		sharedLease: shared,
 		ready:       health.NewGate("the controller"),

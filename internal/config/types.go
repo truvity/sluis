@@ -355,15 +355,21 @@ type Serve struct {
 
 // Roster is what the two controllers share.
 type Roster struct {
-	Release    string       `json:"release,omitempty"`
-	PolicyDir  string       `json:"policyDir"`
-	ConsoleURL string       `json:"consoleURL"`
-	TokenFile  string       `json:"tokenFile,omitempty"`
-	RecordsDir string       `json:"recordsDir,omitempty"`
-	Interval   *Duration    `json:"interval,omitempty"`
-	Log        *Log         `json:"log,omitempty"`
-	Ports      *Ports       `json:"ports,omitempty"`
-	Audit      *RosterAudit `json:"audit,omitempty"`
+	Release    string    `json:"release,omitempty"`
+	PolicyDir  string    `json:"policyDir"`
+	ConsoleURL string    `json:"consoleURL"`
+	TokenFile  string    `json:"tokenFile,omitempty"`
+	RecordsDir string    `json:"recordsDir,omitempty"`
+	Interval   *Duration `json:"interval,omitempty"`
+	Log        *Log      `json:"log,omitempty"`
+	Ports      *Ports    `json:"ports,omitempty"`
+	// Platform, Preset and Adapters choose the adapters by name, per concern, as
+	// they do in the serve configuration; the Lambda controllers need them for
+	// the audit sink (`sqs`) and the state they share with the service.
+	Platform *Platform                `json:"platform,omitempty"`
+	Preset   string                   `json:"preset,omitempty"`
+	Adapters map[string]AdapterChoice `json:"adapters,omitempty"`
+	Audit    *RosterAudit             `json:"audit,omitempty"`
 	// Probes is where /healthz and /readyz answer.
 	Probes *Address `json:"probes,omitempty"`
 }
