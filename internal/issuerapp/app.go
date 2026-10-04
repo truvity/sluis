@@ -844,8 +844,12 @@ func openRecovery(ctx context.Context, cfg Config, st *store.Stores, log *slog.L
 		return nil
 	}
 	if !cfg.inCluster || cfg.recoveryAccount == "" || cfg.recoveryAudience == "" {
-		log.WarnContext(ctx, "recovery is asked for but cannot be built: it proves access to "+
-			"a cluster, and this service is not running in one with an account and audience named")
+		// Info: where the console is merged in (a Lambda, a single binary) the
+		// same recovery.enabled turns on the console's own password recovery,
+		// which needs no cluster; only this issuer's token form does.
+		log.InfoContext(ctx, "the issuer's own recovery sign-in is not built: it proves access to "+
+			"a cluster, and this service is not running in one with an account and audience named; "+
+			"the console's recovery (a password outside a cluster) is unaffected")
 		return nil
 	}
 	namespace, ok := clusterNamespace(st)

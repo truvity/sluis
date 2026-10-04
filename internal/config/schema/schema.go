@@ -225,10 +225,11 @@ func serveSchema() m {
 			"clustersFile": str("The file naming the federated clusters, each by its published key set. Read once at start."),
 			"awsFile":      str("The file naming the AWS accounts, each by its published key set. Read once at start."),
 		}),
-		"recovery": obj("The sign-in that needs no directory: a token for a ServiceAccount, proven against the cluster. Unset is off for the issuer and, for the hub, on.", m{
+		"recovery": obj("The sign-in that needs no directory: in a cluster, a token for a ServiceAccount proven against the API server; anywhere else, a password. Unset is off for the issuer and, for the hub, on.", m{
 			"enabled":        boolean("Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable."),
 			"serviceAccount": str("The ServiceAccount whose token signs in."),
 			"audience":       str("The audience its token must carry."),
+			"passwordFile":   str("Outside a cluster: the file the recovery password is read from, once, at start (the hub keeps only an Argon2id digest of it). Unset takes `adminPasswordEnv`, or generates one and prints it. `enabled: false` leaves the file untouched and refuses the sign-in, so turning it back on needs no new password."),
 		}),
 		"api": obj("The directory API's guard.", m{
 			"audience":      strDefault("The audience a consumer's token must carry.", "directory-roster"),

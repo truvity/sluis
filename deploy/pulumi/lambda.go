@@ -1,12 +1,14 @@
 package sluispulumi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/apigatewayv2"
@@ -19,6 +21,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ssm"
 	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"go.yaml.in/yaml/v3"
 )
 
 // LambdaType is the Pulumi type token of the Lambda component.
@@ -46,6 +49,17 @@ const DefaultWrappedSigningKeyAlias = "alias/sluis-signing-wrapped"
 // StateSecretParameterName is the SSM parameter of the issuer's state secret,
 // `/sluis/private/config/issuer/state-secret`.
 const StateSecretParameterName = ConfigParameterPrefix + "/issuer/state-secret"
+
+// RecoveryPasswordParameterName is the SSM parameter of the recovery password,
+// `/sluis/private/config/recovery/password`: a SecureString the library
+// generates and keeps across applies, and the http function reads at cold
+// start into RecoveryPasswordPath.
+const RecoveryPasswordParameterName = ConfigParameterPrefix + "/recovery/password"
+
+// RecoveryPasswordPath is where the http function finds the recovery password
+// (the library lists it in the http function's SLUIS_SECRET_FILES and names it
+// as `recovery.passwordFile` in the http function's configuration).
+const RecoveryPasswordPath = "/tmp/sluis/recovery-password"
 
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
@@ -137,6 +151,8 @@ type LambdaArgs struct {
 	// PermissionsBoundaryArn is the boundary of every role. Default none.
 	PermissionsBoundaryArn string
 
+	// Recovery is the recovery sign-in. Default (nil): enabled.
+	Recovery *RecoveryArgs
 	// API is the HTTP API in front of the http function. Required.
 	API APIArgs
 	// Schedule is the controllers' tick: one schedule per target.
@@ -231,6 +247,21 @@ type FunctionArgs struct {
 	SecretFiles []SecretFile
 }
 
+// RecoveryArgs is the recovery sign-in: the way in for the day no directory can
+// vouch for anybody, which on Lambda is a generated password.
+//
+// The password and its parameter exist whatever Enabled says, so that turning
+// recovery off and on again is a configuration change and never a rotation.
+type RecoveryArgs struct {
+	// Enabled writes `recovery.enabled` into the http function's configuration.
+	// Default nil: recovery is on, which is what a first installation needs (the
+	// console is signed in to with it until a directory is connected). Turn it
+	// off once a directory works, with a pointer to false: the sign-in is then
+	// refused with a message and the parameter is kept. A `recovery.enabled`
+	// already in Config must agree with it.
+	Enabled *bool
+}
+
 // APIArgs is the HTTP API (payload format 2.0) and its custom domain.
 type APIArgs struct {
 	// DomainName is the custom domain. Required.
@@ -321,6 +352,12 @@ type Lambda struct {
 	// random bytes, base64. The library generates it and keeps it across applies.
 	StateSecretParameter pulumi.StringOutput
 
+	// RecoveryPasswordParameter is the name of the SSM SecureString that holds the
+	// recovery password, `/sluis/private/config/recovery/password`: 40 random
+	// letters and digits with no look-alikes. Only the name is an output, never the
+	// value; an operator reads it with `aws ssm get-parameter --with-decryption`.
+	RecoveryPasswordParameter pulumi.StringOutput
+
 	// ExportReadPolicyJSON is the IAM policy document a consumer's External
 	// Secrets Operator role attaches: read on /sluis/export/* and nothing else.
 	ExportReadPolicyJSON pulumi.StringOutput
@@ -393,6 +430,15 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	if out.FunctionNamePrefix == "" {
 		out.FunctionNamePrefix = "sluis"
 	}
+	var enabled *bool
+	if out.Recovery != nil {
+		enabled = out.Recovery.Enabled
+	}
+	merged, err := withRecovery(out.Config, enabled)
+	if err != nil {
+		return out, nil, err
+	}
+	out.Config = merged
 	if out.LogRetentionDays == 0 {
 		out.LogRetentionDays = 30
 	}
@@ -663,7 +709,10 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		}
 		files := append([]SecretFile(nil), s.args.SecretFiles...)
 		if s.role == RoleHTTP {
-			files = append([]SecretFile{{Parameter: StateSecretParameterName, Path: StateSecretPath}}, files...)
+			files = append([]SecretFile{
+				{Parameter: StateSecretParameterName, Path: StateSecretPath},
+				{Parameter: RecoveryPasswordParameterName, Path: RecoveryPasswordPath},
+			}, files...)
 		}
 		if len(files) > 0 {
 			raw, err := json.Marshal(files)
@@ -748,6 +797,33 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis state secret parameter: %w", err)
 	}
 
+	// ---- the recovery password: generated once and kept (no keepers, so an apply
+	// never rotates it; `pulumi up --replace` on the RandomPassword does), secret
+	// in state and in `pulumi up`'s output, and stored where the http function
+	// reads it at cold start. Letters and digits only, and the look-alikes (0 O 1 l
+	// I) are swapped for fixed other letters, so that it can be read off a screen
+	// and typed without a guess; 40 characters of a 57-letter alphabet is well
+	// over 200 bits, which the swap does not dent.
+	recoveryPassword, err := random.NewRandomPassword(ctx, name+"-recovery-password", &random.RandomPasswordArgs{
+		Length: pulumi.Int(recoveryPasswordLength), Special: pulumi.Bool(false),
+	}, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis recovery password: %w", err)
+	}
+	rargs := &ssm.ParameterArgs{
+		Name:  pulumi.String(RecoveryPasswordParameterName),
+		Type:  pulumi.String("SecureString"),
+		Value: pulumi.ToSecret(recoveryPassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput),
+		Tags:  tags,
+	}
+	if a.ParameterKeyArn != "" {
+		rargs.KeyId = pulumi.String(a.ParameterKeyArn)
+	}
+	recoveryParam, err := ssm.NewParameter(ctx, name+"-recovery-password", rargs, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
+	}
+
 	exportPolicy, err := ExportReadPolicy(a.Region, a.AccountID, a.ParameterKeyArn)
 	if err != nil {
 		return nil, err
@@ -779,6 +855,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.TruststoreURI = pulumi.Sprintf("s3://%s/%s", truststore.Bucket, truststoreKey)
 	out.SchedulerRoleArn = schedRole.Arn
 	out.StateSecretParameter = stateParam.Name
+	out.RecoveryPasswordParameter = recoveryParam.Name
 	out.ScheduleNames = schedNames
 	out.ExportReadPolicyJSON = pulumi.String(exportPolicy).ToStringOutput()
 
@@ -793,10 +870,86 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
 		"exportReadPolicyJson": out.ExportReadPolicyJSON, "stateSecretParameter": out.StateSecretParameter,
+		"recoveryPasswordParameter": out.RecoveryPasswordParameter,
 	}); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// recoveryPasswordLength is the generated recovery password's length.
+const recoveryPasswordLength = 40
+
+// unambiguous swaps the characters that are read wrongly off a screen for
+// fixed others.
+func unambiguous(s string) string {
+	return strings.NewReplacer("0", "x", "O", "X", "1", "y", "l", "Y", "I", "z").Replace(s)
+}
+
+// withRecovery points the http function's configuration at the recovery
+// password file and, when enabled is set, writes `recovery.enabled`. The
+// configuration is a YAML mapping and is otherwise left as it is written
+// (comments and order are kept; indentation is normalised).
+func withRecovery(config string, enabled *bool) (string, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(config), &doc); err != nil {
+		return "", fmt.Errorf("sluispulumi: LambdaArgs.Config is not YAML: %w", err)
+	}
+	if doc.Kind == 0 {
+		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return "", errors.New("sluispulumi: LambdaArgs.Config is not a YAML mapping")
+	}
+	top := doc.Content[0]
+	recovery := mapValue(top, "recovery")
+	if recovery == nil {
+		recovery = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		top.Content = append(top.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "recovery"}, recovery)
+	}
+	if recovery.Kind != yaml.MappingNode {
+		return "", errors.New("sluispulumi: LambdaArgs.Config: recovery is not a mapping")
+	}
+	if v := mapValue(recovery, "passwordFile"); v != nil && v.Value != RecoveryPasswordPath {
+		return "", fmt.Errorf("sluispulumi: LambdaArgs.Config: recovery.passwordFile is the library's (%s): leave it out", RecoveryPasswordPath)
+	}
+	setScalar(recovery, "passwordFile", "!!str", RecoveryPasswordPath)
+	if enabled != nil {
+		want := strconv.FormatBool(*enabled)
+		if v := mapValue(recovery, "enabled"); v != nil && v.Value != want {
+			return "", fmt.Errorf("sluispulumi: LambdaArgs.Config has recovery.enabled: %s and Recovery.Enabled is %s", v.Value, want)
+		}
+		setScalar(recovery, "enabled", "!!bool", want)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		return "", err
+	}
+	if err := enc.Close(); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func mapValue(m *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func setScalar(m *yaml.Node, key, tag, value string) {
+	if v := mapValue(m, key); v != nil {
+		v.Kind, v.Tag, v.Value = yaml.ScalarNode, tag, value
+		return
+	}
+	m.Content = append(m.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value})
 }
 
 func stringsOf(v []any) []string {

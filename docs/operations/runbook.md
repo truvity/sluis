@@ -39,7 +39,8 @@ setup goes wrong.
 
 Outside a cluster there is nothing to prove access to, so the service prints a
 generated recovery password once at start and step 2 is reading it off the
-log. That installation gets a fifth setup step — turn the password off —
+log (on AWS Lambda it is a parameter instead, see
+[Recovery on Lambda](recovery-on-lambda.md)). That installation gets a fifth setup step — turn the password off —
 because a stored password *is* a standing credential, which the token is
 not.
 

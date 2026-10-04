@@ -189,3 +189,62 @@ func TestAnUntrustedDeploymentRecordsThePeer(t *testing.T) {
 		t.Errorf("recorded %v, want the peer's address", records)
 	}
 }
+
+// Every attempt leaves a record, the refused ones too, and a refusal names
+// nobody: the caller has not proved who it is.
+func TestARefusedRecoveryAttemptIsRecorded(t *testing.T) {
+	t.Parallel()
+	trail := audittest.New(t)
+	handler := recoveryServer(t, trail, 0)
+
+	request := httptest.NewRequest(http.MethodPost, "/login/recovery", nil)
+	request.Header.Set("Authorization", "Bearer not-the-proof")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized || response.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("a wrong proof = %d, cookie %q", response.Code, response.Header().Get("Set-Cookie"))
+	}
+	written := trail.Records()
+	if len(written) != 1 || written[0].GetAction() != "roster.recovery.signed_in" ||
+		written[0].GetOutcome().GetResult() != auditv1.Outcome_RESULT_DENIED ||
+		written[0].GetOutcome().GetReason() != reasonRecoveryRefused || written[0].GetActor().GetKind() != "anonymous" {
+		t.Fatalf("written = %v %v, want one denied recovery record", trail.Actions(), written)
+	}
+	if strings.Contains(written[0].String(), "not-the-proof") {
+		t.Error("the record carries the proof")
+	}
+}
+
+// recovery.enabled: false keeps the credential and refuses the sign-in, with
+// a message that says why, and the attempt is recorded.
+func TestRecoveryTurnedOffRefusesWithAMessageAndARecord(t *testing.T) {
+	t.Parallel()
+	trail := audittest.New(t)
+	console := githubConsole(t, nil)
+	console.deps.Audit = trail
+	sessions, err := access.NewSessions(make([]byte, access.SessionKeyBytes), time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewConsoleServer(ConsoleServerDeps{
+		Console: console, Authorizer: console.deps.Authorizer, Sessions: sessions, Recovery: nil,
+		Log: slog.New(slog.DiscardHandler),
+	}).Handler()
+
+	request := httptest.NewRequest(http.MethodPost, "/login/recovery", nil)
+	request.Header.Set("Authorization", "Bearer the-proof")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	body := response.Body.String()
+	if response.Code != http.StatusForbidden || !strings.Contains(body, "turned off") || !strings.Contains(body, "recovery.enabled") {
+		t.Errorf("recovery turned off = %d %q, want 403 saying it is turned off", response.Code, body)
+	}
+	if response.Header().Get("Set-Cookie") != "" {
+		t.Error("a refused recovery set a session")
+	}
+	written := trail.Records()
+	if len(written) != 1 || written[0].GetOutcome().GetResult() != auditv1.Outcome_RESULT_DENIED ||
+		written[0].GetOutcome().GetReason() != reasonRecoveryOff {
+		t.Errorf("written = %v, want one denied record saying it is off", trail.Actions())
+	}
+}

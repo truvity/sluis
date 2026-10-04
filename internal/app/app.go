@@ -89,7 +89,10 @@ type Config struct {
 	consumersPath    string
 	loginDirectory   bool
 	adminPassword    string
-	sessionLifetime  time.Duration
+	// recoveryPasswordFile is where the password is read from instead of
+	// being generated, outside a cluster.
+	recoveryPasswordFile string
+	sessionLifetime      time.Duration
 	// absoluteLifetime caps the console's own session the same way it caps
 	// a per-client one in the issuer: read from the SAME key
 	// the issuer's config reads (lifetimes.absolute), because the
@@ -173,6 +176,7 @@ func FromConfig(f *config.Serve) (Config, error) {
 		}
 		c.recoveryAccount = orDefault(r.ServiceAccount, c.recoveryAccount)
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
+		c.recoveryPasswordFile = r.PasswordFile
 	}
 	if a := f.API; a != nil {
 		c.apiAudience = orDefault(a.Audience, c.apiAudience)
@@ -368,7 +372,9 @@ func openSnapshots(ctx context.Context, st *store.Stores, log *slog.Logger) hub.
 // credential at all: nothing to rotate, nothing to leak, nothing to find
 // in an etcd backup, and an audit trail that names who recovered rather
 // than "admin". Anywhere else there is nothing to prove access to, so a
-// generated password is what is left, and it is printed once.
+// password is what is left: the one recovery.passwordFile holds (a platform
+// puts it there, e.g. from a secret store), or adminPasswordEnv's, or one
+// generated and printed once.
 func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger) (server.Recovery, error) {
 	if !cfg.recoveryEnabled {
 		log.InfoContext(ctx, "no recovery sign-in: this hub can only be entered through the directory")
@@ -376,6 +382,17 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger
 	}
 	if kept.reviewToken == nil {
 		password := cfg.adminPassword
+		if cfg.recoveryPasswordFile != "" {
+			raw, err := os.ReadFile(cfg.recoveryPasswordFile)
+			if err != nil {
+				return nil, fmt.Errorf("recovery.passwordFile: %w", err)
+			}
+			if password = strings.TrimSpace(string(raw)); password == "" {
+				return nil, fmt.Errorf("recovery.passwordFile: %s is empty", cfg.recoveryPasswordFile)
+			}
+			log.InfoContext(ctx, "recovery sign-in is by the password in recovery.passwordFile",
+				"file", cfg.recoveryPasswordFile)
+		}
 		if password == "" {
 			generated, err := generatedPassword()
 			if err != nil {

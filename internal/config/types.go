@@ -92,6 +92,9 @@ type (
 		Enabled        *bool  `json:"enabled,omitempty"`
 		ServiceAccount string `json:"serviceAccount,omitempty"`
 		Audience       string `json:"audience,omitempty"`
+		// PasswordFile is the recovery password, for a hub that is not in a
+		// cluster: the file it is read from, once, at start.
+		PasswordFile string `json:"passwordFile,omitempty"`
 	}
 
 	// API is the directory API listener's guard.

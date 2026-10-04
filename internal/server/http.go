@@ -698,8 +698,21 @@ func (s *ConsoleServer) signInConnector(kind string) (SignInConnector, bool) {
 // that a runbook can be one curl, which matters on the day this is
 // reached at all.
 func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
+	// Every attempt leaves a record, the refused ones too: a recovery that
+	// bypasses the directory is the sign-in whose failures an auditor reads
+	// first. Whoever it was is not known, so the actor is anonymous.
+	how := recoveryKindOf(s.recovery)
+	if how == "" {
+		how = "none"
+	}
+	refuse := func(reason string) {
+		s.console.record(r.Context(), audit.RecoverySignedIn(audit.Anonymous(), "console", how, audit.Denied(reason)))
+	}
 	if !recoveryEnabled(s.recovery) {
-		http.Error(w, "this deployment has no recovery sign-in", http.StatusForbidden)
+		refuse(reasonRecoveryOff)
+		http.Error(w, "recovery sign-in is turned off on this deployment (recovery.enabled is false). "+
+			"Whoever can change its configuration turns it back on; the recovery credential is kept, "+
+			"so nothing needs rotating.", http.StatusForbidden)
 		return
 	}
 	proof := r.FormValue("proof")
@@ -714,10 +727,12 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrRecoveryThrottled):
 		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", "remote", r.RemoteAddr)
+		refuse(reasonRecoveryThrottled)
 		http.Error(w, "too many attempts; wait a minute", http.StatusTooManyRequests)
 		return
 	case errors.Is(err, ErrRecoveryRefused):
 		s.log.WarnContext(r.Context(), "recovery refused", "remote", r.RemoteAddr, "reason", logsafe.Error(err))
+		refuse(reasonRecoveryRefused)
 		http.Error(w, "that proof was not accepted", http.StatusUnauthorized)
 		return
 	case err != nil:
@@ -726,6 +741,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		// would send an operator hunting for the wrong thing on the worst
 		// possible day.
 		s.log.ErrorContext(r.Context(), "recovery could not be checked", "error", err)
+		s.console.record(r.Context(), audit.RecoverySignedIn(audit.Anonymous(), "console", how, audit.Failed(reasonRecoveryUnchecked)))
 		http.Error(w, "recovery could not be checked: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -764,6 +780,13 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 
 // reasonUnaudited is the reason a refused recovery sign-in is recorded
 // with, when its own record could not be written.
+const (
+	reasonRecoveryOff       = "recovery sign-in is turned off (recovery.enabled is false)"
+	reasonRecoveryThrottled = "too many refused attempts; recovery is paused for a minute"
+	reasonRecoveryRefused   = "the proof was not accepted"
+	reasonRecoveryUnchecked = "the proof could not be checked"
+)
+
 const reasonUnaudited = "the audit trail could not be written, and a recovery sign-in is refused without its record"
 
 // logout clears the session. It cannot end a session elsewhere: rotating
