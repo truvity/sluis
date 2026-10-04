@@ -173,6 +173,20 @@ apart. A burst of either is a client bug or a stolen credential; one is noise.
 | `access_roster.leases.lost` | counter | `kind` | Leases held and lost: taken over, or not renewable for a whole lifetime. The tick stopped before its next write. |
 | `access_roster.leases.held` | up-down counter | `kind` | Leases this runner holds now. |
 
+**What a controller emits on every tick, to alert on its absence.** Each tick
+(one target, under its lease) emits `access_roster.ticks` and
+`access_roster.tick.duration` and, when it ended ok,
+`access_roster.tick.last_success_timestamp`, with the target in `target`
+(`github-tick` and `github-links` for GitHub, `slack-tick` for Slack, in `kind`). The
+per-controller series that move with each pass over a target are
+`github_roster.passes` (by `org` and `outcome`) and `slack_roster.passes` (by
+`workspace` and `outcome`), with the `*.rows` gauges recorded in the same call.
+A controller that has stopped shows as `access_roster_tick_last_success_timestamp_seconds`
+ageing past two intervals, or as `increase(github_roster_passes_total[1h]) == 0`; a
+series that has gone altogether needs `absent_over_time(...)`, which the chart's
+`AccessRosterTickStale` does not do (it looks back a day). With more than one replica the lease counters
+(`access_roster.leases.contended`) rise by design.
+
 The controllers' own metrics are the existing ones: `github_roster.passes`,
 `.changes`, `.link_changes`, `.breaker_trips`, `.rows`, `.seats_free`,
 `.seats_short`, `.links`, and the rate-limit pair `github_roster.rate_limited`
@@ -309,7 +323,7 @@ first.
 A lease is lost when another runner takes it over, or it could not be renewed
 for a whole lifetime. One loss is the design working: the tick stopped before its
 next write. Repeated losses are two runners on one target (a `tick` Job beside
-the Deployment, or more than one replica where the State is not shared, see
+the Deployment, or more than one replica where the State is not shared (the chart refuses that), see
 [high-availability.md](high-availability.md)) or a State that cannot be reached
 to renew: see `SluisPortErrors`.
 

@@ -751,7 +751,7 @@ thing, and the conformance suite names the exception:
   of the layout replaces the poll.
 - **Tick leases are exclusive across processes only with a Valkey.** The
   controllers are configured with none, so with this adapter a controller's
-  leases are held in its own memory and the chart keeps one replica.
+  leases are held in its own memory and the chart refuses more than one replica.
 - **`Sealer` is `ErrUnsupported`** (`sealing/context` is skipped): nothing is
   sealed today, and a process-local key would produce envelopes no restart could
   open.

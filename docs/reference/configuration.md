@@ -84,7 +84,11 @@ service writes *itself*, where it is the producer and gets to choose.
 | `serviceAccount.annotations` | `{}` | annotations on the ServiceAccount, which is how a cloud identity reaches this service: an admission webhook (EKS Pod Identity, GKE Workload Identity, the self-hosted `amazon-eks-pod-identity-webhook`) reads one and injects credentials into every pod using the account. Without it a self-hosted installation cannot give the service an AWS identity, and `audit.s3` has nothing to authenticate with; the chart mounts no credential of its own and takes none as a value. On AWS: `eks.amazonaws.com/role-arn: <the role's ARN>` |
 | `controllerGithub.enabled` | `false` | render the GitHub controller beside the service. Refused without an `exchange.clusters` row for this cluster or a `console.mount`, because either is a controller that can read nothing |
 | `controllerSlack.enabled` | `false` | render the Slack controller beside the service. Refused without an `exchange.clusters` row for this cluster or a `console.mount`, for the same reason. The policy must put the controller's ServiceAccount (`<release>-slack-roster`) in `all:access-roster:viewer`; without it every pass fails on the first read. Roll the console before the controller when upgrading from before 1.42.0 (the controller needs `ListServedDomains`) |
-| `controllerSlack.resources` | `{}` | the controller pod's resources |
+| `controllerGithub.resources`, `controllerSlack.resources` | `{}` | the controller pod's resources |
+| `controllerGithub.replicas`, `controllerSlack.replicas` | `1` | how many controller pods run. Above 1 the chart refuses to render unless that controller's `config.ports.adapter` is `nats` or `dynamodb`: with any other adapter each pod keeps its tick leases in its own memory, and every replica would act on every target ([high-availability](../operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)) |
+| `controllerGithub.strategy`, `controllerSlack.strategy` | `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1` | the Deployment's rollout. The default starts the new pod first and removes the old one only when it is Ready, so a release that crash-loops leaves the running controller alone ([runbook](../operations/runbook.md#a-controller-release-that-crash-loops)). `type: Recreate` stops the old pod first, and is refused with more than one replica; it renders no `rollingUpdate` |
+| `controllerGithub.minReadySeconds`, `controllerSlack.minReadySeconds` | `10` | how long a new pod must stay Ready before it counts as available |
+| `controllerGithub.podDisruptionBudget`, `controllerSlack.podDisruptionBudget` | `enabled: true`, `minAvailable: 1` | rendered only when `replicas` is above 1 |
 | `audit.token.audience` / `.expirationSeconds` | `audit` / `3600` | the projected token presented to the receiver |
 | `exports.openbao.caBundle` | `""` | PEM of the authorities that sign OpenBao's certificate, for the service's [exports](#exports-and-the-export-port): a ConfigMap `<release>-openbao-ca` mounted at `/var/run/access-issuer/openbao-ca/ca.pem`, which `config.ports.export.openbao.caFile` must then be (the chart refuses another path). Empty mounts nothing |
 | `exports.openbao.token.audience` / `.expirationSeconds` | `""` / `3600` | a ServiceAccount token projected at `/var/run/openbao/token` for the `jwt` auth method, which `config.ports.export.openbao.auth.tokenFile` must then be. Empty projects nothing, which is what the `kubernetes` method wants |
@@ -532,10 +536,13 @@ The metrics, the two alerts and the dashboard row are in
 ### `controller-github` (the chart's `controllerGithub.config`; `sluis controller github`)
 
 The GitHub controller: it makes each organisation's teams match the policy's
-`github` table. It has no listener.
+`github` table. It has no listener but the probes': `/healthz` and `/readyz` on
+`probes.address`. It runs one replica by default, and more only with a shared
+State (see `controllerGithub.replicas`).
 
 | Key | Default | Meaning |
 |---|---|---|
+| `probes.address` | `:7070` | where `/healthz` (liveness, follows nothing) and `/readyz` answer. Readiness opens once the process has finished starting: the policy loaded, the stores open, the audit catalogue accepted. The chart serves the container's `health` port from it |
 | `policyDir` | **required** | the same policy ConfigMap the service mounts; its `github` table is the bindings. The chart requires `/var/run/github-roster/policy` |
 | `consoleURL` | **required** | the console's API, which answers who holds a group. The chart requires this release's own Service plus `console.mount`, and prints it |
 | `release` | `sluis` | the name the service's objects carry, so the controller finds `<release>-github-status`. The chart requires the release's full name |
@@ -559,11 +566,13 @@ any other Secret or ConfigMap, and watching them for a change takes none.
 ### `controller-slack` (the chart's `controllerSlack.config`; `sluis controller slack`)
 
 The Slack controller: it makes each workspace's channels match the policy's
-`slack` table. It has no listener, and runs as one replica with `Recreate`: two
-controllers would make every change twice.
+`slack` table. It has no listener but the probes', and runs one replica by default:
+a second needs a shared State, because two controllers on process-local leases
+would make every change twice (see `controllerSlack.replicas`).
 
 | Key | Default | Meaning |
 |---|---|---|
+| `probes.address` | `:7070` | as for `controller-github` |
 | `policyDir` | **required** | the same policy ConfigMap the service mounts; its `slack` and `people` tables are the bindings. The chart requires `/var/run/slack-roster/policy` |
 | `consoleURL` | **required** | as for `controller-github` |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `nats` or `dynamodb` it reads the console's records there, sealed by `ports.sealer` |

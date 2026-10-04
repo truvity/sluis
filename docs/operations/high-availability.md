@@ -211,24 +211,83 @@ since every fetch re-checks that the document's own `client_id` matches
 the URL it was served from, but worth knowing before treating "it worked
 when I retried" as a fluke.
 
-## The controllers are single-replica on purpose
+## The controllers: how they roll, and when a second replica is safe
 
-`controllerGithub` and `controllerSlack` each run one pod with `strategy: Recreate`: two
-controllers would make every change twice, and Slack's answer to the second is
-an error that reads as a failure. Each target (an organisation, a workspace, the
-GitHub link check) is ticked under a lease taken from the State port
-([0029](../decisions/0029-ticks-per-target-under-a-lease.md)), which is what will
-let two replicas divide the targets; but the leases keep another pod off only
-when the State is shared, and a controller is configured with no Valkey, so on
-today's storage its leases are in its own process and the chart stays at one
-replica. Two replicas wait for the NATS State. `sluis tick <github|slack>
-<target> --config <file>` runs one target's tick once under its lease, for an
-operator, but only with the controller scaled to 0 and `--unsafe-local-lease`:
-with no shared State the controller's lease does not exclude it, so it refuses
-otherwise. A rollout or a node loss pauses reconciling
-for the time the pod needs to start; every pass recomputes from the console and
-the target system, so nothing is missed, and a pass that meets a console on
-another policy is retried within seconds (5s doubling to a minute, six times).
+`controllerGithub` and `controllerSlack` each run one pod by default, rolled by
+`RollingUpdate` with `maxUnavailable: 0` and `maxSurge: 1`: the new pod starts
+beside the old one, and the old one is removed only when the new one is Ready.
+Ready means the process finished starting (the policy loaded, the stores open,
+the audit catalogue accepted; `/readyz` on `probes.address`, default `:7070`).
+A release whose pods crash at start therefore leaves the running controller
+alone. Before 2026-10-04 the chart used `Recreate` and no probe, which
+deleted the old pod first: see
+[a controller release that crash-loops](runbook.md#a-controller-release-that-crash-loops).
+
+Each target (an organisation, a workspace, the GitHub link check) is ticked under
+a lease taken from the State port
+([0029](../decisions/0029-ticks-per-target-under-a-lease.md)), so with more than
+one replica only one acts on a target at a time and the others skip it. **A lease
+keeps another pod off only when the State is shared**, and that is the whole
+condition for a second replica:
+
+| `ports.adapter` | Leases | `replicas` above 1 |
+|---|---|---|
+| `nats`, `dynamodb` | in the shared State: one holder per target across every pod | safe, and the chart renders a `PodDisruptionBudget` |
+| `legacy` (the default), `memory` | in each pod's own memory (a controller is configured with no Valkey) | **refused at render**: every replica would act on every target, and make each change twice |
+
+With more than one replica the evidence is these, in the code:
+
+- **The lease, in both controllers.** `rails.Leases.Do` takes `lease.<kind>:<target>` with
+  `State.Create` (a Create with a lifetime, which fails with `ErrExists` while it
+  is held), renews it by compare-and-swap every third of its two-minute lifetime,
+  and cancels the tick's context when it is lost, so the tick stops before its
+  next write. GitHub ticks under `github-tick:<org>` and `github-links:all`, Slack
+  under `slack-tick:<workspace>`. `Pass` (the sweep), the credential watch and the
+  trigger all reach a target only through `RunTarget`, which takes the lease; no
+  path ticks a target without it.
+- **"Run a pass now".** There are two ways in. The console's Refresh notifies the
+  target on the Trigger port, and each replica also watches the mounted or stored
+  records for a new request (`rails.Watch`, every 30 seconds) and notifies the
+  target itself. The NATS and DynamoDB triggers are a watch on `notify.<target>`,
+  so a notification reaches **every** replica, and a change to the credentials
+  wakes every replica's sweep. Each replica then calls `RunTarget`: one takes the
+  lease and the rest log "leased to another runner" and drop it. A notification is
+  a hint that may be duplicated or lost, and the sweep is its backstop. A request
+  that arrives while the holder is already mid-tick waits for the next sweep, as
+  it does with one replica.
+- **What is per replica, not shared.** The installation-token cache and the
+  profile-miss cache (each replica mints its own), the held-row ledger and the
+  last-report memory. The last two decide which held or reported rows are
+  recorded to the audit trail as *new*: a replica that did not tick the target
+  last seeds them from the report in the Blob, so a row can be recorded once per
+  replica when ticks alternate. That is a duplicate audit record of a row that was
+  held, never a duplicate change to GitHub or Slack.
+- **Costs of the second replica.** Each replica sweeps every `interval`, so a target
+  is ticked about twice as often (more GitHub and Slack API calls, and
+  `access_roster.leases.contended` counts the sweeps that found a target taken: it
+  is normal, not a fault). `SluisLeaseLost` should stay quiet.
+- **Leader-only side effects.** None is outside a lease. Every pod registers the same
+  audit catalogue at start, which is a registration of what is already there. The Slack Connect
+  hand-off and the Slack member cache are on the State port with these adapters.
+
+`strategy` is the operator's. With the `legacy` adapter the new pod's first pass
+can overlap the old pod's last for the few seconds until the old pod is removed,
+and the leases are in each pod's memory, so the two do not exclude each other
+for that time (a duplicate invitation, which GitHub or Slack answers with an
+error that reads as a failure). `strategy: {type: Recreate}` restores the old
+behaviour (no overlap, and the gap), and the chart refuses `Recreate` with more
+than one replica.
+
+`sluis tick <github|slack> <target> --config <file>` runs one target's tick once
+under its lease, for an operator. With the `legacy` adapter it refuses to run
+unless the controller is scaled to 0 and `--unsafe-local-lease` is passed, because
+the controller's lease does not exclude it.
+
+A rollout or a node loss of the only replica pauses reconciling for the time the new
+pod needs to start; every pass recomputes from the console and the target system,
+so nothing is missed, and a pass that meets a console on another policy is retried
+within seconds (5s doubling to a minute, six times).
+
 The Slack controller's last report is in the ConfigMap `<release>-slack-status`,
 so a restarted pod does not record every hold and leaver again. Removals still
 need the directory to vouch, so a console outage never empties a channel or a
@@ -236,9 +295,12 @@ team.
 
 ## PodDisruptionBudget, anti-affinity, probes
 
-**The chart renders neither a PodDisruptionBudget nor any pod
+**The chart renders no PodDisruptionBudget for the service, and no pod
 anti-affinity or topology-spread rule** (checked against
-`charts/sluis/templates/`). An installation that wants replicas
+`charts/sluis/templates/`). The controllers are the exception: with `replicas`
+above 1 the chart renders one `PodDisruptionBudget` for each
+(`controller-pdb.yaml`, `podDisruptionBudget.minAvailable`, default 1). An
+installation that wants the service's replicas
 kept off the same node, or wants to guarantee at least one stays up
 through a voluntary disruption (a node drain, a cluster upgrade), adds
 these itself, for example:
@@ -277,7 +339,11 @@ outside the process; `readinessProbe` calls `/readyz`, follows Valkey
 would fire first (`timeoutSeconds: 3` against the service's own 2-second
 check; `failureThreshold: 3` at `periodSeconds: 10`, so a replica leaves
 rotation within thirty seconds of real trouble, comfortably longer than a
-reconnect takes).
+reconnect takes). The controllers carry probes of their own (`/healthz` and
+`/readyz` on their `probes.address`): liveness follows nothing, and readiness
+opens once the process has finished starting, with `periodSeconds: 5` and
+`minReadySeconds: 10` so a pod that listens and then fails does not retire the
+old one.
 
 ## Upgrades
 

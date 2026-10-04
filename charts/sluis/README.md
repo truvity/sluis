@@ -76,8 +76,9 @@ stored), an owner of the workspace installs it, and the bot token is kept in
 secret store
 ([guide](../../docs/connect/slack-apps-catalogue.md)).
 
-`controllerSlack` renders the Slack controller (`enabled`, `resources` and the controller's `config`: `interval`,
-`enabledWorkspaces`): it needs `exchange.clusters` to name this cluster and
+`controllerSlack` renders the Slack controller (`enabled`, `resources`, the rollout
+(`replicas`, `strategy`, `minReadySeconds`, `podDisruptionBudget`) and the
+controller's `config`: `interval`, `enabledWorkspaces`): it needs `exchange.clusters` to name this cluster and
 `console.mount` to be set, and egress to `slack.com:443` from the fleet's own
 policy
 ([guide](../../docs/connect/slack-workspace.md#running-the-controller)).
@@ -86,6 +87,18 @@ for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 `<release>-slack-records` at `recordsRemoteKey` (the two keys must differ), with
 `deletionPolicy` fixed at `None`; it needs `config.store: kubernetes`
 ([runbook](../../docs/operations/runbook.md#slack-state)).
+
+Each controller rolls so that a failed start leaves the old pod running: `strategy`
+defaults to `RollingUpdate` with `maxUnavailable: 0` and `maxSurge: 1`, the pod has a
+readiness probe on `/readyz` (`config.probes.address`, default `:7070`) that opens
+once the process has finished starting, and `minReadySeconds` defaults to 10.
+`replicas` defaults to 1, and above 1 needs the tick leases in a State the replicas
+share: the chart refuses it unless `config.ports.adapter` is `nats` or `dynamodb`,
+and then renders a `PodDisruptionBudget` (`podDisruptionBudget.minAvailable`,
+default 1). `strategy.type: Recreate` stops the old pod first, as the chart did before
+2026-10-04
+([why](../../docs/operations/runbook.md#a-controller-release-that-crash-loops),
+[when a second replica is safe](../../docs/operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)).
 
 ```sh
 helm install sluis oci://ghcr.io/truvity/charts/sluis \
