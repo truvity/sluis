@@ -1,5 +1,16 @@
 ## Unreleased
 
+### Fixed
+
+- **On Lambda the directory snapshot was never refreshed after the first one, so
+  sign-in failed about 30 minutes later ("the directory cannot be vouched
+  for…"); it is now refreshed on demand and every 15 minutes by a schedule.**
+  A request that finds the snapshot older than the refresh interval refreshes it
+  (older than the freshness window: before answering, bounded to 20 seconds, and
+  under the refresh lease so instances read a directory once between them), and
+  `<prefix>-directory-refresh` invokes the http function with
+  `{"kind":"refresh"}` every 15 minutes (`DirectoryRefresh.Rate`, `.Disabled`).
+
 ## v1.61.0
 
 kms-wrapped signing (one symmetric KMS key, wrapped data key pairs, free rotation) becomes the AWS presets' default; recovery on Lambda is a Pulumi-generated password in SSM with an off switch; controllers lose access to config/*; GET / redirects to the console.

@@ -26,6 +26,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	githubcontroller "github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/port/invoke"
 	"github.com/truvity/sluis/internal/rosterapp"
 	slackapp "github.com/truvity/sluis/internal/slackroster/app"
@@ -161,9 +162,16 @@ func openHTTP(ctx context.Context, file string) (*Function, error) {
 		log.WarnContext(ctx, "run-now cannot reach the controllers: adapters.trigger is not invoke, so a console write "+
 			"is picked up at the controller's next scheduled tick")
 	}
+	// There is no loop to keep the directory's snapshots fresh on Lambda: a
+	// request that finds one due refreshes it, and a schedule does so between
+	// requests ({"kind":"refresh"}).
+	service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
 	return &Function{
 		Role: RoleHTTP,
-		Handler: NewHTTP(service.Handler(), service.Settle, log).WithExports(func(ctx context.Context) (ExportsResult, error) {
+		Handler: NewHTTP(service.Handler(), service.Settle, log).WithRefresh(func(ctx context.Context) (RefreshResult, error) {
+			res, err := service.RefreshDirectory(ctx)
+			return RefreshResult{Kind: KindRefresh, Workspaces: res.Workspaces, Ran: res.Ran, Contended: res.Contended, Failed: res.Failed}, err
+		}).WithExports(func(ctx context.Context) (ExportsResult, error) {
 			res, declared := service.ExportsPass(ctx)
 			out := ExportsResult{Kind: KindExports, Outcome: "ran", Exports: res.Exports, Done: res.Done, Contended: res.Contended, Failed: res.Failed}
 			switch {

@@ -32,6 +32,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/exports"
 	"github.com/truvity/sluis/internal/health"
+	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/hublocal"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
@@ -118,6 +119,20 @@ func (a *App) ExportsPass(ctx context.Context) (res exports.PassResult, declared
 		return exports.PassResult{}, false
 	}
 	return a.exports.Pass(ctx), true
+}
+
+// UseRequestRefresh makes the directory refresh a snapshot that is due from the
+// request that finds it, for a function that has no background loop. See
+// [hub.Hub.UseRequestRefresh].
+func (a *App) UseRequestRefresh(timeout time.Duration) {
+	a.directory.Hub().UseRequestRefresh(timeout)
+}
+
+// RefreshDirectory runs one refresh pass over every connected workspace, under
+// the refresh lease. It is what a function runs on a schedule in place of the
+// loop [App.Run] starts.
+func (a *App) RefreshDirectory(ctx context.Context) (hub.RefreshResult, error) {
+	return a.directory.Hub().RefreshPass(ctx)
 }
 
 // Settle waits for the work a request left running after its response, which

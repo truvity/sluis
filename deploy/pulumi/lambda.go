@@ -159,6 +159,8 @@ type LambdaArgs struct {
 	Schedule ScheduleArgs
 	// Exports is the schedule that runs the exports.
 	Exports ExportsArgs
+	// DirectoryRefresh is the schedule that refreshes the directory's snapshots.
+	DirectoryRefresh DirectoryRefreshArgs
 	// WebIdentityAudience restricts the audience of the outbound web identity
 	// token the github and slack roles may ask STS for
 	// (`sts:IdentityTokenAudience`), normally the console's URL. Empty allows any
@@ -219,6 +221,25 @@ type ExportsArgs struct {
 
 // DefaultExportsSchedule is the exports' tick when ExportsArgs.Rate is empty.
 const DefaultExportsSchedule = "rate(15 minutes)"
+
+// DirectoryRefreshArgs is the directory refresh schedule: one EventBridge
+// schedule invoking the http function with `{"kind":"refresh"}`.
+//
+// Lambda has no loop to take a new snapshot of each connected directory, and a
+// snapshot older than the freshness window (30 minutes) stops being
+// authoritative, which sign-in refuses on. A request that finds one stale
+// refreshes it too, so the schedule keeps it warm rather than being the only
+// guarantee.
+type DirectoryRefreshArgs struct {
+	// Disabled leaves the schedule out.
+	Disabled bool
+	// Rate is the schedule expression. Default DefaultDirectoryRefreshSchedule.
+	Rate string
+}
+
+// DefaultDirectoryRefreshSchedule is the directory refresh's tick when
+// DirectoryRefreshArgs.Rate is empty: the hub's refresh interval.
+const DefaultDirectoryRefreshSchedule = "rate(15 minutes)"
 
 // SecretFile is an SSM parameter the function writes to a file at cold start
 // (SLUIS_SECRET_FILES, a JSON array of {parameter, path}).
@@ -465,6 +486,12 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	}
 	if r := out.Exports.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
 		return out, nil, fmt.Errorf("sluispulumi: Exports.Rate %q is not an EventBridge Scheduler expression", r)
+	}
+	if out.DirectoryRefresh.Rate == "" {
+		out.DirectoryRefresh.Rate = DefaultDirectoryRefreshSchedule
+	}
+	if r := out.DirectoryRefresh.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
+		return out, nil, fmt.Errorf("sluispulumi: DirectoryRefresh.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	for _, f := range []*FunctionArgs{&out.HTTP, &out.GitHub, &out.Slack} {
 		if _, has := f.Env["SLUIS_SECRET_FILES"]; has {
@@ -1162,7 +1189,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[strin
 	}
 	gh, sl := fns[RoleGitHub], fns[RoleSlack]
 	invokeArns := []any{gh.Arn, sl.Arn}
-	if !a.Exports.Disabled && a.Exports.Function == RoleHTTP {
+	if (!a.Exports.Disabled && a.Exports.Function == RoleHTTP) || !a.DirectoryRefresh.Disabled {
 		invokeArns = append(invokeArns, fns[RoleHTTP].Arn)
 	}
 	if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
@@ -1235,6 +1262,25 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[strin
 			return nil, none, fmt.Errorf("sluis exports schedule: %w", err)
 		}
 		names = append(names, pulumi.String(ename))
+	}
+	if !a.DirectoryRefresh.Disabled {
+		rname := a.FunctionNamePrefix + "-directory-refresh"
+		if _, err := scheduler.NewSchedule(ctx, name+"-directory-refresh", &scheduler.ScheduleArgs{
+			Name:                       pulumi.String(rname),
+			Description:                pulumi.String("Refreshes the directory snapshots in the http function."),
+			ScheduleExpression:         pulumi.String(a.DirectoryRefresh.Rate),
+			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
+			Target: &scheduler.ScheduleTargetArgs{
+				Arn: fns[RoleHTTP].Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
+				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
+					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
+				},
+			},
+		}, opts...); err != nil {
+			return nil, none, fmt.Errorf("sluis directory refresh schedule: %w", err)
+		}
+		names = append(names, pulumi.String(rname))
 	}
 	return role, names.ToStringArrayOutput(), nil
 }
