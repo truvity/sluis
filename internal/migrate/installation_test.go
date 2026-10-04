@@ -157,3 +157,37 @@ func TestAnInstallationRerunIsIdempotentAndDoesNotOverwriteANewerRecord(t *testi
 		t.Fatalf("--overwrite = %v", err)
 	}
 }
+
+// A copy is written with the lifetime the source has LEFT when it is written,
+// not the one it had when it was read: it must not outlive the source by the
+// time the run took.
+func TestACopyIsWrittenWithTheLifetimeLeftAtWriteTime(t *testing.T) {
+	src := newLegacy(t)
+	seed(t, src.stores)
+	seedLogins(t, src.stores)
+	dst := portSide(memory.New().Set(), store.AdapterDynamoDB)
+	start := time.Now()
+	calls := 0
+	opt := migrate.Options{WritersStopped: true, Sessions: true, Now: func() time.Time {
+		calls++
+		if calls == 1 {
+			return start
+		}
+		return start.Add(4 * time.Minute) // the run took four minutes between the read and the writes
+	}}
+	report, err := migrate.Run(ctx, side("old", src.stores), side("new", dst), opt)
+	if err != nil || !report.OK {
+		t.Fatalf("Run = %v\n%s", err, report.JSON())
+	}
+	var found bool
+	err = dst.Ports.State.(port.StateExporter).ExportState(ctx, "issuer:code:", func(x port.Exported) error {
+		found = true
+		if x.TTL > time.Minute+5*time.Second {
+			t.Errorf("the code was written with %s left, the source's five minutes less the four the run took", x.TTL)
+		}
+		return nil
+	})
+	if err != nil || !found {
+		t.Fatalf("the code is not on the destination (%v)", err)
+	}
+}
