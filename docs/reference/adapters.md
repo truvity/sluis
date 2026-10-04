@@ -23,7 +23,6 @@ presets and the platform fit together, see
 | `kubernetes` | 💤 on request | — | needs | — | ✅ | — | — | State in a ConfigMap the service rebuilds and owns. |
 | `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | ConfigMaps and, optionally, Valkey sessions and leases; kept until the kernel cutover (ADR 0031). |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
-| `nats` | ✅ implemented | — | — | — | ✅ | — | ✅ | State in a NATS JetStream KV bucket; being retired. |
 | `postgres` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | State in a PostgreSQL table. |
 | `valkey` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | State, sessions included, in Valkey. |
 
@@ -65,7 +64,6 @@ presets and the platform fit together, see
 | `http` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | "Run a pass now" from an authenticated HTTP request. |
 | `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | An in-process trigger: a notification reaches only this process. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
-| `nats` | ✅ implemented | — | — | — | ✅ | — | ✅ | Notifications over the same bucket; being retired. |
 | `watch` | 💤 on request | — | needs | — | ✅ | — | — | "Run a pass now" from a Kubernetes watch. |
 
 ## schedule
