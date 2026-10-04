@@ -250,7 +250,7 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 		if withWrapped {
 			st = append(st, wrappedSigningStatement(v[3].(string)))
 		}
-		if withState && a.WrappedSigningKeyArn != nil && suffix != "serve" {
+		if withState && suffix != "serve" {
 			st = append(st, keyringWriteDenial(v[1].(string)))
 		}
 		return document(st)

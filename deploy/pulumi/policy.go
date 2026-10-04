@@ -197,10 +197,28 @@ func keyringWriteDenial(tableArn string) statement {
 // The roles are named by an ArnEquals on aws:PrincipalArn and not as principals,
 // so the key can be created before the roles exist.
 func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) {
-	signing := func() map[string]any { return map[string]any{"aws:PrincipalArn": signingRoleArns} }
+	return document(append([]statement{{
+		"Sid": "EnableIAMPolicies", "Effect": "Allow", "Resource": "*", "Action": "kms:*",
+		"Principal": map[string]any{"AWS": arnPrefix + "iam::" + account + ":root"},
+	}}, WrappedKeyPolicyStatements(signingRoleArns)...))
+}
+
+// WrappedKeyPolicyStatements are the statements a wrapped signing key's policy
+// MUST carry: the library puts them in the key it creates, and an estate merges
+// them into the policy of a shared key it passes as WrappedSigningArgs.KeyArn
+// (docs/deployment/aws.md). On a shared key they touch only what presents the
+// signing context and the signing roles themselves:
+//
+//   - SluisSigningContextReserved denies every principal but the signing roles any
+//     use of the key under purpose=sluis-signing, Encrypt and the data-key calls
+//     included (or an Encrypt-capable principal could mint a ciphertext of a key
+//     it chose, under the signing context);
+//   - the three SluisSigningRole denials hold the signing roles to the two calls
+//     and the one context of their own grant: nothing else on the key.
+func WrappedKeyPolicyStatements(signingRoleArns []string) []map[string]any {
 	// The conditions of one denial of a signing role: one way of straying.
 	deny := func(sid string, notAction bool, stray map[string]any) statement {
-		cond := map[string]any{"ArnEquals": signing()}
+		cond := map[string]any{"ArnEquals": map[string]any{"aws:PrincipalArn": signingRoleArns}}
 		for op, v := range stray {
 			cond[op] = v
 		}
@@ -212,11 +230,7 @@ func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) 
 		}
 		return st
 	}
-	return document([]statement{
-		{
-			"Sid": "EnableIAMPolicies", "Effect": "Allow", "Resource": "*", "Action": "kms:*",
-			"Principal": map[string]any{"AWS": arnPrefix + "iam::" + account + ":root"},
-		},
+	return []statement{
 		WrappedKeyReservedDeny(signingRoleArns),
 		deny("SluisSigningRolePurposeOnly", false, map[string]any{
 			"StringNotEquals": map[string]any{"kms:EncryptionContext:purpose": WrappedSigningPurpose},
@@ -225,23 +239,15 @@ func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) 
 			"ForAnyValue:StringNotEquals": map[string]any{"kms:EncryptionContextKeys": wrappedContextKeys},
 		}),
 		deny("SluisSigningRoleNothingElse", true, nil),
-	})
+	}
 }
 
-// WrappedKeyPolicyStatements is WrappedKeyReservedDeny as the statements to merge
-// into a shared key's policy document (a list of one, so that it can grow).
-func WrappedKeyPolicyStatements(signingRoleArns []string) []map[string]any {
-	return []map[string]any{WrappedKeyReservedDeny(signingRoleArns)}
-}
-
-// WrappedKeyReservedDeny is the statement every wrapped signing key's policy
-// MUST carry, a shared key's included: nothing but the signing roles may use the key under the signing
-// context. The library puts it on the key it creates; a key passed as
-// WrappedSigningArgs.KeyArn needs the same statement (docs/deployment/aws.md).
+// WrappedKeyReservedDeny is the first of WrappedKeyPolicyStatements: nothing but
+// the signing roles may use the key under the signing context.
 func WrappedKeyReservedDeny(signingRoleArns []string) map[string]any {
 	return statement{
 		"Sid": "SluisSigningContextReserved", "Effect": "Deny", "Principal": map[string]any{"AWS": "*"}, "Resource": "*",
-		"Action": []string{kmsDecrypt, "kms:ReEncrypt*", "kms:GenerateDataKeyPair*", kmsGenerateKP, "kms:CreateGrant"},
+		"Action": []string{kmsDecrypt, kmsEncrypt, "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant"},
 		"Condition": map[string]any{
 			"StringEquals": map[string]any{"kms:EncryptionContext:purpose": WrappedSigningPurpose},
 			"ArnNotEquals": map[string]any{"aws:PrincipalArn": signingRoleArns},
@@ -312,7 +318,6 @@ type functionPolicyIn struct {
 	queueArn           string
 	signingKeyArns     []string
 	wrappedKeyArn      string
-	wrappedSigning     bool
 	webIdentity        bool
 	webIdentityAud     string
 	parameterKeyArn    string
@@ -368,7 +373,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 			"Resource": in.invokeFunctionArns,
 		})
 	}
-	if in.wrappedSigning && in.role != RoleHTTP {
+	if in.role != RoleHTTP {
 		st = append(st, keyringWriteDenial(in.tableArn))
 	}
 	if in.webIdentity && in.role != RoleHTTP {

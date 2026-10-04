@@ -43,7 +43,7 @@
   `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on it with those
   conditions to the http function, and no asymmetric keys unless
   `KeepRemoteSigningKeys`. The github and slack roles may not write the key ring
-  items. `KubernetesIdentityArgs.WrappedSigningKeyArn` grants the serve role the
+  items (with any signing). `KubernetesIdentityArgs.WrappedSigningKeyArn` grants the serve role the
   same.
 
 ## v1.60.0
