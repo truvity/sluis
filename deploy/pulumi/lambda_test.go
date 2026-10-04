@@ -1121,6 +1121,9 @@ func TestTheControllersNeverWriteTheKeyRingWhateverTheSigning(t *testing.T) {
 		}
 		if has != (r != "http") {
 			t.Errorf("%s: keyring-write denial %v", r, has)
+		}
+	}
+}
 
 // The recovery password is generated once, kept as a SecureString under the
 // config/ prefix, written to a file the http function reads at cold start, and
