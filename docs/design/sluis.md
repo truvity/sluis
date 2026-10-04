@@ -1026,9 +1026,9 @@ looking at a conformance screenshot, not a test.
 ## The store
 
 > **Current state, until the migration.** What follows describes the store
-> as it runs today. The target — a State port with NATS JetStream key-value
-> on Kubernetes and DynamoDB on AWS, secrets sealed into it, Valkey retired
-> — is decided in [ADR 0027](../decisions/0027-the-state-port-nats-jetstream-and-dynamodb.md)
+> as it runs today. The target — a State port with DynamoDB, dynamic secrets
+> in a Secrets port (SSM), Valkey retired (the NATS and sealing parts of the
+> records were superseded on 2026-10-04) — is decided in [ADR 0027](../decisions/0027-the-state-port-nats-jetstream-and-dynamodb.md)
 > and [ADR 0028](../decisions/0028-nothing-writes-configmaps-or-secrets.md)
 > and specified in [ports.md](ports.md). Those records supersede the
 > statements below that the store is plain Kubernetes objects with no cloud

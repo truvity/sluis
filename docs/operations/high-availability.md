@@ -232,7 +232,7 @@ condition for a second replica:
 
 | `ports.adapter` | Leases | `replicas` above 1 |
 |---|---|---|
-| `nats`, `dynamodb` | in the shared State: one holder per target across every pod | safe, and the chart renders a `PodDisruptionBudget` |
+| `dynamodb` | in the shared State: one holder per target across every pod | safe, and the chart renders a `PodDisruptionBudget` |
 | `legacy` (the default), `memory` | in each pod's own memory (a controller is configured with no Valkey) | **refused at render**: every replica would act on every target, and make each change twice |
 
 With more than one replica the evidence is these, in the code:
@@ -248,7 +248,7 @@ With more than one replica the evidence is these, in the code:
 - **"Run a pass now".** There are two ways in. The console's Refresh notifies the
   target on the Trigger port, and each replica also watches the mounted or stored
   records for a new request (`rails.Watch`, every 30 seconds) and notifies the
-  target itself. The NATS and DynamoDB triggers are a watch on `notify.<target>`,
+  target itself. The DynamoDB trigger is a watch on `notify.<target>`,
   so a notification reaches **every** replica, and a change to the credentials
   wakes every replica's sweep. Each replica then calls `RunTarget`: one takes the
   lease and the rest log "leased to another runner" and drop it. A notification is

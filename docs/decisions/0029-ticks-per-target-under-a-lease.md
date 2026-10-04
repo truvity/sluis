@@ -3,6 +3,9 @@
 **Status:** Accepted; applies [0024](0024-reconciler-rails-are-shared-pieces-not-a-framework.md)
 **Date:** 2026-10-02
 
+> **Note (2026-10-04).** Where this record names NATS or the KMS Sealer for two
+> replicas, read DynamoDB: both were removed (INF-1268).
+
 ## Context
 
 The two reconcilers poll: each pass walks every workspace or organisation, and a

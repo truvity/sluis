@@ -5,6 +5,10 @@ and supersedes the part of truvity/gitops ADR-034 §9 that says the issuer never
 calls OpenBao and a PushSecret copies
 **Date:** 2026-10-03
 
+> **Note (2026-10-04).** "The sealed State" below is history: credentials now live
+> in the Secrets port (see [0028](0028-nothing-writes-configmaps-or-secrets.md)),
+> which is the source of truth the copy is made from.
+
 ## Context
 
 [0028](0028-nothing-writes-configmaps-or-secrets.md) moved every secret the console

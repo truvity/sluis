@@ -3,15 +3,15 @@
 How to move an installation's State from one storage to another with
 `sluis migrate`, and how to undo it. The decision is
 [0031](../decisions/0031-a-generic-migration-tool.md): one generic command, the
-move order **Kubernetes objects, then NATS, then DynamoDB**, and **data and
-runtime never move in the same step**. This page is the first step: today's
-ConfigMaps, Secrets and Valkey to a NATS JetStream bucket, with every login kept
-alive. The same command, with the two files the other way round, is the rollback.
+move order **Kubernetes objects, then DynamoDB**, and **data and runtime never
+move in the same step**. (The decision also named a NATS JetStream step; that
+adapter was removed, and the order is now the two steps here.) This page is that
+step: today's ConfigMaps, Secrets and Valkey to a DynamoDB table, with the
+credentials in the Secrets port and every login kept alive. The same command,
+with the two files the other way round, is the rollback.
 
-A side may also be a DynamoDB table (`ports.adapter: dynamodb`), as a destination
-or a source: the exporters read its sessions with their lifetimes left, so NATS to
-DynamoDB, the third step of the order, is the same command with the two files, and
-so is its rollback.
+A side may be a DynamoDB table (`ports.adapter: dynamodb`), as a destination or a
+source: the exporters read its sessions with their lifetimes left.
 
 ## What it does
 
@@ -26,11 +26,11 @@ schema. There is no second configuration to keep in step.
 
 It copies **through the business interfaces, never as bytes**: a workspace and its
 credential are read from the source's own store and written to the destination's,
-so a secret is sealed under the destination's Sealer with the destination's key as
-its binding, and a record lands in the layout its adapter keeps. (For the same
-reason both sides' Sealers must work: a copy is an open and a seal, not a copy of
-ciphertext. Moving to a new key-encryption key is therefore what a copy between two
-sealed stores already is.)
+so a secret is written to the destination's Secrets (`private/<key>/<ref>`) and
+a record lands in the layout its adapter keeps. (For the same reason a
+destination that is not the legacy storage needs a working Secrets adapter: a
+copy is a read through the source's store and a write through the destination's,
+not a copy of bytes.)
 
 | Domain | What | How the lifetime is kept |
 |---|---|---|
@@ -51,7 +51,7 @@ to the same S3 prefix is not); `--blobs copy|skip` forces either.
 
 **A backup or export to a file** (`--backup <file>`, a file adapter as one end) is
 not built: there is no file adapter yet. A backup today is a copy to a second
-bucket, which is the same command with a second `--to`.
+storage, which is the same command with a second `--to`.
 
 ## The safety it holds
 
@@ -77,7 +77,7 @@ bucket, which is the same command with a second `--to`.
    created. It needs no `--i-have-stopped-writers`, so it can run against the live
    installation, and should, first.
 4. **It verifies.** After the copy it reads the source and the destination again,
-   fresh, through the same interfaces, decrypted where sealed, and compares every
+   fresh, through the same interfaces, secrets read from each side's Secrets, and compares every
    source item with the destination's. A source that changed during the copy shows
    as a mismatch, so a missed writer is found, not hidden. For the issuer's state
    it also checks that each copy has no lifetime longer than the source's, and not
@@ -98,7 +98,7 @@ Blob name on the destination. The exit status is `0` only when `ok` is true.
 
 ```json
 {
-  "from": "old.yaml", "to": "new.yaml", "fromAdapter": "legacy", "toAdapter": "nats",
+  "from": "old.yaml", "to": "new.yaml", "fromAdapter": "legacy", "toAdapter": "dynamodb",
   "dryRun": false, "overwrite": false,
   "startedAt": "...", "finishedAt": "...",
   "steps": [
@@ -121,19 +121,20 @@ record that does not decode): it is reported, not copied, and everything else is
 still copied and verified, then the run ends non-zero. `notes` say what was left
 out and why.
 
-## Procedure: Kubernetes objects to NATS
+## Procedure: Kubernetes objects to DynamoDB
 
 Before the window, with nothing stopped:
 
 1. **Prepare the new configuration.** A copy of the Deployment's `serve` file with
-   `ports.adapter: nats`, `ports.nats` (the URL, the bucket, how this workload
-   authenticates), `ports.sealer` (KMS, which NATS requires) and, if the reports
-   are to move, `ports.blob` (S3). **Remove `valkey.address`**: NATS holds the
+   `ports.adapter: dynamodb`, `ports.dynamodb` (the table, the region; the
+   workload's own identity is the credential), a secrets adapter (the destination's
+   credentials go there, and the start is refused without one) and, if the reports
+   are to move, `ports.blob` (S3). **Remove `valkey.address`**: DynamoDB holds the
    shared state and the start is refused with both. Keep `store`, `release` and
    `inCluster` as they are: they are what the console's cluster-only objects
    (the token review, the declared OAuth client) still use.
 2. **Dry-run against the live installation.** It reads the old objects and
-   Valkey and the new bucket, and writes nothing:
+   Valkey and the new table, and writes nothing:
 
    ```
    sluis migrate --from old.yaml --to new.yaml --dry-run
@@ -152,8 +153,8 @@ In the window:
    ServiceAccount (it needs the Role the Deployments have, to read the objects),
    the Deployment's environment (the Valkey password a file names) and both files
    mounted. A sketch to adapt from the `serve` Deployment's pod template (the
-   volumes that carry the NATS credential and the KMS identity must be the same
-   ones):
+   the identity that reaches DynamoDB and the secrets store must be the same
+   one):
 
    ```yaml
    apiVersion: batch/v1
@@ -180,7 +181,7 @@ In the window:
    `unreadable: []`, and `totals.verified` equal to `totals.source`. If a run
    failed part way, **run the same command again**: it completes the copy. If
    `conflicts` is not empty the destination was not empty: decide whether it is
-   stale (`--overwrite`) or the wrong bucket.
+   stale (`--overwrite`) or the wrong table.
 6. **Switch and roll.** Put the new `config` (the file of step 1) into the chart's
    values and upgrade, with the Deployments' replicas back up. Nothing was written
    to the source, so the old objects and Valkey are exactly as they were.
@@ -188,8 +189,8 @@ In the window:
    Slack workspaces; a person signed in before the window **is still signed in**
    and a refresh token from before it refreshes; the GitHub and Slack controllers
    tick (`access_roster.ticks` in [telemetry.md](telemetry.md)); the log says
-   `keeping state in NATS JetStream` and `the domain records in the state port,
-   credentials sealed`.
+   `keeping state in DynamoDB` and `the domain records in the state port,
+   credentials in Secrets`.
 8. **Leave the old store in place** (ADR 0031) until the step after it has been
    green for a day: do not delete the ConfigMaps, the Secrets or the Valkey.
 
@@ -223,5 +224,5 @@ roll. The report says the same things in this direction.
 | `the destination already holds a different value`, naming `<domain>/<kind> <key>` | Nothing was written. The destination is not empty or is the wrong one. Look, then `--overwrite` if the destination's value is the stale one. |
 | `the destination does not match the source after the copy` | A key whose second read differs: a writer was still running, or an adapter lost a write. The `mismatches` name them; stop what writes, and run again. |
 | `the source holds items its store cannot read` | A record that does not decode. The rest is copied and verified; fix or delete the named record and run again to confirm. |
-| `ports.adapter nats: ... ports.sealer` | The destination has no working Sealer: the credentials are sealed before they are stored. |
+| `ports.adapter dynamodb: ... secrets adapter` | The destination has no working Secrets: credentials are written there, never into State. |
 | `store unavailable` while copying | The destination (or source) went away. Run the same command again. |
