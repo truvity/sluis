@@ -29,6 +29,7 @@ back it — an in-memory one, and one over Valkey (`internal/valkey/state.go`)
 | Which clients an SSO session covers | `issuer:sso-clients:` | the session lifetime | the set a browser-wide logout walks. |
 | SSO indices | `issuer:sso-of:`, `issuer:sso-all` | the session lifetime | listing and revocation, same shape as the per-session indices. |
 | A minted token's own record | `issuer:token:` | until the token expires | read by `/userinfo` and by exchanging a token as a subject token — see [Valkey down](#valkey-down), below — and deleted to revoke a specific token. |
+| An identity's last-known directory groups | `issuer:held:` | the hold window (`lifetimes.hold`) | groups and the time of the answer, nothing else: what lets an instance that starts while the directory cannot be vouched for keep people signed in. Deleted when the directory says the account is suspended or gone, and on revoke. |
 | The signing-key schedule | `issuer:keyring:index:`, `issuer:keyring:entry:` | 30 days, refreshed on every poll | see [Signing keys across replicas](#signing-keys-across-replicas). |
 
 Nothing here is swept: every record carries its own TTL and expires on its
