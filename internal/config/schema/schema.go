@@ -40,6 +40,12 @@ func obj(description string, props m, required ...string) m {
 	return o
 }
 
+// exclusive refuses an object that names both a and b.
+func exclusive(o m, a, b string) m {
+	o["not"] = m{"required": []string{a, b}}
+	return o
+}
+
 func str(description string) m {
 	return m{"type": "string", "minLength": 1, "description": description}
 }
@@ -243,13 +249,19 @@ func serveSchema() m {
 			"idKey":      str("The key of the id in that Secret."),
 			"secretKey":  str("The key of the secret in that Secret."),
 		}),
-		"signingKey": obj("The issuer's signing keys: provisioned, never minted here.", m{
-			"file":            str("The primary key. Unset generates one for this process, which a local run may do and nothing else should."),
+		"signingKey": exclusive(obj("The issuer's signing keys: provisioned, never minted here.", m{
+			"file": str("The primary key. Unset generates one for this process, which a local run may do and nothing else should. Exclusive with `kms`."),
+			"kms": obj("Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`.", m{
+				"keys": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
+					"description": "ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each."},
+				"region":          str("The keys' region. Unset follows the AWS SDK's own resolution."),
+				"stateSecretFile": str("A file of at least 32 secret bytes, the same in every replica, from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
+			}, "keys", "stateSecretFile"),
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),
 			"activationDelay": duration("How long a newly published key waits before a replica signs with it. At least `pollInterval`.", "15m"),
 			"overlap":         duration("How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew.", ""),
-		}),
+		}), "file", "kms"),
 		"valkey": obj("The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.", m{
 			"address":     m{"type": "string", "allOf": []any{m{"pattern": `^[^\s/]+:[0-9]{1,5}$`}, m{"not": m{"pattern": "@"}}}, "description": "host:port, with no credentials."},
 			"passwordEnv": envField("The NAME of the variable holding the password."),

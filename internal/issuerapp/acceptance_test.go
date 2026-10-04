@@ -33,6 +33,11 @@ func boot(t *testing.T, change ...func(*config.Serve)) *issuerapp.App {
 // bootWith is the same with a directory of the caller's choosing, which
 // the sign-in tests need: they are about what the DIRECTORY says.
 func bootWith(t *testing.T, directory issuer.Directory, change ...func(*config.Serve)) *issuerapp.App {
+	return bootDeps(t, issuerapp.Deps{Directory: directory}, change...)
+}
+
+// bootDeps is the same with the dependencies of the caller's choosing.
+func bootDeps(t *testing.T, deps issuerapp.Deps, change ...func(*config.Serve)) *issuerapp.App {
 	t.Helper()
 	policyDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(policyDir, "policy.yaml"), []byte(`
@@ -61,7 +66,7 @@ clients:
 		t.Fatalf("FromConfig: %v", err)
 	}
 	app, err := issuerapp.New(context.Background(), cfg,
-		issuerapp.Deps{Directory: directory}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		deps, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

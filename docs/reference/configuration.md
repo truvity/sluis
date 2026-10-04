@@ -427,8 +427,11 @@ The issuer, the console and the directory hub, one process.
 | `console.origin` | unset | the one **other** origin allowed to call `SessionService` from a browser. Obsolete on one origin, which is the shipped shape |
 | `oauthClient.*` | unset | the client registered once with the directory backend, for sign-in and admin consent. `idFile` and `secretFile` name files (mount the Secret with `secretMounts`), or `secretEnv` names the variable that holds the secret; `secretName`, `idKey` and `secretKey` name the Kubernetes Secret the console shows as declared. With none, nobody can sign in and this installation issues tokens to machines only, which is a real posture and is said at start |
 | `signingKey.file` | unset: a key generated for the process | the primary signing key, provisioned and never minted here. The chart requires `/var/run/access-issuer/signing-key/<signingKey.key>` |
+| `signingKey.kms.keys[]` | unset | sign with **AWS KMS** instead of a file: `ECC_NIST_P384` / `SIGN_VERIFY` keys as ids, ARNs or aliases (e.g. `alias/sluis-signing`), oldest first, **the last one signs**. Exclusive with `signingKey.file` (both is refused at load). The private key never leaves KMS: each token is a `kms:Sign` of the SHA-384 of the JWS signing input (`MessageType: DIGEST`, `ECDSA_SHA_384`), the DER signature is converted to raw `r\|\|s`, and the algorithm is ES384. The `kid` is the RFC 7638 thumbprint of the public key, the same as a file holding that key would have. A key of another spec or usage stops the start. **Rotate by appending** a key: it is published at once and signs only after `activationDelay`, the earlier one stays published for `overlap`, exactly as for files; the list is re-read every `pollInterval`, which also notices an alias moved to another key. Never insert a key before one already seen. `signingKey.additionalFiles` still works beside it for other algorithms |
+| `signingKey.kms.region` | the SDK's own | the keys' region |
+| `signingKey.kms.stateSecretFile` | required with `kms` | at least 32 secret bytes, identical in every replica, that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
 | `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
-| `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
+| `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file (or each KMS key's public half) is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
 | `valkey.address` | unset | host:port of the shared store, with no credentials; unset keeps sessions and snapshots in memory, which is one replica only |
 | `valkey.passwordEnv` | unset | the *name* of the variable holding the password |
 | `valkey.tls` | `false` | speak TLS to the server |
@@ -893,3 +896,30 @@ spec:
       remoteRef:
         key: /path/in/your/store/example-sa-key-json
 ```
+
+## Signing with AWS KMS
+
+`signingKey.kms` keeps the issuer's signing key in KMS, so the estate's master
+key is never in a pod, a Secret or a backup. One key per estate, created as
+`ECC_NIST_P384`, usage `SIGN_VERIFY`, alias like `sluis-signing`.
+
+The role the service runs as (Pod Identity, IRSA) needs exactly this on each
+key listed in `signingKey.kms.keys`:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["kms:Sign", "kms:GetPublicKey"],
+  "Resource": ["arn:aws:kms:<region>:<account>:key/<key-id>"]
+}
+```
+
+For an alias, grant on the key it points at (an alias ARN does not match a
+key policy `Resource`; use a `kms:ResourceAliases` condition if the grant must
+follow the alias). Without `kms:GetPublicKey` the service refuses to start and
+the log line names the permission and the key; without `kms:Sign` it starts
+and fails every token, counted in `access_issuer.kms_signatures{result="error"}`.
+`access_issuer.kms_signatures` counts every `kms:Sign` by the signing key's
+`kid` and `result` (`ok` or `error`). Every signature is also in CloudTrail.
+
+Rotation is appending a new key to `keys`; see the table above.

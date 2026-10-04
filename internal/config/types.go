@@ -141,6 +141,15 @@ type (
 		PollInterval    *Duration `json:"pollInterval,omitempty"`
 		ActivationDelay *Duration `json:"activationDelay,omitempty"`
 		Overlap         *Duration `json:"overlap,omitempty"`
+		// KMS signs with AWS KMS keys instead of a file. Exclusive with File.
+		KMS *SigningKeyKMS `json:"kms,omitempty"`
+	}
+
+	// SigningKeyKMS is the AWS KMS source of the primary signing key.
+	SigningKeyKMS struct {
+		Keys            []string `json:"keys,omitempty"`
+		Region          string   `json:"region,omitempty"`
+		StateSecretFile string   `json:"stateSecretFile,omitempty"`
 	}
 
 	// Valkey is the shared store for logins in progress and snapshots.

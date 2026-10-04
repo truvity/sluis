@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/truvity/sluis/backend/google"
@@ -70,6 +72,12 @@ type Config struct {
 	// primary [Config.signingKeyFile] -- see [issuer.KeyRings] and the
 	// chart's `signingKey.additional`.
 	additionalSigningKeyFiles []string
+	// kmsKeys, when set, replace signingKeyFile: AWS KMS keys, oldest
+	// first, the last signing. kmsStateSecretFile is what the sign-in state
+	// derives from, since a KMS key has no private bytes of its own.
+	kmsKeys            []string
+	kmsRegion          string
+	kmsStateSecretFile string
 
 	tokenLifetime    time.Duration
 	refreshLifetime  time.Duration
@@ -154,6 +162,18 @@ func FromConfig(f *config.Serve) (Config, error) {
 	}
 	if k := f.SigningKey; k != nil {
 		c.signingKeyFile = k.File
+		if k.KMS != nil {
+			if k.File != "" {
+				return Config{}, errors.New("signingKey.file and signingKey.kms are exclusive: " +
+					"a key is a file or a KMS key, not both")
+			}
+			if len(k.KMS.Keys) == 0 || k.KMS.StateSecretFile == "" {
+				return Config{}, errors.New("signingKey.kms needs keys and stateSecretFile")
+			}
+			c.kmsKeys = k.KMS.Keys
+			c.kmsRegion = k.KMS.Region
+			c.kmsStateSecretFile = k.KMS.StateSecretFile
+		}
 		// The files the deployment expects, named exactly: a deployment
 		// naming them is a deployment a missing mount fails LOUDLY for, at
 		// start, rather than one that silently signs with fewer algorithms
@@ -285,6 +305,9 @@ func dur(d *config.Duration, fallback time.Duration) time.Duration {
 // client with no caller -- config that reads as a supported deployment
 // and is not one.
 type Deps struct {
+	// KMS is the client for signingKey.kms. Nil builds one from the AWS
+	// default credential chain; a test supplies a fake.
+	KMS issuer.KMSAPI
 	// Stores is the storage ports, built once from configuration and shared
 	// with the directory half. Nil is a process with no shared state and no
 	// cluster: logins in progress are kept in this process, and recovery is
@@ -348,6 +371,8 @@ type Deps struct {
 
 // App is an assembled issuer.
 type App struct {
+	// kms is set when the primary key lives in AWS KMS; Run polls it.
+	kms     *issuer.KMSKeyRefs
 	handler http.Handler
 	health  http.Handler
 	issuer  *issuer.Issuer
@@ -466,7 +491,16 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		core.UseGitHubApps(*deps.GitHubApps)
 	}
 
-	key, err := signingKey(ctx, cfg, log)
+	var (
+		key     *issuer.SigningKey
+		kmsRefs *issuer.KMSKeyRefs
+		kmsRest []*issuer.SigningKey
+	)
+	if len(cfg.kmsKeys) > 0 {
+		kmsRefs, kmsRest, key, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
+	} else {
+		key, err = signingKey(ctx, cfg, log)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -496,6 +530,14 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		ActivationDelay: cfg.keyActivationDelay,
 		Overlap:         cfg.keyOverlap,
 	})
+	// The rest of the KMS list, in order, AFTER the delays are set: the
+	// first key the installation ever saw is active at once, every later
+	// one waits out the activation delay, so the last listed signs last.
+	for _, extra := range kmsRest {
+		if err = storage.Rotate(ctx, extra); err != nil {
+			return nil, fmt.Errorf("adopt a KMS signing key: %w", err)
+		}
+	}
 	signIn, err := openSignIn(ctx, cfg, log)
 	if err != nil {
 		return nil, err
@@ -578,7 +620,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log}, nil
+	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs}, nil
 }
 
 // directorySource says where the answer about a person comes from. There
@@ -648,6 +690,12 @@ func (a *App) Run(ctx context.Context) error {
 	group, gctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return serve(gctx, a.cfg.port, a.handler, "issuer", a.log) })
 	group.Go(func() error { return serve(gctx, a.cfg.healthPort, a.health, "health", a.log) })
+	if a.kms != nil {
+		group.Go(func() error {
+			watchKMSKeys(gctx, a.kms, a.cfg.keyPollInterval, a.storage, a.log)
+			return nil
+		})
+	}
 	group.Go(func() error {
 		paths := append([]string{a.cfg.signingKeyFile}, a.cfg.additionalSigningKeyFiles...)
 		watchSigningKey(gctx, paths, a.cfg.keyPollInterval, a.storage, a.log)
@@ -1062,4 +1110,84 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 		return fmt.Errorf("%s listener: %w", name, err)
 	}
 	return nil
+}
+
+// kmsSigningKeys reads every KMS key in signingKey.kms at start, in order.
+//
+// The FIRST is returned as the primary and the rest apart: the ring gives the
+// first key it ever sees an immediate schedule and every later one an
+// activation delay, so feeding them in list order makes the last one signs
+// last. A fresh installation with two keys listed therefore signs with the
+// first until the delay passes; an existing one already has them recorded.
+// Only ever append a key: listing a key that sorts before one the ring has
+// already seen would give it a LATER activation and make it the signer.
+//
+// A key the role cannot read stops the start, with the missing permission
+// named; starting without it would sign with fewer keys than the deployment
+// declared.
+func kmsSigningKeys(
+	ctx context.Context, cfg Config, api issuer.KMSAPI, log *slog.Logger,
+) (*issuer.KMSKeyRefs, []*issuer.SigningKey, *issuer.SigningKey, error) {
+	seed, err := os.ReadFile(cfg.kmsStateSecretFile) //nolint:gosec // the path is deployment configuration
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("read signingKey.kms.stateSecretFile: %w", err)
+	}
+	if api == nil {
+		var loaders []func(*awsconfig.LoadOptions) error
+		if cfg.kmsRegion != "" {
+			loaders = append(loaders, awsconfig.WithRegion(cfg.kmsRegion))
+		}
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("load the AWS configuration for signingKey.kms: %w", err)
+		}
+		api = kms.NewFromConfig(awsCfg)
+	}
+	refs := &issuer.KMSKeyRefs{API: api, Refs: cfg.kmsKeys, Seed: seed}
+	keys, err := refs.Load(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	seen := map[string]string{}
+	for i, key := range keys {
+		if prev, dup := seen[key.ID()]; dup {
+			return nil, nil, nil, fmt.Errorf("signingKey.kms.keys %q and %q are the same key", prev, cfg.kmsKeys[i])
+		}
+		seen[key.ID()] = cfg.kmsKeys[i]
+		log.InfoContext(ctx, "signing with an AWS KMS key",
+			"key", cfg.kmsKeys[i], "kid", key.ID(), "algorithm", key.SignatureAlgorithm(), "active", i == len(keys)-1)
+	}
+	return refs, keys[1:], keys[0], nil
+}
+
+// watchKMSKeys re-reads every KMS key's public half on an interval and feeds
+// it to the key rings, the KMS twin of [watchSigningKey]. Each key is read on
+// its own, so one that fails does not hide the others, and a failure keeps the
+// previous key as a file read that fails does. Re-reading is what notices an
+// alias moved to another key: it reads as a new kid and is scheduled as one.
+func watchKMSKeys(ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger) {
+	if interval <= 0 {
+		interval = issuer.DefaultKeyPollInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for _, ref := range refs.Refs {
+				one := issuer.KMSKeyRefs{API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
+				keys, err := one.Load(ctx)
+				if err != nil {
+					log.WarnContext(ctx, "could not re-read a KMS signing key; keeping the previous one",
+						"key", ref, "error", err)
+					continue
+				}
+				if err := storage.Rotate(ctx, keys[0]); err != nil {
+					log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", "key", ref, "error", err)
+				}
+			}
+		}
+	}
 }

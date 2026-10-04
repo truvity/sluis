@@ -300,7 +300,7 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) *r
 
 	entry := &ringEntry{
 		ID:         key.id,
-		JWK:        jose.JSONWebKey{Key: key.key.Public(), KeyID: key.id, Algorithm: string(key.alg), Use: "sig"},
+		JWK:        jose.JSONWebKey{Key: key.pub, KeyID: key.id, Algorithm: string(key.alg), Use: "sig"},
 		Algorithm:  key.alg,
 		SeenAt:     now,
 		ActivateAt: activateAt,
