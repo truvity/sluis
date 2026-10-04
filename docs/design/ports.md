@@ -180,8 +180,8 @@ package pins the documented outcome.
     "ssm:PutParameter", "ssm:DeleteParameter"
   ],
   "Resource": [
-    "arn:aws:ssm:<region>:<account>:parameter/sluis/private/*",
-    "arn:aws:ssm:<region>:<account>:parameter/sluis/export/*"
+    "<the SSM parameter ARNs of /sluis/private/*>",
+    "<the SSM parameter ARNs of /sluis/export/*>"
   ]
 }
 ```
