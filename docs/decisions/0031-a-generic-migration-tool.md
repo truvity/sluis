@@ -3,8 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-10-02
 
-> **Amended (2026-10-04).** The NATS step of the order is gone with the adapter:
->: the order is Kubernetes objects, then DynamoDB with the credentials in
+> **Amended (2026-10-04).** The NATS step of the order is gone with the adapter.
+> The order is Kubernetes objects, then DynamoDB with the credentials in
 > the Secrets port, and secrets are no longer rewrapped but written to the
 > destination's Secrets ([operations/migrate.md](../operations/migrate.md)). The
 > text below is the decision as it was taken.
