@@ -30,7 +30,7 @@ func zipFile(t *testing.T, extra map[string]string) string {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	files := map[string]string{"bootstrap": "#!binary\n", "config/sluis.yaml": "stale: true\n"}
+	files := map[string]string{"bootstrap": "#!binary\n", "config/sluis.yaml": "stale: true\n", "config/github.yaml": "stale: true\n"}
 	for k, v := range extra {
 		files[k] = v
 	}
@@ -61,6 +61,7 @@ func zipFile(t *testing.T, extra map[string]string) string {
 type estate struct {
 	pkg                 string
 	config              string
+	githubConfig        string
 	catalogues          map[string]string
 	cataloguePaths      []string
 	orgs, workspaces    []string
@@ -78,9 +79,13 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 	if e.config == "" {
 		e.config = "issuerURL: https://access.example.test\n"
 	}
+	if e.githubConfig == "" {
+		e.githubConfig = "policyDir: /var/task/config\n"
+	}
 	a := &arp.LambdaArgs{
 		Region: region, AccountID: account,
-		Package: e.pkg, Config: e.config, Catalogues: e.catalogues, CataloguePaths: e.cataloguePaths,
+		Package: e.pkg, Config: e.config, GitHubConfig: e.githubConfig,
+		SlackConfig: "policyDir: /var/task/config\\n", Catalogues: e.catalogues, CataloguePaths: e.cataloguePaths,
 		Storage:       &arp.StorageGrant{BucketArn: pulumi.String(arnp + "s3:::" + bucket)},
 		State:         &arp.StateGrant{TableArn: pulumi.String(arnp + "dynamodb:" + region + ":" + account + ":table/" + table)},
 		AuditQueueArn: pulumi.String(arnp + "sqs:" + region + ":" + account + ":audit-ingest"),
@@ -124,6 +129,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("truststoreUri", l.TruststoreURI)
 		collect("exportReadPolicy", l.ExportReadPolicyJSON)
 		collect("schedulerRoleArn", l.SchedulerRoleArn)
+		collect("stateSecretParameter", l.StateSecretParameter)
 		return nil
 	})
 }
@@ -205,7 +211,8 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("%s is in a VPC", r)
 		}
 		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
-		if env["SLUIS_ROLE"].StringValue() != r || env["SLUIS_CONFIG_FILE"].StringValue() != "/var/task/config/sluis.yaml" {
+		file := map[string]string{"http": "sluis", "github": "github", "slack": "slack"}[r]
+		if env["SLUIS_ROLE"].StringValue() != r || env["SLUIS_CONFIG_FILE"].StringValue() != "/var/task/config/"+file+".yaml" {
 			t.Errorf("%s env: %v", r, env)
 		}
 		pkgs = append(pkgs, packageFiles(t, f))
@@ -352,16 +359,17 @@ func schedules(t *testing.T, rec *recorder) map[string]string {
 
 func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	rec, out := mustLambda(t, estate{
-		orgs: []string{"truvity", "trust-form"}, workspaces: []string{"T0TRUVITY"}, rate: "rate(2 minutes)", telemetry: true,
+		orgs: []string{"truvity", "trust-form", "github:links"}, workspaces: []string{"T0TRUVITY"}, rate: "rate(2 minutes)", telemetry: true,
 		catalogues: map[string]string{"github-apps.yaml": "apps: []\n"},
 		mutate:     func(a *arp.LambdaArgs) { a.API.DomainName = "access.one.example.test" },
 	})
 	shape(t, rec, out, "access.one.example.test")
 
 	want := map[string]string{
-		"sluis-github-truvity":    `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
-		"sluis-github-trust-form": `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
-		"sluis-slack-T0TRUVITY":   `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-slack",
+		"sluis-github-truvity":      `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
+		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
+		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
+		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-slack",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
@@ -392,7 +400,7 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		}
 	}
 	pkg := packageFiles(t, rec.one(t, fnType, "kernel-http"))
-	for _, p := range []string{"bootstrap", "config/sluis.yaml", "config/github-apps.yaml"} {
+	for _, p := range []string{"bootstrap", "config/sluis.yaml", "config/github.yaml", "config/slack.yaml", "config/github-apps.yaml"} {
 		if _, ok := pkg[p]; !ok {
 			t.Errorf("the package lacks %s; has %v", p, keysOf(pkg))
 		}
@@ -490,6 +498,9 @@ func TestAChangedConfigOrCatalogueChangesThePackage(t *testing.T) {
 	if changed := files(estate{config: "a: 2\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}}); reflect.DeepEqual(base, changed) {
 		t.Error("a changed config left the package as it was")
 	}
+	if changed := files(estate{config: "a: 1\n", githubConfig: "b: 2\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}}); reflect.DeepEqual(base, changed) {
+		t.Error("a changed controller config left the package as it was")
+	}
 	if changed := files(estate{config: "a: 1\n", catalogues: map[string]string{"c.yaml": "x: 2\n"}}); reflect.DeepEqual(base, changed) {
 		t.Error("a changed catalogue left the package as it was")
 	}
@@ -567,6 +578,8 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 		"no region":         func(a *arp.LambdaArgs) { a.Region = "" },
 		"no package":        func(a *arp.LambdaArgs) { a.Package = "" },
 		"no config":         func(a *arp.LambdaArgs) { a.Config = " \n" },
+		"no github config":  func(a *arp.LambdaArgs) { a.GitHubConfig = "" },
+		"no slack config":   func(a *arp.LambdaArgs) { a.SlackConfig = "" },
 		"no queue":          func(a *arp.LambdaArgs) { a.AuditQueueArn = nil },
 		"no storage":        func(a *arp.LambdaArgs) { a.Storage = nil },
 		"no state":          func(a *arp.LambdaArgs) { a.State = nil },
@@ -653,5 +666,30 @@ func TestAPackageEntryOutsideTheRootIsRefused(t *testing.T) {
 		if _, _, err := buildLambda(t, estate{pkg: p}); err == nil {
 			t.Errorf("%q accepted", name)
 		}
+	}
+}
+
+func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
+	key := arnp + "kms:" + region + ":" + account + ":key/params"
+	for _, k := range []string{"", key} {
+		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = k }})
+		r := rec.one(t, "random:index/randomBytes:RandomBytes", "kernel-state-secret")
+		if prop(r, "length").NumberValue() != 32 || prop(r, "keepers").HasValue() {
+			t.Errorf("random bytes: %v: 32 bytes and no keepers, or an apply rotates it", r.Inputs)
+		}
+		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-state-secret")
+		if prop(p, "name").StringValue() != "/sluis/private/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
+			t.Errorf("parameter: %v", p.Inputs)
+		}
+		if !prop(p, "value").IsSecret() {
+			t.Error("the secret's value is not marked secret")
+		}
+		if got := prop(p, "keyId"); got.HasValue() != (k != "") || (k != "" && got.StringValue() != key) {
+			t.Errorf("keyId %v with ParameterKeyArn %q", prop(p, "keyId"), k)
+		}
+	}
+	_, out := mustLambda(t, estate{})
+	if out["stateSecretParameter"] != "/sluis/private/issuer/state-secret" {
+		t.Errorf("output: %q", out["stateSecretParameter"])
 	}
 }

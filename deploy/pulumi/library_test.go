@@ -276,6 +276,7 @@ func TestEachRoleGetsExactlyTheStorageAndTheTable(t *testing.T) {
 		"s3:ListBucket":          {bucketArn},
 		"dynamodb:GetItem":       {tableArn},
 		"dynamodb:PutItem":       {tableArn},
+		"dynamodb:UpdateItem":    {tableArn},
 		"dynamodb:DeleteItem":    {tableArn},
 		"dynamodb:Query":         {tableArn},
 		"dynamodb:Scan":          {tableArn},

@@ -20,7 +20,7 @@
 //	l, err := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 //		Region: "eu-central-1", AccountID: accountID,
 //		Package:        "sluis-lambda_1.58.0_linux_arm64.zip", // a path or an https URL
-//		Config:         sluisYAML,                             // config/sluis.yaml in the package
+//		Config:         sluisYAML, GitHubConfig: githubYAML, SlackConfig: slackYAML, // config/{sluis,github,slack}.yaml
 //		CataloguePaths: []string{"catalogues/github-apps.yaml"},
 //		Storage:        store.Grant(),
 //		State:          state.Grant(),
@@ -38,7 +38,8 @@
 // `bootstrap` told apart by SLUIS_ROLE, in no VPC, each with a role of its own:
 // only sluis-http may kms:Sign with the signing key and invoke the controllers.
 // The estate's configuration and its catalogues are added to the zip, so a change
-// to either changes the package and redeploys. /sluis/private/* in SSM is
+// to either changes the package and redeploys. The issuer's OAuth-state secret is
+// generated and kept in SSM (Lambda.StateSecretParameter). /sluis/private/* in SSM is
 // sluis's alone; /sluis/export/* is for consumers, and
 // Lambda.ExportReadPolicyJSON is the policy that reads it and nothing else.
 //
