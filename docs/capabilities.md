@@ -54,10 +54,10 @@ release and what has landed since.
 | Piece | Kubernetes | AWS Lambda |
 |---|---|---|
 | Issuer, console and directory hub | ✅ | 📄 |
-| GitHub reconciler | ✅ (one replica) | 📄 |
-| Slack reconciler | ✅ (one replica) | 📄 |
+| GitHub reconciler | ✅ (one replica; two with a NATS or DynamoDB State, 🧪) | 📄 |
+| Slack reconciler | ✅ (one replica; two with a NATS or DynamoDB State, 🧪) | 📄 |
 | `Tick(target)` with a lease per target, a report per target, and a trigger that ticks only its target (on the legacy adapter: the lease is exclusive across pods only with a shared State, and a controller has none; the console reaches a controller through the mounted records, polled) | 🧪 | 📄 |
-| Two replicas of a reconciler | 📄 (needs the NATS State) | — |
+| Two replicas of a reconciler | 🧪 (chart `replicas`: refused unless `ports.adapter` is `nats` or `dynamodb`) | — |
 | Slack Connect handoff: the host's tick notifies the guest's; the guest-side probe is the host's tick's | 🧪 | 📄 |
 | Slack Connect handoff by pending-share record (`share.<host>.<channel>`: 14 days while pending, 7 days once accepted; needs a State both runners share) | 🧪 | 📄 |
 | Slack `users.info` cache on the State (`cache.slack.user.<workspace>.<id>`, 24 h; `slack_roster.user_cache` counts hits and misses) | 🧪 | 📄 |
