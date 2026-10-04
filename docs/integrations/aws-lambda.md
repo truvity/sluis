@@ -94,7 +94,7 @@ function that was configured with `memory` fails at its first event and not by
 acting twice.
 
 **`http` also receives `{"kind":"exports"}`**, from an EventBridge Scheduler
-schedule (by default every 15 minutes, on the `sluis-http` function). The
+schedule (15 minutes, on the `sluis-http` function; the infrastructure library's default). The
 Kubernetes process keeps the exports current with a loop that also watches the
 sources; a function has neither, so each invocation makes every declared export
 once (the secrets under `/sluis/export/...` and the other targets of `exports:`),
@@ -252,29 +252,65 @@ schedules.
 A controller reads the console's API (who holds a group, the organisations'
 credentials) as a workload. In a cluster that is its projected ServiceAccount
 token. On Lambda it is the function role's **outbound web identity token**: the
-controller calls `sts:GetWebIdentityToken` with one audience, caches the token
-until two minutes before its expiry (a warm execution environment reuses it
-across invocations), and presents it as the bearer of every call. The `http`
+controller calls `sts:GetWebIdentityToken` for the console's own audience (see below),
+presents the token as the bearer of every call, and reuses it for under four
+minutes (a warm execution environment reuses it across invocations). The `http`
 function's issuer verifies it against the account's published key set, with the
-verifier token exchange already uses, and takes the role as the caller.
+same per-account verifiers token exchange uses, and takes the role as the caller.
 
-In the `github.yaml` and `slack.yaml` files:
+The cache is by **age**, not by expiry. The issuer refuses a token whose `iat` is
+older than the federation file's `maxAge` (default 5 minutes) whatever its `exp`
+says, so the controller requests the shortest lifetime it can reuse (5 minutes,
+STS's default; AWS allows from 1 minute to 1 hour) and mints a new token once the
+old one is four minutes old. If you raise `maxAge`, the four minutes stay safe.
+
+### Two audiences, two doors
+
+An AWS role's token is a proof at two doors, and each has its own audience, so a
+token minted for one is no proof at the other:
+
+| Door | Audience | Set in |
+|---|---|---|
+| Token exchange (`/token`) | the `audience` of the AWS federation file | `exchange.awsFile` of the `http` config |
+| The console's API (a controller's bearer) | `console.awsAudience`, default `<issuerURL>/console` | the `http` config |
+
+The controllers request the console audience: `console.auth.aws.audience` in the
+`github.yaml` and `slack.yaml` files must equal the issuer's `console.awsAudience`.
+The issuer refuses to start with the same value for both doors.
 
 ```yaml
+# http config
+console:
+  awsAudience: https://sluis.example/console   # optional: this is the default
+exchange:
+  awsFile: /var/task/config/aws.yaml           # audience: sluis-exchange, the accounts
+```
+
+```yaml
+# github.yaml and slack.yaml
 console:
   auth:
     aws:
-      audience: https://sluis.example/aws   # the audience of the issuer's AWS federation file
+      audience: https://sluis.example/console  # = the issuer's console.awsAudience
 ```
 
 Absent, the controller reads `tokenFile`, as on Kubernetes. Three things must agree:
 
 1. **IAM.** The `github` and `slack` roles are allowed `sts:GetWebIdentityToken`
-   (the account has outbound identity federation enabled).
+   (the account has outbound identity federation enabled), and the permission can be
+   held to the console audience with the condition key
+   `sts:IdentityTokenAudience`:
+
+   ```json
+   {"Effect":"Allow","Action":"sts:GetWebIdentityToken","Resource":"*",
+    "Condition":{"ForAnyValue:StringEquals":{"sts:IdentityTokenAudience":"https://sluis.example/console"}}}
+   ```
+
+   So a controller role can mint a console bearer and nothing for token exchange.
+   Only a role that is meant to exchange gets the exchange audience.
 2. **The issuer.** The `http` function's `exchange.awsFile` lists the account
-   (`issuer` from `aws iam get-outbound-web-identity-federation-info`) and the
-   same `audience`. That one value is what an AWS token must be minted for, both
-   at token exchange and at the console.
+   (`issuer` from `aws iam get-outbound-web-identity-federation-info`). The console
+   door uses the same accounts with `console.awsAudience`.
 3. **The policy.** The role is entitled to what the policy's `aws` matchers say,
    and to nothing without one. Declare the controllers as viewers (enough to read
    who holds a group):
@@ -288,7 +324,10 @@ groups:
 ```
 
 A role the policy does not name is nobody at the console, however well its token
-verifies.
+verifies. An `aws` matcher with no `role`, or a bare `*`, admits **every** role of
+its account, including roles created later. It is not refused (a policy may rely on
+it), but the issuer logs a warning at start naming the groups that have one: name
+the role unless that is meant.
 
 ## Cold start, and what is not here
 

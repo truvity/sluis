@@ -120,6 +120,10 @@ type (
 	Console struct {
 		Origin string `json:"origin,omitempty"`
 		Client string `json:"client,omitempty"`
+		// AWSAudience is the audience an AWS role's web identity token must be
+		// minted for to be a bearer at the console: its OWN, distinct from
+		// `exchange`'s, so a token for one door is no proof at the other.
+		AWSAudience string `json:"awsAudience,omitempty"`
 	}
 
 	// OAuthClient is the client registered once with the directory backend.

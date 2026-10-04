@@ -237,8 +237,9 @@ func serveSchema() m {
 			}),
 		}),
 		"console": obj("Where the console is published, for the sign-in that starts there.", m{
-			"origin": str("The console's origin, when it is not the issuer's."),
-			"client": str("The client id the console signs in as."),
+			"origin":      str("The console's origin, when it is not the issuer's."),
+			"client":      str("The client id the console signs in as."),
+			"awsAudience": str("The audience an AWS role's web identity token must be minted for to be a bearer at the console (a Lambda controller). Its own, distinct from the AWS federation file's, so a token for token exchange is no proof here and the reverse. Default `<issuerURL>/console`."),
 		}),
 		"oauthClient": obj("The OAuth client registered once with the directory backend: it drives both admin consent and operator sign-in.", m{
 			"id":         str("The client id, for a local run. Not a secret."),
@@ -401,8 +402,8 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 		"tokenFile":  strDefault("This pod's projected ServiceAccount token, presented to the console and read afresh on every call.", mountDefault),
 		"console": obj("How the controller proves itself to the console, when the pod's `tokenFile` is not the way.", m{
 			"auth": obj("The proof. Absent, `tokenFile`.", m{
-				"aws": obj("The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), cached until near its expiry. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.", m{
-					"audience": str("The audience requested from STS. It must equal the `audience` of the issuer's AWS federation file."),
+				"aws": obj("The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.", m{
+					"audience": str("The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file."),
 				}, "audience"),
 			}),
 		}),

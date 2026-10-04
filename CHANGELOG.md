@@ -6,10 +6,14 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   A controller's console client can present the function role's AWS outbound web
   identity token (`sts:GetWebIdentityToken`, one audience, cached until two minutes
   before expiry) instead of a projected ServiceAccount token: set
-  `console.auth.aws.audience` in the controller's file (it must equal the audience of
-  the issuer's AWS federation file). The console's workload door now accepts an AWS
+  `console.auth.aws.audience` in the controller's file, which must equal the issuer's new
+  `console.awsAudience` (default `<issuerURL>/console`): the console and token exchange
+  are two doors with two audiences, so a token minted for one is no proof at the other.
+  The token is re-minted every four minutes, because the issuer refuses one whose `iat`
+  is older than its `maxAge`. The console's workload door now accepts an AWS
   role as it does a cluster's ServiceAccount, and the policy's `aws` matchers decide
-  what it may do. The `http` function also answers `{"kind":"exports"}` from a
+  what it may do (an `aws` matcher with no role admits every role of the account, and
+  the issuer now warns at start). The `http` function also answers `{"kind":"exports"}` from a
   schedule: one pass of every export, each under its lease, failing the invocation if
   a copy could not be made. Kubernetes behaviour is unchanged. See
   [aws-lambda](docs/integrations/aws-lambda.md).

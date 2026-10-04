@@ -2,9 +2,9 @@
 //
 // In a cluster it is the pod's projected ServiceAccount token, read afresh on
 // every call. On Lambda there is none, and the proof is the function role's
-// outbound web identity token (`sts:GetWebIdentityToken`), scoped to the one
-// audience the console's issuer verifies AWS roles for, and cached until it is
-// near its expiry so a pass that calls the console many times asks STS once.
+// outbound web identity token (`sts:GetWebIdentityToken`), scoped to the
+// console's own audience (distinct from the token exchange's), and reused for under
+// four minutes (the issuer refuses a token older than its maxAge) so a pass that calls the console many times asks STS once.
 //
 // The issuer verifies the token against the account's published key set, with
 // the same verifier token exchange uses, and the policy's `aws` matchers decide
@@ -50,11 +50,18 @@ type STS interface {
 }
 
 const (
-	// lifetime is how long a token is requested for: long enough that one pass
-	// uses one, and well inside the 5 minutes to 1 hour AWS allows.
-	lifetime = 10 * time.Minute
-	// refreshBefore is how close to its expiry a cached token is replaced.
-	refreshBefore = 2 * time.Minute
+	// lifetime is how long a token is requested for: five minutes, STS's own
+	// default. AWS allows from one minute, but a shorter token could not be
+	// reused for the whole of [maxReuse].
+	lifetime = 5 * time.Minute
+	// maxReuse is how old a token may be and still be presented. The issuer
+	// refuses a token whose `iat` is older than its AWS federation `maxAge`
+	// (default five minutes), whatever the token's own `exp` allows, so the
+	// cache is by AGE and not by expiry: a token that is still valid but five
+	// minutes old is a 401. A minute inside the default is the leeway.
+	maxReuse = 4 * time.Minute
+	// expirySlack is the least life a reused token must still have.
+	expirySlack = 30 * time.Second
 	// algorithm is one the issuer's AWS verifier accepts by default.
 	algorithm = "ES384"
 )
@@ -65,13 +72,14 @@ type AWS struct {
 	audience string
 	now      func() time.Time
 
-	mu      sync.Mutex
-	token   string
-	expires time.Time
+	mu       sync.Mutex
+	token    string
+	mintedAt time.Time
+	expires  time.Time
 }
 
-// NewAWS connects with the function's role. The audience must equal the one the
-// issuer's AWS federation file names.
+// NewAWS connects with the function's role. The audience must equal the issuer's
+// `console.awsAudience`, not the AWS federation file's.
 //
 // The source is shared by audience for the life of the process: a function
 // assembles its controller per invocation, and a warm execution environment
@@ -107,12 +115,13 @@ func NewAWSWith(api STS, audience string, now func() time.Time) (*AWS, error) {
 	return &AWS{api: api, audience: audience, now: now}, nil
 }
 
-// Token implements [Source]. The token is cached until it is within two minutes
-// of its expiry.
+// Token implements [Source]. A token is reused while it is under four minutes old,
+// and a new one is minted after that.
 func (a *AWS) Token(ctx context.Context) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.token != "" && a.expires.Sub(a.now()) > refreshBefore {
+	now := a.now()
+	if a.token != "" && now.Sub(a.mintedAt) < maxReuse && a.expires.Sub(now) > expirySlack {
 		return a.token, nil
 	}
 	out, err := a.api.GetWebIdentityToken(ctx, &sts.GetWebIdentityTokenInput{
@@ -127,7 +136,8 @@ func (a *AWS) Token(ctx context.Context) (string, error) {
 		return "", errors.New("sts:GetWebIdentityToken returned no token")
 	}
 	a.token = aws.ToString(out.WebIdentityToken)
-	a.expires = a.now().Add(lifetime)
+	a.mintedAt = now
+	a.expires = now.Add(lifetime)
 	if out.Expiration != nil {
 		a.expires = *out.Expiration
 	}

@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,11 +68,14 @@ type Config struct {
 	clientSecretsDir  string
 	clustersPath      string
 	awsPath           string
-	consoleClientID   string
-	audience          string
-	githubOwners      []string
-	consoleOrigin     string
-	signingKeyFile    string
+	// consoleAWSAudience is the audience an AWS role's token must carry to be a
+	// bearer at the console, distinct from the exchange's.
+	consoleAWSAudience string
+	consoleClientID    string
+	audience           string
+	githubOwners       []string
+	consoleOrigin      string
+	signingKeyFile     string
 	// additionalSigningKeyFiles are every OTHER algorithm this
 	// installation signs with at once, one file per algorithm, beside the
 	// primary [Config.signingKeyFile] -- see [issuer.KeyRings] and the
@@ -138,6 +142,7 @@ func FromConfig(f *config.Serve) (Config, error) {
 	if f.Console != nil {
 		c.consoleOrigin = f.Console.Origin
 		c.consoleClientID = f.Console.Client
+		c.consoleAWSAudience = strings.TrimSpace(f.Console.AWSAudience)
 	}
 	if f.Exchange != nil {
 		c.clustersPath = f.Exchange.ClustersFile
@@ -270,6 +275,9 @@ func FromConfig(f *config.Serve) (Config, error) {
 	// into an installation's whole estate.
 	if c.issuerURL == "" {
 		return Config{}, errors.New("issuerURL is required: it is baked into every token and every relying party")
+	}
+	if c.consoleAWSAudience == "" {
+		c.consoleAWSAudience = strings.TrimSuffix(c.issuerURL, "/") + "/console"
 	}
 	if c.audience == "" {
 		c.audience = c.release
@@ -453,6 +461,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// longer one needs the resource to say it is read-only. Refused here
 	// because policy alone cannot know lifetimes.absolute, and a row that
 	// could never be honoured should stop the service, not be clamped.
+	warnBroadAWSMatchers(ctx, set, log)
 	rows := set.Resources()
 	for i := range rows {
 		if err = rows[i].CheckAbsoluteCap(rows[i].ID, cfg.absoluteLifetime); err != nil {
@@ -1080,9 +1089,21 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 	}
 	for _, account := range awsFederation.Verifiers(nil) {
 		verifiers = append(verifiers, account)
-		// And a role may present its token to the console directly, as a
-		// ServiceAccount does: a Lambda controller has no projected token.
-		clusters = append(clusters, account)
+	}
+	// And a role may present its token to the console directly, as a
+	// ServiceAccount does: a Lambda controller has no projected token. By the
+	// console's OWN audience, so that a token minted for token exchange is no
+	// bearer here and the reverse: each door is one decision.
+	if len(awsFederation.Accounts) > 0 {
+		if cfg.consoleAWSAudience == awsFederation.Audience {
+			return nil, nil, fmt.Errorf("console.awsAudience %q is the AWS federation file's audience: "+
+				"the console and the token exchange are two doors and each takes its own", cfg.consoleAWSAudience)
+		}
+		for _, account := range consoleAWSVerifiers(awsFederation, cfg.consoleAWSAudience, nil) {
+			clusters = append(clusters, account)
+		}
+		log.InfoContext(ctx, "AWS role tokens are bearers at the console by their own audience",
+			"audience", cfg.consoleAWSAudience)
 	}
 	if len(awsFederation.Accounts) > 0 {
 		log.InfoContext(ctx, "AWS role tokens are verified against each account's own key set",
@@ -1358,4 +1379,40 @@ func checkStateSecret(ctx context.Context, state issuer.State, seed []byte) erro
 			"delete the shared state key " + key)
 	}
 	return nil
+}
+
+// BroadAWSMatchers names the groups whose `aws` matchers admit every role of
+// their account: one with no `role`, or a bare `*`. That is a rule somebody may
+// have meant, and one that grows by itself with the account, so it is said at
+// start and never refused (an existing policy may rely on it).
+func BroadAWSMatchers(set *policy.Set) []string {
+	var out []string
+	declared := set.Declared()
+	names := make([]string, 0, len(declared.Groups))
+	for name := range declared.Groups {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		for _, m := range declared.Groups[name].Matchers {
+			if m.AWS != nil && (m.AWS.Role == "" || m.AWS.Role == "*") {
+				out = append(out, name+" (account "+m.AWS.Account+")")
+			}
+		}
+	}
+	return out
+}
+
+func warnBroadAWSMatchers(ctx context.Context, set *policy.Set, log *slog.Logger) {
+	if broad := BroadAWSMatchers(set); len(broad) > 0 {
+		log.WarnContext(ctx, "aws matchers with no role (or a bare *) admit EVERY role of the account, "+
+			"including roles created later: name the role unless that is meant", "groups", broad)
+	}
+}
+
+// consoleAWSVerifiers are the AWS accounts' verifiers for the console door: the
+// same rows as token exchange's, with the console's own audience.
+func consoleAWSVerifiers(f verify.AWSFederation, audience string, client *http.Client) []*verify.AWSAccount {
+	f.Audience = audience
+	return f.Verifiers(client)
 }

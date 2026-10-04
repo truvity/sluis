@@ -184,10 +184,10 @@
               "properties": {
                 "aws": {
                   "additionalProperties": false,
-                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), cached until near its expiry. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
                   "properties": {
                     "audience": {
-                      "description": "The audience requested from STS. It must equal the `audience` of the issuer's AWS federation file.",
+                      "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
                       "minLength": 1,
                       "type": "string"
                     }
@@ -650,10 +650,10 @@
               "properties": {
                 "aws": {
                   "additionalProperties": false,
-                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), cached until near its expiry. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
                   "properties": {
                     "audience": {
-                      "description": "The audience requested from STS. It must equal the `audience` of the issuer's AWS federation file.",
+                      "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
                       "minLength": 1,
                       "type": "string"
                     }
@@ -1186,6 +1186,11 @@
           "additionalProperties": false,
           "description": "Where the console is published, for the sign-in that starts there.",
           "properties": {
+            "awsAudience": {
+              "description": "The audience an AWS role's web identity token must be minted for to be a bearer at the console (a Lambda controller). Its own, distinct from the AWS federation file's, so a token for token exchange is no proof here and the reverse. Default `<issuerURL>/console`.",
+              "minLength": 1,
+              "type": "string"
+            },
             "client": {
               "description": "The client id the console signs in as.",
               "minLength": 1,

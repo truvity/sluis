@@ -29,7 +29,7 @@ login:
   directory: true
   signOutURL: https://access.example/logout
   forwarded: {issuer: https://proxy.example, audience: access, emailHeader: X-Email}
-console: {origin: https://access.example, client: console}
+console: {origin: https://access.example, client: console, awsAudience: https://access.example/console}
 oauthClient:
   id: client-id
   idFile: /var/run/access-issuer/oauth-client/client-id

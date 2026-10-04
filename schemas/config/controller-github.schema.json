@@ -203,10 +203,10 @@
           "properties": {
             "aws": {
               "additionalProperties": false,
-              "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), cached until near its expiry. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+              "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
               "properties": {
                 "audience": {
-                  "description": "The audience requested from STS. It must equal the `audience` of the issuer's AWS federation file.",
+                  "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
                   "minLength": 1,
                   "type": "string"
                 }
