@@ -1,3 +1,7 @@
+## v1.59.0
+
+On Lambda, the GitHub and Slack controllers authenticate to the console with their role's AWS web identity token (a console audience of its own), and exports run on a schedule.
+
 ## v1.58.0
 
 sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM secrets, KMS token signing (ES384 and RS256), S3 blobs and SQS audit; adapters are chosen by name from presets; the sealer and the NATS adapter are removed.
