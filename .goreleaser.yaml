@@ -99,18 +99,25 @@ builds:
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
-  # The Lambda extension layer: a runtime-agnostic binary that Lambda runs
-  # from /opt/extensions, so the ARCHIVE must hold it at exactly
-  # extensions/access-roster-otlp (the file name is the extension's name).
-  # Linux only, both Lambda architectures. Not an image and not in the
-  # `binaries` archive: it is the zip a layer version is published from.
+  # sluis as AWS Lambda functions: ONE arm64 binary, deployed as three functions
+  # (http, github, slack) whose role is the SLUIS_ROLE variable. The runtime is
+  # provided.al2023, which runs the file named `bootstrap` at the zip's root, so
+  # that is the binary's name. arm64 only: the functions are Graviton.
+  #
+  # `lambda` leaves the Kubernetes, NATS and Valkey storage out of the binary
+  # (internal/store/store_lambda.go; cmd/sluis-lambda/imports_test.go holds the
+  # line), and `lambda.norpc` is aws-lambda-go's own tag for a runtime that is
+  # not the old Go one. The console is embedded, so `just console` above has
+  # built it. The telemetry layer is truvity/observability's otlp-lambda, never
+  # ours.
   - id: sluis-lambda
     main: ./cmd/sluis-lambda
-    binary: extensions/access-roster-otlp
+    binary: bootstrap
     env: [CGO_ENABLED=0]
     goos: [linux]
-    goarch: [amd64, arm64]
+    goarch: [arm64]
     flags: [-trimpath]
+    tags: [lambda, lambda.norpc]
     ldflags:
       - -s -w -X github.com/truvity/sluis/internal/version.Version={{.Version}}
 
@@ -145,18 +152,18 @@ archives:
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-  # The Lambda layer, one zip per architecture (a layer version lists its
-  # compatible architectures, and the binary is arch-specific). The zip root
-  # is the layer root: extensions/access-roster-otlp. amd64 is Lambda's
-  # x86_64.
-  - id: lambda-layer
+  # The Lambda zip the three functions are deployed from, with `bootstrap` at
+  # its root. The deploy tooling ADDS the estate's configuration files to it
+  # (config/sluis.yaml and the catalogues), so that a change to them is a new
+  # deployment: this archive holds nothing of the estate's.
+  - id: lambda
     ids: [sluis-lambda]
     formats: [zip]
     wrap_in_directory: false
-    # Nothing but the extension: the zip root IS /opt in the function, and a
-    # README or LICENSE there is clutter in somebody else's layer.
+    # Nothing but the binary: the zip root IS /var/task, and a README or
+    # LICENSE there is clutter in a function's code.
     files: ["none*"]
-    name_template: "sluis-lambda-layer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "sluis-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 kos:
   # base_import_paths appends the cmd directory's basename, so with the
@@ -224,11 +231,11 @@ release:
     `directory` are not built yet, and `docs/reference/go-module.md` says
     so.
 
-    DEPRECATED: the Lambda extension layer `sluis-lambda-layer_{{ .Version }}_linux_{{ "{amd64,arm64}" }}.zip`
-    is built for one more release and then dropped; the extension now
-    lives in truvity/observability and ships there as
-    `otlp-lambda-layer_<version>_linux_<arch>.zip`
-    (`docs/integrations/aws-lambda.md`).
+    The Lambda zip `sluis-lambda_{{ .Version }}_linux_arm64.zip` holds `bootstrap`, the one
+    binary the issuer and both controllers run as on AWS Lambda
+    (`docs/integrations/aws-lambda.md`). The telemetry layer is
+    `otlp-lambda-layer_<version>_linux_<arch>.zip` from `truvity/observability`;
+    sluis ships none.
 
     `sluisctl` is its own archive, because it is the one thing here that
     runs on somebody's own laptop. `accessctl_*` is the same program under
