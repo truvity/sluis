@@ -744,6 +744,14 @@ func mount(issuerHandler, console http.Handler) http.Handler {
 		http.Redirect(w, r, "/console/", http.StatusFound)
 	})
 	mux.Handle("/console/", http.StripPrefix("/console", console))
+	// The bare origin is where a person lands who typed the hostname: the
+	// issuer has no page of its own there, and the console is the one
+	// thing on this origin a person came for. Only the exact path: every
+	// other route, the issuer's included, keeps its own handler, and "GET"
+	// here is GET and HEAD.
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/console/", http.StatusFound)
+	})
 	// The admin-consent callback stays at the origin ROOT, because it is
 	// the one flow that runs before anybody can be signed in: the
 	// operator who connects the FIRST directory is by definition one no
