@@ -122,9 +122,9 @@ func (c WrappedConfig) Validate(tokenLifetime time.Duration) error {
 		return fmt.Errorf("signingKey.kmsWrapped.rotateEvery (%s) must be longer than prepublish (%s): "+
 			"a key must activate before the next one is generated", c.RotateEvery, c.Prepublish)
 	}
-	if min := tokenLifetime + KeyOverlapSkew; c.Retain < min {
+	if least := tokenLifetime + KeyOverlapSkew; c.Retain < least {
 		return fmt.Errorf("signingKey.kmsWrapped.retain (%s) must be at least lifetimes.token plus a skew margin (%s): "+
-			"a key that leaves the JWKS earlier makes valid tokens unverifiable", c.Retain, min)
+			"a key that leaves the JWKS earlier makes valid tokens unverifiable", c.Retain, least)
 	}
 	return nil
 }

@@ -94,11 +94,13 @@ func TestKMSWrappedConfigIsValidated(t *testing.T) {
 		"with a file": {&config.SigningKey{File: "/k", KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s"}}, "exclusive"},
 		"with kms": {&config.SigningKey{KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecretFile: "/s"},
 			KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s"}}, "exclusive"},
-		"no key":       {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{StateSecretFile: "/s"}}, "keyId"},
-		"no secret":    {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k"}}, "stateSecretFile"},
-		"eddsa":        {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s", Algorithms: []string{"EdDSA"}}}, "EdDSA is not supported"},
+		"no key":    {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{StateSecretFile: "/s"}}, "keyId"},
+		"no secret": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k"}}, "stateSecretFile"},
+		"eddsa": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
+			KeyID: "k", StateSecretFile: "/s", Algorithms: []string{"EdDSA"}}}, "EdDSA is not supported"},
 		"short retain": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s", Retain: d("30m")}}, "retain"},
-		"rotate soon":  {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s", RotateEvery: d("10m")}}, "longer than prepublish"},
+		"rotate soon": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
+			KeyID: "k", StateSecretFile: "/s", RotateEvery: d("10m")}}, "longer than prepublish"},
 	} {
 		_, err := issuerapp.FromConfig(&config.Serve{IssuerURL: "https://issuer.example", SigningKey: tc.key})
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

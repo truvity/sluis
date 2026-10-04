@@ -433,9 +433,7 @@ func TestWrappedUnwrapRefusesAPublicKeyThatIsNotItsPair(t *testing.T) {
 func TestWrappedMissingPermissionsAreNamed(t *testing.T) {
 	env := newWrapEnv(jose.ES384)
 	env.kms.DenyGenerate = true
-	ws, _ := NewWrappedSigning(env.config(), env.kms, make([]byte, 32), func(ctx context.Context, _ jose.SignatureAlgorithm, fn func(context.Context) error) (bool, error) {
-		return true, fn(ctx)
-	}, nil)
+	ws, _ := NewWrappedSigning(env.config(), env.kms, make([]byte, 32), alwaysLease, nil)
 	_, _, err := ws.Bootstrap(context.Background(), env.state)
 	if err == nil || !strings.Contains(err.Error(), "kms:GenerateDataKeyPairWithoutPlaintext") {
 		t.Errorf("a denied generate: %v", err)
@@ -444,9 +442,7 @@ func TestWrappedMissingPermissionsAreNamed(t *testing.T) {
 	env = newWrapEnv(jose.ES384)
 	env.start(t)
 	env.kms.DenyDecrypt = true
-	ws, _ = NewWrappedSigning(env.config(), env.kms, make([]byte, 32), func(ctx context.Context, _ jose.SignatureAlgorithm, fn func(context.Context) error) (bool, error) {
-		return true, fn(ctx)
-	}, nil)
+	ws, _ = NewWrappedSigning(env.config(), env.kms, make([]byte, 32), alwaysLease, nil)
 	_, _, err = ws.Bootstrap(context.Background(), env.state)
 	if err == nil || !strings.Contains(err.Error(), "kms:Decrypt") {
 		t.Errorf("a denied decrypt must stop the start, not mint a second key: %v", err)
@@ -519,4 +515,12 @@ func TestWrappedConfigValidation(t *testing.T) {
 	if err := (WrappedConfig{}).Validate(0); err == nil {
 		t.Error("an empty configuration is valid")
 	}
+}
+
+func noLease(context.Context, jose.SignatureAlgorithm, func(context.Context) error) (bool, error) {
+	return false, nil
+}
+
+func alwaysLease(ctx context.Context, _ jose.SignatureAlgorithm, fn func(context.Context) error) (bool, error) {
+	return true, fn(ctx)
 }

@@ -214,7 +214,8 @@ func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
 
 	// Settings of its own win whole; another adapter's block is not borrowed.
 	_, table, _ = Config{Adapter: AdapterLegacy, sel: selection{
-		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms", Settings: map[string]any{"keys": []any{"alias/b"}, "stateSecretFile": "/other"}}},
+		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms",
+			Settings: map[string]any{"keys": []any{"alias/b"}, "stateSecretFile": "/other"}}},
 	}}.plan(ctx, quiet)
 	if got := table[port.ConcernSigning]; got.Settings["stateSecretFile"] != "/other" {
 		t.Errorf("the override's own settings were replaced: %+v", got)
