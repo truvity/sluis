@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.61.1
+
+Released automatically as a patch: the Lambda directory snapshot was refreshed on demand and every 15 minutes, fixing sign-in failures after 30 minutes.
+
 ### Fixed
 
 - **On Lambda the directory snapshot was never refreshed after the first one, so
