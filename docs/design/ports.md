@@ -116,7 +116,7 @@ resolved`, one attribute per concern) and exposed as the gauge
 | state | dynamodb, legacy (until the kernel cutover), memory, nats (being removed) | kubernetes, postgres, valkey |
 | secrets | memory, ssm | openbao, kubernetes, store |
 | blobs | s3, memory, legacy | postgres, off |
-| signing | file (kms: in progress) | generated, transit |
+| signing | file, kms | generated, transit |
 | trigger | memory, legacy, nats, dynamodb (invoke: later) | watch, http |
 | schedule | ticker (eventbridge: later) | |
 | audit | connect, log, sqs | |

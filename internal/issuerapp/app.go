@@ -30,6 +30,7 @@ import (
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/kube"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/verify"
@@ -491,6 +492,9 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		core.UseGitHubApps(*deps.GitHubApps)
 	}
 
+	if err := applySigningPlan(ctx, &cfg, stores.Plan); err != nil {
+		return nil, err
+	}
 	var (
 		key     *issuer.SigningKey
 		kmsRefs *issuer.KMSKeyRefs
@@ -1190,4 +1194,40 @@ func watchKMSKeys(ctx context.Context, refs *issuer.KMSKeyRefs, interval time.Du
 			}
 		}
 	}
+}
+
+// applySigningPlan makes the registry's resolved signing adapter the one that
+// is used. The legacy `signingKey` keys already resolve to it (file by
+// default, kms when `signingKey.kms` is written), so a deployment that
+// names no adapter runs exactly as before; the choice differs only when a
+// preset or `adapters.signing` names one, and then it must agree with what
+// `signingKey` says rather than be ignored.
+func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
+	choice, ok := plan[port.ConcernSigning]
+	if !ok {
+		return nil
+	}
+	desc, found := port.Default.Lookup(port.ConcernSigning, choice.Adapter)
+	if !found || desc.Factory == nil {
+		return fmt.Errorf("adapters: the signing adapter %q cannot be built", choice.Adapter)
+	}
+	built, err := desc.Factory(ctx, choice.Settings)
+	if err != nil {
+		return fmt.Errorf("adapters.signing: %w", err)
+	}
+	switch choice.Adapter {
+	case "kms":
+		k, _ := built.(*port.KMSSigning)
+		if cfg.signingKeyFile != "" {
+			return errors.New("the signing adapter is kms and signingKey.file is set: a key is a file or a KMS key, not both")
+		}
+		if len(cfg.kmsKeys) == 0 && k != nil {
+			cfg.kmsKeys, cfg.kmsRegion, cfg.kmsStateSecretFile = k.Keys, k.Region, k.StateSecretFile
+		}
+	case "file":
+		if len(cfg.kmsKeys) > 0 {
+			return errors.New("the signing adapter is file and signingKey.kms is set: a key is a file or a KMS key, not both")
+		}
+	}
+	return nil
 }

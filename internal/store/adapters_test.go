@@ -155,5 +155,29 @@ func TestAnSsmSettingNobodyKnowsIsRefusedAtStart(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "rooot") {
 		t.Fatalf("err = %v, want one naming the unknown setting", err)
+
+// `signingKey.kms` is the legacy spelling of the kms signing adapter, and a
+// `signingKey.file` beside a preset that picks kms still means file.
+func TestSigningKeyIsTheLegacyMappingOfTheSigningAdapter(t *testing.T) {
+	kms := &config.SigningKeyKMS{Keys: []string{"alias/a"}, StateSecretFile: "/s"}
+	_, table, err := Config{Adapter: AdapterLegacy, Kube: KubeNone,
+		sel: selection{SigningKMS: kms}}.plan(context.Background(), quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.Name(port.ConcernSigning) != "kms" || table[port.ConcernSigning].Settings["stateSecretFile"] != "/s" {
+		t.Fatalf("got %+v", table[port.ConcernSigning])
+	}
+
+	table, err = port.Resolve(port.Selection{
+		Legacy:    Config{Adapter: AdapterLegacy, sel: selection{SigningFile: true}}.legacyTable(),
+		Preset:    "aws-serverless",
+		LegacySet: []port.Concern{port.ConcernSigning},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.Name(port.ConcernSigning) != "file" {
+		t.Fatalf("signing = %s, want file", table.Name(port.ConcernSigning))
 	}
 }

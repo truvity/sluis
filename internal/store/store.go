@@ -206,7 +206,7 @@ func FromServe(f *config.Serve) (Config, error) {
 
 		DynamoDB: dynamoOf(f.Ports),
 		Export:   exportConfigOf(f.Ports),
-		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != ""),
+		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", f.SigningKey),
 	}
 	var err error
 	if (c.Adapter == AdapterNATS || c.Adapter == AdapterDynamoDB) && f.Valkey != nil && f.Valkey.Address != "" {
@@ -239,7 +239,7 @@ func FromRoster(f *config.Roster) Config {
 	c := Config{
 		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
 		Blob: blobOf(f.Ports), Sealer: sealerOf(f.Ports), NATS: natsOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
-		sel: selectionOf(f.Ports, nil, "", nil, f.Audit != nil && f.Audit.Writer != ""),
+		sel: selectionOf(f.Ports, nil, "", nil, f.Audit != nil && f.Audit.Writer != "", nil),
 	}
 	if c.Adapter == AdapterMemory {
 		c.Kube = KubeNone
