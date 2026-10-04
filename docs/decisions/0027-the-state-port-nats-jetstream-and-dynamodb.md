@@ -7,8 +7,8 @@ in [0031](0031-a-generic-migration-tool.md) has run
 **Date:** 2026-10-02
 
 > **Superseded in part (2026-10-04).** The NATS JetStream adapter was removed
-> (INF-1268; no estate ran it, and the owner chose DynamoDB, the Secrets port and
-> SSM for both platforms of the aws-hybrid preset, INF-1263 to INF-1276). The
+> (no estate ran it, and the owner chose DynamoDB, the Secrets port and
+> SSM for the aws-hybrid preset). The
 > DynamoDB half of this record stands. The text below is the decision as it was
 > taken.
 
