@@ -1,5 +1,11 @@
 ## Unreleased
 
+- **Deployment guides and a generated adapter matrix.** `docs/guides/choosing-a-deployment.md`
+  opens with the decision tree and modifiers, then the presets and support levels
+  (`aws-hybrid` is the implemented, maintained path); `docs/guides/diy-adapter.md` is the
+  fixed checklist for adding an adapter in a fork. `docs/reference/adapters.md` is
+  generated from the adapter registry and the preset table by `just adapters-doc`;
+  `just docs-check` fails when it is stale.
 - **Adapters are chosen by name, per concern.** `internal/port` gains an adapter registry:
   each adapter registers a descriptor (name, concern, what it needs of AWS, Kubernetes
   and OpenBao, the runtimes it works on, implemented or on request, and a factory from

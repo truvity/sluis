@@ -340,7 +340,11 @@ page, organised by what you are trying to do. Three starting points from
 there are worth naming here — [docs/adoption.md](docs/adoption.md) for
 what taking this into use requires, [docs/safety.md](docs/safety.md) for
 what is refused and why, and [CHANGELOG.md](CHANGELOG.md) for what
-changed for a consumer, per version.
+changed for a consumer, per version. To pick a deployment (and see which
+adapters exist), read
+[docs/guides/choosing-a-deployment.md](docs/guides/choosing-a-deployment.md);
+to add an adapter in a fork,
+[docs/guides/diy-adapter.md](docs/guides/diy-adapter.md).
 
 ## The rule that makes this repository public
 

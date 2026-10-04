@@ -151,7 +151,12 @@ leak-canary:
 # proto service and RPC must also be named in docs/reference/contracts.md.
 docs-check:
     ./hack/check-docs-symbols.py
-    go test -count=1 ./internal/contractsdoc/
+    go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/
+
+# Regenerate docs/reference/adapters.md from the adapter registry. Run it
+# after adding, removing or changing an adapter; docs-check fails when stale.
+adapters-doc:
+    go run ./internal/port/matrixdoc/gen
 
 # Run go mod tidy
 tidy:

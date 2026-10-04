@@ -23,6 +23,8 @@ tables. For a map of every page in the repository, not just these, see
   — every input and output of the GitHub Action, and the
   [`token-source: access-roster`](connect/github-actions.md#in-a-reusable-workflow-token-source-access-roster)
   pattern for a reusable workflow
+- [reference/adapters.md](reference/adapters.md) — every adapter per concern, what it
+  needs, where it runs and whether it is built (generated from the registry)
 - [reference/contracts.md](reference/contracts.md) — the ConnectRPC
   services (the Slack services included), installation tokens at `/token`, and
   the whoami endpoint
