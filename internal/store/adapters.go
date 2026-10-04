@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -130,10 +131,16 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 		// its settings where they have always been, `signingKey.kms`: an override
 		// with no settings of its own takes the legacy block's, when the block is
 		// for the same adapter. Settings given in the override win whole.
-		if o, ok := sel.Overrides[port.ConcernSigning]; ok && len(o.Settings) == 0 {
-			if legacy := sel.Legacy[port.ConcernSigning]; legacy.Adapter == o.Adapter && len(legacy.Settings) > 0 {
+		if o, ok := sel.Overrides[port.ConcernSigning]; ok {
+			legacy := sel.Legacy[port.ConcernSigning]
+			switch {
+			case len(o.Settings) == 0 && legacy.Adapter == o.Adapter && len(legacy.Settings) > 0:
 				o.Settings = legacy.Settings
 				sel.Overrides[port.ConcernSigning] = o
+			case len(o.Settings) > 0 && o.Adapter == "kms-wrapped" && legacy.Adapter == o.Adapter && len(legacy.Settings) > 0:
+				// Two statements of one key's settings: refused, not one preferred.
+				return c, nil, errors.New("adapters.signing.settings and signingKey.kmsWrapped are both set: " +
+					"state the kms-wrapped settings in one of them")
 			}
 		}
 	}

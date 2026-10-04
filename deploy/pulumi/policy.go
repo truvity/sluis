@@ -143,7 +143,7 @@ const (
 // wrappedContextKeys are the encryption context's keys, and only they.
 var wrappedContextKeys = []string{"purpose", "alg", "kid"}
 
-// wrappedSigningStatement is the use of the symmetric application key by the
+// wrappedSigningStatement is the use of the dedicated symmetric key by the
 // function that signs: generate a data key pair and decrypt a private key, on
 // that key only, and only with the encryption context the adapter uses
 // (purpose=sluis-signing and no keys but purpose, alg and kid). Never Encrypt,
@@ -161,16 +161,47 @@ func wrappedSigningStatement(keyArn string) statement {
 	}
 }
 
-// wrappedKeyPolicy is the key policy of the symmetric key the library creates:
-// the account's IAM policies govern it (the root statement every key has), and
-// the signing role is held to the same conditions as its own grant, so that a
-// broader policy attached to it later does not widen what it can do with the
-// key. The role is named by an ArnEquals on aws:PrincipalArn and not by a
-// principal, so the key can be created before the role exists.
-func wrappedKeyPolicy(account, signingRoleArn string) (string, error) {
-	// The conditions of one denial: the signing role, and one way of straying.
+// keyringWriteDenial keeps a process that does not sign from writing the key
+// ring in the State table: with wrapped signing the ring is what a signer
+// trusts to learn which keys to publish, so a write there is a way to plant one.
+// The partition key is the record kind (layout v2): `keyring`, `keyring-index`
+// and `keyring-retired`. The key-generation lease (kind `lease`, id
+// `signing-keygen/<alg>`) shares its partition with the controllers' own leases
+// and cannot be denied this way: a limit, noted in docs/deployment/aws.md.
+func keyringWriteDenial(tableArn string) statement {
+	return statement{
+		"Sid":      sidKeyringWrites,
+		"Effect":   "Deny",
+		"Action":   []string{ddbPutItem, ddbUpdateItem, ddbDeleteItem, "dynamodb:BatchWriteItem"},
+		"Resource": tableArn,
+		"Condition": map[string]any{
+			"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{"keyring", "keyring-index", "keyring-retired"}},
+		},
+	}
+}
+
+// wrappedKeyPolicy is the key policy of the dedicated symmetric key the library
+// creates. The account's IAM policies govern it (the root statement every key
+// has), and everything that can open a wrapped signing key is pinned to the
+// signing roles (signingRoleArns: the http function's role, and the Kubernetes
+// serve role when one signs too):
+//
+//   - SluisSigningContextReserved denies EVERY principal that is not a signing
+//     role any use of the key under the context purpose=sluis-signing, which the
+//     root delegation would otherwise leave open to every role with kms:Decrypt:
+//     the context is in the State beside the ciphertext, so anyone who may
+//     decrypt could read a wrapped signing key and forge offline;
+//   - the other denials hold the signing roles themselves to the conditions of
+//     their own grant, so a broader policy attached to them later does not widen
+//     what they can do with the key.
+//
+// The roles are named by an ArnEquals on aws:PrincipalArn and not as principals,
+// so the key can be created before the roles exist.
+func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) {
+	signing := func() map[string]any { return map[string]any{"aws:PrincipalArn": signingRoleArns} }
+	// The conditions of one denial of a signing role: one way of straying.
 	deny := func(sid string, notAction bool, stray map[string]any) statement {
-		cond := map[string]any{"ArnEquals": map[string]any{"aws:PrincipalArn": signingRoleArn}}
+		cond := map[string]any{"ArnEquals": signing()}
 		for op, v := range stray {
 			cond[op] = v
 		}
@@ -187,6 +218,7 @@ func wrappedKeyPolicy(account, signingRoleArn string) (string, error) {
 			"Sid": "EnableIAMPolicies", "Effect": "Allow", "Resource": "*", "Action": "kms:*",
 			"Principal": map[string]any{"AWS": arnPrefix + "iam::" + account + ":root"},
 		},
+		WrappedKeyReservedDeny(signingRoleArns),
 		deny("SluisSigningRolePurposeOnly", false, map[string]any{
 			"StringNotEquals": map[string]any{"kms:EncryptionContext:purpose": WrappedSigningPurpose},
 		}),
@@ -197,8 +229,24 @@ func wrappedKeyPolicy(account, signingRoleArn string) (string, error) {
 	})
 }
 
+// WrappedKeyReservedDeny is the statement every wrapped signing key's policy
+// MUST carry: nothing but the signing roles may use the key under the signing
+// context. The library puts it on the key it creates; a key passed as
+// WrappedSigningArgs.KeyArn needs the same statement (docs/deployment/aws.md).
+func WrappedKeyReservedDeny(signingRoleArns []string) map[string]any {
+	return statement{
+		"Sid": "SluisSigningContextReserved", "Effect": "Deny", "Principal": map[string]any{"AWS": "*"}, "Resource": "*",
+		"Action": []string{kmsDecrypt, "kms:ReEncrypt*", "kms:GenerateDataKeyPair*", kmsGenerateKP, "kms:CreateGrant"},
+		"Condition": map[string]any{
+			"StringEquals": map[string]any{"kms:EncryptionContext:purpose": WrappedSigningPurpose},
+			"ArnNotEquals": map[string]any{"aws:PrincipalArn": signingRoleArns},
+		},
+	}
+}
+
 const (
 	sidWrappedSigning = "SluisWrappedSigning"
+	sidKeyringWrites  = "SluisNoKeyringWrites"
 	sidSigning        = "SluisSigning"
 	sidLogs           = "SluisLogs"
 	sidPrivate        = "SluisPrivateParameters"
@@ -259,6 +307,7 @@ type functionPolicyIn struct {
 	queueArn           string
 	signingKeyArns     []string
 	wrappedKeyArn      string
+	wrappedSigning     bool
 	webIdentity        bool
 	webIdentityAud     string
 	parameterKeyArn    string
@@ -313,6 +362,9 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 			"Action":   lambdaInvokeFunction,
 			"Resource": in.invokeFunctionArns,
 		})
+	}
+	if in.wrappedSigning && in.role != RoleHTTP {
+		st = append(st, keyringWriteDenial(in.tableArn))
 	}
 	if in.webIdentity && in.role != RoleHTTP {
 		st = append(st, webIdentityStatement(in.webIdentityAud))

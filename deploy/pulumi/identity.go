@@ -63,10 +63,12 @@ type KubernetesIdentityArgs struct {
 	// kms:Sign and kms:GetPublicKey with them. Optional.
 	SigningKeyArns []pulumi.StringInput
 	// WrappedSigningKeyArn is the symmetric key of the `kms-wrapped` signing
-	// adapter (Lambda's WrappedSigningKeyArn, or the estate's application key).
-	// When set the serve process, and only it, may generate data key pairs and
-	// decrypt with it, under the encryption context purpose=sluis-signing.
-	// Optional.
+	// adapter: Lambda's WrappedSigningKeyArn, a dedicated key whose policy
+	// reserves the signing context to the signing roles (this role must be among
+	// WrappedSigningArgs.AdditionalSigningRoleArns). When set the serve process,
+	// and only it, may generate data key pairs and decrypt with it, under the
+	// encryption context purpose=sluis-signing, and the other processes may not
+	// write the key ring in the table. Optional.
 	WrappedSigningKeyArn pulumi.StringInput
 	// State is the DynamoDB table of the State port. Nil when State is not in
 	// DynamoDB (it is on NATS), and the roles then carry no DynamoDB grant.
@@ -246,6 +248,9 @@ func newProcessIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kube
 		}
 		if withWrapped {
 			st = append(st, wrappedSigningStatement(v[3].(string)))
+		}
+		if withState && a.WrappedSigningKeyArn != nil && suffix != "serve" {
+			st = append(st, keyringWriteDenial(v[1].(string)))
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

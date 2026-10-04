@@ -912,7 +912,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 			continue
 		}
 		cond := st["Condition"].(map[string]any)
-		if !reflect.DeepEqual(cond["ArnEquals"], map[string]any{"aws:PrincipalArn": roleArn}) || cond[want] == nil {
+		if !reflect.DeepEqual(cond["ArnEquals"], map[string]any{"aws:PrincipalArn": []any{roleArn}}) || cond[want] == nil {
 			t.Errorf("%s: condition %v", sid, cond)
 		}
 	}
@@ -920,7 +920,35 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 		!reflect.DeepEqual(strs(st["NotAction"]), []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"}) {
 		t.Errorf("the deny of everything else: %v", st)
 	}
-	if len(byID) != 4 {
+	// Nobody else may use the key under the signing context: the root delegation
+	// would otherwise let any role with kms:Decrypt unwrap a key read from the State.
+	res := byID["SluisSigningContextReserved"]
+	if res == nil || res["Effect"] != "Deny" || !reflect.DeepEqual(res["Principal"], map[string]any{"AWS": "*"}) ||
+		!reflect.DeepEqual(strs(res["Action"]), []string{"kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKeyPair*",
+			"kms:GenerateDataKeyPairWithoutPlaintext", "kms:CreateGrant"}) ||
+		!reflect.DeepEqual(res["Condition"], map[string]any{
+			"StringEquals": map[string]any{"kms:EncryptionContext:purpose": "sluis-signing"},
+			"ArnNotEquals": map[string]any{"aws:PrincipalArn": []any{roleArn}},
+		}) {
+		t.Errorf("the reserved-context denial: %v", res)
+	}
+	// The github and slack roles may not write the key ring.
+	for _, r := range []string{"http", "github", "slack"} {
+		var denied map[string]any
+		for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
+			if st["Sid"] == "SluisNoKeyringWrites" {
+				denied = st
+			}
+		}
+		if (r == "http") != (denied == nil) {
+			t.Errorf("%s: keyring-write denial %v", r, denied)
+		}
+		if denied != nil && (denied["Effect"] != "Deny" || !reflect.DeepEqual(denied["Condition"], map[string]any{
+			"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []any{"keyring", "keyring-index", "keyring-retired"}}})) {
+			t.Errorf("%s: %v", r, denied)
+		}
+	}
+	if len(byID) != 5 {
 		t.Errorf("key policy statements: %v", byID)
 	}
 }
@@ -998,5 +1026,57 @@ func TestThePodIdentityServeRoleMayUseTheWrappedKeyAndNoOtherRoleMay(t *testing.
 	}
 	if g := grants(pol("kernel-sluis-github-policy")); len(g["kms:Decrypt"]) != 0 || len(g["kms:GenerateDataKeyPairWithoutPlaintext"]) != 0 {
 		t.Errorf("github: %v", g)
+	}
+}
+
+func TestTheKeyPolicyNamesEverySigningRole(t *testing.T) {
+	serve := arnp + "iam::" + account + ":role/acme-sluis-serve"
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.WrappedSigning = &arp.WrappedSigningArgs{AdditionalSigningRoleArns: []string{serve}}
+	}})
+	k := rec.one(t, "aws:kms/key:Key", "kernel-signing-key-wrapped")
+	for _, st := range statements(t, prop(k, "policy").StringValue()) {
+		if st["Sid"] == "SluisSigningContextReserved" {
+			got := st["Condition"].(map[string]any)["ArnNotEquals"]
+			if !reflect.DeepEqual(got, map[string]any{"aws:PrincipalArn": []any{arnp + "iam::" + account + ":role/sluis-http", serve}}) {
+				t.Errorf("signing roles: %v", got)
+			}
+			return
+		}
+	}
+	t.Error("no reserved-context denial")
+}
+
+func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
+	app := arnp + "kms:" + region + ":" + account + ":key/application"
+	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
+		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
+		if err != nil {
+			return err
+		}
+		st, err := arp.NewState(ctx, "kernel", &arp.StateArgs{TableName: table})
+		if err != nil {
+			return err
+		}
+		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
+			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
+			Namespace: "sluis", Serve: arp.ProcessArgs{ServiceAccount: "sluis"}, GitHub: arp.ProcessArgs{ServiceAccount: "sluis-github"},
+			Storage: store.Grant(), State: st.Grant(), WrappedSigningKeyArn: pulumi.String(app),
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	has := func(n string) bool {
+		for _, s := range statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue()) {
+			if s["Sid"] == "SluisNoKeyringWrites" {
+				return true
+			}
+		}
+		return false
+	}
+	if has("kernel-sluis-serve-policy") || !has("kernel-sluis-github-policy") {
+		t.Error("only the serve role may write the key ring")
 	}
 }

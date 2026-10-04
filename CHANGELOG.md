@@ -12,8 +12,8 @@
 ### Added
 
 - **`kms-wrapped` signing adapter, the default for the AWS presets.** Token
-  signing moves from one remote asymmetric KMS key per algorithm to ONE symmetric
-  application key per estate and data key pairs: the issuer calls
+  signing moves from one remote asymmetric KMS key per algorithm to ONE dedicated symmetric
+  key per estate and data key pairs: the issuer calls
   `kms:GenerateDataKeyPairWithoutPlaintext` (ES384 on `ECC_NIST_P384`, RS256 on
   `RSA_3072`), records the public key and the private key encrypted under the
   symmetric key in its key ring, and signs locally with the key it decrypts
@@ -27,18 +27,22 @@
   prepublish, retain}` or `adapters.signing`. `aws-serverless` and `aws-hybrid`
   now default to it; `kms` (remote signing, non-extractable keys) stays
   selectable and unchanged, and so does `aws-eks`. **Trade-off:** wrapped keys
-  are decrypted into memory, so a leaked role can forge tokens until the key
-  rotates out. EdDSA is not supported yet. See
+  are decrypted into memory, so a leaked signing role can forge offline for as
+  long as the keys are published, and write access to the State (the key ring)
+  is part of the trust boundary; a dedicated key whose policy reserves the
+  signing context to the signing roles is required. EdDSA is not supported yet. See
   [Signing on AWS](docs/deployment/aws.md#signing-on-aws). A deployment that
   names `signingKey.kms` or `signingKey.file` keeps what it names.
-- **Pulumi library: `LambdaArgs.WrappedSigning`.** One symmetric key (created
-  with rotation enabled, protected, and a key policy that holds the http role to
+- **Pulumi library: `LambdaArgs.WrappedSigning`.** One dedicated symmetric key (created
+  with rotation enabled, protected, and a key policy that denies every principal
+  but the signing roles any use of the signing context and holds those roles to
   `kms:EncryptionContext:purpose = sluis-signing` and no context keys beside
-  `purpose`, `alg`, `kid`, or an existing `KeyArn`), a grant of only
+  `purpose`, `alg`, `kid`; an existing `KeyArn` must carry the same denial), a grant of only
   `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on it with those
   conditions to the http function, and no asymmetric keys unless
-  `KeepRemoteSigningKeys`. `KubernetesIdentityArgs.WrappedSigningKeyArn` grants
-  the serve role the same.
+  `KeepRemoteSigningKeys`. The github and slack roles may not write the key ring
+  items. `KubernetesIdentityArgs.WrappedSigningKeyArn` grants the serve role the
+  same.
 
 ## v1.60.0
 
