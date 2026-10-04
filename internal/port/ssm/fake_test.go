@@ -98,7 +98,9 @@ func (f *fakeAPI) DeleteParameter(_ context.Context, in *awsssm.DeleteParameterI
 	return &awsssm.DeleteParameterOutput{}, nil
 }
 
-func (f *fakeAPI) GetParametersByPath(_ context.Context, in *awsssm.GetParametersByPathInput, _ ...func(*awsssm.Options)) (*awsssm.GetParametersByPathOutput, error) {
+func (f *fakeAPI) GetParametersByPath(
+	_ context.Context, in *awsssm.GetParametersByPathInput, _ ...func(*awsssm.Options),
+) (*awsssm.GetParametersByPathOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	path := aws.ToString(in.Path)
@@ -116,12 +118,12 @@ func (f *fakeAPI) GetParametersByPath(_ context.Context, in *awsssm.GetParameter
 	if in.NextToken != nil {
 		start = sort.SearchStrings(names, *in.NextToken)
 	}
-	max := int(aws.ToInt32(in.MaxResults))
-	if max == 0 || max > 10 {
-		max = 10
+	limit := int(aws.ToInt32(in.MaxResults))
+	if limit == 0 || limit > 10 {
+		limit = 10
 	}
 	out := &awsssm.GetParametersByPathOutput{}
-	end := start + max
+	end := start + limit
 	if end < len(names) {
 		out.NextToken = aws.String(names[end])
 	} else {
