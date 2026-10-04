@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,13 +25,25 @@ type selection struct {
 	// PortsAdapter and PortsBlob say the legacy keys were written, so beside
 	// a preset they override it.
 	PortsAdapter, PortsBlob bool
+	// SigningFile and SigningKMS say `signingKey` names a key source, which is
+	// the legacy spelling of the signing adapter: beside a preset it
+	// overrides it, as `ports.adapter` does for state.
+	SigningFile bool
+	SigningKMS  *config.SigningKeyKMS
 }
 
-func selectionOf(p *config.Ports, plat *config.Platform, preset string, adapters map[string]config.AdapterChoice, auditWriter bool) selection {
-	return selection{
+func selectionOf(
+	p *config.Ports, plat *config.Platform, preset string, adapters map[string]config.AdapterChoice,
+	auditWriter bool, sk *config.SigningKey,
+) selection {
+	sel := selection{
 		Platform: plat, Preset: preset, Adapters: adapters, AuditWriter: auditWriter,
 		PortsAdapter: p != nil && p.Adapter != "", PortsBlob: p != nil && p.Blob != nil,
 	}
+	if sk != nil {
+		sel.SigningFile, sel.SigningKMS = sk.File != "", sk.KMS
+	}
+	return sel
 }
 
 // legacyTable is what the `ports` keys mean, as a table: the mapping of the
@@ -56,6 +69,14 @@ func (c Config) legacyTable() port.Table {
 	if c.Blob != nil {
 		t[port.ConcernBlobs] = port.Choice{Adapter: c.Blob.Adapter}
 	}
+	if k := c.sel.SigningKMS; k != nil && !c.sel.SigningFile {
+		// What `signingKey.kms` has always meant, as settings. Marshalling a
+		// struct of strings cannot fail.
+		raw, _ := json.Marshal(port.KMSSigning{Keys: k.Keys, Region: k.Region, StateSecretFile: k.StateSecretFile})
+		var settings port.Settings
+		_ = json.Unmarshal(raw, &settings)
+		t[port.ConcernSigning] = port.Choice{Adapter: "kms", Settings: settings}
+	}
 	if c.sel.AuditWriter {
 		t[port.ConcernAudit] = port.Choice{Adapter: "connect"}
 	}
@@ -75,6 +96,9 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 	}
 	if c.sel.PortsBlob {
 		sel.LegacySet = append(sel.LegacySet, port.ConcernBlobs)
+	}
+	if c.sel.SigningFile || c.sel.SigningKMS != nil {
+		sel.LegacySet = append(sel.LegacySet, port.ConcernSigning)
 	}
 	if len(c.sel.Adapters) > 0 {
 		sel.Overrides = map[port.Concern]port.Override{}

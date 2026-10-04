@@ -54,6 +54,7 @@ presets and the platform fit together, see
 |---|---|---|---|---|---|---|---|---|
 | `file` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | Signing keys read from files the platform mounts (`signingKey`). |
 | `generated` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | A token-signing key generated at start and shared through state. |
+| `kms` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Token signing by AWS KMS ECC_NIST_P384 keys; the private key never leaves KMS (`signingKey.kms`). |
 | `transit` | 💤 on request | — | — | needs | ✅ | ✅ | ✅ | Token signing by an OpenBao transit key. |
 
 ## trigger
@@ -90,7 +91,7 @@ The adapter each preset names per concern. 💤 on request marks an adapter that
 | state | `postgres` 💤 | `kubernetes` 💤 | `kubernetes` 💤 | `dynamodb` | `dynamodb` | `dynamodb` |
 | secrets | `store` 💤 | `kubernetes` 💤 | `openbao` 💤 | `ssm` | `ssm` | `ssm` |
 | blobs | `postgres` 💤 | `off` 💤 | `off` 💤 | `s3` | `s3` | `s3` |
-| signing | `generated` 💤 | `file` | `transit` 💤 | `kms` 💤 | `kms` 💤 | `kms` 💤 |
+| signing | `generated` 💤 | `file` | `transit` 💤 | `kms` | `kms` | `kms` |
 | trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `watch` 💤 |
 | schedule | `ticker` | `ticker` | `ticker` | `eventbridge` 💤 | `eventbridge` 💤 | `ticker` |
 | audit | `log` | `log` | `log` | `sqs` | `sqs` | `sqs` |
