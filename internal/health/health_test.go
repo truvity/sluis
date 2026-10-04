@@ -101,3 +101,25 @@ func TestNoDependenciesIsReady(t *testing.T) {
 		}
 	}
 }
+
+// A controller's readiness is "did I start": closed until the process says
+// so, then open. Liveness never waits for it.
+func TestAGateIsNotReadyUntilStartupSaysSo(t *testing.T) {
+	t.Parallel()
+
+	gate := health.NewGate("the controller")
+	mux := health.Mux(0, gate.Dependency())
+
+	got := get(t, mux, "/readyz")
+	if got.Code != http.StatusServiceUnavailable || !strings.Contains(got.Body.String(), "the controller") {
+		t.Errorf("readyz before start = %d %q, want 503 naming the controller", got.Code, got.Body.String())
+	}
+	if got := get(t, mux, "/healthz"); got.Code != http.StatusOK {
+		t.Errorf("healthz = %d: liveness must not wait for start-up", got.Code)
+	}
+
+	gate.Open()
+	if got := get(t, mux, "/readyz"); got.Code != http.StatusOK {
+		t.Errorf("readyz after start = %d, want 200", got.Code)
+	}
+}

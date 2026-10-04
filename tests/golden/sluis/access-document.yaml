@@ -658,11 +658,18 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: controller-github
 spec:
-  # One: two controllers would make every change twice, and GitHub's answer
-  # to the second is an error that reads as a failure.
+  # Rolled so that a new pod must be Ready before an old one goes: a
+  # start that fails (the 2026-10-04 rollout, where every new pod crashed
+  # at start) leaves the old pod running. More than one replica is safe only
+  # on a shared State (see sluis.controllerRollout), and `replicas` is
+  # refused above 1 without one.
   replicas: 1
+  minReadySeconds: 10
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: sluis-github-roster
@@ -702,6 +709,16 @@ spec:
             - controller
             - github
             - --config=/etc/sluis/controller-github.yaml
+          ports:
+            - name: health
+              containerPort: 7070
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/sluis/controller-github.yaml
@@ -795,11 +812,18 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: controller-slack
 spec:
-  # One: two controllers would make every change twice, and Slack's answer
-  # to the second is an error that reads as a failure.
+  # Rolled so that a new pod must be Ready before an old one goes: a
+  # start that fails (the 2026-10-04 rollout, where every new pod crashed
+  # at start) leaves the old pod running. More than one replica is safe only
+  # on a shared State (see sluis.controllerRollout), and `replicas` is
+  # refused above 1 without one.
   replicas: 1
+  minReadySeconds: 10
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: sluis-slack-roster
@@ -832,6 +856,16 @@ spec:
             - controller
             - slack
             - --config=/etc/sluis/controller-slack.yaml
+          ports:
+            - name: health
+              containerPort: 7070
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/sluis/controller-slack.yaml
