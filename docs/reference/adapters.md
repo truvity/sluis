@@ -70,6 +70,7 @@ presets and the platform fit together, see
 
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
+| `eventbridge` | ✅ implemented | needs | — | — | — | ✅ | — | One EventBridge Scheduler schedule per target invokes the controller function with {"kind":"tick","target":"<id>"}. |
 | `ticker` | ✅ implemented | — | — | — | ✅ | — | ✅ | An in-process interval timer. |
 
 ## audit
@@ -91,6 +92,6 @@ The adapter each preset names per concern. 💤 on request marks an adapter that
 | blobs | `postgres` 💤 | `off` 💤 | `off` 💤 | `s3` | `s3` | `s3` |
 | signing | `generated` 💤 | `file` | `transit` 💤 | `kms` | `kms` | `kms` |
 | trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `watch` 💤 |
-| schedule | `ticker` | `ticker` | `ticker` | `eventbridge` 💤 | `eventbridge` 💤 | `ticker` |
+| schedule | `ticker` | `ticker` | `ticker` | `eventbridge` | `eventbridge` | `ticker` |
 | audit | `log` | `log` | `log` | `sqs` | `sqs` | `sqs` |
 

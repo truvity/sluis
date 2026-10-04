@@ -35,6 +35,33 @@
   failed one, and `Trail.Flush` is there for a handler to call before it returns. The
   process needs `sqs:SendMessage` on the queue. See `docs/design/ports.md`.
 
+- **sluis runs as AWS Lambda functions.** One arm64 `bootstrap` in one zip, deployed
+  as three functions chosen by `SLUIS_ROLE`: `http` (the issuer and the console behind
+  an API Gateway HTTP API, payload format 2.0, into the same `net/http` mux the server
+  serves), and `github` and `slack` (one pass of one target per invocation, under the
+  target's lease in DynamoDB). Events: `{"kind":"tick","target":"<id>"}` from an
+  EventBridge Scheduler schedule and `{"kind":"run","target":"<id>"}` from the `http`
+  function; a second invocation for a held target returns `contended` and succeeds.
+  "Run now" is the new `invoke` adapter of the `trigger` concern (an asynchronous
+  Lambda invoke; `Subscribe` is unused), and `eventbridge` is described for the
+  `schedule` concern. The configuration is a file in the zip (`SLUIS_CONFIG_FILE`,
+  default `/var/task/config/sluis.yaml`); an environment variable whose value is
+  `ssm:/sluis/private/...` (or `/sluis/export/...`) is read from SSM Parameter Store at
+  cold start, so a `*Env` secret is never in the file; `SLUIS_SECRET_FILES` (a JSON array of `{"parameter","path"}`) writes parameters to files under `/tmp` (0600) at cold start, so every `*File` setting works unchanged on Lambda. The release attaches
+  `sluis-lambda_<version>_linux_arm64.zip` (`bootstrap` at its root, about 50 MB, 14 MB
+  zipped; the Kubernetes binary is about 80 MB). The binary is built with
+  `-tags lambda,lambda.norpc`, which leaves out client-go, NATS and Valkey, and
+  `cmd/sluis-lambda/imports_test.go` fails on any of them. The controllers' configuration files gain the serve file's `platform`, `preset` and
+  `adapters` keys (the Lambda controllers select `sqs` audit through them). **No change
+  to the Kubernetes build.** See [aws-lambda](docs/integrations/aws-lambda.md).
+
+- **Removed: sluis's own OTLP Lambda extension.** `cmd/sluis-lambda` used to be the
+  extension installed as `extensions/access-roster-otlp`, deprecated in v1.57.0 for
+  `truvity/observability`'s `otlp-lambda` layer. Nothing in `truvity/gitops` or
+  `opwerm/nexus` deploys it, so the extension and the `sluis-lambda-layer_*` assets are
+  gone and `cmd/sluis-lambda` is the function's composition root. The layer is the only
+  telemetry layer; sluis ships none.
+
 - **The `ssm` secrets adapter.** `internal/port/ssm` keeps `port.Secrets` in AWS SSM
   Parameter Store as SecureString parameters (the AWS-managed key, or `kmsKeyId`).
   A port path `p` is `/sluis/private/<p>`, and a path under `export/` is

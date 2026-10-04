@@ -1,298 +1,270 @@
-# AWS Lambda — telemetry with the function role's identity
+# sluis on AWS Lambda
 
-> **Deprecated: the extension moved to
-> [truvity/observability](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md).**
-> The source is `github.com/truvity/observability/lambdaext` and the layer is
-> `otlp-lambda-layer_<version>_linux_<arch>.zip` in that repository's
-> releases. This repository keeps building `sluis-lambda-layer` for one more
-> release so that a consumer can switch, and then stops. This page is kept for
-> that one release. The `SLUIS_*` names with the `ACCESS_ROSTER_*` fallback are
-> read by a wrapper in `cmd/sluis-lambda` until observability releases the same.
+sluis runs as three AWS Lambda functions from one zip. Nothing is in a VPC: every
+dependency (DynamoDB, S3, KMS, SSM, SQS, Lambda) is an AWS API the function reaches
+over its role, and the only inbound path is an API Gateway HTTP API.
 
-A Lambda function can send its OpenTelemetry data to an OTLP endpoint that
-trusts sluis **without holding any secret**. The release carries an
-extension layer, `sluis-lambda-layer_<version>_linux_<arch>.zip`,
-that does three things for the function:
+The Kubernetes build is unchanged and stays what kernel and hive run where they run
+it. This page is the other platform
+([decision 0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)).
 
-1. asks STS for an identity token for the role the function already runs as
-   (`sts:GetWebIdentityToken`, AWS outbound identity federation);
-2. trades it at the sluis issuer (RFC 8693 token exchange) for a
-   short-lived access token audienced at the OTLP endpoint;
-3. runs an OTLP/HTTP proxy on `127.0.0.1:4318` that forwards every export to
-   the endpoint with that token as the bearer;
-4. subscribes to the Lambda **Telemetry API** and sends the platform's own
-   events (timeouts, out-of-memory kills, init errors, the `REPORT` metrics)
-   as OTLP logs through the same upstream and token, with no CloudWatch in
-   the path ([Platform logs](#platform-logs)).
+## One binary, one zip, three functions
 
-The function's own OpenTelemetry SDK needs no credential and no auth
-configuration. It exports to the loopback address, with any language's
-standard OTLP/HTTP exporter:
+The release attaches `sluis-lambda_<version>_linux_arm64.zip`. It holds one file,
+`bootstrap`, at the zip root: an arm64 Linux binary for the `provided.al2023` runtime.
+It is about 50 MB, and the zip about 14 MB (for reference, the Kubernetes binary is
+about 80 MB). The same zip is deployed as three functions, and the environment
+variable `SLUIS_ROLE` chooses what each one is:
 
-```
-OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf   # or http/json
-```
+| Function | `SLUIS_ROLE` | What it runs | Invoked by |
+|---|---|---|---|
+| `http` | `http` | The issuer and the console: the same `net/http` mux the Kubernetes server serves | API Gateway HTTP API, payload format 2.0 |
+| `github` | `github` | The GitHub roster controller: ONE pass for ONE organisation | EventBridge Scheduler, and an async invoke from `http` |
+| `slack` | `slack` | The Slack roster controller: ONE pass for ONE workspace | EventBridge Scheduler, and an async invoke from `http` |
 
-gRPC OTLP is not supported (HTTP protobuf and JSON only).
+The binary reads `SLUIS_ROLE` once, at cold start. A missing or unknown role stops the
+start (an Init error in the platform's terms) and the log line says which.
 
 ```mermaid
-sequenceDiagram
-    participant F as function (OTel SDK)
-    participant E as extension (127.0.0.1:4318)
-    participant S as STS (regional)
-    participant I as sluis issuer
-    participant O as OTLP endpoint
-    F->>E: POST /v1/traces
-    E->>S: GetWebIdentityToken (function role)
-    S-->>E: identity JWT
-    E->>I: token exchange, audience = OTLP client
-    I-->>E: access token (short-lived, cached)
-    E->>O: POST /v1/traces, Authorization: Bearer
-    O-->>E: 200
-    E-->>F: 200
+flowchart LR
+    GW[API Gateway HTTP API] -->|payload 2.0| H[http function]
+    SCH[EventBridge Scheduler<br/>one schedule per target] -->|tick| G[github function]
+    SCH -->|tick| S[slack function]
+    H -->|async invoke: run| G
+    H -->|async invoke: run| S
+    H & G & S --> D[(DynamoDB<br/>state, sessions, leases)]
+    H & G & S --> B[(S3 blobs)]
+    H -->|kms:Sign| K[KMS]
+    H & G & S -->|at cold start| P[SSM Parameter Store]
+    H & G & S -->|emit| Q[SQS audit]
 ```
 
-## Why a proxy, and why on demand
+## Events
 
-A Lambda execution environment is **frozen between invocations**: no timer
-runs while it is frozen, so a token refreshed by a background loop can be
-expired when the environment thaws and the function exports. The extension
-therefore checks the clock on every export: a token is cached until a third
-of its life remains, and a caller that finds it inside that window waits for
-a new one (concurrent callers share one refresh). The extension also warms
-the token on each `INVOKE`, so the usual export finds a fresh one waiting.
+**`http`** receives an API Gateway HTTP API event, payload format 2.0 (a REST API or an
+ALB sends another shape and is refused). The function turns it into an `http.Request`
+and runs the handler:
 
-Forwarding is **synchronous**. Answering the exporter early and forwarding
-later would let the environment freeze with the export still in memory.
+- the method, `rawPath` and `rawQueryString` are the request line, and `host` the Host;
+- the headers arrive lower-cased, and the `cookies` array becomes one `Cookie` header;
+- a base64 body is decoded;
+- the source IP is `RemoteAddr`.
 
-## Platform logs
+The response carries the status and the headers, with several values of one header
+joined by a comma. `Set-Cookie` goes in the response's `cookies`, as the gateway
+requires: it drops a header of that name. A body that is not UTF-8 text, or has a
+`Content-Encoding`, is base64 with `isBase64Encoded`. A handler that panics answers
+500, a request that cannot be read 400, and a response over the platform's 6 MB limit
+502 with a log line that says why.
 
-The function's own OTel SDK cannot report that it was killed: a timeout, an
-out-of-memory kill or a failed init ends the process before it can export
-anything. Lambda reports those itself, to the Telemetry API, and the
-extension forwards them as OTLP **logs** to `<endpoint>/v1/logs` (protobuf,
-`Authorization: Bearer`, the same token source as the proxy).
-
-The extension starts a listener, subscribes to the Telemetry API
-(`PUT /2022-07-01/telemetry`, schema `2022-12-13`) naming it as the
-destination, and Lambda POSTs batches to it. The platform's own buffering
-(`maxItems`, `maxBytes`, `timeoutMs`) decides how often; the extension
-answers each POST at once and exports in the background, and always exports
-what it holds **before** it asks for the next event, because that is the
-moment the environment may be frozen.
-
-| Event | Severity | Body (shape) | Attributes |
-|---|---|---|---|
-| `platform.initStart` | INFO | `INIT_START Runtime Version: <v> Phase: <p>` | `initializationType`, `phase` |
-| `platform.initRuntimeDone` | INFO, ERROR if `status` is not `success` or `errorType` is set | `INIT_RUNTIME_DONE Phase: <p> Status: <s>` | `status`, `errorType` |
-| `platform.initReport` | as above | `INIT_REPORT Phase: <p> Status: <s> Duration: <ms>` | `status`, `durationMs` |
-| `platform.start` | INFO | `START RequestId: <id> Version: <v>` | `requestId` |
-| `platform.runtimeDone` | INFO, ERROR on `failure`, `error`, `timeout` | `RUNTIME_DONE RequestId: <id> Status: <s>` | `status`, `errorType`, `durationMs`, `producedBytes` |
-| `platform.report` | INFO, ERROR on `error`, `timeout`, or any `errorType` (`Task.Timedout`, `Runtime.OutOfMemory`, ...) | `REPORT RequestId: <id> Duration: ... Billed Duration: ... Memory Size: ... Max Memory Used: ... Init Duration: ...` | `status`, `errorType`, `durationMs`, `billedDurationMs`, `memorySizeMB`, `maxMemoryUsedMB`, `initDurationMs`, `restoreDurationMs` |
-| `platform.restoreStart` / `restoreRuntimeDone` / `restoreReport` | as above | `RESTORE_...` | `status`, `errorType`, `durationMs` |
-| `platform.logsDropped` | WARN | `LOGS_DROPPED Reason: <r>` | `droppedRecords`, `droppedBytes` |
-| `platform.telemetrySubscription` and other `platform.*` | INFO | the event name and status | `status` |
-| `function` (opt-in) | INFO, or the JSON log's `level` | the line | `requestId` for JSON logs |
-| `extension` (opt-in) | INFO | the line | |
-
-Every record has `event.name` (the event type above), `requestId` and
-`faas.invocation_id` where the event has one, and the event's own timestamp.
-When the event carries X-Ray tracing (`tracing.value`), the record carries
-the trace id from `Root=`, the span from `tracing.spanId` (else `Parent=`)
-and the sampled flag, so a log lines up with the function's own trace.
-
-The resource of every record is `service.name` (`OTEL_SERVICE_NAME`, else the
-function name), `faas.name`, `faas.version`, `faas.instance` (the log
-stream), `faas.max_memory`, `cloud.provider=aws`, `cloud.platform=aws_lambda`
-and `cloud.region`.
-
-**Function and extension logs are off by default.** A function that already
-exports its logs through OpenTelemetry would then send each line twice (once
-through its SDK, once as a Telemetry API `function` record), and would pay for
-it twice. Turn `ACCESS_ROSTER_FUNCTION_LOGS` on for a function that writes to
-stdout and has no OTel logs SDK: it is then the way those lines reach the
-log store without CloudWatch. Platform events are never in the SDK's logs, so
-they have no duplicate. Note that Lambda still writes the same lines to
-CloudWatch Logs unless the function role's logging is denied there; the
-extension does not turn that off.
-
-The queue is bounded in memory (`ACCESS_ROSTER_TELEMETRY_BUFFER_QUEUE_ITEMS`,
-5000 records, a few MB at most). If exports cannot keep up, the **oldest**
-records are dropped and the next export starts with a WARN record saying how
-many were. The export is fail-open like the rest: with no token or a failing
-upstream the batch is dropped, one log line is written per failure window and
-one when it recovers, and the invocation is never held up. A `401` drops the
-token and retries once. On `SHUTDOWN` the extension stops the listener and
-exports what is left within the shutdown deadline.
-
-Outside Lambda, and in the Runtime Interface Emulator, the Telemetry API is
-absent (the emulator answers the subscription `202 Telemetry.NotSupported`):
-the extension logs one line and runs without it.
-
-## What the extension does when something is wrong
-
-It is **fail-open**: telemetry never blocks, slows or crashes an invocation.
-
-- No token (STS refused, the issuer is down or refuses the role): the proxy
-  answers `503` with `Retry-After`, which OTLP exporters treat as retryable,
-  and the extension logs **one line per failure window** (and one when it
-  recovers). After a failure it does not call STS again for 5 seconds, so an
-  exporter's retries are not a request storm. A token that is still valid is
-  used even if its replacement failed.
-- Missing or invalid configuration, or the port is taken: one log line, and
-  the extension keeps answering the platform (an extension that exits is
-  reported by Lambda as a crash of the invocation). Exports then find nothing
-  listening.
-- The upstream answers `401`: the cached token is dropped and the next export
-  obtains a new one. Other upstream statuses are relayed unchanged.
-- `SHUTDOWN`: the proxy stops accepting, lets in-flight forwards finish within
-  the shutdown deadline, and exits.
-
-Tokens are held in memory only (plus the optional file below) and are never
-logged.
-
-## Configuration
-
-All settings are environment variables on the function.
-
-Since the rename to sluis each one is read as `SLUIS_<NAME>` first and as
-`ACCESS_ROSTER_<NAME>` second: both work, and `SLUIS_*` wins when both are set.
-The table lists the `ACCESS_ROSTER_*` names, which are unchanged; write
-`SLUIS_ISSUER` where it says `ACCESS_ROSTER_ISSUER`, and so on. The contract
-name `ACCESS_ROSTER_ISSUER` as a GitHub variable (`vars.ACCESS_ROSTER_ISSUER`)
-is not this variable and does not change.
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `ACCESS_ROSTER_ISSUER` | required | The issuer's base URL. |
-| `ACCESS_ROSTER_AUDIENCE` | required | The audience asked of STS for the identity token. What the issuer's AWS verifier expects; the role policy pins it (below). |
-| `ACCESS_ROSTER_OTLP_ENDPOINT` | required | The OTLP/HTTP base URL, `https`. The extension appends `/v1/traces`, `/v1/metrics`, `/v1/logs`. Plain `http` is accepted only for a loopback host. |
-| `ACCESS_ROSTER_OTLP_AUDIENCE` | `otlp` | The exchange's audience and client id: the roster client that the OTLP endpoint accepts. |
-| `ACCESS_ROSTER_LISTEN` | `127.0.0.1:4318` | The proxy's address. |
-| `ACCESS_ROSTER_STS_DURATION_SECONDS` | `300` | Lifetime asked of the STS token (60 to 3600). It is used once, for the exchange. |
-| `ACCESS_ROSTER_STS_ALGORITHM` | `ES384` | Signing algorithm asked of STS (`ES384` or `RS256`). |
-| `ACCESS_ROSTER_PLATFORM_LOGS` | `true` | Subscribe to Telemetry API `platform` events and forward them as OTLP logs. |
-| `ACCESS_ROSTER_FUNCTION_LOGS` | `false` | Also forward `function` logs (the function's stdout/stderr). Duplicates logs the function exports itself; see [Platform logs](#platform-logs). |
-| `ACCESS_ROSTER_EXTENSION_LOGS` | `false` | Also forward `extension` logs (other extensions' output). |
-| `ACCESS_ROSTER_TELEMETRY_LISTEN` | `sandbox.localdomain:4243` | The Telemetry API destination. Bound on all interfaces of the sandbox at that port when the host is `sandbox.localdomain`. |
-| `ACCESS_ROSTER_TELEMETRY_BUFFER_MAX_ITEMS` | `1000` | The platform's batch size in events (1000 to 10000). |
-| `ACCESS_ROSTER_TELEMETRY_BUFFER_MAX_BYTES` | `262144` | The platform's batch size in bytes (262144 to 1048576). |
-| `ACCESS_ROSTER_TELEMETRY_BUFFER_TIMEOUT_MS` | `1000` | The platform's longest wait before delivering a batch (25 to 30000). |
-| `ACCESS_ROSTER_TELEMETRY_BUFFER_QUEUE_ITEMS` | `5000` | Records held in the extension waiting for an export (100 to 1000000); beyond it the oldest are dropped and counted. |
-| `ACCESS_ROSTER_TOKEN_FILE` | unset | If set, each access token is also written here (mode 0600, replaced atomically; the directory is created 0700). For a function that runs its own collector with a bearer-token-from-file extension. Off by default. Use a path under `/tmp`. |
-
-STS needs a **regional** endpoint (the global one does not support the
-call): the SDK picks it from `AWS_REGION`, which Lambda sets. The extension
-needs egress to the regional STS endpoint, the issuer and the OTLP endpoint;
-a VPC function without a NAT needs an STS interface endpoint.
-
-## IAM and account setup
-
-1. **The account must have outbound identity federation enabled** (IAM
-   account settings, or `aws iam enable-outbound-web-identity-federation`).
-   Without it STS answers `OutboundWebIdentityFederationDisabled`, which the
-   extension logs.
-2. **The function role** needs `sts:GetWebIdentityToken`, and the policy
-   should pin the audience (and, optionally, the lifetime and algorithm):
+**`github` and `slack`** receive one of two JSON events, which run the same pass:
 
 ```json
-{
-  "Effect": "Allow",
-  "Action": "sts:GetWebIdentityToken",
-  "Resource": "*",
-  "Condition": {
-    "ForAllValues:StringEquals": {
-      "sts:IdentityTokenAudience": "https://access.example"
-    },
-    "StringEquals": { "sts:SigningAlgorithm": "ES384" },
-    "NumericLessThanEquals": { "sts:DurationSeconds": "300" }
-  }
-}
+{"kind":"tick","target":"<id>"}
+{"kind":"run","target":"<id>"}
 ```
 
-`sts:IdentityTokenAudience` is a multi-valued key (the API takes a list of
-audiences), so it needs the `ForAllValues:StringEquals` operator. A plain
-`StringEquals` evaluates to an implicit deny when the request carries the
-audience as a list, and STS answers `AccessDenied ... no identity-based policy
-allows the sts:GetWebIdentityToken action`. `ForAllValues` also passes on an
-empty set, which is safe here only because `Audience` is a required parameter
-of [GetWebIdentityToken](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetWebIdentityToken.html).
-`sts:SigningAlgorithm` is single-valued and keeps `StringEquals`.
+`tick` is what an EventBridge Scheduler schedule sends, one schedule per target.
+`run` is "run a pass now": the `http` function sends it with an asynchronous invoke
+when a console write concerns the target. A target is a GitHub organisation's login
+(or `github:links`, the link check) for `github`, and a workspace's key for `slack`.
 
-3. **The roster** must admit the role: the issuer-side AWS verifier recognises
-   the account, and a group matcher selects the role, for example
-   `arn:aws:iam::111122223333:role/billing-*`. A role in no group is refused
-   at the exchange, which shows up as a `503` plus the issuer's sentence in
-   the extension's log line.
+Each invocation assembles the controller, runs ONE pass of the target under the
+target's lease in DynamoDB, closes it (which flushes the audit queue) and returns:
 
-## The console's Audit page on Lambda
+```json
+{"kind":"tick","target":"acme","outcome":"ran"}
+```
 
-With the `sqs` audit sink there is no audit receiver, and the Audit page does not
-need one: `audit.queryURL` is its own setting. Point it at the query service,
-for example `https://audit.example.org/sluis`; a path prefix is kept and the
-procedure path appended (`.../sluis/audit.v1.QueryService/Search`).
-
-The browser never calls the query service. `sluis-http` forwards the page's
-calls from the console's own origin, server-side, with a token it mints for the
-person signed in (audience `audit.audience`, default `audit`). So the query host
-needs **no CORS policy**, and the function needs egress to it: the functions
-run outside any VPC, so the query host must be publicly reachable (through
-Cloudflare, for example) and accept those tokens.
-
-## Attaching the layer
-
-Each release carries one zip per architecture:
-
-| Lambda architecture | Release asset |
+| `outcome` | Meaning |
 |---|---|
-| `x86_64` | `sluis-lambda-layer_<version>_linux_amd64.zip` |
-| `arm64` | `sluis-lambda-layer_<version>_linux_arm64.zip` |
+| `ran` | The pass ran to its end. |
+| `contended` | Another invocation holds the target's lease. This one ends cleanly: it returns success, so the platform does not retry it or count an error. The other invocation's pass is the one that counts. |
+| `unknown` | A `run` for a target this controller does not run. Only a `run`: see below. |
 
-The zip root is the layer root: it holds one file,
-`extensions/access-roster-otlp` (mode 0755). Publish it as a layer version in
-your own account and region, with the matching `--compatible-architectures`,
-and add it to the function:
+A failed pass returns an error, which the scheduler's retry policy sees. A `tick` for
+a target the controller does not run is also an error: a schedule that names nobody's
+target is a mistake to see. A `run` is a hint, and the one for an unknown target ends
+cleanly as `unknown`.
 
-```
-aws lambda publish-layer-version --layer-name access-roster-otlp \
-  --zip-file fileb://sluis-lambda-layer_<version>_linux_arm64.zip \
-  --compatible-architectures arm64
-```
+The leases are `Create` and `Update` with a TTL on the State port, which is DynamoDB
+here, so two invocations (a schedule firing while somebody pressed "run now") cannot
+both run. The controller refuses to run its pass when the State is not shared, so a
+function that was configured with `memory` fails at its first event and not by
+acting twice.
 
-The release does not publish a layer version for you. The binary is a static
-Go executable with no runtime dependency, so it works with every runtime,
-including container-image functions (copy it to `/opt/extensions/`).
+### Run now
 
-## Size and cold start
+The `http` function's console notifies the `trigger` port when a write concerns a
+target. On Lambda that port is the `invoke` adapter: `Notify` is an asynchronous
+invoke (`InvocationType: Event`) of the controller function with
+`{"kind":"run","target":"<id>"}`, and returns as soon as the platform queues it.
+`Subscribe` is unused, since the platform starts the function. The adapter is told
+which kind a target is by the policy that declares it (a declared Slack workspace is
+`slack`, a bound GitHub organisation is `github`), so one function is invoked. A target
+the policy does not declare invokes both, and the one that does not run it ends
+as `unknown`.
 
-| | amd64 | arm64 |
+## Environment
+
+| Variable | Function | Meaning |
 |---|---|---|
-| binary (stripped, `-trimpath`) | 10.06 MB | 9.31 MB |
-| zip | 4.01 MB | 3.60 MB |
+| `SLUIS_ROLE` | all | `http`, `github` or `slack`. Required. |
+| `SLUIS_CONFIG_FILE` | all | The configuration file in the zip. Default `/var/task/config/sluis.yaml`. |
+| `SLUIS_SECRET_FILES` | all | SSM parameters written to files under `/tmp` at cold start, see below. |
+| `<NAME>=ssm:/sluis/private/...` | all | A secret read from SSM into a variable at cold start, see below. |
+| `OTEL_*` | all | OpenTelemetry's own, as on Kubernetes. The telemetry layer sets the endpoint. |
 
-In the Lambda Runtime Interface Emulator the extension registers and init
-completes in about 12 ms (the first token is fetched in the background,
-after registering, so it does not delay init). Lambda bills extension time
-like function time; the proxy is idle between exports.
+There is no other variable and no flag. A retired variable of the old environment
+configuration (`PORT`, `LOG_LEVEL` and the rest listed in
+[configuration](../reference/configuration.md)) stops the start, as it does on
+Kubernetes. The run-now functions' names are in the file, not in the environment
+(`adapters.trigger.settings`).
 
-## Tests
+## Configuration is in the zip
 
-The extension's package (now `github.com/truvity/observability/lambdaext`) has unit tests (token cache, expiry after a freeze,
-single flight, failure backoff, STS and exchange against fakes, proxy
-headers/body/encoding, 503 and refusals) and end-to-end tests that run the
-real binary against a fake Extensions API, STS, issuer and OTLP upstream. One
-more test runs it in the real Lambda base image with `aws-lambda-rie`; it is
-opt-in (`ACCESS_ROSTER_RIE=1`, needs docker and port 8080).
+The deploy tooling ADDS the estate's configuration to the zip at deploy time:
 
-The Telemetry API is covered by tests against a fake Telemetry API
-(subscription, batches POSTed to the extension's listener, records arriving at
-the fake upstream with the bearer token, flush on `SHUTDOWN`) and by unit
-tests of the event mapping with the AWS reference payloads (including a
-timeout and an out-of-memory report). The emulator has no Telemetry API, so
-the opt-in emulator test only proves the extension tolerates that.
+```text
+bootstrap
+config/sluis.yaml        the http function's file (a `serve` configuration)
+config/github.yaml       the github function's file (a `controller-github` configuration)
+config/slack.yaml        the slack function's file (a `controller-slack` configuration)
+config/...               the policy, the GitHub and Slack catalogues the files name
+```
 
-Not covered by the layer: gRPC OTLP. The OTLP logs are written by a small
-hand-rolled protobuf encoder rather than the generated packages, which would
-add about 6.7 MB to the binary; a test decodes its output with the generated
-schema.
+So a change of configuration is a new deployment: there is no mounted ConfigMap to
+change under a running function, and the function that reads it is the version that
+was released with it. The three roles read three schemas, as the three commands do
+(`schemas/config/serve.schema.json`, `controller-github.schema.json`,
+`controller-slack.schema.json`), so each function sets `SLUIS_CONFIG_FILE` to its own
+file. The default names `sluis.yaml` for a function that sets none. The file is
+validated against its schema at cold start, before the function takes an event. The
+release zip holds none of this: `bootstrap` only.
+
+On Lambda a file selects its adapters by name per concern
+([ports](../design/ports.md)):
+
+```yaml
+# config/sluis.yaml (the http function)
+platform: { aws: true, runtime: lambda }   # or: preset: aws-serverless
+adapters:
+  state:   { adapter: dynamodb, settings: { table: sluis } }
+  blobs:   { adapter: s3,       settings: { bucket: sluis-blobs, prefix: blobs/ } }
+  trigger: { adapter: invoke,   settings: { github: sluis-github, slack: sluis-slack } }
+```
+
+`legacy` is refused on the Lambda runtime. The controllers' files take the
+same `platform`, `preset` and `adapters` keys as the service's, so that all three
+functions resolve the same table: the state (and so the leases), the blobs and the
+audit sink. The audit adapter is `sqs` (`adapters.audit.settings.queueURL`); on Lambda
+each record is sent before the call that made it returns, and every function flushes
+what is still queued before its invocation returns, since the platform freezes the
+process afterwards (a controller does it by closing, which delivers its queue).
+
+### Secrets
+
+Configuration secrets (a Google OAuth client secret, the admin password, a GitHub
+App's key, a Slack signing secret) are read from SSM Parameter Store at cold start,
+under the same layout as the dynamic secrets (decision D1a): `/sluis/private/...` for
+sluis's own and `/sluis/export/...` for what it exports. The file keeps naming the
+variable that holds a secret (`oauthClient.secretEnv: OAUTH_CLIENT_SECRET`), and the
+function's environment says where to read it:
+
+```text
+OAUTH_CLIENT_SECRET=ssm:/sluis/private/oauth/client-secret
+```
+
+At cold start every variable whose value begins with `ssm:` is replaced by the
+parameter's decrypted value, before the file is read. A path outside the two roots is
+refused, and a missing parameter stops the start naming the path and never a value.
+A function with no such variable calls SSM not at all. This is a small reader of
+configuration. The `ssm` adapter of the secrets concern, which stores the service's
+dynamic secrets, is another piece.
+
+#### Secret files
+
+Many settings name a FILE, not a variable: the GitHub App key files, the Slack
+secrets, `signingKey.kms.stateSecretFile`. There is no mounted Secret on Lambda, so
+the variable `SLUIS_SECRET_FILES` lists parameters to write to files at cold start,
+before the configuration is read:
+
+```text
+SLUIS_SECRET_FILES=[{"parameter":"/sluis/private/issuer/state-secret","path":"/tmp/sluis/state-secret"}]
+```
+
+```yaml
+signingKey:
+  kms:
+    stateSecretFile: /tmp/sluis/state-secret   # the file the variable above wrote
+```
+
+Each entry is a decrypted SSM parameter (under `/sluis/private/` or `/sluis/export/`)
+written byte for byte, with no newline added, to a path under `/tmp/`, mode 0600 in
+directories of mode 0700. A path anywhere else, one with `..`, or a parameter outside
+the roots stops the start. Every `*File` setting then works as it does on Kubernetes by
+naming one of those paths, and the secret never enters the zip. The issuer's state
+secret is generated into `/sluis/private/issuer/state-secret` (base64 of 32 random
+bytes) by the infrastructure code and read this way by every function.
+
+## IAM: one role per function
+
+Each function has its own role (decision D5a), and only `http` can sign a token:
+
+| Permission | `http` | `github` | `slack` |
+|---|:-:|:-:|:-:|
+| `kms:Sign`, `kms:GetPublicKey` on the token-signing key | yes | no | no |
+| `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table | yes | yes | yes |
+| `s3:GetObject`, `PutObject`, `DeleteObject`, `ListBucket` on the blob bucket and prefix | yes | yes | yes |
+| `ssm:GetParameter`, `PutParameter`, `DeleteParameter`, `GetParametersByPath` on `/sluis/private/*` and `/sluis/export/*`, for the secrets adapter (`ssm`) that keeps the service's dynamic secrets | yes | yes | yes |
+| `ssm:GetParameters` on the parameters its variables and `SLUIS_SECRET_FILES` name, under `/sluis/private/*` (and `kms:Decrypt` on the key encrypting them) | yes | yes | yes |
+| `sqs:SendMessage` on the audit queue | yes | yes | yes |
+| `lambda:InvokeFunction` on the `github` and `slack` functions | yes | no | no |
+| `logs:*` as usual | yes | yes | yes |
+
+Narrow the SSM permission to the parameters each function's variables name: a
+controller needs a GitHub App's key and not the OAuth client's secret. EventBridge
+Scheduler needs its own role, with `lambda:InvokeFunction` on the function it
+schedules.
+
+## Cold start, and what is not here
+
+- The state, sessions, leases and the target's reports are in DynamoDB and S3, so no
+  invocation depends on another's memory. A sign-in's half-finished state is in the
+  session records, not the process.
+- The directory snapshot is refreshed on read when it is stale, as the hub already
+  does. The Kubernetes process also refreshes it on a timer; a function has no process
+  between invocations to keep one in, and a refresh a request started is finished
+  before the response is returned to the platform.
+- `http` is one assembled service per execution environment, kept across
+  invocations. A controller is assembled per invocation, as `sluis tick` does.
+- The exports' runner, a background loop, is not started.
+
+## Telemetry
+
+The only telemetry layer is `truvity/observability`'s OTLP Lambda layer
+(`otlp-lambda-layer_<version>_linux_<arch>.zip` in its releases, documented in
+[its integration page](https://github.com/truvity/observability/blob/master/docs/integrations/aws-lambda.md)).
+It runs the OTLP proxy on the loopback address, authenticates with the function role's
+identity, and sends the platform's own logs. sluis ships no layer and no extension:
+the one this repository used to build (`sluis-lambda-layer`, installed as
+`extensions/access-roster-otlp`) was removed once nothing deployed it. Set the layer's
+`OTEL_EXPORTER_OTLP_ENDPOINT` as the layer's page says; the function exports metrics
+and traces with the OpenTelemetry SDK it already has, and flushes them at the end of
+every invocation, because the platform freezes the process when one returns.
+
+## Building and checking the root
+
+`cmd/sluis-lambda` is built with `-tags lambda,lambda.norpc`. The `lambda` tag leaves
+out the Kubernetes, NATS and Valkey storage the other binary carries (see
+`internal/store/store_lambda.go`), and `lambda.norpc` is the Lambda library's own tag
+for the `provided` runtimes. `cmd/sluis-lambda/imports_test.go` lists the root's
+transitive imports and fails on `k8s.io/`, `github.com/nats-io/`,
+`github.com/valkey-io/` and the packages that wrap them, and on a sweep that finds
+nothing. It runs in `just test`, so a client-go import three packages down is a red
+build and not 30 MB of cold start.
+
+```sh
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc \
+  -ldflags '-s -w' -o bootstrap ./cmd/sluis-lambda
+```
