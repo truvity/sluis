@@ -78,6 +78,7 @@ presets and the platform fit together, see
 |---|---|---|---|---|---|---|---|---|
 | `connect` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | Events sent to the audit installation's receiver (`audit.writer`). |
 | `log` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | Events written to the log only. |
+| `sqs` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Events published to an SQS queue the audit writer Lambda consumes (settings `queueURL`, `region`, `endpoint`, `timeout`; the catalogue travels with the writer's package). |
 
 ## Presets
 
@@ -91,5 +92,5 @@ The adapter each preset names per concern. 💤 on request marks an adapter that
 | signing | `generated` 💤 | `file` | `transit` 💤 | `kms` 💤 | `kms` 💤 | `kms` 💤 |
 | trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `watch` 💤 |
 | schedule | `ticker` | `ticker` | `ticker` | `eventbridge` 💤 | `eventbridge` 💤 | `ticker` |
-| audit | `log` | `log` | `log` | `sqs` 💤 | `sqs` 💤 | `sqs` 💤 |
+| audit | `log` | `log` | `log` | `sqs` | `sqs` | `sqs` |
 
