@@ -181,8 +181,8 @@ func seedLogins(t *testing.T, st *store.Stores) (issuer.Session, string) {
 // counts is a report's step by name.
 func step(t *testing.T, r *migrate.Report, domain, kind string) migrate.Step {
 	t.Helper()
-	for _, s := range r.Steps {
-		if s.Domain == domain && s.Kind == kind {
+	for i := range r.Steps {
+		if s := r.Steps[i]; s.Domain == domain && s.Kind == kind {
 			return s
 		}
 	}
