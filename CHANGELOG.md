@@ -1,4 +1,4 @@
-## Unreleased
+## v1.57.0
 
 - **Deprecated: the Lambda extension layer (`sluis-lambda-layer`).** The
   extension moved to `truvity/observability`
