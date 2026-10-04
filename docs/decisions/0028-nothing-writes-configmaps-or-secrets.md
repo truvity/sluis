@@ -1,6 +1,6 @@
 # 0028 — Nothing writes ConfigMaps or Secrets; written secrets are sealed
 
-**Status:** Accepted; extended by [0034](0034-exports-go-to-openbao-directly.md)
+**Status:** Accepted; extended by [0034](0034-exports-go-to-openbao-directly.md); amended by [0036](0036-configuration-is-immutable-per-instance.md)
 **Date:** 2026-10-02
 
 > **Superseded (2026-10-04).** Sealing is retired entirely: the Sealing

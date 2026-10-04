@@ -1,6 +1,6 @@
 # 0032 — One configuration file, one binary, one chart
 
-**Status:** Accepted; applies [0007](0007-breaking-changes-inside-1x.md), [0018](0018-do-not-configure-what-the-product-knows.md)
+**Status:** Accepted; applies [0007](0007-breaking-changes-inside-1x.md), [0018](0018-do-not-configure-what-the-product-knows.md); refined by [0036](0036-configuration-is-immutable-per-instance.md)
 **Date:** 2026-10-02
 
 ## Context
