@@ -21,7 +21,8 @@ func openExports(cfg Config, stores *store.Stores, directory *app.App, log *slog
 		return nil, nil
 	}
 	if stores.Ports.Export == nil {
-		return nil, errors.New("exports: nothing says where to copy to: set ports.export, or choose a secrets adapter (adapters.secrets, or a preset), whose export/ prefix is then used")
+		return nil, errors.New("exports: nothing says where to copy to: set ports.export, " +
+			"or choose a secrets adapter (adapters.secrets, or a preset), whose export/ prefix is then used")
 	}
 	sources := directory.ExportSources()
 	if err := sources.Check(specs); err != nil {

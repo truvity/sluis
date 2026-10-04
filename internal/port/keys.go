@@ -40,7 +40,7 @@ type conv int
 
 const (
 	// convID keeps the rest of the key as the id.
-	convID conv = iota
+	convID conv = iota // the zero value: the rest of the key is the id
 	// convDots makes every dot of the rest a slash (the rest holds no slash).
 	convDots
 	// convColons makes every colon of the rest a slash (the rest holds no slash).
@@ -164,6 +164,8 @@ func (r keyRule) id(key string) (string, error) {
 
 func (r keyRule) convert(rest string) (string, bool) {
 	switch r.conv {
+	case convID:
+		return rest, true
 	case convDots:
 		return strings.ReplaceAll(rest, ".", "/"), !strings.Contains(rest, "/")
 	case convColons:
