@@ -2,6 +2,9 @@ package issuer
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -52,9 +55,35 @@ type Resolver struct {
 	dir    Directory
 	window time.Duration
 
+	// state is where last-known answers live when more than one instance
+	// serves (a Lambda fleet, a rollout that replaces replicas): a fresh
+	// instance then finds what the one before it learned. Nil means the
+	// answers live in seen, in this process only.
+	state State
+
 	mu   sync.Mutex
 	seen map[string]lastKnown
 	now  func() time.Time
+}
+
+// heldKey is where one identity's last-known answer is kept in the State.
+func heldKey(identity string) string { return "issuer:held:" + identity }
+
+// heldRecord is what is written down: the groups and when they were
+// answered, and nothing else. They are what the issuer already puts in the
+// tokens it mints; no token and no name is kept.
+type heldRecord struct {
+	Groups []string  `json:"groups"`
+	At     time.Time `json:"at"`
+}
+
+// UseState keeps last-known answers in a State shared across instances,
+// each with a lifetime of the hold window, in place of this process's
+// memory. A nil state keeps the memory.
+func (r *Resolver) UseState(state State) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.state = state
 }
 
 // NewResolver returns a resolver over dir, holding last-known groups for
@@ -102,16 +131,14 @@ func (r *Resolver) Resolve(ctx context.Context, email string) (Resolution, error
 	email = strings.ToLower(strings.TrimSpace(email))
 	standing, err := r.dir.ResolveUser(ctx, email)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := r.now()
+	now := r.clock()
 
 	if err == nil && standing.Authoritative {
 		if !standing.Found || standing.Suspended {
-			delete(r.seen, email)
+			r.forget(ctx, email)
 			return Resolution{}, &Refused{Reason: "the directory says this account is not live"}
 		}
-		r.seen[email] = lastKnown{groups: standing.Groups, at: now}
+		r.remember(ctx, email, lastKnown{groups: standing.Groups, at: now})
 
 		return Resolution{
 			Groups:     standing.Groups,
@@ -123,7 +150,7 @@ func (r *Resolver) Resolve(ctx context.Context, email string) (Resolution, error
 	// Either the hub could not be reached, or it answered without being
 	// able to vouch for the answer. Both are the same situation from here:
 	// act on what was last known, or on nothing.
-	known, ok := r.seen[email]
+	known, ok := r.recall(ctx, email)
 	if !ok || now.Sub(known.at) > r.window {
 		if err != nil {
 			return Resolution{}, err
@@ -133,13 +160,84 @@ func (r *Resolver) Resolve(ctx context.Context, email string) (Resolution, error
 	return Resolution{Groups: known.groups, Held: true}, nil
 }
 
+func (r *Resolver) clock() time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.now()
+}
+
+// remember records an authoritative answer: in the shared State when there
+// is one, and in memory when there is none or the State refused the write
+// (a store that is down must not turn a good answer into no answer).
+func (r *Resolver) remember(ctx context.Context, email string, known lastKnown) {
+	r.mu.Lock()
+	state := r.state
+	r.mu.Unlock()
+	if state != nil {
+		raw, err := json.Marshal(heldRecord{Groups: known.groups, At: known.at})
+		if err == nil {
+			err = state.Set(ctx, heldKey(email), raw, r.window)
+		}
+		if err == nil {
+			return
+		}
+		slog.WarnContext(ctx, "the issuer could not store the last-known groups; keeping them in memory",
+			"error", err)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seen[email] = known
+}
+
+// recall is what is remembered about an identity. With a State it is the
+// State's word alone, so that a removal made by another instance is not
+// undone by a stale copy here; memory answers when there is no State or it
+// cannot be read.
+func (r *Resolver) recall(ctx context.Context, email string) (lastKnown, bool) {
+	r.mu.Lock()
+	state := r.state
+	r.mu.Unlock()
+	if state != nil {
+		rec, err := getJSON[heldRecord](ctx, state, heldKey(email))
+		if err == nil {
+			if rec == nil {
+				return lastKnown{}, false
+			}
+			return lastKnown{groups: rec.Groups, at: rec.At}, true
+		}
+		slog.WarnContext(ctx, "the issuer could not read the last-known groups; using memory", "error", err)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	known, ok := r.seen[email]
+	return known, ok
+}
+
+// forget drops an answer from both places. A failure to delete from the
+// State is logged and not returned from Resolve, which is refusing anyway;
+// the record still ends with its lifetime.
+func (r *Resolver) forget(ctx context.Context, email string) {
+	if err := r.Forget(ctx, email); err != nil {
+		slog.WarnContext(ctx, "the issuer could not delete the last-known groups", "error", err)
+	}
+}
+
 // Forget drops what is remembered about an address, so that revoking
 // someone also stops the hold window from keeping them alive through an
 // unreachable hub.
-func (r *Resolver) Forget(email string) {
+func (r *Resolver) Forget(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.seen, strings.ToLower(strings.TrimSpace(email)))
+	state := r.state
+	delete(r.seen, email)
+	r.mu.Unlock()
+	if state == nil {
+		return nil
+	}
+	if err := state.Delete(ctx, heldKey(email)); err != nil {
+		return fmt.Errorf("issuer: forget the last-known groups: %w", err)
+	}
+	return nil
 }
 
 // Input builds the policy input for a person, given what the hub said.

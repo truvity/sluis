@@ -114,6 +114,7 @@ var keyRules = []keyRule{
 	{prefix: "issuer:session-rotated:", kind: "issuer-session-rotated"},
 	{prefix: "issuer:keyring:entry:", kind: "keyring", conv: convColons},
 	{prefix: "issuer:keyring:retired:", kind: "keyring-retired", conv: convColons},
+	{prefix: "issuer:held:", kind: "issuer-held"},
 	{prefix: "issuer:kms:", kind: "issuer-guard"},
 }
 
