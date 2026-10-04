@@ -2,13 +2,17 @@ package issuer_test
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +29,7 @@ import (
 
 // fakeKMS signs with a local P-384 key and answers in DER, as KMS does.
 type fakeKMS struct {
+	rsaKey   *rsa.PrivateKey // set: an RSA key, spec RSA_3072 unless changed
 	key      *ecdsa.PrivateKey
 	arn      string
 	spec     types.KeySpec
@@ -45,9 +50,29 @@ func newFakeKMS(t *testing.T) *fakeKMS {
 		spec: types.KeySpecEccNistP384, usage: types.KeyUsageTypeSignVerify}
 }
 
+func newFakeRSAKMS(t *testing.T) *fakeKMS {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 3072)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &fakeKMS{rsaKey: key, arn: "arn:aws:kms:eu-west-1:111122223333:key/rsa",
+		spec: types.KeySpecRsa3072, usage: types.KeyUsageTypeSignVerify}
+}
+
 func (f *fakeKMS) GetPublicKey(_ context.Context, _ *kms.GetPublicKeyInput, _ ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
 	if f.pubErr != nil {
 		return nil, f.pubErr
+	}
+	if f.rsaKey != nil {
+		der, err := x509.MarshalPKIXPublicKey(&f.rsaKey.PublicKey)
+		if err != nil {
+			return nil, err
+		}
+		return &kms.GetPublicKeyOutput{
+			KeyId: aws.String(f.arn), KeySpec: f.spec, KeyUsage: f.usage, PublicKey: der,
+			SigningAlgorithms: []types.SigningAlgorithmSpec{types.SigningAlgorithmSpecRsassaPkcs1V15Sha256},
+		}, nil
 	}
 	der, err := x509.MarshalPKIXPublicKey(&f.key.PublicKey)
 	if err != nil {
@@ -64,6 +89,13 @@ func (f *fakeKMS) Sign(_ context.Context, in *kms.SignInput, _ ...func(*kms.Opti
 	f.lastSign = in
 	if f.signErr != nil {
 		return nil, f.signErr
+	}
+	if f.rsaKey != nil {
+		if in.SigningAlgorithm != types.SigningAlgorithmSpecRsassaPkcs1V15Sha256 || len(in.Message) != 32 {
+			return nil, errors.New("fake: not an RS256 digest request")
+		}
+		sig, err := rsa.SignPKCS1v15(rand.Reader, f.rsaKey, crypto.SHA256, in.Message)
+		return &kms.SignOutput{Signature: sig}, err
 	}
 	der, err := ecdsa.SignASN1(rand.Reader, f.key, in.Message)
 	if err != nil {
@@ -356,4 +388,150 @@ func TestAStateErrorTreatsAnEarlierKeyAsRetired(t *testing.T) {
 	_ = ring.ObserveKnown(ctx, a)
 	_ = ring.Observe(ctx, b)
 	assertPublished(t, ring, b.ID())
+}
+
+func TestAnRSAKMSKeySignsRS256(t *testing.T) {
+	t.Parallel()
+	fake := newFakeRSAKMS(t)
+	key, err := issuer.KMSSigningKeyFor(context.Background(), fake, "alias/rs", kmsSeed, jose.RS256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key.SignatureAlgorithm() != jose.RS256 {
+		t.Fatalf("alg %s", key.SignatureAlgorithm())
+	}
+	signer, err := op.SignerFromKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := signer.Sign([]byte(`{"sub":"x"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compact, _ := signed.CompactSerialize()
+	parsed, err := jose.ParseSigned(compact, []jose.SignatureAlgorithm{jose.RS256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parsed.Verify(&fake.rsaKey.PublicKey); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if fake.lastSign.MessageType != types.MessageTypeDigest || len(fake.lastSign.Message) != 32 {
+		t.Fatalf("KMS was asked %+v", fake.lastSign)
+	}
+	// kid is the RFC 7638 thumbprint of the RSA key.
+	jwk := jose.JSONWebKey{Key: &fake.rsaKey.PublicKey}
+	tp, _ := jwk.Thumbprint(crypto.SHA256)
+	if key.ID() != base64.RawURLEncoding.EncodeToString(tp) {
+		t.Fatalf("kid %s is not the thumbprint", key.ID())
+	}
+}
+
+func TestAKMSKeyOfTheWrongAlgorithmShapeIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	// An EC key where RS256 is asked for, and an RSA key where ES384 is.
+	if _, err := issuer.KMSSigningKeyFor(ctx, newFakeKMS(t), "k", kmsSeed, jose.RS256); err == nil {
+		t.Error("an EC key was accepted for RS256")
+	}
+	if _, err := issuer.KMSSigningKeyFor(ctx, newFakeRSAKMS(t), "k", kmsSeed, jose.ES384); err == nil {
+		t.Error("an RSA key was accepted for ES384")
+	}
+	bad := newFakeRSAKMS(t)
+	bad.spec = types.KeySpecRsa2048 // reports 2048 while the key is 3072
+	if _, err := issuer.KMSSigningKeyFor(ctx, bad, "k", kmsSeed, jose.RS256); err == nil {
+		t.Error("a spec that disagrees with the key was accepted")
+	}
+	enc := newFakeRSAKMS(t)
+	enc.usage = types.KeyUsageTypeEncryptDecrypt
+	if _, err := issuer.KMSSigningKeyFor(ctx, enc, "k", kmsSeed, jose.RS256); err == nil {
+		t.Error("an ENCRYPT_DECRYPT key was accepted")
+	}
+}
+
+// A signature KMS returns that does not verify is never handed back (RSA).
+func TestAnRSASignatureThatDoesNotVerifyIsRefused(t *testing.T) {
+	t.Parallel()
+	fake := newFakeRSAKMS(t)
+	key, err := issuer.KMSSigningKeyFor(context.Background(), fake, "k", kmsSeed, jose.RS256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _ := rsa.GenerateKey(rand.Reader, 3072)
+	fake.rsaKey = other
+	signer, _ := op.SignerFromKey(key)
+	if _, err := signer.Sign([]byte("{}")); err == nil {
+		t.Fatal("an unverifiable signature became a token")
+	}
+}
+
+// Rotation is per ring: an RS256 list [A,B] rotates and A stays retired through
+// repeated polls, while the ES384 ring beside it, on the same state, keeps its
+// own key and schedule.
+func TestKMSRingsRotateIndependently(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	state := issuer.NewMemoryState()
+	clock := newSettableClock(time.Now())
+	cfg := issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: 10 * time.Minute}
+	es := issuer.NewKeyRing(jose.ES384, state, cfg, nil)
+	rs := issuer.NewKeyRing(jose.RS256, state, cfg, nil)
+	es.SetClock(clock.now)
+	rs.SetClock(clock.now)
+
+	esKey := mustKMSKey(t, newFakeKMS(t), jose.ES384)
+	a := mustKMSKey(t, newFakeRSAKMS(t), jose.RS256)
+	b := mustKMSKey(t, newFakeRSAKMS(t), jose.RS256)
+	_ = es.Observe(ctx, esKey)
+	_ = rs.Observe(ctx, a)
+	_ = rs.Observe(ctx, b) // appended: waits its delay
+	if rs.Active().ID() != a.ID() {
+		t.Fatal("the appended RS256 key signs before its activation delay")
+	}
+	clock.set(clock.now().Add(2 * time.Minute))
+	_ = rs.Observe(ctx, b)
+	if rs.Active().ID() != b.ID() {
+		t.Fatal("the appended RS256 key should sign after its delay")
+	}
+	for range 4 {
+		clock.set(clock.now().Add(time.Hour))
+		_ = rs.ObserveKnown(ctx, a)
+		_ = rs.Observe(ctx, b)
+		_ = es.Observe(ctx, esKey)
+	}
+	assertPublished(t, rs, b.ID())
+	assertPublished(t, es, esKey.ID())
+	if es.Active().ID() != esKey.ID() || rs.Active().ID() != b.ID() {
+		t.Fatal("a ring lost its signer")
+	}
+}
+
+func mustKMSKey(t *testing.T, api issuer.KMSAPI, alg jose.SignatureAlgorithm) *issuer.SigningKey {
+	t.Helper()
+	k, err := issuer.KMSSigningKeyFor(context.Background(), api, "k", kmsSeed, alg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+// A client pinned to signing_alg RS256 gets its token from the KMS RS256 ring,
+// while the default audience is signed by the KMS ES384 key.
+func TestAPinnedRS256ClientIsSignedByTheKMSRSAKey(t *testing.T) {
+	t.Parallel()
+	es := mustKMSKey(t, newFakeKMS(t), jose.ES384)
+	rs := mustKMSKey(t, newFakeRSAKMS(t), jose.RS256)
+	server := newMultiAlgServerWith(t, es, rs)
+
+	b := newBrowser(t, server)
+	b.signIn()
+	pinned := redeem(t, b, b.authorize("&resource="+url.QueryEscape("https://resource.example/rs256")))
+	header, _ := verifiedHeader(t, server, pinned["access_token"].(string))
+	if header["alg"] != string(jose.RS256) || header["kid"] != rs.ID() {
+		t.Fatalf("pinned access token header = %v, want RS256 by the KMS RSA key %s", header, rs.ID())
+	}
+	plain, _ := verifiedHeader(t, server, pinned["id_token"].(string))
+	if plain["alg"] != string(jose.ES384) || plain["kid"] != es.ID() {
+		t.Fatalf("default id token header = %v, want ES384 by the KMS EC key", plain)
+	}
 }

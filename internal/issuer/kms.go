@@ -2,8 +2,11 @@ package issuer
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/asn1"
@@ -58,11 +61,31 @@ const es384Size = 48
 // private bytes to derive from, so the deployment supplies one; it must be
 // the same in every replica.
 func KMSSigningKey(ctx context.Context, api KMSAPI, ref string, seed []byte) (*SigningKey, error) {
+	return KMSSigningKeyFor(ctx, api, ref, seed, jose.ES384)
+}
+
+// KMSSigningKeyFor is [KMSSigningKey] for the algorithm alg: ES384 over an
+// ECC_NIST_P384 key, or RS256 over an RSA_2048, RSA_3072 or RSA_4096 key
+// (RSASSA_PKCS1_V1_5_SHA_256 over a SHA-256 digest; the signature is raw
+// PKCS#1 v1.5, so there is nothing to convert). A key of another shape than
+// alg asks for is refused.
+func KMSSigningKeyFor(ctx context.Context, api KMSAPI, ref string, seed []byte, alg jose.SignatureAlgorithm) (*SigningKey, error) {
 	if api == nil || ref == "" {
 		return nil, errors.New("issuer: a KMS signing key needs a client and a key")
 	}
 	if len(seed) < 32 {
 		return nil, errors.New("issuer: the KMS signing key's state secret must be at least 32 bytes")
+	}
+	var wantSpecs []types.KeySpec
+	var wantAlg types.SigningAlgorithmSpec
+	switch alg {
+	case jose.ES384:
+		wantSpecs, wantAlg = []types.KeySpec{types.KeySpecEccNistP384}, types.SigningAlgorithmSpecEcdsaSha384
+	case jose.RS256:
+		wantSpecs = []types.KeySpec{types.KeySpecRsa2048, types.KeySpecRsa3072, types.KeySpecRsa4096}
+		wantAlg = types.SigningAlgorithmSpecRsassaPkcs1V15Sha256
+	default:
+		return nil, fmt.Errorf("issuer: a KMS key signs ES384 or RS256, not %s", alg)
 	}
 	ctx, cancel := context.WithTimeout(ctx, kmsSignTimeout)
 	defer cancel()
@@ -75,22 +98,34 @@ func KMSSigningKey(ctx context.Context, api KMSAPI, ref string, seed []byte) (*S
 		}
 		return nil, fmt.Errorf("issuer: kms:GetPublicKey on %q: %w", ref, err)
 	}
-	if out.KeySpec != types.KeySpecEccNistP384 {
-		return nil, fmt.Errorf("issuer: KMS key %q is %s; a signing key must be ECC_NIST_P384", ref, out.KeySpec)
+	if !slices.Contains(wantSpecs, out.KeySpec) {
+		return nil, fmt.Errorf("issuer: KMS key %q is %s; a %s signing key must be one of %v", ref, out.KeySpec, alg, wantSpecs)
 	}
 	if out.KeyUsage != types.KeyUsageTypeSignVerify {
 		return nil, fmt.Errorf("issuer: KMS key %q has usage %s; a signing key must be SIGN_VERIFY", ref, out.KeyUsage)
 	}
-	if !slices.Contains(out.SigningAlgorithms, types.SigningAlgorithmSpecEcdsaSha384) {
-		return nil, fmt.Errorf("issuer: KMS key %q does not offer ECDSA_SHA_384", ref)
+	if !slices.Contains(out.SigningAlgorithms, wantAlg) {
+		return nil, fmt.Errorf("issuer: KMS key %q does not offer %s", ref, wantAlg)
 	}
 	parsed, err := x509.ParsePKIXPublicKey(out.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("issuer: KMS key %q: read the public key: %w", ref, err)
 	}
-	pub, ok := parsed.(*ecdsa.PublicKey)
-	if !ok || pub.Curve != elliptic.P384() {
-		return nil, fmt.Errorf("issuer: KMS key %q is not a P-384 public key", ref)
+	var pub crypto.PublicKey
+	switch p := parsed.(type) {
+	case *ecdsa.PublicKey:
+		if alg != jose.ES384 || p.Curve != elliptic.P384() {
+			return nil, fmt.Errorf("issuer: KMS key %q is not a P-384 public key", ref)
+		}
+		pub = p
+	case *rsa.PublicKey:
+		bits := map[types.KeySpec]int{types.KeySpecRsa2048: 2048, types.KeySpecRsa3072: 3072, types.KeySpecRsa4096: 4096}[out.KeySpec]
+		if alg != jose.RS256 || p.N.BitLen() != bits {
+			return nil, fmt.Errorf("issuer: KMS key %q is not a %s RSA public key", ref, out.KeySpec)
+		}
+		pub = p
+	default:
+		return nil, fmt.Errorf("issuer: KMS key %q has a %T public key", ref, parsed)
 	}
 	id, err := thumbprint(pub)
 	if err != nil {
@@ -102,8 +137,8 @@ func KMSSigningKey(ctx context.Context, api KMSAPI, ref string, seed []byte) (*S
 	if keyID == "" {
 		return nil, fmt.Errorf("issuer: KMS returned no key id for %q", ref)
 	}
-	signer := &kmsSigner{api: api, keyID: keyID, kid: id, pub: pub, metrics: kmsMetricsOnce()}
-	return &SigningKey{id: id, key: signer, pub: pub, alg: jose.ES384, seed: append([]byte(nil), seed...)}, nil
+	signer := &kmsSigner{api: api, keyID: keyID, kid: id, pub: pub, alg: alg, metrics: kmsMetricsOnce()}
+	return &SigningKey{id: id, key: signer, pub: pub, alg: alg, seed: append([]byte(nil), seed...)}, nil
 }
 
 // kmsSigner is a [jose.OpaqueSigner] over kms:Sign.
@@ -111,42 +146,61 @@ type kmsSigner struct {
 	api     KMSAPI
 	keyID   string
 	kid     string
-	pub     *ecdsa.PublicKey
+	pub     crypto.PublicKey
+	alg     jose.SignatureAlgorithm
 	metrics kmsInstruments
 }
 
 // Public implements [jose.OpaqueSigner].
 func (s *kmsSigner) Public() *jose.JSONWebKey {
-	return &jose.JSONWebKey{Key: s.pub, KeyID: s.kid, Algorithm: string(jose.ES384), Use: "sig"}
+	return &jose.JSONWebKey{Key: s.pub, KeyID: s.kid, Algorithm: string(s.alg), Use: "sig"}
 }
 
 // Algs implements [jose.OpaqueSigner].
-func (s *kmsSigner) Algs() []jose.SignatureAlgorithm { return []jose.SignatureAlgorithm{jose.ES384} }
+func (s *kmsSigner) Algs() []jose.SignatureAlgorithm { return []jose.SignatureAlgorithm{s.alg} }
 
-// SignPayload implements [jose.OpaqueSigner]: the SHA-384 of the JWS signing
-// input goes to KMS as a DIGEST, and the DER signature that comes back is
-// converted to the raw r||s that JWS ES384 carries.
+// SignPayload implements [jose.OpaqueSigner]: the digest of the JWS signing
+// input goes to KMS (SHA-384 and ECDSA for ES384, whose DER signature is
+// converted to raw r||s; SHA-256 and PKCS#1 v1.5 for RS256), and the
+// signature is verified against the public half before it is returned.
 func (s *kmsSigner) SignPayload(payload []byte, alg jose.SignatureAlgorithm) ([]byte, error) {
-	if alg != jose.ES384 {
-		return nil, fmt.Errorf("issuer: a KMS P-384 key signs ES384, not %s", alg)
+	if alg != s.alg {
+		return nil, fmt.Errorf("issuer: this KMS key signs %s, not %s", s.alg, alg)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), kmsSignTimeout)
 	defer cancel()
-	digest := sha512.Sum384(payload)
+	var digest []byte
+	var spec types.SigningAlgorithmSpec
+	if s.alg == jose.RS256 {
+		sum := sha256.Sum256(payload)
+		digest, spec = sum[:], types.SigningAlgorithmSpecRsassaPkcs1V15Sha256
+	} else {
+		sum := sha512.Sum384(payload)
+		digest, spec = sum[:], types.SigningAlgorithmSpecEcdsaSha384
+	}
 	out, err := s.api.Sign(ctx, &kms.SignInput{
 		KeyId:            aws.String(s.keyID),
-		Message:          digest[:],
+		Message:          digest,
 		MessageType:      types.MessageTypeDigest,
-		SigningAlgorithm: types.SigningAlgorithmSpecEcdsaSha384,
+		SigningAlgorithm: spec,
 	})
 	if err != nil {
 		s.metrics.record(ctx, s.kid, kmsResult(err))
 		return nil, fmt.Errorf("issuer: kms:Sign with %s: %w", s.keyID, err)
 	}
-	raw, err := derToRaw(out.Signature, es384Size)
-	if err == nil && !ecdsa.Verify(s.pub, digest[:],
-		new(big.Int).SetBytes(raw[:es384Size]), new(big.Int).SetBytes(raw[es384Size:])) {
-		err = errors.New("the signature does not verify against the key's public half")
+	raw := out.Signature
+	switch pub := s.pub.(type) {
+	case *rsa.PublicKey:
+		err = rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest, raw)
+		if err != nil {
+			err = errors.New("the signature does not verify against the key's public half")
+		}
+	case *ecdsa.PublicKey:
+		raw, err = derToRaw(out.Signature, es384Size)
+		if err == nil && !ecdsa.Verify(pub, digest,
+			new(big.Int).SetBytes(raw[:es384Size]), new(big.Int).SetBytes(raw[es384Size:])) {
+			err = errors.New("the signature does not verify against the key's public half")
+		}
 	}
 	if err != nil {
 		s.metrics.record(ctx, s.kid, "error")
@@ -215,6 +269,8 @@ func (m kmsInstruments) record(ctx context.Context, kid, result string) {
 // ones are published until their overlap ends. Adding a key to the end of the
 // list is the rotation.
 type KMSKeyRefs struct {
+	// Alg is the algorithm of every key in Refs; empty is ES384.
+	Alg  jose.SignatureAlgorithm
 	API  KMSAPI
 	Refs []string
 	Seed []byte
@@ -225,11 +281,18 @@ type KMSKeyRefs struct {
 func (k KMSKeyRefs) Load(ctx context.Context) ([]*SigningKey, error) {
 	out := make([]*SigningKey, 0, len(k.Refs))
 	for _, ref := range k.Refs {
-		key, err := KMSSigningKey(ctx, k.API, strings.TrimSpace(ref), k.Seed)
+		key, err := KMSSigningKeyFor(ctx, k.API, strings.TrimSpace(ref), k.Seed, k.alg())
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, key)
 	}
 	return out, nil
+}
+
+func (k KMSKeyRefs) alg() jose.SignatureAlgorithm {
+	if k.Alg == "" {
+		return jose.ES384
+	}
+	return k.Alg
 }

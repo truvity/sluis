@@ -422,6 +422,7 @@ The issuer, the console and the directory hub, one process.
 | `oauthClient.*` | unset | the client registered once with the directory backend, for sign-in and admin consent. `idFile` and `secretFile` name files (mount the Secret with `secretMounts`), or `secretEnv` names the variable that holds the secret; `secretName`, `idKey` and `secretKey` name the Kubernetes Secret the console shows as declared. With none, nobody can sign in and this installation issues tokens to machines only, which is a real posture and is said at start |
 | `signingKey.file` | unset: a key generated for the process | the primary signing key, provisioned and never minted here. The chart requires `/var/run/access-issuer/signing-key/<signingKey.key>` |
 | `signingKey.kms.keys[]` | unset | sign with **AWS KMS** instead of a file: `ECC_NIST_P384` / `SIGN_VERIFY` keys as ids, ARNs or aliases (e.g. `alias/sluis-signing`), oldest first, **the last one signs**. Exclusive with `signingKey.file` (both is refused at load). The private key never leaves KMS: each token is a `kms:Sign` of the SHA-384 of the JWS signing input (`MessageType: DIGEST`, `ECDSA_SHA_384`), the DER signature is converted to raw `r\|\|s`, and the algorithm is ES384. The `kid` is the RFC 7638 thumbprint of the public key, the same as a file holding that key would have. A key of another spec or usage stops the start. **Rotate by appending** a key: it is published at once and signs only after `activationDelay`, the earlier one stays published for `overlap`, exactly as for files; the list is re-read every `pollInterval`, which also notices an alias moved to another key. Never insert a key before one already seen. `signingKey.additionalFiles` still works beside it for other algorithms |
+| `signingKey.kms.additional[]` | unset | every OTHER algorithm signed at once, `{alg: RS256, keys: [...]}`: `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` keys, oldest first, the last signing, for the relying parties that need RS256 (Kargo, EKS's OIDC provider; a client or resource pins it with `signing_alg: RS256`). Each token is `kms:Sign` with `RSASSA_PKCS1_V1_5_SHA_256` over a SHA-256 digest, verified against the public half before it is returned. The kid is the RFC 7638 thumbprint. Each algorithm is its own ring with the rotation rules above; an RS256 key here and one in `additionalFiles` clash and stop the start |
 | `signingKey.kms.region` | the SDK's own | the keys' region |
 | `signingKey.kms.stateSecretFile` | required with `kms` | base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
 | `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
@@ -898,7 +899,8 @@ key is never in a pod, a Secret or a backup. One key per estate, created as
 `ECC_NIST_P384`, usage `SIGN_VERIFY`, alias like `sluis-signing`.
 
 The role the service runs as (Pod Identity, IRSA) needs exactly this on each
-key listed in `signingKey.kms.keys`:
+key listed in `signingKey.kms.keys` AND in every `signingKey.kms.additional[].keys`
+(the ES384 key and the RS256 key):
 
 ```json
 {

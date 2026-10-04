@@ -1907,6 +1907,37 @@
               "additionalProperties": false,
               "description": "Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`.",
               "properties": {
+                "additional": {
+                  "description": "Every OTHER algorithm this installation signs with at once, each on its own rotation track, as `signingKey.additionalFiles` does for files. RS256 is the one that exists: for relying parties that need it (Kargo, EKS's OIDC provider).",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "One algorithm's keys.",
+                    "properties": {
+                      "alg": {
+                        "description": "The algorithm.",
+                        "enum": [
+                          "RS256"
+                        ]
+                      },
+                      "keys": {
+                        "description": "RSA_2048, RSA_3072 or RSA_4096 SIGN_VERIFY keys, oldest first, the last signing; same rotation rules as `keys`.",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "alg",
+                      "keys"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
                 "keys": {
                   "description": "ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each.",
                   "items": {

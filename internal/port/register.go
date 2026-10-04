@@ -12,6 +12,14 @@ type KMSSigning struct {
 	Keys            []string `json:"keys"`
 	Region          string   `json:"region,omitempty"`
 	StateSecretFile string   `json:"stateSecretFile"`
+	// Additional is the keys of every other algorithm (RS256).
+	Additional []KMSSigningAlg `json:"additional,omitempty"`
+}
+
+// KMSSigningAlg is one more algorithm's keys.
+type KMSSigningAlg struct {
+	Alg  string   `json:"alg"`
+	Keys []string `json:"keys"`
 }
 
 // The adapters of the concerns whose wiring is the process's own: the
@@ -31,7 +39,7 @@ func init() {
 	})
 	Register(Descriptor{
 		Name: "kms", Concern: ConcernSigning,
-		Summary:  "Token signing by AWS KMS ECC_NIST_P384 keys; the private key never leaves KMS (`signingKey.kms`).",
+		Summary:  "Token signing by AWS KMS keys (ES384 on ECC_NIST_P384, and RS256 on RSA); the private key never leaves KMS (`signingKey.kms`).",
 		Requires: Requires{AWS: true},
 		Runtimes: []Runtime{RuntimeKubernetes, RuntimeLambda},
 		Factory: func(_ context.Context, s Settings) (any, error) {
