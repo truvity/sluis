@@ -1120,6 +1120,12 @@
     "signingKey": {
       "additionalProperties": false,
       "description": "The issuer's signing keys: provisioned, never minted here.",
+      "not": {
+        "required": [
+          "file",
+          "kms"
+        ]
+      },
       "properties": {
         "activationDelay": {
           "$ref": "#/$defs/duration",
@@ -1136,9 +1142,40 @@
           "type": "array"
         },
         "file": {
-          "description": "The primary key. Unset generates one for this process, which a local run may do and nothing else should.",
+          "description": "The primary key. Unset generates one for this process, which a local run may do and nothing else should. Exclusive with `kms`.",
           "minLength": 1,
           "type": "string"
+        },
+        "kms": {
+          "additionalProperties": false,
+          "description": "Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`.",
+          "properties": {
+            "keys": {
+              "description": "ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "region": {
+              "description": "The keys' region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "stateSecretFile": {
+              "description": "A file of at least 32 secret bytes, the same in every replica, from which the sign-in state is derived: a KMS key has no private bytes to derive from.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "keys",
+            "stateSecretFile"
+          ],
+          "type": "object"
         },
         "overlap": {
           "$ref": "#/$defs/duration",

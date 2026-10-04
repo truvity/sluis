@@ -50,8 +50,12 @@ import (
 // published — that is [KeyRing], which watches for a new one to appear
 // and keeps the schedule every replica agrees on.
 type SigningKey struct {
-	id   string
-	key  crypto.Signer
+	id string
+	// key is what the library signs with: the private key itself for a
+	// file, a [jose.OpaqueSigner] for a key that never leaves a KMS.
+	key any
+	// pub is the public half, published in the JWKS.
+	pub  crypto.PublicKey
 	alg  jose.SignatureAlgorithm
 	seed []byte
 }
@@ -102,7 +106,7 @@ func newSigningKey(key crypto.Signer) (*SigningKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, err := thumbprint(key)
+	id, err := thumbprint(key.Public())
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +114,7 @@ func newSigningKey(key crypto.Signer) (*SigningKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SigningKey{id: id, key: key, alg: alg, seed: sd}, nil
+	return &SigningKey{id: id, key: key, pub: key.Public(), alg: alg, seed: sd}, nil
 }
 
 // signatureAlgorithm is what a key of this kind signs with. The curve
@@ -157,8 +161,8 @@ func seed(key crypto.Signer) ([]byte, error) {
 // RFC 7638 hashes only the key's required members -- kty, n and e for RSA,
 // kty, crv, x and y for EC -- so neither `alg` nor `use` enters it, and an
 // RSA key keeps the id it had before this function stopped naming RS256.
-func thumbprint(key crypto.Signer) (string, error) {
-	jwk := jose.JSONWebKey{Key: key.Public(), Use: "sig"}
+func thumbprint(pub crypto.PublicKey) (string, error) {
+	jwk := jose.JSONWebKey{Key: pub, Use: "sig"}
 	sum, err := jwk.Thumbprint(crypto.SHA256)
 	if err != nil {
 		return "", fmt.Errorf("issuer: derive the key id: %w", err)

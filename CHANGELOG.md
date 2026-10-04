@@ -92,6 +92,16 @@
   - `NewKubernetesIdentity` takes an optional `SigningKeyArn`, which only the
     serve role may sign with. EKS Pod Identity is otherwise as it was.
 
+- **Sign with AWS KMS.** `signingKey.kms` (`keys`, `region`, `stateSecretFile`) makes the
+  issuer sign ES384 tokens with `ECC_NIST_P384` KMS keys: the private key never leaves
+  KMS. Exclusive with `signingKey.file`, which stays the default. Keys are listed oldest
+  first and the last signs; the `kid` is the RFC 7638 thumbprint, rotation is appending a
+  key and rides the existing `pollInterval`, `activationDelay` and `overlap`. The role
+  needs `kms:Sign` and `kms:GetPublicKey`; signatures are counted by key in
+  `access_issuer.kms_signatures`. See
+  [Signing with AWS KMS](docs/reference/configuration.md#signing-with-aws-kms). The chart
+  does not render this yet.
+
 - **The GitHub and Slack controllers roll safely.** The chart fixed each controller at
   one replica with `strategy: Recreate`, so a release whose pods crashed at start
   (sluis 1.57.0, 2026-10-04) deleted the running controller first and left it down for
