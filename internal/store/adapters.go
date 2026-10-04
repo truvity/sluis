@@ -109,8 +109,8 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 }
 
 // apply carries the choices for the concerns this build consumes into the
-// Config. State and blobs are consumed here; the others are announced and
-// await the packages that wire them. A choice that is registered but that
+// Config. State, blobs and secrets are consumed here; the others are announced
+// and await the packages that wire them. A choice that is registered but that
 // nothing consumes yet is refused for state and blobs, where ignoring it would
 // run on another store than the one named, and logged for the rest.
 func (c Config) apply(t port.Table) (Config, error) {
@@ -159,7 +159,33 @@ func (c Config) apply(t port.Table) (Config, error) {
 	default:
 		return c, fmt.Errorf("adapters: blobs adapter %q is registered but this build does not serve with it yet", b.Adapter)
 	}
+	// Secrets: the legacy table names `legacy` (and `memory` beside the memory
+	// state) for a deployment that chose nothing, and that keeps today's
+	// behaviour of no Secrets port. Only a choice somebody made is built.
+	if sc := t[port.ConcernSecrets]; sc.Adapter != "" && sc.Adapter != "legacy" && sc.Source != port.SourceLegacy {
+		c.secrets = &sc
+	}
 	return c, nil
+}
+
+// secretsOf builds the Secrets port the plan chose, nil when none was chosen.
+func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
+	if c.secrets == nil {
+		return nil, nil
+	}
+	d, ok := port.Default.Lookup(port.ConcernSecrets, c.secrets.Adapter)
+	if !ok || d.Factory == nil {
+		return nil, fmt.Errorf("adapters: secrets adapter %q is registered but this build does not serve with it yet", c.secrets.Adapter)
+	}
+	built, err := d.Factory(ctx, c.secrets.Settings)
+	if err != nil {
+		return nil, fmt.Errorf("adapters.secrets: %w", err)
+	}
+	secrets, ok := built.(port.Secrets)
+	if !ok {
+		return nil, fmt.Errorf("adapters.secrets: %q built a %T, which is not a port.Secrets", c.secrets.Adapter, built)
+	}
+	return secrets, nil
 }
 
 // decodeStrict reads a settings object into v, refusing a key v lacks.

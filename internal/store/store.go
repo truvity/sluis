@@ -24,6 +24,7 @@ import (
 	"github.com/truvity/sluis/internal/port/observe"
 	"github.com/truvity/sluis/internal/port/openbao"
 	"github.com/truvity/sluis/internal/port/s3blob"
+	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
 	"github.com/truvity/sluis/internal/valkey"
 )
 
@@ -83,6 +84,9 @@ type Config struct {
 	DynamoDB dynamoport.Config
 	// Export is the Export port's adapter; nil is none.
 	Export *config.PortsExport
+
+	// secrets is the secrets adapter the plan chose, nil when nothing chose one.
+	secrets *port.Choice
 
 	// sel is what the file says about adapters beyond `ports.adapter`.
 	sel selection
@@ -179,6 +183,14 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 		return port.Set{}, fmt.Errorf("ports.export: %w", err)
 	}
 	set.Export = exp
+	secrets, err := c.secretsOf(ctx)
+	if err != nil {
+		return port.Set{}, err
+	}
+	if secrets != nil {
+		set.Secrets = secrets
+		log.InfoContext(ctx, "secrets are kept by the secrets adapter", "adapter", c.secrets.Adapter)
+	}
 	return set, nil
 }
 

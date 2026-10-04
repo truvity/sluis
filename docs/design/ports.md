@@ -114,7 +114,7 @@ resolved`, one attribute per concern) and exposed as the gauge
 | Concern | Implemented | On request |
 |---|---|---|
 | state | dynamodb, legacy (until the kernel cutover), memory, nats (being removed) | kubernetes, postgres, valkey |
-| secrets | memory (ssm: in progress) | openbao, kubernetes, store |
+| secrets | memory, ssm | openbao, kubernetes, store |
 | blobs | s3, memory, legacy | postgres, off |
 | signing | file (kms: in progress) | generated, transit |
 | trigger | memory, legacy, nats, dynamodb (invoke: later) | watch, http |
@@ -129,8 +129,69 @@ paths, each with a version: `Get(path) (value, version)`, `Put`, `PutIfVersion`
 means "only if absent"), `Delete` and `List(prefix)` (names, never values, by whole
 segments). A value is at most `MaxSecret` (8 KiB, an SSM advanced parameter's
 limit). Exports live under `export/` (`port.ExportPrefix`). The suite is
-`porttest.RunSecrets`; the `memory` adapter passes it, and an adapter for a real
-store runs it against the engine.
+`porttest.RunSecrets`; the `memory` and `ssm` adapters pass it, and an adapter for a
+real store runs it against the engine.
+
+The secrets concern is wired by `internal/store`: an adapter that configuration
+chose (a preset, the platform answers or `adapters.secrets`) is built from its
+settings and is `Set.Secrets`. With nothing chosen (the `ports` keys alone, which
+is every deployment before the presets) there is no Secrets port, as before.
+
+### The SSM adapter
+
+`internal/port/ssm` (`adapters.secrets.adapter: ssm`, or the `aws-hybrid`,
+`aws-serverless` and `aws-eks` presets) keeps each secret as a SecureString
+parameter in AWS SSM Parameter Store. It needs AWS and runs on kubernetes and
+lambda.
+
+**Settings:** `root` (default `/sluis`), `kmsKeyId` (a customer-managed key id, ARN
+or alias; unset is the AWS-managed `alias/aws/ssm`), `region`, `endpoint`
+(LocalStack).
+
+**Layout:** a port path `p` is the parameter `<root>/private/<p>`, except a path
+under `export/`, which is `<root>/export/<rest>`. A consumer's External Secrets
+Operator reads `<root>/export/*` and nothing else.
+
+**Values:** a text value is stored as it is, so an export reads as the secret itself;
+a value that is not text (control bytes, not UTF-8) or that begins with `sluis-b64:`
+is stored as that marker and its base64 (so a binary value is at most about 6 KiB).
+The tier is Intelligent-Tiering: standard (4 KiB, free) until a value needs more,
+then advanced (8 KiB, billed), never downgraded. `MaxSecret` is enforced first.
+
+**Versions** are SSM's parameter versions, a counter per write.
+
+**Compare-and-swap is not atomic.** SSM has no conditional write on a version.
+`PutIfVersion(v)` reads the version and then writes with Overwrite: a writer that
+lands in between is overwritten (last writer wins). Creation (an empty version,
+"only if absent") is atomic: `PutParameter` with Overwrite=false. The service's
+writers of one secret are serialised by the target lease, which is a State
+operation and atomic, so the window is not reachable in normal operation; a caller
+that needs a true compare-and-swap on secrets must not use this adapter. The
+conformance suite has no concurrent case, so no skip is needed; a test in the
+package pins the documented outcome.
+
+**IAM** the role of sluis needs, on the parameters of the root:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath",
+    "ssm:PutParameter", "ssm:DeleteParameter"
+  ],
+  "Resource": [
+    "arn:aws:ssm:<region>:<account>:parameter/sluis/private/*",
+    "arn:aws:ssm:<region>:<account>:parameter/sluis/export/*"
+  ]
+}
+```
+
+(`GetParametersByPath` on the hierarchy itself is authorised by the `/*` resource
+of each tree; a listing from the root asks for both `private` and `export`.) With
+`kmsKeyId` set, add `kms:Decrypt` and `kms:Encrypt` on that key; the AWS-managed
+key needs nothing beyond the parameter permissions. **Consumers' ESO must read ONLY
+`/sluis/export/*`** (`ssm:GetParameter` and `ssm:GetParametersByPath` there, and
+`kms:Decrypt` if a customer key is set), never `/sluis/private/*`.
 
 ## State
 
