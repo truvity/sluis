@@ -402,9 +402,7 @@ func TestWrappedRefusesAContextMismatch(t *testing.T) {
 		}
 	}
 	// (Different KMS: the blob is unknown there, which must refuse too.)
-	ws2, err := NewWrappedSigning(other.config(), other.kms, make([]byte, 32), func(context.Context, jose.SignatureAlgorithm, func(context.Context) error) (bool, error) {
-		return false, nil
-	}, nil)
+	ws2, err := NewWrappedSigning(other.config(), other.kms, make([]byte, 32), noLease, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
