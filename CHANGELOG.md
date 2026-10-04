@@ -1,6 +1,4 @@
-## v1.59.1
-
-Released automatically as a patch: the declared OAuth client is read off-cluster, so the issuer on Lambda can open the Google Workspace directory.
+## Unreleased
 
 ### Changed
 
@@ -33,6 +31,10 @@ Released automatically as a patch: the declared OAuth client is read off-cluster
   provider reads a property with `remoteRef.property`; the `exports` event on Lambda
   writes there. `ports.export: openbao` keeps working. The property names of each source
   are in the storage layout reference.
+
+## v1.59.1
+
+Released automatically as a patch: the declared OAuth client is read off-cluster, so the issuer on Lambda can open the Google Workspace directory.
 
 ### Fixed
 
