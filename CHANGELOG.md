@@ -23,6 +23,42 @@
   `PutIfVersion`, `Delete`, `List`; exports under `export/`) with a `memory` adapter and
   a `porttest.RunSecrets` conformance suite. See `docs/design/ports.md`.
 
+- **The Pulumi library deploys sluis on AWS Lambda.** Both estates (Truvity and
+  hive) move sluis to Lambda, and `deploy/pulumi` now expresses it
+  ([guide](docs/deployment/aws.md#lambda)):
+
+  - `NewLambda` creates three functions from one released zip (`sluis-http`,
+    `sluis-github`, `sluis-slack`; arm64, `provided.al2023`, handler `bootstrap`,
+    no VPC), told apart by `SLUIS_ROLE`. The library adds the estate's
+    configuration at `config/sluis.yaml` (`SLUIS_CONFIG_FILE`) and the catalogue
+    files at `config/<name>` to the zip, so a change to either changes the package
+    and redeploys.
+  - **One IAM role per function.** All three get DynamoDB, S3, SSM under
+    `/sluis/private/*` (read, write, delete), writes under `/sluis/export/*`,
+    `sqs:SendMessage` on the audit ingest queue and logging; only `sluis-http`
+    gets `kms:Sign`, `kms:GetPublicKey` and `lambda:InvokeFunction` on the
+    controllers. `ExportReadPolicyJSON` is the policy a consumer's External
+    Secrets Operator role attaches: read on `/sluis/export/*` and nothing else.
+  - An HTTP API (payload 2.0) behind a custom domain with mutual TLS and a
+    truststore the library uploads to a bucket of its own, with the default
+    `execute-api` endpoint disabled unless `API.KeepDefaultEndpoint` is set (for
+    the cutover's acceptance run).
+  - One EventBridge schedule per GitHub organisation and Slack workspace,
+    invoking the controller with `{"kind":"tick","target":"<id>"}` through a
+    scheduler role that may invoke only those two functions.
+  - A new token-signing KMS key (`ECC_NIST_P384`, `SIGN_VERIFY`, alias default
+    `alias/sluis-signing`), and an optional observability `otlp-lambda` layer.
+  - **Breaking: the Sealer's KMS key is removed.** `NewStorage` no longer creates
+    the key and its alias, and `StorageArgs.KeyAlias`, `KeyDescription`,
+    `DefaultKeyAlias`, `Storage.KeyArn`, `KeyID`, `KeyAlias`, `StorageGrant.KeyArn`
+    and `BindingContextKey` are gone; the roles no longer grant `kms:Encrypt` and
+    `kms:Decrypt` on it. A caller's next apply therefore schedules the key's
+    deletion (30-day window). The key and its alias are protected, so run
+    `pulumi state unprotect` on both URNs first or the apply refuses.
+    `PortsArgs.KeyID` is optional and an empty one renders no `sealer:` block.
+  - `NewKubernetesIdentity` takes an optional `SigningKeyArn`, which only the
+    serve role may sign with. EKS Pod Identity is otherwise as it was.
+
 - **The GitHub and Slack controllers roll safely.** The chart fixed each controller at
   one replica with `strategy: Recreate`, so a release whose pods crashed at start
   (sluis 1.57.0, 2026-10-04) deleted the running controller first and left it down for
