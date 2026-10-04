@@ -77,7 +77,7 @@ type lines struct {
 }
 
 func (l *lines) Write(p []byte) (int, error) { l.mu.Lock(); defer l.mu.Unlock(); return l.b.Write(p) }
-func (l *lines) String() string               { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
+func (l *lines) String() string              { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
 // On SQS there is no receiver: opening needs no token, registers nothing, and
 // says once that the catalogue travels with the writer.
