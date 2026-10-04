@@ -21,6 +21,7 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- include "sluis.controllerRollout" (dict "name" "controllerGithub" "v" .Values.controllerGithub) }}
 {{- $name := printf "%s-github-roster" (include "sluis.fullname" .) }}
 ---
 # The controller's own account. It holds two permissions: updating its one
@@ -97,11 +98,15 @@ metadata:
     {{- include "sluis.labels" . | nindent 4 }}
     app.kubernetes.io/component: controller-github
 spec:
-  # One: two controllers would make every change twice, and GitHub's answer
-  # to the second is an error that reads as a failure.
-  replicas: 1
+  # Rolled so that a new pod must be Ready before an old one goes: a
+  # start that fails (the 2026-10-04 rollout, where every new pod crashed
+  # at start) leaves the old pod running. More than one replica is safe only
+  # on a shared State (see sluis.controllerRollout), and `replicas` is
+  # refused above 1 without one.
+  replicas: {{ .Values.controllerGithub.replicas }}
+  minReadySeconds: {{ .Values.controllerGithub.minReadySeconds }}
   strategy:
-    type: Recreate
+    {{- include "sluis.controllerStrategy" .Values.controllerGithub | nindent 4 }}
   selector:
     matchLabels:
       {{- include "sluis.controllerGithubSelectorLabels" . | nindent 6 }}
@@ -141,6 +146,7 @@ spec:
             - controller
             - github
             - --config=/etc/sluis/controller-github.yaml
+          {{- include "sluis.controllerProbes" (dict "name" "controllerGithub" "cfg" $cfg) | nindent 10 }}
           {{- with include "sluis.otelEnv" (dict "root" . "service" "github-roster") }}
           env:
             {{- . | nindent 12 }}
