@@ -8,10 +8,12 @@ require (
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/otelconnect v0.10.0
 	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/aws/aws-lambda-go v1.55.1
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.70.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.1
+	github.com/aws/aws-sdk-go-v2/service/lambda v1.110.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.1
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.0
@@ -21,7 +23,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/truvity/audit/sdk v0.6.1
-	github.com/truvity/observability v0.47.0
 	github.com/truvity/policy v1.37.0
 	github.com/zitadel/oidc/v3 v3.49.6
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
@@ -94,6 +95,7 @@ require (
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect

@@ -52,6 +52,12 @@ func init() {
 		Runtimes: []Runtime{RuntimeKubernetes, RuntimeProcess},
 	})
 	Register(Descriptor{
+		Name: "eventbridge", Concern: ConcernSchedule,
+		Summary:  "One EventBridge Scheduler schedule per target invokes the controller function with {\"kind\":\"tick\",\"target\":\"<id>\"}.",
+		Requires: Requires{AWS: true},
+		Runtimes: []Runtime{RuntimeLambda},
+	})
+	Register(Descriptor{
 		Name: "connect", Concern: ConcernAudit,
 		Summary: "Events sent to the audit installation's receiver (`audit.writer`).",
 	})
