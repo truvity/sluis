@@ -399,6 +399,15 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret file the configuration names")
 		}
+		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+			// A function instance would generate a password nobody can read except
+			// from its own log, and print it there. Fail closed instead: no recovery,
+			// and no secret in any line.
+			log.ErrorContext(ctx, "recovery sign-in is enabled but no password is configured on this "+
+				"function (recovery.passwordFile or adminPasswordEnv): recovery is NOT available. "+
+				"Set the password, or set recovery.enabled: false to silence this")
+			return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
+		}
 		if password == "" {
 			generated, err := generatedPassword()
 			if err != nil {

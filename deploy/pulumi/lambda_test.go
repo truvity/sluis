@@ -1206,3 +1206,51 @@ func TestRecoveryEnabledIsWrittenIntoTheHTTPConfiguration(t *testing.T) {
 		}
 	}
 }
+
+// A leaked controller role must not read, replace or delete the operator's
+// config (the recovery password, the state secret, the OAuth client, the declared
+// clients); http reads config/* and writes only credentials/* and exports.
+func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *testing.T) {
+	rec, _ := mustLambda(t, estate{})
+	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
+	cfg := []string{ssmArn + "/sluis/private/config", ssmArn + "/sluis/private/config/*"}
+	creds := []string{ssmArn + "/sluis/private/credentials", ssmArn + "/sluis/private/credentials/*"}
+	actions := []string{"ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter"}
+	denied := func(role string) map[string][]string {
+		out := map[string][]string{}
+		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
+			if s["Effect"] != "Deny" {
+				continue
+			}
+			for _, a := range strs(s["Action"]) {
+				out[a] = append(out[a], strs(s["Resource"])...)
+			}
+		}
+		return out
+	}
+	for _, role := range []string{"github", "slack"} {
+		d := denied(role)
+		for _, a := range actions {
+			if !reflect.DeepEqual(d[a], cfg) {
+				t.Errorf("%s: %s is denied on %v, want %v", role, a, d[a], cfg)
+			}
+		}
+		g := rolePolicy(t, rec, role)
+		if !reflect.DeepEqual(g["ssm:PutParameter"][0], ssmArn+"/sluis/private") {
+			t.Errorf("%s keeps its credentials access: %v", role, g["ssm:PutParameter"])
+		}
+	}
+	h := rolePolicy(t, rec, "http")
+	if len(denied("http")) != 0 {
+		t.Errorf("http is denied something: %v", denied("http"))
+	}
+	if got := h["ssm:GetParameter"]; !reflect.DeepEqual(got, []string{ssmArn + "/sluis/private", ssmArn + "/sluis/private/*"}) {
+		t.Errorf("http reads %v, want all of /sluis/private (config/* included)", got)
+	}
+	want := append(append([]string{}, creds...), ssmArn+"/sluis/export", ssmArn+"/sluis/export/*")
+	for _, a := range []string{"ssm:PutParameter", "ssm:DeleteParameter"} {
+		if !reflect.DeepEqual(h[a], want) {
+			t.Errorf("http %s on %v, want %v", a, h[a], want)
+		}
+	}
+}

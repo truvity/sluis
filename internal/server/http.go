@@ -62,6 +62,7 @@ type ConsoleServer struct {
 	connectors map[string]Connector
 	hub        *hub.Hub
 	recovery   Recovery
+	cheap      cheapRefusals
 	signIn     bool
 	signOutURL string
 	forwarded  ForwardedIdentity
@@ -708,8 +709,19 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	refuse := func(reason string) {
 		s.console.record(r.Context(), audit.RecoverySignedIn(audit.Anonymous(), "console", how, audit.Denied(reason)))
 	}
+	// The refusals that cost nothing (turned off, throttled) are anybody's to
+	// send in a loop, so they are recorded once a window with a count, not once
+	// each. A real check, right or wrong, is always recorded.
+	refuseCheap := func(reason string) {
+		if n, ok := s.cheap.note(reason, time.Now()); ok {
+			if n > 1 {
+				reason = fmt.Sprintf("%s (%d attempts in the last %s)", reason, n, cheapWindow)
+			}
+			refuse(reason)
+		}
+	}
 	if !recoveryEnabled(s.recovery) {
-		refuse(reasonRecoveryOff)
+		refuseCheap(reasonRecoveryOff)
 		http.Error(w, "recovery sign-in is turned off on this deployment (recovery.enabled is false). "+
 			"Whoever can change its configuration turns it back on; the recovery credential is kept, "+
 			"so nothing needs rotating.", http.StatusForbidden)
@@ -727,7 +739,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrRecoveryThrottled):
 		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", "remote", r.RemoteAddr)
-		refuse(reasonRecoveryThrottled)
+		refuseCheap(reasonRecoveryThrottled)
 		http.Error(w, "too many attempts; wait a minute", http.StatusTooManyRequests)
 		return
 	case errors.Is(err, ErrRecoveryRefused):

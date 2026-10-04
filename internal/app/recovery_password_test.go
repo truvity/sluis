@@ -59,3 +59,20 @@ func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
 		t.Error("a missing password file was not refused")
 	}
 }
+
+// On a Lambda function there is nowhere to read a generated password but the
+// function's own log, so with no password configured recovery is not built and
+// nothing is printed.
+func TestOnLambdaAMissingPasswordFailsClosedWithoutPrintingOne(t *testing.T) {
+	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "sluis-http")
+	var logs strings.Builder
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+
+	recovery, err := openRecovery(context.Background(), Config{recoveryEnabled: true}, stores{}, log)
+	if err != nil || recovery != nil {
+		t.Fatalf("openRecovery = %v, %v, want no recovery and no error", recovery, err)
+	}
+	if !strings.Contains(logs.String(), "level=ERROR") || !strings.Contains(logs.String(), "NOT available") {
+		t.Errorf("no clear error was logged: %q", logs.String())
+	}
+}

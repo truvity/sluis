@@ -247,3 +247,31 @@ func (p *PasswordRecovery) Verify(_ context.Context, proof string) (string, erro
 	p.failures = 0
 	return "recovery", nil
 }
+
+// cheapWindow is how often a refusal that costs nothing is recorded.
+const cheapWindow = time.Minute
+
+// cheapRefusals counts the refusals that do no work, per reason, and says when
+// one is due a record: the first, then one per window carrying the count.
+type cheapRefusals struct {
+	mu      sync.Mutex
+	last    map[string]time.Time
+	pending map[string]int
+}
+
+// note counts an attempt and reports whether to record now, and how many
+// attempts the record stands for.
+func (c *cheapRefusals) note(reason string, now time.Time) (int, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.last == nil {
+		c.last, c.pending = map[string]time.Time{}, map[string]int{}
+	}
+	c.pending[reason]++
+	if at, seen := c.last[reason]; seen && now.Sub(at) < cheapWindow {
+		return 0, false
+	}
+	n := c.pending[reason]
+	c.last[reason], c.pending[reason] = now, 0
+	return n, true
+}
