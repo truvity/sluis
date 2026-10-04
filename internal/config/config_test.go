@@ -423,7 +423,7 @@ func TestThePortsBlobAndSealerAreChecked(t *testing.T) {
 // there is no writer, and the page must still be configurable.
 func TestTheQueryURLNeedsNoWriter(t *testing.T) {
 	for name, extra := range map[string]string{
-		"alone":             "audit: {queryURL: 'https://audit.example/sluis'}\n",
+		"alone": "audit: {queryURL: 'https://audit.example/sluis'}\n",
 		"with the sqs sink": "audit: {queryURL: 'https://audit.example/sluis'}\n" +
 			"adapters: {audit: {adapter: sqs, settings: {queueURL: 'https://sqs.example/1/q', region: eu-west-1}}}\n",
 		"with the log sink": "audit: {queryURL: 'http://q:1', audience: audit}\nadapters: {audit: {adapter: log}}\n",
