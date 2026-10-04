@@ -461,10 +461,6 @@ func TestThePortsNameTheBucketTheKeyTheTableAndTheRegion(t *testing.T) {
 				Adapter string
 				S3      map[string]any
 			}
-			Sealer struct {
-				Adapter string
-				KMS     map[string]any
-			}
 		}
 	}
 	if err := yaml.Unmarshal([]byte(y), &doc); err != nil {
@@ -472,8 +468,7 @@ func TestThePortsNameTheBucketTheKeyTheTableAndTheRegion(t *testing.T) {
 	}
 	p := doc.Ports
 	if p.Adapter != "dynamodb" || !reflect.DeepEqual(p.DynamoDB, map[string]any{"table": table, "region": "eu-west-1"}) ||
-		p.Blob.Adapter != "s3" || !reflect.DeepEqual(p.Blob.S3, map[string]any{"bucket": bucket, "region": "eu-west-1"}) ||
-		p.Sealer.Adapter != "kms" || !reflect.DeepEqual(p.Sealer.KMS, map[string]any{"keyId": "alias/kernel-sluis", "region": "eu-west-1"}) {
+		p.Blob.Adapter != "s3" || !reflect.DeepEqual(p.Blob.S3, map[string]any{"bucket": bucket, "region": "eu-west-1"}) {
 		t.Errorf("ports:\n%s", y)
 	}
 	if strings.Contains(y, "create") || strings.Contains(y, "arn:") {
@@ -492,7 +487,7 @@ func TestWithoutATableNoStateAdapterIsRendered(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, []string{"blob", "sealer"}) {
+	if !reflect.DeepEqual(keys, []string{"blob"}) {
 		t.Errorf("keys %v", keys)
 	}
 }

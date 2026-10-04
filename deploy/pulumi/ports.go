@@ -29,10 +29,8 @@ type PortsArgs struct {
 	// shares it. Optional.
 	BlobPrefix string
 
-	// KeyID is the Sealer's key as the configuration names it: an alias, a key
-	// id or a key ARN. Sealing is retired and the library no longer creates a
-	// key, so it is optional: empty renders no `sealer:` block. Set it only for
-	// an installation still on a sealer key of its own.
+	// KeyID is ignored: sealing is retired and `ports.sealer` is refused, so
+	// nothing renders it. The field stays until the library drops its sealer key.
 	KeyID string
 
 	// TableName is the State table (State's TableName). Required with the
@@ -48,7 +46,6 @@ type PortsArgs struct {
 //	  adapter: dynamodb
 //	  dynamodb: {table: ..., region: ...}
 //	  blob: {adapter: s3, s3: {bucket: ..., region: ...}}
-//	  sealer: {adapter: kms, kms: {keyId: ..., region: ...}}   # only with KeyID
 //
 // `create` is never rendered: the table is the infrastructure's, and the
 // adapter then binds to it and checks it with DescribeTable. Credentials are
@@ -87,9 +84,6 @@ func RenderPorts(p PortsArgs) (map[string]any, error) {
 	}
 	ports := map[string]any{
 		"blob": map[string]any{"adapter": "s3", "s3": s3},
-	}
-	if p.KeyID != "" {
-		ports["sealer"] = map[string]any{"adapter": "kms", "kms": withRegion(map[string]any{"keyId": p.KeyID})}
 	}
 	if adapter == "dynamodb" {
 		ports["adapter"] = "dynamodb"
