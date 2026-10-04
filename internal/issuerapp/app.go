@@ -613,7 +613,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		deps.UseSignedIn(signedIn(core))
 	}
 	if deps.UseWorkloads != nil {
-		// The SAME verifiers token exchange uses, and only the clusters:
+		// The SAME verifiers token exchange uses, and only the clusters and AWS accounts:
 		// a CI job has no business reading the console's API, and a
 		// second copy of the cluster rows would be a second place for one
 		// installation's trust to be configured.
@@ -1038,9 +1038,9 @@ func openState(ctx context.Context, st *store.Stores, log *slog.Logger) issuer.S
 // everything with "unverified" is indistinguishable from one that is
 // misconfigured.
 //
-// The clusters are also returned on their own: they are the one kind of
-// proof the console accepts as a bearer, from a workload in a federated
-// cluster calling its API.
+// The clusters and the AWS accounts are also returned on their own: they are the
+// two kinds of proof the console accepts as a bearer, from a workload in a
+// federated cluster or a Lambda function's role calling its API.
 func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clusters issuer.Verifiers, err error) {
 	var verifiers issuer.Verifiers
 
@@ -1080,6 +1080,9 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 	}
 	for _, account := range awsFederation.Verifiers(nil) {
 		verifiers = append(verifiers, account)
+		// And a role may present its token to the console directly, as a
+		// ServiceAccount does: a Lambda controller has no projected token.
+		clusters = append(clusters, account)
 	}
 	if len(awsFederation.Accounts) > 0 {
 		log.InfoContext(ctx, "AWS role tokens are verified against each account's own key set",

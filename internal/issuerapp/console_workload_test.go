@@ -1,6 +1,8 @@
 package issuerapp
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
@@ -147,5 +149,65 @@ func TestNoFederatedClusterMeansNoWorkloadDoor(t *testing.T) {
 	t.Parallel()
 	if read := workloadBearer(nil, slog.New(slog.NewTextHandler(io.Discard, nil))); read != nil {
 		t.Error("a reader was built with no cluster to verify against")
+	}
+}
+
+// A Lambda controller has no projected token: it presents its function role's
+// outbound web identity token, verified against the account's published key
+// set by the SAME AWS verifier token exchange uses. It becomes an AWS-role
+// principal, and the policy's `aws` matchers decide what it may do.
+func TestALambdaControllerReadsTheConsoleWithItsRolesWebIdentityToken(t *testing.T) {
+	t.Parallel()
+
+	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{
+			Key: key.Public(), KeyID: "aws", Algorithm: string(jose.ES384), Use: "sig",
+		}}})
+	}))
+	t.Cleanup(keys.Close)
+	const issuerURL = "https://abc.tokens.sts.global.api.aws"
+	mint := func(audience, subject string) string {
+		signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES384, Key: key},
+			(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "aws"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := jwt.Signed(signer).Claims(map[string]any{
+			"iss": issuerURL, "sub": subject, "aud": audience,
+			"exp": time.Now().Add(10 * time.Minute).Unix(), "iat": time.Now().Unix(),
+			"https://sts.amazonaws.com/": map[string]any{"aws_account": "111122223333"},
+		}).Serialize()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	read := workloadBearer(issuer.Verifiers{&verify.AWSAccount{
+		Account: "111122223333", Name: "prod", Issuer: issuerURL, JWKSURI: keys.URL,
+		Audience: "https://sluis.example/aws", Client: keys.Client(),
+	}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if read == nil {
+		t.Fatal("a federated AWS account produced no reader")
+	}
+	call := func(bearer string) (access.Principal, bool) {
+		request := httptest.NewRequest(http.MethodPost, "/directoryroster.v1.AccessService/ListHolders", nil)
+		request.Header.Set("Authorization", "Bearer "+bearer)
+		return read(request)
+	}
+
+	got, ok := call(mint("https://sluis.example/aws", "arn:aws:iam::111122223333:role/sluis-github"))
+	if !ok {
+		t.Fatal("the controller's role token was refused")
+	}
+	if got.Source != access.SourceWorkload || got.AWS == nil || got.AWS.Name != "sluis-github" ||
+		got.AWS.Account != "111122223333" || got.ServiceAccount != nil || got.Email != "" {
+		t.Errorf("principal = %+v (aws %+v)", got, got.AWS)
+	}
+	if _, ok := call(mint("vault", "arn:aws:iam::111122223333:role/sluis-github")); ok {
+		t.Error("a token minted for another audience was accepted")
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/portstore"
@@ -42,10 +43,13 @@ import (
 type Config struct {
 	release string
 	// stores says which adapter backs the storage ports.
-	stores         store.Config
-	policyDir      string
-	console        string
-	tokenFile      string
+	stores    store.Config
+	policyDir string
+	console   string
+	tokenFile string
+	// consoleAWS, when set, replaces the token file with the function role's
+	// AWS web identity token, for this audience.
+	consoleAWS     string
 	credentialsDir string
 	recordsDir     string
 	interval       time.Duration
@@ -86,6 +90,11 @@ func FromConfig(f *config.ControllerSlack) (Config, error) {
 		probes:         ":7070",
 		// The instance is the pod, which is its hostname in a cluster.
 		audit: audit.Config{Version: version.String()},
+	}
+	if f.Console != nil && f.Console.Auth != nil && f.Console.Auth.AWS != nil {
+		if c.consoleAWS = strings.TrimSpace(f.Console.Auth.AWS.Audience); c.consoleAWS == "" {
+			return Config{}, errors.New("console.auth.aws.audience is required")
+		}
 	}
 	if f.Probes != nil && f.Probes.Address != "" {
 		c.probes = f.Probes.Address
@@ -233,18 +242,19 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		members = portstore.NewUserCache(base)
 	}
 
-	// Every call to the console carries this pod's own projected token,
-	// read fresh each time: the kubelet rotates it under the pod.
-	bearer := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			token, err := os.ReadFile(cfg.tokenFile)
-			if err != nil {
-				return nil, fmt.Errorf("read this pod's ServiceAccount token: %w", err)
-			}
-			req.Header().Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
-			return next(ctx, req)
+	// Every call to the console carries the controller's proof: this pod's own
+	// projected token, read afresh each time (the kubelet rotates it under the
+	// pod), or on Lambda the function role's web identity token.
+	var proof consoleauth.Source = consoleauth.File(cfg.tokenFile)
+	if cfg.consoleAWS != "" {
+		aws, err := consoleauth.NewAWS(ctx, cfg.consoleAWS)
+		if err != nil {
+			stores.Close()
+			return nil, err
 		}
-	}))
+		proof = aws
+	}
+	bearer := consoleauth.Interceptor(proof)
 	// And one client span per call, with the traceparent carried to the
 	// console, so a tick's trace continues into the console's own spans.
 	console := append([]connect.ClientOption{bearer}, telemetry.ConnectClientOptions()...)

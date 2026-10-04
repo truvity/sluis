@@ -399,6 +399,13 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 		"policyDir":  str("The directory the policy is mounted at: the bindings are the policy's " + kind + " table."),
 		"consoleURL": url("The console's API, which answers who holds a group."),
 		"tokenFile":  strDefault("This pod's projected ServiceAccount token, presented to the console and read afresh on every call.", mountDefault),
+		"console": obj("How the controller proves itself to the console, when the pod's `tokenFile` is not the way.", m{
+			"auth": obj("The proof. Absent, `tokenFile`.", m{
+				"aws": obj("The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), cached until near its expiry. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.", m{
+					"audience": str("The audience requested from STS. It must equal the `audience` of the issuer's AWS federation file."),
+				}, "audience"),
+			}),
+		}),
 		"recordsDir": strDefault("The console's records, mounted.", recordsDefault),
 		"interval":   duration("How long between passes. Positive.", "15m"),
 		"log":        logLevel(),
