@@ -107,7 +107,7 @@ func readZip(raw []byte) (map[string]zipEntry, error) {
 			continue
 		}
 		name := path.Clean(f.Name)
-		if path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+		if path.IsAbs(name) || strings.Contains(f.Name, "..") || strings.Contains(name, "..") || strings.Contains(f.Name, "\\") {
 			return nil, fmt.Errorf("sluispulumi: Package holds %q, which is outside the package root", f.Name)
 		}
 		rc, err := f.Open()
@@ -165,6 +165,9 @@ func buildArchive(entries map[string]zipEntry, added map[string]string) (pulumi.
 			mode = 0o755
 		}
 		p := filepath.Join(dir, filepath.FromSlash(n))
+		if !strings.HasPrefix(p, dir+string(filepath.Separator)) {
+			return nil, fmt.Errorf("sluispulumi: Package holds %q, which is outside the package root", n)
+		}
 		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 			return nil, fmt.Errorf("sluispulumi: %w", err)
 		}
