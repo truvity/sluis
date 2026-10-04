@@ -1158,7 +1158,8 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		t.Errorf("output: %q", out["recoveryPasswordParameter"])
 	}
 	env := prop(rec.one(t, fnType, "kernel-http"), "environment").ObjectValue()["variables"].ObjectValue()
-	if got := env["SLUIS_SECRET_FILES"].StringValue(); !strings.Contains(got, `"parameter":"/sluis/private/config/recovery/password","path":"/tmp/sluis/recovery-password"`) {
+	wantFile := `"parameter":"/sluis/private/config/recovery/password","path":"/tmp/sluis/recovery-password"`
+	if got := env["SLUIS_SECRET_FILES"].StringValue(); !strings.Contains(got, wantFile) {
 		t.Errorf("http secret files: %s", got)
 	}
 	for _, role := range []string{"github", "slack"} {
@@ -1178,17 +1179,19 @@ func TestRecoveryEnabledIsWrittenIntoTheHTTPConfiguration(t *testing.T) {
 		rec, _ := mustLambda(t, e)
 		return packageFiles(t, rec.one(t, fnType, "kernel-http"))["config/sluis.yaml"]
 	}
-	if got := configOf(estate{config: "issuerURL: https://x\n"}); strings.Contains(got, "enabled") || !strings.Contains(got, "passwordFile: /tmp/sluis/recovery-password") {
+	got := configOf(estate{config: "issuerURL: https://x\n"})
+	if strings.Contains(got, "enabled") || !strings.Contains(got, "passwordFile: /tmp/sluis/recovery-password") {
 		t.Errorf("default: %q, want the file named and the hub's own default (on) left alone", got)
 	}
 	for want, e := range map[string]*bool{"enabled: false": &off, "enabled: true": &on} {
-		got := configOf(estate{config: "# the issuer\nissuerURL: https://x\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: e} }})
+		got = configOf(estate{config: "# the issuer\nissuerURL: https://x\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: e} }})
 		if !strings.Contains(got, want) || !strings.Contains(got, "# the issuer") || !strings.Contains(got, "issuerURL: https://x") {
 			t.Errorf("Recovery.Enabled %v: %q", *e, got)
 		}
 	}
 	// A key the operator already wrote is kept, and may not disagree.
-	if got := configOf(estate{config: "recovery:\n  enabled: false\n  audience: x\n"}); !strings.Contains(got, "enabled: false") || !strings.Contains(got, "audience: x") {
+	got = configOf(estate{config: "recovery:\n  enabled: false\n  audience: x\n"})
+	if !strings.Contains(got, "enabled: false") || !strings.Contains(got, "audience: x") {
 		t.Errorf("an operator's recovery.enabled was lost: %q", got)
 	}
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }})
