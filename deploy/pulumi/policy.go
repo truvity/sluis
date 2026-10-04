@@ -117,16 +117,16 @@ func sortedStrings(s []string) []string {
 	return out
 }
 
-// signingStatement is the use of the token-signing key: sign with it and read
-// its public half. Never Verify, Decrypt or a data-key call: the key is
+// signingStatement is the use of the token-signing keys: sign with them and read
+// their public halves. Never Verify, Decrypt or a data-key call: the key is
 // SIGN_VERIFY and what it signs is the issuer's tokens, which is a power only
 // the serve process has.
-func signingStatement(keyArn string) statement {
+func signingStatement(keyArns []string) statement {
 	return statement{
 		"Sid":      sidSigning,
 		"Effect":   "Allow",
 		"Action":   []string{kmsSign, kmsPublicKey},
-		"Resource": keyArn,
+		"Resource": keyArns,
 	}
 }
 
@@ -180,7 +180,7 @@ type functionPolicyIn struct {
 	bucketArn          string
 	tableArn, tableKey string
 	queueArn           string
-	signingKeyArn      string
+	signingKeyArns     []string
 	parameterKeyArn    string
 	logGroupArn        string
 	invokeFunctionArns []string
@@ -221,7 +221,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Resource": in.queueArn,
 	})
 	if in.role == RoleHTTP {
-		st = append(st, signingStatement(in.signingKeyArn), statement{
+		st = append(st, signingStatement(in.signingKeyArns), statement{
 			"Sid":      sidInvoke,
 			"Effect":   "Allow",
 			"Action":   lambdaInvokeFunction,

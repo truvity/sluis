@@ -35,6 +35,10 @@ const (
 // LambdaArgs.SigningKeyAlias is empty.
 const DefaultSigningKeyAlias = "alias/sluis-signing"
 
+// DefaultSigningKeyRS256Alias is the RSA signing key's alias when
+// LambdaArgs.SigningKeyRS256Alias is empty.
+const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
+
 // StateSecretParameterName is the SSM parameter of the issuer's state secret.
 const StateSecretParameterName = PrivateParameterPrefix + "/issuer/state-secret"
 
@@ -99,6 +103,12 @@ type LambdaArgs struct {
 	// SigningKeyAlias is the token-signing key's alias. Default
 	// DefaultSigningKeyAlias. It must start with "alias/".
 	SigningKeyAlias string
+	// SigningKeyRS256Alias is the alias of the second signing key, `RSA_3072`
+	// and `SIGN_VERIFY`, which both estates sign RS256 tokens with beside the
+	// ES384 key. Default DefaultSigningKeyRS256Alias. It must start with
+	// "alias/". DisableSigningKeyRS256 leaves the key out (default: created).
+	SigningKeyRS256Alias   string
+	DisableSigningKeyRS256 bool
 
 	// FunctionNamePrefix starts the functions' and roles' names:
 	// `<prefix>-http`, `<prefix>-github` and `<prefix>-slack`. Default "sluis".
@@ -188,6 +198,11 @@ type Lambda struct {
 	SigningKeyArn   pulumi.StringOutput
 	SigningKeyID    pulumi.StringOutput
 	SigningKeyAlias pulumi.StringOutput
+	// SigningKeyRS256Arn, SigningKeyRS256ID and SigningKeyRS256Alias are the RSA
+	// signing key; empty with DisableSigningKeyRS256.
+	SigningKeyRS256Arn   pulumi.StringOutput
+	SigningKeyRS256ID    pulumi.StringOutput
+	SigningKeyRS256Alias pulumi.StringOutput
 
 	// The functions and their roles.
 	HTTPFunctionArn, GitHubFunctionArn, SlackFunctionArn    pulumi.StringOutput
@@ -254,6 +269,15 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 	}
 	if out.SigningKeyAlias == "" {
 		out.SigningKeyAlias = DefaultSigningKeyAlias
+	}
+	if out.SigningKeyRS256Alias == "" {
+		out.SigningKeyRS256Alias = DefaultSigningKeyRS256Alias
+	}
+	if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
+		return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
+	}
+	if !out.DisableSigningKeyRS256 && out.SigningKeyRS256Alias == out.SigningKeyAlias {
+		return out, nil, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is the ES384 key's alias too")
 	}
 	if !strings.HasPrefix(out.SigningKeyAlias, "alias/") || len(out.SigningKeyAlias) == len("alias/") {
 		return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyAlias %q must start with \"alias/\"", out.SigningKeyAlias)
@@ -390,6 +414,29 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis signing alias: %w", err)
 	}
+	signingArns := []pulumi.StringInput{key.Arn}
+	rsEmpty := pulumi.String("").ToStringOutput()
+	rsArn, rsID, rsAlias := rsEmpty, rsEmpty, rsEmpty
+	if !a.DisableSigningKeyRS256 {
+		rsKey, err := kms.NewKey(ctx, name+"-signing-key-rs256", &kms.KeyArgs{
+			Description:           pulumi.String(name + " token signing: the issuer signs its RS256 tokens with it"),
+			KeyUsage:              pulumi.String("SIGN_VERIFY"),
+			CustomerMasterKeySpec: pulumi.String("RSA_3072"),
+			DeletionWindowInDays:  pulumi.Int(30),
+			Tags:                  tags,
+		}, child, pulumi.Protect(true))
+		if err != nil {
+			return nil, fmt.Errorf("sluis RS256 signing key: %w", err)
+		}
+		rsAl, err := kms.NewAlias(ctx, name+"-signing-alias-rs256", &kms.AliasArgs{
+			Name: pulumi.String(a.SigningKeyRS256Alias), TargetKeyId: rsKey.KeyId,
+		}, child)
+		if err != nil {
+			return nil, fmt.Errorf("sluis RS256 signing alias: %w", err)
+		}
+		signingArns = append(signingArns, rsKey.Arn)
+		rsArn, rsID, rsAlias = rsKey.Arn, rsKey.KeyId, rsAl.Name
+	}
 
 	// ---- the functions
 	fnName := func(role string) string { return a.FunctionNamePrefix + "-" + role }
@@ -408,7 +455,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		if err != nil {
 			return nil, fmt.Errorf("sluis %s log group: %w", s.role, err)
 		}
-		role, err := newFunctionRole(ctx, name, fnName(s.role), s.role, &a, key.Arn, logs.Arn, fnArn(RoleGitHub), fnArn(RoleSlack), tags, child)
+		role, err := newFunctionRole(ctx, name, fnName(s.role), s.role, &a, signingArns, logs.Arn, fnArn(RoleGitHub), fnArn(RoleSlack), tags, child)
 		if err != nil {
 			return nil, fmt.Errorf("sluis %s role: %w", s.role, err)
 		}
@@ -511,6 +558,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 
 	out.SigningKeyArn, out.SigningKeyID, out.SigningKeyAlias = key.Arn, key.KeyId, alias.Name
+	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
 	out.HTTPFunctionArn, out.HTTPFunctionName = fns[RoleHTTP].Arn, fns[RoleHTTP].Name
 	out.GitHubFunctionArn, out.GitHubFunctionName = fns[RoleGitHub].Arn, fns[RoleGitHub].Name
 	out.SlackFunctionArn, out.SlackFunctionName = fns[RoleSlack].Arn, fns[RoleSlack].Name
@@ -539,6 +587,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
+		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
 		"httpFunctionArn": out.HTTPFunctionArn, "githubFunctionArn": out.GitHubFunctionArn, "slackFunctionArn": out.SlackFunctionArn,
 		"httpRoleArn": out.HTTPRoleArn, "githubRoleArn": out.GitHubRoleArn, "slackRoleArn": out.SlackRoleArn,
 		"apiId": out.APIID, "apiUrl": out.APIURL,
@@ -550,6 +599,14 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, err
 	}
 	return out, nil
+}
+
+func stringsOf(v []any) []string {
+	out := make([]string, 0, len(v))
+	for _, e := range v {
+		out = append(out, e.(string))
+	}
+	return out
 }
 
 func lambdaTrust() string {
@@ -565,7 +622,7 @@ func lambdaTrust() string {
 // newFunctionRole is the role of one function and its inline policy, both named
 // after the function. The function's own ARN is computed from its name, which is
 // what keeps the http role's grant on the other two from being a cycle.
-func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaArgs, signingKeyArn, logGroupArn pulumi.StringInput,
+func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaArgs, signingKeyArns []pulumi.StringInput, logGroupArn pulumi.StringInput,
 	githubArn, slackArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	rargs := &iam.RoleArgs{Name: pulumi.String(fnName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
@@ -579,12 +636,15 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 	if a.State.KeyArn != nil {
 		stateKey = a.State.KeyArn
 	}
-	inputs := []any{a.Storage.BucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, signingKeyArn, logGroupArn}
+	inputs := []any{a.Storage.BucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn}
+	for _, k := range signingKeyArns {
+		inputs = append(inputs, k)
+	}
 	doc := pulumi.All(inputs...).ApplyT(func(v []any) (string, error) {
 		return functionPolicy(functionPolicyIn{
 			role: role, region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), signingKeyArn: v[4].(string), logGroupArn: v[5].(string),
+			queueArn: v[3].(string), logGroupArn: v[4].(string), signingKeyArns: stringsOf(v[5:]),
 			parameterKeyArn:    a.ParameterKeyArn,
 			invokeFunctionArns: []string{githubArn, slackArn},
 		})
