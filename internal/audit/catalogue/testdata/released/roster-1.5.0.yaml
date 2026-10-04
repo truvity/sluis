@@ -1,4 +1,4 @@
-# What sluis records: every action, what it carries, who it concerns,
+# What access-roster records: every action, what it carries, who it concerns,
 # which profiles keep it, and how it reads as a sentence.
 #
 # This is the contract with the audit trail (github.com/truvity/audit). Every
@@ -32,7 +32,7 @@ actor_kinds:
     description: A cluster workload, by its service account (system:serviceaccount:<namespace>:<name>).
   system:
     category: machine
-    description: sluis acting on its own, with nobody asking.
+    description: access-roster acting on its own, with nobody asking.
   anonymous:
     category: external
     description: A caller refused before it proved who it is; the request's address is in the record's context.
@@ -50,7 +50,7 @@ target_types:
     description: A person's GitHub account, by login.
     is_person: true
   github_app:
-    description: A GitHub App, by the id sluis catalogues it under, or its slug where it has none.
+    description: A GitHub App, by the id access-roster catalogues it under, or its slug where it has none.
   slack_workspace:
     description: A Slack workspace, by the key the policy names it under.
   slack_channel:

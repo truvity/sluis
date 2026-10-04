@@ -98,6 +98,9 @@ document saved as `internal/audit/catalogue/testdata/released/roster-<version>.y
 an audit installation refuses a different document under a version it already
 holds, which stops the service at start (v1.41.0 and v1.42.0 did that, fixed in
 v1.42.1), and `TestAReleasedCatalogueVersionIsNeverChanged` fails on it.
+Add the new fixture's line to `testdata/released/SHA256SUMS` too
+(`sha256sum roster-<version>.yaml`); `TestAReleasedFixtureIsNeverRewritten`
+fails on a released fixture whose bytes changed.
 `just audit-catalogue` also regenerates `frontend/src/auditSentences.ts`;
 commit it, or the recipe fails on the diff. Register the new data schema file
 beside `roster.yaml` and add it to the action's `data_schema`. Never put an address, a name or a secret in data: an
