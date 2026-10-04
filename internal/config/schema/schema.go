@@ -41,11 +41,6 @@ func obj(description string, props m, required ...string) m {
 }
 
 // exclusive refuses an object that names both a and b.
-func exclusive(o m, a, b string) m {
-	o["not"] = m{"required": []string{a, b}}
-	return o
-}
-
 // exclusiveOf is exclusive for any number of keys: no two of names are set together.
 func exclusiveOf(o m, names ...string) m {
 	var pairs []any
