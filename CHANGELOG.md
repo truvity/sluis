@@ -66,7 +66,9 @@
   dashboard names and OTEL `service.name` (they change with the dashboards, at
   B5). The full list is in the ADR.
 
-## v1.56.0
+## v1.56.1
+
+Released automatically as a patch by a workflow_dispatch of Auto Release; it carries a feature (the Pulumi library) that would normally be a minor.
 
 - **A Pulumi library for the AWS part of an installation:
   `github.com/truvity/sluis/deploy/pulumi`.** A Go module of its own (Pulumi is
@@ -80,6 +82,8 @@
   encryption-context key `sluis:binding` only, so it needs a service release
   whose Sealer sends that key. Tested with Pulumi's mocks (`just pulumi-test`).
   [docs/deployment/aws.md](docs/deployment/aws.md).
+
+## v1.56.0
 
 - **A longer absolute session for a read-only resource: `absolute_cap` and
   `read_only` on a policy resource.** The 24-hour absolute limit of
