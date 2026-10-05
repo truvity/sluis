@@ -1,0 +1,317 @@
+package sluispulumi
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime/debug"
+	"strconv"
+	"strings"
+
+	"go.yaml.in/yaml/v3"
+
+	"github.com/truvity/sluis/internal/config"
+)
+
+// The documents of the configuration layer, by the name each has in it.
+const (
+	docHTTP   = RoleHTTP
+	docGitHub = RoleGitHub
+	docSlack  = RoleSlack
+	docPolicy = "policy"
+)
+
+// The names of the configuration secrets this library writes, in layout v3.
+const (
+	stateSecretName      = "issuer/state-secret"
+	recoveryPasswordName = "recovery/password"
+)
+
+// renderDocuments renders the four documents the configuration layer holds and
+// holds each to sluis's own loader, the one the function runs at cold start: a
+// layer outlives the deploy that published it, so a document the binary would
+// refuse is refused here, before anything is created.
+//
+// Into the http document the library writes what is its own: the apiVersion,
+// `policy.file`, `secrets` (ssm, the installation's root), the recovery
+// password's and the state secret's names and `recovery.enabled`. Into the
+// controllers' it writes the apiVersion and `policy.file`. A value written in a
+// document that disagrees with the library's is refused, naming it.
+func renderDocuments(a *LambdaArgs) (map[string]string, error) {
+	root := SSMRoot(a.Instance)
+	out := map[string]string{}
+	for _, d := range []struct {
+		name, kind, body string
+		field            string
+	}{
+		{docHTTP, "serve", a.Config, "Config"},
+		{docGitHub, "controller-github", a.GitHubConfig, "GitHubConfig"},
+		{docSlack, "controller-slack", a.SlackConfig, "SlackConfig"},
+	} {
+		doc, err := yamlMap(d.body, d.field)
+		if err != nil {
+			return nil, err
+		}
+		if err = own(doc, d.field, "apiVersion", config.APIVersion(d.kind)); err != nil {
+			return nil, err
+		}
+		policy, err := child(doc, d.field, "policy")
+		if err != nil {
+			return nil, err
+		}
+		if err = own(policy, d.field+": policy", "file", DocumentPath(docPolicy)); err != nil {
+			return nil, err
+		}
+		if d.kind == "serve" {
+			if err = ownServe(doc, a, root); err != nil {
+				return nil, err
+			}
+		}
+		raw, err := yaml.Marshal(doc)
+		if err != nil {
+			return nil, err
+		}
+		out[d.name] = string(raw)
+	}
+	policy, err := renderPolicy(a)
+	if err != nil {
+		return nil, err
+	}
+	out[docPolicy] = policy
+	if err = validateDocuments(out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ownServe writes the http document's library-owned keys.
+func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
+	secrets, err := child(doc, "Config", "secrets")
+	if err != nil {
+		return err
+	}
+	if err = own(secrets, "Config: secrets", "source", "ssm"); err != nil {
+		return err
+	}
+	if err = own(secrets, "Config: secrets", "root", root); err != nil {
+		return err
+	}
+	if err = own(secrets, "Config: secrets", "region", a.Region); err != nil {
+		return err
+	}
+	recovery, err := child(doc, "Config", "recovery")
+	if err != nil {
+		return err
+	}
+	if err = own(recovery, "Config: recovery", "passwordSecret", recoveryPasswordName); err != nil {
+		return err
+	}
+	if a.Recovery != nil && a.Recovery.Enabled != nil {
+		if v, set := recovery["enabled"]; set && v != *a.Recovery.Enabled {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Config has recovery.enabled: %v and Recovery.Enabled is %v", v, *a.Recovery.Enabled)
+		}
+		recovery["enabled"] = *a.Recovery.Enabled
+	}
+	if signing, ok := doc["signingKey"].(map[string]any); ok {
+		for _, k := range []string{"kms", "kmsWrapped"} {
+			if b, ok := signing[k].(map[string]any); ok {
+				if err = own(b, "Config: signingKey."+k, "stateSecret", stateSecretName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// renderPolicy is the canonical policy document, from Policy (a document) or
+// PolicyPath (a file or a directory of layers, rendered by sluis's own
+// renderer).
+func renderPolicy(a *LambdaArgs) (string, error) {
+	var doc *config.PolicyDocument
+	switch {
+	case strings.TrimSpace(a.Policy) != "":
+		dir, err := os.MkdirTemp("", "sluis-policy-")
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		file := filepath.Join(dir, "policy.yaml")
+		if err = os.WriteFile(file, []byte(a.Policy), 0o600); err != nil {
+			return "", err
+		}
+		if doc, err = config.Load[config.PolicyDocument](file); err != nil {
+			return "", fmt.Errorf("sluispulumi: LambdaArgs.Policy: %w", err)
+		}
+	default:
+		var err error
+		if doc, err = config.Render(a.PolicyPath); err != nil {
+			return "", fmt.Errorf("sluispulumi: LambdaArgs.PolicyPath: %w", err)
+		}
+	}
+	raw, err := doc.Encode()
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// validateDocuments loads each rendered document as the function will.
+func validateDocuments(docs map[string]string) error {
+	dir, err := os.MkdirTemp("", "sluis-layer-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	path := func(name string) (string, error) {
+		p := filepath.Join(dir, name+".yaml")
+		return p, os.WriteFile(p, []byte(docs[name]), 0o600)
+	}
+	var errs []error
+	for name, load := range map[string]func(string) error{
+		docHTTP:   func(p string) error { _, err := config.Load[config.Serve](p); return err },
+		docGitHub: func(p string) error { _, err := config.Load[config.ControllerGitHub](p); return err },
+		docSlack:  func(p string) error { _, err := config.Load[config.ControllerSlack](p); return err },
+		docPolicy: func(p string) error { _, err := config.Load[config.PolicyDocument](p); return err },
+	} {
+		p, err := path(name)
+		if err != nil {
+			return err
+		}
+		if err = load(p); err != nil {
+			errs = append(errs, fmt.Errorf("sluispulumi: the %s document: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func yamlMap(body, field string) (map[string]any, error) {
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		return nil, fmt.Errorf("sluispulumi: LambdaArgs.%s is not YAML: %w", field, err)
+	}
+	if doc == nil {
+		doc = map[string]any{}
+	}
+	return doc, nil
+}
+
+func child(m map[string]any, where, key string) (map[string]any, error) {
+	v, set := m[key]
+	if !set || v == nil {
+		c := map[string]any{}
+		m[key] = c
+		return c, nil
+	}
+	c, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("sluispulumi: LambdaArgs.%s: %s is not a mapping", where, key)
+	}
+	return c, nil
+}
+
+// own sets a key the library owns, refusing a different value already there.
+func own(m map[string]any, where, key, value string) error {
+	if v, set := m[key]; set && v != value {
+		return fmt.Errorf("sluispulumi: LambdaArgs.%s: %s is %v, and the library writes %s: leave it out", where, key, v, value)
+	}
+	m[key] = value
+	return nil
+}
+
+// SSMRoot is an installation's SSM root in layout v3: `/sluis/<instance>`.
+func SSMRoot(instance string) string { return "/sluis/" + instance }
+
+var instancePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
+
+// MinPackageVersion is the oldest release this library deploys: the first that
+// reads its configuration from the layer (SLUIS_CONFIG) and its secrets from
+// SSM layout v3. An older package does not start on what this library renders.
+const MinPackageVersion = "1.62"
+
+// The release zip's name: sluis-lambda_<version>_linux_<arch>.zip.
+var packageName = regexp.MustCompile(`^sluis-lambda_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)
+
+// checkVersion refuses a package older than this library: older than
+// MinPackageVersion, and older than this library's own minor when the build
+// knows it (the library and the binary are released together, at one version).
+func checkVersion(pkg, explicit string) error {
+	major, minor, err := packageVersion(pkg, explicit)
+	if err != nil {
+		return err
+	}
+	floor := []string{MinPackageVersion}
+	if own := libraryMinor(); own != "" {
+		floor = append(floor, own)
+	}
+	for _, f := range floor {
+		fm, fn, _ := majorMinor(f)
+		if major < fm || (major == fm && minor < fn) {
+			return fmt.Errorf("sluispulumi: the package is sluis %d.%d, older than %s, which this library deploys at the least: "+
+				"deploy the release of the same version as this library", major, minor, f)
+		}
+	}
+	return nil
+}
+
+func packageVersion(pkg, explicit string) (int, int, error) {
+	if explicit != "" {
+		major, minor, err := majorMinor(strings.TrimPrefix(explicit, "v"))
+		if err != nil {
+			return 0, 0, fmt.Errorf("sluispulumi: LambdaArgs.PackageVersion %q is not a version", explicit)
+		}
+		return major, minor, nil
+	}
+	base := pkg
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	m := packageName.FindStringSubmatch(base)
+	if m == nil {
+		return 0, 0, fmt.Errorf("sluispulumi: the package %q is not named sluis-lambda_<version>_linux_<arch>.zip: "+
+			"set LambdaArgs.PackageVersion to the release it is", base)
+	}
+	major, _ := strconv.Atoi(m[1])
+	minor, _ := strconv.Atoi(m[2])
+	return major, minor, nil
+}
+
+func majorMinor(v string) (int, int, error) {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) < 2 {
+		return 0, 0, errors.New("not a version")
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, err
+	}
+	return major, minor, nil
+}
+
+// libraryMinor is this library's own released minor, "1.62", from the build's
+// module list; empty in a build of its own source or a pseudo-version.
+func libraryMinor() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	for _, m := range info.Deps {
+		if m.Path != "github.com/truvity/sluis/deploy/pulumi" {
+			continue
+		}
+		v := strings.TrimPrefix(m.Version, "v")
+		if strings.Contains(v, "-") {
+			return ""
+		}
+		if major, minor, err := majorMinor(v); err == nil {
+			return strconv.Itoa(major) + "." + strconv.Itoa(minor)
+		}
+	}
+	return ""
+}

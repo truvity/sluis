@@ -26,12 +26,12 @@ const (
 	truststore = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 )
 
-// zipFile writes a release zip: `bootstrap` at its root and a stale config.
+// zipFile writes a release zip: `bootstrap` at its root.
 func zipFile(t *testing.T, extra map[string]string) string {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	files := map[string]string{"bootstrap": "#!binary\n", "config/sluis.yaml": "stale: true\n", "config/github.yaml": "stale: true\n"}
+	files := map[string]string{"bootstrap": "#!binary\n"}
 	for k, v := range extra {
 		files[k] = v
 	}
@@ -52,19 +52,31 @@ func zipFile(t *testing.T, extra map[string]string) string {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(t.TempDir(), "sluis-lambda_1.0.0_linux_arm64.zip")
+	p := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p
 }
 
+// sha is a file's SHA-256, as the release's checksums give it.
+func sha(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+const minimalPolicy = "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n  all:access-roster:operator: {}\n"
+
 type estate struct {
 	pkg                 string
 	config              string
 	githubConfig        string
-	catalogues          map[string]string
-	cataloguePaths      []string
+	policy              string
 	orgs, workspaces    []string
 	rate                string
 	telemetry           bool
@@ -81,12 +93,19 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 		e.config = "issuerURL: https://access.example.test\n"
 	}
 	if e.githubConfig == "" {
-		e.githubConfig = "policyDir: /var/task/config\n"
+		e.githubConfig = "consoleURL: https://access.example.test/console\n"
+	}
+	if e.policy == "" {
+		e.policy = minimalPolicy
+	}
+	pkgSHA := ""
+	if !strings.Contains(e.pkg, "://") {
+		pkgSHA = sha(t, e.pkg)
 	}
 	a := &arp.LambdaArgs{
-		Region: region, AccountID: account,
-		Package: e.pkg, Config: e.config, GitHubConfig: e.githubConfig,
-		SlackConfig: "policyDir: /var/task/config\\n", Catalogues: e.catalogues, CataloguePaths: e.cataloguePaths,
+		Region: region, AccountID: account, Instance: "kernel",
+		Package: e.pkg, PackageSHA256: pkgSHA, Config: e.config, GitHubConfig: e.githubConfig,
+		SlackConfig: "consoleURL: https://access.example.test/console\n", Policy: e.policy,
 		Storage:       &arp.StorageGrant{BucketArn: pulumi.String(arnp + "s3:::" + bucket)},
 		State:         &arp.StateGrant{TableArn: pulumi.String(arnp + "dynamodb:" + region + ":" + account + ":table/" + table)},
 		AuditQueueArn: pulumi.String(arnp + "sqs:" + region + ":" + account + ":audit-ingest"),
@@ -137,6 +156,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("schedulerRoleArn", l.SchedulerRoleArn)
 		collect("stateSecretParameter", l.StateSecretParameter)
 		collect("recoveryPasswordParameter", l.RecoveryPasswordParameter)
+		collect("configLayerArn", l.ConfigLayerArn)
 		return nil
 	})
 }
@@ -160,9 +180,26 @@ func rolePolicy(t *testing.T, rec *recorder, role string) map[string][]string {
 	return grants(statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()))
 }
 
-// packageFiles is what a function's package holds, by path: the text of a string
-// asset and the content of a file asset.
-func packageFiles(t *testing.T, f declared) map[string]string {
+// packagePath is the file a function's code is: the release zip, as it is.
+func packagePath(t *testing.T, f declared) string {
+	t.Helper()
+	code := prop(f, "code")
+	if !code.IsArchive() || !code.ArchiveValue().IsPath() {
+		t.Fatalf("%s: code is not the zip itself: %v", f.Name, code)
+	}
+	return code.ArchiveValue().Path
+}
+
+const layerType = "aws:lambda/layerVersion:LayerVersion"
+
+// layerFiles is what the configuration layer holds, by path.
+func layerFiles(t *testing.T, rec *recorder) map[string]string {
+	t.Helper()
+	return archiveFiles(t, rec.one(t, layerType, "kernel-config"))
+}
+
+// archiveFiles is what an archive of assets holds, by path.
+func archiveFiles(t *testing.T, f declared) map[string]string {
 	t.Helper()
 	code := prop(f, "code")
 	if !code.IsArchive() {
@@ -204,7 +241,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	if n := len(rec.ofType(fnType)); n != 3 {
 		t.Fatalf("%d functions, want 3", n)
 	}
-	var pkgs []map[string]string
+	var pkgs []string
 	for _, r := range roles {
 		f := rec.one(t, fnType, "kernel-"+r)
 		if prop(f, "name").StringValue() != "sluis-"+r || prop(f, "runtime").StringValue() != "provided.al2023" ||
@@ -218,14 +255,30 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("%s is in a VPC", r)
 		}
 		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
-		file := map[string]string{"http": "sluis", "github": "github", "slack": "slack"}[r]
-		if env["SLUIS_ROLE"].StringValue() != r || env["SLUIS_CONFIG_FILE"].StringValue() != "/var/task/config/"+file+".yaml" {
+		if env["SLUIS_ROLE"].StringValue() != r || env["SLUIS_CONFIG"].StringValue() != "/opt/sluis/"+r+".yaml" {
 			t.Errorf("%s env: %v", r, env)
 		}
-		pkgs = append(pkgs, packageFiles(t, f))
+		for k := range env {
+			if k != "SLUIS_ROLE" && k != "SLUIS_CONFIG" && !strings.HasPrefix(string(k), "OTEL_") {
+				t.Errorf("%s: %s in the environment", r, k)
+			}
+		}
+		// The configuration layer is mounted last.
+		if l := prop(f, "layers").ArrayValue(); len(l) == 0 || l[len(l)-1].StringValue() != out["configLayerArn"] {
+			t.Errorf("%s layers: %v, want the configuration layer last", r, l)
+		}
+		pkgs = append(pkgs, packagePath(t, f))
 	}
-	if !reflect.DeepEqual(pkgs[0], pkgs[1]) || !reflect.DeepEqual(pkgs[1], pkgs[2]) {
+	if pkgs[0] != pkgs[1] || pkgs[1] != pkgs[2] {
 		t.Error("the three functions do not share one package")
+	}
+	files := layerFiles(t, rec)
+	if got := keysOf(files); !reflect.DeepEqual(got, []string{"sluis/github.yaml", "sluis/http.yaml", "sluis/policy.yaml", "sluis/slack.yaml"}) {
+		t.Errorf("the layer holds %v", got)
+	}
+	layer := rec.one(t, layerType, "kernel-config")
+	if !prop(layer, "skipDestroy").BoolValue() || prop(layer, "layerName").StringValue() != "sluis-config" {
+		t.Errorf("layer: %v", layer.Inputs)
 	}
 
 	// One role per function: distinct, and only http signs and runs a pass.
@@ -253,12 +306,16 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("%s sqs: %v", r, got)
 		}
 		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-		wantPriv := []string{ssmArn + "/sluis/private", ssmArn + "/sluis/private/*"}
-		if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(got, wantPriv) {
+		wantRead := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*",
+			ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+		if r == "http" {
+			wantRead = append(wantRead, ssmArn+"/sluis/kernel/private/config", ssmArn+"/sluis/kernel/private/config/*")
+		}
+		if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
 			t.Errorf("%s reads %v", r, got)
 		}
 		for _, res := range g["ssm:PutParameter"] {
-			if !strings.Contains(res, "/sluis/private") && !strings.Contains(res, "/sluis/export") {
+			if !strings.Contains(res, "/sluis/kernel/private/credentials") && !strings.Contains(res, "/sluis/kernel/export") {
 				t.Errorf("%s may put %s", r, res)
 			}
 		}
@@ -352,11 +409,17 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("export policy grants %s", a)
 		}
 		for _, r := range res {
-			if !strings.Contains(r, ":parameter/sluis/export") {
+			if !strings.Contains(r, ":parameter/sluis/kernel/export") {
 				t.Errorf("export policy names %s", r)
 			}
 		}
 	}
+}
+
+func sortedCopy(s []string) []string {
+	out := slices.Clone(s)
+	sort.Strings(out)
+	return out
 }
 
 func schedules(t *testing.T, rec *recorder) map[string]string {
@@ -375,8 +438,7 @@ func schedules(t *testing.T, rec *recorder) map[string]string {
 func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	rec, out := mustLambda(t, estate{
 		orgs: []string{"truvity", "trust-form", "github:links"}, workspaces: []string{"T0TRUVITY"}, rate: "rate(2 minutes)", telemetry: true,
-		catalogues: map[string]string{"github-apps.yaml": "apps: []\n"},
-		mutate:     func(a *arp.LambdaArgs) { a.API.DomainName = "access.one.example.test" },
+		mutate: func(a *arp.LambdaArgs) { a.API.DomainName = "access.one.example.test" },
 	})
 	shape(t, rec, out, "access.one.example.test")
 
@@ -420,18 +482,12 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	// Telemetry: the layer and the settings on all three.
 	for _, r := range []string{"http", "github", "slack"} {
 		f := rec.one(t, fnType, "kernel-"+r)
-		if l := prop(f, "layers").ArrayValue(); len(l) != 1 || !strings.Contains(l[0].StringValue(), "otlp-lambda") {
+		if l := prop(f, "layers").ArrayValue(); len(l) != 2 || !strings.Contains(l[0].StringValue(), "otlp-lambda") {
 			t.Errorf("%s layers: %v", r, l)
 		}
 		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
 		if env["OTEL_EXPORTER_OTLP_ENDPOINT"].StringValue() != "https://otlp.example.test" || env["OTEL_SERVICE_NAME"].StringValue() != "sluis-"+r {
 			t.Errorf("%s env: %v", r, env)
-		}
-	}
-	pkg := packageFiles(t, rec.one(t, fnType, "kernel-http"))
-	for _, p := range []string{"bootstrap", "config/sluis.yaml", "config/github.yaml", "config/slack.yaml", "config/github-apps.yaml"} {
-		if _, ok := pkg[p]; !ok {
-			t.Errorf("the package lacks %s; has %v", p, keysOf(pkg))
 		}
 	}
 }
@@ -460,8 +516,8 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 	}
 	for _, r := range []string{"http", "github", "slack"} {
 		f := rec.one(t, fnType, "kernel-"+r)
-		if prop(f, "layers").IsArray() && len(prop(f, "layers").ArrayValue()) != 0 {
-			t.Errorf("%s has a layer without Telemetry: %v", r, f.Inputs)
+		if l := prop(f, "layers").ArrayValue(); len(l) != 1 {
+			t.Errorf("%s has a layer beside the configuration's without Telemetry: %v", r, l)
 		}
 		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
 		for k := range env {
@@ -510,57 +566,129 @@ func keysOf(m map[string]string) []string {
 	return out
 }
 
-func TestAChangedConfigOrCatalogueChangesThePackage(t *testing.T) {
+// The package is the release, byte for byte, whatever the documents say; a
+// changed document is a new layer and leaves the package as it was.
+func TestADocumentChangesTheLayerAndNeverThePackage(t *testing.T) {
 	pkg := zipFile(t, nil)
-	files := func(e estate) map[string]string {
+	build := func(e estate) (string, map[string]string) {
 		e.pkg = pkg
 		rec, _ := mustLambda(t, e)
-		return packageFiles(t, rec.one(t, fnType, "kernel-http"))
+		code := packagePath(t, rec.one(t, fnType, "kernel-http"))
+		return code, layerFiles(t, rec)
 	}
-	base := files(estate{config: "a: 1\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}})
-	if base["config/sluis.yaml"] != "a: 1\nrecovery:\n  passwordFile: /tmp/sluis/recovery-password\n" {
-		t.Fatalf("the stale config in the zip won over the estate's: %q", base["config/sluis.yaml"])
+	code, base := build(estate{})
+	if raw, _ := os.ReadFile(code); sha256.Sum256(raw) != sha256.Sum256(must(os.ReadFile(pkg))) {
+		t.Error("the function's code is not the release zip")
 	}
-	if base["bootstrap"] != "#!binary\n" {
-		t.Errorf("bootstrap: %q", base["bootstrap"])
+	_, same := build(estate{})
+	if !reflect.DeepEqual(base, same) {
+		t.Error("the same inputs gave another layer")
 	}
-	if same := files(estate{config: "a: 1\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}}); !reflect.DeepEqual(base, same) {
-		t.Error("the same inputs gave another package")
-	}
-	if changed := files(estate{config: "a: 2\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}}); reflect.DeepEqual(base, changed) {
-		t.Error("a changed config left the package as it was")
-	}
-	if changed := files(estate{config: "a: 1\n", githubConfig: "b: 2\n", catalogues: map[string]string{"c.yaml": "x: 1\n"}}); reflect.DeepEqual(base, changed) {
-		t.Error("a changed controller config left the package as it was")
-	}
-	if changed := files(estate{config: "a: 1\n", catalogues: map[string]string{"c.yaml": "x: 2\n"}}); reflect.DeepEqual(base, changed) {
-		t.Error("a changed catalogue left the package as it was")
+	for name, e := range map[string]estate{
+		"serve":      {config: "issuerURL: https://other.example.test\n"},
+		"controller": {githubConfig: "consoleURL: https://other.example.test/console\n"},
+		"policy":     {policy: minimalPolicy + "  all:access-roster:viewer: {}\n"},
+	} {
+		c, changed := build(e)
+		if reflect.DeepEqual(base, changed) {
+			t.Errorf("a changed %s document left the layer as it was", name)
+		}
+		if c != code {
+			t.Errorf("a changed %s document changed the package", name)
+		}
 	}
 }
 
-func TestACatalogueOnDiskIsInThePackageUnderItsBaseName(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "roster.yaml")
-	if err := os.WriteFile(p, []byte("k: v\n"), 0o600); err != nil {
-		t.Fatal(err)
+func must(raw []byte, err error) []byte {
+	if err != nil {
+		panic(err)
 	}
-	rec, _ := mustLambda(t, estate{cataloguePaths: []string{p}})
-	if got := packageFiles(t, rec.one(t, fnType, "kernel-slack"))["config/roster.yaml"]; got != "k: v\n" {
-		t.Errorf("catalogue: %q", got)
+	return raw
+}
+
+// What the library writes into the documents, and holds them to sluis's own
+// loader before anything is published.
+func TestTheDocumentsAreTheLibrarysAndHeldToTheBinarysLoader(t *testing.T) {
+	rec, _ := mustLambda(t, estate{config: "issuerURL: https://access.example.test\n" +
+		"signingKey: {kmsWrapped: {keyId: alias/sluis-signing-wrapped}}\n"})
+	files := layerFiles(t, rec)
+	for _, want := range []string{
+		"apiVersion: sluis.truvity.github.io/serve/v2", "file: /opt/sluis/policy.yaml",
+		"root: /sluis/kernel", "source: ssm", "region: " + region,
+		"passwordSecret: recovery/password", "stateSecret: issuer/state-secret",
+	} {
+		if !strings.Contains(files["sluis/http.yaml"], want) {
+			t.Errorf("the http document lacks %q:\n%s", want, files["sluis/http.yaml"])
+		}
 	}
-	empty := filepath.Join(t.TempDir(), "empty.yaml")
-	if err := os.WriteFile(empty, nil, 0o600); err != nil {
-		t.Fatal(err)
+	for _, c := range []string{"github", "slack"} {
+		if d := files["sluis/"+c+".yaml"]; !strings.Contains(d, "apiVersion: sluis.truvity.github.io/controller-"+c+"/v2") ||
+			!strings.Contains(d, "file: /opt/sluis/policy.yaml") {
+			t.Errorf("the %s document: %s", c, d)
+		}
+	}
+	if !strings.HasPrefix(files["sluis/policy.yaml"], "apiVersion: sluis.truvity.github.io/policy/v2\n") {
+		t.Errorf("the policy: %s", files["sluis/policy.yaml"])
 	}
 	for name, e := range map[string]estate{
-		"empty file":      {cataloguePaths: []string{empty}},
-		"missing file":    {cataloguePaths: []string{filepath.Join(t.TempDir(), "nope.yaml")}},
-		"conflict":        {cataloguePaths: []string{p}, catalogues: map[string]string{"roster.yaml": "other\n"}},
-		"a path":          {catalogues: map[string]string{"../x.yaml": "a: b"}},
-		"over the config": {catalogues: map[string]string{"sluis.yaml": "a: b"}},
+		"a v1 key":                     {config: "issuerURL: https://x.example\npolicyDir: /var/task/config\n"},
+		"an unknown key":               {config: "issuerURL: https://x.example\nissuerURl: x\n"},
+		"another secrets root":         {config: "issuerURL: https://x.example\nsecrets: {source: ssm, root: /sluis/other}\n"},
+		"another policy file":          {config: "issuerURL: https://x.example\npolicy: {file: /var/task/policy.yaml}\n"},
+		"another apiVersion":           {config: "apiVersion: sluis.truvity.github.io/serve/v1\nissuerURL: https://x.example\n"},
+		"a controller with no console": {githubConfig: "interval: 5m\n"},
+		"a policy the loader refuses":  {policy: minimalPolicy + "clients: {c: {kind: public, requires: [x:y:z]}}\n"},
+		"a policy with a misspelt key": {policy: minimalPolicy + "gruops: {}\n"},
+		"another state secret":         {config: "issuerURL: https://x.example\nsigningKey: {kms: {keys: [a], stateSecret: other}}\n"},
 	} {
 		if _, _, err := buildLambda(t, e); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// The policy is a document, or a file or directory of layers that sluis's own
+// renderer makes one of.
+func TestThePolicyComesFromADocumentOrARenderedDirectory(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"10-policy.yaml":   "version: 1\ngroups:\n  all:access-roster:operator: {}\n",
+		"20-clusters.yaml": "apiVersion: sluis.truvity.github.io/policy/v2\nexchange: {clusters: [{name: devel, issuer: 'https://k.example'}]}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Policy, a.PolicyPath = "", dir }})
+	if p := layerFiles(t, rec)["sluis/policy.yaml"]; !strings.Contains(p, "issuer: https://k.example") || !strings.Contains(p, "all:access-roster:operator") {
+		t.Errorf("the rendered policy: %s", p)
+	}
+	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.PolicyPath = dir }}); err == nil {
+		t.Error("both Policy and PolicyPath were accepted")
+	}
+	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Policy = "" }}); err == nil {
+		t.Error("no policy was accepted")
+	}
+}
+
+// A package older than the library cannot read the layer it publishes.
+func TestAPackageOlderThanTheLibraryIsRefused(t *testing.T) {
+	old := filepath.Join(t.TempDir(), "sluis-lambda_1.61.2_linux_arm64.zip")
+	if err := os.WriteFile(old, must(os.ReadFile(zipFile(t, nil))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := buildLambda(t, estate{pkg: old}); err == nil || !strings.Contains(err.Error(), "older than") {
+		t.Errorf("a 1.61 package: %v", err)
+	}
+	unnamed := filepath.Join(t.TempDir(), "x.zip")
+	if err := os.WriteFile(unnamed, must(os.ReadFile(zipFile(t, nil))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := buildLambda(t, estate{pkg: unnamed}); err == nil || !strings.Contains(err.Error(), "PackageVersion") {
+		t.Errorf("an unnamed package: %v", err)
+	}
+	if _, _, err := buildLambda(t, estate{pkg: unnamed, mutate: func(a *arp.LambdaArgs) { a.PackageVersion = "v1.62.3" }}); err != nil {
+		t.Errorf("an unnamed package with its version: %v", err)
 	}
 }
 
@@ -572,16 +700,13 @@ func TestThePackageCanBeFetchedFromAnHTTPSURLAndItsDigestIsChecked(t *testing.T)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(raw) }))
 	defer srv.Close()
 	// A loopback http URL stands in for the release's https URL.
-	rec, _ := mustLambda(t, estate{pkg: srv.URL + "/sluis-lambda_1.0.0_linux_arm64.zip"})
-	if packageFiles(t, rec.one(t, fnType, "kernel-http"))["bootstrap"] == "" {
-		t.Error("no bootstrap from the URL")
-	}
 	sum := sha256.Sum256(raw)
-	good := estate{pkg: srv.URL + "/x.zip", mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = hex.EncodeToString(sum[:]) }}
-	if _, _, err := buildLambda(t, good); err != nil {
-		t.Errorf("a right digest: %v", err)
+	url := srv.URL + "/sluis-lambda_1.62.0_linux_arm64.zip"
+	rec, _ := mustLambda(t, estate{pkg: url, mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = hex.EncodeToString(sum[:]) }})
+	if got := must(os.ReadFile(packagePath(t, rec.one(t, fnType, "kernel-http")))); !bytes.Equal(got, raw) {
+		t.Error("the fetched package is not the release, byte for byte")
 	}
-	bad := estate{pkg: srv.URL + "/x.zip", mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = strings.Repeat("0", 64) }}
+	bad := estate{pkg: url, mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = strings.Repeat("0", 64) }}
 	if _, _, err := buildLambda(t, bad); err == nil {
 		t.Error("a wrong digest was accepted")
 	}
@@ -596,7 +721,7 @@ func TestAPackageWithoutBootstrapIsRefused(t *testing.T) {
 	w, _ := zw.Create("other")
 	_, _ = w.Write([]byte("x"))
 	_ = zw.Close()
-	p := filepath.Join(t.TempDir(), "x.zip")
+	p := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -607,8 +732,15 @@ func TestAPackageWithoutBootstrapIsRefused(t *testing.T) {
 
 func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 	for name, mutate := range map[string]func(*arp.LambdaArgs){
-		"no region":         func(a *arp.LambdaArgs) { a.Region = "" },
-		"no package":        func(a *arp.LambdaArgs) { a.Package = "" },
+		"no region":      func(a *arp.LambdaArgs) { a.Region = "" },
+		"no instance":    func(a *arp.LambdaArgs) { a.Instance = "" },
+		"a bad instance": func(a *arp.LambdaArgs) { a.Instance = "Kernel/1" },
+		"no digest":      func(a *arp.LambdaArgs) { a.PackageSHA256 = "" },
+		"a wrong digest": func(a *arp.LambdaArgs) { a.PackageSHA256 = strings.Repeat("ab", 32) },
+		"no package":     func(a *arp.LambdaArgs) { a.Package = "" },
+		"the library's env": func(a *arp.LambdaArgs) {
+			a.Telemetry = &arp.TelemetryArgs{LayerArn: pulumi.String("x"), Env: map[string]string{"SLUIS_CONFIG": "/x"}}
+		},
 		"no config":         func(a *arp.LambdaArgs) { a.Config = " \n" },
 		"no github config":  func(a *arp.LambdaArgs) { a.GitHubConfig = "" },
 		"no slack config":   func(a *arp.LambdaArgs) { a.SlackConfig = "" },
@@ -693,7 +825,7 @@ func TestAPackageEntryOutsideTheRootIsRefused(t *testing.T) {
 			_, _ = w.Write([]byte("x"))
 		}
 		_ = zw.Close()
-		p := filepath.Join(t.TempDir(), "x.zip")
+		p := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
 		if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -712,18 +844,21 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 			t.Errorf("random bytes: %v: 32 bytes and no keepers, or an apply rotates it", r.Inputs)
 		}
 		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-state-secret")
-		if prop(p, "name").StringValue() != "/sluis/private/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
+		if prop(p, "name").StringValue() != "/sluis/kernel/private/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		if !prop(p, "value").IsSecret() {
 			t.Error("the secret's value is not marked secret")
+		}
+		if !prop(p, "overwrite").BoolValue() {
+			t.Error("the parameter would refuse the value `sluis migrate ssm-layout` copied there first")
 		}
 		if got := prop(p, "keyId"); got.HasValue() != (k != "") || (k != "" && got.StringValue() != key) {
 			t.Errorf("keyId %v with ParameterKeyArn %q", prop(p, "keyId"), k)
 		}
 	}
 	_, out := mustLambda(t, estate{})
-	if out["stateSecretParameter"] != "/sluis/private/config/issuer/state-secret" {
+	if out["stateSecretParameter"] != "/sluis/kernel/private/config/issuer/state-secret" {
 		t.Errorf("output: %q", out["stateSecretParameter"])
 	}
 }
@@ -827,46 +962,6 @@ func TestTheDirectoryRefreshScheduleIsOnByDefaultAndConfigurable(t *testing.T) {
 	}
 	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.DirectoryRefresh.Rate = "hourly" }}); err == nil {
 		t.Error("a bad rate was accepted")
-	}
-}
-
-func TestTheSecretFilesAreTheEnvironmentTheAppReads(t *testing.T) {
-	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
-		a.GitHub.SecretFiles = []arp.SecretFile{{Parameter: "/sluis/private/github/app-key", Path: "/tmp/sluis/github-app.pem"}}
-		a.GitHub.Env = map[string]string{"GITHUB_APP_KEY": "ssm:/sluis/private/github/app-key"}
-	}})
-	env := func(r string) map[resource.PropertyKey]resource.PropertyValue {
-		return prop(rec.one(t, fnType, "kernel-"+r), "environment").ObjectValue()["variables"].ObjectValue()
-	}
-	wantHTTP := `[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"},` +
-		`{"parameter":"/sluis/private/config/recovery/password","path":"/tmp/sluis/recovery-password"}]`
-	if got := env("http")["SLUIS_SECRET_FILES"].StringValue(); got != wantHTTP {
-		t.Errorf("http: %s", got)
-	}
-	if got := env("github")["SLUIS_SECRET_FILES"].StringValue(); got != `[{"parameter":"/sluis/private/github/app-key","path":"/tmp/sluis/github-app.pem"}]` {
-		t.Errorf("github: %s", got)
-	}
-	if env("github")["GITHUB_APP_KEY"].StringValue() != "ssm:/sluis/private/github/app-key" {
-		t.Error("an ssm: mapping did not pass through")
-	}
-	if env("slack")["SLUIS_SECRET_FILES"].HasValue() {
-		t.Error("slack lists no secret files")
-	}
-	for name, mutate := range map[string]func(*arp.LambdaArgs){
-		"outside /tmp": func(a *arp.LambdaArgs) {
-			a.Slack.SecretFiles = []arp.SecretFile{{Parameter: "/sluis/private/x", Path: "/var/task/x"}}
-		},
-		"traversal": func(a *arp.LambdaArgs) {
-			a.Slack.SecretFiles = []arp.SecretFile{{Parameter: "/sluis/private/x", Path: "/tmp/../x"}}
-		},
-		"outside /sluis": func(a *arp.LambdaArgs) {
-			a.Slack.SecretFiles = []arp.SecretFile{{Parameter: "/other/x", Path: "/tmp/x"}}
-		},
-		"the library's own": func(a *arp.LambdaArgs) { a.HTTP.Env = map[string]string{"SLUIS_SECRET_FILES": "[]"} },
-	} {
-		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
-			t.Errorf("%s: accepted", name)
-		}
 	}
 }
 
@@ -1010,22 +1105,6 @@ func TestWrappedSigningWithAnExistingKeyCreatesNoKey(t *testing.T) {
 	}
 	if got := rolePolicy(t, rec, "slack")["kms:Decrypt"]; len(got) != 0 {
 		t.Errorf("slack decrypts with %v", got)
-	}
-}
-
-func TestWrappedSigningCanKeepTheRemoteKeysWhileAStackMoves(t *testing.T) {
-	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
-		a.WrappedSigning = &arp.WrappedSigningArgs{KeepRemoteSigningKeys: true, KeyAlias: "alias/acme-wrapped"}
-	}})
-	if n := len(rec.ofType("aws:kms/key:Key")); n != 3 {
-		t.Errorf("keys: %v", rec.names())
-	}
-	g := rolePolicy(t, rec, "http")
-	if len(g["kms:Sign"]) != 2 || len(g["kms:Decrypt"]) != 1 || out["signingKeyArn"] == "" {
-		t.Errorf("http: %v %v", g, out)
-	}
-	if prop(rec.one(t, "aws:kms/alias:Alias", "kernel-signing-alias-wrapped"), "name").StringValue() != "alias/acme-wrapped" {
-		t.Error("alias")
 	}
 }
 
@@ -1177,7 +1256,7 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 			t.Errorf("random password: %v: at least 32 characters, no special ones, and no keepers, or an apply rotates it", r.Inputs)
 		}
 		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-recovery-password")
-		if prop(p, "name").StringValue() != "/sluis/private/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
+		if prop(p, "name").StringValue() != "/sluis/kernel/private/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		value := prop(p, "value")
@@ -1197,52 +1276,50 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		}
 	}
 	rec, out := mustLambda(t, estate{})
-	if out["recoveryPasswordParameter"] != "/sluis/private/config/recovery/password" {
+	if out["recoveryPasswordParameter"] != "/sluis/kernel/private/config/recovery/password" {
 		t.Errorf("output: %q", out["recoveryPasswordParameter"])
 	}
-	env := prop(rec.one(t, fnType, "kernel-http"), "environment").ObjectValue()["variables"].ObjectValue()
-	wantFile := `"parameter":"/sluis/private/config/recovery/password","path":"/tmp/sluis/recovery-password"`
-	if got := env["SLUIS_SECRET_FILES"].StringValue(); !strings.Contains(got, wantFile) {
-		t.Errorf("http secret files: %s", got)
+	files := layerFiles(t, rec)
+	if !strings.Contains(files["sluis/http.yaml"], "passwordSecret: recovery/password") {
+		t.Errorf("the http document does not name the password: %s", files["sluis/http.yaml"])
 	}
 	for _, role := range []string{"github", "slack"} {
-		e := prop(rec.one(t, fnType, "kernel-"+role), "environment").ObjectValue()["variables"].ObjectValue()
-		if f := e["SLUIS_SECRET_FILES"]; f.HasValue() && strings.Contains(f.StringValue(), "recovery") {
+		if strings.Contains(files["sluis/"+role+".yaml"], "recovery") {
 			t.Errorf("%s was given the recovery password", role)
 		}
 	}
 }
 
-// The toggle is a configuration key, the library owns the file's path, and
+// The toggle is a configuration key, the library owns the secret's name, and
 // turning recovery off keeps the parameter.
-func TestRecoveryEnabledIsWrittenIntoTheHTTPConfiguration(t *testing.T) {
+func TestRecoveryEnabledIsWrittenIntoTheHTTPDocument(t *testing.T) {
 	off := false
 	on := true
 	configOf := func(e estate) string {
 		rec, _ := mustLambda(t, e)
-		return packageFiles(t, rec.one(t, fnType, "kernel-http"))["config/sluis.yaml"]
+		return layerFiles(t, rec)["sluis/http.yaml"]
 	}
-	got := configOf(estate{config: "issuerURL: https://x\n"})
-	if strings.Contains(got, "enabled") || !strings.Contains(got, "passwordFile: /tmp/sluis/recovery-password") {
-		t.Errorf("default: %q, want the file named and the hub's own default (on) left alone", got)
+	got := configOf(estate{config: "issuerURL: https://x.example\n"})
+	if strings.Contains(got, "enabled") || !strings.Contains(got, "passwordSecret: recovery/password") {
+		t.Errorf("default: %q, want the secret named and the hub's own default (on) left alone", got)
 	}
 	for want, e := range map[string]*bool{"enabled: false": &off, "enabled: true": &on} {
-		got = configOf(estate{config: "# the issuer\nissuerURL: https://x\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: e} }})
-		if !strings.Contains(got, want) || !strings.Contains(got, "# the issuer") || !strings.Contains(got, "issuerURL: https://x") {
+		got = configOf(estate{config: "issuerURL: https://x.example\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: e} }})
+		if !strings.Contains(got, want) || !strings.Contains(got, "issuerURL: https://x.example") {
 			t.Errorf("Recovery.Enabled %v: %q", *e, got)
 		}
 	}
-	// A key the operator already wrote is kept, and may not disagree.
-	got = configOf(estate{config: "recovery:\n  enabled: false\n  audience: x\n"})
+	got = configOf(estate{config: "issuerURL: https://x.example\nrecovery:\n  enabled: false\n  audience: x\n"})
 	if !strings.Contains(got, "enabled: false") || !strings.Contains(got, "audience: x") {
 		t.Errorf("an operator's recovery.enabled was lost: %q", got)
 	}
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }})
 	rec.one(t, "aws:ssm/parameter:Parameter", "kernel-recovery-password")
 	for name, e := range map[string]estate{
-		"disagrees": {config: "recovery: {enabled: true}\n", mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }},
-		"own file":  {config: "recovery: {passwordFile: /tmp/other}\n"},
-		"not a map": {config: "- a\n"},
+		"disagrees": {config: "issuerURL: https://x.example\nrecovery: {enabled: true}\n",
+			mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }},
+		"own secret": {config: "issuerURL: https://x.example\nrecovery: {passwordSecret: other}\n"},
+		"not a map":  {config: "- a\n"},
 	} {
 		if _, _, err := buildLambda(t, e); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -1256,8 +1333,9 @@ func TestRecoveryEnabledIsWrittenIntoTheHTTPConfiguration(t *testing.T) {
 func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	cfg := []string{ssmArn + "/sluis/private/config", ssmArn + "/sluis/private/config/*"}
-	creds := []string{ssmArn + "/sluis/private/credentials", ssmArn + "/sluis/private/credentials/*"}
+	cfg := []string{ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*"}
+	creds := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
+	export := []string{ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
 	actions := []string{"ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter"}
 	denied := func(role string) map[string][]string {
 		out := map[string][]string{}
@@ -1271,6 +1349,7 @@ func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *test
 		}
 		return out
 	}
+	writes := append(append([]string{}, creds...), export...)
 	for _, role := range []string{"github", "slack"} {
 		d := denied(role)
 		for _, a := range actions {
@@ -1279,21 +1358,52 @@ func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *test
 			}
 		}
 		g := rolePolicy(t, rec, role)
-		if !reflect.DeepEqual(g["ssm:PutParameter"][0], ssmArn+"/sluis/private") {
-			t.Errorf("%s keeps its credentials access: %v", role, g["ssm:PutParameter"])
+		for _, a := range actions {
+			if !reflect.DeepEqual(g[a], writes) {
+				t.Errorf("%s: %s on %v, want %v", role, a, g[a], writes)
+			}
 		}
 	}
 	h := rolePolicy(t, rec, "http")
 	if len(denied("http")) != 0 {
 		t.Errorf("http is denied something: %v", denied("http"))
 	}
-	if got := h["ssm:GetParameter"]; !reflect.DeepEqual(got, []string{ssmArn + "/sluis/private", ssmArn + "/sluis/private/*"}) {
-		t.Errorf("http reads %v, want all of /sluis/private (config/* included)", got)
+	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
+		t.Errorf("http reads %v, want credentials, exports and config", got)
 	}
-	want := append(append([]string{}, creds...), ssmArn+"/sluis/export", ssmArn+"/sluis/export/*")
 	for _, a := range []string{"ssm:PutParameter", "ssm:DeleteParameter"} {
-		if !reflect.DeepEqual(h[a], want) {
-			t.Errorf("http %s on %v, want %v", a, h[a], want)
+		if !reflect.DeepEqual(h[a], writes) {
+			t.Errorf("http %s on %v, want %v", a, h[a], writes)
+		}
+	}
+}
+
+// A path grant covers every level below it: a controller allowed
+// GetParametersByPath on <root>/private (or any parent of config/) would read the
+// operator's config/* whatever the Deny on config/* says. No controller Allow
+// may name a parent of <root>/private/config, and none names /sluis.
+func TestNoControllerMayReadAParentOfTheConfigPrefix(t *testing.T) {
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Function = "github" }})
+	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
+	config := "/sluis/kernel/private/config"
+	for _, role := range []string{"github", "slack", "http"} {
+		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
+			if s["Effect"] != "Allow" {
+				continue
+			}
+			for _, res := range strs(s["Resource"]) {
+				path, ok := strings.CutPrefix(res, ssmArn)
+				if !ok {
+					continue
+				}
+				path = strings.TrimSuffix(path, "/*")
+				if !strings.HasPrefix(path, "/sluis/kernel/") {
+					t.Errorf("%s: a grant outside the installation's root: %s", role, res)
+				}
+				if role != "http" && (strings.HasPrefix(config, path+"/") || path == config || strings.HasPrefix(path, config+"/")) {
+					t.Errorf("%s may reach config/* through %s (%v)", role, res, s["Action"])
+				}
+			}
 		}
 	}
 }

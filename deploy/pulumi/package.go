@@ -12,59 +12,53 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-// Where the package puts what the functions read. /var/task is the root of a
-// function's package.
-const (
-	packageRoot = "/var/task"
-	configDir   = "config"
-	// The names are joined so that a scan for emitted action names does not take
-	// them for one.
-	configName       = "sluis" + ".yaml"
-	githubConfigName = "github" + ".yaml"
-	slackConfigName  = "slack" + ".yaml"
-)
+// LayerRoot is where the configuration layer is mounted in a function: Lambda
+// extracts a layer under /opt, and the layer holds sluis/.
+const LayerRoot = "/opt/sluis"
 
-// ConfigFilePath is where the package holds the configuration of one function
-// (role http, github or slack), which is what that function's SLUIS_CONFIG_FILE
-// names: config/sluis.yaml, config/github.yaml and config/slack.yaml.
-func ConfigFilePath(role string) string {
-	name := configName
-	switch role {
-	case RoleGitHub:
-		name = githubConfigName
-	case RoleSlack:
-		name = slackConfigName
-	}
-	return packageRoot + "/" + configDir + "/" + name
-}
+// DocumentPath is where a function finds a document of the configuration
+// layer: its own service document (`http`, `github`, `slack`) or `policy`.
+// SLUIS_CONFIG names the first; every service document's policy.file names
+// the second.
+func DocumentPath(name string) string { return LayerRoot + "/" + name + ".yaml" }
 
-// maxPackageBytes bounds a zip fetched from a URL: a Lambda package is 250 MB
-// unzipped at most, and a sluis release is a few MB.
 const maxPackageBytes = 100 << 20
 
 // loadPackage reads the released zip, from a path or an https URL, and returns
 // its entries by path with the bytes of each. It checks the digest when one is
 // given, refuses a zip with a path that leaves the package root, and requires
 // `bootstrap` at the root.
-func loadPackage(src, sha string) (map[string]zipEntry, error) {
+// loadPackage reads the release zip, holds it to the SHA-256 it must have, checks
+// it is a function package, and returns a local copy of it, byte for byte: the
+// function's code is the release, never a zip rebuilt here.
+func loadPackage(src, sha string) (string, error) {
 	raw, err := fetchPackage(src)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if sha != "" {
-		sum := sha256.Sum256(raw)
-		if !strings.EqualFold(hex.EncodeToString(sum[:]), sha) {
-			return nil, fmt.Errorf("sluispulumi: the package %s has the SHA-256 %x, not the %s asked for", src, sum, sha)
-		}
+	sum := sha256.Sum256(raw)
+	if !strings.EqualFold(hex.EncodeToString(sum[:]), strings.TrimSpace(sha)) {
+		return "", fmt.Errorf("sluispulumi: the package %s has the SHA-256 %x, not the %s asked for", src, sum, sha)
 	}
-	return readZip(raw)
+	if _, err = readZip(raw); err != nil {
+		return "", err
+	}
+	if !strings.Contains(src, "://") {
+		return src, nil
+	}
+	dir, err := os.MkdirTemp("", "sluis-package-")
+	if err != nil {
+		return "", fmt.Errorf("sluispulumi: %w", err)
+	}
+	local := filepath.Join(dir, hex.EncodeToString(sum[:])+".zip")
+	if err = os.WriteFile(local, raw, 0o600); err != nil {
+		return "", fmt.Errorf("sluispulumi: %w", err)
+	}
+	return local, nil
 }
 
 func fetchPackage(src string) ([]byte, error) {
@@ -153,43 +147,3 @@ func readZip(raw []byte) (map[string]zipEntry, error) {
 // that Pulumi reads when it registers the function (a Pulumi asset is a path or a
 // string, and a string loses the executable bit `bootstrap` needs); the
 // directory is not removed, because the engine reads it after this returns.
-func buildArchive(entries map[string]zipEntry, added map[string]string) (pulumi.Archive, error) {
-	dir, err := os.MkdirTemp("", "sluis-package-")
-	if err != nil {
-		return nil, fmt.Errorf("sluispulumi: %w", err)
-	}
-	assets := map[string]any{}
-	names := make([]string, 0, len(entries))
-	for n := range entries {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	for _, n := range names {
-		if _, over := added[n]; over {
-			continue
-		}
-		e := entries[n]
-		mode := e.mode
-		if mode&0o700 == 0 {
-			mode = 0o644
-		}
-		if n == "bootstrap" {
-			mode = 0o755
-		}
-		p := filepath.Join(dir, filepath.FromSlash(n))
-		if !strings.HasPrefix(p, dir+string(filepath.Separator)) {
-			return nil, fmt.Errorf("sluispulumi: Package holds %q, which is outside the package root", n)
-		}
-		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-			return nil, fmt.Errorf("sluispulumi: %w", err)
-		}
-		if err := os.WriteFile(p, e.body, mode); err != nil {
-			return nil, fmt.Errorf("sluispulumi: %w", err)
-		}
-		assets[n] = pulumi.NewFileAsset(p)
-	}
-	for n, body := range added {
-		assets[n] = pulumi.NewStringAsset(body)
-	}
-	return pulumi.NewAssetArchive(assets), nil
-}
