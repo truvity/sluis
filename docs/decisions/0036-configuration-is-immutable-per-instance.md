@@ -28,8 +28,11 @@ schemas authored, tests binding the structs) already answers part of this.
 1. **Configuration and policy are immutable for the life of an instance. A
    change is a new set of instances, never a reload.**
    - Kubernetes: the chart renders `checksum/*` annotations from the config and
-     policy, so a change rolls the Deployment. ConfigMaps are mounted as
-     directories, never through `subPath`, which would not follow an update.
+     policy, so a change rolls the Deployment. A file a process reads once at
+     start may be mounted with `subPath`: the `checksum/*` annotation replaces
+     the pod on any change, so an in-place update would never be read. Mount a
+     directory only where a file is meant to change in place (secret files read
+     per call, signing keys).
    - AWS Lambda: the configuration and policy are delivered as an **immutable
      Lambda layer** mounted at `/opt/<app>/`. The function's code is the
      **released zip, byte-identical to the release and sha256-verified** before
