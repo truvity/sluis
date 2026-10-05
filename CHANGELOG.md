@@ -490,7 +490,7 @@ kms-wrapped signing (one symmetric KMS key, wrapped data key pairs, free rotatio
   is part of the trust boundary; the key policy must reserve the signing context
   to the signing roles (the library does it for the key it creates; a shared
   `KeyArn` needs the denial merged in). EdDSA is not supported yet. See
-  [Signing on AWS](docs/deployment/aws.md#signing-on-aws). A deployment that
+  [Signing on AWS](docs/reference/pulumi-library.md#signing-on-aws). A deployment that
   names `signingKey.kms` or `signingKey.file` keeps what it names.
 - **Pulumi library: `LambdaArgs.WrappedSigning`.** One symmetric key (created
   with rotation enabled, protected, and a key policy that denies every principal
@@ -518,7 +518,7 @@ kms-wrapped signing (one symmetric KMS key, wrapped data key pairs, free rotatio
   refused ones too, is now the audit event `roster.recovery.signed_in` (outcome
   `denied` or `failure` with the reason, actor `anonymous`); the catalogue is unchanged.
   The setup checklist's step "Turn off the recovery password" names the setting and the
-  parameter. See [Recovery on Lambda](docs/operations/recovery-on-lambda.md).
+  parameter. See [Recovery on Lambda](docs/how-to/recover-on-lambda.md).
 
 - **`GET /` on the issuer's host redirects to `/console/`** (302, HEAD too) when the
   console is mounted, instead of the issuer's bare 404. Only the exact path: every
@@ -593,7 +593,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   the issuer now warns at start). The `http` function also answers `{"kind":"exports"}` from a
   schedule: one pass of every export, each under its lease, failing the invocation if
   a copy could not be made. Kubernetes behaviour is unchanged. See
-  [aws-lambda](docs/integrations/aws-lambda.md).
+  [aws-lambda](docs/reference/lambda.md).
 
 - **The Pulumi library creates a second signing key, RS256.** `NewLambda` makes an
   `RSA_3072` `SIGN_VERIFY` key beside the ES384 one (alias `SigningKeyRS256Alias`,
@@ -669,7 +669,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   `-tags lambda,lambda.norpc`, which leaves out client-go, NATS and Valkey, and
   `cmd/sluis-lambda/imports_test.go` fails on any of them. The controllers' configuration files gain the serve file's `platform`, `preset` and
   `adapters` keys (the Lambda controllers select `sqs` audit through them). **No change
-  to the Kubernetes build.** See [aws-lambda](docs/integrations/aws-lambda.md).
+  to the Kubernetes build.** See [aws-lambda](docs/reference/lambda.md).
 
 - **Removed: sluis's own OTLP Lambda extension.** `cmd/sluis-lambda` used to be the
   extension installed as `extensions/access-roster-otlp`, deprecated in v1.57.0 for
@@ -726,7 +726,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
 
 - **The Pulumi library deploys sluis on AWS Lambda.** Both estates (Truvity and
   hive) move sluis to Lambda, and `deploy/pulumi` now expresses it
-  ([guide](docs/deployment/aws.md#lambda)):
+  ([guide](docs/reference/pulumi-library.md#lambda)):
 
   - `NewLambda` creates three functions from one released zip (`sluis-http`,
     `sluis-github`, `sluis-slack`; arm64, `provided.al2023`, handler `bootstrap`,
@@ -795,8 +795,8 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   - More than one replica is refused at render unless the controller's
     `ports.adapter` is `nats` or `dynamodb`. With `legacy` or `memory` the tick leases
     are in each pod's memory and every replica would act on every target.
-  - See [the runbook](docs/operations/runbook.md#a-controller-release-that-crash-loops)
-    and [high availability](docs/operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe).
+  - See [the runbook](docs/how-to/day-two.md#a-controller-release-that-crash-loops)
+    and [high availability](docs/how-to/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe).
 
 ## v1.57.1
 
@@ -866,7 +866,7 @@ Released automatically as a patch: the roster audit catalogue bumped to 1.7.0 af
   - **Environment:** the Lambda extension reads `SLUIS_*` first and falls back
     to `ACCESS_ROSTER_*` (both work, `SLUIS_*` wins); `sluisctl` does the same
     for `SLUISCTL_*` and `ACCESSCTL_*`
-    ([aws-lambda](docs/integrations/aws-lambda.md),
+    ([aws-lambda](docs/reference/lambda.md),
     [sluisctl](docs/reference/sluisctl.md)).
   - **npm:** `@truvity/access-roster` becomes `@truvity/sluis`. The release also
     publishes the same build as `@truvity/access-roster` for one or two
@@ -897,7 +897,7 @@ Released automatically as a patch by a workflow_dispatch of Auto Release; it car
   validated in its tests against the binaries' schemas. The KMS grant admits the
   encryption-context key `sluis:binding` only, so it needs a service release
   whose Sealer sends that key. Tested with Pulumi's mocks (`just pulumi-test`).
-  [docs/deployment/aws.md](docs/deployment/aws.md).
+  [docs/deployment/aws.md](docs/reference/pulumi-library.md).
 
 ## v1.56.0
 
@@ -966,7 +966,7 @@ This release adds a DynamoDB adapter for State, the session index and the Trigge
   on any other skip, and `access-roster migrate` copies memory into it and back.
   Marked 🧪 in the capabilities: not yet run against AWS. Installations on any other
   adapter see no change. See
-  [docs/design/ports.md](docs/design/ports.md#the-dynamodb-adapter).
+  [docs/design/ports.md](docs/explanation/ports.md#the-dynamodb-adapter).
 
 ## v1.54.0
 
@@ -998,7 +998,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   writes needs `--i-have-stopped-writers`. It then reads both sides again and
   compares every item, and prints a JSON report of counts and keys (never a
   value), also to a Blob with `--report-blob`. Re-running completes a partial
-  copy. See [docs/operations/migrate.md](docs/operations/migrate.md). Adds the
+  copy. See [docs/operations/migrate.md](docs/how-to/migrate-state.md). Adds the
   optional `port.StateExporter` and `port.IndexExporter`, a `Restore` on the two
   GitHub link stores and `PutSessionKey`, used only by the migration. `--backup`
   to a file is a follow-up.
@@ -1014,7 +1014,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   unchanged. A Sealer is required: the start is refused, naming `ports.sealer`,
   without one (so `nats` needs `ports.sealer`). The controllers read the same
   records from the State instead of the mounted files. See
-  [docs/design/ports.md](docs/design/ports.md#the-domain-stores).
+  [docs/design/ports.md](docs/explanation/ports.md#the-domain-stores).
 
 - **A GitHub link is one item with one compare-and-swap refresh.**
   `gh.link.<account>` holds the link and its sealed token pair; the refresh
@@ -1042,7 +1042,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   adapter's unless `ports.blob` and `ports.sealer` name the S3 and KMS adapters. The conformance suite passes against an
   embedded nats-server, a single node and a three-node cluster. Additive: the
   default adapter is unchanged. See
-  [docs/design/ports.md](docs/design/ports.md#the-nats-adapter).
+  [docs/design/ports.md](docs/explanation/ports.md#the-nats-adapter).
 
 - **S3 Blob and KMS Sealer adapters.** `ports.blob: {adapter: s3, s3: {bucket,
   prefix, region, kmsKey, endpoint, pathStyle}}` keeps the status reports and
@@ -1054,7 +1054,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   platform's; no key is configured. Additive: an installation that sets neither
   runs what it did. Both are experimental: they pass the conformance suite on
   LocalStack (`just test-s3`, and the `s3` CI job, which fails on a skipped
-  test). See [docs/design/ports.md](docs/design/ports.md#the-s3-blob-and-the-kms-sealer).
+  test). See [docs/design/ports.md](docs/explanation/ports.md#the-s3-blob-and-the-kms-sealer).
 
 - **The access document.** A policy layer may be written as the lists an
   installation derives from its access matrix (`access`) plus the rows that are
@@ -1301,7 +1301,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `reports/slack/` are the two status ConfigMaps). A key of the layout that has
   no object of its own today (`ses.`, `sid.`, `ws.`, `gh.link.`, ...) is refused
   as unsupported rather than written somewhere else. The gaps are listed in
-  [design/ports.md](docs/design/ports.md#implementation-status): a revision is
+  [design/ports.md](docs/explanation/ports.md#implementation-status): a revision is
   a digest of the stored bytes, `Watch` polls, and the legacy `Sealer` refuses.
   The issuer's logins in progress, the hub's snapshots and refresh lease, the
   controllers' reports and the cluster `TokenReview` now go through the ports;
@@ -1424,7 +1424,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`ACCESS_ROSTER_TELEMETRY_BUFFER_*`; oldest dropped and counted), exports are
   fail-open, and what is queued is exported before the environment can freeze
   and on `SHUTDOWN`. The binary grows by about 65 KB. See
-  [integrations/aws-lambda.md](docs/integrations/aws-lambda.md#platform-logs).
+  [integrations/aws-lambda.md](docs/reference/lambda.md#platform-logs).
 
 ## v1.51.0
 
@@ -1447,7 +1447,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   the rest `path.Match` globs; roll the issuer before the policy that uses it,
   since an older issuer refuses the key). Audited as `roster.token.exchanged`
   with proof `workload`; the catalogue is unchanged. See
-  [connect/aws-workloads.md](docs/connect/aws-workloads.md).
+  [connect/aws-workloads.md](docs/how-to/connect/aws-workloads.md).
 
 - **A Lambda extension layer sends a function's OpenTelemetry data with the
   function role's identity.** The release now carries
@@ -1846,7 +1846,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   never as data, so the Slack Connect records no longer write `from`. Moving a
   policy channel to the console: remove it from the policy, find it under
   Discovered, Manage it with the directory group as the source and the same
-  mode ([docs](docs/connect/slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console)).
+  mode ([docs](docs/how-to/connect/slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console)).
 
 - **Fix: a Slack Connect side no report mentions is shown as unknown, not
   dropped.** Slack names only the host among a channel's teams when the host's
@@ -1889,7 +1889,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   invitation, and a private side without the bot is held until the bot is
   invited. Nobody is ever removed, and a team that is not a connected workspace
   is never touched. The audit catalogue is unchanged. See
-  [docs/connect/slack-connect-channels.md](docs/connect/slack-connect-channels.md).
+  [docs/connect/slack-connect-channels.md](docs/how-to/connect/slack-connect-channels.md).
 
 ## v1.43.1
 
@@ -2072,7 +2072,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`ListSlackSharedChannels`, `CreateSlackSharedChannel`,
   `UpdateSlackSharedChannel`, `DeleteSlackSharedChannel`), new audit actions
   `roster.slack_shared_channel.created`, `.updated` and `.deleted`. See
-  [docs/connect/slack-connect-channels.md](docs/connect/slack-connect-channels.md).
+  [docs/connect/slack-connect-channels.md](docs/how-to/connect/slack-connect-channels.md).
 - **New: the Slack page.** Connect, read and operate a Slack workspace from
   the console. **Connect** pastes a throwaway app configuration token
   (api.slack.com/apps, *Your App Configuration Tokens*; 12 hours, used once,
@@ -2096,7 +2096,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `DisconnectSlackWorkspace`, `ConfirmSlackRemovals`), new audit action
   `roster.slack_workspace.connect_refused`, new `slackapp.Client.Revoke`. The
   catalogue's install into the wrong workspace now revokes the token too. See
-  [docs/connect/slack-workspace.md](docs/connect/slack-workspace.md#connect-a-workspace-from-the-console).
+  [docs/connect/slack-workspace.md](docs/how-to/connect/slack-workspace.md#connect-a-workspace-from-the-console).
 
 - **New: a catalogue of Slack Apps, created and installed from the
   console.** `slackApps` declares each App (`id`, the policy's `workspace`
@@ -2115,7 +2115,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   token, through a PushSecret per entry. New RPCs `SlackAppService`
   (`ListSlackApps`, `CreateSlackApp`, `InstallSlackApp`), new audit actions
   `roster.slack_app.created`, `.installed` and `.install_refused`. See
-  [docs/connect/slack-apps-catalogue.md](docs/connect/slack-apps-catalogue.md).
+  [docs/connect/slack-apps-catalogue.md](docs/how-to/connect/slack-apps-catalogue.md).
 - **New: per-organisation operators for Slack workspaces.**
   `slack.workspaces.<key>.owner` names the directory workspace that owns a
   Slack workspace, with the same meaning and checks as
@@ -2152,7 +2152,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   never creates accounts, touches user groups or removes anybody from a public
   channel. It needs egress to `slack.com:443`, which the chart leaves to the
   fleet's egress policy. Off by default; see
-  [docs/connect/slack-workspace.md](docs/connect/slack-workspace.md).
+  [docs/connect/slack-workspace.md](docs/how-to/connect/slack-workspace.md).
 - **New: `people` and `slack` in the policy schema (schema only; no
   controller yet).** `people` links the addresses of one person across
   domains; `slack` declares workspaces (own key, Slack `team_id`, email
@@ -2176,7 +2176,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   yet. (The controller ships in this same release, in the first bullet above.)
   `internal/slackapp` gains `UserInfo` (a member's address) and
   `SharedTeamIDs` on a channel. See
-  [docs/design/sluis.md](docs/design/sluis.md#the-slack-reconciler).
+  [docs/design/sluis.md](docs/explanation/design.md#the-slack-reconciler).
 - **Internal: `internal/rails` now holds what the GitHub controller and the
   reconcilers after it share: the pass loop with its policy-retry backoff
   (`Run`), the console's two questions gated by the policy digest
@@ -2184,7 +2184,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`Ledger`) and the last-good-report journal (`Journal`).** The GitHub
   controller calls them and keeps everything GitHub-shaped to itself. No
   user-visible change: same decisions, same audit records, same metrics.
-  See [docs/design/sluis.md](docs/design/sluis.md#reconciler-rails).
+  See [docs/design/sluis.md](docs/explanation/design.md#reconciler-rails).
 
 ## v1.40.0
 
@@ -2201,7 +2201,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   injects a bearer token the workload's own projected ServiceAccount token
   earned by an RFC 8693 exchange, so the stock server holds no credential.
   The image is `ghcr.io/truvity/access-roster/resource-proxy:<version>`,
-  multi-arch. See [docs/connect/mcp.md](docs/connect/mcp.md#fronting-a-stock-mcp-server-with-resource-proxy).
+  multi-arch. See [docs/connect/mcp.md](docs/how-to/connect/mcp.md#fronting-a-stock-mcp-server-with-resource-proxy).
   `identity.Verified` gains `ClientID` (the token's `azp`, or
   `client_id`). No existing package changes behaviour.
 
@@ -2230,7 +2230,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `internal/rails` for these four pieces and keeps everything GitHub-shaped —
   teams, logins, invitations, deriving and deciding — to itself. No
   user-visible change: same decisions, same audit records, same metrics. See
-  [docs/design/sluis.md](docs/design/sluis.md#reconciler-rails).
+  [docs/design/sluis.md](docs/explanation/design.md#reconciler-rails).
 
 ## v1.39.2
 
@@ -2296,7 +2296,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   [ADR 0014](docs/decisions/0014-minting-third-party-credentials-only-where-membership-is-governed.md).
   See
   [docs/reference/sluisctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged](docs/reference/sluisctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)
-  and [docs/connect/r2-storage.md](docs/connect/r2-storage.md).
+  and [docs/connect/r2-storage.md](docs/how-to/connect/r2-storage.md).
 
 ## v1.38.0
 
@@ -2326,7 +2326,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   never fails, or prints anything, over a feature it was never opted
   into. See
   [docs/reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](docs/reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect),
-  [docs/connect/ssh.md](docs/connect/ssh.md) and
+  [docs/connect/ssh.md](docs/how-to/connect/ssh.md) and
   [docs/decisions/0016](docs/decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md).
 
 ## v1.37.0
@@ -2353,7 +2353,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   A delimiter is refused at load if it is empty, the separator itself, a
   quote, a comma, whitespace, or built from the alphabet a scope, thing
   or role is itself conventionally written in
-  ([taxonomy.md](docs/taxonomy.md)) — and, because no single character
+  ([taxonomy.md](docs/reference/taxonomy.md)) — and, because no single character
   can be proven absent from every group name this schema could ever
   declare, also if it would collide two of the policy's own declared
   groups once rewritten. See
@@ -2376,7 +2376,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `TestJWKSAndDiscoveryAreNotCacheableByAProxy`
   (`internal/issuer/jwks_cache_test.go`) now fails the build the day that
   stops being true. See
-  [docs/operations/high-availability.md#signing-keys-across-replicas](docs/operations/high-availability.md#signing-keys-across-replicas)
+  [docs/operations/high-availability.md#signing-keys-across-replicas](docs/how-to/high-availability.md#signing-keys-across-replicas)
   for the same rule restated as a deployment concern: nothing in front of
   this issuer may cache `/keys` either.
 
@@ -2414,7 +2414,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   by the login namespace rather than the target, so two targets sharing
   a parent login (`bao -ns=<env>/a`, `bao -ns=<env>/b`) reuse the same
   login; `--forget` clears the entry at that login namespace. See
-  [docs/connect/openbao.md#logins-at-a-parent-namespace](docs/connect/openbao.md#logins-at-a-parent-namespace).
+  [docs/connect/openbao.md#logins-at-a-parent-namespace](docs/how-to/connect/openbao.md#logins-at-a-parent-namespace).
 
 ## v1.34.0
 
@@ -2465,7 +2465,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   bao's own flags, including `-namespace`, go after it, exactly where
   bao has always accepted them. See
   [docs/reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged](docs/reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged)
-  and [docs/connect/openbao.md](docs/connect/openbao.md).
+  and [docs/connect/openbao.md](docs/how-to/connect/openbao.md).
 
 - **Added: `accessctl bao kv get ... -format=env` renders a KV secret as
   dotenv lines**, a stop-gap for the one thing `bao kv get` cannot do yet
@@ -2503,7 +2503,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   repository keeps its own, committed and secret-free, and points
   `PGSERVICEFILE` at it. See
   [docs/reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command](docs/reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command)
-  and [docs/connect/postgresql.md](docs/connect/postgresql.md).
+  and [docs/connect/postgresql.md](docs/how-to/connect/postgresql.md).
 
 - **Breaking: `accessctl credential ssh|db|client` is removed.**
   `docs/decisions/0013-openbao-access-through-the-bao-cli.md`. Each now
@@ -2513,9 +2513,9 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   CI and Ansible; `db` → `accessctl psql` / `accessctl pg --`; `client`
   → `accessctl bao write <pki mount>/sign/<role> csr=@your.csr` (an
   `openssl req -new` recipe for the CSR is in
-  [docs/connect/openbao.md](docs/connect/openbao.md)). See
-  [docs/connect/ssh.md](docs/connect/ssh.md) and
-  [docs/connect/postgresql.md](docs/connect/postgresql.md) for the
+  [docs/connect/openbao.md](docs/how-to/connect/openbao.md)). See
+  [docs/connect/ssh.md](docs/how-to/connect/ssh.md) and
+  [docs/connect/postgresql.md](docs/how-to/connect/postgresql.md) for the
   full replacements.
 
 ## v1.33.0
@@ -2536,7 +2536,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   silently narrowed. No policy that declares no per-role `scopes` changes
   shape or behaviour. See
   [docs/reference/policy.md#per-role-scopes](docs/reference/policy.md#per-role-scopes)
-  and [docs/taxonomy.md#per-role-scopes](docs/taxonomy.md#per-role-scopes).
+  and [docs/taxonomy.md#per-role-scopes](docs/reference/taxonomy.md#per-role-scopes).
 
 - **Added: `groupsScoping: enforce` actually narrows a token's `groups`
   claim, and `/userinfo`'s answer, to what report mode has been
@@ -2624,7 +2624,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   installation can reach for it. See
   [docs/reference/policy.md#groups-in-a-token-scoping](docs/reference/policy.md#groups-in-a-token-scoping),
   [docs/reference/configuration.md](docs/reference/configuration.md) and
-  [docs/operations/runbook.md#reading-the-groups-scoping-report](docs/operations/runbook.md#reading-the-groups-scoping-report)
+  [docs/operations/runbook.md#reading-the-groups-scoping-report](docs/how-to/day-two.md#reading-the-groups-scoping-report)
   for reading what report mode finds.
 
 - **Added: an optional `vocabulary` table declares which scopes and things
@@ -2664,7 +2664,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   names is.
 
   See [docs/reference/policy.md#vocabulary](docs/reference/policy.md#vocabulary),
-  [docs/taxonomy.md](docs/taxonomy.md) and
+  [docs/taxonomy.md](docs/reference/taxonomy.md) and
   [docs/decisions/0010-a-declared-vocabulary.md](docs/decisions/0010-a-declared-vocabulary.md).
 
 - **Added: a person's page states the whole "why do I hold this group"
@@ -2687,7 +2687,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   OIDC (a `SecurityPolicy` with `oidc:` on Envoy Gateway) is the replacement
   for a console with no OpenID flow of its own. For a gateway that is not Envoy
   Gateway, run upstream `oauth2-proxy` yourself following the recipe in
-  [docs/design/access-proxy.md](docs/design/access-proxy.md).
+  [docs/design/access-proxy.md](docs/how-to/connect/oauth2-proxy.md).
 
   Versions of the chart already published remain available in the OCI registry,
   so existing pins keep working. See
@@ -2845,7 +2845,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   1. Delete the `secretManagers` block from your deployment values.
   2. Revoke the reader grant you gave the issuer in OpenBAO: the policy
      `sys/policies/acl/*`, `identity/group/name*` and `sys/auth` — see
-     [docs/connect/openbao.md](docs/connect/openbao.md) for the full path list.
+     [docs/connect/openbao.md](docs/how-to/connect/openbao.md) for the full path list.
   3. Delete the secret stores page from your console bookmarks.
 
   **Sign in to OpenBAO stays unaffected:** the issuer still hands OpenBAO a
@@ -3173,7 +3173,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   pod. Give that identity `list` on `sys/policies/acl`,
   `identity/group/name` and `identity/group-alias/id`, `read` on each of
   their children and on `sys/auth`, and nothing else
-  ([docs/connect/openbao.md](docs/connect/openbao.md)). An
+  ([docs/connect/openbao.md](docs/how-to/connect/openbao.md)). An
   exchange it is not granted is drawn on the page, naming the audience,
   rather than raised as an error.
 - **`secretManagers[].caCertSecret`** mounts a PEM bundle trusted in
@@ -3192,7 +3192,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   denied". A run that reads **zero** keys fails rather than writing an
   empty `.env`, which is the failure nobody notices. Only the key names
   are printed, never a value.
-  [docs/connect/openbao.md](docs/connect/openbao.md),
+  [docs/connect/openbao.md](docs/how-to/connect/openbao.md),
   [docs/reference/sluisctl.md](docs/reference/sluisctl.md).
 
 ## v1.21.0
@@ -3268,7 +3268,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   organisation) — each with the permissions it needs and why. It is
   values to read and copy, not a default the chart applies: creating an
   App stays an owner of the organisation confirming a manifest. The
-  guide's new [*A default set*](docs/connect/github-apps-catalogue.md#a-default-set)
+  guide's new [*A default set*](docs/how-to/connect/github-apps-catalogue.md#a-default-set)
   says why they are four identities and not one.
 - **A catalogue App's credential can be projected to a secret store.**
   An entry may carry `push: {secretStore: {name, kind}, remoteKey,
@@ -3287,7 +3287,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   rotated as one, and the store that holds it is in the App's blast
   radius.
 - **New guide:
-  [connect/infrastructure-as-code.md](docs/connect/infrastructure-as-code.md)**
+  [connect/infrastructure-as-code.md](docs/how-to/connect/infrastructure-as-code.md)**
   — the line between the two sides (this service owns identities and
   credentials; the program owns structure and names identities), a worked
   Pulumi program in Go that reads the credential from the store and
@@ -3826,7 +3826,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `accessctl_<version>_nix-flake.tar.gz`, a Nix flake over that release's
   own archives. A repository adds its URL with `#accessctl` to
   `devbox.json`
-  ([docs/design/sluisctl.md](docs/design/sluisctl.md#installing-it)).
+  ([docs/design/sluisctl.md](docs/explanation/sluisctl.md#installing-it)).
 
 ## v1.6.5
 
@@ -4348,7 +4348,7 @@ changed since 0.17.1; what changed is what can be said about it.
   its step demanded. The logout pair — RP-Initiated plus one of the
   other three — is what the Foundation requires for a logout
   submission, and both halves are green for the first time.
-  [docs/conformance.md](docs/conformance.md) carries the run and what
+  [docs/conformance.md](docs/explanation/conformance-findings.md) carries the run and what
   each column means.
 
 - **Documentation at 1.0**: one design document for the one

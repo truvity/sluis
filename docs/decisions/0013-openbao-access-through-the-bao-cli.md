@@ -48,7 +48,7 @@ operate in only by *default*. `--login-ns` (or
 `$SLUISCTL_BAO_LOGIN_NAMESPACE`) lets it happen at a PARENT of that
 namespace instead, for an installation that keeps its logins at one
 namespace while data lives in per-project children — see
-[docs/connect/openbao.md#logins-at-a-parent-namespace](../connect/openbao.md#logins-at-a-parent-namespace).
+[docs/connect/openbao.md#logins-at-a-parent-namespace](../how-to/connect/openbao.md#logins-at-a-parent-namespace).
 The target namespace must still be the login namespace or a descendant
 of it, checked before any exchange, for the same reason the paragraph
 below gives; only where the login itself may happen has moved.

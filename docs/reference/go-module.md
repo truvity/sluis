@@ -1,7 +1,7 @@
 # Go module `github.com/truvity/sluis`
 
 What a Go service behind the gateway imports. The shape follows
-[../design/trust.md](../design/trust.md): **exactly two verifiers**, one
+[../design/trust.md](../explanation/trust.md): **exactly two verifiers**, one
 per anchor, and one `Verified` whichever proved the caller — so a handler
 never learns which anchor answered and cannot come to depend on it.
 
@@ -46,7 +46,7 @@ mux.Handle("/", res.Protect(mcp))
 
 `Protect` verifies the bearer for the resource's own URL and answers the
 RFC 9728 challenge; `Metadata` serves the Protected Resource Metadata.
-[connect/mcp.md](../connect/mcp.md#a-go-server-identityresource) is the
+[connect/mcp.md](../how-to/connect/mcp.md#a-go-server-identityresource) is the
 guide, and `resource-proxy` is the same thing as a sidecar for a server
 you did not write.
 

@@ -102,7 +102,7 @@ gateway-fronted console it ends within that token's own lifetime or
 application that minted its own session after signing in is reached only
 through Back-Channel Logout, or whatever limit it put on that session
 itself
-([how each kind finds out](docs/design/sluis.md#telling-the-relying-party-back-channel-logout)).
+([how each kind finds out](docs/explanation/design.md#telling-the-relying-party-back-channel-logout)).
 
 **As a machine.** A GitHub Actions job presents the identity token it
 already has and receives one for AWS or a cluster, under a rule that
@@ -200,11 +200,11 @@ asking anyone.
 
 | Fans in | Fans out |
 |---|---|
-| [corporate directories](docs/connect/corporate-directory.md): several Google Workspaces, Entra next — each a workspace with its own credential and its own served domains | [Kubernetes clusters, for people](docs/connect/kubernetes-cluster.md): each trusts the one issuer as its identity provider |
-| [CI platforms](docs/connect/github-actions.md) — GitHub Actions today: one federated issuer, an owner allow-list | [AWS accounts](docs/connect/aws-account.md): each trusts the one issuer as an OIDC provider |
-| [every cluster's own ServiceAccount tokens](docs/connect/service-to-service.md), for workloads: one row per cluster naming its key set; [AWS IAM roles' outbound-federation tokens](docs/connect/aws-workloads.md), one row per account | [GitHub organisations](docs/connect/github-organisation.md): one controller App each, bindings in the same policy, and a runner App per tier for self-hosted runners |
-| | [Slack workspaces](docs/connect/slack-workspace.md): one bot each, channels bound in the same policy, console channels fed by directory groups, and [Slack Connect channels](docs/connect/slack-connect-channels.md) between your own workspaces; [Slack Apps](docs/connect/slack-apps-catalogue.md) declared as data |
-| | [consoles and applications](docs/connect/console-app.md): one client row each |
+| [corporate directories](docs/how-to/connect/corporate-directory.md): several Google Workspaces, Entra next — each a workspace with its own credential and its own served domains | [Kubernetes clusters, for people](docs/how-to/connect/kubernetes-cluster.md): each trusts the one issuer as its identity provider |
+| [CI platforms](docs/how-to/connect/github-actions.md) — GitHub Actions today: one federated issuer, an owner allow-list | [AWS accounts](docs/how-to/connect/aws-account.md): each trusts the one issuer as an OIDC provider |
+| [every cluster's own ServiceAccount tokens](docs/how-to/connect/service-to-service.md), for workloads: one row per cluster naming its key set; [AWS IAM roles' outbound-federation tokens](docs/how-to/connect/aws-workloads.md), one row per account | [GitHub organisations](docs/how-to/connect/github-organisation.md): one controller App each, bindings in the same policy, and a runner App per tier for self-hosted runners |
+| | [Slack workspaces](docs/how-to/connect/slack-workspace.md): one bot each, channels bound in the same policy, console channels fed by directory groups, and [Slack Connect channels](docs/how-to/connect/slack-connect-channels.md) between your own workspaces; [Slack Apps](docs/how-to/connect/slack-apps-catalogue.md) declared as data |
+| | [consoles and applications](docs/how-to/connect/console-app.md): one client row each |
 
 Adding one of anything is one row and one trust registration. The
 issuer URL, the policy file and the console never multiply.
@@ -212,7 +212,7 @@ issuer URL, the policy file and the console never multiply.
 Everything in both columns is built and in use, with one exception: the
 second directory backend (Entra) is designed behind the same workspace
 record and not written yet.
-[architecture.md](docs/architecture.md#fan-in-and-fan-out) says how each
+[architecture.md](docs/explanation/architecture.md#fan-in-and-fan-out) says how each
 row is expressed in configuration.
 
 ## Install and a worked example
@@ -266,7 +266,7 @@ Then sign in once with a recovery token
 (`kubectl -n sluis create token access-issuer-recovery --audience access-issuer-recovery`),
 and the console's Overview walks the rest: connecting the directory, and
 the first operator who signs in as themselves.
-[docs/operations/adoption-plain-helm.md](docs/operations/adoption-plain-helm.md)
+[docs/operations/adoption-plain-helm.md](docs/how-to/install-with-helm.md)
 is the whole walk-through, with the prerequisites and a gateway-native OIDC
 setup for consoles with no authorization model of their own.
 
@@ -321,20 +321,20 @@ them found and fixed in v0.15.2. The logout pair the Foundation requires
 for a submission, RP-Initiated plus Back-Channel, is green for the first
 time; the first Back-Channel run found two defects, fixed in v0.17.1.
 Every column, and why, is in
-[docs/conformance.md](docs/conformance.md).
+[docs/conformance.md](docs/explanation/conformance-findings.md).
 
 ## Documentation
 
 [docs/index.md](docs/index.md) is the one entry point: a map to every
 page, organised by what you are trying to do. Three starting points from
-there are worth naming here — [docs/adoption.md](docs/adoption.md) for
-what taking this into use requires, [docs/safety.md](docs/safety.md) for
+there are worth naming here — [docs/adoption.md](docs/getting-started/README.md) for
+what taking this into use requires, [docs/safety.md](docs/explanation/safety.md) for
 what is refused and why, and [CHANGELOG.md](CHANGELOG.md) for what
 changed for a consumer, per version. To pick a deployment (and see which
 adapters exist), read
-[docs/guides/choosing-a-deployment.md](docs/guides/choosing-a-deployment.md);
+[docs/guides/choosing-a-deployment.md](docs/getting-started/README.md);
 to add an adapter in a fork,
-[docs/guides/diy-adapter.md](docs/guides/diy-adapter.md).
+[docs/guides/diy-adapter.md](docs/how-to/add-an-adapter.md).
 
 ## The rule that makes this repository public
 

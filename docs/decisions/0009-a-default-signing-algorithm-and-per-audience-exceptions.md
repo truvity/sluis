@@ -49,7 +49,7 @@ RS256" and "some other audience wants something else" at once.
 algorithm, and picks the key by the token's AUDIENCE.** A deployment
 configures a key per algorithm it needs (`signingKey.certificate` for
 the default, `signingKey.additional[]` for the rest — see
-[reference/access-issuer.md](../reference/access-issuer.md)); a client
+[reference/access-issuer.md](../reference/configuration.md)); a client
 row or a resource row may pin `signing_alg: RS256 | ES256 | ES384`
 (policy schema, not this issuer's arbitrary choice: the three values a
 real relying party in this estate has actually asked for); a row naming
@@ -110,7 +110,7 @@ is not one on its own.
 sees every algorithm currently published**, across every key ring, not
 only the one its own audience happens to use — unchanged from how
 discovery already behaved for a single key mid-rotation
-([reference/access-issuer.md](../reference/access-issuer.md)). This is
+([reference/access-issuer.md](../reference/configuration.md)). This is
 strictly more permissive than before, never less: nothing that verified
 against this issuer's discovery document stops working.
 

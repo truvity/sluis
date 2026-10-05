@@ -3,10 +3,10 @@
 # Adapters: compatibility and implementation matrix
 
 Every adapter, per concern, from the registry in `internal/port`. To pick one,
-start with [choosing a deployment](../guides/choosing-a-deployment.md); to add one,
-see [adding an adapter in a fork](../guides/diy-adapter.md); for how adapters,
+start with [choosing a deployment](../getting-started/README.md); to add one,
+see [adding an adapter in a fork](../how-to/add-an-adapter.md); for how adapters,
 presets and the platform fit together, see
-[design/ports.md](../design/ports.md#adapters-presets-and-the-platform).
+[design/ports.md](../explanation/ports.md#adapters-presets-and-the-platform).
 
 - ✅ implemented: built and registered; the maintainers' estates run it.
 - 💤 on request: designed and in the catalogue, not built; start refuses it. It is built when a user asks.

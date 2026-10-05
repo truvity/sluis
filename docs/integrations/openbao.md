@@ -10,7 +10,7 @@ end to end, lives with OpenBAO**:
 It is proven there by a conformance test that runs a real OpenBAO server
 against an issuer shaped like this one, and `pkg/model`'s `Roster` preset
 builds the OpenBAO side of it. The how-to for an installation is
-[connect/openbao.md](../connect/openbao.md).
+[connect/openbao.md](../how-to/connect/openbao.md).
 
 This page is only what **this** side must provide for that contract to
 hold. Each item is something access-issuer, `sluisctl` or the policy
@@ -65,7 +65,7 @@ clients:
   than as a policy. Keep them equal by a test in the repository that owns
   the policy, not by review.
 - **Every group OpenBAO holds a policy for** belongs in `requires`, named
-  by the [naming rule](../design/trust.md#naming); a group missing here is
+  by the [naming rule](../explanation/trust.md#naming); a group missing here is
   refused at the exchange, before OpenBAO is reached (`sluisctl` exit
   `4`).
 
@@ -93,7 +93,7 @@ clients:
 
 A job with `id-token: write` exchanges its GitHub token for `openbao`
 exactly as for any other audience, and the `ci` rules decide its groups
-([connect/github-actions.md](../connect/github-actions.md)). The GitHub
+([connect/github-actions.md](../how-to/connect/github-actions.md)). The GitHub
 Action writes kubeconfigs and AWS profiles only, so an OpenBAO login in a
 job runs `sluisctl token --audience openbao`, or `sluisctl bao`/`pg`/
 `psql` for a certificate, since a job has no agent to hand an SSH

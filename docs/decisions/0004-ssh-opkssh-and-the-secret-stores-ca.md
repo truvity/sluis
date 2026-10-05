@@ -8,8 +8,8 @@
 `sluisctl credential ssh` already gets a person a short-lived
 certificate from a secret store's SSH CA — a key made on the caller's
 machine, signed once, handed to the agent
-([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../design/sluisctl.md#credential-the-broker-for-what-openbao-mints),
-[connect/openbao.md](../connect/openbao.md)). That is a courier in front
+([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../explanation/sluisctl.md#credential-the-broker-for-what-openbao-mints),
+[connect/openbao.md](../how-to/connect/openbao.md)). That is a courier in front
 of a certificate authority: correct under
 [0002](0002-mission-boundary-tokens-and-memberships.md), but a detour
 through this repository's own binary for something OpenPubkey SSH
@@ -39,7 +39,7 @@ Session lifetime otherwise follows
 the same as anywhere else a person's sign-in is the credential.
 
 **Hosts keep their key signed by the secret store's SSH CA**, exactly as
-[connect/openbao.md](../connect/openbao.md)'s host side already describes
+[connect/openbao.md](../how-to/connect/openbao.md)'s host side already describes
 — a certificate authority is still the right tool for a key that must
 never be a person's problem to rotate, and clients trust it with
 `@cert-authority` the way they always have.
@@ -71,7 +71,7 @@ tracked reason the direct path is not there yet. When ES384 support
 lands, the migration is: declare opkssh's client, write the
 `oidc:groups:` policy on each server, cut over, then remove the broker
 subcommand and its documentation, following the removal shape in
-[design/sluis.md#appendix-what-was-removed-and-why](../design/sluis.md#appendix-what-was-removed-and-why).
+[design/sluis.md#appendix-what-was-removed-and-why](../explanation/design.md#appendix-what-was-removed-and-why).
 
 ## Alternatives considered
 

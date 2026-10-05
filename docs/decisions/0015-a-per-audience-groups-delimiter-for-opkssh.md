@@ -25,7 +25,7 @@ oidc:groups:devel:ssh:user
 is not "match the group `devel:ssh:user`" to opkssh — it is "match
 whatever the LAST `:`-separated field is", `user`, against a held group
 of the same name. This schema's own grant shape,
-`<scope>:<thing>:<role>` ([taxonomy.md](../taxonomy.md)), is built
+`<scope>:<thing>:<role>` ([taxonomy.md](../reference/taxonomy.md)), is built
 entirely out of the one character opkssh's parser treats as a field
 separator, so no group this schema would ever mint for opkssh can match
 by name at all — not `devel:ssh:user`, not any other. Quoting the value
@@ -64,7 +64,7 @@ is not, by itself, the whole of what makes this safe:
 **No single delimiter character can be proven absent from every group
 name this schema could ever declare.** A Groups-table key is not
 required to fit `<scope>:<thing>:<role>` at all — an installation may
-declare any string as a group, [taxonomy.md](../taxonomy.md) calls this
+declare any string as a group, [taxonomy.md](../reference/taxonomy.md) calls this
 "unconventional" and warns rather than refuses it — and even a concrete
 grant's own segments carry no character restriction narrower than "not
 empty, no `:`". So this schema refuses a delimiter built from the
@@ -120,7 +120,7 @@ lands, which is every group this schema's own taxonomy produces.
 
 **Rename this installation's groups to avoid `:` entirely**, e.g. give
 every group a single-segment alias. Rejected: it does not merely work
-around opkssh's bug, it reverses [taxonomy.md](../taxonomy.md)'s whole
+around opkssh's bug, it reverses [taxonomy.md](../reference/taxonomy.md)'s whole
 point — the name being the whole of the fact, `<scope>:<thing>:<role>`,
 carried unchanged into every relying party's own binding — for every
 consumer, to accommodate the one relying party that cannot read it, when

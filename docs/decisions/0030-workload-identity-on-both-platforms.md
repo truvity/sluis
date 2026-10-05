@@ -9,7 +9,7 @@ A workload proves who it is to the issuer in one of two ways. A Kubernetes
 ServiceAccount token, projected for an audience, is verified against its
 cluster. An AWS role's identity token, minted by outbound identity federation
 (`sts:GetWebIdentityToken`), is verified against the account's issuer
-([connect/aws-workloads.md](../connect/aws-workloads.md)). Which of them a
+([connect/aws-workloads.md](../how-to/connect/aws-workloads.md)). Which of them a
 workload has follows from where it runs, and a workload can run on one platform
 and call a service on the other: a Lambda function reaching an issuer in a
 cluster, or a pod reaching one on Lambda.

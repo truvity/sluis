@@ -5,7 +5,7 @@ dashboard that read it, and how to install them. The contract it follows is
 [0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)
 to
 [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md) and
-[design/ports.md](../design/ports.md): telemetry is the OpenTelemetry
+[design/ports.md](../explanation/ports.md): telemetry is the OpenTelemetry
 environment and nothing else, it is exported only when a collector is named, and
 it carries no personal data.
 
@@ -316,7 +316,7 @@ A lease is lost when another runner takes it over, or it could not be renewed
 for a whole lifetime. One loss is the design working: the tick stopped before its
 next write. Repeated losses are two runners on one target (a `tick` Job beside
 the Deployment, or more than one replica where the State is not shared (the chart refuses that), see
-[high-availability.md](high-availability.md)) or a State that cannot be reached
+[high-availability.md](../how-to/high-availability.md)) or a State that cannot be reached
 to renew: see `SluisPortErrors`.
 
 #### SluisGitHubRateLimitLow
