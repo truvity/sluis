@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.64.0
+
 Documents mode, `sluisctl render` and the installation document, the OpenBao Secrets adapter, `k8s-aws`, verify-only signing keys. Presets `server`, `k8s-minimal` and `k8s-openbao` are refused, and the chart's values mode is deprecated: see [upgrade to v1.64](docs/how-to/upgrade/v1.64.md).
 
 ### Added
