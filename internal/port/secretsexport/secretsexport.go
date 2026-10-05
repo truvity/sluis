@@ -56,7 +56,8 @@ func (e *Export) path(target port.ExportTarget, check func() error) (string, por
 	if target.Namespace != "" {
 		ns, ok := e.secrets.(port.NamespacedSecrets)
 		if !ok {
-			return "", nil, fmt.Errorf("%w: the secrets adapter has no namespaces (%q): use ports.export.openbao or the openbao secrets adapter", port.ErrUnsupported, target.Namespace)
+			return "", nil, fmt.Errorf("%w: the secrets adapter has no namespaces (%q): use ports.export.openbao or the openbao secrets adapter",
+				port.ErrUnsupported, target.Namespace)
 		}
 		var err error
 		if secrets, err = ns.In(target.Namespace); err != nil {
