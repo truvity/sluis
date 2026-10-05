@@ -235,7 +235,7 @@ type (
 	}
 
 	// Platform is the answers to the questions that pick a preset: what the
-	// installation has to build on (docs/design/ports.md, "Adapters").
+	// installation has to build on (docs/explanation/ports.md, "Adapters").
 	Platform struct {
 		AWS        bool   `json:"aws,omitempty"`
 		Kubernetes bool   `json:"kubernetes,omitempty"`
@@ -251,7 +251,7 @@ type (
 	}
 
 	// Ports chooses the adapter behind the storage ports of
-	// docs/design/ports.md.
+	// docs/explanation/ports.md.
 	//
 	// Adapter picks the State, Index and Trigger (and, unless overridden below,
 	// the Blob). Blob replaces one port with an adapter that composes with any

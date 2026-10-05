@@ -5,7 +5,7 @@
    named in a Chart.yaml, must point at a file that exists; a `#anchor` must
    match a heading of the file it points into (GitHub's slug rules). A link to
    a page that was never written is found by a stranger, and Chart.yaml's
-   description named docs/design/access-issuer.md for months.
+   description named docs/explanation/verify-and-issue.md for months.
 
 2. BANNED NAMES. The product was renamed (docs/decisions/0035-renamed-to-sluis.md):
    `access-roster`, `access-issuer` and the NATS adapter are gone. They stay in

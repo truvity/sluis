@@ -7,7 +7,7 @@
 // hub.Store, a server.GitHubLinks, and so on), so nothing above it changes;
 // internal/app chooses between these and the ConfigMap and Secret stores of
 // internal/kube by the adapter `ports.adapter` names. The layout is the one of
-// docs/design/ports.md:
+// docs/explanation/ports.md:
 //
 //	ws.dir.<provider>.<id>  a directory workspace: record, credential in Secrets
 //	ws.slack.<workspace>    a Slack workspace: record, bot token in Secrets

@@ -1,5 +1,5 @@
 // Package dynamodb is the DynamoDB adapter of the State, Index and Trigger
-// ports (docs/design/ports.md, ADR 0027): one table, shared by every replica
+// ports (docs/explanation/ports.md, ADR 0027): one table, shared by every replica
 // and every process, so a lease is exclusive across pods and a notification
 // crosses processes. It is the State of the AWS platform, and what a
 // Kubernetes deployment on AWS can use.

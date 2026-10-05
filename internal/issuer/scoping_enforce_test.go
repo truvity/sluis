@@ -151,7 +151,7 @@ func TestGroupsScopingEnforceScopesUserinfo(t *testing.T) {
 // dropped group is the steady state under enforce rather than news on
 // every token. This is what lets an operator turn it on only when
 // diagnosing a missing role, per
-// docs/operations/runbook.md#turning-enforce-on.
+// docs/how-to/turn-enforce-on.md.
 func TestGroupsScopingEnforceLogsAtDebugNotInfo(t *testing.T) {
 	t.Parallel()
 	server, iss, rec := serveScoping(t, adaDirectory(), issuer.GroupsScopingEnforce, "")

@@ -68,7 +68,6 @@ and needs no config, session or `HOME`.
 
 ## Commands
 
-<!-- generated: cli-sluisctl -->
 | Command | Does | Reference |
 |---|---|---|
 | `version` | this build's own version (also `--version`, `-version`) | below |
@@ -85,7 +84,6 @@ and needs no config, session or `HOME`.
 | `bao`, `r2`, `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
-<!-- /generated -->
 
 Source: `usage` in `cmd/sluisctl/main.go`.
 
@@ -129,13 +127,11 @@ writes) and refuses an installation that disagrees with it, naming the key. Both
 documents are held to the loader the service runs at start, so what `render` writes is
 what the service accepts.
 
-<!-- generated: cli-sluisctl -->
 | Flag | Meaning |
 |---|---|
 | `--installation <file>` | the installation document (required) |
 | `--out <dir>` | the directory the two documents are written to (required) |
 | `--check` | write nothing: compare, print a line diff, exit `1` if there is any |
-<!-- /generated -->
 
 `--check` writes nothing: it compares what would be written with the files in
 `<dir>`, prints a line diff, and exits `1` if there is any (a missing file counts). Run

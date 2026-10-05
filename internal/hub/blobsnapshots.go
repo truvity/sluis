@@ -20,7 +20,7 @@ import (
 // SnapshotBlobPrefix and SnapshotLeasePrefix are where the hub's snapshots
 // and refresh leases sit in the ports: `snapshots/<workspace>` in the blob
 // port and `lease.<kind>:<workspace>` in the state port
-// (docs/design/ports.md).
+// (docs/explanation/ports.md).
 const (
 	SnapshotBlobPrefix  = "snapshots/"
 	SnapshotLeasePrefix = "lease."

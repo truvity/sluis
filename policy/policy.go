@@ -32,7 +32,7 @@ import (
 // on thing, in scope. `dev:k8s:admin` is admin of dev's Kubernetes;
 // `prod:shop:deployer` deploys the shop project on prod;
 // `all:access-roster:operator` operates this hub across every directory
-// it serves. The reasoning is in docs/design/trust.md under "Naming";
+// it serves. The reasoning is in docs/explanation/trust.md under "Naming";
 // what matters here is that the name is the whole of the fact, carried
 // verbatim into a token's `groups` claim and out of it into a relying
 // party's own bindings, re-mapped nowhere in between.
@@ -250,7 +250,7 @@ type Policy struct {
 	// file (see [Policy.checkGrantName]) and every mapping wildcard in
 	// [Policy.Groups] (see [Policy.checkGroupKey]) a claim the loader can
 	// check instead of trust. See docs/reference/policy.md#vocabulary and
-	// docs/taxonomy.md.
+	// docs/reference/taxonomy.md.
 	Vocabulary *Vocabulary `yaml:"vocabulary,omitempty"`
 	// Groups is every internal group name an installation uses, and how a
 	// caller comes to be in it. A key may be a mapping wildcard — `*` in

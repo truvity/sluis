@@ -40,7 +40,7 @@ func migrateUsage(out io.Writer, fs *flag.FlagSet) {
 	_, _ = fmt.Fprint(out, `Usage: sluis migrate --from <config> --to <config> [flags]
 
 Copies the State of one installation's storage to another's, through the domain
-stores and the ports (docs/decisions/0031, docs/operations/migrate.md). Each side is
+stores and the ports (docs/decisions/0031, docs/how-to/migrate-state.md). Each side is
 the configuration file of 'sluis serve' for that storage: the ports.* keys
 (and, for the legacy storage, store, release and valkey) say where it is. Domain
 records and secrets are copied through their stores, so a secret is written to the
@@ -53,7 +53,7 @@ from a workstation) and --to a serve configuration with ports.adapter: dynamodb,
 the ssm secrets adapter and an s3 blob. State, secrets, the controllers' reports and
 the issuer's key ring schedule are copied; the issuer's sessions, refresh tokens and
 codes in flight (people sign in again) and the Index sets are not, unless
---with-sessions. docs/operations/runbook.md, "Cutover: migrating an installation".
+--with-sessions. docs/how-to/cutover.md.
 
 Nothing is written unless the source is quiet: stop every writer (scale the issuer,
 the console and both controllers to 0) and pass --i-have-stopped-writers. The report is

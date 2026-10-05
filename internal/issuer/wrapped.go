@@ -198,7 +198,7 @@ func wrapError(call string, err error) error {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "AccessDeniedException" || apiErr.ErrorCode() == "AccessDenied") {
 		return fmt.Errorf("issuer: this role may not call kms:%s: grant kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on the "+
-			"application key with the encryption context purpose=%s (docs/deployment/aws.md, Signing on AWS): %w", call, WrapPurpose, err)
+			"application key with the encryption context purpose=%s (docs/explanation/signing-on-aws.md): %w", call, WrapPurpose, err)
 	}
 	return fmt.Errorf("issuer: kms:%s: %w", call, err)
 }

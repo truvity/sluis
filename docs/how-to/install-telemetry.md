@@ -3,7 +3,7 @@
 ## Purpose
 
 Point the pod at an OpenTelemetry collector, and install the alert rules and the Grafana dashboard that read what it
-publishes. What is published, and the alert catalogue, are in [telemetry](../operations/telemetry.md).
+publishes. What is published, and the alert catalogue, are in [telemetry](../reference/telemetry.md).
 
 ## Preconditions
 
@@ -71,7 +71,7 @@ helm install   sluis-alerts oci://ghcr.io/truvity/charts/sluis --version X.Y.Z -
 ```
 
 `alerts.ruleLabels` is added to every rule beside its `severity`; `alerts.rules.<rule>.labels` to one rule;
-`alerts.runbookBaseUrl` is where the [runbook](../operations/telemetry.md#runbook) is (empty renders no link). Every
+`alerts.runbookBaseUrl` is where the [runbook](../reference/telemetry.md#runbook) is (empty renders no link). Every
 threshold is `alerts.rules.<rule>.*`.
 
 **Expect** one rule group of twelve rules.
@@ -106,7 +106,7 @@ variable every panel uses, `cluster` and `namespace` variables, `$cluster` in th
 
 ## Afterwards
 
-- Tell whoever is on call where the [runbook](../operations/telemetry.md#runbook) is, and route the `severity` labels.
+- Tell whoever is on call where the [runbook](../reference/telemetry.md#runbook) is, and route the `severity` labels.
 - A rule whose series is absent does not fire. Whether the service runs at all is the platform's own scrape alert, not this
   chart's.
 - After changing a threshold, re-read the rule's comment in `charts/sluis/templates/alerts.yaml` for why it is what it is.

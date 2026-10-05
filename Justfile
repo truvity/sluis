@@ -174,10 +174,22 @@ leak-canary:
 # link in a Markdown file or Chart.yaml resolves, and the retired names
 # (access-roster, access-issuer, NATS) appear only where
 # hack/docs-hygiene-allow.tsv says, with a reason.
+#
+# The generated regions of the docs (`<!-- generated: name -->`) must be
+# what `just docs-generate` writes, and a page over 400 lines is a warning.
 docs-check:
     ./hack/check-docs-symbols.py
     ./hack/check-docs-hygiene.py
+    ./hack/check-docs-length.py
+    go run ./cmd/docsgen -check
     go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/
+
+# Rewrite the generated regions of the docs (config keys, chart values, policy
+# keys, audit actions, alerts, the ADR index) from their sources: the JSON
+# schemas, the audit catalogue, the chart's golden alert render and the ADRs.
+# Run it after changing any of them; docs-check fails when a region is stale.
+docs-generate:
+    go run ./cmd/docsgen
 
 # Regenerate docs/reference/adapters.md from the adapter registry. Run it
 # after adding, removing or changing an adapter; docs-check fails when stale.

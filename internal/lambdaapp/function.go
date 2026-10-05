@@ -1,5 +1,5 @@
 // Package lambdaapp runs sluis as ONE AWS Lambda function: one binary, one zip,
-// one function (docs/integrations/aws-lambda.md). The function takes
+// one function (docs/reference/lambda.md). The function takes
 //
 //   - API Gateway HTTP API events: the issuer and the console, the same mux the
 //     Kubernetes process serves on its listener;

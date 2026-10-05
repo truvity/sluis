@@ -1,5 +1,5 @@
 // Package ssm is the AWS Systems Manager Parameter Store adapter of
-// port.Secrets (docs/design/ports.md, "Secrets"): dynamic secrets and the
+// port.Secrets (docs/explanation/ports.md, "Secrets"): dynamic secrets and the
 // exports as SecureString parameters.
 //
 // Credentials are ambient: the AWS SDK's default chain (EKS Pod Identity,

@@ -91,5 +91,5 @@ keys are not published after `until` whether or not you remove the entries.
 ## Afterwards
 
 - Delete the old signing Secrets and the cert-manager Certificates the chart no longer renders, once nothing mounts them.
-- Check the signing alerts in [telemetry](../operations/telemetry.md#alerts): the rotation threshold follows `rotateEvery`.
+- Check the signing alerts in [telemetry](../reference/telemetry.md#alerts): the rotation threshold follows `rotateEvery`.
 - Tell the owners of relying parties that pin an algorithm (`signing_alg: RS256`) that RS256 is now a KMS-wrapped key too.

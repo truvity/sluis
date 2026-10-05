@@ -99,7 +99,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 }
 
-// The conformance suite of docs/design/ports.md against today's storage:
+// The conformance suite of docs/explanation/ports.md against today's storage:
 // every assertion either passes or is skipped with the engine's reason.
 func TestConformance(t *testing.T) {
 	porttest.Run(t, func(t *testing.T) porttest.Env {

@@ -10,7 +10,7 @@ import (
 // ErrUnauthenticated is a token [Identity] does not accept.
 var ErrUnauthenticated = errors.New("port: the token proves nothing")
 
-// permanent are the key families the layout in docs/design/ports.md marks
+// permanent are the key families the layout in docs/explanation/ports.md marks
 // as having no lifetime. Every other key needs one.
 var permanent = []string{"ws.", "gh.org.", "gh.link.", "app.", "rec."}
 

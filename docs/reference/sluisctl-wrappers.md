@@ -196,7 +196,6 @@ sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orde
 
 ### Flags
 
-<!-- generated: cli-sluisctl -->
 | Flag | Default | |
 |---|---|---|
 | `--address` | `$BAO_ADDR`, then `$VAULT_ADDR` | the OpenBAO API |
@@ -208,7 +207,6 @@ sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orde
 | `--common-name` | the signed-in identity | the common name to ask for |
 | `--audience` | `openbao` | the exchange client OpenBAO accepts |
 | `--issuer`, `--client` | what `login` wrote | as for every other command |
-<!-- /generated -->
 
 `-ns` and `-mount` are spelled short, mirroring `bao`'s own
 `-namespace`. **The authentication step is `bao`'s own**
@@ -354,13 +352,11 @@ UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl
 
 ### Flags
 
-<!-- generated: cli-sluisctl -->
 | Flag | Default | |
 |---|---|---|
 | `--file` | `~/.ssh/known_hosts.d/sluisctl` | the managed file to write |
 | `--address` | `$BAO_ADDR`, then `$VAULT_ADDR` | the OpenBAO API for `openbao:` entries |
 | `--ca-cert` | `$BAO_CACERT`, then `$VAULT_CACERT` | a PEM bundle to trust, added to the system's roots |
-<!-- /generated -->
 
 ### What each failure exits with
 

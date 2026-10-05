@@ -217,7 +217,7 @@ type WrappedSigningArgs struct {
 	// creates the key, with rotation enabled, protected, and a key policy that
 	// reserves the signing encryption context to the signing roles. With KeyArn
 	// the library creates no key and leaves its policy alone, and the estate MUST
-	// merge WrappedKeyPolicyStatements into it (docs/deployment/aws.md): without
+	// merge WrappedKeyPolicyStatements into it (docs/reference/pulumi-library.md): without
 	// it any principal that may kms:Decrypt on the key can unwrap a signing key
 	// read from the State and forge tokens. A multi-Region key (mrk-...) is
 	// accepted: the statements go in EVERY replica's key policy, since a wrapped

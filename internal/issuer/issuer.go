@@ -1,7 +1,7 @@
 // Package issuer is the token service: it verifies proofs produced
 // elsewhere, applies the shared policy, and issues tokens. It never
 // authenticates anyone and holds no user records — the line the design
-// draws around it is in docs/design/access-issuer.md.
+// draws around it is in docs/explanation/verify-and-issue.md.
 package issuer
 
 import (
@@ -76,7 +76,7 @@ const (
 	// token — see [Storage]'s groups-scoping report. The default, and the
 	// mode an installation is expected to run before it ever turns to
 	// [GroupsScopingEnforce] — see
-	// docs/operations/runbook.md#reading-the-groups-scoping-report for
+	// docs/how-to/read-the-groups-scoping-report.md for
 	// turning report's findings into overrides first.
 	GroupsScopingReport GroupsScopingMode = "report"
 	// GroupsScopingEnforce narrows a token's `groups` claim, and

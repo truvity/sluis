@@ -187,7 +187,7 @@ func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) 
 // WrappedKeyPolicyStatements are the statements a wrapped signing key's policy
 // MUST carry: the library puts them in the key it creates, and an estate merges
 // them into the policy of a shared key it passes as WrappedSigningArgs.KeyArn
-// (docs/deployment/aws.md). On a shared key they touch only what presents the
+// (docs/reference/pulumi-library.md). On a shared key they touch only what presents the
 // signing context and the signing roles themselves:
 //
 //   - SluisSigningContextReserved denies every principal but the signing roles any

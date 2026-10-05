@@ -29,7 +29,7 @@ import type { Session, SignIn } from "./gen/accessissuer/v1/session_pb";
 import { paths } from "./router";
 import { Facet, Facets, Failure, Loading, Nothing, Page, Ref } from "./ui";
 
-/** Sessions live in the issuer (docs/design/access-issuer.md, "Where
+/** Sessions live in the issuer (docs/explanation/sessions.md, "Where
  *  session management lives"): one refresh token, described, per
  *  identity and per client. This is the one file that renders them,
  *  because a person's page, a client's page and the installation-wide
@@ -39,7 +39,7 @@ import { Facet, Facets, Failure, Loading, Nothing, Page, Ref } from "./ui";
  *  wherever sessions show: a person's page (client only), a client's
  *  page (identity only), and the Sessions rail page (both). Sessions
  *  that share a browser (SSO) session are grouped under one heading so
- *  "this laptop" reads as one thing (docs/design/hub.md, "The
+ *  "this laptop" reads as one thing (docs/explanation/console.md, "The
  *  console"). */
 export function SessionsPanel({
     sessions,

@@ -16,7 +16,7 @@
               "description": "GitHub Apps.",
               "properties": {
                 "catalogue": {
-                  "description": "Every GitHub App the installation declares (docs/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+                  "description": "Every GitHub App the installation declares (docs/how-to/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
                   "items": {
                     "additionalProperties": false,
                     "description": "One App: created under `org` from the console, and installed there.",
@@ -142,7 +142,7 @@
               "description": "Slack Apps.",
               "properties": {
                 "catalogue": {
-                  "description": "Every Slack App the installation declares (docs/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
+                  "description": "Every Slack App the installation declares (docs/how-to/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
                   "items": {
                     "additionalProperties": false,
                     "description": "One Slack App, created and installed from the console.",
@@ -1120,7 +1120,7 @@
       "properties": {
         "adapters": {
           "additionalProperties": false,
-          "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
+          "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.",
           "properties": {
             "audit": {
               "additionalProperties": false,
@@ -1708,7 +1708,7 @@
         },
         "platform": {
           "additionalProperties": false,
-          "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+          "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
           "properties": {
             "aws": {
               "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
@@ -1775,7 +1775,7 @@
               }
             }
           ],
-          "description": "The adapters behind the storage ports (docs/design/ports.md).",
+          "description": "The adapters behind the storage ports (docs/explanation/ports.md).",
           "properties": {
             "adapter": {
               "default": "legacy",

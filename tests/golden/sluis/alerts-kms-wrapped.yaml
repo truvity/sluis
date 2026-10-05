@@ -35,7 +35,7 @@ spec:
               Secret the chart mounts (cert-manager's Certificate, or the existing Secret
               named in signingKey.existingSecret) and the issuer's log for why it could not
               be read.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosternosigningkeypublished"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosternosigningkeypublished"
         # The age of the active key is the time since the first replica saw it become
         # active. With kms-wrapped signing a new key pair is made every `rotateEvery`
         # and the threshold is that plus two hours. cert-manager replaces the certificate `renewBefore` ahead of its end
@@ -59,7 +59,7 @@ spec:
               signingKey.pollInterval is reading the mounted file. With kms-wrapped keys,
               check the issuer's log for why it cannot generate or wrap a key pair (the
               pod's AWS role, the KMS key's policy).
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrostersigningkeyrotationstalled"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostersigningkeyrotationstalled"
         # The share of the issuer listener's requests answered 5xx over 10 minutes. A
         # healthy issuer answers none: its refusals are 4xx. A floor of `minErrors` in
         # the window keeps one failed request in a quiet hour from being a page, and the
@@ -85,7 +85,7 @@ spec:
               failed on the server side. The dashboard's request panel names the route; the
               issuer's log has the error. A store that is down (see AccessRosterPortErrors)
               and a directory that cannot be reached are the usual causes.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosterissuer5xx"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterissuer5xx"
         # A token is signed in memory and costs one store write, so the p99 of the token
         # endpoint is milliseconds when healthy. Two seconds is two orders of magnitude
         # over that and still short of the clients' timeouts, which is where a slow
@@ -104,7 +104,7 @@ spec:
               Token requests are taking longer than 2s at the
               99th percentile. The store (see the port latency panel), the policy's size and
               the directory are what a token waits on.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrostertokenendpointslow"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostertokenendpointslow"
         # A tick that fails once is a console mid-rollout or GitHub having a moment, and
         # the next pass repairs it. The default interval is 15 minutes, so
         # `failures` (3) failed ticks of ONE target within `window` (45m) is three in a
@@ -124,7 +124,7 @@ spec:
               times within 45m. Its report (the controller's page in the
               console, and the log's "a pass over an organisation failed" or the Slack
               equivalent) names the error.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrostertickfailing"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostertickfailing"
         # The time since a target's last ok tick, from a gauge each ok tick stamps. It
         # catches what a failure counter cannot: a controller that is not running, a
         # lease nobody can take, a loop that hangs. One hour is four default intervals
@@ -144,7 +144,7 @@ spec:
               This target has not completed a tick for longer than 3600s.
               Check that the controller's Deployment is running, that its leases are not held
               by a runner that is gone (AccessRosterLeaseLost), and the log for the failures.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrostertickstale"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostertickstale"
         # A lease is lost when another runner takes it over or when it could not be
         # renewed for a whole lifetime; the tick stops before its next write, which is
         # what the lease is for, so one loss is the design working. Repeated losses are
@@ -164,7 +164,7 @@ spec:
               within 1h. Look for a second runner (a tick Job beside the
               Deployment, a replica count over one on a State that is not shared) and for
               port errors on the State.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosterleaselost"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterleaselost"
         # GitHub's budget left, as last reported on a response. An App's core budget is
         # thousands of requests an hour, and the controller waits out a limit itself, so
         # a low reading is not an outage; sustained is. Under `remaining` (100) for
@@ -185,7 +185,7 @@ spec:
               requests for 30m. github_roster_rate_limited_total says how
               often a call already waited. Lengthen the controller's interval, or look for
               a caller spending the App's budget outside this controller.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrostergithubratelimitlow"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostergithubratelimitlow"
         # The invitations the last pass could not send for want of a free seat. There is
         # no healthy non-zero: each is a person the policy admits who cannot be invited
         # until the organisation buys a seat or removes one. Not a page (the controller is
@@ -203,7 +203,7 @@ spec:
               The controller could not invite everyone the policy admits to this organisation
               because it has no free seats. Buy seats, or remove members that no longer
               belong, and the next pass sends the invitations.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosterseatsshort"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterseatsshort"
         # The share of storage port calls (state, index, blob) that ended `unavailable`
         # or `error` over five minutes. A lost compare-and-swap (`conflict`), a create
         # over a live key (`exists`) and a missing key (`not_found`) are the ports
@@ -229,7 +229,7 @@ spec:
               last 5 minutes. State and index are Valkey (or the namespace's ConfigMaps and
               Secrets); blobs are the reports' ConfigMaps. Check that store's own health and
               the NetworkPolicy to it.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosterporterrors"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterporterrors"
         # An export retries a failed copy with backoff, from five seconds to five
         # minutes, so a store that is down shows as a failure every few minutes and a
         # store that was down for one retry shows as one. The copy is stale for as long as
@@ -251,7 +251,7 @@ spec:
               Nothing live is affected. The log line "an export failed" names the target and
               the error: a login the role refuses, a policy that lacks a capability on the
               path, or OpenBao being down.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosterexportfailing"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterexportfailing"
         # The time since an export last had its copy in the store, from a gauge each ok
         # attempt stamps (a copy that was already as it should be counts). The default
         # interval is an hour, so three hours is two missed refreshes and the one that
@@ -272,4 +272,4 @@ spec:
               This export has not had its copy in the store for longer than 10800s.
               Check that the service is running with its exports configured, that its
               leases are not held by a runner that is gone, and the log for failures.
-            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrosterexportstale"
+            runbook_url: "https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterexportstale"

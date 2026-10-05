@@ -51,7 +51,7 @@ Only the latest release is supported with security updates.
   probe, a partial read, a stale snapshot or a domain conflict all read as
   "not authoritative", never as "gone".
 - Every service here trusts **exactly two anchors** and never a third
-  ([docs/design/trust.md](docs/explanation/trust.md)): the cluster (a
+  ([docs/explanation/trust.md](docs/explanation/trust.md)): the cluster (a
   ServiceAccount token checked by TokenReview, audience-bound,
   allow-listed) for workloads in the same cluster, and the issuer (its
   JWKS, an audience) for everything else. A workload calling the

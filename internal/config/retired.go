@@ -78,7 +78,7 @@ var retiredIssuer = map[string]string{
 	"CLUSTERS_FILE":                    "exchange.clustersFile",
 	"AWS_FEDERATION_FILE":              "exchange.awsFile",
 	"VALKEY_ADDRESS":                   "valkey.address",
-	"VALKEY_PASSWORD":                  "valkey.passwordEnv, which names the variable that holds it",
+	"VALKEY_PASSWORD":                  "valkey.passwordSecret, the secret's name (valkey/password), delivered by `secrets`",
 	"VALKEY_TLS":                       "valkey.tls",
 	"VALKEY_CLUSTER":                   "valkey.cluster",
 	"GITHUB_OWNERS":                    "github.owners",

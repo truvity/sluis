@@ -171,7 +171,7 @@ What is copied, where and how often is `exports` in the configuration file
 ([configuration](exports.md)),
 run by `internal/exports`: one worker per export, under a per-export lease on the
 State, retried with backoff, and counted
-([telemetry](../operations/telemetry.md#the-exports)).
+([telemetry](telemetry.md#the-exports)).
 
 ## Inputs
 

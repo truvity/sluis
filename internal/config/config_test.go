@@ -291,7 +291,7 @@ func TestARetiredVariableIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("retired variables were accepted")
 	}
-	for _, want := range []string{"ISSUER_URL (now issuerURL)", "VALKEY_PASSWORD (now valkey.passwordEnv"} {
+	for _, want := range []string{"ISSUER_URL (now issuerURL)", "VALKEY_PASSWORD (now valkey.passwordSecret"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say %q: %v", want, err)
 		}

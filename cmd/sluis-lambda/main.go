@@ -1,7 +1,7 @@
 // Command sluis-lambda is sluis as ONE AWS Lambda function: one arm64
 // `bootstrap` binary in one zip, deployed as one function that serves API
 // Gateway events and runs the controllers' passes. See
-// docs/integrations/aws-lambda.md.
+// docs/reference/lambda.md.
 //
 // It is built with `-tags lambda,lambda.norpc`: the first leaves out the
 // Kubernetes, NATS and Valkey storage the other binary carries, and

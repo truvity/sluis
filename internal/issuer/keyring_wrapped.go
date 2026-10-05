@@ -156,7 +156,7 @@ const staleFactor = 1.5
 
 // warnStale logs at ERROR, at most hourly, while the active wrapped key is older
 // than staleFactor times rotateEvery. Alert on the same condition from the
-// metric (access_issuer.signing_key.active_since_timestamp, docs/deployment/aws.md).
+// metric (access_issuer.signing_key.active_since_timestamp, docs/reference/pulumi-library.md).
 func (r *KeyRing) warnStale(ctx context.Context, h *wrapHooks) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

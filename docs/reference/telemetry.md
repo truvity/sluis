@@ -84,7 +84,6 @@ unit as a suffix (`access_issuer.http.requests` is
 `access_issuer_http_requests_total`). Only the cluster, the namespace and the
 tier become labels from the resource; every label below is a metric attribute.
 
-<!-- generated: telemetry-metrics -->
 Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and the controllers' packages.
 
 ### The issuer
@@ -186,7 +185,6 @@ configuration and never carries a path, a namespace or a value. An attempt is al
 span (`export`, with the target kind and the outcome). The log names the export and
 the target on every failure and never a value.
 
-<!-- /generated -->
 
 ### No workspace or organisation label on the issuer's series
 
@@ -206,23 +204,23 @@ above the rule in `charts/sluis/templates/alerts.yaml`. Every
 aggregation keeps the cluster label, since one store holds many clusters.
 
 <!-- generated: telemetry-alerts -->
-Source: `charts/sluis/templates/alerts.yaml` and `alerts.rules` in `charts/sluis/values.yaml`.
 
-| Alert | Severity | Fires when | Default threshold |
-|---|---|---|---|
-| `AccessRosterNoSigningKeyPublished` | critical | An algorithm has no published key. | `< 1` for 5m |
-| `AccessRosterSigningKeyRotationStalled` | warning | The active key is older than a certificate's life less its renewal. | 350 days (30240000s) for 1h |
-| `AccessRosterIssuer5xx` | critical | A share of the listener's requests is answered 5xx. | over 5% and at least 5 errors, over 10m, for 10m |
-| `AccessRosterTokenEndpointSlow` | warning | The token endpoint's p99 is high. | over 2s, over 10m, for 15m |
-| `AccessRosterTickFailing` | warning | One target's ticks keep failing. | 3 in 45m |
-| `AccessRosterTickStale` | critical | A target has had no ok tick for a long while (absence). | 3600s (four default intervals), for 10m |
-| `AccessRosterLeaseLost` | warning | Leases of one kind are lost repeatedly. | 3 in 1h |
-| `AccessRosterGitHubRateLimitLow` | warning | GitHub's budget is nearly spent, for long. | under 100 for 30m |
-| `AccessRosterSeatsShort` | warning | An organisation lacks the seats to invite. | `> 0` for 30m |
-| `AccessRosterPortErrors` | critical | Storage port calls are failing. | over 5% and at least 5 errors, over 5m, for 10m |
-| `AccessRosterExportFailing` | warning | One export's copy keeps failing. | 3 in 30m, for 15m |
-| `AccessRosterExportStale` | warning | An export has not had its copy in the store for a long while (absence). | 10800s (three default intervals), for 10m |
+Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (12 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
 
+| Alert | Severity | For | What it says | Default expression |
+|---|---|---|---|---|
+| `AccessRosterNoSigningKeyPublished` | critical | 5m | The issuer's key ring holds no key to publish for this algorithm, so its JWKS is empty and no relying party can verify a token. | `min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1` |
+| `AccessRosterSigningKeyRotationStalled` | warning | 1h | The active signing key is older than 30240000s and has not rotated. | `time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000` |
+| `AccessRosterIssuer5xx` | critical | 10m | More than 5% of the requests in the last 10 minutes failed on the server side. | `( sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) / sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis"}[10m])) ) > 0.05 and sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5` |
+| `AccessRosterTokenEndpointSlow` | warning | 15m | Token requests are taking longer than 2s at the 99th percentile. | `histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2` |
+| `AccessRosterTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
+| `AccessRosterTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600` |
+| `AccessRosterLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3` |
+| `AccessRosterGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
+| `AccessRosterSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
+| `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
+| `AccessRosterExportFailing` | warning | 15m | The copy of this secret into OpenBao failed 3 or more times within 30m, so what a consumer reads there is stale. | `sum by (k8s_cluster_name, namespace, export) (increase(access_roster_export_attempts_total{namespace="sluis",outcome="failed"}[30m])) >= 3` |
+| `AccessRosterExportStale` | warning | 10m | This export has not had its copy in the store for longer than 10800s. | `time() - max by (k8s_cluster_name, namespace, export) (last_over_time(access_roster_export_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 10800` |
 <!-- /generated -->
 
 A rule whose series is absent does not fire: whether the issuer or the

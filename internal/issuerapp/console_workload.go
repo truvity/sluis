@@ -17,7 +17,7 @@ import (
 // It exists for one kind of caller: a controller in the same cluster —
 // the GitHub controller is the first — reading the console's API with the
 // token its kubelet projected. The rule is the one
-// docs/connect/service-to-service.md states for every same-cluster call:
+// docs/how-to/connect/service-to-service.md states for every same-cluster call:
 // present the ServiceAccount token, never an exchange in front of it,
 // because the issuer would verify that very token and re-sign it.
 //

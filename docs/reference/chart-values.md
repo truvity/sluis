@@ -13,62 +13,291 @@ the defaults and a comment per key. Why the chart is shaped this way, and the co
 ## Values
 
 <!-- generated: chart-values -->
-| Value | Default | Meaning |
-|---|---|---|
-| `documents.service`, `documents.policy` | `""` | **the rendered documents** of one installation (`sluisctl render`, [0038](../decisions/0038-estates-render-through-sluis.md)): the service document and the policy document as strings (`--set-file documents.service=rendered/sluis.yaml`). The chart puts each into its ConfigMap **unchanged** and keeps only the deployment-level values (replicas, the service account, mounts, probes, routes, alerts); it holds the documents to what it mounts (the release's full name, `policy.file`, the public URLs the route's, the audit token, the verify-only keys) and refuses a disagreement, naming the key to change in the installation. Set both or neither; with them `config` is not read, and `policy`, `exchange.clusters` and `exchange.aws.accounts` are refused. A secret an `openbao` or `ssm` secrets adapter delivers is not projected from a Kubernetes Secret. Deprecated: the values-mode below (`config`, `policy`, `exchange`, `githubApps.catalogue`, `slackApps`) keeps working for one minor, and NOTES.txt says so while it is used |
-| `config` | see [the service document](configuration.md#the-service-document) | **the service document** (`sluis serve`, with its controllers), rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/sluis/config.yaml`, read once at start (a change rolls the pods by their checksum annotation). Validated by `values.schema.json` against the schema the binary uses. It carries `apiVersion: sluis.truvity.github.io/sluis/v3`, and says everything about how the process runs (the issuer URL, lifetimes, the store, recovery, audit, the signing key's rotation, `secrets`, the adapters); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate. The values below that look policy-like (`exchange.*`, `githubApps`, `slackApps`, `policy`) are rendered into the policy document, not into this one |
-| `secrets[]` | `[]` | the secrets the config names, projected as files under `/var/run/sluis/secrets`: `{name, secretName, key}` puts a Secret's key at `<name>`, a secret NAME of the [layout](secrets.md#the-names) (`valkey/password`, `issuer/state-secret`, `directory/<id>/key`). `config.secrets` must then be `{source: file, root: /var/run/sluis/secrets}`, the default. Each confidential client's Secret is projected as `clients/<id>/secret` without being listed (its key is `policy.clients.<id>.secretKey`, default `client-secret`, and it is left out of the rendered policy document). A secret is never in `config` |
-| `secretEnv[]` | `[]` | for a config whose `secrets.source` is `env`: `{name, secretName, key, optional}` puts a Secret's key in the variable `name`, which must be `SLUIS_SECRET_<NAME>` for the name it delivers (`SLUIS_SECRET_VALKEY_PASSWORD`) |
-| `secretMounts[]` | `[]` | `{secretName, mountPath}`: a Secret mounted read-only as a directory, for a file a document names by path that is not a secret of the layout (a signing key's `file`). Each key is a file |
-| `config.controllers.github`, `config.controllers.slack` | absent (off) | the controllers that run **inside the one process** (v1.63): present is on, `github: {}` takes the defaults, which are the paths the chart mounts. `consoleURL` is required by the chart and is this release's own Service plus `console.mount`; the chart prints it when it is wrong. [The `controllers` section](configuration.md#controllers-the-github-and-slack-controllers) lists the keys. A change to a controller's section rolls the pod. Refused at render without an `exchange.clusters` row for this cluster or a `console.mount`, because either is a controller that can read nothing. The policy must put the release's ServiceAccount in `all:access-roster:viewer` (`exchange` must admit it); without it every pass fails on the first read. `controllerGithub` and `controllerSlack` are removed (v1.63): [upgrade to v1.63](../how-to/upgrade/v1.63.md) |
-| `replicaCount` | `2` | two replicas need a State they share: `config.ports.adapter: dynamodb`, or the `legacy` adapter with `config.valkey` (`memory` is one replica only). With a controller in `config.controllers` the chart refuses more than one unless `config.ports.adapter` is `dynamodb`: the controllers' tick leases must be in a State every replica shares, or every replica acts on every target ([high-availability](../explanation/high-availability.md#the-controllers-in-the-one-process)). Every replica serves every workspace, including one connected through the console on the other replica: a reader missing locally is opened from the stored credential on first use |
-| `image.repository` / `tag` | `ghcr.io/truvity/sluis/sluis` / app version | the one image: one Deployment runs `sluis serve`, and the controllers run in that process |
-| `nameOverride` / `fullnameOverride` | `""` / `""` | replace the chart name (the `app.kubernetes.io/name` label and the controllers' selectors) and the release's full name (the prefix of every object, and the value `config.release` must carry). For an installation moving from the `access-issuer` chart: [migrate from the access-issuer chart](../how-to/migrate-from-the-access-issuer-chart.md) |
-| `signingKey.existingSecret` / `.key` | `""` / `tls.key` | a Secret holding a PEM private key -- RSA, or ECDSA on P-256, P-384 or P-521. Empty renders a cert-manager `Certificate` instead. **Never minted by the service**: two replicas with two keys hand out tokens half the fleet cannot verify |
-| `signingKey.certificate.issuerName` / `.issuerKind` | `selfsigned` / `ClusterIssuer` | the cert-manager issuer that produces the key, when no `existingSecret` is named. The certificate is a by-product; only the key is used |
-| `signingKey.certificate.algorithm` / `.size` / `.encoding` | `ECDSA` / `384` / `PKCS8` | the key, and so what the issuer signs with BY DEFAULT: RSA signs RS256, and P-256, P-384 and P-521 sign ES256, ES384 and ES512. ECDSA takes 256, 384 or 521; RSA takes 2048, 3072 or 4096; PKCS1 encodes only RSA. A combination cert-manager would not issue is refused at render. The default P-384 key means ES384 for every audience that pins no `signing_alg` of its own — for the one relying party that lags (Kargo; EKS's associated OIDC provider; both RS256-only), pin **that audience's** policy row instead of this whole installation's default; see `signingKey.additional` below and [Policy: signing algorithm per audience](policy.md#signing-algorithm-per-audience). Changing THIS value changes the default for every audience that names none, and is not "just a rotation" the way adding a `signingKey.additional` entry is: every other algorithm now lives on its own track, and this value decides which one is "the default" |
-| `signingKey.additional[]` | `[]` | every OTHER algorithm this installation signs with AT THE SAME TIME as the default above: `{algorithm, size, encoding, issuerName, issuerKind, renewBefore, duration, key}` (`key`, default `tls.key`, is the key's file name in the entry's Secret, which is named `<release>-signing-key-<algorithm>`). Refused with KMS signing, one cert-manager `Certificate` and `Secret` per entry, each on its OWN rotation track — renewing one never disturbs another's schedule, including the default's. Two entries (or one entry and the default) naming the same algorithm are refused at render: each algorithm publishes only one key at a time. This is how a client or a resource's `signing_alg` (RS256, ES256 or ES384 — [policy.md#signing-algorithm-per-audience](policy.md#signing-algorithm-per-audience)) has a key to actually sign with; naming an algorithm nothing here configures is refused **at issuer start**, not on the first request that reaches it |
-| `signingKey.certificate.renewBefore` / `.duration` | `720h` / `8760h` | how long before expiry cert-manager replaces the key, and the certificate's life. A renewal is a **new key** (`rotationPolicy: Always`). `renewBefore` only decides how OFTEN that happens; `config.signingKey.overlap` is what has to be kept longer than `config.lifetimes.token` |
-| `directory.push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](exports.md)). a **recovery copy** of `Secret <release>-workspace-credentials`: `{secretStore: {name, kind}, remoteKey, refreshInterval}` renders `PushSecret <release>-workspace-copy`, which writes the whole Secret as one JSON object at `remoteKey` — bundled, because the keys inside are `<workspace-id>.json` and a reconnect mints a new id, so a per-key mapping would go stale while reporting healthy. `kind` defaults to `SecretStore`, `refreshInterval` to `1h`; `deletionPolicy` is fixed at `None`, because the case this exists for is the Secret going away. Refused at render without `directory.store: kubernetes`, without a store or a key, or for two pushes sharing one path. It is a push and not an `ExternalSecret` because the service is the writer: a pull would let a stale copy overwrite a freshly connected workspace. What lands there **is** the credential |
-| `githubApps.catalogue[]` | `[]` | GitHub Apps declared as data — `{id, org, name, description, public, permissions, events, installation, grants, push}` each — created and installed by an operator on the GitHub page (the Apps tab: the App's own page). Rendered into the policy document's `apps.github.catalogue` (or write it there, in `policy.apps`); the document is refused, at render and at start, for a malformed entry or a grant naming a group the policy does not declare. A default set to copy ships as the chart's `examples/github-apps.yaml`. See [connect/github-apps-catalogue.md](../how-to/connect/github-apps-catalogue.md) |
-| `githubApps.catalogue[].grants[]` | `[]` | who may ask for that App's installation tokens, and for how much: `{group, repositories[], permissions{}}` each. `group` is an internal group the policy declares; `repositories` are names in the App's organisation, `["*"]` for all; `permissions` is `{name: level}`. A request is served by the first grant, in catalogue order, that covers all of it ([contract](contracts.md#installation-tokens-at-token)) |
-| `githubApps.catalogue[].push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](exports.md)). copy one App's credential to a secret store: `{secretStore: {name, kind}, remoteKey, refreshInterval, deletionPolicy}` renders `PushSecret <release>-github-app-<id>`, which writes `app_id`, `installation_id` and `private_key` at `remoteKey` — that App's three property keys and nothing else. Off unless written, and refused at render for two entries sharing one path in one store, or without `directory.store: kubernetes`. The copy is a real credential, rotated as one. See [connect/infrastructure-as-code.md](../how-to/connect/infrastructure-as-code.md) |
-| `githubApps.push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](exports.md)). a **recovery copy** of `Secret <release>-github-apps` — the link App and one App per bound organisation, the identities this service acts as — with the same shape and rules as `directory.push`, rendering `PushSecret <release>-github-apps-copy`. Distinct from `catalogue[].push`, which copies one catalogue App's three keys for a consumer that must act as it; this copies the service's own Apps, and only so they can be restored. An App cannot be re-created with its old id, so losing them means every grant rebinds and every installation is re-authorised by hand |
-| `slackState.push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](exports.md)). a **recovery copy** of the Slack state, in the shape of `directory.push` with one more key: `{secretStore: {name, kind}, remoteKey, recordsRemoteKey, refreshInterval}` renders `PushSecret <release>-slack-credentials-copy` (the whole of `Secret <release>-slack-credentials`, at `remoteKey`) and `PushSecret <release>-slack-records-copy` (the whole of `Secret <release>-slack-records`, at `recordsRemoteKey`). Each is bundled under one remote key because the keys inside are `<workspace-id>.json`. `recordsRemoteKey` is required and must differ from `remoteKey`. `kind` defaults to `SecretStore`, `refreshInterval` to `1h`; `deletionPolicy` is fixed at `None`. Refused at render without `directory.store: kubernetes`, without a store or either key, or for two pushes sharing one path. The records are a mirror Secret because they live in a ConfigMap and a `PushSecret` reads Secrets only. What lands there **is** every workspace's credential |
-| `slackApps[]` | `[]` | Slack Apps declared as data — `{id, workspace, name, description, botScopes, push}` each — created (with a throwaway app configuration token, used once and never stored) and installed (by an owner of the workspace) by an operator on the console's Slack area (the Apps tab). `id` is `[a-z0-9-]`, at most 32, unique, and never changes; `workspace` is a key of the policy's `slack.workspaces` (lowercase letters, digits and `-`, at most 40, as the policy itself requires); `name` defaults to `<workspace>-<id>`, at most 35; `description` at most 140. Rendered into the policy document's `apps.slack.catalogue`; the document is refused for a malformed entry or an entry for a workspace the policy does not name. Needs `directory.store: kubernetes`. See [connect/slack-apps-catalogue.md](../how-to/connect/slack-apps-catalogue.md) |
-| `slackApps[].push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](exports.md)). copy one App's bot token — one key, `bot_token`, never the client secret or the record — to a secret store: `{secretStore: {name, kind}, remoteKey, refreshInterval, deletionPolicy}`, rendering `PushSecret <release>-slack-app-<id>`. Refused at render for two entries sharing one path in one store, or without `directory.store: kubernetes`. The copy is a real credential, rotated as one |
-| `console.mount` | `/console` | where the console sits on this origin. A **path** and not a host, because discovery must be at the root of the origin named in every token's `iss`. It is also what the console prefixes onto every link it hands a browser — `/login` resolves against the origin, where the issuer's page is. Empty serves no console |
-| `exchange.clusters[]` | `[]` | the clusters whose workloads may exchange: `{name, issuer, jwksUri}` per cluster, verified against the key set that cluster publishes. Rendered into the policy document's `exchange.clusters` (write them here or in `policy.exchange`, not both). **No secret in any row**, and this service holds access to no cluster — including its own, which is a row like any other |
-| `exchange.aws.accounts[]` | `[]` | the AWS accounts whose IAM roles may exchange their outbound-identity-federation token: `{account, name, issuer, jwksUri, orgId, algs}` per account, verified against the key set that account's issuer publishes. Rendered into the policy document's `exchange.aws`. **No secret in any row. Empty verifies no AWS token at all**: any AWS account can mint a valid token for a role of its own, so the row is the trust boundary. See [connect/aws-workloads.md](../how-to/connect/aws-workloads.md) |
-| `exchange.aws.audience` | the issuer URL | the audience the role must request from `sts:GetWebIdentityToken`; a token for any other is refused |
-| `exchange.aws.maxAge` | `5m` | refuse a token whose `iat` is older, whatever its `exp` allows (AWS permits an hour). At most `1h` |
-| `route.host` | `""` | the hostname on the gateway. Empty renders no Gateway, HTTPRoute or Certificate, which is right for an installation reached by port-forward |
-| `route.rootRedirect` | `""` | where a bare GET of the host goes. The issuer serves nothing at `/` — every endpoint it answers is a named one — so point this at `/console/` and somebody who types the domain lands somewhere useful |
-| `route.gatewayClassName`, `route.certificate.issuerName` / `.issuerKind` | `internal`, `internal-ca` / `ClusterIssuer` | which class the Gateway joins, and who issues its TLS certificate |
-| `route.certificate.privateKey` | `{}` | the key that TLS certificate is issued for: `{algorithm, size, encoding, rotationPolicy}`, cert-manager's own fields. Empty leaves every one to cert-manager's defaults, an RSA 2048 key. Set it when the issuer will only sign one kind of key — a PKI role pinned to an algorithm refuses at issuance, long after the render succeeded, and the listener stays dark with the reason on the `CertificateRequest`. The same combinations as the signing key are refused at render |
-| `route.sharedWith[]` | `[]` | namespaces besides this one allowed to attach an HTTPRoute to this Gateway. A **gateway-level** admission, not a ReferenceGrant: whether a Gateway accepts a route from another namespace is entirely its own `allowedRoutes` |
-| `route.parentRefs[]` | `[]` | parents for the issuer's routes, written out in full (e.g. a platform `ListenerSet` carrying `route.host`). When set the chart renders **no Gateway and no TLS Certificate**: the parent owns the listener and its certificate, and `gatewayClassName`, `certificate` and `sharedWith` have no effect. Write `group` and `kind` out |
-| `policy` | `{}` | the policy document without its `apiVersion`, which the chart writes: [the policy document](policy-document.md), held by `values.schema.json` to `schemas/config/policy.schema.json`, rendered into `<release>-policy` and mounted where `policy.file` names it (`config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`; the controllers read the process's own policy). Render a directory of layers first with `sluisctl policy render` and pass the result here |
-| `networkPolicy.enabled` | `false` | |
-| `networkPolicy.clients[]` | `[]` | namespaces allowed to reach the service in-cluster: the proxies verifying tokens and the workloads exchanging them |
-| `networkPolicy.gatewayNamespace` | `""` | the gateway's namespace, admitted to the service's port besides `clients`. Empty admits no gateway, so with the policy enabled nothing with a browser reaches it |
-| `serviceAccount.annotations` | `{}` | annotations on the ServiceAccount, which is how a cloud identity reaches this service: an admission webhook (EKS Pod Identity, GKE Workload Identity, the self-hosted `amazon-eks-pod-identity-webhook`) reads one and injects credentials into every pod using the account. Without it a self-hosted installation cannot give the service an AWS identity, and `audit.s3` has nothing to authenticate with; the chart mounts no credential of its own and takes none as a value. On AWS: `eks.amazonaws.com/role-arn: <the role's ARN>` |
-| `resources`, `replicaCount` | as `values.yaml` | the one Deployment's. Its readiness probe (`/readyz` on `config.probes.address`) is ready only once the whole process, each controller included, has begun |
-| `audit.token.audience` / `.expirationSeconds` | `audit` / `3600` | the projected token presented to the receiver |
-| `exports.openbao.caBundle` | `""` | PEM of the authorities that sign OpenBao's certificate, for the service's [exports](exports.md): a ConfigMap `<release>-openbao-ca` mounted at `/var/run/access-issuer/openbao-ca/ca.pem`, which `config.ports.export.openbao.caFile` must then be (the chart refuses another path). Empty mounts nothing |
-| `exports.openbao.token.audience` / `.expirationSeconds` | `""` / `3600` | a ServiceAccount token projected at `/var/run/openbao/token` for the `jwt` auth method, which `config.ports.export.openbao.auth.tokenFile` must then be. Empty projects nothing, which is what the `kubernetes` method wants |
-| `alerts.rules.exportFailing` / `.exportStale` | enabled, `warning`: 3 failures in `30m` for `15m`; no copy for `10800`s for `10m` | the two rules over the exports ([telemetry](../operations/telemetry.md#alerts)) |
-| `signingKey.verifyOnly[]` | `[]` | `{pem}` each: a PUBLIC key (PEM, certificate or JWK) the chart mounts from the ConfigMap `<release>-verify-keys` at `/var/run/access-issuer/verify-keys/<index>.pem`, for `config.signingKey.verifyOnly[<index>].file`. A private key is refused at render. [Cut over to kms-wrapped signing](../how-to/cut-over-to-kms-wrapped-signing.md) |
-| `serviceAccount.awsIdentity` / `.awsRoleArn` | `pod-identity` / `""` | how the pod gets its AWS role. `pod-identity` (EKS Pod Identity) renders nothing: the association is made outside the chart. `irsa` annotates the account with `eks.amazonaws.com/role-arn: <awsRoleArn>`, which it requires; `awsRoleArn` with `pod-identity`, or the annotation written twice, is refused |
-| `telemetry.otlp.endpoint` / `.protocol` / `.extraEnv` | `""` / `http/protobuf` / `{}` | the OpenTelemetry SDK environment on every pod: `OTEL_EXPORTER_OTLP_ENDPOINT` (an http(s) URL), `OTEL_EXPORTER_OTLP_PROTOCOL` (`http/protobuf`, `http/json` or `grpc`) and other `OTEL_*` variables by name (none may be the endpoint). Empty `endpoint` renders nothing and exports nothing |
-| `renders` | `app` | what this release renders: `app` (the service), `alerts` (only the alert rules) or `dashboards` (only the Grafana dashboard ConfigMaps). The last two render and validate nothing else, so they may be a second release beside the one running the service |
-| `alerts.name` / `.objectNamespace` / `.namespace` | `<release>-alerts` / the release's / the release's | the rule object's name, the namespace it goes in (where the ruler looks), and the namespace of the series the rules read |
-| `alerts.format` / `.labels` / `.ruleLabels` / `.interval` | `vmrule` / `{}` / `{}` / `1m` | `vmrule` or `prometheusrule`; labels on the rule object; labels on every rule (the cluster, for the Alertmanager tree); the evaluation interval |
-| `alerts.clusterLabel` / `.selector` / `.runbookBaseUrl` | `k8s_cluster_name` / `""` / the repository's `docs/operations/telemetry.md` | the label naming the cluster, extra matchers for every series, and where an alert's runbook entry is (the alert's name, lower-cased, is the anchor; empty renders no link) |
-| `alerts.rules.<rule>.enabled` / `.severity` / `.for` / `.labels` | enabled, per rule | each rule's switch, severity, hold time and labels, with the rule's own thresholds beside them (`ratio`, `minErrors`, `thresholdSeconds`, `failures`, `window`, `maxAgeSeconds`, `losses`, `remaining`). The rules and every threshold are in [telemetry](../operations/telemetry.md#alerts) and `values.yaml` |
-| `dashboards.namespace` / `.folder` / `.sidecarLabel` / `.sidecarLabelValue` / `.labels` | the release's / `Access` / `grafana_dashboard` / `"1"` / `{}` | with `renders: dashboards`: one ConfigMap per file in `charts/sluis/dashboards/`, labelled for Grafana's sidecar, in Grafana's namespace |
-| `image.pullPolicy`, `serviceAccount.name`, `resources`, `podAnnotations`, `nodeSelector`, `tolerations` | | passthrough |
 
+Source: `charts/sluis/values.schema.json`. Generated by `just docs-generate`; keys are listed with their parents first.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `alerts` | object | — | Alert rules, rendered with `renders: alerts`. |
+| `alerts.clusterLabel` | string | — | The label that names the cluster on a store that holds several. |
+| `alerts.format` | one of vmrule, prometheusrule | — | The kind of object. |
+| `alerts.interval` | string | — | How often the ruler evaluates the group. |
+| `alerts.labels` | object | — | Labels on the rule object. |
+| `alerts.labels.<name>` | string | — |  |
+| `alerts.name` | string | — | The object's name. Empty: <release>-alerts. |
+| `alerts.namespace` | string | — | The namespace sluis runs in, whose series the rules read. Empty: the release's. |
+| `alerts.objectNamespace` | string | — | Where the rule object goes. Empty: the release's namespace. |
+| `alerts.ruleLabels` | object | — | Labels added to every rule, for Alertmanager routing, such as `k8s_cluster_name`. |
+| `alerts.ruleLabels.<name>` | string | — |  |
+| `alerts.rules` | object | — | The rules. |
+| `alerts.rules.exportFailing` | object | — | An export's copy keeps failing. |
+| `alerts.rules.exportFailing.enabled` | boolean | — |  |
+| `alerts.rules.exportFailing.failures` | integer | — | Failed attempts of one export within `window`. |
+| `alerts.rules.exportFailing.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.exportFailing.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.exportFailing.labels.<name>` | string | — |  |
+| `alerts.rules.exportFailing.severity` | string | — | The severity label. |
+| `alerts.rules.exportFailing.window` | string | — | The window, as a duration. |
+| `alerts.rules.exportStale` | object | — | An export has not had its copy in the store for `maxAgeSeconds`. |
+| `alerts.rules.exportStale.enabled` | boolean | — |  |
+| `alerts.rules.exportStale.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.exportStale.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.exportStale.labels.<name>` | string | — |  |
+| `alerts.rules.exportStale.maxAgeSeconds` | integer | — | The age, in seconds. |
+| `alerts.rules.exportStale.severity` | string | — | The severity label. |
+| `alerts.rules.issuer5xx` | object | — | The listener answers a share of its requests 5xx. |
+| `alerts.rules.issuer5xx.enabled` | boolean | — |  |
+| `alerts.rules.issuer5xx.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.issuer5xx.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.issuer5xx.labels.<name>` | string | — |  |
+| `alerts.rules.issuer5xx.minErrors` | integer | — | The fewest 5xx in the window that count. |
+| `alerts.rules.issuer5xx.ratio` | number | — | The share. |
+| `alerts.rules.issuer5xx.severity` | string | — | The severity label. |
+| `alerts.rules.leaseLost` | object | — | Tick leases are lost repeatedly. |
+| `alerts.rules.leaseLost.enabled` | boolean | — |  |
+| `alerts.rules.leaseLost.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.leaseLost.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.leaseLost.labels.<name>` | string | — |  |
+| `alerts.rules.leaseLost.losses` | integer | — | Leases lost within `window` by one kind of target. |
+| `alerts.rules.leaseLost.severity` | string | — | The severity label. |
+| `alerts.rules.leaseLost.window` | string | — | The window, as a duration. |
+| `alerts.rules.noSigningKey` | object | — | No signing key is published. |
+| `alerts.rules.noSigningKey.enabled` | boolean | — |  |
+| `alerts.rules.noSigningKey.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.noSigningKey.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.noSigningKey.labels.<name>` | string | — |  |
+| `alerts.rules.noSigningKey.severity` | string | — | The severity label. |
+| `alerts.rules.portErrors` | object | — | Storage port calls are failing. |
+| `alerts.rules.portErrors.enabled` | boolean | — |  |
+| `alerts.rules.portErrors.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.portErrors.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.portErrors.labels.<name>` | string | — |  |
+| `alerts.rules.portErrors.minErrors` | integer | — | The fewest failures in the window that count. |
+| `alerts.rules.portErrors.ratio` | number | — | The share of calls that failed. |
+| `alerts.rules.portErrors.severity` | string | — | The severity label. |
+| `alerts.rules.rateLimitLow` | object | — | GitHub's rate-limit budget is nearly spent. |
+| `alerts.rules.rateLimitLow.enabled` | boolean | — |  |
+| `alerts.rules.rateLimitLow.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.rateLimitLow.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.rateLimitLow.labels.<name>` | string | — |  |
+| `alerts.rules.rateLimitLow.remaining` | integer | — | Requests left under which the alert fires. |
+| `alerts.rules.rateLimitLow.severity` | string | — | The severity label. |
+| `alerts.rules.seatsShort` | object | — | An organisation has fewer free seats than invitations. |
+| `alerts.rules.seatsShort.enabled` | boolean | — |  |
+| `alerts.rules.seatsShort.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.seatsShort.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.seatsShort.labels.<name>` | string | — |  |
+| `alerts.rules.seatsShort.severity` | string | — | The severity label. |
+| `alerts.rules.signingKeyRotationStalled` | object | — | The active signing key is older than `maxAgeSeconds`. |
+| `alerts.rules.signingKeyRotationStalled.enabled` | boolean | — |  |
+| `alerts.rules.signingKeyRotationStalled.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.signingKeyRotationStalled.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.signingKeyRotationStalled.labels.<name>` | string | — |  |
+| `alerts.rules.signingKeyRotationStalled.maxAgeSeconds` | integer | — | The age, in seconds. |
+| `alerts.rules.signingKeyRotationStalled.severity` | string | — | The severity label. |
+| `alerts.rules.tickFailing` | object | — | A target's ticks keep failing. |
+| `alerts.rules.tickFailing.enabled` | boolean | — |  |
+| `alerts.rules.tickFailing.failures` | integer | — | Failed ticks of one target within `window`. |
+| `alerts.rules.tickFailing.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.tickFailing.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.tickFailing.labels.<name>` | string | — |  |
+| `alerts.rules.tickFailing.severity` | string | — | The severity label. |
+| `alerts.rules.tickFailing.window` | string | — | The window, as a duration. |
+| `alerts.rules.tickStale` | object | — | A target has had no ok tick for `maxAgeSeconds`. |
+| `alerts.rules.tickStale.enabled` | boolean | — |  |
+| `alerts.rules.tickStale.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.tickStale.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.tickStale.labels.<name>` | string | — |  |
+| `alerts.rules.tickStale.maxAgeSeconds` | integer | — | The age, in seconds. |
+| `alerts.rules.tickStale.severity` | string | — | The severity label. |
+| `alerts.rules.tokenLatency` | object | — | The token endpoint's p99 is over `thresholdSeconds`. |
+| `alerts.rules.tokenLatency.enabled` | boolean | — |  |
+| `alerts.rules.tokenLatency.for` | string | — | How long the condition holds before the alert fires, as a duration. |
+| `alerts.rules.tokenLatency.labels` | object | — | Labels added to this rule only. |
+| `alerts.rules.tokenLatency.labels.<name>` | string | — |  |
+| `alerts.rules.tokenLatency.severity` | string | — | The severity label. |
+| `alerts.rules.tokenLatency.thresholdSeconds` | number | — | The p99, in seconds. |
+| `alerts.runbookBaseUrl` | string | — | Where the runbook is; the alert's name, lower-cased, is the anchor. Empty renders no link. |
+| `alerts.selector` | string | — | Extra matchers for every series. |
+| `audit` | object | — | The projected service-account token this service and the controllers present to the audit installation. The installation itself (`audit.writer` and the rest) is the `config`'s. |
+| `audit.token` | object | — |  |
+| `audit.token.audience` | string | — | The audience of the projected token presented to the receiver. |
+| `audit.token.expirationSeconds` | integer | — |  |
+| `config` | object | — | Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is sluis's: schemas/config/sluis.schema.json. |
+| `console` | object | — | Where the console is mounted on the issuer's origin. The rest of what the console is configured with is the `config`'s. |
+| `console.mount` | string | — | Where the console is mounted on this issuer's origin, e.g. /console. Empty serves no console. |
+| `dashboards` | object | — | Grafana dashboards, rendered with `renders: dashboards`. |
+| `dashboards.folder` | string | — | The Grafana folder, for a sidecar that reads the folder annotation. |
+| `dashboards.labels` | object | — | Extra labels on each ConfigMap. |
+| `dashboards.labels.<name>` | string | — |  |
+| `dashboards.namespace` | string | — | Grafana's namespace. Empty: the release's. |
+| `dashboards.sidecarLabel` | string | — | The label Grafana's sidecar selects ConfigMaps by. |
+| `dashboards.sidecarLabelValue` | string | — | Its value. |
+| `directory` | object | — | The corporate directories this service reads itself. The workspaces a deployment declares are the config's: `config.directory.workspaces`, each key file mounted with `secretMounts`. |
+| `directory.push` | object | — | Copy the credential of every connected workspace to a secret store with an External Secrets PushSecret, for recovery: the whole Secret bundled under one remote key, because the key names inside it are not stable. Absent pushes nothing. deletionPolicy is deliberately not settable -- the case this exists for is the Secret going away. |
+| `directory.push.refreshInterval` | string | — |  |
+| `directory.push.remoteKey` | string | **required** |  |
+| `directory.push.secretStore` | object | **required** |  |
+| `directory.push.secretStore.kind` | one of SecretStore, ClusterSecretStore | — |  |
+| `directory.push.secretStore.name` | string | **required** |  |
+| `documents` | object | — | The rendered documents of one installation (`sluisctl render`), each as the string the file holds. The chart puts them into their ConfigMaps unchanged and holds them to what it mounts; it does not rewrite them. Set both or neither. With them, `config`, `policy`, `exchange.clusters` and `exchange.aws.accounts` are not used. |
+| `documents.policy` | string | — | The policy document (`policy.yaml`, apiVersion sluis.truvity.github.io/policy/v2). |
+| `documents.service` | string | — | The service document (`sluis.yaml`, apiVersion sluis.truvity.github.io/sluis/v3). |
+| `exchange` | object | — |  |
+| `exchange.aws` | object | — | AWS accounts whose IAM roles may exchange their outbound-identity-federation token. Empty verifies none. |
+| `exchange.aws.accounts` | array | — |  |
+| `exchange.aws.accounts[].account` | string | **required** | The 12-digit AWS account id. |
+| `exchange.aws.accounts[].algs` | array | — |  |
+| `exchange.aws.accounts[].issuer` | string | **required** | The account's token issuer, from get-outbound-web-identity-federation-info. |
+| `exchange.aws.accounts[].jwksUri` | string | — | Where its public keys are. Empty means <issuer>/.well-known/jwks.json. |
+| `exchange.aws.accounts[].name` | string | **required** | The estate's word for the account, for logs. |
+| `exchange.aws.accounts[].orgId` | string | — | Require this AWS Organizations id in the token. |
+| `exchange.aws.audience` | string | — | The audience the role must request from STS. Empty means the issuer's own URL. |
+| `exchange.aws.maxAge` | string | — | Refuse a token whose iat is older, whatever its exp allows. Default 5m, at most 1h. |
+| `exchange.clusters` | array | — | Clusters whose workloads may exchange, each verified against the key set that cluster publishes. No secret in any row. |
+| `exchange.clusters[].issuer` | string | **required** | The `iss` its ServiceAccount tokens carry. |
+| `exchange.clusters[].jwksUri` | string | — | Where its public keys are. Empty discovers it from the issuer. |
+| `exchange.clusters[].name` | string | **required** | The estate's word for the cluster; what a workload matcher names. |
+| `exports` | object | — | What the chart mounts for the service's exports (docs/decisions/0034): the CA that signs OpenBao's certificate and the projected token the login presents. What is copied and where (`config.exports`), and the OpenBao it is copied to and how the service logs in to it (`config.ports.export`), are the `config`'s. |
+| `exports.openbao` | object | — |  |
+| `exports.openbao.caBundle` | string | — | PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.ports.export.openbao.caFile` and `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted. |
+| `exports.openbao.token` | object | — |  |
+| `exports.openbao.token.audience` | string | — | The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.ports.export.openbao.auth.tokenFile` and `config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token. |
+| `exports.openbao.token.expirationSeconds` | integer | — |  |
+| `fullnameOverride` | string | — | Replaces the release's full name, the prefix of every object the chart renders and the value `config.release` must carry. An installation migrating from the access-issuer chart sets it to the old full name so no object is renamed. |
+| `githubApps` | object | — |  |
+| `githubApps.catalogue` | array | — | GitHub Apps declared as data, created and installed from the console. The service validates the whole catalogue again at start. |
+| `githubApps.catalogue[].description` | string | — |  |
+| `githubApps.catalogue[].events` | array | — |  |
+| `githubApps.catalogue[].grants` | array | — |  |
+| `githubApps.catalogue[].grants[].group` | string | **required** |  |
+| `githubApps.catalogue[].grants[].permissions` | object | **required** |  |
+| `githubApps.catalogue[].grants[].permissions.<name>` | one of read, write, admin | — |  |
+| `githubApps.catalogue[].grants[].repositories` | array | **required** |  |
+| `githubApps.catalogue[].id` | string | **required** |  |
+| `githubApps.catalogue[].installation` | one of all, selected | — |  |
+| `githubApps.catalogue[].name` | string | — |  |
+| `githubApps.catalogue[].org` | string | **required** |  |
+| `githubApps.catalogue[].permissions` | object | **required** |  |
+| `githubApps.catalogue[].permissions.<name>` | one of read, write, admin | — |  |
+| `githubApps.catalogue[].public` | boolean | — |  |
+| `githubApps.catalogue[].push` | object | — | Copy this App's credential to a secret store with an External Secrets PushSecret: its three property keys only, to the store and path named here. Absent pushes nothing. |
+| `githubApps.catalogue[].push.deletionPolicy` | one of None, Delete | — |  |
+| `githubApps.catalogue[].push.refreshInterval` | string | — |  |
+| `githubApps.catalogue[].push.remoteKey` | string | **required** |  |
+| `githubApps.catalogue[].push.secretStore` | object | **required** |  |
+| `githubApps.catalogue[].push.secretStore.kind` | one of SecretStore, ClusterSecretStore | — |  |
+| `githubApps.catalogue[].push.secretStore.name` | string | **required** |  |
+| `githubApps.push` | object | — | Copy the link App and one App per bound organisation to a secret store with an External Secrets PushSecret, for recovery: the whole Secret bundled under one remote key, because the key names inside it are not stable. Absent pushes nothing. deletionPolicy is deliberately not settable -- the case this exists for is the Secret going away. |
+| `githubApps.push.refreshInterval` | string | — |  |
+| `githubApps.push.remoteKey` | string | **required** |  |
+| `githubApps.push.secretStore` | object | **required** |  |
+| `githubApps.push.secretStore.kind` | one of SecretStore, ClusterSecretStore | — |  |
+| `githubApps.push.secretStore.name` | string | **required** |  |
+| `image` | object | — |  |
+| `image.pullPolicy` | one of Always, IfNotPresent, Never | — |  |
+| `image.repository` | string | — |  |
+| `image.tag` | string | — |  |
+| `nameOverride` | string | — | Replaces the chart name in the `app.kubernetes.io/name` label and in the controllers' selector labels. An installation migrating from the access-issuer chart sets it to access-issuer so the Deployments' immutable selectors are unchanged. |
+| `networkPolicy` | object | — |  |
+| `networkPolicy.clients` | array | — |  |
+| `networkPolicy.enabled` | boolean | — |  |
+| `networkPolicy.gatewayNamespace` | string | — |  |
+| `nodeSelector` | object | — |  |
+| `podAnnotations` | object | — |  |
+| `policy` | object | — | The policy document, without its apiVersion, which the chart writes: rendered into the ConfigMap <release>-policy beside the sections the chart's own values fill (exchange.clusters and exchange.aws from `exchange`, the catalogues from `githubApps.catalogue` and `slackApps`). Its schema is schemas/config/policy.schema.json. An access document or a directory of layers is rendered first: `sluisctl policy render`. |
+| `renders` | one of app, alerts, dashboards | — | What this release renders: `app`, the service and the controllers (the default); `alerts`, only the alert rules; `dashboards`, only the Grafana dashboard ConfigMaps. In the last two nothing else is rendered. |
+| `replicaCount` | integer | — |  |
+| `resources` | object | — |  |
+| `route` | object | — |  |
+| `route.certificate` | object | — |  |
+| `route.certificate.issuerKind` | one of Issuer, ClusterIssuer | — |  |
+| `route.certificate.issuerName` | string | — |  |
+| `route.certificate.privateKey` | object | — |  |
+| `route.certificate.privateKey.algorithm` | one of RSA, ECDSA | — |  |
+| `route.certificate.privateKey.encoding` | one of PKCS1, PKCS8 | — |  |
+| `route.certificate.privateKey.rotationPolicy` | one of Never, Always | — |  |
+| `route.certificate.privateKey.size` | one of 256, 384, 521, 2048, 3072, 4096 | — |  |
+| `route.gatewayClassName` | string | — |  |
+| `route.host` | string | — |  |
+| `route.parentRefs` | array | — |  |
+| `route.parentRefs[].group` | string | — |  |
+| `route.parentRefs[].kind` | string | — |  |
+| `route.parentRefs[].name` | string | **required** |  |
+| `route.parentRefs[].namespace` | string | — |  |
+| `route.parentRefs[].port` | integer | — |  |
+| `route.parentRefs[].sectionName` | string | — |  |
+| `route.rootRedirect` | string | — | Where a bare GET of the host root goes; empty serves 404. |
+| `route.sharedWith` | array | — |  |
+| `secretEnv` | array | — | Environment variables from a Secret's keys: the holders of the secrets the config names (`valkey.passwordEnv`, `oauthClient.secretEnv`, `adminPasswordEnv`). A secret is never in `config`. |
+| `secretEnv[].key` | string | **required** | The key in the Secret. |
+| `secretEnv[].name` | string | **required** | The variable, as the config names it. |
+| `secretEnv[].optional` | boolean | — | Start without it when the Secret or the key is absent. |
+| `secretEnv[].secretName` | string | **required** | The Secret. |
+| `secretManagers` | any | — | Removed in v1.30.0 — the console's secret-store view was removed. Setting this key fails the render with a clear message. See CHANGELOG.md and docs/decisions/0002-mission-boundary-tokens-and-memberships.md. |
+| `secretMounts` | array | — | Secrets mounted read-only as directories, for a file the config names by path (`oauthClient.idFile`, `oauthClient.secretFile`). Each key is a file. |
+| `secretMounts[].mountPath` | string | **required** | The directory it appears in. |
+| `secretMounts[].secretName` | string | **required** | The Secret. |
+| `secrets` | array | — | The secrets the config names, each one key of a Secret projected as the file <config.secrets.root>/<name>. |
+| `secrets[].key` | string | **required** |  |
+| `secrets[].name` | string | **required** | The secret's name, as the config gives it: valkey/password. |
+| `secrets[].secretName` | string | **required** |  |
+| `serviceAccount` | object | — |  |
+| `serviceAccount.annotations` | object | — |  |
+| `serviceAccount.annotations.<name>` | string | — |  |
+| `serviceAccount.awsIdentity` | one of pod-identity, irsa | — | How the pod gets its AWS role. `pod-identity` (EKS Pod Identity) renders nothing: the association is made outside the chart. `irsa` annotates the account with `eks.amazonaws.com/role-arn: <awsRoleArn>`, which it requires. |
+| `serviceAccount.awsRoleArn` | string | — | The role's ARN, for `awsIdentity: irsa`. |
+| `serviceAccount.name` | string | — |  |
+| `signingKey` | object | — |  |
+| `signingKey.additional` | array | — |  |
+| `signingKey.additional[].algorithm` | one of RSA, ECDSA | **required** |  |
+| `signingKey.additional[].duration` | string | — |  |
+| `signingKey.additional[].encoding` | one of PKCS1, PKCS8 | — |  |
+| `signingKey.additional[].issuerKind` | one of Issuer, ClusterIssuer | — |  |
+| `signingKey.additional[].issuerName` | string | — |  |
+| `signingKey.additional[].key` | string | — |  |
+| `signingKey.additional[].renewBefore` | string | — |  |
+| `signingKey.additional[].size` | one of 256, 384, 521, 2048, 3072, 4096 | **required** |  |
+| `signingKey.certificate` | object | — |  |
+| `signingKey.certificate.algorithm` | one of RSA, ECDSA | — |  |
+| `signingKey.certificate.duration` | string | — |  |
+| `signingKey.certificate.encoding` | one of PKCS1, PKCS8 | — |  |
+| `signingKey.certificate.issuerKind` | one of Issuer, ClusterIssuer | — |  |
+| `signingKey.certificate.issuerName` | string | — |  |
+| `signingKey.certificate.renewBefore` | string | — |  |
+| `signingKey.certificate.size` | one of 256, 384, 521, 2048, 3072, 4096 | — |  |
+| `signingKey.existingSecret` | string | — |  |
+| `signingKey.key` | string | — |  |
+| `signingKey.verifyOnly` | array | — | PUBLIC keys the chart mounts from a ConfigMap (they are not secret), one file each at /var/run/access-issuer/verify-keys/<index>.pem, for `config.signingKey.verifyOnly[<index>].file`: published in the JWKS and never signed with. A private key is refused. |
+| `signingKey.verifyOnly[].pem` | string | **required** | A PEM public key, a certificate, or a JWK. |
+| `slackApps` | array | — | Slack Apps declared as data, created and installed from the console. The service validates the whole catalogue again at start, and refuses an entry for a workspace the policy's slack.workspaces does not name. |
+| `slackApps[].botScopes` | array | **required** |  |
+| `slackApps[].description` | string | — |  |
+| `slackApps[].id` | string | **required** |  |
+| `slackApps[].name` | string | — |  |
+| `slackApps[].push` | object | — | Copy this App's bot token to a secret store with an External Secrets PushSecret: that one key only, to the store and path named here. Absent pushes nothing. |
+| `slackApps[].push.deletionPolicy` | one of None, Delete | — |  |
+| `slackApps[].push.refreshInterval` | string | — |  |
+| `slackApps[].push.remoteKey` | string | **required** |  |
+| `slackApps[].push.secretStore` | object | **required** |  |
+| `slackApps[].push.secretStore.kind` | one of SecretStore, ClusterSecretStore | — |  |
+| `slackApps[].push.secretStore.name` | string | **required** |  |
+| `slackApps[].workspace` | string | **required** | A key of the policy's slack.workspaces. |
+| `slackState` | object | — | A recovery copy of the Slack state: see push. |
+| `slackState.push` | object | — | Copy the credential of every connected Slack workspace, and the mirror of the records that say which workspaces and Slack Connect channels the console holds, to a secret store with an External Secrets PushSecret, for recovery: each whole Secret bundled under its own remote key (remoteKey for the credentials, recordsRemoteKey for the records), because the key names inside are not stable. Absent pushes nothing. deletionPolicy is deliberately not settable -- the case this exists for is the Secret going away. |
+| `slackState.push.recordsRemoteKey` | string | **required** |  |
+| `slackState.push.refreshInterval` | string | — |  |
+| `slackState.push.remoteKey` | string | **required** |  |
+| `slackState.push.secretStore` | object | **required** |  |
+| `slackState.push.secretStore.kind` | one of SecretStore, ClusterSecretStore | — |  |
+| `slackState.push.secretStore.name` | string | **required** |  |
+| `telemetry` | object | — | The OpenTelemetry SDK environment on every pod of `renders: app` (ADR 0006). Nothing is rendered without `otlp.endpoint`. |
+| `telemetry.otlp` | object | — |  |
+| `telemetry.otlp.endpoint` | string | — | OTEL_EXPORTER_OTLP_ENDPOINT: an http(s) URL naming the collector or gateway. Empty: nothing is exported and nothing is rendered. |
+| `telemetry.otlp.extraEnv` | object | — | Other OpenTelemetry SDK variables, name to value. Every name starts with OTEL_ and none is OTEL_EXPORTER_OTLP_ENDPOINT (checked at render). |
+| `telemetry.otlp.extraEnv.<name>` | string or number or boolean | — |  |
+| `telemetry.otlp.protocol` | one of http/protobuf, http/json, grpc | `"http/protobuf"` | OTEL_EXPORTER_OTLP_PROTOCOL. |
+| `tolerations` | array | — |  |
 <!-- /generated -->
 
 Why there are two routes, and why the console's mount is not rewritten by the gateway:

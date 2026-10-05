@@ -133,7 +133,7 @@ type Deps struct {
 	Slack func(token string) *slackapp.Client
 	// Leases takes a lease on each workspace before its tick, from the State
 	// port. Nil runs every tick without one: a single runner, which is what
-	// a deployment with no shared State has (see docs/design/ports.md).
+	// a deployment with no shared State has (see docs/explanation/ports.md).
 	Leases *rails.Leases
 	// Trigger says that a workspace has work: a notification runs that
 	// workspace's tick. Nil is an in-process trigger.

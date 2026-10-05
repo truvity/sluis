@@ -57,5 +57,5 @@
 // RenderPorts renders the `ports:` block of the processes' configuration from
 // the same names.
 //
-// docs/deployment/aws.md is the guide: every input and output and the IAM.
+// docs/reference/pulumi-library.md is the guide: every input and output and the IAM.
 package sluispulumi

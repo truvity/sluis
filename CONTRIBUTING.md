@@ -58,8 +58,7 @@ ts/                       the TypeScript package; dist/ is built and
                           published to GitHub Packages by the release
 proto/  gen/              contracts and committed generated code
 docs/                     getting-started, how-to (with upgrade/),
-                          reference, explanation, decisions (ADRs),
-                          plus operations/telemetry.md
+                          reference, explanation, decisions (ADRs)
 ```
 
 Public Go packages stay free of Kubernetes and framework specifics

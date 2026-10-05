@@ -39,5 +39,5 @@ Blob port, gzip-encoded).
 
 ## Afterwards
 
-- Watch `access_roster.leases.contended` and `AccessRosterLeaseLost` ([telemetry](../operations/telemetry.md)) after raising the
+- Watch `access_roster.leases.contended` and `AccessRosterLeaseLost` ([telemetry](../reference/telemetry.md)) after raising the
   count.

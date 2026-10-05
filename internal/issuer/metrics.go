@@ -37,7 +37,7 @@ func newIssuerInstruments() issuerInstruments {
 	tokens, _ := meter.Int64Counter("access_issuer.tokens.issued",
 		metric.WithDescription("Access tokens signed, by client id (declared clients only; anything else is `other`) and grant type."))
 	failures, _ := meter.Int64Counter("access_issuer.login.failures",
-		metric.WithDescription("Sign-ins that did not complete, by reason: a fixed set, see docs/operations/telemetry.md."))
+		metric.WithDescription("Sign-ins that did not complete, by reason: a fixed set, see docs/reference/telemetry.md."))
 	logins, _ := meter.Int64Counter("access_issuer.login.successes",
 		metric.WithDescription("Sign-ins that completed, by how the person was proved: a directory's kind, `recovery` or `browser_session`."))
 	reuse, _ := meter.Int64Counter("access_issuer.reuse_detected",

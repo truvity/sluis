@@ -12,7 +12,7 @@ import (
 )
 
 // r2AudienceDefault is the client id an R2 credential broker conventionally
-// answers to -- see docs/connect/r2-storage.md. An installation whose
+// answers to -- see docs/how-to/connect/r2-storage.md. An installation whose
 // broker uses a different name overrides it with --audience or
 // $SLUISCTL_R2_AUDIENCE; nothing here assumes the name is universal.
 const r2AudienceDefault = "r2-broker"
@@ -120,7 +120,7 @@ func parseR2Flags(args []string) (r2Request, []string, error) {
 // Defaulting the subcommand is what lets a `credential_process` line
 // never spell it out: `credential_process = sluisctl r2 -- credentials
 // --bucket example-bucket --prefix nix/` is the documented form
-// (docs/connect/r2-storage.md), and `sluisctl r2 -- --bucket
+// (docs/how-to/connect/r2-storage.md), and `sluisctl r2 -- --bucket
 // example-bucket` (no subcommand at all) works identically -- `credentials`
 // is the one subcommand a caller of THIS wrapper ever wants. `serve` runs
 // the broker service itself, holding its own parent key from its own

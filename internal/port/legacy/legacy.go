@@ -3,7 +3,7 @@
 // internal/kube and the Valkey of internal/valkey. It exists so that the
 // service can depend on the ports before the data moves (ADR 0031); it is
 // deleted when the migration has run and the DynamoDB adapter
-// carries the layout of docs/design/ports.md.
+// carries the layout of docs/explanation/ports.md.
 //
 // Nothing here changes what is written where. The data model today is
 // per-domain objects, not a key-value store, so each port key is mapped onto

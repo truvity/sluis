@@ -720,7 +720,7 @@ groups:
 }
 
 // TestWildcardEmptiedByRoleScopeRefused proves the "wildcard that expands
-// to no group is refused" rule (docs/taxonomy.md#mapping-wildcards) still
+// to no group is refused" rule (docs/reference/taxonomy.md#mapping-wildcards) still
 // holds, and explains itself, when the reason is rule 3 rather than a
 // role that does not exist at all: `kernel:*:user` has a concrete scope
 // and a role every declared thing recognizes, but `ssh` is the only thing

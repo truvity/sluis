@@ -952,7 +952,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   that is not an http(s) URL, an `extraEnv` name not starting with `OTEL_`, and
   `OTEL_EXPORTER_OTLP_ENDPOINT` in `extraEnv`. Without it the alerts and the
   dashboard had no data. See
-  [docs/operations/telemetry.md](docs/operations/telemetry.md#wiring-it-with-the-chart).
+  [docs/reference/telemetry.md](docs/reference/telemetry.md#wiring-it-with-the-chart).
 
 - **`access-roster migrate --from <config> --to <config>`** copies the State from
   one storage to another (ADR 0031): the first step of the move, ConfigMaps,
@@ -1043,7 +1043,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
 - **Traces, issuer and controller metrics, and the chart's `alerts` and
   `dashboards` modes.** Telemetry is still only `OTEL_*`, exported only when a
   collector is named; the contract and every signal are in
-  [docs/operations/telemetry.md](docs/operations/telemetry.md).
+  [docs/reference/telemetry.md](docs/reference/telemetry.md).
 
   - **Traces.** A server span per request on the issuer's listener, named for a
     fixed route and never the path; Connect spans on the console's and the
