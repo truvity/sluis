@@ -33,6 +33,11 @@ spec:
       serviceAccountName: {{ include "sluis.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
+        {{- if include "sluis.secretFiles" . }}
+        # The projected secrets are mode 0440: readable by this group, whatever
+        # user the image runs as.
+        fsGroup: 65532
+        {{- end }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -250,6 +255,7 @@ spec:
         # Secret its policy entry names.
         - name: secrets
           projected:
+            defaultMode: 0440
             sources:
               {{- range .Values.secrets }}
               - secret:
@@ -258,6 +264,7 @@ spec:
                     - key: {{ .key }}
                       path: {{ .name }}
               {{- end }}
+              {{- if not (include "sluis.documentsMode" .) }}
               {{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) }}
               {{- if $client.secret }}
               - secret:
@@ -265,6 +272,7 @@ spec:
                   items:
                     - key: {{ $client.secretKey | default "client-secret" }}
                       path: clients/{{ $id }}/secret
+              {{- end }}
               {{- end }}
               {{- end }}
         {{- end }}

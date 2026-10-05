@@ -141,10 +141,19 @@ sluis.checks: everything the service's config must agree with.
 {{- if ne (join "," ($signing.additionalFiles | default list)) $additional -}}
 {{- fail (printf "config.signingKey.additionalFiles must be [%s], one file per signingKey.additional entry in the order they are declared (got [%s])" $additional (join ", " ($signing.additionalFiles | default list))) -}}
 {{- end -}}
-{{- if include "sluis.secretFiles" . -}}
+{{- if or (include "sluis.secretFiles" .) (and (include "sluis.documentsMode" .) (eq (dig "secrets" "source" "env" $c) "file")) -}}
 {{- $secrets := dig "secrets" dict $c -}}
 {{- if or (ne ($secrets.source | default "env") "file") (ne ($secrets.root | default "") "/var/run/sluis/secrets") -}}
 {{- fail (printf "config.secrets must be {source: file, root: /var/run/sluis/secrets}, where the chart projects `secrets` and each confidential client's Secret (got source %q, root %q)" ($secrets.source | default "env") ($secrets.root | default "")) -}}
+{{- end -}}
+{{- if include "sluis.documentsMode" . -}}
+{{- $declared := dict -}}
+{{- range .Values.secrets -}}{{- $_ := set $declared .name true -}}{{- end -}}
+{{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) -}}
+{{- if and $client.secret (not (hasKey $declared $client.secret)) -}}
+{{- fail (printf "policy client %q names the secret %q and `secrets` does not declare it: with secrets.source file the chart projects each name from the Kubernetes Secret declared in `secrets` ({name: %s, secretName: <Secret>, key: <key>})" $id $client.secret $client.secret) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- include "sluis.expectAudit" (dict "key" "config.audit.tokenFile" "cfg" $c) -}}

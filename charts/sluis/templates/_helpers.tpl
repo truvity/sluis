@@ -228,16 +228,20 @@ whether the client-secrets volume is rendered at all. A deployment whose
 clients are all public or exchange-only mounts nothing.
 */}}
 {{- define "sluis.secretFiles" -}}
-{{- if or .Values.secrets (include "sluis.confidentialClients" .) }}yes{{ end }}
+{{- if include "sluis.documentsMode" . -}}
+{{- if and .Values.secrets (eq (dig "secrets" "source" "env" .Values.config) "file") }}yes{{ end -}}
+{{- else if or .Values.secrets (include "sluis.confidentialClients" .) }}yes{{ end }}
 {{- end }}
 
 {{- define "sluis.confidentialClients" -}}
 {{- /*
-  With documents (`documents.service`), a secret is delivered as the document's
-  secrets adapter says: an `openbao` or `ssm` adapter reads a client's secret by
-  its NAME from the store, so there is no Kubernetes Secret to project.
+  Values mode only: a client's `secret` is the name of the Kubernetes Secret that
+  holds it. With documents (`documents.service`) it is the secret's NAME
+  (clients/<id>/secret), the same string the secrets source resolves, so there
+  is nothing to read a Secret name from; the Secret behind each name is declared
+  in `secrets` instead.
 */ -}}
-{{- if not (and (include "sluis.documentsMode" .) (has (dig "adapters" "secrets" "adapter" "" .Values.config) (list "openbao" "ssm"))) -}}
+{{- if not (include "sluis.documentsMode" .) -}}
 {{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) }}
 {{- if $client.secret }}yes{{ end }}
 {{- end }}
