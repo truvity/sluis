@@ -100,6 +100,10 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
 - **Preset `aws-eks`** is the deprecated name of `k8s-aws` (it never started: it named the unbuilt trigger `watch`).
   It resolves to `k8s-aws` and start logs a warning.
 
+## v1.64.0-rc.1
+
+The release candidate of v1.64.0, the same changes as above; cut to exercise the release workflow's library-tag job before the final tag. Its npm package was not published (npm refuses a pre-release without `--tag`).
+
 ## v1.63.0
 
 One process everywhere (ADR 0037): on AWS Lambda one function and one role, on Kubernetes one Deployment and one Pod Identity role, configured by one service document `sluis.yaml` (`apiVersion` v3, with `controllers.github` and `controllers.slack`) plus the canonical `policy.yaml`. No data migration from 1.62; binary 1.63 and the Pulumi library 1.63 deploy together. **Upgrading:** [upgrade to v1.63](docs/how-to/upgrade/v1.63.md).
