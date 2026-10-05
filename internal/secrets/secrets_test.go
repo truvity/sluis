@@ -178,3 +178,57 @@ func TestALegacySourceReadsWhereV1SaidFirst(t *testing.T) {
 		}
 	}
 }
+
+// A failed read is not tried again for a while, and a copy that cannot be read
+// again is served only for so long: then the source fails closed.
+func TestTheSSMSourceBacksOffAndFailsClosedWhenTooStale(t *testing.T) {
+	f := &fakeSSM{params: map[string]string{"/sluis/hive/private/config/a": "1"}}
+	now := time.Unix(0, 0)
+	src := &secrets.SSM{API: f, Root: "/sluis/hive", Refresh: time.Minute, MaxStale: time.Hour, Now: func() time.Time { return now }}
+	ctx := context.Background()
+	if _, err := src.Get(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	f.fail = true
+	now = now.Add(2 * time.Minute)
+	if v, err := src.Get(ctx, "a"); err != nil || v != "1" {
+		t.Fatalf("the copy was not served: %q %v", v, err)
+	}
+	calls := f.calls
+	for range 5 {
+		_, _ = src.Get(ctx, "a")
+	}
+	if f.calls != calls {
+		t.Errorf("SSM was asked again within the back-off: %d calls", f.calls-calls)
+	}
+	now = now.Add(2 * time.Hour)
+	if _, err := src.Get(ctx, "a"); err == nil {
+		t.Error("a copy older than MaxStale was served")
+	}
+	f.fail = false
+	now = now.Add(time.Minute)
+	if v, err := src.Get(ctx, "a"); err != nil || v != "1" {
+		t.Errorf("a read again after the back-off: %q %v", v, err)
+	}
+}
+
+func TestANameIsNotEchoedAndTwoNamesMayNotShareAVariable(t *testing.T) {
+	err := secrets.Check("hunter2 ../x")
+	if err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("Check: %v", err)
+	}
+	if err := secrets.CheckEnvNames([]string{"a/b", "a-b"}); err == nil || !strings.Contains(err.Error(), "SLUIS_SECRET_A_B") {
+		t.Errorf("a collision: %v", err)
+	}
+	if err := secrets.CheckEnvNames([]string{"a/b", "a/b", "c"}); err != nil {
+		t.Errorf("one name twice is no collision: %v", err)
+	}
+}
+
+func TestARootNamedPrivateOrExportIsRefused(t *testing.T) {
+	for _, root := range []string{"/sluis/private", "/sluis/export", "/sluis/x/export"} {
+		if _, err := secrets.NewSSM(context.Background(), root, "", "", 0); err == nil {
+			t.Errorf("%s was accepted", root)
+		}
+	}
+}

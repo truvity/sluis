@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -16,6 +17,18 @@ import (
 // again: a rotated secret reaches every instance within it.
 const DefaultRefresh = 5 * time.Minute
 
+// DefaultMaxStale is how old a copy may grow while every read again fails
+// before the source fails closed: an instance whose read access was revoked
+// stops serving the secrets it read, a day later at the latest.
+const DefaultMaxStale = 24 * time.Hour
+
+// retryAfter is how long after a failed read the next is tried: a throttled or
+// denied SSM is not asked again on every request.
+const retryAfter = 30 * time.Second
+
+// readTimeout bounds one read of the prefix, every page of it.
+const readTimeout = 20 * time.Second
+
 // ConfigPrefix is where, under an installation's root, the secrets a document
 // names live: `<root>/private/config/<name>` (layout v3).
 const ConfigPrefix = "/private/config/"
@@ -27,16 +40,30 @@ type ParametersAPI interface {
 
 // SSM reads every parameter under <Root>/private/config/ at once, decrypted,
 // and again when its copy is older than Refresh.
+//
+// A read again happens outside the lock, by one caller at a time; everybody
+// else is answered from the copy meanwhile. A read that fails keeps the copy,
+// and the next is not tried before retryAfter. A copy older than MaxStale with
+// every read again failing is not served: the source fails closed.
 type SSM struct {
 	API     ParametersAPI
 	Root    string
 	Refresh time.Duration
+	// MaxStale is how old a copy may grow while reads fail. Zero is
+	// DefaultMaxStale.
+	MaxStale time.Duration
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 
-	mu      sync.Mutex
-	values  map[string]string
-	fetched time.Time
+	mu         sync.Mutex
+	values     map[string]string
+	fetched    time.Time
+	nextTry    time.Time
+	lastErr    error
+	refreshing bool
+	// readMu serialises the reads, so a cold start reads once however many
+	// callers arrive together.
+	readMu sync.Mutex
 }
 
 // NewSSM connects with the platform's credentials (a Lambda role, Pod
@@ -63,7 +90,23 @@ func NewSSM(ctx context.Context, root, region, endpoint string, refresh time.Dur
 
 func checkRoot(root string) error {
 	if !strings.HasPrefix(root, "/") || strings.HasSuffix(root, "/") || strings.Count(root, "/") < 2 {
-		return fmt.Errorf("secrets: ssm: root %q is not /<app>/<instance> (layout v3: /sluis/<instance>)", root)
+		return errors.New("secrets: ssm: the root is not /<app>/<instance> (layout v3: /sluis/<instance>)")
+	}
+	if err := CheckRoot(root); err != nil {
+		return fmt.Errorf("secrets: ssm: %w", err)
+	}
+	return nil
+}
+
+// CheckRoot refuses an SSM root that would nest under another installation's
+// private or export tree, or under layout v2's (/sluis/private, /sluis/export):
+// no segment of it may be `private` or `export`.
+func CheckRoot(root string) error {
+	for _, seg := range strings.Split(strings.Trim(root, "/"), "/") {
+		if seg == "private" || seg == "export" {
+			return fmt.Errorf("the root has a segment %q: an instance may not be named private or export, "+
+				"which would put its parameters under another tree", seg)
+		}
 	}
 	return nil
 }
@@ -87,35 +130,81 @@ func (s *SSM) Get(ctx context.Context, name string) (string, error) {
 // Describe implements [Source].
 func (s *SSM) Describe(name string) string { return "ssm " + s.Root + ConfigPrefix + name }
 
-// current is the copy, read again when it is older than the refresh. A read
-// that fails keeps the copy there is, when there is one: an SSM outage does not
-// take a secret away from an instance that read it.
+// current is the copy, read again when it is older than the refresh.
 func (s *SSM) current(ctx context.Context) (map[string]string, error) {
-	now := time.Now
-	if s.Now != nil {
-		now = s.Now
-	}
-	refresh := s.Refresh
+	now := s.now()
+	refresh, maxStale := s.Refresh, s.MaxStale
 	if refresh <= 0 {
 		refresh = DefaultRefresh
 	}
+	if maxStale <= 0 {
+		maxStale = DefaultMaxStale
+	}
+	s.mu.Lock()
+	values, age := s.values, now.Sub(s.fetched)
+	switch {
+	case values != nil && age < refresh:
+		s.mu.Unlock()
+		return values, nil
+	case now.Before(s.nextTry) || (values != nil && s.refreshing):
+		// A read failed a moment ago, or another caller is reading: answer
+		// from the copy while it is young enough to.
+		err := s.lastErr
+		s.mu.Unlock()
+		if values != nil && age < maxStale {
+			return values, nil
+		}
+		if err == nil {
+			err = errors.New("secrets: ssm: the parameters are being read")
+		}
+		return nil, s.staleErr(err, values != nil)
+	}
+	s.refreshing = true
+	s.mu.Unlock()
+
+	s.readMu.Lock()
+	defer s.readMu.Unlock()
+	s.mu.Lock()
+	if s.values != nil && s.now().Sub(s.fetched) < refresh {
+		// Another caller read while this one waited.
+		s.refreshing = false
+		values := s.values
+		s.mu.Unlock()
+		return values, nil
+	}
+	s.mu.Unlock()
+	read, err := s.read(context.WithoutCancel(ctx))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.values != nil && now().Sub(s.fetched) < refresh {
-		return s.values, nil
-	}
-	values, err := s.read(ctx)
+	s.refreshing = false
 	if err != nil {
-		if s.values != nil {
+		s.lastErr, s.nextTry = err, s.now().Add(retryAfter)
+		if s.values != nil && s.now().Sub(s.fetched) < maxStale {
 			return s.values, nil
 		}
-		return nil, err
+		return nil, s.staleErr(err, s.values != nil)
 	}
-	s.values, s.fetched = values, now()
-	return values, nil
+	s.values, s.fetched, s.lastErr, s.nextTry = read, s.now(), nil, time.Time{}
+	return read, nil
+}
+
+func (s *SSM) staleErr(err error, hadCopy bool) error {
+	if hadCopy {
+		return fmt.Errorf("secrets: ssm: the copy is older than allowed and it cannot be read again: %w", err)
+	}
+	return err
+}
+
+func (s *SSM) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
 }
 
 func (s *SSM) read(ctx context.Context) (map[string]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
 	prefix := s.Root + ConfigPrefix
 	values := map[string]string{}
 	var token *string

@@ -172,7 +172,7 @@ spec:
               - secret:
                   name: {{ $client.secret }}
                   items:
-                    - key: client-secret
+                    - key: {{ $client.secretKey | default "client-secret" }}
                       path: clients/{{ $id }}/secret
               {{- end }}
               {{- end }}

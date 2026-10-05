@@ -279,7 +279,7 @@ func serveSchema() m {
 		}),
 		"oauthClient": obj("The OAuth client registered once with the directory backend: it drives both admin consent and operator sign-in.", m{
 			"id":         str("The client id, for a local run. Not a secret."),
-			"provider":   str("Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it."),
+			"provider":   m{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9._-]*$`, "description": "Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it. One segment of a secret's name."},
 			"secretName": str("The Kubernetes Secret the client is declared in, which the console shows and cannot change."),
 			"idKey":      str("The key of the id in that Secret."),
 			"secretKey":  str("The key of the secret in that Secret."),

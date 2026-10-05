@@ -83,7 +83,15 @@ func Load(file string) (Config, error) {
 	// The secrets the document names are read through one source, opened
 	// here and handed to both halves with the storage ports. Opening connects
 	// to nothing: a secret is read when it is used.
-	if cfg.Stores.Secrets, err = secrets.Open(context.Background(), svc); err != nil {
+	var clients []string
+	if p != nil {
+		for id := range p.Policy.Clients {
+			if p.Policy.Clients[id].Kind == policy.KindConfidential {
+				clients = append(clients, secrets.ClientSecret(id))
+			}
+		}
+	}
+	if cfg.Stores.Secrets, err = secrets.Open(context.Background(), svc, clients...); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

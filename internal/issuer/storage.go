@@ -2,6 +2,7 @@ package issuer
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -619,7 +620,9 @@ func (s *Storage) AuthorizeClientIDSecret(_ context.Context, clientID, secret st
 		return nil
 	}
 	want, ok := s.secrets(clientID)
-	if !ok || want == "" || want != secret {
+	// Constant time: the comparison must not tell a caller how much of a
+	// guess was right.
+	if !ok || want == "" || subtle.ConstantTimeCompare([]byte(want), []byte(secret)) != 1 {
 		return errors.New("the client secret does not match")
 	}
 	return nil

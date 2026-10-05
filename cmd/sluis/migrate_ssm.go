@@ -11,8 +11,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/truvity/sluis/internal/migrate"
 )
@@ -33,8 +35,10 @@ with 'sluis migrate --from <v1 serve config> --to <v2 serve config>' whose
 secrets adapters name the two roots. The exports (export/...) are written again
 by the service's next exports pass.
 
-The report is JSON on stdout: the names, never a value. The credentials are the
-AWS SDK's own (a profile, the environment).
+The report is JSON on stdout: the account and region it ran in, and the names,
+never a value. Each copy is encrypted with the source parameter's own KMS key
+unless --kms-key names one. The credentials are the AWS SDK's own (a profile,
+the environment).
 
 `
 
@@ -46,7 +50,7 @@ func migrateSSMLayout(out io.Writer, args []string) error {
 	var region string
 	fs.StringVar(&o.From, "from-root", "/sluis", "the layout v2 root")
 	fs.StringVar(&o.To, "to-root", "", "the layout v3 root: /sluis/<instance>")
-	fs.StringVar(&o.KMSKeyID, "kms-key", "", "the KMS key the copies are encrypted with (default: the AWS-managed key)")
+	fs.StringVar(&o.KMSKeyID, "kms-key", "", "the KMS key the copies are encrypted with (default: each parameter's own key)")
 	fs.StringVar(&region, "region", "", "the region (default: the AWS SDK's own resolution)")
 	fs.BoolVar(&o.DryRun, "dry-run", false, "report what would be copied; write nothing")
 	fs.BoolVar(&o.Overwrite, "overwrite", false, "replace a v3 parameter that holds a different value (default: refuse, naming it)")
@@ -70,6 +74,13 @@ func migrateSSMLayout(out io.Writer, args []string) error {
 		return fmt.Errorf("ssm: %w", err)
 	}
 	report, err := migrate.MoveSSMLayout(ctx, awsssm.NewFromConfig(cfg), o)
+	// Where it ran: what an operator checks before trusting a dry run.
+	report.Region = cfg.Region
+	if who, idErr := sts.NewFromConfig(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); idErr == nil {
+		report.Account = aws.ToString(who.Account)
+	} else if err == nil {
+		err = fmt.Errorf("sts: who is this: %w", idErr)
+	}
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
 	if encErr := enc.Encode(report); encErr != nil && err == nil {

@@ -189,6 +189,7 @@ policy:
     reports:
       kind: confidential
       secret: reports-client
+      secretKey: oidc-secret
       redirects:
         - https://reports.example/oauth2/callback
       requires:

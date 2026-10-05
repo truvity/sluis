@@ -1261,6 +1261,11 @@
                 "minLength": 1,
                 "type": "string"
               },
+              "secretKey": {
+                "description": "The chart's: the key of the Secret `secret` names that holds the client's secret. Default client-secret. Not rendered into the policy document.",
+                "minLength": 1,
+                "type": "string"
+              },
               "sign_in_exchange": {
                 "description": "It may exchange a sign-in for a token of its own.",
                 "type": "boolean"
@@ -2499,8 +2504,8 @@
               "type": "string"
             },
             "provider": {
-              "description": "Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it.",
-              "minLength": 1,
+              "description": "Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it. One segment of a secret's name.",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
               "type": "string"
             },
             "secretKey": {

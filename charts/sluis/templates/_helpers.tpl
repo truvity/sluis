@@ -120,6 +120,13 @@ both ways is refused: one place says it.
 */}}
 {{- define "sluis.policyDocument" -}}
 {{- $doc := deepCopy (.Values.policy | default dict) -}}
+{{- if $doc.clients -}}
+{{- $clients := dict -}}
+{{- range $id, $c := $doc.clients -}}
+{{- $_ := set $clients $id (omit $c "secretKey") -}}
+{{- end -}}
+{{- $_ := set $doc "clients" $clients -}}
+{{- end -}}
 {{- $exchange := deepCopy (dig "exchange" dict $doc) -}}
 {{- if .Values.exchange.clusters -}}
 {{- if hasKey $exchange "clusters" -}}

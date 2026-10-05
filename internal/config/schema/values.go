@@ -53,6 +53,9 @@ func Values() []byte {
 			panic(err)
 		}
 		flatten(defs, c.schema, s)
+		if c.schema == "policy" {
+			chartOnlyClientSecretKey(defs)
+		}
 
 		// Walk to the component's own object and give it the `config` property.
 		node := root
@@ -163,4 +166,20 @@ func fragment(path string) map[string]any {
 	delete(s, "$id")
 	delete(s, "title")
 	return s
+}
+
+// chartOnlyClientSecretKey lets a client of the chart's `policy` name the key of
+// its Secret that holds the secret (`secretKey`, default client-secret). It is
+// the chart's, not the policy's: the chart projects that key and leaves it out
+// of the policy document it renders.
+func chartOnlyClientSecretKey(defs m) {
+	pol, _ := defs["config-policy"].(map[string]any)
+	props, _ := pol["properties"].(map[string]any)
+	clients, _ := props["clients"].(map[string]any)
+	client, _ := clients["additionalProperties"].(map[string]any)
+	cprops, _ := client["properties"].(map[string]any)
+	if cprops == nil {
+		panic("schema: the policy schema has no clients' properties")
+	}
+	cprops["secretKey"] = m{"type": "string", "minLength": 1, "description": "The chart's: the key of the Secret `secret` names that holds the client's secret. Default client-secret. Not rendered into the policy document."}
 }
