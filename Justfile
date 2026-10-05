@@ -134,9 +134,9 @@ acceptance: console
 # The require gate: deploy/pulumi requires github.com/truvity/sluis, and a
 # library tagged vX.Y.Z whose require names another version ships against
 # the wrong root. The release workflow tags the library at a commit whose
-# require is pinned to the release (hack/pin-pulumi-require.sh), so the
-# require on master is never bumped by hand; this runs the pin and holds its
-# result to the tag with hack/check-release-require.sh, as the workflow's gate
+# require is pinned to the release (hack/pin-pulumi-require.sh) and builds it
+# as a consumer before tagging (hack/build-as-consumer.sh), so the require on
+# master is never bumped by hand; this runs the pin, as the workflow's gate
 # does.
 #
 # The release path, as far as it can be exercised without a tag.
@@ -150,9 +150,7 @@ release-check tag="": console
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -n "{{tag}}" ]; then
-        pinned="$(mktemp)"
-        ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/go.mod > "$pinned"
-        ./hack/check-release-require.sh "{{tag}}" "$pinned"
+        ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/go.mod > /dev/null
     fi
     ./hack/check-archives.py
     goreleaser check

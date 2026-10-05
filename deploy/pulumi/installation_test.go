@@ -3,7 +3,7 @@ package sluispulumi_test
 import (
 	"go/parser"
 	"go/token"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,22 +128,41 @@ func TestRecoveryIsSaidOnceAcrossTheArgumentsAndTheInstallation(t *testing.T) {
 	}
 }
 
+// An installation never leaves the web identity audience empty, which would
+// mean any audience: it is the console's, and a different one is refused.
+func TestTheWebIdentityAudienceIsTheConsolesWhenAnInstallationIsGiven(t *testing.T) {
+	in := hiveInstallation(t)
+	rec, _ := mustLambda(t, withInstallation(in, nil))
+	if !strings.Contains(prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue(), "https://access.example.test/console") {
+		t.Error("the role's web identity grant does not carry the console audience")
+	}
+	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://other.example.test" })); err == nil ||
+		!strings.Contains(err.Error(), "WebIdentityAudience") {
+		t.Errorf("a different audience: %v", err)
+	}
+	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://access.example.test/console" })); err != nil {
+		t.Errorf("the same audience: %v", err)
+	}
+}
+
 // The library is a consumer of the root module's public surface only. An
 // import of its `internal/` would compile while the module is checked out
 // beside it (the path prefix permits it) and be a different, older package for
 // a consumer on an earlier release: the version trap a public package ends.
 func TestTheLibraryImportsNothingInternal(t *testing.T) {
-	files, err := filepath.Glob("*.go")
+	var files []string
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(path, ".go") {
+			files = append(files, path)
+		}
+		return err
+	})
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no sources: %v", err)
 	}
 	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
-		}
-		if _, err := os.Stat(f); err != nil {
-			t.Fatal(err)
-		}
+		// Test files count too: a test that reaches into internal/ is the
+		// same trap when the module is consumed at another release.
 		parsed, err := parser.ParseFile(token.NewFileSet(), f, nil, parser.ImportsOnly)
 		if err != nil {
 			t.Fatal(err)

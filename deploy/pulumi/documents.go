@@ -170,6 +170,16 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 		rec.Enabled = r.Enabled
 		in.Recovery = &rec
 	}
+	// With an installation an empty audience is never "any audience": it is the
+	// console's, the one the controllers' token is minted for.
+	aud := sluisconfig.ConsoleAudience(&in)
+	switch {
+	case a.WebIdentityAudience == "":
+		a.WebIdentityAudience = aud
+	case a.WebIdentityAudience != aud:
+		return a, fmt.Errorf("sluispulumi: LambdaArgs.WebIdentityAudience is %q and the installation's console audience is %q: "+
+			"leave it out, or say it once", a.WebIdentityAudience, aud)
+	}
 	service, policy, err := sluisconfig.Render(&in)
 	if err != nil {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)

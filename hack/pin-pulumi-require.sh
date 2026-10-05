@@ -19,8 +19,8 @@ set -euo pipefail
 version="${1:?usage: pin-pulumi-require.sh <vX.Y.Z> [go.mod]}"
 file="${2:-$(cd "$(dirname "$0")/.." && pwd)/deploy/pulumi/go.mod}"
 
-if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "pin-pulumi-require: $version is not a release version (vX.Y.Z)" >&2
+if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+  echo "pin-pulumi-require: $version is not a release version (vX.Y.Z or a semver pre-release such as vX.Y.Z-rc.1)" >&2
   exit 2
 fi
 

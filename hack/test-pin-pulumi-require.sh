@@ -25,7 +25,11 @@ grep -q '^module github.com/truvity/sluis/deploy/pulumi$' "$tmp/go.mod" || fail 
 
 # Refused: a version that is not a release, a file with no require, one with two.
 "$pin" 1.2.3 "$tmp/go.mod" 2>/dev/null && fail "a version with no v was accepted"
-"$pin" v1.2.3-rc.1 "$tmp/go.mod" 2>/dev/null && fail "a pre-release was accepted"
+# A pre-release is a release the trigger (`v*`) and the gate accept: so does the pin.
+"$pin" v1.2.3-rc.1 "$tmp/go.mod" || fail "a pre-release was refused"
+grep -qE '^[[:space:]]*github\.com/truvity/sluis v1\.2\.3-rc\.1$' "$tmp/go.mod" || fail "the pre-release was not pinned"
+"$pin" v1.2.3-rc.1.x "$tmp/go.mod" || fail "a dotted pre-release was refused"
+"$pin" v1.2.3-bad+meta "$tmp/go.mod" 2>/dev/null && fail "build metadata was accepted"
 printf 'module x\n' > "$tmp/none.mod"
 "$pin" v1.2.3 "$tmp/none.mod" 2>/dev/null && fail "a go.mod with no require was accepted"
 printf 'require (\n\tgithub.com/truvity/sluis v1.0.0\n\tgithub.com/truvity/sluis v1.1.0\n)\n' > "$tmp/two.mod"

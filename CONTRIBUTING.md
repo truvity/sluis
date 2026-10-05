@@ -230,15 +230,28 @@ reason. An identifier that deliberately keeps its old name gets an `allow` row;
 prose still to be rewritten is a `baseline` count that only goes down.
 
 Two gates run before the artifacts exist, and `just release-check vX.Y.Z`
-runs the first locally:
+runs the pin locally:
 
 - **The Pulumi library's require.** `deploy/pulumi/go.mod` requires
   `github.com/truvity/sluis`, and the release workflow tags the library at a
   child of the release commit whose require is the tag
   (`hack/pin-pulumi-require.sh`; the `pulumi-tag` job), so nothing is bumped by
-  hand. The `gate` job runs the pin and holds its result to the tag
-  (`hack/check-release-require.sh`), so a `go.mod` the pin cannot handle stops
-  the release before anything is published.
+  hand. The `gate` job runs the pin first, so a `go.mod` it cannot handle stops
+  the release before anything is published, and `pulumi-tag` then builds the
+  pinned library as a consumer would (the `replace` dropped, the root module
+  fetched at the release tag with `GOPROXY=direct`, `go build` and `go vet`,
+  `hack/build-as-consumer.sh`) before the `deploy/pulumi/vX.Y.Z` ref exists.
+  The `checkout` step keeps no credential (`persist-credentials: false`); the
+  token is in the API calls only.
+
+  **A `deploy/pulumi/vX.Y.Z` tag pushed by hand at the release commit is refused
+  by design:** the job accepts an existing tag only when it is a child of the
+  release commit with the pinned `go.mod`, and fails otherwise, because a tag
+  that a proxy has fetched cannot be taken back. The recovery is to delete the
+  wrong tag before any proxy fetches it, or, once one has, to cut the next
+  version, and to re-run the job for the right one. An owner step, not done
+  here: a tag ruleset restricting `deploy/pulumi/v*` to the release workflow
+  makes the hand-push impossible instead of refused.
 - **No breaking patch.** Auto-release refuses to cut a patch while the
   CHANGELOG entries after the newest release contain `**Breaking:`
   (`hack/check-no-breaking-patch.sh`; the `guard` job of `auto-release.yaml`).

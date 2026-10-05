@@ -33,11 +33,12 @@ jobs:
   # Before anything is built or published: refuse a tag whose Pulumi library
   # cannot be pinned to it. deploy/pulumi requires github.com/truvity/sluis and
   # the library is tagged (by pulumi-tag below) at a commit whose require is
-  # THIS release: hack/pin-pulumi-require.sh makes that go.mod, and the check
-  # holds the result to the tag, so a go.mod the pin cannot handle stops the
-  # release here, before anything is published, and not at the end of it. The
+  # THIS release: hack/pin-pulumi-require.sh makes that go.mod, so a go.mod the
+  # pin cannot handle stops the release here, before anything is published.
+  # The pinned library is then BUILT as a consumer would, in pulumi-tag, before
+  # its ref exists (hack/build-as-consumer.sh). The
   # require on master is never bumped by hand.
-  # `just release-check <tag>` runs the same two scripts locally.
+  # `just release-check <tag>` runs the pin locally.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -50,8 +51,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          ./hack/pin-pulumi-require.sh "$TAG" - < deploy/pulumi/go.mod > "$RUNNER_TEMP/go.mod"
-          ./hack/check-release-require.sh "$TAG" "$RUNNER_TEMP/go.mod"
+          ./hack/pin-pulumi-require.sh "$TAG" - < deploy/pulumi/go.mod > /dev/null
 
   release:
     needs: gate
@@ -140,8 +140,11 @@ jobs:
   # library tagged with a stale one compiled for nobody (it used a package its
   # require did not have). So the tag points at a commit made here: a child of
   # the release commit whose deploy/pulumi/go.mod requires THIS release, and
-  # nothing else differs (hack/pin-pulumi-require.sh, which has a test). The
-  # require on master is whatever it was and never has to be bumped.
+  # nothing else differs (hack/pin-pulumi-require.sh, which has a test), and it
+  # is BUILT as a consumer would build it, before the ref exists: the replace
+  # dropped, the root module fetched at the release tag, `go build` and
+  # `go vet` (hack/build-as-consumer.sh). The require on master is whatever it
+  # was and never has to be bumped.
   #
   # Idempotent, so that a re-run of a release does not fail on its own tag: a tag
   # that exists counts when it is that very commit (a child of the release
@@ -150,11 +153,19 @@ jobs:
   pulumi-tag:
     needs: release
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The token is for the API calls below and nothing else: git needs
+          # none here, and a credential left in .git/config is one more place
+          # a step could read it.
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: deploy/pulumi/go.mod
       - name: tag the Pulumi library at the release commit, pinned to the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -167,6 +178,7 @@ jobs:
             tag="$dir/${GITHUB_REF_NAME}"
             pinned="$(mktemp)"
             hack/pin-pulumi-require.sh "${GITHUB_REF_NAME}" - < "$dir/go.mod" > "$pinned"
+            hack/build-as-consumer.sh "$dir" "$pinned" "${GITHUB_REF_NAME}"
             if ref=$(gh api "repos/$REPO/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha' 2>/dev/null); then
               read -r otype existing <<<"$ref"
               # A signed or annotated tag is an object of its own: the ref
