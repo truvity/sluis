@@ -3,7 +3,8 @@
 // and, as the main path, the Lambda deployment: ONE function from the release
 // zip with one role, an HTTP API with a mutual-TLS custom domain, the
 // token-signing key and the controllers' schedules. The EKS Pod Identity roles
-// are kept for an installation that still runs the Deployments.
+// are kept, collapsed to ONE role for the one pod, for an installation that
+// runs the Deployment.
 //
 // It is a library, not a program: a stack calls the constructors below and
 // gets components with the outputs a deployment needs. It creates nothing by

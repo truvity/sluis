@@ -100,6 +100,21 @@
   destroyed by the apply, and the schedules (named as before) point at the one
   function. No data migration: SSM, DynamoDB and S3 are unchanged.
 
+- **Breaking: `NewKubernetesIdentity` makes ONE role for the one pod.** The
+  `Serve`, `GitHub` and `Slack` `ProcessArgs` and `ProcessArgs` itself are gone;
+  `ServiceAccount` (required) and `Description` are on the args. The role is
+  `<prefix>-sluis` (was `<prefix>-sluis-serve`; `-github` and `-slack` are
+  gone), with one Pod Identity association for the one ServiceAccount, and the
+  outputs are `RoleArn` and `RoleName` (were `ServeRoleArn`, `GitHubRoleArn`,
+  `SlackRoleArn` and the names). Its policy is the old serve role's (storage,
+  state, signing keys or the wrapped key, with no key-ring denial now that the
+  one role signs) and, with the new `Instance` (and `Region`,
+  `ParameterKeyArn`), the Lambda role's SSM grants under `/sluis/<instance>/`:
+  credentials read/write, config read, exports, the parameter key through SSM
+  only. Moving: Pulumi replaces the serve role under its new name and destroys
+  the github and slack roles and associations; the Deployment's ServiceAccount
+  is the one named in `ServiceAccount`.
+
 ### Chart
 
 - **Breaking: one Deployment.** `controllerGithub` and `controllerSlack` are

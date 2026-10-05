@@ -161,25 +161,6 @@ func wrappedSigningStatement(keyArn string) statement {
 	}
 }
 
-// keyringWriteDenial keeps a process that does not sign from writing the key
-// ring in the State table: with wrapped signing the ring is what a signer
-// trusts to learn which keys to publish, so a write there is a way to plant one.
-// The partition key is the record kind (layout v2): `keyring`, `keyring-index`
-// and `keyring-retired`. The key-generation lease (kind `lease`, id
-// `signing-keygen/<alg>`) shares its partition with the controllers' own leases
-// and cannot be denied this way: a limit, noted in docs/deployment/aws.md.
-func keyringWriteDenial(tableArn string) statement {
-	return statement{
-		"Sid":      sidKeyringWrites,
-		"Effect":   "Deny",
-		"Action":   []string{ddbPutItem, ddbUpdateItem, ddbDeleteItem, "dynamodb:BatchWriteItem"},
-		"Resource": tableArn,
-		"Condition": map[string]any{
-			"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []string{"keyring", "keyring-index", "keyring-retired"}},
-		},
-	}
-}
-
 // wrappedKeyPolicy is the key policy of the symmetric key the library creates. The account's IAM policies govern it (the root statement every key
 // has), and everything that can open a wrapped signing key is pinned to the
 // signing roles (signingRoleArns: the function's role, and the Kubernetes
@@ -257,7 +238,6 @@ func WrappedKeyReservedDeny(signingRoleArns []string) map[string]any {
 
 const (
 	sidWrappedSigning = "SluisWrappedSigning"
-	sidKeyringWrites  = "SluisNoKeyringWrites"
 	sidSigning        = "SluisSigning"
 	sidLogs           = "SluisLogs"
 	sidPrivate        = "SluisPrivateParameters"
@@ -350,27 +330,48 @@ type functionPolicyIn struct {
 	invokeFunctionArns []string
 }
 
-// privateStatements is the function's grant on /sluis/<instance>/private,
-// narrowed to what it does there:
+// ssmStatements is the grant on /sluis/<instance> that both the Lambda role and
+// the Kubernetes pod's role carry (one process, one role), scoped to the one
+// root:
 //
-//   - it reads and writes credentials/* (the credentials of its records), and
-//     nothing else of private/ that it may write;
-//   - it reads config/* (the secrets its document names: the recovery password,
-//     the state secret, the OAuth client, the declared clients and workspaces),
-//     and never writes it: config/* is the operator's and the stack's.
-func privateStatements(in functionPolicyIn) []statement {
+//   - private/credentials/*: read and write (the credentials of its records);
+//   - private/config/*: read only (the secrets its document names: the recovery
+//     password, the state secret, the OAuth client, the declared clients and
+//     workspaces); config/* is the operator's and the stack's;
+//   - export/*: write, and with exports (the pass that reads back what it wrote)
+//     read too;
+//   - with a customer-managed parameter key, its use through SSM only, for the
+//     parameters under those prefixes.
+func ssmStatements(region, account, instance, parameterKeyArn string) []statement {
+	return ssmStatementsFor(region, account, instance, parameterKeyArn, true)
+}
+
+func ssmStatementsFor(region, account, instance, parameterKeyArn string, exports bool) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
-	return []statement{{
+	st := []statement{{
 		"Sid":      sidPrivate,
 		"Effect":   "Allow",
 		"Action":   all,
-		"Resource": parameterArns(in.region, in.account, CredentialsParameterPrefix(in.instance)),
+		"Resource": parameterArns(region, account, CredentialsParameterPrefix(instance)),
 	}, {
 		"Sid":      sidPrivate + "Config",
 		"Effect":   "Allow",
 		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-		"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix(in.instance)),
+		"Resource": parameterArns(region, account, ConfigParameterPrefix(instance)),
 	}}
+	exportActions := []string{ssmPutParameter, ssmDeleteParameter}
+	if exports {
+		exportActions = all
+	}
+	st = append(st, statement{
+		"Sid":      sidExport,
+		"Effect":   "Allow",
+		"Action":   exportActions,
+		"Resource": parameterArns(region, account, ExportParameterPrefix(instance)),
+	})
+	prefixes := []string{CredentialsParameterPrefix(instance), ExportParameterPrefix(instance), ConfigParameterPrefix(instance)}
+	return append(st, parameterKeyStatements(parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
+		parameterArnsUnder(region, account, prefixes...))...)
 }
 
 // functionPolicy is the function's role: the storage, the table, its secrets and
@@ -387,20 +388,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	}}
 	st = append(st, storageStatements(in.bucketArn)...)
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
-	st = append(st, privateStatements(in)...)
-	exportActions := []string{ssmPutParameter, ssmDeleteParameter}
-	if in.exports {
-		exportActions = []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
-	}
-	st = append(st, statement{
-		"Sid":      sidExport,
-		"Effect":   "Allow",
-		"Action":   exportActions,
-		"Resource": parameterArns(in.region, in.account, ExportParameterPrefix(in.instance)),
-	})
-	keyPrefixes := []string{CredentialsParameterPrefix(in.instance), ExportParameterPrefix(in.instance), ConfigParameterPrefix(in.instance)}
-	st = append(st, parameterKeyStatements(in.parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
-		parameterArnsUnder(in.region, in.account, keyPrefixes...))...)
+	st = append(st, ssmStatementsFor(in.region, in.account, in.instance, in.parameterKeyArn, in.exports)...)
 	st = append(st, statement{
 		"Sid":      sidAudit,
 		"Effect":   "Allow",

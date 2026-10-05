@@ -26,10 +26,10 @@ type opts struct {
 	versioning bool
 	tableKey   pulumi.StringInput
 	noState    bool
-	noSlack    bool
-	noGitHub   bool
 	boundary   string
 	serveSA    string
+	instance   string
+	paramKey   string
 }
 
 // stack is the three components wired the way a stack would wire them.
@@ -49,16 +49,8 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 		id := &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:eu-west-1:" + account + ":cluster/" + cluster, AccountID: account,
 			Namespace: "sluis", PermissionsBoundaryArn: o.boundary,
-			Serve:   arp.ProcessArgs{ServiceAccount: o.serveSA},
-			GitHub:  arp.ProcessArgs{ServiceAccount: "sluis-github"},
-			Slack:   arp.ProcessArgs{ServiceAccount: "sluis-slack"},
-			Storage: store.Grant(),
-		}
-		if o.noSlack {
-			id.Slack = arp.ProcessArgs{}
-		}
-		if o.noGitHub {
-			id.GitHub = arp.ProcessArgs{}
+			ServiceAccount: o.serveSA, Storage: store.Grant(),
+			Region: "eu-west-1", Instance: o.instance, ParameterKeyArn: o.paramKey,
 		}
 		collect("bucketName", store.BucketName)
 		collect("bucketArn", store.BucketArn)
@@ -75,11 +67,8 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 		if err != nil {
 			return err
 		}
-		collect("serveRoleArn", ids.ServeRoleArn)
-		collect("serveRoleName", ids.ServeRoleName)
-		collect("githubRoleArn", ids.GitHubRoleArn)
-		collect("slackRoleArn", ids.SlackRoleArn)
-		collect("slackRoleName", ids.SlackRoleName)
+		collect("roleArn", ids.RoleArn)
+		collect("roleName", ids.RoleName)
 		return nil
 	})
 }
@@ -187,7 +176,7 @@ func TestATableTakesACustomerManagedKeyAndTheRolesMayUseItOnlyThroughDynamoDB(t 
 	if !sse["enabled"].BoolValue() || sse["kmsKeyArn"].StringValue() != cmk {
 		t.Errorf("sse: %v", sse)
 	}
-	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-serve-policy")
+	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
 	var found bool
 	for _, s := range statements(t, prop(p, "policy").StringValue()) {
 		if s["Sid"] == "SluisStateKey" {
@@ -206,43 +195,40 @@ func TestATableTakesACustomerManagedKeyAndTheRolesMayUseItOnlyThroughDynamoDB(t 
 	}
 }
 
-func TestEveryRoleHasItsOwnPolicyRoleAttachmentAndAssociation(t *testing.T) {
+func TestTheOneRoleHasItsPolicyAttachmentAndAssociation(t *testing.T) {
 	rec, out := mustStack(t, opts{})
-	want := map[string]string{ // role -> ServiceAccount
-		"kernel-sluis-serve":  "sluis",
-		"kernel-sluis-github": "sluis-github",
-		"kernel-sluis-slack":  "sluis-slack",
+	role := "kernel-sluis"
+	r := rec.one(t, "aws:iam/role:Role", role+"-role")
+	if prop(r, "name").StringValue() != role || prop(r, "permissionsBoundary").StringValue() != arnp+"iam::"+account+":policy/boundary" {
+		t.Errorf("%s: %v", role, r.Inputs)
 	}
-	for role, sa := range want {
-		r := rec.one(t, "aws:iam/role:Role", role+"-role")
-		if prop(r, "name").StringValue() != role || prop(r, "permissionsBoundary").StringValue() != arnp+"iam::"+account+":policy/boundary" {
-			t.Errorf("%s: %v", role, r.Inputs)
-		}
-		pol := rec.one(t, "aws:iam/policy:Policy", role+"-policy")
-		if prop(pol, "name").StringValue() != role {
-			t.Errorf("%s policy: %v", role, pol.Inputs)
-		}
-		att := rec.one(t, "aws:iam/rolePolicyAttachment:RolePolicyAttachment", role+"-attachment")
-		if prop(att, "role").StringValue() != role || prop(att, "policyArn").StringValue() != arnp+"iam::"+account+":policy/"+role {
-			t.Errorf("%s attachment: %v", role, att.Inputs)
-		}
-		pia := rec.one(t, "aws:eks/podIdentityAssociation:PodIdentityAssociation", role+"-pia")
-		if prop(pia, "clusterName").StringValue() != cluster || prop(pia, "namespace").StringValue() != "sluis" ||
-			prop(pia, "serviceAccount").StringValue() != sa || prop(pia, "roleArn").StringValue() != arnp+"iam::"+account+":role/"+role {
-			t.Errorf("%s association: %v", role, pia.Inputs)
-		}
+	pol := rec.one(t, "aws:iam/policy:Policy", role+"-policy")
+	if prop(pol, "name").StringValue() != role {
+		t.Errorf("policy: %v", pol.Inputs)
 	}
-	if len(rec.ofType("aws:eks/podIdentityAssociation:PodIdentityAssociation")) != 3 {
-		t.Error("not exactly one association per process")
+	att := rec.one(t, "aws:iam/rolePolicyAttachment:RolePolicyAttachment", role+"-attachment")
+	if prop(att, "role").StringValue() != role || prop(att, "policyArn").StringValue() != arnp+"iam::"+account+":policy/"+role {
+		t.Errorf("attachment: %v", att.Inputs)
 	}
-	if out["serveRoleArn"] != arnp+"iam::"+account+":role/kernel-sluis-serve" || out["serveRoleName"] != "kernel-sluis-serve" {
+	pia := rec.one(t, "aws:eks/podIdentityAssociation:PodIdentityAssociation", role+"-pia")
+	if prop(pia, "clusterName").StringValue() != cluster || prop(pia, "namespace").StringValue() != "sluis" ||
+		prop(pia, "serviceAccount").StringValue() != "sluis" || prop(pia, "roleArn").StringValue() != arnp+"iam::"+account+":role/"+role {
+		t.Errorf("association: %v", pia.Inputs)
+	}
+	if n := len(rec.ofType("aws:eks/podIdentityAssociation:PodIdentityAssociation")); n != 1 {
+		t.Errorf("%d associations, want the one pod's", n)
+	}
+	if n := len(rec.ofType("aws:iam/role:Role")); n != 1 {
+		t.Errorf("%d roles, want one: the controllers run in the same pod", n)
+	}
+	if out["roleArn"] != arnp+"iam::"+account+":role/kernel-sluis" || out["roleName"] != "kernel-sluis" {
 		t.Errorf("outputs: %v", out)
 	}
 }
 
 func TestTheTrustPolicyNamesTheClusterTheNamespaceAndOneServiceAccount(t *testing.T) {
 	rec, _ := mustStack(t, opts{})
-	r := rec.one(t, "aws:iam/role:Role", "kernel-sluis-github-role")
+	r := rec.one(t, "aws:iam/role:Role", "kernel-sluis-role")
 	st := statements(t, prop(r, "assumeRolePolicy").StringValue())
 	if len(st) != 1 || st[0]["Effect"] != "Allow" {
 		t.Fatalf("trust: %v", st)
@@ -256,7 +242,7 @@ func TestTheTrustPolicyNamesTheClusterTheNamespaceAndOneServiceAccount(t *testin
 	c := st[0]["Condition"].(map[string]any)
 	eq := c["StringEquals"].(map[string]any)
 	if eq["aws:SourceAccount"] != account || eq["aws:RequestTag/kubernetes-namespace"] != "sluis" ||
-		eq["aws:RequestTag/kubernetes-service-account"] != "sluis-github" {
+		eq["aws:RequestTag/kubernetes-service-account"] != "sluis" {
 		t.Errorf("StringEquals: %v", eq)
 	}
 	if c["ArnEquals"].(map[string]any)["aws:SourceArn"] != arnp+"eks:eu-west-1:"+account+":cluster/"+cluster {
@@ -282,26 +268,22 @@ func TestEachRoleGetsExactlyTheStorageAndTheTable(t *testing.T) {
 		"dynamodb:Scan":          {tableArn},
 		"dynamodb:DescribeTable": {tableArn},
 	}
-	for _, role := range []string{"serve", "github", "slack"} {
-		p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-"+role+"-policy")
-		got := grants(statements(t, prop(p, "policy").StringValue()))
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("%s grants:\n got %v\nwant %v", role, got, want)
-		}
+	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	got := grants(statements(t, prop(p, "policy").StringValue()))
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("grants:\n got %v\nwant %v", got, want)
 	}
 }
 
 func TestWithoutStateNoRoleCarriesADynamoDBGrant(t *testing.T) {
 	rec, _ := mustStack(t, opts{noState: true})
-	for _, role := range []string{"serve", "github", "slack"} {
-		p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-"+role+"-policy")
-		doc := prop(p, "policy").StringValue()
-		if strings.Contains(doc, "dynamodb") {
-			t.Errorf("%s has a DynamoDB grant without a table: %s", role, doc)
-		}
-		if got := len(statements(t, doc)); got != 2 {
-			t.Errorf("%s has %d statements, want the 2 of the storage", role, got)
-		}
+	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	doc := prop(p, "policy").StringValue()
+	if strings.Contains(doc, "dynamodb") {
+		t.Errorf("a DynamoDB grant without a table: %s", doc)
+	}
+	if got := len(statements(t, doc)); got != 2 {
+		t.Errorf("%d statements, want the 2 of the storage", got)
 	}
 	if len(rec.ofType("aws:dynamodb/table:Table")) != 0 {
 		t.Error("a table was made")
@@ -326,20 +308,56 @@ func TestNoGrantIsOnAWildcardResourceOrAWildcardAction(t *testing.T) {
 	}
 }
 
-func TestAControllerThatIsNotRunIsNotGivenARole(t *testing.T) {
-	rec, out := mustStack(t, opts{noSlack: true, noGitHub: true})
-	if rec.has("aws:iam/role:Role", "kernel-sluis-slack-role") || rec.has("aws:iam/role:Role", "kernel-sluis-github-role") {
-		t.Errorf("roles for processes that were not asked for: %v", rec.names())
+// With Instance the pod's role has the Lambda role's SSM grants: the same rules,
+// scoped to /sluis/<instance>/ and nothing above it, and no wildcard but a
+// trailing /*.
+func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *testing.T) {
+	key := arnp + "kms:eu-west-1:" + account + ":key/params"
+	rec, _ := mustStack(t, opts{instance: "kernel", paramKey: key})
+	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	g := grants(statements(t, prop(p, "policy").StringValue()))
+	ssmArn := arnp + "ssm:eu-west-1:" + account + ":parameter"
+	creds := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
+	cfg := []string{ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*"}
+	export := []string{ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+	writes := append(append([]string{}, creds...), export...)
+	if got := g["ssm:PutParameter"]; !reflect.DeepEqual(got, writes) {
+		t.Errorf("writes %v, want %v", got, writes)
 	}
-	if out["slackRoleArn"] != "" || out["githubRoleArn"] != "" || out["serveRoleArn"] == "" {
-		t.Errorf("outputs: %v", out)
+	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
+		t.Errorf("reads %v", got)
 	}
-}
-
-func TestAServiceAccountTakesOneAssociation(t *testing.T) {
-	_, _, err := stack(t, opts{serveSA: "sluis-github"})
-	if err == nil || !strings.Contains(err.Error(), "ServiceAccount") {
-		t.Fatalf("two processes on one ServiceAccount: %v", err)
+	for a, res := range g {
+		for _, r := range res {
+			path, ok := strings.CutPrefix(r, ssmArn)
+			if !ok {
+				continue
+			}
+			if !strings.HasPrefix(strings.TrimSuffix(path, "/*"), "/sluis/kernel/") || strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
+				t.Errorf("%s: %s is outside /sluis/kernel/ or has a wildcard", a, r)
+			}
+		}
+	}
+	n := 0
+	for _, s := range statements(t, prop(p, "policy").StringValue()) {
+		if s["Sid"] == "SluisParameterKey" {
+			n++
+			if s["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:ViaService"] != "ssm.*.amazonaws.com" {
+				t.Errorf("the parameter key is not through SSM only: %v", s)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d parameter-key statements", n)
+	}
+	// Without an instance, no SSM at all.
+	rec, _ = mustStack(t, opts{})
+	doc := prop(rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy"), "policy").StringValue()
+	if strings.Contains(doc, "ssm:") {
+		t.Errorf("an SSM grant without an Instance: %s", doc)
+	}
+	if _, _, err := stack(t, opts{instance: "private"}); err == nil {
+		t.Error("an instance named private was accepted")
 	}
 }
 
@@ -351,7 +369,7 @@ func TestTheRequiredInputsAreRequired(t *testing.T) {
 	if err == nil {
 		t.Fatal("empty arguments were accepted")
 	}
-	for _, want := range []string{"ClusterName", "ClusterArn", "AccountID", "Namespace", "Serve.ServiceAccount"} {
+	for _, want := range []string{"ClusterName", "ClusterArn", "AccountID", "Namespace", "ServiceAccount"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error does not name %s: %v", want, err)
 		}
@@ -373,15 +391,15 @@ func TestTheRolePrefixDefaultsToTheComponentsName(t *testing.T) {
 		}
 		_, err = arp.NewKubernetesIdentity(ctx, "ar", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: "c", AccountID: account, Namespace: "n",
-			Serve: arp.ProcessArgs{ServiceAccount: "s"}, Storage: s.Grant(),
+			ServiceAccount: "s", Storage: s.Grant(),
 		})
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := rec.one(t, "aws:iam/role:Role", "ar-sluis-serve-role")
-	if prop(r, "name").StringValue() != "ar-sluis-serve" || prop(r, "permissionsBoundary").HasValue() {
+	r := rec.one(t, "aws:iam/role:Role", "ar-sluis-role")
+	if prop(r, "name").StringValue() != "ar-sluis" || prop(r, "permissionsBoundary").HasValue() {
 		t.Errorf("role: %v", r.Inputs)
 	}
 }
