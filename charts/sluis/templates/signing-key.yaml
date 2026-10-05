@@ -1,3 +1,4 @@
+{{- include "sluis.prepare" . -}}
 {{- /* With KMS signing there is no key file: nothing to issue and nothing to mount (sluis.remoteSigning). */ -}}
 {{- if and (eq .Values.renders "app") (not (include "sluis.remoteSigning" .)) -}}
 {{- if not .Values.signingKey.existingSecret }}

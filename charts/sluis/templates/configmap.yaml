@@ -1,4 +1,6 @@
+{{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "app" -}}
+{{- /* With `documents.service` the document is rendered verbatim: no apiVersion added, nothing renamed or dropped. */ -}}
 # What `sluis serve --config` reads: `config`, as the values give it, with
 # nothing added, renamed or dropped but the apiVersion the chart writes. The
 # binary validates it against schemas/config/sluis.schema.json at start, and
@@ -12,5 +14,9 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
+    {{- if include "sluis.documentsMode" . }}
+    {{- .Values.documents.service | trimSuffix "\n" | nindent 4 }}
+    {{- else }}
     {{- include "sluis.document" (dict "kind" "sluis" "doc" .Values.config) | nindent 4 }}
+    {{- end }}
 {{ end -}}

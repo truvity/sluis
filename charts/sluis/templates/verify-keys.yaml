@@ -1,3 +1,4 @@
+{{- include "sluis.prepare" . -}}
 {{- if and (eq .Values.renders "app") .Values.signingKey.verifyOnly -}}
 {{- include "sluis.verifyOnlyKeys" . -}}
 # PUBLIC keys the service publishes in its JWKS and never signs with: the keys of
