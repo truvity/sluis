@@ -9,11 +9,25 @@ package schema
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 )
 
-// BaseID is where the schemas are named: the identifier is a name, and nothing
-// fetches it.
-const BaseID = "https://truvity.github.io/sluis/schemas/v2/config/"
+// idBase is where the schemas are named: the identifier is a name, and nothing
+// fetches it. The version in it is the document's own, see [ID].
+const idBase = "https://truvity.github.io/sluis/schemas/"
+
+// ID is the `$id` of the schema of a document: the version in it is the
+// version of the `apiVersion` the document carries, so a v3 document is never
+// named as v2 (the service document was, for a release).
+func ID(name, apiVersion string) string {
+	return idBase + apiVersion[strings.LastIndex(apiVersion, "/")+1:] + "/config/" + name + ".schema.json"
+}
+
+// apiVersionOf is the `const` of a properties block's `apiVersion`.
+func apiVersionOf(props m) string {
+	v, _ := props["apiVersion"].(m)["const"].(string)
+	return v
+}
 
 // The shared shapes this repository takes from truvity/policy, by the `$id`
 // they carry. The loader resolves them from its embedded copies.
@@ -187,7 +201,7 @@ func document(name, title, description string, props m, required []string, uses 
 	}
 	s := m{
 		"$schema":              "https://json-schema.org/draft/2020-12/schema",
-		"$id":                  BaseID + name + ".schema.json",
+		"$id":                  ID(name, apiVersionOf(props)),
 		"title":                title,
 		"description":          description,
 		"type":                 "object",
@@ -371,7 +385,7 @@ func sluisSchema() m {
 			"/var/run/secrets/slack-roster/token", "/var/run/slack-roster/workspaces",
 			"credentialsDir", "One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.", "/var/run/slack-roster/credentials")),
 	})
-	s["$id"] = BaseID + "sluis.schema.json"
+	s["$id"] = ID("sluis", apiVersionOf(props))
 	s["title"] = "sluis"
 	s["description"] = "The configuration of `sluis serve`, the one process of sluis: the issuer, the console and the directory hub and, under `controllers`, the GitHub and Slack controllers. On Kubernetes it is one Deployment; on AWS Lambda it is one function." + secretsNote
 	return s

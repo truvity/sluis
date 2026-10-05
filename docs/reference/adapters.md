@@ -63,6 +63,7 @@ presets and the platform fit together, see
 |---|---|---|---|---|---|---|---|---|
 | `dynamodb` | ✅ implemented | needs | — | — | ✅ | ✅ | ✅ | Notifications over the same table. |
 | `http` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | "Run a pass now" from an authenticated HTTP request. |
+| `invoke` | ✅ implemented | needs | — | — | — | ✅ | — | "Run a pass now" as an asynchronous Lambda invoke of the controller function. |
 | `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | An in-process trigger: a notification reaches only this process. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `watch` | 💤 on request | — | needs | — | ✅ | — | — | "Run a pass now" from a Kubernetes watch. |
@@ -92,9 +93,19 @@ The adapter each preset names per concern. 💤 on request marks an adapter that
 | secrets | `store` 💤 | `kubernetes` 💤 | `openbao` | `ssm` | `ssm` | `ssm` |
 | blobs | `postgres` 💤 | `off` 💤 | `off` 💤 | `s3` | `s3` | `s3` |
 | signing | `generated` 💤 | `file` | `transit` 💤 | `kms-wrapped` | `kms-wrapped` | `kms-wrapped` |
-| trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `dynamodb` |
+| trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` | `invoke` | `dynamodb` |
 | schedule | `ticker` | `ticker` | `ticker` | `eventbridge` | `eventbridge` | `ticker` |
 | audit | `log` | `log` | `log` | `sqs` | `sqs` | `connect` |
+
+### Availability
+
+A preset that names an adapter which is not built is **unavailable**: start refuses it with a message naming the preset, unless `adapters` replaces every planned adapter it names. Unavailable now:
+
+- `server`: its state, secrets, blobs, signing and trigger adapters (postgres, store, generated, http) are planned and not built.
+- `k8s-minimal`: its state, secrets, blobs and trigger adapters (kubernetes, off, watch) are planned and not built.
+- `k8s-openbao`: its state, blobs, signing and trigger adapters (kubernetes, off, transit, watch) are planned and not built.
+
+Available: `aws-serverless`, `aws-hybrid`, `k8s-aws`.
 
 `aws-eks` is the deprecated name of `k8s-aws`: it resolves to it, and start warns.
 

@@ -123,7 +123,15 @@ acceptance: console
     go run ./cmd/acceptance -namespace acceptance -kubeconfig ""
     kind delete cluster --name sluis-acceptance
 
-# Check the release configuration without cutting one.
+# Check the release configuration without cutting one, and, given the tag
+# about to be cut (`just release-check v1.64.0`), refuse a tag the Pulumi
+# library does not agree with.
+#
+# The require gate: deploy/pulumi requires github.com/truvity/sluis, and a
+# library tagged vX.Y.Z whose require names another version ships against
+# the wrong root. hack/check-release-require.sh passes when the require
+# names the tag or is gone. The release workflow runs the same script first.
+#
 # The release path, as far as it can be exercised without a tag.
 #
 # `goreleaser check` validates the config and `build --single-target`
@@ -131,7 +139,10 @@ acceptance: console
 # where v0.12.0 failed, four minutes into a tagged run, publishing
 # nothing. So the archive shapes are checked here by reading the same
 # file goreleaser reads.
-release-check: console
+release-check tag="": console
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "{{tag}}" ]; then ./hack/check-release-require.sh "{{tag}}"; fi
     ./hack/check-archives.py
     goreleaser check
     goreleaser build --snapshot --clean --single-target
@@ -149,8 +160,14 @@ leak-canary:
 # code block in a Markdown file, so a rename leaves the old name in the
 # guide and the first person to notice is a stranger following it. Every
 # proto service and RPC must also be named in docs/reference/contracts.md.
+#
+# And the documentation's hygiene (hack/check-docs-hygiene.py): every relative
+# link in a Markdown file or Chart.yaml resolves, and the retired names
+# (access-roster, access-issuer, NATS) appear only where
+# hack/docs-hygiene-allow.tsv says, with a reason.
 docs-check:
     ./hack/check-docs-symbols.py
+    ./hack/check-docs-hygiene.py
     go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/
 
 # Regenerate docs/reference/adapters.md from the adapter registry. Run it

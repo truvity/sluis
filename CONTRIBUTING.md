@@ -220,6 +220,37 @@ module of its own, is tagged `deploy/pulumi/vX.Y.Z` at the same commit by the
 release's `pulumi-tag` job. One tag, every artifact: a consumer pins one
 version of this repository.
 
+`just docs-check` also holds the documentation's links and names
+(`hack/check-docs-hygiene.py`): every relative link in a Markdown file or
+`Chart.yaml` must resolve, and the retired names (the product's two old
+names and the first state adapter, [ADR 0035](docs/decisions/0035-renamed-to-sluis.md))
+may appear outside `docs/decisions/` and
+`CHANGELOG.md` only where `hack/docs-hygiene-allow.tsv` lists them with a
+reason. An identifier that deliberately keeps its old name gets an `allow` row;
+prose still to be rewritten is a `baseline` count that only goes down.
+
+Two gates run before the artifacts exist, and `just release-check vX.Y.Z`
+runs the first locally:
+
+- **The Pulumi library's require.** `deploy/pulumi/go.mod` must require
+  `github.com/truvity/sluis` at the tag being released, or not at all
+  (`hack/check-release-require.sh`; the release workflow's `gate` job). Bump
+  the require, and `go mod tidy` in `deploy/pulumi`, in a pull request before
+  tagging, because the library is tagged at the same commit and a tag cannot
+  be taken back.
+- **No breaking patch.** Auto-release refuses to cut a patch while the
+  CHANGELOG entries after the newest release contain `**Breaking:`
+  (`hack/check-no-breaking-patch.sh`; the `guard` job of `auto-release.yaml`).
+  A breaking change is tagged by hand as the next minor.
+
+The release also carries two checksummed bundles beside the binaries:
+`sluis-config-schemas_<version>.tar.gz` (the JSON Schemas of the configuration
+documents, `schemas/config/*.schema.json`) and
+`sluis-audit-catalogue_<version>.tar.gz` (`roster.yaml` and every schema it
+references, side by side: the audit writer refuses to start without one).
+`internal/releasecheck` holds both to their sources, so a new schema or catalogue
+action cannot be left out of a bundle.
+
 Auto-release is armed (`vars.AUTO_RELEASE`) and cuts **patch** tags when
 changes merge: at once for a merged `security`-labelled pull request, weekly
 for dependency bumps. Minors and majors are always manual — tag them when the

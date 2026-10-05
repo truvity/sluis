@@ -25,11 +25,21 @@
   keep verifying across the cutover to `kmsWrapped`. A private key stops the start. The chart mounts them from a
   ConfigMap (`signingKey.verifyOnly[].pem`). `until` is required; the chart refuses private material at render
   (PEM blocks other than PUBLIC KEY and CERTIFICATE, anything containing "private", a JWK with a private member).
+- **Release assets `sluis-config-schemas_<version>.tar.gz` and `sluis-audit-catalogue_<version>.tar.gz`**, in
+  `checksums.txt`: the JSON Schemas of the configuration documents, and the audit catalogue `roster.yaml` with
+  every schema it references (the audit writer refuses to start without one). A test holds each bundle to its source.
 - **Chart: `serviceAccount.awsIdentity`** (`pod-identity`, the default and renders nothing, or `irsa`, which annotates
   the account with `eks.amazonaws.com/role-arn: <serviceAccount.awsRoleArn>`).
 
 ### Changed
 
+- **Presets `server`, `k8s-minimal` and `k8s-openbao` are marked unavailable**: each names adapters that are planned
+  and not built, and loading one now fails with a message naming the preset and the missing adapters, unless
+  `adapters` replaces every one of them. They are not removed; `docs/reference/adapters.md` lists them.
+- **The `$id` of `sluis.schema.json` says v3**, the version of the document (it said v2). A schema's `$id`
+  version now follows its document's `apiVersion`.
+- **`docs/reference/adapters.md` shows the `invoke` trigger as implemented**, as is the `aws-serverless` and
+  `aws-hybrid` presets' trigger: the generator now links every adapter any binary registers.
 - **Chart: KMS signing renders cleanly.** With `config.signingKey.kmsWrapped` (or `kms`, or `adapters.signing`
   naming one) the chart renders no signing Certificate and mounts no signing Secret, and refuses
   `signingKey.additional` and `existingSecret`; the chart's default `config.signingKey.file` is dropped with

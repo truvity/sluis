@@ -1,0 +1,51 @@
+# Allowlist of hack/check-docs-hygiene.py. Tab separated: kind, then columns (see the script).
+# `allow` rows are permanent: identifiers that deliberately keep an old name (docs/decisions/0035-renamed-to-sluis.md).
+# `baseline` rows are a RATCHET over prose that a docs restructure rewrites: lower the count as pages are fixed, delete the row at 0.
+
+allow	*	:access-roster:	group names `<scope>:access-roster:operator|viewer` are the installation's own role names (ADR 0035: kept, changing them re-keys every grant)
+allow	*	token-source[:-] ?`?access-roster|access-roster-issuer	the GitHub Action's `token-source: access-roster` and the shared workflow's `access-roster-issuer` input (ADR 0035: kept as contract names)
+allow	*	access-roster\.truvity\.github\.io	Kubernetes label and annotation keys access-roster.truvity.github.io/* (ADR 0035: kept)
+allow	*	urn:(truvity:)?access-roster	token-exchange URNs, protocol constants in clients' configuration (ADR 0035: kept)
+allow	*	schemas\.example/access-roster	data_schema URLs inside the audit catalogue document, part of a document an installation holds (ADR 0035: kept)
+allow	*	@truvity/access-roster	the deprecated npm alias, still published (release.yaml npm job)
+allow	*	`access-roster` grants preset	the grants preset name (ADR 0035: kept)
+allow	*	access-roster-overview|access-roster overview	the dashboard's file name, uid and title, not renamed yet: renaming one re-creates it in every Grafana
+allow	*	kernel-access-issuer-audit	an existing AWS role of the estate (decision N9a), retired by its own runbook step
+allow	README.md	Formerly \*\*access-roster\*\*	the rename notice itself
+allow	*	migrating-from-the-access-issuer-chart|migrating from the access-issuer chart|from the `access-issuer` chart|`access-issuer` chart until|the `access-issuer` chart	the migration guide is named for the chart it migrates from
+link	CHANGELOG.md	docs/design/ports.md#the-nats-adapter	history: the heading went with the NATS adapter
+link	CHANGELOG.md	docs/design/ports.md#the-s3-blob-and-the-kms-sealer	history: the heading went with the KMS sealer
+link	CHANGELOG.md	docs/integrations/aws-lambda.md#platform-logs	history: the heading was renamed
+
+# Baseline: prose that still uses a retired name. The docs restructure rewrites these pages; lower each count as it does.
+baseline	README.md	access-issuer	9	prose pending the docs restructure (ADR 0035 rename)
+baseline	charts/sluis/README.md	access-issuer	5	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/concepts.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/corporate-directory.md	access-issuer	3	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/envoy-gateway-oidc.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/github-actions.md	access-issuer	2	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/github-apps-catalogue.md	access-issuer	7	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/github-organisation.md	access-issuer	3	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/kubernetes-cluster.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/connect/slack-workspace.md	access-issuer	4	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/deployment/aws.md	NATS	3	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/design/sluis.md	NATS	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/design/trust.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/design/trust.md	access-roster	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/integrations.md	access-issuer	3	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/integrations/aws-lambda.md	NATS	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/integrations/aws-lambda.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/integrations/aws-lambda.md	access-roster	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/integrations/openbao.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/adoption-plain-helm.md	access-issuer	18	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/conformance.md	access-issuer	17	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/migrate.md	NATS	2	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/migration-from-an-idp.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/migration-from-google-group-sync.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/runbook.md	access-issuer	6	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/operations/telemetry.md	access-issuer	4	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/reference/access-issuer.md	access-issuer	1	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/reference/configuration.md	access-issuer	26	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/reference/contracts.md	access-issuer	4	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/reference/policy.md	access-issuer	4	prose pending the docs restructure (ADR 0035 rename)
+baseline	docs/reference/policy.md	access-roster	2	prose pending the docs restructure (ADR 0035 rename)

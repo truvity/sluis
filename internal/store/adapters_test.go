@@ -52,7 +52,7 @@ func TestWithoutTheNewKeysTheLegacyKeysDecide(t *testing.T) {
 func TestPlatformChecksAndOverrides(t *testing.T) {
 	ctx := context.Background()
 	// Legacy needs Kubernetes: a platform that says there is none refuses it.
-	_, _, err := Config{Adapter: AdapterLegacy, sel: selection{Platform: &config.Platform{Runtime: "process"}, Preset: "server",
+	_, _, err := Config{Adapter: AdapterLegacy, sel: selection{Platform: &config.Platform{Runtime: "process"}, Preset: "k8s-aws",
 		PortsAdapter: true}}.plan(ctx, quiet)
 	if err == nil || !strings.Contains(err.Error(), "needs Kubernetes") {
 		t.Errorf("legacy on a platform with no cluster: %v", err)

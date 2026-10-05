@@ -5,7 +5,7 @@ description: >-
   which verifies proofs produced elsewhere, applies the shared policy and
   issues tokens, and the GitHub and Slack controllers (`controller github`,
   `controller slack`). It authenticates nobody itself and holds no user
-  records. See docs/design/access-issuer.md.
+  records. See docs/design/sluis.md.
 type: application
 # Placeholder. The git tag is the sole version authority — the release
 # workflow stamps `--version`/`--app-version` from it at package time.

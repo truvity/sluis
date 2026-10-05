@@ -32,7 +32,26 @@ permissions:
   id-token: write # the token exchange, in the shared workflow's job
 
 jobs:
+  # A patch is never breaking. Auto-release cuts only patches, so it refuses
+  # when the CHANGELOG entries after the newest release carry
+  # `**Breaking:`; a breaking change is tagged by hand as a minor (the
+  # release workflow's gates run on that tag as on any other).
+  guard:
+    if: vars.AUTO_RELEASE == 'true' && vars.ACCESS_ROSTER_ISSUER != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # the newest v* tag decides which CHANGELOG sections are unreleased
+          fetch-depth: 0
+      - name: no breaking entry under a patch
+        run: ./hack/check-no-breaking-patch.sh CHANGELOG.md
+
   tag:
+    needs: guard
     if: vars.AUTO_RELEASE == 'true' && vars.ACCESS_ROSTER_ISSUER != ''
     uses: truvity/ci-workflows/.github/workflows/auto-release.yaml@58d470dff71c732e208f47a80bb6c5d741e016a7 # v3.25.0
     with:
