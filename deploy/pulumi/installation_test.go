@@ -75,7 +75,7 @@ func TestAnInstallationAndTheArgumentsAgreeOrAreRefused(t *testing.T) {
 	}{
 		"another instance":      {func(_ *sluisconfig.Installation, a *arp.LambdaArgs) { a.Instance = "other" }, "Instance"},
 		"another region":        {func(_ *sluisconfig.Installation, a *arp.LambdaArgs) { a.Region = "eu-west-1" }, "Region"},
-		"another account":       {func(_ *sluisconfig.Installation, a *arp.LambdaArgs) { a.AccountID = "222222222222" }, "AccountID"},
+		"another account":       {func(_ *sluisconfig.Installation, a *arp.LambdaArgs) { a.AccountID = strings.Repeat("2", 12) }, "AccountID"},
 		"another function name": {func(_ *sluisconfig.Installation, a *arp.LambdaArgs) { a.FunctionName = "other" }, "FunctionName"},
 		"another shape":         {func(in *sluisconfig.Installation, _ *arp.LambdaArgs) { in.Shape = sluisconfig.ShapeKubernetes }, "Shape"},
 		"the documents too": {func(_ *sluisconfig.Installation, a *arp.LambdaArgs) {
