@@ -6,7 +6,7 @@ require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.48.0
 	github.com/pulumi/pulumi-random/sdk/v4 v4.21.2
 	github.com/pulumi/pulumi/sdk/v3 v3.267.0
-	github.com/truvity/policy v1.44.0
+	github.com/truvity/policy v1.45.0
 	github.com/truvity/sluis v1.63.0
 	go.yaml.in/yaml/v3 v3.0.5
 )
