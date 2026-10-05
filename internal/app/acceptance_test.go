@@ -30,7 +30,7 @@ func issuerFile(t *testing.T, change ...func(*config.Serve)) *config.Serve {
 		IssuerURL: "https://issuer.example",
 		Demo:      true,
 		Store:     "memory",
-		Recovery:  &config.Recovery{Enabled: &enabled, PasswordSecret: "recovery/password"},
+		Recovery:  &config.Recovery{Enabled: &enabled, LoginSecret: "recovery/password"},
 	}
 	for _, c := range change {
 		c(f)

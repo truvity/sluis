@@ -84,10 +84,10 @@ type Config struct {
 	recoveryAccount  string
 	recoveryAudience string
 	loginDirectory   bool
-	// recoveryPassword names the recovery password's secret, read instead of
+	// recoveryLogin names the recovery password's secret, read instead of
 	// being generated, outside a cluster.
-	recoveryPassword string
-	sessionLifetime  time.Duration
+	recoveryLogin   string
+	sessionLifetime time.Duration
 	// absoluteLifetime caps the console's own session the same way it caps
 	// a per-client one in the issuer: read from the SAME key
 	// the issuer's config reads (lifetimes.absolute), because the
@@ -175,7 +175,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		}
 		c.recoveryAccount = orDefault(r.ServiceAccount, c.recoveryAccount)
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
-		c.recoveryPassword = r.PasswordSecret
+		c.recoveryLogin = r.LoginSecret
 	}
 	if d := f.Directory; d != nil {
 		c.workspaces = d.Workspaces
@@ -356,16 +356,16 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 	}
 	if kept.reviewToken == nil {
 		password := ""
-		if cfg.recoveryPassword != "" {
+		if cfg.recoveryLogin != "" {
 			if src == nil {
 				return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
 			}
 			var err error
-			if password, err = src.Get(ctx, cfg.recoveryPassword); err != nil {
+			if password, err = src.Get(ctx, cfg.recoveryLogin); err != nil {
 				return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names",
-				"secret", src.Describe(cfg.recoveryPassword))
+				"secret", src.Describe(cfg.recoveryLogin))
 		}
 		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
