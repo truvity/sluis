@@ -1,8 +1,9 @@
 # sluis — chart and configuration
 
-How the service is configured: the chart's boundary, its values, the
-overlay format, the Kubernetes objects it owns, the roles, and the two
-things it expects the deployment to provide.
+How the service is configured: the chart's boundary, its values, the four
+documents (the three service documents and the policy), how a secret is named
+and delivered, the Kubernetes objects it owns, the roles, and the two things it
+expects the deployment to provide.
 
 **One chart, `charts/sluis`, and one image, for the whole product.** It renders the
 whole of sluis — the directory, the policy, the OpenID provider,
@@ -44,11 +45,12 @@ service writes *itself*, where it is the producer and gets to choose.
 
 | Value | Default | Meaning |
 |---|---|---|
-| `config` | see [the file](#the-configuration-file) | **the service's configuration**, rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/sluis/config.yaml`. Validated by `values.schema.json` against the schema the binary uses. Everything the service decides is here (the issuer URL, lifetimes, the store, Valkey, recovery, audit, the signing key's rotation); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate |
-| `secretEnv[]` | `[]` | the only way a secret reaches a process: `{name, secretName, key, optional}` puts a Secret's key in the variable `name`, which the config names (`valkey.passwordEnv`, `oauthClient.secretEnv`, `adminPasswordEnv`). A secret is never in `config` |
-| `secretMounts[]` | `[]` | `{secretName, mountPath}`: a Secret mounted read-only as a directory, for a file the config names by path (`oauthClient.idFile`, `oauthClient.secretFile`). Each key is a file |
-| `controllerGithub.config` | see [the file](#the-configuration-file) | the GitHub controller's configuration, rendered as it stands into `<release>-github-roster-config`. `consoleURL` is required, and is this release's own Service |
-| `controllerSlack.config` | see [the file](#the-configuration-file) | the Slack controller's, into `<release>-slack-roster-config` |
+| `config` | see [the file](#the-configuration-file) | **the serve document**, rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/sluis/config.yaml`, read once at start (a change rolls the pods by their checksum annotation). Validated by `values.schema.json` against the schema the binary uses. It carries `apiVersion: sluis.truvity.github.io/serve/v2`, and says everything about how the process runs (the issuer URL, lifetimes, the store, Valkey, recovery, audit, the signing key's rotation, `secrets`); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate. The values below that look policy-like (`exchange.*`, `githubApps`, `slackApps`, `policy`) are rendered into the policy document, not into this one |
+| `secrets[]` | `[]` | the secrets the config names, projected as files under `/var/run/sluis/secrets`: `{name, secretName, key}` puts a Secret's key at `<name>`, a secret NAME of the [layout](#secrets) (`valkey/password`, `issuer/state-secret`, `directory/<id>/key`). `config.secrets` must then be `{source: file, root: /var/run/sluis/secrets}`, the default. Each confidential client's Secret is projected as `clients/<id>/secret` without being listed (its key is `policy.clients.<id>.secretKey`, default `client-secret`, and it is left out of the rendered policy document). A secret is never in `config` |
+| `secretEnv[]` | `[]` | for a config whose `secrets.source` is `env`: `{name, secretName, key, optional}` puts a Secret's key in the variable `name`, which must be `SLUIS_SECRET_<NAME>` for the name it delivers (`SLUIS_SECRET_VALKEY_PASSWORD`) |
+| `secretMounts[]` | `[]` | `{secretName, mountPath}`: a Secret mounted read-only as a directory, for a file a document names by path that is not a secret of the layout (a signing key's `file`). Each key is a file |
+| `controllerGithub.config` | see [the file](#the-configuration-file) | the GitHub controller's document (`controller-github/v2`), rendered as it stands into `<release>-github-roster-config` and read once at start; a change to it restarts that controller alone, a policy change all three. `consoleURL` is required, and is this release's own Service |
+| `controllerSlack.config` | see [the file](#the-configuration-file) | the Slack controller's (`controller-slack/v2`), into `<release>-slack-roster-config`, the same way |
 | `replicaCount` | `2` | two replicas need Valkey; one may use the in-memory store. Every replica serves every workspace, including one connected through the console on the other replica: a reader missing locally is opened from the stored credential on first use |
 | `image.repository` / `tag` | `ghcr.io/truvity/sluis/sluis` / app version | the one image: `serve` and both controllers are subcommands of it, each Deployment passing its own arguments |
 | `nameOverride` / `fullnameOverride` | `""` / `""` | replace the chart name (the `app.kubernetes.io/name` label and the controllers' selectors) and the release's full name (the prefix of every object, and the value `config.release` must carry). For an installation moving from the access-issuer chart: [see below](#migrating-from-the-access-issuer-chart) |
@@ -57,18 +59,17 @@ service writes *itself*, where it is the producer and gets to choose.
 | `signingKey.certificate.algorithm` / `.size` / `.encoding` | `ECDSA` / `384` / `PKCS8` | the key, and so what the issuer signs with BY DEFAULT: RSA signs RS256, and P-256, P-384 and P-521 sign ES256, ES384 and ES512. ECDSA takes 256, 384 or 521; RSA takes 2048, 3072 or 4096; PKCS1 encodes only RSA. A combination cert-manager would not issue is refused at render. The default P-384 key means ES384 for every audience that pins no `signing_alg` of its own — for the one relying party that lags (Kargo; EKS's associated OIDC provider; both RS256-only), pin **that audience's** policy row instead of this whole installation's default; see `signingKey.additional` below and [policy.md#signing-algorithm-per-audience](policy.md#signing-algorithm-per-audience). Changing THIS value changes the default for every audience that names none, and is not "just a rotation" the way adding a `signingKey.additional` entry is: every other algorithm now lives on its own track, and this value decides which one is "the default" |
 | `signingKey.additional[]` | `[]` | every OTHER algorithm this installation signs with AT THE SAME TIME as the default above: `{algorithm, size, encoding, issuerName, issuerKind, renewBefore, duration}`, one cert-manager `Certificate` and `Secret` per entry, each on its OWN rotation track — renewing one never disturbs another's schedule, including the default's. Two entries (or one entry and the default) naming the same algorithm are refused at render: each algorithm publishes only one key at a time. This is how a client or a resource's `signing_alg` (RS256, ES256 or ES384 — [policy.md#signing-algorithm-per-audience](policy.md#signing-algorithm-per-audience)) has a key to actually sign with; naming an algorithm nothing here configures is refused **at issuer start**, not on the first request that reaches it |
 | `signingKey.certificate.renewBefore` / `.duration` | `720h` / `8760h` | how long before expiry cert-manager replaces the key, and the certificate's life. A renewal is a **new key** (`rotationPolicy: Always`). `renewBefore` only decides how OFTEN that happens; `config.signingKey.overlap` is what has to be kept longer than `config.lifetimes.token` |
-| `directory.workspaces[]` | `[]` | declared workspaces, see below |
 | `directory.push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](#exports-and-the-export-port)). a **recovery copy** of `Secret <release>-workspace-credentials`: `{secretStore: {name, kind}, remoteKey, refreshInterval}` renders `PushSecret <release>-workspace-copy`, which writes the whole Secret as one JSON object at `remoteKey` — bundled, because the keys inside are `<workspace-id>.json` and a reconnect mints a new id, so a per-key mapping would go stale while reporting healthy. `kind` defaults to `SecretStore`, `refreshInterval` to `1h`; `deletionPolicy` is fixed at `None`, because the case this exists for is the Secret going away. Refused at render without `directory.store: kubernetes`, without a store or a key, or for two pushes sharing one path. It is a push and not an `ExternalSecret` because the service is the writer: a pull would let a stale copy overwrite a freshly connected workspace. What lands there **is** the credential |
-| `githubApps.catalogue[]` | `[]` | GitHub Apps declared as data — `{id, org, name, description, public, permissions, events, installation, grants, push}` each — created and installed by an operator on the GitHub page (the Apps tab: the App's own page). Rendered to `ConfigMap <release>-github-apps-catalogue`; the service refuses to start on a malformed entry or a grant naming a group the policy does not declare. A default set to copy ships as the chart's `examples/github-apps.yaml`. See [connect/github-apps-catalogue.md](../connect/github-apps-catalogue.md) |
+| `githubApps.catalogue[]` | `[]` | GitHub Apps declared as data — `{id, org, name, description, public, permissions, events, installation, grants, push}` each — created and installed by an operator on the GitHub page (the Apps tab: the App's own page). Rendered into the policy document's `apps.github.catalogue` (or write it there, in `policy.apps`); the document is refused, at render and at start, for a malformed entry or a grant naming a group the policy does not declare. A default set to copy ships as the chart's `examples/github-apps.yaml`. See [connect/github-apps-catalogue.md](../connect/github-apps-catalogue.md) |
 | `githubApps.catalogue[].grants[]` | `[]` | who may ask for that App's installation tokens, and for how much: `{group, repositories[], permissions{}}` each. `group` is an internal group the policy declares; `repositories` are names in the App's organisation, `["*"]` for all; `permissions` is `{name: level}`. A request is served by the first grant, in catalogue order, that covers all of it ([contract](contracts.md#installation-tokens-at-token)) |
 | `githubApps.catalogue[].push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](#exports-and-the-export-port)). copy one App's credential to a secret store: `{secretStore: {name, kind}, remoteKey, refreshInterval, deletionPolicy}` renders `PushSecret <release>-github-app-<id>`, which writes `app_id`, `installation_id` and `private_key` at `remoteKey` — that App's three property keys and nothing else. Off unless written, and refused at render for two entries sharing one path in one store, or without `directory.store: kubernetes`. The copy is a real credential, rotated as one. See [connect/infrastructure-as-code.md](../connect/infrastructure-as-code.md) |
 | `githubApps.push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](#exports-and-the-export-port)). a **recovery copy** of `Secret <release>-github-apps` — the link App and one App per bound organisation, the identities this service acts as — with the same shape and rules as `directory.push`, rendering `PushSecret <release>-github-apps-copy`. Distinct from `catalogue[].push`, which copies one catalogue App's three keys for a consumer that must act as it; this copies the service's own Apps, and only so they can be restored. An App cannot be re-created with its old id, so losing them means every grant rebinds and every installation is re-authorised by hand |
 | `slackState.push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](#exports-and-the-export-port)). a **recovery copy** of the Slack state, in the shape of `directory.push` with one more key: `{secretStore: {name, kind}, remoteKey, recordsRemoteKey, refreshInterval}` renders `PushSecret <release>-slack-credentials-copy` (the whole of `Secret <release>-slack-credentials`, at `remoteKey`) and `PushSecret <release>-slack-records-copy` (the whole of `Secret <release>-slack-records`, at `recordsRemoteKey`). Each is bundled under one remote key because the keys inside are `<workspace-id>.json`. `recordsRemoteKey` is required and must differ from `remoteKey`. `kind` defaults to `SecretStore`, `refreshInterval` to `1h`; `deletionPolicy` is fixed at `None`. Refused at render without `directory.store: kubernetes`, without a store or either key, or for two pushes sharing one path. The records are a mirror Secret because they live in a ConfigMap and a `PushSecret` reads Secrets only. What lands there **is** every workspace's credential |
-| `slackApps[]` | `[]` | Slack Apps declared as data — `{id, workspace, name, description, botScopes, push}` each — created (with a throwaway app configuration token, used once and never stored) and installed (by an owner of the workspace) by an operator on the console's Slack area (the Apps tab). `id` is `[a-z0-9-]`, at most 32, unique, and never changes; `workspace` is a key of the policy's `slack.workspaces` (lowercase letters, digits and `-`, at most 40, as the policy itself requires); `name` defaults to `<workspace>-<id>`, at most 35; `description` at most 140. Rendered to `ConfigMap <release>-slack-apps-catalogue`; the service refuses to start on a malformed entry or an entry for a workspace the policy does not name. Needs `directory.store: kubernetes`. See [connect/slack-apps-catalogue.md](../connect/slack-apps-catalogue.md) |
+| `slackApps[]` | `[]` | Slack Apps declared as data — `{id, workspace, name, description, botScopes, push}` each — created (with a throwaway app configuration token, used once and never stored) and installed (by an owner of the workspace) by an operator on the console's Slack area (the Apps tab). `id` is `[a-z0-9-]`, at most 32, unique, and never changes; `workspace` is a key of the policy's `slack.workspaces` (lowercase letters, digits and `-`, at most 40, as the policy itself requires); `name` defaults to `<workspace>-<id>`, at most 35; `description` at most 140. Rendered into the policy document's `apps.slack.catalogue`; the document is refused for a malformed entry or an entry for a workspace the policy does not name. Needs `directory.store: kubernetes`. See [connect/slack-apps-catalogue.md](../connect/slack-apps-catalogue.md) |
 | `slackApps[].push` | absent | **Deprecated** (needs `config.store: kubernetes`; a State-backed deployment uses [`exports`](#exports-and-the-export-port)). copy one App's bot token — one key, `bot_token`, never the client secret or the record — to a secret store: `{secretStore: {name, kind}, remoteKey, refreshInterval, deletionPolicy}`, rendering `PushSecret <release>-slack-app-<id>`. Refused at render for two entries sharing one path in one store, or without `directory.store: kubernetes`. The copy is a real credential, rotated as one |
 | `console.mount` | `/console` | where the console sits on this origin. A **path** and not a host, because discovery must be at the root of the origin named in every token's `iss`. It is also what the console prefixes onto every link it hands a browser — `/login` resolves against the origin, where the issuer's page is. Empty serves no console |
-| `exchange.clusters[]` | `[]` | the clusters whose workloads may exchange: `{name, issuer, jwksUri}` per cluster, verified against the key set that cluster publishes. **No secret in any row**, and this service holds access to no cluster — including its own, which is a row like any other |
-| `exchange.aws.accounts[]` | `[]` | the AWS accounts whose IAM roles may exchange their outbound-identity-federation token: `{account, name, issuer, jwksUri, orgId, algs}` per account, verified against the key set that account's issuer publishes. **No secret in any row. Empty verifies no AWS token at all**: any AWS account can mint a valid token for a role of its own, so the row is the trust boundary. See [connect/aws-workloads.md](../connect/aws-workloads.md) |
+| `exchange.clusters[]` | `[]` | the clusters whose workloads may exchange: `{name, issuer, jwksUri}` per cluster, verified against the key set that cluster publishes. Rendered into the policy document's `exchange.clusters` (write them here or in `policy.exchange`, not both). **No secret in any row**, and this service holds access to no cluster — including its own, which is a row like any other |
+| `exchange.aws.accounts[]` | `[]` | the AWS accounts whose IAM roles may exchange their outbound-identity-federation token: `{account, name, issuer, jwksUri, orgId, algs}` per account, verified against the key set that account's issuer publishes. Rendered into the policy document's `exchange.aws`. **No secret in any row. Empty verifies no AWS token at all**: any AWS account can mint a valid token for a role of its own, so the row is the trust boundary. See [connect/aws-workloads.md](../connect/aws-workloads.md) |
 | `exchange.aws.audience` | the issuer URL | the audience the role must request from `sts:GetWebIdentityToken`; a token for any other is refused |
 | `exchange.aws.maxAge` | `5m` | refuse a token whose `iat` is older, whatever its `exp` allows (AWS permits an hour). At most `1h` |
 | `route.host` | `""` | the hostname on the gateway. Empty renders no Gateway, HTTPRoute or Certificate, which is right for an installation reached by port-forward |
@@ -77,7 +78,7 @@ service writes *itself*, where it is the producer and gets to choose.
 | `route.certificate.privateKey` | `{}` | the key that TLS certificate is issued for: `{algorithm, size, encoding, rotationPolicy}`, cert-manager's own fields. Empty leaves every one to cert-manager's defaults, an RSA 2048 key. Set it when the issuer will only sign one kind of key — a PKI role pinned to an algorithm refuses at issuance, long after the render succeeded, and the listener stays dark with the reason on the `CertificateRequest`. The same combinations as the signing key are refused at render |
 | `route.sharedWith[]` | `[]` | namespaces besides this one allowed to attach an HTTPRoute to this Gateway. A **gateway-level** admission, not a ReferenceGrant: whether a Gateway accepts a route from another namespace is entirely its own `allowedRoutes` |
 | `route.parentRefs[]` | `[]` | parents for the issuer's routes, written out in full (e.g. a platform `ListenerSet` carrying `route.host`). When set the chart renders **no Gateway and no TLS Certificate**: the parent owns the listener and its certificate, and `gatewayClassName`, `certificate` and `sharedWith` have no effect. Write `group` and `kind` out |
-| `policy` | `{}` | the declared policy, see [policy.md](policy.md) |
+| `policy` | `{}` | the policy document without its `apiVersion`, which the chart writes: [the policy document](#the-policy-document), held by `values.schema.json` to `schemas/config/policy.schema.json`, rendered into `<release>-policy` and mounted where each process's `policy.file` names it (`config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`; the controllers': `/var/run/github-roster/policy/policy.yaml`, `/var/run/slack-roster/policy/policy.yaml`). Render a directory of layers first with `sluisctl policy render` and pass the result here |
 | `networkPolicy.enabled` | `false` | |
 | `networkPolicy.clients[]` | `[]` | namespaces allowed to reach the service in-cluster: the proxies verifying tokens and the workloads exchanging them |
 | `networkPolicy.gatewayNamespace` | `""` | the gateway's namespace, admitted to the service's port besides `clients`. Empty admits no gateway, so with the policy enabled nothing with a browser reaches it |
@@ -132,25 +133,29 @@ question, *what does this issuer serve*, but listing an endpoint under
 | back-channel logout | OIDC Back-Channel Logout 1.0 | opt-in per client with `backchannel_logout_uri`: a signed `logout+jwt` POSTed to every such client that signed the person in, by the `sid` it saw, when the sign-in ends |
 | not served | RFC 8628 device flow, client credentials, RFC 7523 JWT bearer, RFC 7662 introspection, implicit and hybrid flows, session-management iframe, RFC 7591 dynamic client registration | The first three were served through 0.11 and are gone: the device flow is for a machine with no browser, and both headless cases here — a CI job and a workload — are token exchange; client credentials is a machine with a stored secret, which is the thing this design exists not to have; JWT bearer is token exchange with a different spelling, and two ways to say one thing is two things to keep truthful. Introspection never applied — these are JWTs, verified offline against the key set. RFC 7591 is deliberate and stays refused — the Model Context Protocol deprecated it in favour of Client ID Metadata Documents, which this issuer serves instead when `client_documents` names an origin: no endpoint, nothing stored, and an allow-list that keeps the set of origins answerable by reading the repository |
 
-## Declared workspaces (the overlay)
+## Declared workspaces (`directory.workspaces`)
 
 ```yaml
-workspaces:
-  - id: C0example              # the backend's tenant id (Google: the customer id)
-    backend: google
-    admin: admin@example.com   # the account the key impersonates
-    secretName: example-sa-key # a Secret in this namespace
-    secretKey: key.json        # which key of it holds the JSON; this is the default
-    serve:                     # optional; omitted serves every domain it owns
-      - example.com
-    syncGroups:                # optional; omitted keeps every group in them
-      - platform@example.com
+# the serve document
+directory:
+  workspaces:
+    - id: C0example                  # the backend's tenant id (Google: the customer id)
+      backend: google
+      admin: admin@example.com       # the account the key impersonates
+      keySecret: directory/C0example/key   # the NAME of the key's secret
+      serve:                         # optional; omitted serves every domain it owns
+        - example.com
+      syncGroups:                    # optional; omitted keeps every group in them
+        - platform@example.com
 ```
 
-The chart renders the list into a ConfigMap and mounts each named Secret
-read-only. The service merges declared workspaces with the ones connected
+The service adopts the declared workspaces at start. The key is a secret by
+name, `directory/<id>/key`, delivered by `secrets`: on Kubernetes the chart
+projects it from the Secret a `secrets` entry names
+(`{name: directory/C0example/key, secretName: example-sa-key, key: key.json}`),
+read on every use. The service merges declared workspaces with the ones connected
 through the console: declared ones are read-only in the console, cannot be
-disconnected there (remove them from the values instead) and win when a
+disconnected there (remove them from the document instead) and win when a
 domain is claimed twice. Domains are discovered from the backend, exactly
 as for a connected workspace.
 
@@ -203,11 +208,14 @@ reads the `groups` claim. That is [../connect/service-to-service.md](../connect/
 
 ## The policy
 
-The service loads the family's [policy](policy.md) — `groups`,
-`claims`, `lifetimes`, `clients` and `github` — from the deployment's
-ConfigMap(s). There is one layer: the console is read-only, so
-nothing it does can add to what is declared here. The chart renders the
-policy from `policy:` in values, which is the same YAML:
+The service loads one [policy document](#the-policy-document) — the family's
+[policy](policy.md) (`groups`, `claims`, `lifetimes`, `clients`, `github` and
+the rest) plus the sections that say whom the exchange trusts, which Apps an
+operator may make, what the controllers may change and what is exported — from the
+file the serve document's `policy.file` names. There is one layer: the console is
+read-only, so nothing it does can add to what is declared here. The chart renders
+the document from `policy:` in values, which is the same YAML without its
+`apiVersion`:
 
 ```yaml
 policy:
@@ -235,18 +243,13 @@ so the hash carries the uniqueness the readable part may have lost.
 | `Secret <release>-oauth-client` | OAuth client id and secret | declared via `oauthClient.secret.name` and read-only. The console used to be able to write one; it cannot since the console became read-only, because a credential a console can change is one somebody can change from a browser |
 | `Secret <release>-session-key` | signs the session cookie and the consent-flow state | the service, generated on first start; rotate by deleting |
 | the signing key | a PEM private key, mounted as a file | **not the issuer** — cert-manager issues one, or external-secrets delivers one. The issuer reads it from the file, never through the API; its key id is the key's own RFC 7638 thumbprint, so nothing has to carry one beside it |
-| `ConfigMap <release>-policy` | the declared layer of the policy, plus the console's own settings and the consumer allow-list | the chart |
-| `ConfigMap <release>-overlay` | the declared workspaces | the chart |
-| `ConfigMap <release>-aws` | the AWS accounts whose roles may exchange, each an account id, a name and the issuer URL AWS gave it. **No secret in any row** | the chart, only when `exchange.aws.accounts` is non-empty |
-| `ConfigMap <release>-clusters` | the clusters whose workloads may exchange, each a name and the URL of the key set it publishes. **No secret in any row** | the chart |
-| `ConfigMap <release>-github-apps-catalogue` | the declared GitHub App catalogue, `catalogue.yaml`. **No secret in it** | the chart, when `githubApps.catalogue` is not empty |
+| `ConfigMap <release>-policy` | the policy document: the declared policy, the exchange's clusters and AWS accounts (**no secret in any row**), the GitHub and Slack App catalogues, what the controllers may change and the exports. One file, `policy.yaml`, read once by each process | the chart |
 | `PushSecret <release>-github-app-<id>` | the instruction to copy one catalogue App's `app_id`, `installation_id` and `private_key` to the store and path its entry names — that App's three property keys and nothing else. **What lands there is the App's key**, a second durable copy, rotated as one | the chart, for each `githubApps.catalogue` entry carrying `push`; External Secrets does the copying |
 | `PushSecret <release>-workspace-copy` | the instruction to copy the whole of `Secret <release>-workspace-credentials`, every key as one JSON object, to the store and path `directory.push` names. A recovery copy: restoring is an operator writing it back, deliberately. `deletionPolicy: None`, so the copy outlives the Secret it is for | the chart, when `directory.push` is written; External Secrets does the copying |
 | `PushSecret <release>-github-apps-copy` | the same for `Secret <release>-github-apps` — the link App and one App per bound organisation — to where `githubApps.push` names | the chart, when `githubApps.push` is written; External Secrets does the copying |
 | `PushSecret <release>-slack-credentials-copy` | the instruction to copy the whole of `Secret <release>-slack-credentials` to the store and path `slackState.push` names. `deletionPolicy: None` | the chart, when `slackState.push` is written; External Secrets does the copying |
 | `PushSecret <release>-slack-records-copy` | the same for `Secret <release>-slack-records`, to `slackState.push.recordsRemoteKey` | the chart, when `slackState.push` is written; External Secrets does the copying |
 | `ConfigMap <release>-slack-status` | the Slack controller's last report, one document per workspace | created empty by the service at start; its data replaced by the controller, which is granted this one name (get, update, patch) |
-| `ConfigMap <release>-slack-apps-catalogue` | the declared Slack App catalogue (`slackApps`), without `push`. **No secret in it** | the chart, when `slackApps` is not empty |
 | `Secret <release>-slack-catalogue-apps` | every catalogue Slack App: `<id>.client_id`, `<id>.client_secret` and, once installed, `<id>.slack_bot_token`, beside `<id>.record.json` | the service (a catalogue App's Create and Install), created empty at start |
 | `PushSecret <release>-slack-app-<id>` | the instruction to copy one catalogue Slack App's bot token (property `bot_token`, nothing else) to the store and path its entry names. What lands there is the token | the chart, for each `slackApps` entry carrying `push` |
 | `ConfigMap <release>-github-status` | the GitHub controller's last report, one document per organisation | created empty by the service at start; its data replaced by the controller, which is granted this one name |
@@ -329,32 +332,47 @@ first line, naming what a restart would lose.
 
 ## The configuration file
 
-Each subcommand of `sluis` (`serve`, `controller github`, `controller slack`) is configured by **one YAML file**, given with `--config <file>`,
-and by nothing else: `--version` and `--help` are the only other flags. `sluis tick github|slack <target>`
+An installation is configured by **four documents**, each one YAML file:
+three service documents, one per process (`serve`, `controller-github`,
+`controller-slack`), which say how the process runs, and one **policy document**,
+which says what the installation decides. Each subcommand of `sluis` (`serve`,
+`controller github`, `controller slack`) takes its service document with
+`--config <file>` or, with no `--config`, from the variable `SLUIS_CONFIG`; the
+service document names the policy document with `policy.file`. Those two are the
+only thing that configures a process: `--version` and `--help` are the only other
+flags. `sluis tick github|slack <target>`
 runs one target's tick once and reads the same file as its controller (`controller-github`, `controller-slack`); the target
 comes first: an organisation's login or `github:links` for GitHub, a workspace's key for Slack. Until a shared State exists a tick
 refuses to run (a running controller's lease would not exclude it); with the controller scaled to 0, `--unsafe-local-lease` runs it.
 [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md) is the
-decision, and truvity/policy's
+decision, [0036](../decisions/0036-configuration-is-immutable-per-instance.md) the
+rules for how the documents reach an instance, and truvity/policy's
 [configuration contract](https://github.com/truvity/policy/blob/master/docs/contracts/config.md)
-the rule it follows.
+the rule both follow.
 
-- **Validated before anything starts.** The file is held to its JSON Schema
-  (`schemas/config/<command>.schema.json`: `serve`, `controller-github` or `controller-slack`, embedded in the binary) first. An
+- **Immutable per instance.** A document is read once, at start. A change to
+  configuration or policy is a new set of instances, never a reload: on
+  Kubernetes the chart renders a `checksum/*` annotation per document, so a
+  change rolls the Deployment; on AWS Lambda it is a new configuration layer
+  version ([AWS Lambda](../integrations/aws-lambda.md)); elsewhere it is a
+  restart. What stays live is credentials and State: a secret is read when it
+  is used or on a short refresh, so rotating one is not a deployment.
+- **Validated before anything starts.** Each document is held to its JSON Schema
+  (`schemas/config/<document>.schema.json`: `serve`, `controller-github`,
+  `controller-slack` or `policy`, embedded in the binary) first. An
   unknown key, a missing required key or a value of the wrong type refuses to
   start and names the path to it. The chart's `values.schema.json` embeds the
-  same schemas under each component's `config`, so the same mistake fails
-  `helm install`, and the chart's tests hold what it renders to them.
-- **Secrets are the one thing the environment adds, and only the ones the
-  file names.** A key ending in `Env` holds the *name* of a variable
-  (`valkey.passwordEnv: VALKEY_PASSWORD`), and the process reads exactly the
-  variables the file names; an unset or empty one refuses to start, naming the
-  variable. A key ending in `File` or `Dir` holds a path. A secret in the file
-  is refused: there is no key to put it in, and a URL or address with a password
-  in it does not match the schema.
+  same schemas under each component's `config` and under `policy`, so the same
+  mistake fails `helm install`, and the chart's tests hold what it renders to them.
+- **A secret is named, never written.** A key ending in `Secret` holds a secret's
+  NAME (`valkey.passwordSecret: valkey/password`), and `secrets.source` says how a
+  name is delivered ([Secrets](#secrets)). A key ending in `File` or `Dir` holds a
+  path to something that is not a secret, or to a key the platform mounts. A
+  secret in a document is refused: there is no key to put it in, and a URL or
+  address with a password in it does not match the schema.
 - **Telemetry is not here.** It is OpenTelemetry's own `OTEL_*` environment
   (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, ...), read by the SDK and
-  set on the pod by the platform. Nothing in the file restates it.
+  set on the pod by the platform. Nothing in a document restates it.
 - **The old environment is refused, not ignored.** A variable of the old
   configuration that is still set (`ISSUER_URL`, `VALKEY_PASSWORD`, ...) stops
   the process at start, naming the key that replaces it. The tables
@@ -366,15 +384,194 @@ default. What follows is the orientation: each key, its default when unset, and
 what to know. A key the table gives no default for is unset by default, which
 is the binary's own behaviour.
 
+### Documents and `apiVersion`
+
+Every document carries an `apiVersion` of the form
+`sluis.truvity.github.io/<kind>/v2`, with `<kind>` one of `serve`,
+`controller-github`, `controller-slack` and `policy`. **Absent means v1.** A binary
+reads its documents' version N and N-1, and converts N-1 as it loads it: this
+build reads v2 and v1, so a deployment rolls the binary first and its
+configuration second. A v1 document is held to the schema it was written against
+(`schemas/config/v1/`, frozen as v1.61 wrote it) and keeps working unchanged:
+what v1 kept in a service document and v2 keeps in the policy document is read
+from the files v1 named, and each secret is read where v1 named it. A v2 document
+that still names a key v2 retired is refused with where it went, not with the
+schema's bare "not a key this service reads" ([Retired keys](#retired-keys)).
+A schema change that cannot be converted is a major step, not a minor one.
+
+```yaml
+apiVersion: sluis.truvity.github.io/serve/v2
+issuerURL: https://sluis.example
+policy: {file: /etc/sluis/policy/policy.yaml}
+secrets: {source: file, root: /var/run/sluis/secrets}
+```
+
+Layering exists in exactly one place, rendering the policy
+([The policy document](#the-policy-document)): a running binary reads one finished
+document and merges nothing.
+
+### Secrets
+
+A document never holds a secret. It gives a secret's **name** (a path of
+segments of letters, digits, `.`, `_` and `-`, separated by `/`), and the serve
+document's `secrets` says how a name is delivered:
+
+```yaml
+secrets:
+  source: ssm          # env | file | ssm
+  root: /sluis/hive    # file: a directory; ssm: the installation's root
+  region: eu-west-1    # ssm only
+  refresh: 5m          # ssm only
+```
+
+| `source` | A name is delivered as | Read |
+|---|---|---|
+| `env` (the default) | the variable `SLUIS_SECRET_<NAME>`: the name upper-cased, every character that is not a letter or a digit an underscore (`valkey/password` is `SLUIS_SECRET_VALKEY_PASSWORD`). Two names may not share a variable | once, at start; for a local run |
+| `file` | the file `<root>/<name>` | on every use, so a rotated Secret the platform mounts takes effect without a restart. The chart's `secrets` value projects each name as a file under `/var/run/sluis/secrets` |
+| `ssm` | the SecureString `<root>/private/config/<name>` of AWS SSM Parameter Store | every parameter under `<root>/private/config/` at once (decrypted, paged), and again once `refresh` (`5m`) has passed |
+
+The names are the layout's ([0036](../decisions/0036-configuration-is-immutable-per-instance.md)),
+and the key that holds each is:
+
+| Name | Held by | What it is |
+|---|---|---|
+| `clients/<client-id>/secret` | a confidential client of the policy | the client's secret. The service reads one per confidential client of the policy it loaded |
+| `providers/google/<provider>/client-id`, `.../client-secret` | `oauthClient.provider` | the Google OAuth client registered for the directory |
+| `issuer/state-secret` | `signingKey.kms.stateSecret`, `signingKey.kmsWrapped.stateSecret` | the sign-in state secret |
+| `recovery/password` | `recovery.passwordSecret` | the recovery password |
+| `directory/<id>/key` | `directory.workspaces[].keySecret` | a declared workspace's service-account key |
+| `valkey/password` | `valkey.passwordSecret` | the shared store's password |
+
+A name that is not delivered stops the start, naming the name and where it was
+looked for; a value is never in an error or a log line. On Kubernetes the usual
+source is `file`, the chart projecting each Secret key a `secrets` entry names;
+on AWS Lambda it is `ssm`, from the layout below.
+
+### SSM layout v3
+
+An installation has **one root**, `secrets.root`, which is `/sluis/<instance>`
+with `<instance>` the installation's name (hive: `hive`, Truvity's: `kernel`), so
+two installations share an account without colliding. Under it:
+
+```text
+/sluis/<instance>/private/config/<name>           what an operator seeds: the names above
+/sluis/<instance>/private/credentials/<kind>/<id>/<ref>   what sluis writes: the credentials of the Secrets port
+/sluis/<instance>/export/<path>                   what sluis copies out, for consumers
+```
+
+The `ssm` Secrets adapter of the ports takes its root from the same
+`secrets.root` (`source: ssm`): naming another root under
+`adapters.secrets.settings` is refused, and with neither the start is refused. A
+v1 document that names no root keeps `/sluis` (layout v2) until it moves.
+
+**`private` and `export` are reserved:** an instance may not be named either,
+since `/sluis/private/...` would then be the tree of another installation, and
+a root with such a segment is refused at start. An instance is lower-case letters,
+digits and dashes.
+
+The IAM boundary follows the tree. A function that only runs a controller needs
+`private/credentials` and `export` and never `private/config`; the one that signs
+tokens reads `private/config` as well ([AWS Lambda](../integrations/aws-lambda.md#iam-one-role-per-function)).
+The paths in [storage layout](storage-layout.md) are v2's; v3 puts the instance
+between `/sluis` and `private`.
+
+**Moving to v3.** Copy the configuration secrets, then the credentials:
+
+```sh
+sluis migrate ssm-layout --to-root /sluis/<instance> --dry-run   # the report is JSON: names, never a value
+sluis migrate ssm-layout --to-root /sluis/<instance>
+sluis migrate --from <config on /sluis> --to <config on /sluis/<instance>>
+```
+
+`ssm-layout` copies `<from-root>/private/config/...` (default `--from-root
+/sluis`) to `<to-root>/private/config/...` under the names the documents give:
+`oauth/client-id` and `client-secret` become `providers/google/default/client-id`
+and `client-secret`, `clients/<id>` becomes `clients/<id>/secret`, and every other
+name keeps its own. It deletes nothing, so remove the v2 parameters once the
+installation runs on v3; it writes where the destination is absent, refuses one
+that holds another value unless `--overwrite`, and encrypts each copy with the
+source parameter's own KMS key unless `--kms-key` names one. `sluis migrate`
+([operations/migrate.md](../operations/migrate.md)) then moves the credentials,
+through two serve documents whose Secrets adapters name the two roots. The
+exports are written again by the next exports pass.
+
+### The policy document
+
+The policy document says what the installation decides. Its tables are the access
+model's ([policy.md](policy.md): `vocabulary`, `groups`, `claims`, `lifetimes`,
+`resources`, `clients`, `github`, `slack`, `people`, ...), unchanged; beside
+them are four sections that used to be spread over the service documents and the
+files they named, so that one change no longer touches several documents that
+nothing kept consistent:
+
+| Section | Holds | Was |
+|---|---|---|
+| `exchange.clusters[]` | `{name, issuer, jwksUri}` per federated cluster | `exchange.clustersFile` |
+| `exchange.aws` | `audience`, `maxAge` and `accounts[]` (`{account, name, issuer, jwksUri, orgId, algs}`) | `exchange.awsFile` |
+| `exchange.github.owners[]` | the organisations whose CI tokens are verified. None verifies none | `github.owners` |
+| `apps.github.runnerTiers[]` | the tiers an operator may create a runner App for | `github.runnerTiers` |
+| `apps.github.catalogue[]` | the GitHub App catalogue ([connect/github-apps-catalogue.md](../connect/github-apps-catalogue.md)) | `github.catalogueFile`, the GitHub controller's `catalogueFile` |
+| `apps.slack.catalogue[]` | the Slack App catalogue ([connect/slack-apps-catalogue.md](../connect/slack-apps-catalogue.md)) | `slack.catalogueFile` |
+| `controllers.github.enabledOrgs[]` | the organisations the GitHub controller changes; every other bound organisation is a dry run | the controller's `enabledOrgs` |
+| `controllers.slack.enabledWorkspaces[]` | the workspaces the Slack controller changes | the controller's `enabledWorkspaces` |
+| `exports[]` | the secrets copied out of the service ([Exports](#exports-and-the-export-port)) | `exports` of `serve` |
+
+There is no secret in any of them: every row is a name and a URL.
+
+```yaml
+apiVersion: sluis.truvity.github.io/policy/v2
+groups:
+  all:access-roster:operator: { members: [platform-admins@example.com] }
+  all:access-roster:viewer:   { members: [all@example.com] }
+lifetimes: { default: 12h }
+github:
+  example-org: { members: [all:access-roster:viewer] }
+exchange:
+  clusters:
+    - {name: devel, issuer: "https://kubernetes.default.svc", jwksUri: "https://devel.example/openid/v1/jwks"}
+  aws:
+    audience: sluis-exchange
+    accounts:
+      - {account: "111122223333", name: apps, issuer: "https://example-id.tokens.sts.global.api.aws"}
+  github: {owners: [example-org]}
+apps:
+  github: {runnerTiers: [preview, stable]}
+controllers:
+  github: {enabledOrgs: [example-org]}
+```
+
+Whatever the service checked at start across these now belongs to the document,
+and runs wherever it is loaded (the binary, `sluisctl policy render`, the Pulumi
+library before it publishes one): a catalogue grant naming an undeclared group,
+a Slack App for an undeclared workspace, an enabled organisation or workspace the
+policy does not bind, an export of an undeclared App, two clusters for one
+issuer.
+
+**Rendering.** A process loads exactly one document. `sluisctl policy render
+<file or directory> [-o <file>]` writes it from the layers a deployment declares:
+a policy file of v1 (`version: 1`), an access document (`access:` and `overlay:`,
+reshaped into tables) or a policy document fragment, alone or a directory of them
+merged in name order ([sluisctl](sluisctl.md#policy-render-the-one-policy-document)).
+Tables merge by key and a key declared twice is an error naming the file; of the
+sections, a list concatenates and a list of names unions. The result is held to
+every check above, and is the same bytes for the same layers. Name it in each
+service document's `policy.file`. On Kubernetes the chart renders it from
+`policy:` in values and the Apps' catalogues; on AWS Lambda it is the policy of
+the configuration layer.
+
 ### `serve` (the chart's `config`; `sluis serve`)
 
 The issuer, the console and the directory hub, one process.
 
 | Key | Default | Meaning |
 |---|---|---|
+| `apiVersion` | absent (v1) | `sluis.truvity.github.io/serve/v2`. Absent is v1, which this build converts as it loads it: see [Documents and `apiVersion`](#documents-and-apiversion) |
 | `issuerURL` | **required** | baked into every token and every relying party's trust. There is no default, because one would be a value nobody chose spread across an estate. An http or https URL with no credentials |
 | `release` | `sluis` | the name this installation's objects carry (`<release>-github-orgs`, the prefix of its keys in Valkey). **The chart requires it to be the release's full name**, and says what to write |
 | `cluster` | unset | what this cluster is called, which becomes part of a ServiceAccount's subject: `<cluster>:k8s:<namespace>:<name>`. Empty keeps the older unqualified form |
+| `secrets.source` | `env` | how every secret NAME this document gives is delivered: `env`, `file` or `ssm`. See [Secrets](#secrets) |
+| `secrets.root` | required with `file` and `ssm` | `file`: the directory the names are files under (the chart: `/var/run/sluis/secrets`). `ssm`: the installation's root, `/sluis/<instance>`: its configuration secrets are read from `<root>/private/config/`, so two installations share an account by their roots ([SSM layout v3](#ssm-layout-v3)) |
+| `secrets.region` / `.endpoint` / `.refresh` | the SDK's / AWS / `5m` | `ssm` only: the parameters' region; a LocalStack address; how long before every parameter under the prefix is read again, so a rotation reaches a running instance |
 | `store` | `memory` (the chart: `kubernetes`) | where connected workspaces and their credentials are kept. `memory` makes a restart a fresh installation, which is right for a laptop and nothing else |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports ([design/ports.md](../design/ports.md)): `legacy` keeps state where it has always been kept (the namespace's ConfigMaps and Secrets, and Valkey when `valkey.address` is set); `dynamodb` keeps the same in one DynamoDB table shared by every replica ([design/ports.md](../design/ports.md#the-dynamodb-adapter)); `memory` keeps all of it in the process, so a restart loses every login in progress, and is refused with `store: kubernetes` or `valkey.address`. With `dynamodb` or `memory` the domain records too (directory workspaces and their credentials, GitHub organisations and Apps, people's links, the Slack records) are kept in that State, their credentials in the Secrets port (`memory` has its own), and the controllers read them there instead of from mounted files ([design/ports.md](../design/ports.md#the-domain-stores)); a secrets adapter is then required, and the start is refused naming it without one. The `nats` adapter and `ports.sealer` were removed: a file that names either is refused |
 | `ports.blob.adapter` | (the Blob of `ports.adapter`) | `s3` replaces the Blob port (status reports, directory snapshots) with an S3 bucket, whatever `ports.adapter` is; `ports.blob.s3` is then required |
@@ -387,55 +584,48 @@ The issuer, the console and the directory hub, one process.
 | `ports.dynamodb.table` | **required with `dynamodb`** | the table: a string partition key `pk`, a string sort key `sk` and TTL on `expires` ([design/ports.md](../design/ports.md#the-dynamodb-adapter)) |
 | `ports.dynamodb.region` / `.endpoint` | the SDK's (`AWS_REGION`) / AWS | the table's region; LocalStack's or DynamoDB Local's address. Credentials are the platform's (Pod Identity, IRSA, a Lambda role) and are never configured |
 | `ports.dynamodb.create` | `false` | make the table at start when it is not there (on-demand, TTL on `expires`), for a test or a development installation. Off binds to the table the infrastructure code made; the role needs `dynamodb:GetItem`, `PutItem`, `DeleteItem`, `Query` and `DescribeTable` on it, and `Scan` for `migrate` |
-| `ports.export.adapter` | unset: nothing is copied out | the adapter behind the Export port ([design/ports.md](../design/ports.md#export)): `openbao` writes to a KV version 2 mount of an OpenBao; `memory` keeps the copies in the process, for a test. `exports` needs one. See [Exports and the export port](#exports-and-the-export-port) |
+| `ports.export.adapter` | unset: nothing is copied out | the adapter behind the Export port ([design/ports.md](../design/ports.md#export)): `openbao` writes to a KV version 2 mount of an OpenBao; `memory` keeps the copies in the process, for a test. The policy document's `exports` need one. See [Exports and the export port](#exports-and-the-export-port) |
 | `ports.export.openbao.address` | **required with `openbao`** | the OpenBao server, `https://openbao.example`, with no path or credentials. Nothing is contacted at start |
 | `ports.export.openbao.caFile` / `.mount` / `.namespace` | system authorities / `kv` / unset | a PEM bundle for the server's certificate in place of the system's; the KV version 2 mount; the OpenBao namespace an export that names none is written to |
 | `ports.export.openbao.auth.method` | **required with `openbao`** | `kubernetes` (the Kubernetes auth method, with the pod's ServiceAccount token) or `jwt` (the JWT/OIDC method, with a token read from `tokenFile`). Both log in with `POST auth/<mount>/login {role, jwt}`, inside each namespace written to |
 | `ports.export.openbao.auth.mount` / `.role` / `.tokenFile` | the method's name / **required** / the pod's ServiceAccount token for `kubernetes`, **required** for `jwt` | the auth mount path in each namespace; the role the login asks for; and where the JWT is read from, afresh on every login (a projected ServiceAccount token, or on AWS the web identity token of outbound federation) |
-| `exports[]` | `[]` | the secrets copied out of the service, each `{name, source, app, tier, org, bundle, namespace, path, properties, interval}`: see [Exports and the export port](#exports-and-the-export-port). Validated at start |
 | `listen.address` | `:8080` | everything a browser and a relying party reach: discovery, the key set, the flows, the login page, and the console under `console.mount`. The chart takes the Service's and the routes' port from it, and refuses one outside 1-65535 |
 | `probes.address` | `:7070` | `/healthz`, `/readyz` |
 | `log.level` | `info` | `debug`, `info`, `warn`, `error` |
-| `policyDir` | built-in two groups | the directory the policy is mounted at. The chart requires `/var/run/access-issuer/policy` |
-| `overlayFile` | unset | the file of declared workspaces; the chart renders it from `directory.workspaces` |
+| `policy.file` | built-in two groups | the one [policy document](#the-policy-document) the service decides by, read once at start: the file `sluisctl policy render` writes. The chart requires `/var/run/access-issuer/policy/policy.yaml`. Unset, the built-in two groups (or the demonstration policy under `demo`) |
+| `directory.workspaces[]` | unset | the workspaces the deployment declares, which the service adopts at start: see [Declared workspaces](#declared-workspaces-directoryworkspaces). Each names its key by `keySecret` |
 | `publicURL`, `publicRootURL` | `http://localhost:8081`, `publicURL` | where a browser reaches the console (with its mount) and the origin root, where the admin-consent callback stays. With `route.host` and `console.mount` set the chart requires `https://<host><mount>` and `https://<host>` |
 | `secureCookies` | follows the scheme of `issuerURL` | mark session cookies Secure. The chart refuses `false` on a route served over TLS |
 | `groupsScoping` | `report` | how far this installation has moved toward per-audience `groups` scoping ([policy.md#groups-in-a-token-scoping](policy.md#groups-in-a-token-scoping)): `off` computes and logs nothing -- quote it (`"off"`), or YAML reads the bare word as a boolean -- `report` logs what would be dropped without changing a token, `enforce` narrows the claim |
 | `demo` | `false` | two tenants held in memory, which need no credential and no network |
 | `allowInsecure` | `false` | accept a plain-http issuer URL, for a local run |
 | `inCluster` | `false` | recovery proves access to the cluster the pod runs in. Required with `recovery.enabled` |
-| `clientSecretsDir` | unset | one file per confidential client, named after the client id, each the client's secret; read per call, so a rotated Secret takes effect without a restart. The chart requires `/var/run/access-issuer/clients` when a policy client names a `secret` |
-| `adminPasswordEnv` | unset | the *name* of the variable holding the hub's recovery password, for a run outside a cluster (`recovery.passwordFile` wins when both are set). Unset generates one and prints it once |
 | `lifetimes.token` / `.refresh` / `.hold` | `1h` / `12h` / `4h` | how long a token lives, how long a refresh lives (the sliding window: a session idle longer than this ends, whatever its absolute limit, so a resource's seven-day `absolute_cap` needs `refresh` raised to match; it is also how long a browser sign-in lasts), and how long a signed-in identity keeps its last granted role while the directory cannot vouch. Caps: the policy may ask for shorter |
 | `lifetimes.absolute` | `24h` | the global timeout: no per-client session, and no access or ID token, outlives `auth_time` by more than this, no matter how often it is refreshed. Refused when zero, negative, or shorter than `lifetimes.token`: at render, and at start. A resource in the policy may carry its own `absolute_cap`, longer than this only when it says `read_only: true` and never beyond `168h` ([policy.md](policy.md#a-longer-absolute-session-for-a-read-only-resource)); the shortest cap among a chain's resources applies, and a chain that touches any other resource falls back to this value |
 | `lifetimes.session` | `12h` | how long the console's own session lasts, capped at `lifetimes.absolute` |
 | `freshness.refreshInterval` / `.freshnessWindow` / `.probeInterval` | `15m` / `30m` / `5m` | how often the refresher takes a new snapshot per workspace, how old a snapshot may be before its domains stop being authoritative, and how often a credential is probed and the domain list re-read |
-| `exchange.audience` | `release` | the audience a workload's ServiceAccount token must be minted for. Without one, every mounted token in every federated cluster would be a proof. The controllers' projected tokens are minted for it |
-| `exchange.clustersFile` / `.awsFile` | unset | the files naming the federated clusters and AWS accounts; the chart renders them from `exchange.clusters` and `exchange.aws.accounts` and requires the paths where it mounts them |
+| `exchange.audience` | `release` | the audience a workload's ServiceAccount token must be minted for. Without one, every mounted token in every federated cluster would be a proof. The controllers' projected tokens are minted for it. The federated clusters and AWS accounts are not here: they are the policy document's `exchange.clusters` and `exchange.aws`, rows and not files |
 | `recovery.enabled` | unset: off for the issuer, on for the hub | the way in for the day the ordinary one is broken. It stores nothing: a short-lived ServiceAccount token proving access to the API server, so the authority is the cluster's own RBAC. **The only thing left that asks the cluster anything.** The chart's default is `true` |
-| `recovery.passwordFile` | unset | outside a cluster, the file the hub's recovery password is read from, once, at start (it keeps an Argon2id digest, compared in constant time; ten refused attempts a minute pause it for a minute per process). Unset takes `adminPasswordEnv`, or generates one and prints it. With `recovery.enabled: false` the file is left alone and the sign-in is refused with a message, so turning recovery back on needs no new password. The Pulumi library's Lambda shape writes it from the SSM parameter `/sluis/private/config/recovery/password`: [Recovery on Lambda](../operations/recovery-on-lambda.md). Every attempt, refused ones included, is the audit event `roster.recovery.signed_in` |
+| `recovery.passwordSecret` | unset | the NAME of the recovery password, `recovery/password`, for a hub outside a cluster: delivered by `secrets`, read once at start (it keeps an Argon2id digest, compared in constant time; ten refused attempts a minute pause it for a minute per process). Unset generates one and prints it. With `recovery.enabled: false` the secret is left alone and the sign-in is refused with a message, so turning recovery back on needs no new password. The Pulumi library's Lambda shape generates it at `/sluis/<instance>/private/config/recovery/password`: [Recovery on Lambda](../operations/recovery-on-lambda.md). Every attempt, refused ones included, is the audit event `roster.recovery.signed_in` |
 | `recovery.serviceAccount` / `.audience` | the chart: `access-issuer-recovery` for both | the account recovery proves access as, which the chart creates and binds to nobody, and the audience its token must be minted for. Granting `create` on `serviceaccounts/token` for the account is how an installation says who may recover |
-| `api.audience` / `api.consumersFile` | `directory-roster` / unset | the directory API's guard |
 | `login.directory` | `true` | whether the console offers a sign-in of its own, under `<mount>/login`. With `console.client` set it is a second door |
 | `login.signOutURL`, `login.forwarded.*` | unset | where sign-out sends the browser, and a sign-in an authenticating proxy has already done |
 | `console.client` | unset | the declared client the console signs people in as. Somebody with no session is sent to `/authorize`, signs in at the issuer's page, and comes back with the issuer's session set |
 | `console.origin` | unset | the one **other** origin allowed to call `SessionService` from a browser. Obsolete on one origin, which is the shipped shape |
-| `oauthClient.*` | unset | the client registered once with the directory backend, for sign-in and admin consent. `idFile` and `secretFile` name files (mount the Secret with `secretMounts`), or `secretEnv` names the variable that holds the secret; `secretName`, `idKey` and `secretKey` name the Kubernetes Secret the console shows as declared. With none, nobody can sign in and this installation issues tokens to machines only, which is a real posture and is said at start |
+| `console.awsAudience` | `<issuerURL>/console` | the audience an AWS role's web identity token must be minted for to be a bearer at the console. Its own, distinct from the policy document's `exchange.aws.audience`, so a token for one door is no proof at the other; the issuer refuses to start with the same value for both ([AWS Lambda](../integrations/aws-lambda.md#two-audiences-two-doors)) |
+| `oauthClient.*` | unset | the client registered once with the directory backend, for sign-in and admin consent. `provider` names its two secrets, `providers/google/<provider>/client-id` and `client-secret`; the id may instead be `id`, which is not a secret. `secretName`, `idKey` and `secretKey` name the Kubernetes Secret the console shows as declared. With none, nobody can sign in and this installation issues tokens to machines only, which is a real posture and is said at start |
 | `signingKey.file` | unset: a key generated for the process | the primary signing key, provisioned and never minted here. The chart requires `/var/run/access-issuer/signing-key/<signingKey.key>` |
 | `signingKey.kms.keys[]` | unset | sign with **AWS KMS** instead of a file: `ECC_NIST_P384` / `SIGN_VERIFY` keys as ids, ARNs or aliases (e.g. `alias/sluis-signing`), oldest first, **the last one signs**. Exclusive with `signingKey.file` (both is refused at load). The private key never leaves KMS: each token is a `kms:Sign` of the SHA-384 of the JWS signing input (`MessageType: DIGEST`, `ECDSA_SHA_384`), the DER signature is converted to raw `r\|\|s`, and the algorithm is ES384. The `kid` is the RFC 7638 thumbprint of the public key, the same as a file holding that key would have. A key of another spec or usage stops the start. **Rotate by appending** a key: it is published at once and signs only after `activationDelay`, the earlier one stays published for `overlap`, exactly as for files; the list is re-read every `pollInterval`, which also notices an alias moved to another key. Never insert a key before one already seen. `signingKey.additionalFiles` still works beside it for other algorithms |
 | `signingKey.kms.additional[]` | unset | every OTHER algorithm signed at once, `{alg: RS256, keys: [...]}`: `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` keys, oldest first, the last signing, for the relying parties that need RS256 (Kargo, EKS's OIDC provider; a client or resource pins it with `signing_alg: RS256`). Each token is `kms:Sign` with `RSASSA_PKCS1_V1_5_SHA_256` over a SHA-256 digest, verified against the public half before it is returned. The kid is the RFC 7638 thumbprint. Each algorithm is its own ring with the rotation rules above; an RS256 key here and one in `additionalFiles` clash and stop the start |
 | `signingKey.kms.region` | the SDK's own | the keys' region |
-| `signingKey.kmsWrapped` | unset | sign with key pairs **KMS generates and wraps under one symmetric key** (the `kms-wrapped` adapter; the AWS Lambda presets' default), rotated automatically; exclusive with `file` and `kms`. The private key is decrypted into process memory to sign, so a leaked signing role can forge offline for as long as the keys are published, and write access to the State's key ring is part of the trust boundary (a `kms` key is non-extractable); the key policy must reserve the signing context to the signing roles (mandatory on a shared key). Fields: `keyId` (the symmetric key, an id, ARN or alias; required), `stateSecretFile` (as for `kms`; required), `region`, `algorithms` (`ES384`, `RS256`; default both, the first is the default; EdDSA is not supported yet), `rotateEvery` (24h; longer than `prepublish`, at most 168h), `prepublish` (default `activationDelay`: how long a new key is published before it signs), `retain` (default `overlap`, i.e. `lifetimes.token` plus a skew margin; never less). Needs `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the key with the encryption context `purpose=sluis-signing`. See [Signing on AWS](../deployment/aws.md#signing-on-aws) |
-| `signingKey.kms.stateSecretFile` | required with `kms` | base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
+| `signingKey.kmsWrapped` | unset | sign with key pairs **KMS generates and wraps under one symmetric key** (the `kms-wrapped` adapter; the AWS Lambda presets' default), rotated automatically; exclusive with `file` and `kms`. The private key is decrypted into process memory to sign, so a leaked signing role can forge offline for as long as the keys are published, and write access to the State's key ring is part of the trust boundary (a `kms` key is non-extractable); the key policy must reserve the signing context to the signing roles (mandatory on a shared key). Fields: `keyId` (the symmetric key, an id, ARN or alias; required), `stateSecret` (as for `kms`; required), `region`, `algorithms` (`ES384`, `RS256`; default both, the first is the default; EdDSA is not supported yet), `rotateEvery` (24h; longer than `prepublish`, at most 168h), `prepublish` (default `activationDelay`: how long a new key is published before it signs), `retain` (default `overlap`, i.e. `lifetimes.token` plus a skew margin; never less). Needs `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the key with the encryption context `purpose=sluis-signing`. See [Signing on AWS](../deployment/aws.md#signing-on-aws) |
+| `signingKey.kms.stateSecret` | required with `kms` | the NAME of the sign-in state secret, `issuer/state-secret`: base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
 | `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
 | `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file (or each KMS key's public half) is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
 | `valkey.address` | unset | host:port of the shared store, with no credentials; unset keeps sessions and snapshots in memory, which is one replica only |
-| `valkey.passwordEnv` | unset | the *name* of the variable holding the password |
+| `valkey.passwordSecret` | unset | the NAME of the password secret, `valkey/password`, delivered by `secrets` |
 | `valkey.tls` | `false` | speak TLS to the server |
 | `valkey.cluster` | `true` (the chart's guidance: `false`) | speak the cluster protocol. **Leave it off for a single-node Valkey:** with one shard it makes the client learn node addresses from `CLUSTER SLOTS` and talk to those, bypassing the Service -- the one mechanism whose job is to survive a pod moving. Turn it on when the store has three shards with a replica each (see [Valkey: a recommendation](#valkey-a-recommendation)) |
-| `github.owners[]` | unset | the GitHub organisations whose workflows may exchange. **Unset verifies no CI token at all**, deliberately: anybody may run a workflow in their own repository and get a valid GitHub token, so a list invented by the chart would admit every repository there is |
-| `github.runnerTiers[]` | unset | the runner tiers an operator may create a runner App for on the GitHub page (the Runners tab), one App per bound organisation per tier -- e.g. `[preview, stable]`. Lower-case letters, digits and dashes, at most 16, each once |
-| `github.catalogueFile`, `slack.catalogueFile` | unset | the files declaring the GitHub and Slack Apps; the chart renders them from `githubApps.catalogue` and `slackApps`. A malformed one stops the service |
 | `audit.writer` | unset | the audit installation's receiver: one address, which takes the records and answers the catalogue's registration on the same port. Set, the service and the controller record into it, each with its own projected token; unset, nothing is kept beyond the log line every record also is |
 | `adapters.audit` | derived | `connect` (the default when `audit.writer` is set), `log`, or `sqs` with `settings: {queueURL, region, endpoint, timeout}`; see [the `sqs` adapter](../design/ports.md#the-sqs-adapter). `sqs` needs no `audit.writer` or token, registers no catalogue (it travels in the writer Lambda's package) and needs `sqs:SendMessage` on the queue |
 | `audit.tokenFile` | the chart: `/var/run/audit/token` | the projected token presented to the receiver; the chart requires that path when `audit.writer` is set |
@@ -445,11 +635,11 @@ The issuer, the console and the directory hub, one process.
 
 ### Exports and the export port
 
-`exports` copies the secrets the console keeps (they are in the Secrets port, and no
+The policy document's `exports` copy the secrets the console keeps (they are in the Secrets port, and no
 Kubernetes Secret holds them) into OpenBao, where the programs that act as an App
 and cannot ask the service read them, and where the recovery bundles are kept
-([0034](../decisions/0034-exports-go-to-openbao-directly.md)). `ports.export` says
-which OpenBao and how to log in. It needs a `ports.adapter` other than `legacy`: on
+([0034](../decisions/0034-exports-go-to-openbao-directly.md)). The serve document's `ports.export`
+says which OpenBao and how to log in. It needs a `ports.adapter` other than `legacy`: on
 `legacy` the Secrets still exist and the chart's `push` values (deprecated) copy
 them.
 
@@ -467,11 +657,13 @@ maps a property of the App to the name it is written as and writes only those.
 nothing changed. `name` (default `<source>.<what>`, for instance
 `slack-app.alerts`) identifies the export in the log, the metrics and its lease.
 
-The full block that reproduces, on the kernel cluster, the External Secrets
+The blocks that reproduce, on the kernel cluster, the External Secrets
 PushSecrets the estate ran before (`ports.adapter: dynamodb` with a secrets adapter, the
-`slackApps` and `github.runnerTiers` declared as usual):
+`slackApps` and `apps.github.runnerTiers` declared as usual), first in the serve
+document, then in the policy document:
 
 ```yaml
+# the serve document
 ports:
   export:
     adapter: openbao
@@ -485,6 +677,10 @@ ports:
         mount: jwt-kernel
         role: sluis-writer
         tokenFile: /var/run/openbao/token                # exports.openbao.token.audience
+```
+
+```yaml
+# the policy document
 exports:
   - {source: slack-app, app: alerts, path: slack-apps/alerts}
   - {source: slack-app, app: alerts-trustform, path: slack-apps/alerts-trustform}
@@ -529,6 +725,9 @@ What the service does, and does not do:
 - **No Kubernetes RBAC.** The service reads State and writes OpenBao; it holds no
   permission on Secrets or ConfigMaps for this, and the chart's Roles are unchanged.
   The `kubernetes` auth method has OpenBao itself review the pod's token.
+- **Checked with the policy.** An export of an App the catalogues do not declare, or
+  of a runner tier `apps.github.runnerTiers` does not list, is refused where the
+  policy document is loaded, not at the first copy.
 - **OpenBao policy.** The role needs `read`, `create`, `update` and `patch` on
   `kv/data/<prefix>/*` in each namespace it writes to. Never `list` or `delete`.
 
@@ -544,17 +743,17 @@ State (see `controllerGithub.replicas`).
 
 | Key | Default | Meaning |
 |---|---|---|
+| `apiVersion` | absent (v1) | `sluis.truvity.github.io/controller-github/v2`; absent is v1, converted as it loads |
 | `probes.address` | `:7070` | where `/healthz` (liveness, follows nothing) and `/readyz` answer. Readiness opens once the process has finished starting: the policy loaded, the stores open, the audit catalogue accepted. The chart serves the container's `health` port from it |
-| `policyDir` | **required** | the same policy ConfigMap the service mounts; its `github` table is the bindings. The chart requires `/var/run/github-roster/policy` |
+| `policy.file` | **required** | the same [policy document](#the-policy-document) the service reads; its `github` table is the bindings and its `controllers.github.enabledOrgs` is what the controller changes. The chart requires `/var/run/github-roster/policy/policy.yaml` |
 | `consoleURL` | **required** | the console's API, which answers who holds a group. The chart requires this release's own Service plus `console.mount`, and prints it |
 | `release` | `sluis` | the name the service's objects carry, so the controller finds `<release>-github-status`. The chart requires the release's full name |
 | `tokenFile` | `/var/run/secrets/github-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
 | `appsDir` | `/var/run/github-roster/apps` | the mounted `<release>-github-apps` Secret, one file per connected organisation |
 | `recordsDir` | `/var/run/github-roster/records` | the mounted `<release>-github-orgs` ConfigMap: the organisations' records and the console's requests for a pass. With `appsDir` it is looked at every 30 seconds, and a change (an install, a Refresh) runs a pass at once |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `dynamodb` it reads the console's records there, and the credentials from the Secrets port |
-| `catalogueFile` | unset | the GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. Never fatal here |
 | `interval` | `15m` | how long between passes. Positive |
-| `enabledOrgs[]` | unset | the organisations the controller **changes**. Every other bound organisation is derived and reported, and left alone: an organisation is born disabled. Each must be bound by the policy: the controller refuses to start otherwise, and the chart refuses to render |
+| `console.auth.aws.audience` | unset | on AWS Lambda, the audience the controller requests from `sts:GetWebIdentityToken` for its bearer at the console; it must equal the service's `console.awsAudience`. Unset reads `tokenFile`, as on Kubernetes |
 | `log.level` | `info` | |
 | `audit.writer` / `.tokenFile` | unset | the audit installation; the controller records for itself, as its own workload |
 
@@ -574,8 +773,9 @@ would make every change twice (see `controllerSlack.replicas`).
 
 | Key | Default | Meaning |
 |---|---|---|
+| `apiVersion` | absent (v1) | `sluis.truvity.github.io/controller-slack/v2`; absent is v1, converted as it loads |
 | `probes.address` | `:7070` | as for `controller-github` |
-| `policyDir` | **required** | the same policy ConfigMap the service mounts; its `slack` and `people` tables are the bindings. The chart requires `/var/run/slack-roster/policy` |
+| `policy.file` | **required** | the same [policy document](#the-policy-document) the service reads; its `slack` and `people` tables are the bindings and its `controllers.slack.enabledWorkspaces` is what the controller changes. The chart requires `/var/run/slack-roster/policy/policy.yaml` |
 | `consoleURL` | **required** | as for `controller-github` |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `dynamodb` it reads the console's records there, and the credentials from the Secrets port |
 | `release` | `sluis` | as for `controller-github`; it finds `<release>-slack-status` |
@@ -583,7 +783,7 @@ would make every change twice (see `controllerSlack.replicas`).
 | `credentialsDir` | `/var/run/slack-roster/credentials` | the mounted `<release>-slack-credentials` Secret, one file per connected workspace; optional |
 | `recordsDir` | `/var/run/slack-roster/workspaces` | the mounted `<release>-slack-workspaces` ConfigMap: workspace records, Slack Connect records, console channel records, confirmations and pass requests; optional |
 | `interval` | `15m` | the pass interval. Independently, the controller looks at the mounted credentials and records every 30 seconds and passes without waiting for the interval when they change |
-| `enabledWorkspaces[]` | unset | the workspaces (the policy's keys) the controller **changes**. Every other declared workspace is derived and reported, and left alone. Naming a key the policy does not declare stops the controller at start, and the chart refuses to render |
+| `console.auth.aws.audience` | unset | as for `controller-github` |
 | `log.level` | `info` | |
 | `audit.writer` / `.tokenFile` | unset | the audit installation; the controller records for itself, as its own workload |
 
@@ -657,9 +857,9 @@ new signing key.
 installation they are `<full name>` plus): the controllers' Deployments,
 ServiceAccounts, Roles and ConfigMaps (`-github-roster`, `-slack-roster`,
 `-github-roster-config`, `-slack-roster-config`), `-config`, `-policy`,
-`-clusters`, `-signing-key`, the Service, the status and records objects the
-service writes, the paths the chart mounts the policy, the signing key, the
-catalogues and the controllers' credentials at (`/var/run/access-issuer/...`,
+`-signing-key`, the Service, the status and records objects the
+service writes, the paths the chart mounts the policy, the signing key and
+the controllers' credentials at (`/var/run/access-issuer/...`,
 `/var/run/github-roster/...`, `/var/run/slack-roster/...`), the controllers'
 ServiceAccount subjects the policy lists (`<release>-github-roster`), and the
 telemetry service names (`access-issuer`, `github-roster`, `slack-roster`), so
@@ -698,7 +898,7 @@ a dashboard that selects on them still does.
 
 ## Migrating from environment variables
 
-Everything the subcommands read from the environment is a key of the file, and the
+Everything the subcommands read from the environment is a key of a document, and the
 chart's flat values that fed them are now the component's `config`. An old
 variable that is still set is **refused at start** with the key that replaces
 it; nothing is ignored. The platform-supplied `NAMESPACE` (now read from the
@@ -708,7 +908,7 @@ longer sets them.
 
 ### The service
 
-| Old variable | Key of `serve`'s file |
+| Old variable | Now, in the `serve` document (the policy document where said) |
 |---|---|
 | `ISSUER_URL` | `issuerURL` |
 | `PORT` | `listen.address` (`:<port>`) |
@@ -720,31 +920,31 @@ longer sets them.
 | `PUBLIC_URL`, `PUBLIC_ROOT_URL` | `publicURL`, `publicRootURL` |
 | `SECURE_COOKIES` | `secureCookies` |
 | `STORE` | `store` |
-| `OVERLAY_FILE` | `overlayFile` |
-| `POLICY_DIR` | `policyDir` |
+| `OVERLAY_FILE` | `directory.workspaces`, the declared workspaces themselves (each key by `keySecret`) |
+| `POLICY_DIR` | `policy.file`, the one rendered [policy document](#the-policy-document) |
 | `GROUPS_SCOPING` | `groupsScoping` |
 | `CLUSTER` | `cluster` |
 | `RELEASE_NAME` | `release` |
-| `CLIENT_SECRETS_DIR` | `clientSecretsDir` |
-| `ADMIN_PASSWORD` | `adminPasswordEnv`, which names the variable that holds it |
+| `CLIENT_SECRETS_DIR` | none: a confidential client's secret is the name `clients/<client-id>/secret`, delivered by `secrets` |
+| `ADMIN_PASSWORD` | `recovery.passwordSecret`, which names the secret (`recovery/password`) |
 | `RECOVERY_ENABLED`, `RECOVERY_SERVICE_ACCOUNT`, `RECOVERY_AUDIENCE` | `recovery.enabled`, `recovery.serviceAccount`, `recovery.audience` |
-| `API_AUDIENCE`, `CONSUMERS_FILE` | `api.audience`, `api.consumersFile` |
+| `API_AUDIENCE`, `CONSUMERS_FILE` | none: `sluis serve` serves no directory API listener, so its guard configured nothing |
 | `LOGIN_DIRECTORY`, `SIGN_OUT_URL` | `login.directory`, `login.signOutURL` |
 | `FORWARDED_EMAIL_HEADER`, `FORWARDED_ISSUER`, `FORWARDED_AUDIENCE` | `login.forwarded.emailHeader`, `.issuer`, `.audience` |
 | `CONSOLE_ORIGIN`, `CONSOLE_CLIENT_ID` | `console.origin`, `console.client` |
-| `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_ID_FILE` | `oauthClient.id`, `oauthClient.idFile` |
-| `OAUTH_CLIENT_SECRET`, `OAUTH_CLIENT_SECRET_FILE` | `oauthClient.secretEnv` (names the variable), `oauthClient.secretFile` |
+| `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_ID_FILE` | `oauthClient.id`, or the secret `providers/google/<provider>/client-id` named by `oauthClient.provider` |
+| `OAUTH_CLIENT_SECRET`, `OAUTH_CLIENT_SECRET_FILE` | the secret `providers/google/<provider>/client-secret`, named by `oauthClient.provider` |
 | `OAUTH_CLIENT_SECRET_NAME`, `OAUTH_CLIENT_ID_KEY`, `OAUTH_CLIENT_SECRET_KEY` | `oauthClient.secretName`, `.idKey`, `.secretKey` |
 | `SIGNING_KEY_FILE`, `SIGNING_KEY_FILES` | `signingKey.file`, `signingKey.additionalFiles` |
 | `SIGNING_KEY_POLL_INTERVAL`, `SIGNING_KEY_ACTIVATION_DELAY`, `SIGNING_KEY_OVERLAP` | `signingKey.pollInterval`, `.activationDelay`, `.overlap` |
 | `TOKEN_LIFETIME`, `REFRESH_LIFETIME`, `ABSOLUTE_LIFETIME`, `HOLD_WINDOW` | `lifetimes.token`, `.refresh`, `.absolute`, `.hold` |
 | `SESSION_LIFETIME` | `lifetimes.session` |
 | `REFRESH_INTERVAL`, `FRESHNESS_WINDOW`, `PROBE_INTERVAL` | `freshness.refreshInterval`, `.freshnessWindow`, `.probeInterval` |
-| `EXCHANGE_AUDIENCE`, `CLUSTERS_FILE`, `AWS_FEDERATION_FILE` | `exchange.audience`, `exchange.clustersFile`, `exchange.awsFile` |
+| `EXCHANGE_AUDIENCE`, `CLUSTERS_FILE`, `AWS_FEDERATION_FILE` | `exchange.audience`; and, in the policy document, `exchange.clusters` and `exchange.aws`, the rows themselves |
 | `VALKEY_ADDRESS`, `VALKEY_TLS`, `VALKEY_CLUSTER` | `valkey.address`, `.tls`, `.cluster` |
-| `VALKEY_PASSWORD` | `valkey.passwordEnv`, which names the variable that holds it |
-| `GITHUB_OWNERS`, `GITHUB_RUNNER_TIERS`, `GITHUB_APPS_CATALOGUE_FILE` | `github.owners`, `github.runnerTiers`, `github.catalogueFile` |
-| `SLACK_APPS_CATALOGUE_FILE` | `slack.catalogueFile` |
+| `VALKEY_PASSWORD` | `valkey.passwordSecret`, which names the secret (`valkey/password`) |
+| `GITHUB_OWNERS`, `GITHUB_RUNNER_TIERS`, `GITHUB_APPS_CATALOGUE_FILE` | the policy document's `exchange.github.owners`, `apps.github.runnerTiers`, `apps.github.catalogue` |
+| `SLACK_APPS_CATALOGUE_FILE` | the policy document's `apps.slack.catalogue` |
 | `AUDIT_WRITER_URL`, `AUDIT_TOKEN_FILE` | `audit.writer`, `audit.tokenFile` |
 | `AUDIT_QUERY_URL`, `AUDIT_AUDIENCE`, `AUDIT_FORWARDED_FOR_TRUSTED_HOPS` | `audit.queryURL`, `.audience`, `.forwardedForTrustedHops` |
 | `LOG_LEVEL` | `log.level` |
@@ -756,29 +956,57 @@ longer sets them.
 | Old variable | `controller-github` | `controller-slack` |
 |---|---|---|
 | `RELEASE_NAME` | `release` | `release` |
-| `POLICY_DIR` | `policyDir` | `policyDir` |
+| `POLICY_DIR` | `policy.file` | `policy.file` |
 | `CONSOLE_URL` | `consoleURL` | `consoleURL` |
 | `TOKEN_FILE` | `tokenFile` | `tokenFile` |
 | `APPS_DIR` | `appsDir` | none |
 | `CREDENTIALS_DIR` | none | `credentialsDir` |
 | `RECORDS_DIR` | `recordsDir` | `recordsDir` |
 | `INTERVAL` | `interval` | `interval` |
-| `ENABLED_ORGS` | `enabledOrgs` | none |
-| `ENABLED_WORKSPACES` | none | `enabledWorkspaces` |
-| `GITHUB_APPS_CATALOGUE_FILE` | `catalogueFile` | none |
+| `ENABLED_ORGS` | the policy document's `controllers.github.enabledOrgs` | none |
+| `ENABLED_WORKSPACES` | none | the policy document's `controllers.slack.enabledWorkspaces` |
+| `GITHUB_APPS_CATALOGUE_FILE` | none: the catalogue is the policy document's `apps.github.catalogue` | none |
 | `AUDIT_WRITER_URL`, `AUDIT_TOKEN_FILE` | `audit.writer`, `audit.tokenFile` | `audit.writer`, `audit.tokenFile` |
 | `LOG_LEVEL` | `log.level` | `log.level` |
 
 ### The function's environment (AWS Lambda)
 
 Retired for every role in v1.62.0, with the configuration layer and the
-`secrets` source:
+`secrets` source: a function that still sets one stops at start, naming the v1.62
+Pulumi library to deploy with, because the binary and the library move together
+([AWS Lambda](../integrations/aws-lambda.md#version-coupling)).
 
 | Old variable | Now |
 |---|---|
 | `SLUIS_CONFIG_FILE` | `SLUIS_CONFIG`, which names the service document: `/opt/sluis/<role>.yaml` in the configuration layer |
 | `SLUIS_SECRET_FILES` | the document's `secrets` source (`ssm`, root `/sluis/<instance>`) and the names its keys give: `signingKey.kms.stateSecret`, `recovery.passwordSecret` |
 | any variable set to `ssm:<path>` | the same: a secret is named in the document and read by its `secrets` source |
+
+### Retired keys
+
+A v2 document that names a key v2 retired is refused with where it went. A v1
+document (no `apiVersion`) keeps working with every one of them until it moves.
+
+| Document | Retired key | Now |
+|---|---|---|
+| `serve` | `policyDir` | `policy.file`: render the directory with `sluisctl policy render <dir>` and name the result |
+| `serve` | `overlayFile` | `directory.workspaces`, in the document |
+| `serve` | `api` (`api.audience`, `api.consumersFile`) | removed: `sluis serve` serves no directory API listener |
+| `serve` | `github.owners` | policy `exchange.github.owners` |
+| `serve` | `github.runnerTiers`, `github.catalogueFile` | policy `apps.github.runnerTiers`, `apps.github.catalogue` |
+| `serve` | `slack.catalogueFile` | policy `apps.slack.catalogue` |
+| `serve` | `exports` | policy `exports` |
+| `serve` | `exchange.clustersFile`, `exchange.awsFile` | policy `exchange.clusters`, `exchange.aws`, the rows themselves |
+| `serve` | `valkey.passwordEnv` | `valkey.passwordSecret` (`valkey/password`) |
+| `serve` | `oauthClient.idFile`, `.secretFile`, `.secretEnv` | `oauthClient.provider`: the secrets `providers/google/<provider>/client-id` and `client-secret` |
+| `serve` | `adminPasswordEnv`, `recovery.passwordFile` | `recovery.passwordSecret` (`recovery/password`) |
+| `serve` | `clientSecretsDir` | none: `clients/<client-id>/secret`, delivered by `secrets` |
+| `serve` | `signingKey.kms.stateSecretFile`, `signingKey.kmsWrapped.stateSecretFile` | `stateSecret` (`issuer/state-secret`); the `kms` and `kms-wrapped` adapters' setting is `stateSecret` too |
+| the v1 overlay file | `directory.workspaces[].keyFile` | `keySecret` (`directory/<id>/key`) |
+| `controller-github` | `policyDir`, `catalogueFile`, `enabledOrgs` | `policy.file`; the policy's `apps.github.catalogue`; the policy's `controllers.github.enabledOrgs` |
+| `controller-slack` | `policyDir`, `enabledWorkspaces` | `policy.file`; the policy's `controllers.slack.enabledWorkspaces` |
+| `policy` | `version: 1` | `apiVersion: sluis.truvity.github.io/policy/v2` |
+| `policy` | `access`, `overlay` | an access document is a layer, not a policy document: `sluisctl policy render` reshapes it into one |
 
 ### The chart's values
 
@@ -794,15 +1022,15 @@ Retired for every role in v1.62.0, with the configuration layer and the
 | `recovery.enabled`, `.serviceAccountName`, `.audience` | `config.recovery.enabled`, `.serviceAccount`, `.audience`, with `config.inCluster: true` |
 | `exchange.audience` | `config.exchange.audience` |
 | `valkey.address`, `.tls`, `.cluster` | `config.valkey.address`, `.tls`, `.cluster` |
-| `valkey.passwordSecret.name` / `.key` | `config.valkey.passwordEnv` and a `secretEnv` entry |
-| `oauthClient.secret.name` / `.keys.*` | `config.oauthClient.{secretName,idKey,secretKey,idFile,secretFile}` and a `secretMounts` entry |
-| `github.owners` | `config.github.owners` |
-| `githubRunnerApps.tiers` | `config.github.runnerTiers` |
+| `valkey.passwordSecret.name` / `.key` | `config.valkey.passwordSecret: valkey/password` and a `secrets` entry `{name: valkey/password, secretName, key}` |
+| `oauthClient.secret.name` / `.keys.*` | `config.oauthClient.provider` and `secrets` entries `providers/google/<provider>/client-id` and `client-secret` (`config.oauthClient.{secretName,idKey,secretKey}` name the Secret the console shows) |
+| `github.owners` | `policy.exchange.github.owners` |
+| `githubRunnerApps.tiers` | `policy.apps.github.runnerTiers` |
 | `console.origin`, `console.client` | `config.console.origin`, `config.console.client` (`console.mount` stays: it is the route's) |
 | `signingKey.rotation.*` | `config.signingKey.pollInterval`, `.activationDelay`, `.overlap` |
 | `audit.writer`, `.query`, `.audience`, `.forwardedForTrustedHops` | `config.audit.writer`, `.queryURL`, `.audience`, `.forwardedForTrustedHops` (`audit.token.*` stays: it is the chart's) |
-| `controllerGithub.interval`, `controllerGithub.actsIn` | `controllerGithub.config.interval`, `controllerGithub.config.enabledOrgs` |
-| `controllerSlack.interval`, `controllerSlack.actsIn` | `controllerSlack.config.interval`, `controllerSlack.config.enabledWorkspaces` |
+| `controllerGithub.interval`, `controllerGithub.actsIn` | `controllerGithub.config.interval`, `policy.controllers.github.enabledOrgs` |
+| `controllerSlack.interval`, `controllerSlack.actsIn` | `controllerSlack.config.interval`, `policy.controllers.slack.enabledWorkspaces` |
 | `telemetry.otlpEndpoint` | removed: `OTEL_*` is set on the pods by the platform |
 
 The old values are removed, not aliased: an old key is refused at render
@@ -869,7 +1097,8 @@ spec:
 ```
 
 Point the chart at its Service (`config.valkey.address: directory-roster-cache.directory-roster.svc:6379`)
-and, if the operator issues a password Secret, at that Secret.
+and, if the operator issues a password Secret, name it: `config.valkey.passwordSecret: valkey/password` and a `secrets` entry
+`{name: valkey/password, secretName: <that Secret>, key: <its key>}`.
 
 ## The gateway: a recommendation
 
