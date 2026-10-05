@@ -299,10 +299,6 @@ func parsePolicyDocument(file string, into *PolicyDocument) error {
 	return policyconfig.LoadKind(file, policyKind(), into)
 }
 
-// Secret reads the environment variable the configuration names. An unset or
-// empty variable is an error naming the variable, never quoting anything.
-func Secret(name string) (string, error) { return policyconfig.Secret(name) }
-
 // EnvConfig is the variable that names the service document when no --config
 // is given.
 const EnvConfig = "SLUIS_CONFIG"

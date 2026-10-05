@@ -218,18 +218,6 @@ func TestASecretInTheFileIsRefused(t *testing.T) {
 	}
 }
 
-// The environment supplies exactly the secrets the file names.
-func TestADeclaredSecretIsReadFromTheEnvironment(t *testing.T) {
-	t.Setenv("ACCESS_TEST_SECRET", "s3cr:et@/x")
-	got, err := config.Secret("ACCESS_TEST_SECRET")
-	if err != nil || got != "s3cr:et@/x" {
-		t.Fatalf("the named variable was not read: %q %v", got, err)
-	}
-	if _, err := config.Secret("ACCESS_TEST_NOT_SET"); err == nil || !strings.Contains(err.Error(), "ACCESS_TEST_NOT_SET") {
-		t.Errorf("an unset variable must be named: %v", err)
-	}
-}
-
 func TestAnEmptyOrMissingFileIsRefused(t *testing.T) {
 	if _, err := config.Load[config.Serve](write(t, "")); err == nil {
 		t.Error("an empty file was accepted")
