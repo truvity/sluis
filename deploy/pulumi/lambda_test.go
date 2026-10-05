@@ -773,7 +773,7 @@ func TestAParameterKeyIsGrantedThroughSSMOnly(t *testing.T) {
 	}
 }
 
-func TestThePodIdentityRolesCarryNoSealerAndOnlyServeSigns(t *testing.T) {
+func TestThePodIdentityRoleSignsAndCarriesNoSealer(t *testing.T) {
 	signing := arnp + "kms:" + region + ":" + account + ":key/signing"
 	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
 		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
@@ -782,7 +782,7 @@ func TestThePodIdentityRolesCarryNoSealerAndOnlyServeSigns(t *testing.T) {
 		}
 		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
-			Namespace: "sluis", Serve: arp.ProcessArgs{ServiceAccount: "sluis"}, GitHub: arp.ProcessArgs{ServiceAccount: "sluis-github"},
+			Namespace: "sluis", ServiceAccount: "sluis",
 			Storage: store.Grant(), SigningKeyArns: []pulumi.StringInput{pulumi.String(signing), pulumi.String(signing + "-rs")},
 		})
 		return err
@@ -793,11 +793,8 @@ func TestThePodIdentityRolesCarryNoSealerAndOnlyServeSigns(t *testing.T) {
 	pol := func(n string) map[string][]string {
 		return grants(statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue()))
 	}
-	if g := pol("kernel-sluis-serve-policy"); len(g["kms:Sign"]) != 2 {
-		t.Errorf("serve: %v", g)
-	}
-	if g := pol("kernel-sluis-github-policy"); len(g["kms:Sign"]) != 0 || len(g["kms:Decrypt"]) != 0 {
-		t.Errorf("github: %v", g)
+	if g := pol("kernel-sluis-policy"); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
+		t.Errorf("the role: %v", g)
 	}
 }
 
@@ -1072,7 +1069,7 @@ func TestWrappedSigningAliasMustBeAnAlias(t *testing.T) {
 	}
 }
 
-func TestThePodIdentityServeRoleMayUseTheWrappedKeyAndNoOtherRoleMay(t *testing.T) {
+func TestThePodIdentityRoleMayUseTheWrappedKey(t *testing.T) {
 	app := arnp + "kms:" + region + ":" + account + ":key/application"
 	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
 		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
@@ -1081,7 +1078,7 @@ func TestThePodIdentityServeRoleMayUseTheWrappedKeyAndNoOtherRoleMay(t *testing.
 		}
 		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
-			Namespace: "sluis", Serve: arp.ProcessArgs{ServiceAccount: "sluis"}, GitHub: arp.ProcessArgs{ServiceAccount: "sluis-github"},
+			Namespace: "sluis", ServiceAccount: "sluis",
 			Storage: store.Grant(), WrappedSigningKeyArn: pulumi.String(app),
 		})
 		return err
@@ -1092,22 +1089,19 @@ func TestThePodIdentityServeRoleMayUseTheWrappedKeyAndNoOtherRoleMay(t *testing.
 	pol := func(n string) []map[string]any {
 		return statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue())
 	}
-	serve := grants(pol("kernel-sluis-serve-policy"))
+	serve := grants(pol("kernel-sluis-policy"))
 	if !reflect.DeepEqual(serve["kms:Decrypt"], []string{app}) || !reflect.DeepEqual(serve["kms:GenerateDataKeyPairWithoutPlaintext"], []string{app}) {
 		t.Errorf("serve: %v", serve)
 	}
-	for _, st := range pol("kernel-sluis-serve-policy") {
+	for _, st := range pol("kernel-sluis-policy") {
 		if st["Sid"] == "SluisWrappedSigning" {
 			wantWrappedCondition(t, "serve", st["Condition"])
 		}
 	}
-	if g := grants(pol("kernel-sluis-github-policy")); len(g["kms:Decrypt"]) != 0 || len(g["kms:GenerateDataKeyPairWithoutPlaintext"]) != 0 {
-		t.Errorf("github: %v", g)
-	}
 }
 
 func TestTheKeyPolicyNamesEverySigningRole(t *testing.T) {
-	serve := arnp + "iam::" + account + ":role/acme-sluis-serve"
+	serve := arnp + "iam::" + account + ":role/acme-sluis"
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		a.WrappedSigning = &arp.WrappedSigningArgs{AdditionalSigningRoleArns: []string{serve}}
 	}})
@@ -1124,7 +1118,7 @@ func TestTheKeyPolicyNamesEverySigningRole(t *testing.T) {
 	t.Error("no reserved-context denial")
 }
 
-func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
+func TestThePodIdentityRoleIsNotDeniedTheKeyRing(t *testing.T) {
 	app := arnp + "kms:" + region + ":" + account + ":key/application"
 	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
 		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
@@ -1137,7 +1131,7 @@ func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
 		}
 		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
-			Namespace: "sluis", Serve: arp.ProcessArgs{ServiceAccount: "sluis"}, GitHub: arp.ProcessArgs{ServiceAccount: "sluis-github"},
+			Namespace: "sluis", ServiceAccount: "sluis",
 			Storage: store.Grant(), State: st.Grant(), WrappedSigningKeyArn: pulumi.String(app),
 		})
 		return err
@@ -1145,16 +1139,10 @@ func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	has := func(n string) bool {
-		for _, s := range statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue()) {
-			if s["Sid"] == "SluisNoKeyringWrites" {
-				return true
-			}
+	for _, s := range statements(t, prop(rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy"), "policy").StringValue()) {
+		if s["Effect"] == "Deny" {
+			t.Errorf("the one role signs and is denied: %v", s)
 		}
-		return false
-	}
-	if has("kernel-sluis-serve-policy") || !has("kernel-sluis-github-policy") {
-		t.Error("only the serve role may write the key ring")
 	}
 }
 
