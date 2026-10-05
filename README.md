@@ -16,7 +16,17 @@ anyone: sign-in, passwords and MFA stay with the corporate directory. sluis has 
 own. It runs as one process ([ADR 0037](docs/decisions/0037-one-process-everywhere.md)).
 Why it exists and how it differs from an identity product: [why sluis](docs/explanation/why.md).
 
-## Deployment shapes
+## Who it is for
+
+Platform teams that run a corporate directory and want one reviewed policy file to drive tokens, GitHub teams and Slack
+channels. It assumes AWS (Lambda, or Kubernetes with AWS storage) or an older Kubernetes install on the legacy store.
+It installs no identity store, no passwords and no MFA: those stay with the directory.
+
+## The model
+
+- **Directory**: where people and their groups come from.
+- **Policy**: the file in git that maps directory groups and machine identities to internal groups, per audience.
+- **Issuer and controllers**: one process that mints tokens and reconciles GitHub and Slack from the same file.
 
 | Shape | What runs | Start with |
 |---|---|---|
@@ -26,6 +36,34 @@ Why it exists and how it differs from an identity product: [why sluis](docs/expl
 
 The presets `server`, `k8s-minimal` and `k8s-openbao` are unavailable: they name adapters that are planned and not built
 ([adapters](docs/reference/adapters.md)). To choose between the shapes, read [getting started](docs/getting-started/README.md).
+
+## Install and a worked example
+
+Render the two documents from an installation file, then install the chart with them ([tutorial](docs/getting-started/kubernetes-aws.md)):
+
+```sh
+sluisctl render --installation installation.yaml --out rendered/
+helm install sluis oci://ghcr.io/truvity/charts/sluis \
+  --version X.Y.Z --namespace sluis --create-namespace \
+  --values values.yaml \
+  --set-file documents.service=rendered/sluis.yaml --set-file documents.policy=rendered/policy.yaml
+```
+
+A minimal `installation.yaml` and every key are in [the installation document](docs/reference/installation-document.md).
+
+## Consumers
+
+The `sluis` chart installs in `truvity/gitops` and a second, non-AWS estate. The Go module is imported by `truvity/gitops`
+(`policy`, in its render tests) and by `truvity/gemaal` (`identity`). CI workflows use `sluisctl` and the GitHub Action
+`truvity/sluis`; developers use `sluisctl` to mint credentials locally. The sluis service is a token audience for
+`truvity/cloudflare` (r2broker) and `truvity/observability` (vmauth).
+
+## Neighbours
+
+- **openbao**: sluis mints tokens; openbao trusts them and issues certificates
+  ([integration](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md)).
+- **audit**: every decision, sign-in, refusal and console action is one record, written by the issuer and the controllers.
+- **workstation**: `sluisctl` and `awsctl` both mint AWS credentials on a laptop; `sluisctl` is the estate path.
 
 ## Documentation
 
@@ -65,6 +103,11 @@ supplies it from its own repository. The rule covers code, docs, the CHANGELOG, 
 text, and [`hack/leak-canary.sh`](hack/leak-canary.sh) enforces it in `just check` and in CI. This repository follows the
 shared [component contract](https://github.com/truvity/policy/blob/master/docs/contracts/component.md).
 
+## Status
+
+Used in production by its maintainers; [releases](https://github.com/truvity/sluis/releases). Presets `server`, `k8s-minimal`
+and `k8s-openbao` are unavailable.
+
 ## Development
 
 ```sh
@@ -83,6 +126,6 @@ package, the Go module and the Action at that version. The Pulumi library's tag 
 `require` pinned to the release. Auto-release cuts patch tags when changes merge to master; a minor needs its
 `## vX.Y.0` CHANGELOG heading and is tagged by hand.
 
-## Status and licence
+## Licence
 
-Used in production by its maintainers; [releases](https://github.com/truvity/sluis/releases). MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
