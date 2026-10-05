@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.62.0
+
+Configuration is immutable per instance (ADR 0036): four versioned documents (`serve`, `controller-github`, `controller-slack`, and one canonical `policy`) with `apiVersion` v2, secrets by name from a declared source, SSM layout v3 under `/sluis/<instance>`, and on Lambda the release zip deployed unchanged with the configuration as a layer. Binary 1.62 and the Pulumi library 1.62 deploy together.
+
 ### Changed
 
 - **Breaking: configuration is four documents, each with an `apiVersion`; the
