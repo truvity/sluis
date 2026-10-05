@@ -79,7 +79,7 @@ directory:
 
 Every value, including `syncGroups` and what the chart renders from this
 block, is in
-[reference/configuration.md#declared-workspaces-the-overlay](../reference/configuration.md#declared-workspaces-the-overlay).
+[reference/configuration.md#declared-workspaces-directoryworkspaces](../reference/configuration.md#declared-workspaces-directoryworkspaces).
 A declared workspace is read-only in the console: remove it from the
 values to disconnect it, rather than clicking there.
 

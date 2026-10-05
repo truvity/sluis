@@ -25,6 +25,8 @@ sluisctl psql --address https://openbao.example:8200 -ns staging -- -h db.exampl
 sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orders > orders.sql
 
 sluisctl r2 --service-url https://r2-broker.example.com -- credentials --bucket example-bucket --prefix nix/
+
+sluisctl policy render policy/ -o policy.yaml   # the one policy document an installation reads
 ```
 
 > **Renamed from `accessctl`.** The product is now sluis, and this command is
@@ -441,6 +443,39 @@ UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl
 |---|---|
 | `2` | an entry names both or neither of `url`/`openbao`; an entry names no patterns, or a pattern with whitespace, a comma or `#`; `openbao.mount` missing; a CA bundle that cannot be read or holds no certificate |
 | `0` | everything else, including a source that could not be fetched — that is a warning on stderr, not a failed run: see above |
+
+## `policy render`: the one policy document
+
+```sh
+sluisctl policy render [-o <file>] <file or directory>
+```
+
+An installation is decided by **one policy document**
+([configuration](configuration.md#the-policy-document):
+`apiVersion: sluis.truvity.github.io/policy/v2`, held to
+`schemas/config/policy.schema.json`), and every process reads exactly that and
+merges nothing. `policy render` is the one place layering happens: it builds the
+document from the layers a deployment declares, which are, alone or as a directory
+of them read in name order:
+
+- a policy file of v1 (`version: 1`);
+- an access document (`access:` and `overlay:`), reshaped into tables;
+- a policy document fragment (`apiVersion: sluis.truvity.github.io/policy/v2`):
+  tables and any of the sections `exchange`, `apps`, `controllers` and `exports`.
+
+Tables merge by key, and a key declared twice is an error naming the file. Of the
+sections, a list concatenates and a list of names unions; a scalar declared by two
+layers is an error. The result is held to every check the service runs at start
+(a catalogue grant naming an undeclared group, an enabled organisation the policy
+does not bind, an export of an undeclared App, and the rest), so a document this
+writes is one the service accepts, and the same layers give the same bytes.
+
+`-o <file>` writes the document there; without it, it goes to stdout. Name the
+result in each service document's `policy.file`, or pass it to the chart as
+`policy` (without its `apiVersion`) or to the Pulumi library as `Policy`. It
+needs no network, no session and no `HOME`, and it holds no secret: a policy
+document is reviewed in git. A failed render exits `1` with the reason; a bad
+command line exits `2`.
 
 ## Installing it
 

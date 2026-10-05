@@ -25,6 +25,12 @@ variable `SLUIS_ROLE` chooses what each one is:
 The binary reads `SLUIS_ROLE` once, at cold start. A missing or unknown role stops the
 start (an Init error in the platform's terms) and the log line says which.
 
+The zip is the release, **byte for byte**: the Pulumi library deploys the file it
+was given, after checking its SHA-256 (`PackageSHA256`, from the release's
+checksums), so an installation can show that the code that runs is the code that
+was released. What makes the three functions an installation's is not in the
+zip but in a configuration layer ([below](#configuration-is-a-layer)).
+
 ```mermaid
 flowchart LR
     GW[API Gateway HTTP API] -->|payload 2.0| H[http function]
@@ -35,7 +41,9 @@ flowchart LR
     H & G & S --> D[(DynamoDB<br/>state, sessions, leases)]
     H & G & S --> B[(S3 blobs)]
     H -->|kms:Sign| K[KMS]
-    H & G & S -->|at cold start| P[SSM Parameter Store]
+    H -->|secrets, at cold start and every 5m| P[SSM Parameter Store]
+    G & S -->|credentials| P
+    L[config layer<br/>/opt/sluis] -.->|read at start| H & G & S
     H & G & S -->|emit| Q[SQS audit]
 ```
 
@@ -97,7 +105,7 @@ acting twice.
 schedule (15 minutes, on the `sluis-http` function; the infrastructure library's default). The
 Kubernetes process keeps the exports current with a loop that also watches the
 sources; a function has neither, so each invocation makes every declared export
-once (the secrets under `/sluis/export/...` and the other targets of `exports:`),
+once (the secrets under `/sluis/<instance>/export/...` and the other targets of the policy document's `exports`),
 each under its own lease in DynamoDB, and returns:
 
 ```json
@@ -129,43 +137,67 @@ as `unknown`.
 | Variable | Function | Meaning |
 |---|---|---|
 | `SLUIS_ROLE` | all | `http`, `github` or `slack`. Required. |
-| `SLUIS_CONFIG_FILE` | all | The configuration file in the zip. Default `/var/task/config/sluis.yaml`. |
-| `SLUIS_SECRET_FILES` | all | SSM parameters written to files under `/tmp` at cold start, see below. |
-| `<NAME>=ssm:/sluis/private/...` | all | A secret read from SSM into a variable at cold start, see below. |
+| `SLUIS_CONFIG` | all | The function's service document: `/opt/sluis/<role>.yaml` in the configuration layer. The library sets it. |
 | `OTEL_*` | all | OpenTelemetry's own, as on Kubernetes. The telemetry layer sets the endpoint. |
 
-There is no other variable and no flag. A retired variable of the old environment
-configuration (`PORT`, `LOG_LEVEL` and the rest listed in
-[configuration](../reference/configuration.md)) stops the start, as it does on
-Kubernetes. The run-now functions' names are in the file, not in the environment
+That is the whole environment: there is no other variable and no flag, and no
+secret, since a document names its secrets and does not hold them. A retired
+variable of the old environment configuration (`PORT`, `LOG_LEVEL` and the rest
+listed in [configuration](../reference/configuration.md#migrating-from-environment-variables))
+stops the start, as it does on Kubernetes, and so do `SLUIS_CONFIG_FILE`,
+`SLUIS_SECRET_FILES` and any variable whose value is `ssm:<path>`: they belong to
+the v1.61 library, and the error names the v1.62 library to deploy with. The
+run-now functions' names are in the document, not in the environment
 (`adapters.trigger.settings`).
 
-## Configuration is in the zip
+## Configuration is a layer
 
-The deploy tooling ADDS the estate's configuration to the zip at deploy time:
+The installation's configuration is **not** in the zip. It is one immutable
+Lambda layer, `<prefix>-config` (`provided.al2023`, arm64), which the library
+publishes from the four documents and mounts **last** in each function's layer
+list, so nothing the telemetry layer or another brings can shadow it. Lambda
+extracts a layer under `/opt`, and this one holds `sluis/`:
 
 ```text
-bootstrap
-config/sluis.yaml        the http function's file (a `serve` configuration)
-config/github.yaml       the github function's file (a `controller-github` configuration)
-config/slack.yaml        the slack function's file (a `controller-slack` configuration)
-config/...               the policy, the GitHub and Slack catalogues the files name
+/opt/sluis/http.yaml     the http function's document (a `serve` document, v2)
+/opt/sluis/github.yaml   the github function's document (a `controller-github` document, v2)
+/opt/sluis/slack.yaml    the slack function's document (a `controller-slack` document, v2)
+/opt/sluis/policy.yaml   the policy document every function's `policy.file` names
 ```
 
-So a change of configuration is a new deployment: there is no mounted ConfigMap to
-change under a running function, and the function that reads it is the version that
-was released with it. The three roles read three schemas, as the three commands do
-(`schemas/config/serve.schema.json`, `controller-github.schema.json`,
-`controller-slack.schema.json`), so each function sets `SLUIS_CONFIG_FILE` to its own
-file. The default names `sluis.yaml` for a function that sets none. The file is
-validated against its schema at cold start, before the function takes an event. The
-release zip holds none of this: `bootstrap` only.
+A function's `SLUIS_CONFIG` names its own document, and `policy.file` in each
+names `/opt/sluis/policy.yaml`. The documents are the same ones the Kubernetes
+build reads ([configuration](../reference/configuration.md#the-configuration-file)),
+each validated against its schema at cold start, before the function takes an
+event.
 
-On Lambda a file selects its adapters by name per concern
+Configuration and policy are **immutable for an instance**
+([0036](../decisions/0036-configuration-is-immutable-per-instance.md)): a change
+publishes a new layer version and updates the functions, and AWS replaces every
+instance at once. There are no aliases and no canary: the function stays on
+`$LATEST`. Old layer versions are kept, so a rollback is pointing a function at the
+previous one. A policy change is a manual `pulumi up`; nothing deploys it on merge.
+
+The library holds each document to sluis's own loader (`config.Load`) **before it
+publishes anything**, since a layer outlives the deploy that made it, so a
+document the binary would refuse is refused there. Into the documents it writes
+what is its own, and refuses a document that says otherwise, naming the key:
+
+- every document: `apiVersion` and `policy.file`;
+- the http document: `secrets` (`{source: ssm, root: /sluis/<instance>, region}`),
+  `recovery.passwordSecret`, `recovery.enabled` (from `Recovery`) and the state
+  secret's name under `signingKey.kms` or `signingKey.kmsWrapped`.
+
+The policy is `Policy` (a document) or `PolicyPath` (a file or a directory of
+layers, rendered by sluis's own renderer, the one `sluisctl policy render` runs).
+The three service documents are `Config`, `GitHubConfig` and `SlackConfig`.
+
+On Lambda a document selects its adapters by name per concern
 ([ports](../design/ports.md)):
 
 ```yaml
-# config/sluis.yaml (the http function)
+# /opt/sluis/http.yaml (the http function)
+apiVersion: sluis.truvity.github.io/serve/v2
 platform: { aws: true, runtime: lambda }   # or: preset: aws-serverless
 adapters:
   state:   { adapter: dynamodb, settings: { table: sluis } }
@@ -173,7 +205,7 @@ adapters:
   trigger: { adapter: invoke,   settings: { github: sluis-github, slack: sluis-slack } }
 ```
 
-`legacy` is refused on the Lambda runtime. The controllers' files take the
+`legacy` is refused on the Lambda runtime. The controllers' documents take the
 same `platform`, `preset` and `adapters` keys as the service's, so that all three
 functions resolve the same table: the state (and so the leases), the blobs and the
 audit sink. The audit adapter is `sqs` (`adapters.audit.settings.queueURL`); on Lambda
@@ -181,71 +213,79 @@ each record is sent before the call that made it returns, and every function flu
 what is still queued before its invocation returns, since the platform freezes the
 process afterwards (a controller does it by closing, which delivers its queue).
 
+### `Instance` and the SSM root
+
+The library's `Instance` argument (required: lower-case letters, digits and dashes)
+names the installation (hive: `hive`, Truvity's: `kernel`). Its SSM root is
+`/sluis/<instance>` (layout v3), so two installations share an account without
+colliding. `private` and `export` may not be used as an instance name: they would
+put the root's parameters under another tree, and the root is refused at start.
+
+```text
+/sluis/<instance>/private/config/...        what an operator seeds and the stack generates
+/sluis/<instance>/private/credentials/...   what sluis writes: its records' credentials
+/sluis/<instance>/export/...                what sluis copies out, for consumers
+```
+
 ### Secrets
 
-Configuration secrets (a Google OAuth client secret, the admin password, a GitHub
-App's key, a Slack signing secret) are read from SSM Parameter Store at cold start,
-under the same layout as the dynamic secrets (decision D1a): `/sluis/private/...` for
-sluis's own and `/sluis/export/...` for what it exports. The file keeps naming the
-variable that holds a secret (`oauthClient.secretEnv: OAUTH_CLIENT_SECRET`), and the
-function's environment says where to read it:
+A document names its secrets and holds none of them: `signingKey.kmsWrapped.stateSecret:
+issuer/state-secret`, `recovery.passwordSecret: recovery/password`,
+`oauthClient.provider`, a declared workspace's `keySecret`. The http document's
+`secrets` (`source: ssm`, which the library writes) delivers each name from the
+SecureString `/sluis/<instance>/private/config/<name>`: at cold start the function
+reads **every parameter under that prefix at once**, decrypted and paged, and again
+once the five minutes of `secrets.refresh` have passed, so a rotated secret reaches
+a running function without a deployment. A missing parameter stops the start naming
+the path and never a value. The names are listed in
+[configuration](../reference/configuration.md#secrets).
 
-```text
-OAUTH_CLIENT_SECRET=ssm:/sluis/private/config/oauth/client-secret
-```
+The library generates the two that are its own, in the paths above:
 
-At cold start every variable whose value begins with `ssm:` is replaced by the
-parameter's decrypted value, before the file is read. A path outside the two roots is
-refused, and a missing parameter stops the start naming the path and never a value.
-A function with no such variable calls SSM not at all. This is a small reader of
-configuration. The `ssm` adapter of the secrets concern, which stores the service's
-dynamic secrets, is another piece.
+- `config/issuer/state-secret`: base64 of 32 random bytes, read by the http function;
+- `config/recovery/password`: 40 random letters and digits with no look-alikes, which
+  an operator reads with `aws ssm get-parameter --with-decryption`
+  ([Recovery on Lambda](../operations/recovery-on-lambda.md)).
 
-#### Secret files
-
-Many settings name a FILE, not a variable: the GitHub App key files, the Slack
-secrets, `signingKey.kms.stateSecretFile`. There is no mounted Secret on Lambda, so
-the variable `SLUIS_SECRET_FILES` lists parameters to write to files at cold start,
-before the configuration is read:
-
-```text
-SLUIS_SECRET_FILES=[{"parameter":"/sluis/private/config/issuer/state-secret","path":"/tmp/sluis/state-secret"}]
-```
-
-```yaml
-signingKey:
-  kms:
-    stateSecretFile: /tmp/sluis/state-secret   # the file the variable above wrote
-```
-
-Each entry is a decrypted SSM parameter (under `/sluis/private/` or `/sluis/export/`)
-written byte for byte, with no newline added, to a path under `/tmp/`, mode 0600 in
-directories of mode 0700. A path anywhere else, one with `..`, or a parameter outside
-the roots stops the start. Every `*File` setting then works as it does on Kubernetes by
-naming one of those paths, and the secret never enters the zip. The issuer's state
-secret is generated into `/sluis/private/config/issuer/state-secret` (base64 of 32 random
-bytes) by the infrastructure code and read this way by every function.
+Both keep their values across the upgrade; the parameters are replaced in place by
+name, and the library overwrites a value `sluis migrate ssm-layout` copied first
+instead of reporting a conflict. What an operator seeds (a Google OAuth client's
+`providers/google/<id>/client-id` and `client-secret`, a confidential client's
+`clients/<id>/secret`) is `put-parameter` as a SecureString under
+`/sluis/<instance>/private/config/`.
 
 ## IAM: one role per function
 
-Each function has its own role (decision D5a), and only `http` can sign a token:
+Each function has its own role (decision D5a), only `http` can sign a token, and
+every SSM grant is under `/sluis/<instance>/`:
 
 | Permission | `http` | `github` | `slack` |
 |---|:-:|:-:|:-:|
-| `kms:Sign`, `kms:GetPublicKey` on the token-signing key | yes | no | no |
+| `kms:Sign`, `kms:GetPublicKey` on the token-signing key (remote signing), or `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the symmetric key under the context `purpose=sluis-signing` (`kms-wrapped`) | yes | no | no |
 | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table | yes | yes | yes |
 | `s3:GetObject`, `PutObject`, `DeleteObject`, `ListBucket` on the blob bucket and prefix | yes | yes | yes |
-| `ssm:GetParameter`, `PutParameter`, `DeleteParameter`, `GetParametersByPath` on `/sluis/private/*` and `/sluis/export/*`, for the secrets adapter (`ssm`) that keeps the service's dynamic secrets | yes | yes | yes |
-| `ssm:GetParameters` on the parameters its variables and `SLUIS_SECRET_FILES` name, under `/sluis/private/*` (and `kms:Decrypt` on the key encrypting them) | yes | yes | yes |
+| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` on `<root>/private/credentials/*` and `<root>/export/*`, for the secrets adapter (`ssm`) that keeps the service's credentials and exports | yes | yes | yes |
+| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` on `<root>/private/config/*`: the secrets its document names, read by path, never written | yes | **denied** | **denied** |
+| `kms:Decrypt` through SSM on the key encrypting the parameters, when a customer key is set | yes | yes | yes |
 | `sqs:SendMessage` on the audit queue | yes | yes | yes |
 | `lambda:InvokeFunction` on the `github` and `slack` functions | yes | no | no |
 | `sts:GetWebIdentityToken` (the controller's proof to the console, see below) | no | yes | yes |
 | `logs:*` as usual | yes | yes | yes |
 
-Narrow the SSM permission to the parameters each function's variables name: a
-controller needs a GitHub App's key and not the OAuth client's secret. EventBridge
-Scheduler needs its own role, with `lambda:InvokeFunction` on the function it
-schedules.
+`<root>` is `/sluis/<instance>`. A controller reads and writes its credentials and
+nothing of `private/config`: the recovery password, the state secret, the OAuth
+client and the declared clients are the http function's, and an explicit Deny on
+`<root>/private/config`, which wins over any Allow, keeps a leaked controller role
+from reading, replacing or deleting them. (The v1.61 library allowed a controller `/sluis/private/*`, which let
+`GetParametersByPath` reach `config/*` past its Deny; the v1.62 library grants
+only `private/credentials` and `export`, and a test asserts that no controller
+Allow names a parent of `private/config`.) Every grant ends at the instance, so a
+second installation in the account is out of reach of the first.
+
+A consumer of the exports (an External Secrets Operator role) attaches
+`ExportReadPolicy(region, account, instance, key)`, which reads `<root>/export/*`
+and nothing else. EventBridge Scheduler needs its own role, with
+`lambda:InvokeFunction` on the function it schedules.
 
 ## How a controller authenticates to the console
 
@@ -272,14 +312,14 @@ token minted for one is no proof at the other:
 | Door | Audience | Set in |
 |---|---|---|
 | Token exchange (`/token`) | `exchange.aws.audience` of the policy document | the policy document |
-| The console's API (a controller's bearer) | `console.awsAudience`, default `<issuerURL>/console` | the `http` config |
+| The console's API (a controller's bearer) | `console.awsAudience`, default `<issuerURL>/console` | the `http` document |
 
 The controllers request the console audience: `console.auth.aws.audience` in the
-`github.yaml` and `slack.yaml` files must equal the issuer's `console.awsAudience`.
+`github` and `slack` documents must equal the issuer's `console.awsAudience`.
 The issuer refuses to start with the same value for both doors.
 
 ```yaml
-# http config
+# the http document
 console:
   awsAudience: https://sluis.example/console   # optional: this is the default
 ```
@@ -293,7 +333,7 @@ exchange:
 ```
 
 ```yaml
-# github.yaml and slack.yaml
+# the github and slack documents
 console:
   auth:
     aws:
@@ -335,10 +375,53 @@ its account, including roles created later. It is not refused (a policy may rely
 it), but the issuer logs a warning at start naming the groups that have one: name
 the role unless that is meant.
 
+## Version coupling
+
+The binary and the Pulumi library move together. A binary of 1.62 refuses the v1.61
+library's environment (`SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES`, `ssm:` values) and
+will not start on a function deployed that way; the library refuses a package older
+than its own minor (read from `sluis-lambda_<version>_linux_<arch>.zip`, or from
+`PackageVersion`), because an older binary cannot read the configuration layer. So a
+function is on binary 1.62 **and** library 1.62, never one without the other, and the
+library's module (`deploy/pulumi`, which requires the root module at the same
+version) is pinned to the same release.
+
+## Moving an installation to v1.62
+
+Deploy the library and the binary in one apply, after the secrets are where the
+new documents will look for them:
+
+1. **Copy the configuration secrets** to the instance's root, under the names the
+   documents give them. The old parameters stay until the end:
+
+   ```sh
+   sluis migrate ssm-layout --to-root /sluis/<instance> --dry-run
+   sluis migrate ssm-layout --to-root /sluis/<instance>
+   ```
+
+   It renames `oauth/client-id` and `client-secret` to
+   `providers/google/default/client-id` and `client-secret` and `clients/<id>` to
+   `clients/<id>/secret`; the report is JSON and names, never a value.
+2. **Copy the credentials**, which are the Secrets port's, with `sluis migrate`
+   from a document whose Secrets adapter names `/sluis` to one whose names
+   `/sluis/<instance>` ([migrate](../operations/migrate.md)). The exports are
+   written again by the next exports pass.
+3. **Unprotect the old asymmetric signing keys**, when the installation signs with
+   `WrappedSigning`. The library no longer declares the two asymmetric keys, and
+   they are protected in the stack, so removing them is refused until
+   `pulumi state unprotect` has been run on `<name>-signing-key` and
+   `<name>-signing-key-rs256`. The apply then schedules their deletion, with
+   KMS's 30 days of grace. Do it only when no verifier needs a token they signed.
+4. **Apply** the 1.62 library with the release zip, its `PackageSHA256`, `Instance`
+   and the documents.
+5. **Delete the v2 parameters** under `/sluis/private` and `/sluis/export` once the
+   installation runs on v3.
+
 ## Cold start, and what is not here
 
-- The state, sessions, leases and the target's reports are in DynamoDB and S3, so no
-  invocation depends on another's memory. A sign-in's half-finished state is in the
+- The configuration is the layer's, read once; the secrets are read from SSM at cold start
+  and again every five minutes. The state, sessions, leases and the target's reports
+  are in DynamoDB and S3, so no invocation depends on another's memory. A sign-in's half-finished state is in the
   session records, not the process.
 - The directory snapshot is refreshed on read when it is stale, as the hub already
   does. The Kubernetes process also refreshes it on a timer; a function has no process
