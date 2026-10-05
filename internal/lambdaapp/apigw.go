@@ -38,7 +38,21 @@ type HTTP struct {
 	// refresh runs one pass of the directory refresh (the {"kind":"refresh"}
 	// event); nil when this function has no directory.
 	refresh func(context.Context) (RefreshResult, error)
-	log     *slog.Logger
+	// controllers run a controller pass per {"kind":"tick"|"run"} event, by the
+	// kind of the event's target; kindOf says which kind a target is.
+	controllers map[string]*Controller
+	kindOf      func(target string) string
+	log         *slog.Logger
+}
+
+// WithControllers makes the function answer {"kind":"tick"|"run","target":...}
+// events by running one pass of the target under the controller of its kind
+// (the controllers' names are the keys: "github", "slack"). kindOf says which
+// kind a target is, from the policy that declares it; an empty answer is a
+// target nobody declares.
+func (h *HTTP) WithControllers(kindOf func(target string) string, controllers map[string]*Controller) *HTTP {
+	h.controllers, h.kindOf = controllers, kindOf
+	return h
 }
 
 // WithRefresh makes the function answer {"kind":"refresh"} events with run.
@@ -68,6 +82,9 @@ func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error)
 		Kind string `json:"kind"`
 	}
 	if err := json.Unmarshal(payload, &peek); err == nil && peek.Kind != "" {
+		if peek.Kind == KindTick || peek.Kind == KindRun {
+			return h.controller(ctx, payload)
+		}
 		return h.scheduled(ctx, peek.Kind)
 	}
 	var event events.APIGatewayV2HTTPRequest

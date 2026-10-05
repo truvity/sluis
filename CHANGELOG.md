@@ -51,6 +51,55 @@
   waits for the console, which is its own process, to answer before its first
   pass.
 
+### AWS Lambda and the Pulumi library
+
+- **Breaking: ONE function.** `sluis-http`, `sluis-github` and `sluis-slack`
+  are one function from the release zip. It takes API Gateway events (the issuer
+  and the console), `{"kind":"tick"|"run","target":"<id>"}` (one pass of one
+  target, run by the controller the policy says the target belongs to: the
+  GitHub controller's organisations and `github:links`, the Slack controller's
+  workspaces; a run-now of an undeclared target ends cleanly, a schedule's tick
+  of one fails), and `{"kind":"refresh"}` / `{"kind":"exports"}`. The controllers
+  do not loop on Lambda: each pass is assembled for its invocation, as before.
+  `SLUIS_ROLE` is retired (a function that still sets it is refused, saying why);
+  `SLUIS_CONFIG` names `/opt/sluis/sluis.yaml`. The function's timeout is 300 s
+  by default (API Gateway still cuts a request at 30 s) and its memory one
+  setting (512 MB). The `invoke` trigger's `github` and `slack` settings name
+  this one function, and the library writes them.
+- **The library (`deploy/pulumi`, MinPackageVersion 1.63).** `LambdaArgs`:
+  `Config` is the one v3 service document (`controllers` included);
+  `GitHubConfig`, `SlackConfig`, `HTTP`, `GitHub`, `Slack` and
+  `Exports.Function` are gone; `Function` (`MemoryMB`, `TimeoutSeconds`) and
+  `FunctionName` (default `FunctionNamePrefix`, so `sluis`) are new. Outputs:
+  `FunctionArn`, `FunctionName`, `RoleArn`, `RoleName` replace the
+  `HTTP|GitHub|Slack` ones. One role, `<FunctionName>`, with the http role's
+  policy and the controllers' needs: credentials and exports read/write, config
+  read, the signing keys, `lambda:InvokeFunction` on the function itself,
+  `sts:GetWebIdentityToken` (audience-restricted by `WebIdentityAudience`); no
+  denials, so the keyring is writable by the one role. The controllers' code runs
+  with these permissions: the per-role isolation is gone by decision (S1a). The
+  scheduler role may invoke only the function. Kept: reserved instance names, no
+  endpoints without `AllowEndpoints`, the `Telemetry.Env` allowlist, the
+  release-zip SHA-256 verification, documents held to sluis's loader before
+  anything is published, the layer mounted last, every IAM grant under
+  `/sluis/<instance>/` (a test holds it, with no `*` but a trailing `/*`).
+- **Migrating (hive, Truvity).** Merge the three documents into one v3 document
+  (`apiVersion` is written by the library; the controllers' `consoleURL`,
+  `console.auth.aws.audience` and `interval` go under `controllers.github` /
+  `controllers.slack`; `ports`, `adapters`, `audit` and `secrets` are the one
+  document's, and the controllers' copies are dropped). The policy's `aws`
+  matcher must admit the role that is now the function's (`sluis` or
+  `<prefix>-http`), where it admitted `sluis-github` and `sluis-slack`; the audit
+  installation's workload map likewise. Resource names: the function, role,
+  policy and log group keep their logical names, so `FunctionName:
+  "<prefix>-http"` keeps the existing function, role, log group and API
+  integration in place and replaces nothing; at the default `sluis` they are
+  replaced under the new name (created before the old are deleted, and the old
+  log group's events go with it). Either way the `<prefix>-github` and
+  `<prefix>-slack` functions, roles, policies, log groups and invoke configs are
+  destroyed by the apply, and the schedules (named as before) point at the one
+  function. No data migration: SSM, DynamoDB and S3 are unchanged.
+
 ### Chart
 
 - **Breaking: one Deployment.** `controllerGithub` and `controllerSlack` are

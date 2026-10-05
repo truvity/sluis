@@ -24,13 +24,6 @@ import (
 // LambdaType is the Pulumi type token of the Lambda component.
 const LambdaType = "sluis:aws:Lambda"
 
-// The roles of the one binary (env SLUIS_ROLE).
-const (
-	RoleHTTP   = "http"
-	RoleGitHub = "github"
-	RoleSlack  = "slack"
-)
-
 // DefaultSigningKeyAlias is the token-signing key's alias when
 // LambdaArgs.SigningKeyAlias is empty.
 const DefaultSigningKeyAlias = "alias/sluis-signing"
@@ -60,9 +53,11 @@ func RecoveryPasswordParameterName(instance string) string {
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
 
-// LambdaArgs is the whole Lambda shape of sluis: three functions from one zip,
-// each with a role of its own, the HTTP API in front of the http function, the
-// token-signing key and one schedule per controller target.
+// LambdaArgs is the whole Lambda shape of sluis: ONE function from the release
+// zip with ONE role, the HTTP API in front of it, the token-signing key and one
+// schedule per controller target. The function serves the issuer and the console
+// and runs the controllers' passes; the controllers' code runs with the one
+// role's permissions (owner decision S1a, 2026-10-05).
 type LambdaArgs struct {
 	// Region and AccountID name the SSM parameters and the functions in the
 	// roles' policies. Required.
@@ -86,23 +81,21 @@ type LambdaArgs struct {
 	// library is refused: it cannot read the configuration layer.
 	PackageVersion string
 
-	// Config, GitHubConfig and SlackConfig are the three service documents (a
-	// `serve`, a `controller-github` and a `controller-slack` document, v2), which
-	// the configuration layer holds at /opt/sluis/http.yaml, github.yaml and
-	// slack.yaml; each function's SLUIS_CONFIG names its own. Required. They hold
-	// no secret: a secret is named, and the http document's `secrets` source
-	// reads it from /sluis/<instance>/private/config/.
+	// Config is the service document (v3, apiVersion sluis.truvity.github.io/
+	// sluis/v3: the serve keys and, under `controllers`, the controllers the
+	// function runs), which the configuration layer holds at
+	// /opt/sluis/sluis.yaml; the function's SLUIS_CONFIG names it. Required. It
+	// holds no secret: a secret is named, and its `secrets` source reads it from
+	// /sluis/<instance>/private/config/.
 	//
-	// The library writes what is its own into them: the apiVersion,
-	// `policy.file`, and in the http document `secrets` ({source: ssm, root:
-	// /sluis/<instance>, region}), `recovery.passwordSecret`, `recovery.enabled`
-	// (from Recovery) and the state secret's name under `signingKey.kms` or
-	// `.kmsWrapped`. A different value written for one of them is refused.
-	//
-	// The http document's `adapters.trigger.settings` names the two controller
-	// functions (`github: sluis-github`, `slack: sluis-slack`, that is
-	// FunctionNamePrefix + "-github" and "-slack").
-	Config, GitHubConfig, SlackConfig string
+	// The library writes what is its own into it: the apiVersion, `policy.file`,
+	// `secrets` ({source: ssm, root: /sluis/<instance>, region}),
+	// `recovery.passwordSecret`, `recovery.enabled` (from Recovery), the state
+	// secret's name under `signingKey.kms` or `.kmsWrapped`, and, when
+	// `adapters.trigger` is `invoke`, the function it invokes for a run-now
+	// (this very function: `github` and `slack` settings). A different value
+	// written for one of them is refused.
+	Config string
 	// Policy is the policy document (apiVersion sluis.truvity.github.io/policy/v2,
 	// or a v1 policy file): the layer holds it at /opt/sluis/policy.yaml.
 	// PolicyPath is instead a file or a directory of layers, rendered by sluis's
@@ -112,16 +105,16 @@ type LambdaArgs struct {
 
 	// Storage is the blob bucket (Storage.Grant()). Required.
 	Storage *StorageGrant
-	// State is the DynamoDB table (State.Grant()). Required: all three functions
-	// keep State in it.
+	// State is the DynamoDB table (State.Grant()). Required: the function keeps
+	// State in it.
 	State *StateGrant
-	// AuditQueueArn is the audit stack's ingest queue; each function may send to
+	// AuditQueueArn is the audit stack's ingest queue; the function may send to
 	// it. Required.
 	AuditQueueArn pulumi.StringInput
 
 	// ParameterKeyArn is the customer-managed key SecureString parameters under
 	// /sluis are encrypted with. Default none: the AWS-managed key, which needs no
-	// grant. With a key, each function may use it through SSM only.
+	// grant. With a key, the function may use it through SSM only.
 	ParameterKeyArn string
 
 	// SigningKeyAlias is the token-signing key's alias. Default
@@ -136,27 +129,39 @@ type LambdaArgs struct {
 
 	// WrappedSigning switches token signing to the `kms-wrapped` adapter: ONE
 	// symmetric KMS key, from which the issuer generates and wraps its signing
-	// key pairs (`signingKey.kmsWrapped` in the http function's configuration
+	// key pairs (`signingKey.kmsWrapped` in the function's configuration
 	// names the key). Nil keeps remote signing with the two asymmetric keys
 	// above. With it set the asymmetric keys are not declared: a stack that
 	// signed remotely before unprotects them (`pulumi state unprotect`) and the
 	// next apply schedules their deletion.
 	WrappedSigning *WrappedSigningArgs
 
-	// FunctionNamePrefix starts the functions' and roles' names:
-	// `<prefix>-http`, `<prefix>-github` and `<prefix>-slack`. Default "sluis".
+	// FunctionNamePrefix starts the names of what is not the function: the
+	// configuration layer (`<prefix>-config`), the API, the schedules
+	// (`<prefix>-<kind>-<target>`, `<prefix>-exports`, `<prefix>-directory-
+	// refresh`) and the scheduler's role. Default "sluis".
 	FunctionNamePrefix string
-	// HTTP, GitHub and Slack tune one function each.
-	HTTP, GitHub, Slack FunctionArgs
+	// FunctionName is the function's name, and the name of its role, its role
+	// policy and its log group (`/aws/lambda/<name>`). Default FunctionNamePrefix:
+	// ONE function, `sluis`. An installation that ran the three functions of
+	// v1.62 and wants this one to be the function it already has, with its role,
+	// log group and API integration kept in place and nothing replaced, sets it to
+	// `<prefix>-http` (the resources keep their logical names, so Pulumi's state
+	// carries over). Left at the default, the function, its role and its log group
+	// are replaced under the new name (the new ones are created before the old are
+	// deleted) and the old log group's events go with it.
+	FunctionName string
+	// Function tunes the function.
+	Function FunctionArgs
 
-	// LogRetentionDays is each function's log group's retention. Default 30.
+	// LogRetentionDays is the log group's retention. Default 30.
 	LogRetentionDays int
 	// PermissionsBoundaryArn is the boundary of every role. Default none.
 	PermissionsBoundaryArn string
 
 	// Recovery is the recovery sign-in. Default (nil): enabled.
 	Recovery *RecoveryArgs
-	// API is the HTTP API in front of the http function. Required.
+	// API is the HTTP API in front of the function. Required.
 	API APIArgs
 	// Schedule is the controllers' tick: one schedule per target.
 	Schedule ScheduleArgs
@@ -165,10 +170,10 @@ type LambdaArgs struct {
 	// DirectoryRefresh is the schedule that refreshes the directory's snapshots.
 	DirectoryRefresh DirectoryRefreshArgs
 	// WebIdentityAudience restricts the audience of the outbound web identity
-	// token the github and slack roles may ask STS for
-	// (`sts:IdentityTokenAudience`), normally the console's URL. Empty allows any
-	// audience. The roles hold `sts:GetWebIdentityToken` either way, and the
-	// account must have outbound identity federation enabled.
+	// token the function's role may ask STS for (`sts:IdentityTokenAudience`),
+	// normally the console's URL. Empty allows any audience. The role holds
+	// `sts:GetWebIdentityToken` either way (the controllers read the console with
+	// it), and the account must have outbound identity federation enabled.
 	WebIdentityAudience string
 	// Telemetry is the OpenTelemetry layer. Nil: no layer and no OTEL
 	// environment, which is how an estate whose collector is not ready runs.
@@ -186,7 +191,7 @@ type LambdaArgs struct {
 }
 
 // WrappedSigningArgs is the symmetric key of the `kms-wrapped` signing adapter.
-// The http function, and only it, may use it, and only to generate a data key
+// The function, and only it, may use it, and only to generate a data key
 // pair and to decrypt a private key, with the encryption context
 // purpose=sluis-signing (and no keys beside purpose, alg and kid).
 type WrappedSigningArgs struct {
@@ -202,7 +207,7 @@ type WrappedSigningArgs struct {
 	// key made with the primary decrypts on any replica. Principals with
 	// kms:PutKeyPolicy on a shared key are inside the signing trust boundary.
 	KeyArn pulumi.StringInput
-	// AdditionalSigningRoleArns are the roles beside the http function's that
+	// AdditionalSigningRoleArns are the roles beside the function's that
 	// sign with the key, for the key policy: the Kubernetes serve role, when
 	// KubernetesIdentityArgs.WrappedSigningKeyArn names this key. Ignored with
 	// KeyArn.
@@ -213,13 +218,10 @@ type WrappedSigningArgs struct {
 }
 
 // ExportsArgs is the exports schedule: one EventBridge schedule invoking the
-// function that owns the exports with `{"kind":"exports"}`.
+// function with `{"kind":"exports"}`.
 type ExportsArgs struct {
 	// Disabled leaves the schedule out.
 	Disabled bool
-	// Function is the role of the function that owns the exports: "http" (the
-	// default, `<prefix>-http`), "github" or "slack".
-	Function string
 	// Rate is the schedule expression. Default DefaultExportsSchedule.
 	Rate string
 }
@@ -228,7 +230,7 @@ type ExportsArgs struct {
 const DefaultExportsSchedule = "rate(15 minutes)"
 
 // DirectoryRefreshArgs is the directory refresh schedule: one EventBridge
-// schedule invoking the http function with `{"kind":"refresh"}`.
+// schedule invoking the function with `{"kind":"refresh"}`.
 //
 // Lambda has no loop to take a new snapshot of each connected directory, and a
 // snapshot older than the freshness window (30 minutes) stops being
@@ -246,12 +248,12 @@ type DirectoryRefreshArgs struct {
 // DirectoryRefreshArgs.Rate is empty: the hub's refresh interval.
 const DefaultDirectoryRefreshSchedule = "rate(15 minutes)"
 
-// FunctionArgs tunes one function.
+// FunctionArgs tunes the function.
 type FunctionArgs struct {
-	// MemoryMB defaults to 512.
+	// MemoryMB defaults to 512: one setting for a request and for a pass.
 	MemoryMB int
-	// TimeoutSeconds defaults to 30 for http, and to 300 for a controller (a
-	// pass over a whole organisation).
+	// TimeoutSeconds defaults to 300, which a pass over a whole organisation
+	// needs. API Gateway cuts a request at 30 seconds whatever this says.
 	TimeoutSeconds int
 }
 
@@ -262,7 +264,7 @@ type FunctionArgs struct {
 // The password and its parameter exist whatever Enabled says, so that turning
 // recovery off and on again is a configuration change and never a rotation.
 type RecoveryArgs struct {
-	// Enabled writes `recovery.enabled` into the http function's configuration.
+	// Enabled writes `recovery.enabled` into the function's configuration.
 	// Default nil: recovery is on, which is what a first installation needs (the
 	// console is signed in to with it until a directory is connected). Turn it
 	// off once a directory works, with a pointer to false: the sign-in is then
@@ -271,7 +273,8 @@ type RecoveryArgs struct {
 	Enabled *bool
 }
 
-// APIArgs is the HTTP API (payload format 2.0) and its custom domain.
+// APIArgs is the HTTP API (payload format 2.0) in front of the function, and its
+// custom domain.
 type APIArgs struct {
 	// DomainName is the custom domain. Required.
 	DomainName string
@@ -296,7 +299,8 @@ type APIArgs struct {
 // ScheduleArgs is the controllers' ticks.
 type ScheduleArgs struct {
 	// GitHubOrgs and SlackWorkspaces are the targets: one schedule each, which
-	// invokes the github or slack function with `{"kind":"tick","target":"<id>"}`.
+	// invokes the function with `{"kind":"tick","target":"<id>"}`; the function
+	// runs the pass under the controller the policy says the target belongs to.
 	GitHubOrgs      []string
 	SlackWorkspaces []string
 	// Rate is the EventBridge Scheduler expression. Default DefaultSchedule.
@@ -310,8 +314,8 @@ type TelemetryArgs struct {
 	// Required with Telemetry.
 	LayerArn pulumi.StringInput
 	// Env is the OTEL_* and layer settings (the endpoint, the protocol): with
-	// SLUIS_ROLE and SLUIS_CONFIG, the whole of a function's environment. The
-	// library adds OTEL_SERVICE_NAME, the function's name, unless it is here.
+	// SLUIS_CONFIG, the whole of the function's environment. The library adds
+	// OTEL_SERVICE_NAME, the function's name, unless it is here.
 	Env map[string]string
 }
 
@@ -334,11 +338,9 @@ type Lambda struct {
 	WrappedSigningKeyArn   pulumi.StringOutput
 	WrappedSigningKeyAlias pulumi.StringOutput
 
-	// The functions and their roles.
-	HTTPFunctionArn, GitHubFunctionArn, SlackFunctionArn    pulumi.StringOutput
-	HTTPFunctionName, GitHubFunctionName, SlackFunctionName pulumi.StringOutput
-	HTTPRoleArn, GitHubRoleArn, SlackRoleArn                pulumi.StringOutput
-	HTTPRoleName, GitHubRoleName, SlackRoleName             pulumi.StringOutput
+	// The function and its role.
+	FunctionArn, FunctionName pulumi.StringOutput
+	RoleArn, RoleName         pulumi.StringOutput
 
 	// APIID and APIURL are the HTTP API and its default endpoint (which answers
 	// only with API.KeepDefaultEndpoint).
@@ -357,10 +359,10 @@ type Lambda struct {
 	// ScheduleNames are the schedules, in the order GitHub then Slack targets.
 	ScheduleNames pulumi.StringArrayOutput
 
-	// ConfigLayerArn is the configuration layer's version ARN: the three service
-	// documents and the policy, published immutable and mounted LAST. A change
-	// publishes a new version and updates the functions; an old version is kept,
-	// so re-pointing a function at it is a rollback.
+	// ConfigLayerArn is the configuration layer's version ARN: the service
+	// document and the policy, published immutable and mounted LAST. A change
+	// publishes a new version and updates the function; an old version is kept,
+	// so re-pointing the function at it is a rollback.
 	ConfigLayerArn pulumi.StringOutput
 
 	// StateSecretParameter is the name of the SSM SecureString that holds the
@@ -380,6 +382,8 @@ type Lambda struct {
 	ExportReadPolicyJSON pulumi.StringOutput
 }
 
+var functionNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
 // A target is a login or a workspace key, or `github:links` (the link check).
 var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 
@@ -396,7 +400,6 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	for k, v := range map[string]string{
 		"Region": out.Region, "AccountID": out.AccountID, "Instance": out.Instance,
 		"Package": out.Package, "PackageSHA256": out.PackageSHA256, "Config": strings.TrimSpace(out.Config),
-		"GitHubConfig": strings.TrimSpace(out.GitHubConfig), "SlackConfig": strings.TrimSpace(out.SlackConfig),
 		"API.DomainName": out.API.DomainName, "API.TruststorePEM": strings.TrimSpace(out.API.TruststorePEM),
 		"API.TruststoreBucketName": out.API.TruststoreBucketName,
 	} {
@@ -456,26 +459,20 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.FunctionNamePrefix == "" {
 		out.FunctionNamePrefix = "sluis"
 	}
+	if out.FunctionName == "" {
+		out.FunctionName = out.FunctionNamePrefix
+	}
+	if !functionNamePattern.MatchString(out.FunctionName) {
+		return out, fmt.Errorf("sluispulumi: LambdaArgs.FunctionName %q is letters, digits, - and _, at most 64", out.FunctionName)
+	}
 	if out.LogRetentionDays == 0 {
 		out.LogRetentionDays = 30
 	}
-	for _, f := range []struct {
-		fa      *FunctionArgs
-		timeout int
-	}{{&out.HTTP, 30}, {&out.GitHub, 300}, {&out.Slack, 300}} {
-		if f.fa.MemoryMB == 0 {
-			f.fa.MemoryMB = 512
-		}
-		if f.fa.TimeoutSeconds == 0 {
-			f.fa.TimeoutSeconds = f.timeout
-		}
+	if out.Function.MemoryMB == 0 {
+		out.Function.MemoryMB = 512
 	}
-	switch out.Exports.Function {
-	case "":
-		out.Exports.Function = RoleHTTP
-	case RoleHTTP, RoleGitHub, RoleSlack:
-	default:
-		return out, fmt.Errorf("sluispulumi: Exports.Function %q is http, github or slack", out.Exports.Function)
+	if out.Function.TimeoutSeconds == 0 {
+		out.Function.TimeoutSeconds = 300
 	}
 	if out.Exports.Rate == "" {
 		out.Exports.Rate = DefaultExportsSchedule
@@ -521,30 +518,27 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	return out, nil
 }
 
-type fnSpec struct {
-	role string
-	args FunctionArgs
-}
-
-// NewLambda creates the Lambda shape. The functions are one zip's `bootstrap`
-// (provided.al2023, arm64, no VPC) told apart by SLUIS_ROLE; each has its own
-// role, which is why a grant for one is never a grant for another:
+// NewLambda creates the Lambda shape. The function is the release zip's
+// `bootstrap` (provided.al2023, arm64, no VPC), with ONE role:
 //
-//   - all three: logs to their own group; S3 on the blob bucket; DynamoDB on the
-//     table; SSM read and write under /sluis/<instance>/private/credentials/* and
-//     /sluis/<instance>/export/*; sqs:SendMessage on the audit queue;
-//   - http alone: SSM read under /sluis/<instance>/private/config/* (the
-//     secrets its document names), which the controllers are denied;
-//   - http alone: kms:Sign and kms:GetPublicKey on the signing keys (remote
-//     signing) or, with WrappedSigning, kms:GenerateDataKeyPairWithoutPlaintext and
-//     kms:Decrypt on the symmetric key under the encryption context
-//     purpose=sluis-signing; and lambda:InvokeFunction on the github and slack
-//     functions (run a pass now).
+//   - logs to its own group; S3 on the blob bucket; DynamoDB on the table; SSM
+//     read and write under /sluis/<instance>/private/credentials/* and
+//     /sluis/<instance>/export/* (and read of what it wrote there, for the exports
+//     pass); SSM read under /sluis/<instance>/private/config/* (the secrets its
+//     document names); sqs:SendMessage on the audit queue;
+//   - kms:Sign and kms:GetPublicKey on the signing keys (remote signing) or, with
+//     WrappedSigning, kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on
+//     the symmetric key under the encryption context purpose=sluis-signing;
+//   - lambda:InvokeFunction on itself (run a pass now) and sts:GetWebIdentityToken
+//     (the controllers read the console with it).
+//
+// The controllers' code runs with this role: there is no per-role isolation
+// between the issuer and a controller (owner decision S1a, 2026-10-05).
 //
 // The API is an HTTP API with payload format 2.0 and a $default route to the
-// http function, behind a regional custom domain with mutual TLS. The
-// controllers are invoked by one EventBridge schedule per target, through a role
-// of their own that may invoke only those two functions.
+// function, behind a regional custom domain with mutual TLS. The controllers'
+// passes, the exports and the directory refresh are invoked by EventBridge
+// schedules, through a role of their own that may invoke only this function.
 func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulumi.ResourceOption) (*Lambda, error) {
 	a, err := args.validate()
 	if err != nil {
@@ -620,7 +614,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			wrappedArn = w.KeyArn
 			wrappedKeyArn = pulumi.StringInput(w.KeyArn).ToStringOutput()
 		} else {
-			roles := append([]string{arnPrefix + "iam::" + a.AccountID + ":role/" + a.FunctionNamePrefix + "-" + RoleHTTP},
+			roles := append([]string{arnPrefix + "iam::" + a.AccountID + ":role/" + a.FunctionName},
 				w.AdditionalSigningRoleArns...)
 			policy, err := wrappedKeyPolicy(a.AccountID, roles)
 			if err != nil {
@@ -650,19 +644,17 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		}
 	}
 
-	// ---- the configuration layer: the four documents, immutable. A change is a
+	// ---- the configuration layer: the two documents, immutable. A change is a
 	// new version (and the functions move to it, every instance at once); the
 	// old one is kept (SkipDestroy), which is what makes re-pointing a function
 	// at it a rollback.
 	layer, err := lambda.NewLayerVersion(ctx, name+"-config", &lambda.LayerVersionArgs{
 		LayerName:               pulumi.String(a.FunctionNamePrefix + "-config"),
-		Description:             pulumi.String(name + " configuration: the service documents and the policy, at " + LayerRoot),
+		Description:             pulumi.String(name + " configuration: the service document and the policy, at " + LayerRoot),
 		CompatibleRuntimes:      pulumi.StringArray{pulumi.String("provided.al2023")},
 		CompatibleArchitectures: pulumi.StringArray{pulumi.String("arm64")},
 		Code: pulumi.NewAssetArchive(map[string]any{
-			"sluis/" + docHTTP + ".yaml":   pulumi.NewStringAsset(docs[docHTTP]),
-			"sluis/" + docGitHub + ".yaml": pulumi.NewStringAsset(docs[docGitHub]),
-			"sluis/" + docSlack + ".yaml":  pulumi.NewStringAsset(docs[docSlack]),
+			"sluis/" + docSluis + ".yaml":  pulumi.NewStringAsset(docs[docSluis]),
 			"sluis/" + docPolicy + ".yaml": pulumi.NewStringAsset(docs[docPolicy]),
 		}),
 		SkipDestroy: pulumi.Bool(true),
@@ -671,88 +663,77 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis configuration layer: %w", err)
 	}
 
-	// ---- the functions
-	fnName := func(role string) string { return a.FunctionNamePrefix + "-" + role }
-	fnArn := func(role string) string {
-		return arnPrefix + "lambda:" + a.Region + ":" + a.AccountID + ":function:" + fnName(role)
+	// ---- the function. The resources keep the logical names they had as the
+	// `http` function's (`<name>-http`, `<name>-http-role`, `<name>-http-policy`),
+	// so that with FunctionName `<prefix>-http` Pulumi's state carries over and
+	// nothing is replaced.
+	fnName := a.FunctionName
+	fnArn := arnPrefix + "lambda:" + a.Region + ":" + a.AccountID + ":function:" + fnName
+	logs, err := cloudwatch.NewLogGroup(ctx, name+"-http", &cloudwatch.LogGroupArgs{
+		Name:            pulumi.String("/aws/lambda/" + fnName),
+		RetentionInDays: pulumi.Int(a.LogRetentionDays),
+		Tags:            tags,
+	}, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis log group: %w", err)
 	}
-	specs := []fnSpec{{RoleHTTP, a.HTTP}, {RoleGitHub, a.GitHub}, {RoleSlack, a.Slack}}
-	fns := map[string]*lambda.Function{}
-	roles := map[string]*iam.Role{}
-	for _, s := range specs {
-		logs, err := cloudwatch.NewLogGroup(ctx, name+"-"+s.role, &cloudwatch.LogGroupArgs{
-			Name:            pulumi.String("/aws/lambda/" + fnName(s.role)),
-			RetentionInDays: pulumi.Int(a.LogRetentionDays),
-			Tags:            tags,
-		}, child)
-		if err != nil {
-			return nil, fmt.Errorf("sluis %s log group: %w", s.role, err)
+	role, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, logs.Arn, fnArn, tags, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis role: %w", err)
+	}
+	env := pulumi.StringMap{}
+	if t := a.Telemetry; t != nil {
+		if _, has := t.Env["OTEL_SERVICE_NAME"]; !has {
+			env["OTEL_SERVICE_NAME"] = pulumi.String(fnName)
 		}
-		role, err := newFunctionRole(ctx, name, fnName(s.role), s.role, &a, signingArns, wrappedArn, logs.Arn, fnArn(RoleGitHub), fnArn(RoleSlack), tags, child)
-		if err != nil {
-			return nil, fmt.Errorf("sluis %s role: %w", s.role, err)
+		for k, v := range t.Env {
+			env[k] = pulumi.String(v)
 		}
-		roles[s.role] = role
+	}
+	env[config.EnvConfig] = pulumi.String(DocumentPath(docSluis))
 
-		env := pulumi.StringMap{}
-		if t := a.Telemetry; t != nil {
-			if _, has := t.Env["OTEL_SERVICE_NAME"]; !has {
-				env["OTEL_SERVICE_NAME"] = pulumi.String(fnName(s.role))
-			}
-			for k, v := range t.Env {
-				env[k] = pulumi.String(v)
-			}
-		}
-		env["SLUIS_ROLE"] = pulumi.String(s.role)
-		env[config.EnvConfig] = pulumi.String(DocumentPath(s.role))
-
-		// The configuration layer is LAST: a layer later in the list wins a
-		// path an earlier one also writes, and nothing may write over the
-		// documents.
-		layers := pulumi.StringArray{}
-		if a.Telemetry != nil {
-			layers = append(layers, a.Telemetry.LayerArn)
-		}
-		layers = append(layers, layer.Arn)
-		fn, err := lambda.NewFunction(ctx, name+"-"+s.role, &lambda.FunctionArgs{
-			Name:          pulumi.String(fnName(s.role)),
-			Role:          role.Arn,
-			Runtime:       pulumi.String("provided.al2023"),
-			Handler:       pulumi.String("bootstrap"),
-			Architectures: pulumi.StringArray{pulumi.String("arm64")},
-			Code:          pulumi.NewFileArchive(pkg),
-			MemorySize:    pulumi.Int(s.args.MemoryMB),
-			Timeout:       pulumi.Int(s.args.TimeoutSeconds),
-			Layers:        layers,
-			Environment:   &lambda.FunctionEnvironmentArgs{Variables: env},
-			LoggingConfig: &lambda.FunctionLoggingConfigArgs{LogFormat: pulumi.String("Text"), LogGroup: logs.Name},
-			Tags:          tags,
-			// No VpcConfig: the functions reach DynamoDB, S3, SSM, SQS and KMS over
-			// their public regional endpoints with the role's credentials.
-		}, child, pulumi.DependsOn([]pulumi.Resource{logs}))
-		if err != nil {
-			return nil, fmt.Errorf("sluis %s function: %w", s.role, err)
-		}
-		fns[s.role] = fn
+	// The configuration layer is LAST: a layer later in the list wins a path an
+	// earlier one also writes, and nothing may write over the documents.
+	layers := pulumi.StringArray{}
+	if a.Telemetry != nil {
+		layers = append(layers, a.Telemetry.LayerArn)
+	}
+	layers = append(layers, layer.Arn)
+	fn, err := lambda.NewFunction(ctx, name+"-http", &lambda.FunctionArgs{
+		Name:          pulumi.String(fnName),
+		Role:          role.Arn,
+		Runtime:       pulumi.String("provided.al2023"),
+		Handler:       pulumi.String("bootstrap"),
+		Architectures: pulumi.StringArray{pulumi.String("arm64")},
+		Code:          pulumi.NewFileArchive(pkg),
+		MemorySize:    pulumi.Int(a.Function.MemoryMB),
+		Timeout:       pulumi.Int(a.Function.TimeoutSeconds),
+		Layers:        layers,
+		Environment:   &lambda.FunctionEnvironmentArgs{Variables: env},
+		LoggingConfig: &lambda.FunctionLoggingConfigArgs{LogFormat: pulumi.String("Text"), LogGroup: logs.Name},
+		Tags:          tags,
+		// No VpcConfig: the function reaches DynamoDB, S3, SSM, SQS and KMS over
+		// its public regional endpoints with the role's credentials.
+	}, child, pulumi.DependsOn([]pulumi.Resource{logs}))
+	if err != nil {
+		return nil, fmt.Errorf("sluis function: %w", err)
 	}
 	// A pass that failed is the next tick's: no retry, so that "run a pass now"
 	// and a tick never run twice because of a transient error.
-	for _, role := range []string{RoleGitHub, RoleSlack} {
-		if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-"+role, &lambda.FunctionEventInvokeConfigArgs{
-			FunctionName: fns[role].Name, MaximumRetryAttempts: pulumi.Int(0),
-		}, child); err != nil {
-			return nil, fmt.Errorf("sluis %s invoke config: %w", role, err)
-		}
+	if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-http", &lambda.FunctionEventInvokeConfigArgs{
+		FunctionName: fn.Name, MaximumRetryAttempts: pulumi.Int(0),
+	}, child); err != nil {
+		return nil, fmt.Errorf("sluis invoke config: %w", err)
 	}
 
 	// ---- the API
-	api, domain, truststore, err := newAPI(ctx, name, &a, fns[RoleHTTP], tags, child)
+	api, domain, truststore, err := newAPI(ctx, name, &a, fn, tags, child)
 	if err != nil {
 		return nil, err
 	}
 
 	// ---- the schedules
-	schedRole, schedNames, err := newSchedules(ctx, name, &a, fns, fnName, tags, child)
+	schedRole, schedNames, err := newSchedules(ctx, name, &a, fn, tags, child)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +765,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 
 	// ---- the recovery password: generated once and kept (no keepers, so an apply
 	// never rotates it; `pulumi up --replace` on the RandomPassword does), secret
-	// in state and in `pulumi up`'s output, and stored where the http function
+	// in state and in `pulumi up`'s output, and stored where the function
 	// reads it at cold start. Letters and digits only, and the look-alikes (0 O 1 l
 	// I) are swapped for fixed other letters, so that it can be read off a screen
 	// and typed without a guess; 40 characters of a 57-letter alphabet is well
@@ -818,12 +799,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.SigningKeyArn, out.SigningKeyID, out.SigningKeyAlias = sgArn, sgID, sgAlias
 	out.WrappedSigningKeyArn, out.WrappedSigningKeyAlias = wrappedKeyArn, wrappedAlias
 	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
-	out.HTTPFunctionArn, out.HTTPFunctionName = fns[RoleHTTP].Arn, fns[RoleHTTP].Name
-	out.GitHubFunctionArn, out.GitHubFunctionName = fns[RoleGitHub].Arn, fns[RoleGitHub].Name
-	out.SlackFunctionArn, out.SlackFunctionName = fns[RoleSlack].Arn, fns[RoleSlack].Name
-	out.HTTPRoleArn, out.HTTPRoleName = roles[RoleHTTP].Arn, roles[RoleHTTP].Name
-	out.GitHubRoleArn, out.GitHubRoleName = roles[RoleGitHub].Arn, roles[RoleGitHub].Name
-	out.SlackRoleArn, out.SlackRoleName = roles[RoleSlack].Arn, roles[RoleSlack].Name
+	out.FunctionArn, out.FunctionName = fn.Arn, fn.Name
+	out.RoleArn, out.RoleName = role.Arn, role.Name
 	out.APIID, out.APIURL = api.ID().ToStringOutput(), api.ApiEndpoint
 	out.DomainTarget = domain.DomainNameConfiguration.ApplyT(func(c apigatewayv2.DomainNameDomainNameConfiguration) string {
 		if c.TargetDomainName == nil {
@@ -850,8 +827,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
-		"httpFunctionArn": out.HTTPFunctionArn, "githubFunctionArn": out.GitHubFunctionArn, "slackFunctionArn": out.SlackFunctionArn,
-		"httpRoleArn": out.HTTPRoleArn, "githubRoleArn": out.GitHubRoleArn, "slackRoleArn": out.SlackRoleArn,
+		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "roleArn": out.RoleArn, "roleName": out.RoleName,
 		"apiId": out.APIID, "apiUrl": out.APIURL,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
@@ -891,17 +867,17 @@ func lambdaTrust() string {
 	return string(raw)
 }
 
-// newFunctionRole is the role of one function and its inline policy, both named
-// after the function. The function's own ARN is computed from its name, which is
-// what keeps the http role's grant on the other two from being a cycle.
-func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
-	wrappedKeyArn, logGroupArn pulumi.StringInput,
-	githubArn, slackArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
+// newFunctionRole is the function's role and its inline policy, both named
+// after the function. The function's own ARN is computed from its name (it
+// may invoke itself for a run-now), which is what keeps the grant from being a
+// cycle.
+func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
+	wrappedKeyArn, logGroupArn pulumi.StringInput, selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	rargs := &iam.RoleArgs{Name: pulumi.String(fnName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)
 	}
-	r, err := iam.NewRole(ctx, name+"-"+role+"-role", rargs, opts...)
+	r, err := iam.NewRole(ctx, name+"-http-role", rargs, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -910,7 +886,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 		stateKey = a.State.KeyArn
 	}
 	wrapped := pulumi.StringInput(pulumi.String(""))
-	if wrappedKeyArn != nil && role == RoleHTTP {
+	if wrappedKeyArn != nil {
 		wrapped = wrappedKeyArn
 	}
 	inputs := []any{a.Storage.BucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn, wrapped}
@@ -919,15 +895,15 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 	}
 	doc := pulumi.All(inputs...).ApplyT(func(v []any) (string, error) {
 		return functionPolicy(functionPolicyIn{
-			role: role, region: a.Region, account: a.AccountID,
+			region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
 			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
-			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance, exports: !a.Exports.Disabled && a.Exports.Function == role,
-			invokeFunctionArns: []string{githubArn, slackArn},
-			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,
+			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance, exports: !a.Exports.Disabled,
+			invokeFunctionArns: []string{selfArn},
+			webIdentityAud:     a.WebIdentityAudience,
 		})
 	}).(pulumi.StringOutput)
-	if _, err := iam.NewRolePolicy(ctx, name+"-"+role+"-policy", &iam.RolePolicyArgs{
+	if _, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
 		Name: pulumi.String(fnName), Role: r.Name, Policy: doc,
 	}, opts...); err != nil {
 		return nil, err
@@ -937,7 +913,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 
 const truststoreKey = "truststore/client-ca.pem"
 
-// newAPI is the HTTP API, its integration with the http function, the custom
+// newAPI is the HTTP API, its integration with the function, the custom
 // domain with mutual TLS and the truststore in its own bucket.
 func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, tags pulumi.StringMapInput,
 	opts ...pulumi.ResourceOption) (*apigatewayv2.Api, *apigatewayv2.DomainName, *s3.Bucket, error) {
@@ -1061,9 +1037,10 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 	return api, domain, bucket, nil
 }
 
-// newSchedules is the scheduler's role, which may invoke the two controller
-// functions and nothing else, and one schedule per target.
-func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[string]*lambda.Function, fnName func(string) string,
+// newSchedules is the scheduler's role, which may invoke the function and
+// nothing else, and one schedule per target, one for the exports and one for
+// the directory refresh.
+func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Function,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
 	trust, _ := json.Marshal(map[string]any{
@@ -1081,51 +1058,43 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[strin
 	if err != nil {
 		return nil, none, err
 	}
-	gh, sl := fns[RoleGitHub], fns[RoleSlack]
-	invokeArns := []any{gh.Arn, sl.Arn}
-	if (!a.Exports.Disabled && a.Exports.Function == RoleHTTP) || !a.DirectoryRefresh.Disabled {
-		invokeArns = append(invokeArns, fns[RoleHTTP].Arn)
-	}
 	if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
 		Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), Role: role.Name,
-		Policy: pulumi.All(invokeArns...).ApplyT(func(v []any) (string, error) {
+		Policy: fn.Arn.ApplyT(func(arn string) (string, error) {
 			return document([]statement{{
 				"Sid": "SluisTick", "Effect": "Allow", "Action": lambdaInvokeFunction,
-				"Resource": stringsOf(v),
+				"Resource": []string{arn},
 			}})
 		}).(pulumi.StringOutput),
 	}, opts...); err != nil {
 		return nil, none, err
 	}
 	var names pulumi.StringArray
-	type target struct {
-		role, id string
-		fn       *lambda.Function
-	}
+	type target struct{ kind, id string }
 	var targets []target
 	for _, id := range a.Schedule.GitHubOrgs {
-		targets = append(targets, target{RoleGitHub, id, gh})
+		targets = append(targets, target{"github", id})
 	}
 	for _, id := range a.Schedule.SlackWorkspaces {
-		targets = append(targets, target{RoleSlack, id, sl})
+		targets = append(targets, target{"slack", id})
 	}
 	for _, t := range targets {
 		payload, err := json.Marshal(map[string]string{"kind": "tick", "target": t.id})
 		if err != nil {
 			return nil, none, err
 		}
-		sname := fnName(t.role) + "-" + strings.ReplaceAll(t.id, ":", "-")
+		sname := a.FunctionNamePrefix + "-" + t.kind + "-" + strings.ReplaceAll(t.id, ":", "-")
 		if len(sname) > 64 {
 			return nil, none, fmt.Errorf("sluispulumi: the schedule name %q is longer than 64 characters", sname)
 		}
-		if _, err := scheduler.NewSchedule(ctx, name+"-"+t.role+"-"+strings.ReplaceAll(t.id, ":", "-"), &scheduler.ScheduleArgs{
+		if _, err := scheduler.NewSchedule(ctx, name+"-"+t.kind+"-"+strings.ReplaceAll(t.id, ":", "-"), &scheduler.ScheduleArgs{
 			Name:                       pulumi.String(sname),
-			Description:                pulumi.Sprintf("Ticks the %s controller for %s.", t.role, t.id),
+			Description:                pulumi.Sprintf("Ticks the %s controller for %s.", t.kind, t.id),
 			ScheduleExpression:         pulumi.String(a.Schedule.Rate),
 			ScheduleExpressionTimezone: pulumi.String("UTC"),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
-				Arn:     t.fn.Arn,
+				Arn:     fn.Arn,
 				RoleArn: role.Arn,
 				Input:   pulumi.String(string(payload)),
 				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
@@ -1138,16 +1107,15 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[strin
 		names = append(names, pulumi.String(sname))
 	}
 	if !a.Exports.Disabled {
-		ef := fns[a.Exports.Function]
 		ename := a.FunctionNamePrefix + "-exports"
 		if _, err := scheduler.NewSchedule(ctx, name+"-exports", &scheduler.ScheduleArgs{
 			Name:                       pulumi.String(ename),
-			Description:                pulumi.Sprintf("Runs the exports in the %s function.", a.Exports.Function),
+			Description:                pulumi.String("Runs the exports."),
 			ScheduleExpression:         pulumi.String(a.Exports.Rate),
 			ScheduleExpressionTimezone: pulumi.String("UTC"),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
-				Arn: ef.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"exports"}`),
+				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"exports"}`),
 				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
 					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
 				},
@@ -1161,12 +1129,12 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[strin
 		rname := a.FunctionNamePrefix + "-directory-refresh"
 		if _, err := scheduler.NewSchedule(ctx, name+"-directory-refresh", &scheduler.ScheduleArgs{
 			Name:                       pulumi.String(rname),
-			Description:                pulumi.String("Refreshes the directory snapshots in the http function."),
+			Description:                pulumi.String("Refreshes the directory snapshots."),
 			ScheduleExpression:         pulumi.String(a.DirectoryRefresh.Rate),
 			ScheduleExpressionTimezone: pulumi.String("UTC"),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
-				Arn: fns[RoleHTTP].Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
+				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
 				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
 					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
 				},

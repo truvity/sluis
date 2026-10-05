@@ -224,3 +224,54 @@ func TestARefreshEventRunsOneDirectoryPassAndAFailedWorkspaceIsAnError(t *testin
 		t.Error("a function with no directory ran a refresh")
 	}
 }
+
+// The one function sends a tick or a run to the controller the policy says the
+// target belongs to, an API Gateway event to the handler, and a run for a
+// target nobody declares ends cleanly while a schedule's tick for one fails.
+func TestOneFunctionDispatchesAnEventToTheControllerOfItsTarget(t *testing.T) {
+	gh, sl := &fakePass{ran: true}, &fakePass{ran: true}
+	controller := func(name string, p *fakePass) *lambdaapp.Controller {
+		return &lambdaapp.Controller{Name: name, Open: func(context.Context) (lambdaapp.Pass, error) { return p, nil }}
+	}
+	kindOf := func(target string) string {
+		switch target {
+		case "acme", "github:links":
+			return "github"
+		case "T0SLACK":
+			return "slack"
+		}
+		return ""
+	}
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).
+		WithControllers(kindOf, map[string]*lambdaapp.Controller{"github": controller("github", gh), "slack": controller("slack", sl)})
+	for _, c := range []struct {
+		event string
+		pass  *fakePass
+		other *fakePass
+	}{
+		{`{"kind":"tick","target":"acme"}`, gh, sl},
+		{`{"kind":"run","target":"github:links"}`, gh, sl},
+		{`{"kind":"tick","target":"T0SLACK"}`, sl, gh},
+	} {
+		gh.targets, sl.targets = nil, nil
+		out, err := h.Handle(context.Background(), json.RawMessage(c.event))
+		if err != nil || out.(lambdaapp.Result).Outcome != "ran" {
+			t.Fatalf("%s: %v %+v", c.event, err, out)
+		}
+		if len(c.pass.targets) != 1 || len(c.other.targets) != 0 {
+			t.Errorf("%s: ran %v on its controller and %v on the other", c.event, c.pass.targets, c.other.targets)
+		}
+	}
+	out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"run","target":"nobody"}`))
+	if err != nil || out.(lambdaapp.Result).Outcome != lambdaapp.OutcomeUnknown {
+		t.Errorf("a run-now of an undeclared target: %v %+v", err, out)
+	}
+	if _, err = h.Handle(context.Background(), json.RawMessage(`{"kind":"tick","target":"nobody"}`)); err == nil {
+		t.Error("a schedule's tick of an undeclared target was reported as success")
+	}
+	// A function that runs no controller says so, the same way.
+	none := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
+	if _, err = none.Handle(context.Background(), json.RawMessage(`{"kind":"tick","target":"acme"}`)); err == nil {
+		t.Error("a function with no controllers ran a tick")
+	}
+}

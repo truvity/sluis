@@ -141,6 +141,8 @@ func (t *Trigger) Notify(ctx context.Context, target string) error {
 			names = append(names, fn)
 		}
 		slices.Sort(names)
+		// One function may run both kinds: it is invoked once.
+		names = slices.Compact(names)
 	}
 	var errs []error
 	for _, fn := range names {

@@ -17,9 +17,7 @@ import (
 
 // The documents of the configuration layer, by the name each has in it.
 const (
-	docHTTP   = RoleHTTP
-	docGitHub = RoleGitHub
-	docSlack  = RoleSlack
+	docSluis  = "sluis"
 	docPolicy = "policy"
 )
 
@@ -29,70 +27,59 @@ const (
 	recoveryPasswordName = "recovery/password"
 )
 
-// renderDocuments renders the four documents the configuration layer holds and
+// renderDocuments renders the two documents the configuration layer holds and
 // holds each to sluis's own loader, the one the function runs at cold start: a
 // layer outlives the deploy that published it, so a document the binary would
 // refuse is refused here, before anything is created.
 //
-// Into the http document the library writes what is its own: the apiVersion,
-// `policy.file`, `secrets` (ssm, the installation's root), the recovery
-// password's and the state secret's names and `recovery.enabled`. Into the
-// controllers' it writes the apiVersion and `policy.file`. A value written in a
-// document that disagrees with the library's is refused, naming it.
+// Into the service document the library writes what is its own: the apiVersion
+// (v3), `policy.file`, `secrets` (ssm, the installation's root), the recovery
+// password's and the state secret's names, `recovery.enabled`, and, for the
+// `invoke` trigger, the function it invokes. A value written in the document
+// that disagrees with the library's is refused, naming it.
 func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 	root := SSMRoot(a.Instance)
 	out := map[string]string{}
-	for _, d := range []struct {
-		name, kind, body string
-		field            string
-	}{
-		{docHTTP, "serve", a.Config, "Config"},
-		{docGitHub, "controller-github", a.GitHubConfig, "GitHubConfig"},
-		{docSlack, "controller-slack", a.SlackConfig, "SlackConfig"},
-	} {
-		doc, err := yamlMap(d.body, d.field)
-		if err != nil {
-			return nil, err
-		}
-		if err = own(doc, d.field, "apiVersion", config.APIVersion(d.kind)); err != nil {
-			return nil, err
-		}
-		policy, err := child(doc, d.field, "policy")
-		if err != nil {
-			return nil, err
-		}
-		if err = own(policy, d.field+": policy", "file", DocumentPath(docPolicy)); err != nil {
-			return nil, err
-		}
-		if d.kind == "serve" {
-			if err = ownServe(doc, a, root); err != nil {
-				return nil, err
-			}
-		}
-		if !a.AllowEndpoints {
-			if at := endpointIn(doc, ""); at != "" {
-				return nil, fmt.Errorf("sluispulumi: LambdaArgs.%s names an endpoint (%s): the functions reach AWS at its own "+
-					"endpoints; AllowEndpoints is for a test against LocalStack", d.field, at)
-			}
-		}
-		raw, err := yaml.Marshal(doc)
-		if err != nil {
-			return nil, err
-		}
-		out[d.name] = string(raw)
-	}
-	policy, err := renderPolicy(a)
+	doc, err := yamlMap(a.Config, "Config")
 	if err != nil {
 		return nil, err
 	}
-	out[docPolicy] = policy
+	if err = own(doc, "Config", "apiVersion", config.APIVersion("sluis")); err != nil {
+		return nil, err
+	}
+	policy, err := child(doc, "Config", "policy")
+	if err != nil {
+		return nil, err
+	}
+	if err = own(policy, "Config: policy", "file", DocumentPath(docPolicy)); err != nil {
+		return nil, err
+	}
+	if err = ownServe(doc, a, root); err != nil {
+		return nil, err
+	}
+	if !a.AllowEndpoints {
+		if at := endpointIn(doc, ""); at != "" {
+			return nil, fmt.Errorf("sluispulumi: LambdaArgs.Config names an endpoint (%s): the function reaches AWS at its own "+
+				"endpoints; AllowEndpoints is for a test against LocalStack", at)
+		}
+	}
+	raw, err := yaml.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	out[docSluis] = string(raw)
+	policyDoc, err := renderPolicy(a)
+	if err != nil {
+		return nil, err
+	}
+	out[docPolicy] = policyDoc
 	if err = validateDocuments(out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ownServe writes the http document's library-owned keys.
+// ownServe writes the service document's library-owned keys.
 func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 	secrets, err := child(doc, "Config", "secrets")
 	if err != nil {
@@ -120,6 +107,9 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 		}
 		recovery["enabled"] = *a.Recovery.Enabled
 	}
+	if err = ownTrigger(doc, a); err != nil {
+		return err
+	}
 	if signing, ok := doc["signingKey"].(map[string]any); ok && a.WrappedSigning != nil {
 		if _, remote := signing["kms"]; remote {
 			return errors.New("sluispulumi: LambdaArgs.Config names signingKey.kms and WrappedSigning is set: " +
@@ -133,6 +123,32 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 					return err
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// ownTrigger writes the function a run-now invokes into `adapters.trigger` when
+// the document chooses the `invoke` adapter: it is this function, for both kinds
+// (the function runs the pass under the controller the policy says the target
+// belongs to), so the library names it and a document that names another is
+// refused.
+func ownTrigger(doc map[string]any, a *LambdaArgs) error {
+	adapters, ok := doc["adapters"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	trigger, ok := adapters["trigger"].(map[string]any)
+	if !ok || trigger["adapter"] != "invoke" {
+		return nil
+	}
+	settings, err := child(trigger, "Config: adapters.trigger", "settings")
+	if err != nil {
+		return err
+	}
+	for _, kind := range []string{"github", "slack"} {
+		if err = own(settings, "Config: adapters.trigger.settings", kind, a.FunctionName); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -183,9 +199,7 @@ func validateDocuments(docs map[string]string) error {
 	}
 	var errs []error
 	for name, load := range map[string]func(string) error{
-		docHTTP:   func(p string) error { _, err := config.Load[config.Serve](p); return err },
-		docGitHub: func(p string) error { _, err := config.Load[config.ControllerGitHub](p); return err },
-		docSlack:  func(p string) error { _, err := config.Load[config.ControllerSlack](p); return err },
+		docSluis:  func(p string) error { _, err := config.Load[config.Sluis](p); return err },
 		docPolicy: func(p string) error { _, err := config.Load[config.PolicyDocument](p); return err },
 	} {
 		p, err := path(name)
@@ -272,9 +286,9 @@ func endpointIn(v any, at string) string {
 }
 
 // MinPackageVersion is the oldest release this library deploys: the first that
-// reads its configuration from the layer (SLUIS_CONFIG) and its secrets from
-// SSM layout v3. An older package does not start on what this library renders.
-const MinPackageVersion = "1.62"
+// runs as one function (the v3 service document, SLUIS_CONFIG naming it, no
+// SLUIS_ROLE). An older package does not start on what this library renders.
+const MinPackageVersion = "1.63"
 
 // The release zip's name: sluis-lambda_<version>_linux_<arch>.zip.
 var packageName = regexp.MustCompile(`^sluis-lambda_v?([0-9]+)\.([0-9]+)\.[0-9]+[^_]*_linux_[a-z0-9]+\.zip$`)

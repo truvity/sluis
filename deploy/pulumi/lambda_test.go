@@ -52,7 +52,7 @@ func zipFile(t *testing.T, extra map[string]string) string {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
+	p := filepath.Join(t.TempDir(), "sluis-lambda_1.63.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,6 @@ const minimalPolicy = "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n 
 type estate struct {
 	pkg                 string
 	config              string
-	githubConfig        string
 	policy              string
 	orgs, workspaces    []string
 	rate                string
@@ -90,10 +89,8 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 		e.pkg = zipFile(t, nil)
 	}
 	if e.config == "" {
-		e.config = "issuerURL: https://access.example.test\n"
-	}
-	if e.githubConfig == "" {
-		e.githubConfig = "consoleURL: https://access.example.test/console\n"
+		e.config = "issuerURL: https://access.example.test\ncontrollers:\n  github: {consoleURL: \"https://access.example.test/console\"}\n" +
+			"  slack: {consoleURL: \"https://access.example.test/console\"}\n"
 	}
 	if e.policy == "" {
 		e.policy = minimalPolicy
@@ -104,8 +101,7 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 	}
 	a := &arp.LambdaArgs{
 		Region: region, AccountID: account, Instance: "kernel",
-		Package: e.pkg, PackageSHA256: pkgSHA, Config: e.config, GitHubConfig: e.githubConfig,
-		SlackConfig: "consoleURL: https://access.example.test/console\n", Policy: e.policy,
+		Package: e.pkg, PackageSHA256: pkgSHA, Config: e.config, Policy: e.policy,
 		Storage:       &arp.StorageGrant{BucketArn: pulumi.String(arnp + "s3:::" + bucket)},
 		State:         &arp.StateGrant{TableArn: pulumi.String(arnp + "dynamodb:" + region + ":" + account + ":table/" + table)},
 		AuditQueueArn: pulumi.String(arnp + "sqs:" + region + ":" + account + ":audit-ingest"),
@@ -145,9 +141,9 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("signingKeyRS256ID", l.SigningKeyRS256ID)
 		collect("wrappedSigningKeyArn", l.WrappedSigningKeyArn)
 		collect("wrappedSigningKeyAlias", l.WrappedSigningKeyAlias)
-		collect("httpFunctionArn", l.HTTPFunctionArn)
-		collect("githubFunctionArn", l.GitHubFunctionArn)
-		collect("slackFunctionArn", l.SlackFunctionArn)
+		collect("functionArn", l.FunctionArn)
+		collect("functionName", l.FunctionName)
+		collect("roleArn", l.RoleArn)
 		collect("apiUrl", l.APIURL)
 		collect("domainTarget", l.DomainTarget)
 		collect("domainHostedZoneID", l.DomainHostedZoneID)
@@ -175,9 +171,10 @@ const (
 	policyType = "aws:iam/rolePolicy:RolePolicy"
 )
 
-func rolePolicy(t *testing.T, rec *recorder, role string) map[string][]string {
+// rolePolicy is the grants of the function's one role.
+func rolePolicy(t *testing.T, rec *recorder) map[string][]string {
 	t.Helper()
-	return grants(statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()))
+	return grants(statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()))
 }
 
 // packagePath is the file a function's code is: the release zip, as it is.
@@ -235,45 +232,47 @@ func archiveFiles(t *testing.T, f declared) map[string]string {
 // differ in their targets, their domain and their telemetry, and in nothing here.
 func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	t.Helper()
-	roles := []string{"http", "github", "slack"}
 
-	// Three functions from one package, arm64, provided.al2023, no VPC.
-	if n := len(rec.ofType(fnType)); n != 3 {
-		t.Fatalf("%d functions, want 3", n)
+	// ONE function from the package, arm64, provided.al2023, no VPC.
+	if n := len(rec.ofType(fnType)); n != 1 {
+		t.Fatalf("%d functions, want 1", n)
 	}
-	var pkgs []string
-	for _, r := range roles {
-		f := rec.one(t, fnType, "kernel-"+r)
-		if prop(f, "name").StringValue() != "sluis-"+r || prop(f, "runtime").StringValue() != "provided.al2023" ||
-			prop(f, "handler").StringValue() != "bootstrap" {
-			t.Errorf("%s: %v", r, f.Inputs)
-		}
-		if a := prop(f, "architectures").ArrayValue(); len(a) != 1 || a[0].StringValue() != "arm64" {
-			t.Errorf("%s architectures: %v", r, a)
-		}
-		if prop(f, "vpcConfig").HasValue() {
-			t.Errorf("%s is in a VPC", r)
-		}
-		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
-		if env["SLUIS_ROLE"].StringValue() != r || env["SLUIS_CONFIG"].StringValue() != "/opt/sluis/"+r+".yaml" {
-			t.Errorf("%s env: %v", r, env)
-		}
-		for k := range env {
-			if k != "SLUIS_ROLE" && k != "SLUIS_CONFIG" && !strings.HasPrefix(string(k), "OTEL_") {
-				t.Errorf("%s: %s in the environment", r, k)
-			}
-		}
-		// The configuration layer is mounted last.
-		if l := prop(f, "layers").ArrayValue(); len(l) == 0 || l[len(l)-1].StringValue() != out["configLayerArn"] {
-			t.Errorf("%s layers: %v, want the configuration layer last", r, l)
-		}
-		pkgs = append(pkgs, packagePath(t, f))
+	f := rec.one(t, fnType, "kernel-http")
+	if prop(f, "name").StringValue() != "sluis" || prop(f, "runtime").StringValue() != "provided.al2023" ||
+		prop(f, "handler").StringValue() != "bootstrap" {
+		t.Errorf("%v", f.Inputs)
 	}
-	if pkgs[0] != pkgs[1] || pkgs[1] != pkgs[2] {
-		t.Error("the three functions do not share one package")
+	if prop(f, "memorySize").NumberValue() != 512 || prop(f, "timeout").NumberValue() != 300 {
+		t.Errorf("memory %v timeout %v: one setting, with room for a controller's pass", prop(f, "memorySize"), prop(f, "timeout"))
+	}
+	if a := prop(f, "architectures").ArrayValue(); len(a) != 1 || a[0].StringValue() != "arm64" {
+		t.Errorf("architectures: %v", a)
+	}
+	if prop(f, "vpcConfig").HasValue() {
+		t.Error("the function is in a VPC")
+	}
+	env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
+	if env["SLUIS_CONFIG"].StringValue() != "/opt/sluis/sluis.yaml" {
+		t.Errorf("env: %v", env)
+	}
+	for k := range env {
+		if k != "SLUIS_CONFIG" && !strings.HasPrefix(string(k), "OTEL_") {
+			t.Errorf("%s in the environment", k)
+		}
+	}
+	// The configuration layer is mounted last.
+	if l := prop(f, "layers").ArrayValue(); len(l) == 0 || l[len(l)-1].StringValue() != out["configLayerArn"] {
+		t.Errorf("layers: %v, want the configuration layer last", l)
+	}
+	packagePath(t, f)
+	// Nothing of the three functions of v1.62 is left.
+	for _, n := range []string{"kernel-github", "kernel-slack"} {
+		if rec.has(fnType, n) || rec.has("aws:iam/role:Role", n+"-role") || rec.has(policyType, n+"-policy") {
+			t.Errorf("%s is still declared", n)
+		}
 	}
 	files := layerFiles(t, rec)
-	if got := keysOf(files); !reflect.DeepEqual(got, []string{"sluis/github.yaml", "sluis/http.yaml", "sluis/policy.yaml", "sluis/slack.yaml"}) {
+	if got := keysOf(files); !reflect.DeepEqual(got, []string{"sluis/policy.yaml", "sluis/sluis.yaml"}) {
 		t.Errorf("the layer holds %v", got)
 	}
 	layer := rec.one(t, layerType, "kernel-config")
@@ -281,56 +280,53 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		t.Errorf("layer: %v", layer.Inputs)
 	}
 
-	// One role per function: distinct, and only http signs and runs a pass.
-	seen := map[string]bool{}
-	for _, r := range roles {
-		role := rec.one(t, "aws:iam/role:Role", "kernel-"+r+"-role")
-		if seen[prop(role, "name").StringValue()] {
-			t.Errorf("%s shares a role", r)
-		}
-		seen[prop(role, "name").StringValue()] = true
-		g := rolePolicy(t, rec, r)
-		for _, a := range []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "dynamodb:GetItem", "dynamodb:PutItem",
-			"dynamodb:Query", "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter",
-			"sqs:SendMessage", "logs:CreateLogStream", "logs:PutLogEvents"} {
-			if len(g[a]) == 0 {
-				t.Errorf("%s lacks %s", r, a)
-			}
-		}
-		for _, a := range []string{"kms:Sign", "kms:GetPublicKey", "lambda:InvokeFunction"} {
-			if (len(g[a]) > 0) != (r == "http") {
-				t.Errorf("%s: %s granted=%v", r, a, len(g[a]) > 0)
-			}
-		}
-		if got := g["sqs:SendMessage"]; !reflect.DeepEqual(got, []string{arnp + "sqs:" + region + ":" + account + ":audit-ingest"}) {
-			t.Errorf("%s sqs: %v", r, got)
-		}
-		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-		wantRead := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
-		if r == "http" {
-			// http reads its config, and runs the exports (the default), whose
-			// copies it reads back.
-			wantRead = append(wantRead, ssmArn+"/sluis/kernel/private/config", ssmArn+"/sluis/kernel/private/config/*",
-				ssmArn+"/sluis/kernel/export", ssmArn+"/sluis/kernel/export/*")
-		}
-		if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
-			t.Errorf("%s reads %v", r, got)
-		}
-		for _, res := range g["ssm:PutParameter"] {
-			if !strings.Contains(res, "/sluis/kernel/private/credentials") && !strings.Contains(res, "/sluis/kernel/export") {
-				t.Errorf("%s may put %s", r, res)
-			}
+	// ONE role, with the union of what the three had.
+	if n := len(rec.ofType("aws:iam/role:Role")); n != 2 { // the function's and the scheduler's
+		t.Errorf("%d roles, want the function's and the scheduler's", n)
+	}
+	role := rec.one(t, "aws:iam/role:Role", "kernel-http-role")
+	if prop(role, "name").StringValue() != "sluis" {
+		t.Errorf("role: %v", role.Inputs)
+	}
+	g := rolePolicy(t, rec)
+	for _, a := range []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "dynamodb:GetItem", "dynamodb:PutItem",
+		"dynamodb:Query", "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter",
+		"sqs:SendMessage", "logs:CreateLogStream", "logs:PutLogEvents", "kms:Sign", "kms:GetPublicKey", "lambda:InvokeFunction",
+		"sts:GetWebIdentityToken"} {
+		if len(g[a]) == 0 {
+			t.Errorf("the role lacks %s", a)
 		}
 	}
-	httpG := rolePolicy(t, rec, "http")
-	if got := httpG["lambda:InvokeFunction"]; !reflect.DeepEqual(got, []string{
-		arnp + "lambda:" + region + ":" + account + ":function:sluis-github", arnp + "lambda:" + region + ":" + account + ":function:sluis-slack"}) {
-		t.Errorf("http may invoke %v", got)
+	if got := g["sqs:SendMessage"]; !reflect.DeepEqual(got, []string{arnp + "sqs:" + region + ":" + account + ":audit-ingest"}) {
+		t.Errorf("sqs: %v", got)
+	}
+	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
+	// It reads its credentials, its config and (it runs the exports, the
+	// default) the copies it wrote.
+	wantRead := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*",
+		ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*",
+		ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
+		t.Errorf("reads %v", got)
+	}
+	for _, res := range g["ssm:PutParameter"] {
+		if !strings.Contains(res, "/sluis/kernel/private/credentials") && !strings.Contains(res, "/sluis/kernel/export") {
+			t.Errorf("may put %s", res)
+		}
+	}
+	if got := g["lambda:InvokeFunction"]; !reflect.DeepEqual(got, []string{arnp + "lambda:" + region + ":" + account + ":function:sluis"}) {
+		t.Errorf("may invoke %v: itself only", got)
 	}
 	wantKeys := []string{out["signingKeyArn"], out["signingKeyRS256Arn"]}
 	for _, a := range []string{"kms:Sign", "kms:GetPublicKey"} {
-		if got := httpG[a]; !reflect.DeepEqual(got, wantKeys) {
-			t.Errorf("http %s on %v, want %v", a, got, wantKeys)
+		if got := g[a]; !reflect.DeepEqual(got, wantKeys) {
+			t.Errorf("%s on %v, want %v", a, got, wantKeys)
+		}
+	}
+	// The one role signs, so nothing denies it the key ring.
+	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if s["Effect"] == "Deny" {
+			t.Errorf("the one role has a denial: %v", s)
 		}
 	}
 	for _, d := range rec.ofType(policyType) {
@@ -376,7 +372,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	}
 	integ := rec.one(t, "aws:apigatewayv2/integration:Integration", "kernel-api-integration")
 	if prop(integ, "payloadFormatVersion").StringValue() != "2.0" || prop(integ, "integrationType").StringValue() != "AWS_PROXY" ||
-		prop(integ, "integrationUri").StringValue() != out["httpFunctionArn"] {
+		prop(integ, "integrationUri").StringValue() != out["functionArn"] {
 		t.Errorf("integration: %v", integ.Inputs)
 	}
 	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "kernel-domain")
@@ -445,12 +441,12 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	shape(t, rec, out, "access.one.example.test")
 
 	want := map[string]string{
-		"sluis-github-truvity":      `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
-		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
-		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-github",
-		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-slack",
-		"sluis-exports":             `{"kind":"exports"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-http",
-		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis-http",
+		"sluis-github-truvity":      `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
+		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
+		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
+		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
+		"sluis-exports":             `{"kind":"exports"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
+		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
@@ -475,22 +471,20 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 			t.Errorf("%s: not the scheduler's role", s.Name)
 		}
 	}
-	// The scheduler's role invokes the two controllers and the exports' function.
+	// The scheduler's role invokes the one function and nothing else.
 	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
-	if len(sp) != 1 || len(sp["lambda:InvokeFunction"]) != 3 {
+	if len(sp) != 1 || len(sp["lambda:InvokeFunction"]) != 1 {
 		t.Errorf("scheduler grants %v", sp)
 	}
 
-	// Telemetry: the layer and the settings on all three.
-	for _, r := range []string{"http", "github", "slack"} {
-		f := rec.one(t, fnType, "kernel-"+r)
-		if l := prop(f, "layers").ArrayValue(); len(l) != 2 || !strings.Contains(l[0].StringValue(), "otlp-lambda") {
-			t.Errorf("%s layers: %v", r, l)
-		}
-		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
-		if env["OTEL_EXPORTER_OTLP_ENDPOINT"].StringValue() != "https://otlp.example.test" || env["OTEL_SERVICE_NAME"].StringValue() != "sluis-"+r {
-			t.Errorf("%s env: %v", r, env)
-		}
+	// Telemetry: the layer and the settings on the function.
+	f := rec.one(t, fnType, "kernel-http")
+	if l := prop(f, "layers").ArrayValue(); len(l) != 2 || !strings.Contains(l[0].StringValue(), "otlp-lambda") {
+		t.Errorf("layers: %v", l)
+	}
+	env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
+	if env["OTEL_EXPORTER_OTLP_ENDPOINT"].StringValue() != "https://otlp.example.test" || env["OTEL_SERVICE_NAME"].StringValue() != "sluis" {
+		t.Errorf("env: %v", env)
 	}
 }
 
@@ -516,29 +510,26 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 			t.Errorf("default rate: %v", s.Inputs)
 		}
 	}
-	for _, r := range []string{"http", "github", "slack"} {
-		f := rec.one(t, fnType, "kernel-"+r)
+	{
+		f := rec.one(t, fnType, "kernel-http")
 		if l := prop(f, "layers").ArrayValue(); len(l) != 1 {
-			t.Errorf("%s has a layer beside the configuration's without Telemetry: %v", r, l)
+			t.Errorf("a layer beside the configuration's without Telemetry: %v", l)
 		}
 		env := prop(f, "environment").ObjectValue()["variables"].ObjectValue()
 		for k := range env {
 			if strings.HasPrefix(string(k), "OTEL_") {
-				t.Errorf("%s has %s without Telemetry", r, k)
+				t.Errorf("%s without Telemetry", k)
 			}
 		}
 		if prop(f, "vpcConfig").HasValue() {
-			t.Errorf("%s is in a VPC", r)
+			t.Error("the function is in a VPC")
 		}
 	}
-	if n := len(rec.ofType("aws:iam/role:Role")); n != 4 {
-		t.Errorf("%d roles, want three functions and the scheduler", n)
+	if n := len(rec.ofType("aws:iam/role:Role")); n != 2 {
+		t.Errorf("%d roles, want the function's and the scheduler", n)
 	}
-	if g := rolePolicy(t, rec, "slack"); len(g["kms:Sign"]) != 0 {
-		t.Error("slack signs")
-	}
-	if g := rolePolicy(t, rec, "http"); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
-		t.Errorf("http grants %v", g)
+	if g := rolePolicy(t, rec); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
+		t.Errorf("the role grants %v", g)
 	}
 	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "kernel-domain")
 	if prop(dom, "domainName").StringValue() != "access.two.example.test" || !prop(dom, "mutualTlsAuthentication").IsObject() {
@@ -587,9 +578,10 @@ func TestADocumentChangesTheLayerAndNeverThePackage(t *testing.T) {
 		t.Error("the same inputs gave another layer")
 	}
 	for name, e := range map[string]estate{
-		"serve":      {config: "issuerURL: https://other.example.test\n"},
-		"controller": {githubConfig: "consoleURL: https://other.example.test/console\n"},
-		"policy":     {policy: minimalPolicy + "  all:access-roster:viewer: {}\n"},
+		"serve": {config: "issuerURL: https://other.example.test\n"},
+		"controller": {config: "issuerURL: https://access.example.test\n" +
+			"controllers: {github: {interval: 5m, consoleURL: \"https://access.example.test/console\"}}\n"},
+		"policy": {policy: minimalPolicy + "  all:access-roster:viewer: {}\n"},
 	} {
 		c, changed := build(e)
 		if reflect.DeepEqual(base, changed) {
@@ -615,18 +607,12 @@ func TestTheDocumentsAreTheLibrarysAndHeldToTheBinarysLoader(t *testing.T) {
 		"signingKey: {kmsWrapped: {keyId: alias/sluis-signing-wrapped}}\n"})
 	files := layerFiles(t, rec)
 	for _, want := range []string{
-		"apiVersion: sluis.truvity.github.io/serve/v2", "file: /opt/sluis/policy.yaml",
+		"apiVersion: sluis.truvity.github.io/sluis/v3", "file: /opt/sluis/policy.yaml",
 		"root: /sluis/kernel", "source: ssm", "region: " + region,
 		"passwordSecret: recovery/password", "stateSecret: issuer/state-secret",
 	} {
-		if !strings.Contains(files["sluis/http.yaml"], want) {
-			t.Errorf("the http document lacks %q:\n%s", want, files["sluis/http.yaml"])
-		}
-	}
-	for _, c := range []string{"github", "slack"} {
-		if d := files["sluis/"+c+".yaml"]; !strings.Contains(d, "apiVersion: sluis.truvity.github.io/controller-"+c+"/v2") ||
-			!strings.Contains(d, "file: /opt/sluis/policy.yaml") {
-			t.Errorf("the %s document: %s", c, d)
+		if !strings.Contains(files["sluis/sluis.yaml"], want) {
+			t.Errorf("the service document lacks %q:\n%s", want, files["sluis/sluis.yaml"])
 		}
 	}
 	if !strings.HasPrefix(files["sluis/policy.yaml"], "apiVersion: sluis.truvity.github.io/policy/v2\n") {
@@ -637,8 +623,8 @@ func TestTheDocumentsAreTheLibrarysAndHeldToTheBinarysLoader(t *testing.T) {
 		"an unknown key":               {config: "issuerURL: https://x.example\nissuerURl: x\n"},
 		"another secrets root":         {config: "issuerURL: https://x.example\nsecrets: {source: ssm, root: /sluis/other}\n"},
 		"another policy file":          {config: "issuerURL: https://x.example\npolicy: {file: /var/task/policy.yaml}\n"},
-		"another apiVersion":           {config: "apiVersion: sluis.truvity.github.io/serve/v1\nissuerURL: https://x.example\n"},
-		"a controller with no console": {githubConfig: "interval: 5m\n"},
+		"another apiVersion":           {config: "apiVersion: sluis.truvity.github.io/serve/v2\nissuerURL: https://x.example\n"},
+		"a controller key it shares":   {config: "issuerURL: https://x.example\ncontrollers: {github: {release: x}}\n"},
 		"a policy the loader refuses":  {policy: minimalPolicy + "clients: {c: {kind: public, requires: [x:y:z]}}\n"},
 		"a policy with a misspelt key": {policy: minimalPolicy + "gruops: {}\n"},
 		"another state secret":         {config: "issuerURL: https://x.example\nsigningKey: {kms: {keys: [a], stateSecret: other}}\n"},
@@ -675,12 +661,12 @@ func TestThePolicyComesFromADocumentOrARenderedDirectory(t *testing.T) {
 
 // A package older than the library cannot read the layer it publishes.
 func TestAPackageOlderThanTheLibraryIsRefused(t *testing.T) {
-	old := filepath.Join(t.TempDir(), "sluis-lambda_1.61.2_linux_arm64.zip")
+	old := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
 	if err := os.WriteFile(old, must(os.ReadFile(zipFile(t, nil))), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := buildLambda(t, estate{pkg: old}); err == nil || !strings.Contains(err.Error(), "older than") {
-		t.Errorf("a 1.61 package: %v", err)
+		t.Errorf("a 1.62 package: %v", err)
 	}
 	unnamed := filepath.Join(t.TempDir(), "x.zip")
 	if err := os.WriteFile(unnamed, must(os.ReadFile(zipFile(t, nil))), 0o600); err != nil {
@@ -689,7 +675,7 @@ func TestAPackageOlderThanTheLibraryIsRefused(t *testing.T) {
 	if _, _, err := buildLambda(t, estate{pkg: unnamed}); err == nil || !strings.Contains(err.Error(), "PackageVersion") {
 		t.Errorf("an unnamed package: %v", err)
 	}
-	if _, _, err := buildLambda(t, estate{pkg: unnamed, mutate: func(a *arp.LambdaArgs) { a.PackageVersion = "v1.62.3" }}); err != nil {
+	if _, _, err := buildLambda(t, estate{pkg: unnamed, mutate: func(a *arp.LambdaArgs) { a.PackageVersion = "v1.63.0" }}); err != nil {
 		t.Errorf("an unnamed package with its version: %v", err)
 	}
 }
@@ -703,7 +689,7 @@ func TestThePackageCanBeFetchedFromAnHTTPSURLAndItsDigestIsChecked(t *testing.T)
 	defer srv.Close()
 	// A loopback http URL stands in for the release's https URL.
 	sum := sha256.Sum256(raw)
-	url := srv.URL + "/sluis-lambda_1.62.0_linux_arm64.zip"
+	url := srv.URL + "/sluis-lambda_1.63.0_linux_arm64.zip"
 	rec, _ := mustLambda(t, estate{pkg: url, mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = hex.EncodeToString(sum[:]) }})
 	if got := must(os.ReadFile(packagePath(t, rec.one(t, fnType, "kernel-http")))); !bytes.Equal(got, raw) {
 		t.Error("the fetched package is not the release, byte for byte")
@@ -723,7 +709,7 @@ func TestAPackageWithoutBootstrapIsRefused(t *testing.T) {
 	w, _ := zw.Create("other")
 	_, _ = w.Write([]byte("x"))
 	_ = zw.Close()
-	p := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
+	p := filepath.Join(t.TempDir(), "sluis-lambda_1.63.0_linux_arm64.zip")
 	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -743,22 +729,21 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 		"the library's env": func(a *arp.LambdaArgs) {
 			a.Telemetry = &arp.TelemetryArgs{LayerArn: pulumi.String("x"), Env: map[string]string{"SLUIS_CONFIG": "/x"}}
 		},
-		"no config":         func(a *arp.LambdaArgs) { a.Config = " \n" },
-		"no github config":  func(a *arp.LambdaArgs) { a.GitHubConfig = "" },
-		"no slack config":   func(a *arp.LambdaArgs) { a.SlackConfig = "" },
-		"no queue":          func(a *arp.LambdaArgs) { a.AuditQueueArn = nil },
-		"no storage":        func(a *arp.LambdaArgs) { a.Storage = nil },
-		"no state":          func(a *arp.LambdaArgs) { a.State = nil },
-		"no certificate":    func(a *arp.LambdaArgs) { a.API.CertificateArn = nil },
-		"no truststore":     func(a *arp.LambdaArgs) { a.API.TruststorePEM = "" },
-		"no domain":         func(a *arp.LambdaArgs) { a.API.DomainName = "" },
-		"bad alias":         func(a *arp.LambdaArgs) { a.SigningKeyAlias = "signing" },
-		"bad rs256 alias":   func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = "signing" },
-		"same alias":        func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = arp.DefaultSigningKeyAlias },
-		"bad rate":          func(a *arp.LambdaArgs) { a.Schedule.Rate = "5 minutes" },
-		"bad target":        func(a *arp.LambdaArgs) { a.Schedule.GitHubOrgs = []string{"a b"} },
-		"duplicate":         func(a *arp.LambdaArgs) { a.Schedule.SlackWorkspaces = []string{"T1", "T1"} },
-		"layer without arn": func(a *arp.LambdaArgs) { a.Telemetry = &arp.TelemetryArgs{} },
+		"no config":           func(a *arp.LambdaArgs) { a.Config = " \n" },
+		"a bad function name": func(a *arp.LambdaArgs) { a.FunctionName = "sluis/http" },
+		"no queue":            func(a *arp.LambdaArgs) { a.AuditQueueArn = nil },
+		"no storage":          func(a *arp.LambdaArgs) { a.Storage = nil },
+		"no state":            func(a *arp.LambdaArgs) { a.State = nil },
+		"no certificate":      func(a *arp.LambdaArgs) { a.API.CertificateArn = nil },
+		"no truststore":       func(a *arp.LambdaArgs) { a.API.TruststorePEM = "" },
+		"no domain":           func(a *arp.LambdaArgs) { a.API.DomainName = "" },
+		"bad alias":           func(a *arp.LambdaArgs) { a.SigningKeyAlias = "signing" },
+		"bad rs256 alias":     func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = "signing" },
+		"same alias":          func(a *arp.LambdaArgs) { a.SigningKeyRS256Alias = arp.DefaultSigningKeyAlias },
+		"bad rate":            func(a *arp.LambdaArgs) { a.Schedule.Rate = "5 minutes" },
+		"bad target":          func(a *arp.LambdaArgs) { a.Schedule.GitHubOrgs = []string{"a b"} },
+		"duplicate":           func(a *arp.LambdaArgs) { a.Schedule.SlackWorkspaces = []string{"T1", "T1"} },
+		"layer without arn":   func(a *arp.LambdaArgs) { a.Telemetry = &arp.TelemetryArgs{} },
 	} {
 		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -769,21 +754,19 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 func TestAParameterKeyIsGrantedThroughSSMOnly(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
 	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
-	for _, r := range []string{"http", "github", "slack"} {
-		var n int
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
-			if s["Sid"] != "SluisParameterKey" {
-				continue
-			}
-			n++
-			via := s["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:ViaService"]
-			if strs(s["Resource"])[0] != key || via != "ssm.*.amazonaws.com" {
-				t.Errorf("%s: %v", r, s)
-			}
+	var n int
+	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if s["Sid"] != "SluisParameterKey" {
+			continue
 		}
-		if n != 1 {
-			t.Errorf("%s: %d parameter-key statements", r, n)
+		n++
+		via := s["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:ViaService"]
+		if strs(s["Resource"])[0] != key || via != "ssm.*.amazonaws.com" {
+			t.Errorf("%v", s)
 		}
+	}
+	if n != 1 {
+		t.Errorf("%d parameter-key statements", n)
 	}
 	if !strings.Contains(out["exportReadPolicy"], key) {
 		t.Error("the consumer's policy cannot decrypt the exports")
@@ -827,7 +810,7 @@ func TestAPackageEntryOutsideTheRootIsRefused(t *testing.T) {
 			_, _ = w.Write([]byte("x"))
 		}
 		_ = zw.Close()
-		p := filepath.Join(t.TempDir(), "sluis-lambda_1.62.0_linux_arm64.zip")
+		p := filepath.Join(t.TempDir(), "sluis-lambda_1.63.0_linux_arm64.zip")
 		if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -870,56 +853,51 @@ func TestTheRS256KeyCanBeLeftOut(t *testing.T) {
 	if len(rec.ofType("aws:kms/key:Key")) != 1 || out["signingKeyRS256Arn"] != "" {
 		t.Errorf("keys: %v", rec.names())
 	}
-	if got := rolePolicy(t, rec, "http")["kms:Sign"]; len(got) != 1 {
-		t.Errorf("http signs with %v", got)
+	if got := rolePolicy(t, rec)["kms:Sign"]; len(got) != 1 {
+		t.Errorf("the role signs with %v", got)
 	}
 }
 
-func TestOnlyTheControllersMayAskForAWebIdentityToken(t *testing.T) {
+func TestTheRoleMayAskForAWebIdentityTokenTheControllersReadTheConsoleWith(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
-	for r, want := range map[string]bool{"http": false, "github": true, "slack": true} {
-		g := rolePolicy(t, rec, r)["sts:GetWebIdentityToken"]
-		if (len(g) > 0) != want {
-			t.Errorf("%s: %v", r, g)
-		}
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
-			if s["Sid"] == "SluisWebIdentity" && s["Condition"] != nil {
-				t.Errorf("%s: a condition without an audience: %v", r, s)
-			}
+	if g := rolePolicy(t, rec)["sts:GetWebIdentityToken"]; len(g) == 0 {
+		t.Error("the role may not ask STS for a web identity token")
+	}
+	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if s["Sid"] == "SluisWebIdentity" && s["Condition"] != nil {
+			t.Errorf("a condition without an audience: %v", s)
 		}
 	}
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://access.example.test" }})
-	for _, r := range []string{"github", "slack"} {
-		var n int
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
-			if s["Sid"] != "SluisWebIdentity" {
-				continue
-			}
-			n++
-			c := s["Condition"].(map[string]any)["ForAllValues:StringEquals"].(map[string]any)
-			if !reflect.DeepEqual(strs(c["sts:IdentityTokenAudience"]), []string{"https://access.example.test"}) {
-				t.Errorf("%s: %v", r, c)
-			}
+	var n int
+	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if s["Sid"] != "SluisWebIdentity" {
+			continue
 		}
-		if n != 1 {
-			t.Errorf("%s: %d statements", r, n)
+		n++
+		c := s["Condition"].(map[string]any)["ForAllValues:StringEquals"].(map[string]any)
+		if !reflect.DeepEqual(strs(c["sts:IdentityTokenAudience"]), []string{"https://access.example.test"}) {
+			t.Errorf("%v", c)
 		}
+	}
+	if n != 1 {
+		t.Errorf("%d statements", n)
 	}
 }
 
 func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
-		a.Exports = arp.ExportsArgs{Function: "github", Rate: "rate(1 hour)"}
+		a.Exports = arp.ExportsArgs{Rate: "rate(1 hour)"}
 	}})
 	s := rec.one(t, "aws:scheduler/schedule:Schedule", "kernel-exports")
 	tgt := prop(s, "target").ObjectValue()
-	if prop(s, "scheduleExpression").StringValue() != "rate(1 hour)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-github") ||
+	if prop(s, "scheduleExpression").StringValue() != "rate(1 hour)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis") ||
 		tgt["input"].StringValue() != `{"kind":"exports"}` {
 		t.Errorf("exports schedule: %v", s.Inputs)
 	}
 	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
-	// The http function is invoked by the directory refresh, not by the exports.
-	if len(sp["lambda:InvokeFunction"]) != 3 {
+	// The scheduler invokes the one function and nothing else.
+	if len(sp["lambda:InvokeFunction"]) != 1 {
 		t.Errorf("scheduler grants %v", sp)
 	}
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = true }})
@@ -927,8 +905,7 @@ func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 		t.Error("a disabled exports schedule was made")
 	}
 	for name, mutate := range map[string]func(*arp.LambdaArgs){
-		"bad function": func(a *arp.LambdaArgs) { a.Exports.Function = "nobody" },
-		"bad rate":     func(a *arp.LambdaArgs) { a.Exports.Rate = "hourly" },
+		"bad rate": func(a *arp.LambdaArgs) { a.Exports.Rate = "hourly" },
 	} {
 		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -940,27 +917,20 @@ func TestTheDirectoryRefreshScheduleIsOnByDefaultAndConfigurable(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	s := rec.one(t, "aws:scheduler/schedule:Schedule", "kernel-directory-refresh")
 	tgt := prop(s, "target").ObjectValue()
-	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http") ||
+	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis") ||
 		tgt["input"].StringValue() != `{"kind":"refresh"}` {
 		t.Errorf("directory refresh schedule: %v", s.Inputs)
 	}
 	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
-	if !slices.ContainsFunc(sp["lambda:InvokeFunction"], func(a string) bool { return strings.HasSuffix(a, ":function:sluis-http") }) {
-		t.Errorf("the scheduler cannot invoke the http function: %v", sp)
+	if !slices.ContainsFunc(sp["lambda:InvokeFunction"], func(a string) bool { return strings.HasSuffix(a, ":function:sluis") }) {
+		t.Errorf("the scheduler cannot invoke the function: %v", sp)
 	}
 
-	// Left out, with the exports elsewhere, the scheduler has no reason to
-	// invoke http at all.
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		a.DirectoryRefresh = arp.DirectoryRefreshArgs{Disabled: true}
-		a.Exports.Function = "github"
 	}})
 	if rec.has("aws:scheduler/schedule:Schedule", "kernel-directory-refresh") {
 		t.Error("a disabled directory refresh schedule was made")
-	}
-	sp = grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
-	if len(sp["lambda:InvokeFunction"]) != 2 {
-		t.Errorf("scheduler grants %v", sp)
 	}
 	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.DirectoryRefresh.Rate = "hourly" }}); err == nil {
 		t.Error("a bad rate was accepted")
@@ -1002,17 +972,15 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 		t.Errorf("outputs: %v", out)
 	}
 
-	// Only http may use it, and never to sign remotely.
+	// The one role may use it, and never to sign remotely.
 	wantKey := out["wrappedSigningKeyArn"]
-	for _, r := range []string{"http", "github", "slack"} {
-		g := rolePolicy(t, rec, r)
-		if len(g["kms:Sign"]) != 0 || len(g["kms:GetPublicKey"]) != 0 {
-			t.Errorf("%s signs remotely: %v", r, g)
-		}
-		for _, a := range []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"} {
-			if got := g[a]; (r == "http") != (len(got) > 0) || (r == "http" && !reflect.DeepEqual(got, []string{wantKey})) {
-				t.Errorf("%s: %s on %v", r, a, got)
-			}
+	g := rolePolicy(t, rec)
+	if len(g["kms:Sign"]) != 0 || len(g["kms:GetPublicKey"]) != 0 {
+		t.Errorf("the role signs remotely: %v", g)
+	}
+	for _, a := range []string{"kms:GenerateDataKeyPairWithoutPlaintext", "kms:Decrypt"} {
+		if got := g[a]; !reflect.DeepEqual(got, []string{wantKey}) {
+			t.Errorf("%s on %v", a, got)
 		}
 	}
 	found := false
@@ -1032,7 +1000,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 
 	// The key policy holds the role to the same conditions, whatever else is
 	// attached to it, and gives it nothing else on this key.
-	roleArn := arnp + "iam::" + account + ":role/sluis-http"
+	roleArn := arnp + "iam::" + account + ":role/sluis"
 	byID := map[string]map[string]any{}
 	for _, st := range statements(t, prop(k, "policy").StringValue()) {
 		byID[st["Sid"].(string)] = st
@@ -1070,20 +1038,10 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 		}) {
 		t.Errorf("the reserved-context denial: %v", res)
 	}
-	// The github and slack roles may not write the key ring.
-	for _, r := range []string{"http", "github", "slack"} {
-		var denied map[string]any
-		for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
-			if st["Sid"] == "SluisNoKeyringWrites" {
-				denied = st
-			}
-		}
-		if (r == "http") != (denied == nil) {
-			t.Errorf("%s: keyring-write denial %v", r, denied)
-		}
-		if denied != nil && (denied["Effect"] != "Deny" || !reflect.DeepEqual(denied["Condition"], map[string]any{
-			"ForAnyValue:StringEquals": map[string]any{"dynamodb:LeadingKeys": []any{"keyring", "keyring-index", "keyring-retired"}}})) {
-			t.Errorf("%s: %v", r, denied)
+	// The one role signs, so it is not denied the key ring.
+	for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if st["Sid"] == "SluisNoKeyringWrites" {
+			t.Errorf("the signing role is denied the key ring: %v", st)
 		}
 	}
 	if len(byID) != 5 {
@@ -1102,11 +1060,8 @@ func TestWrappedSigningWithAnExistingKeyCreatesNoKey(t *testing.T) {
 	if out["wrappedSigningKeyArn"] != app || out["wrappedSigningKeyAlias"] != "" {
 		t.Errorf("outputs: %v", out)
 	}
-	if got := rolePolicy(t, rec, "http")["kms:Decrypt"]; !reflect.DeepEqual(got, []string{app}) {
-		t.Errorf("http decrypts with %v", got)
-	}
-	if got := rolePolicy(t, rec, "slack")["kms:Decrypt"]; len(got) != 0 {
-		t.Errorf("slack decrypts with %v", got)
+	if got := rolePolicy(t, rec)["kms:Decrypt"]; !reflect.DeepEqual(got, []string{app}) {
+		t.Errorf("the role decrypts with %v", got)
 	}
 }
 
@@ -1160,7 +1115,7 @@ func TestTheKeyPolicyNamesEverySigningRole(t *testing.T) {
 	for _, st := range statements(t, prop(k, "policy").StringValue()) {
 		if st["Sid"] == "SluisSigningContextReserved" {
 			got := st["Condition"].(map[string]any)["ArnNotEquals"]
-			if !reflect.DeepEqual(got, map[string]any{"aws:PrincipalArn": []any{arnp + "iam::" + account + ":role/sluis-http", serve}}) {
+			if !reflect.DeepEqual(got, map[string]any{"aws:PrincipalArn": []any{arnp + "iam::" + account + ":role/sluis", serve}}) {
 				t.Errorf("signing roles: %v", got)
 			}
 			return
@@ -1204,7 +1159,7 @@ func TestThePodIdentityOtherRolesMayNotWriteTheKeyRing(t *testing.T) {
 }
 
 func TestTheSharedKeyStatementsAreTheWholeOfTheKeyPolicyBeyondTheRootStatement(t *testing.T) {
-	roles := []string{arnp + "iam::" + account + ":role/sluis-http"}
+	roles := []string{arnp + "iam::" + account + ":role/sluis"}
 	st := arp.WrappedKeyPolicyStatements(roles)
 	var sids []string
 	for _, s := range st {
@@ -1229,19 +1184,6 @@ func TestTheSharedKeyStatementsAreTheWholeOfTheKeyPolicyBeyondTheRootStatement(t
 	for _, s := range st[1:] {
 		if s["Condition"].(map[string]any)["ArnEquals"] == nil {
 			t.Errorf("%v reaches principals that are not signing roles", s["Sid"])
-		}
-	}
-}
-
-func TestTheControllersNeverWriteTheKeyRingWhateverTheSigning(t *testing.T) {
-	rec, _ := mustLambda(t, estate{}) // remote signing
-	for _, r := range []string{"http", "github", "slack"} {
-		has := false
-		for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-"+r+"-policy"), "policy").StringValue()) {
-			has = has || st["Sid"] == "SluisNoKeyringWrites"
-		}
-		if has != (r != "http") {
-			t.Errorf("%s: keyring-write denial %v", r, has)
 		}
 	}
 }
@@ -1282,24 +1224,19 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		t.Errorf("output: %q", out["recoveryPasswordParameter"])
 	}
 	files := layerFiles(t, rec)
-	if !strings.Contains(files["sluis/http.yaml"], "passwordSecret: recovery/password") {
-		t.Errorf("the http document does not name the password: %s", files["sluis/http.yaml"])
-	}
-	for _, role := range []string{"github", "slack"} {
-		if strings.Contains(files["sluis/"+role+".yaml"], "recovery") {
-			t.Errorf("%s was given the recovery password", role)
-		}
+	if !strings.Contains(files["sluis/sluis.yaml"], "passwordSecret: recovery/password") {
+		t.Errorf("the service document does not name the password: %s", files["sluis/sluis.yaml"])
 	}
 }
 
 // The toggle is a configuration key, the library owns the secret's name, and
 // turning recovery off keeps the parameter.
-func TestRecoveryEnabledIsWrittenIntoTheHTTPDocument(t *testing.T) {
+func TestRecoveryEnabledIsWrittenIntoTheServiceDocument(t *testing.T) {
 	off := false
 	on := true
 	configOf := func(e estate) string {
 		rec, _ := mustLambda(t, e)
-		return layerFiles(t, rec)["sluis/http.yaml"]
+		return layerFiles(t, rec)["sluis/sluis.yaml"]
 	}
 	got := configOf(estate{config: "issuerURL: https://x.example\n"})
 	if strings.Contains(got, "enabled") || !strings.Contains(got, "passwordSecret: recovery/password") {
@@ -1329,128 +1266,82 @@ func TestRecoveryEnabledIsWrittenIntoTheHTTPDocument(t *testing.T) {
 	}
 }
 
-// A leaked controller role must not read, replace or delete the operator's
-// config (the recovery password, the state secret, the OAuth client, the declared
-// clients); http reads config/* and writes only credentials/* and exports.
-func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *testing.T) {
+// There is one role, with the credentials and exports it writes and the config
+// it reads and never writes (config/* is the operator's and the stack's); it is
+// denied nothing, since a deny would bind the signing, too.
+func TestTheOneRoleReadsConfigAndWritesOnlyCredentialsAndExports(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
 	cfg := []string{ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*"}
 	creds := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
 	export := []string{ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
-	actions := []string{"ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter"}
-	denied := func(role string) map[string][]string {
-		out := map[string][]string{}
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
-			if s["Effect"] != "Deny" {
-				continue
-			}
-			for _, a := range strs(s["Action"]) {
-				out[a] = append(out[a], strs(s["Resource"])...)
-			}
-		}
-		return out
-	}
 	writes := append(append([]string{}, creds...), export...)
-	for _, role := range []string{"github", "slack"} {
-		d := denied(role)
-		for _, a := range actions {
-			if !reflect.DeepEqual(d[a], cfg) {
-				t.Errorf("%s: %s is denied on %v, want %v", role, a, d[a], cfg)
-			}
-		}
-		g := rolePolicy(t, rec, role)
-		for _, a := range actions {
-			want := writes
-			if strings.HasPrefix(a, "ssm:Get") {
-				// The exports run in http: a controller reads none of export/.
-				want = creds
-			}
-			if !reflect.DeepEqual(g[a], want) {
-				t.Errorf("%s: %s on %v, want %v", role, a, g[a], want)
-			}
-		}
-	}
-	h := rolePolicy(t, rec, "http")
-	if len(denied("http")) != 0 {
-		t.Errorf("http is denied something: %v", denied("http"))
-	}
+	h := rolePolicy(t, rec)
 	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
-		t.Errorf("http reads %v, want credentials, exports and config", got)
+		t.Errorf("reads %v, want credentials, exports and config", got)
 	}
 	for _, a := range []string{"ssm:PutParameter", "ssm:DeleteParameter"} {
 		if !reflect.DeepEqual(h[a], writes) {
-			t.Errorf("http %s on %v, want %v", a, h[a], writes)
+			t.Errorf("%s on %v, want %v", a, h[a], writes)
 		}
 	}
 }
 
-// A path grant covers every level below it: a controller allowed
-// GetParametersByPath on <root>/private (or any parent of config/) would read the
-// operator's config/* whatever the Deny on config/* says. No controller Allow
-// may name a parent of <root>/private/config, and none names /sluis.
-func TestNoControllerMayReadAParentOfTheConfigPrefix(t *testing.T) {
-	for _, exportsIn := range []string{"http", "github"} {
-		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Function = exportsIn }})
+// A path grant covers every level below it: no Allow may name a parent of the
+// installation's root or reach outside it, none is a wildcard inside an SSM
+// path, and no ssm action is on every resource. Only a function that runs the
+// exports reads export/.
+func TestNoGrantReachesOutsideTheInstallationsRoot(t *testing.T) {
+	for _, exportsDisabled := range []bool{false, true} {
+		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = exportsDisabled }})
 		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-		config := "/sluis/kernel/private/config"
-		for _, role := range []string{"github", "slack", "http"} {
-			for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
-				actions := strs(s["Action"])
-				ssmAction := slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, "ssm:") })
-				for _, res := range strs(s["Resource"]) {
-					if ssmAction && res == "*" {
-						t.Errorf("%s: an ssm action on every resource: %v", role, s)
-					}
-					path, ok := strings.CutPrefix(res, ssmArn)
-					if !ok {
-						continue
-					}
-					if strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
-						t.Errorf("%s: a wildcard inside an SSM resource: %s", role, res)
-					}
-					if s["Effect"] != "Allow" {
-						continue
-					}
-					path = strings.TrimSuffix(path, "/*")
-					if !strings.HasPrefix(path, "/sluis/kernel/") {
-						t.Errorf("%s: a grant outside the installation's root: %s", role, res)
-					}
-					if role != "http" && (strings.HasPrefix(config, path+"/") || path == config || strings.HasPrefix(path, config+"/")) {
-						t.Errorf("%s may reach config/* through %s (%v)", role, res, s["Action"])
-					}
+		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+			actions := strs(s["Action"])
+			ssmAction := slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, "ssm:") })
+			for _, res := range strs(s["Resource"]) {
+				if ssmAction && res == "*" {
+					t.Errorf("an ssm action on every resource: %v", s)
+				}
+				path, ok := strings.CutPrefix(res, ssmArn)
+				if !ok {
+					continue
+				}
+				// The only wildcard is the trailing /*.
+				if strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
+					t.Errorf("a wildcard inside an SSM resource: %s", res)
+				}
+				if !strings.HasPrefix(strings.TrimSuffix(path, "/*"), "/sluis/kernel/") {
+					t.Errorf("a grant outside the installation's root /sluis/kernel/: %s", res)
 				}
 			}
 		}
-		// Only the role that runs the exports reads export/.
-		for _, role := range []string{"http", "github", "slack"} {
-			reads := slices.ContainsFunc(rolePolicy(t, rec, role)["ssm:GetParameter"], func(r string) bool { return strings.Contains(r, "/export") })
-			if reads != (role == exportsIn) {
-				t.Errorf("exports in %s: %s reads export/ = %v", exportsIn, role, reads)
-			}
+		reads := slices.ContainsFunc(rolePolicy(t, rec)["ssm:GetParameter"], func(r string) bool { return strings.Contains(r, "/export") })
+		if reads == exportsDisabled {
+			t.Errorf("exports disabled=%v and the role reads export/ = %v", exportsDisabled, reads)
 		}
 	}
 }
 
 // With a customer-managed parameter key, each role may use it only for the
 // parameters under the prefixes it reads or writes.
-func TestTheParameterKeyIsHeldToEachRolesPrefixes(t *testing.T) {
+func TestTheParameterKeyIsHeldToTheRolesPrefixes(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
 	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	for role, want := range map[string][]string{
-		"http":   {ssmArn + "/sluis/kernel/private/credentials/*", ssmArn + "/sluis/kernel/export/*", ssmArn + "/sluis/kernel/private/config/*"},
-		"github": {ssmArn + "/sluis/kernel/private/credentials/*", ssmArn + "/sluis/kernel/export/*"},
-	} {
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
-			if s["Sid"] != "SluisParameterKey" {
-				continue
-			}
-			got := strs(s["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"])
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("%s: the key's parameters %v, want %v", role, got, want)
-			}
+	want := []string{ssmArn + "/sluis/kernel/private/credentials/*", ssmArn + "/sluis/kernel/export/*", ssmArn + "/sluis/kernel/private/config/*"}
+	n := 0
+	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		if s["Sid"] != "SluisParameterKey" {
+			continue
 		}
+		n++
+		got := strs(s["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"])
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("the key's parameters %v, want %v", got, want)
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d parameter-key statements", n)
 	}
 	if !strings.Contains(out["exportReadPolicy"], "/sluis/kernel/export/*") || strings.Contains(out["exportReadPolicy"], "private") {
 		t.Errorf("the consumer's key condition: %s", out["exportReadPolicy"])
@@ -1465,10 +1356,8 @@ func TestWhatTheLibraryRefusesToPublish(t *testing.T) {
 	for name, e := range map[string]estate{
 		"a secrets endpoint":  {config: "issuerURL: https://x.example\nsecrets: {endpoint: 'https://evil.example'}\n"},
 		"a dynamodb endpoint": {config: "issuerURL: https://x.example\nports: {adapter: dynamodb, dynamodb: {table: t, endpoint: 'https://evil.example'}}\n"},
-		"a controller's": {githubConfig: "consoleURL: https://x.example/console\n" +
-			"ports: {adapter: dynamodb, dynamodb: {table: t, endpoint: 'https://e.example'}}\n"},
-		"instance private": {mutate: func(a *arp.LambdaArgs) { a.Instance = "private" }},
-		"instance export":  {mutate: func(a *arp.LambdaArgs) { a.Instance = "export" }},
+		"instance private":    {mutate: func(a *arp.LambdaArgs) { a.Instance = "private" }},
+		"instance export":     {mutate: func(a *arp.LambdaArgs) { a.Instance = "export" }},
 		"kms beside wrapped": {config: "issuerURL: https://x.example\nsigningKey: {kms: {keys: [alias/a]}}\n",
 			mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }},
 	} {
@@ -1509,5 +1398,62 @@ func TestTheCodeIsTheVerifiedCopyNotTheCallersFile(t *testing.T) {
 	}
 	if fi, err := os.Stat(code); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("the copy's mode: %v %v", fi, err)
+	}
+}
+
+// The function is named for the installation (`sluis`), and the resources keep
+// the logical names the http function had, so that FunctionName `<prefix>-http`
+// keeps the existing function, role and log group in place: nothing is
+// replaced. The old github and slack resources are not declared.
+func TestTheFunctionNameDecidesTheNamesAndTheLogicalNamesStay(t *testing.T) {
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.FunctionName = "sluis-http" }})
+	if got := prop(rec.one(t, fnType, "kernel-http"), "name").StringValue(); got != "sluis-http" {
+		t.Errorf("function name %q", got)
+	}
+	if got := prop(rec.one(t, "aws:iam/role:Role", "kernel-http-role"), "name").StringValue(); got != "sluis-http" {
+		t.Errorf("role name %q", got)
+	}
+	if got := prop(rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "kernel-http"), "name").StringValue(); got != "/aws/lambda/sluis-http" {
+		t.Errorf("log group %q", got)
+	}
+	if got := grants(statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()))["lambda:InvokeFunction"]; len(got) != 1 ||
+		!strings.HasSuffix(got[0], ":function:sluis-http") {
+		t.Errorf("the function may invoke %v", got)
+	}
+	if out["functionName"] != "sluis-http" {
+		t.Errorf("output: %q", out["functionName"])
+	}
+	// Schedules keep their prefix names, whatever the function is called.
+	rec, _ = mustLambda(t, estate{orgs: []string{"acme"}, workspaces: []string{"T1"}, mutate: func(a *arp.LambdaArgs) { a.FunctionName = "sluis-http" }})
+	got := schedules(t, rec)
+	if len(got) != 4 || got["sluis-github-acme"] == "" || got["sluis-slack-T1"] == "" {
+		t.Errorf("schedules: %v", got)
+	}
+}
+
+// A run-now invokes this very function for both kinds of target: the library
+// names it, and refuses another.
+func TestTheInvokeTriggerNamesTheOneFunction(t *testing.T) {
+	trigger := "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke%s}}\n"
+	rec, _ := mustLambda(t, estate{config: strings.Replace(trigger, "%s", "", 1)})
+	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
+	if !strings.Contains(doc, "github: sluis\n") || !strings.Contains(doc, "slack: sluis\n") {
+		t.Errorf("the trigger does not name the function:\n%s", doc)
+	}
+	if _, _, err := buildLambda(t, estate{config: strings.Replace(trigger, "%s", ", settings: {github: sluis-github}", 1)}); err == nil {
+		t.Error("a trigger naming another function was accepted")
+	}
+}
+
+// A tick for each target of both kinds reaches the one function.
+func TestEverySchedulePointsAtTheOneFunction(t *testing.T) {
+	rec, out := mustLambda(t, estate{orgs: []string{"acme", "github:links"}, workspaces: []string{"T1"}})
+	for name, v := range schedules(t, rec) {
+		if !strings.HasSuffix(v, " "+out["functionArn"]) && !strings.HasSuffix(v, ":function:sluis") {
+			t.Errorf("%s: %s", name, v)
+		}
+	}
+	if n := len(rec.ofType("aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig")); n != 1 {
+		t.Errorf("%d invoke configs, want one: a pass that failed is the next tick's", n)
 	}
 }

@@ -115,7 +115,9 @@ var retiredSlackRoster = map[string]string{
 // configuration layer and the `secrets` source, retired for every binary: a
 // function that still sets one is deployed by an older Pulumi library.
 var retiredLambda = map[string]string{
-	"SLUIS_CONFIG_FILE": "SLUIS_CONFIG, which names the service document (on Lambda, /opt/sluis/<role>.yaml in the configuration layer): " +
+	"SLUIS_ROLE": "nothing: there is ONE function, which serves the issuer and the console and runs the controllers' passes; " +
+		"deploy with the v1.63 Pulumi library",
+	"SLUIS_CONFIG_FILE": "SLUIS_CONFIG, which names the service document (on Lambda, /opt/sluis/sluis.yaml in the configuration layer): " +
 		"deploy with the v1.62 Pulumi library",
 	"SLUIS_SECRET_FILES": "the document's `secrets` source (ssm, root /sluis/<instance>) and the names its keys give " +
 		"(`signingKey.kms.stateSecret`, `recovery.passwordSecret`, ...): deploy with the v1.62 Pulumi library",
