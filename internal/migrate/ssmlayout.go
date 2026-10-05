@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	"github.com/truvity/sluis/internal/secrets"
 )
 
 // The SSM layouts the configuration secrets have had (docs/decisions/0036).
@@ -23,13 +25,15 @@ import (
 type SSMAPI interface {
 	GetParametersByPath(ctx context.Context, in *awsssm.GetParametersByPathInput, opts ...func(*awsssm.Options)) (*awsssm.GetParametersByPathOutput, error)
 	PutParameter(ctx context.Context, in *awsssm.PutParameterInput, opts ...func(*awsssm.Options)) (*awsssm.PutParameterOutput, error)
+	DescribeParameters(ctx context.Context, in *awsssm.DescribeParametersInput, opts ...func(*awsssm.Options)) (*awsssm.DescribeParametersOutput, error)
 }
 
 // SSMLayoutOptions is one run of the configuration secrets' move to layout v3.
 type SSMLayoutOptions struct {
 	// From is the v2 root (`/sluis`), To the v3 one (`/sluis/<instance>`).
 	From, To string
-	// KMSKeyID encrypts what is written; empty is the AWS-managed key.
+	// KMSKeyID encrypts what is written. Empty keeps each parameter's own key:
+	// a customer key is never silently replaced by the AWS-managed one.
 	KMSKeyID string
 	// DryRun plans and writes nothing; Overwrite replaces a parameter that
 	// is already there with a different value.
@@ -38,6 +42,12 @@ type SSMLayoutOptions struct {
 
 // SSMLayoutReport is what a run did, by v3 name. It holds names, never a value.
 type SSMLayoutReport struct {
+	// Account and Region are where it ran, as STS and the SDK say: what an
+	// operator checks before trusting a dry run.
+	Account   string   `json:"account,omitempty"`
+	Region    string   `json:"region,omitempty"`
+	From      string   `json:"from"`
+	To        string   `json:"to"`
 	Copied    []string `json:"copied"`
 	Unchanged []string `json:"unchanged"`
 	Conflicts []string `json:"conflicts,omitempty"`
@@ -68,7 +78,7 @@ const configDir = "/private/config/"
 // or, with Overwrite, different; the source is left as it is, to be deleted by
 // the operator once the installation runs on v3.
 func MoveSSMLayout(ctx context.Context, api SSMAPI, o SSMLayoutOptions) (SSMLayoutReport, error) {
-	report := SSMLayoutReport{Copied: []string{}, Unchanged: []string{}, DryRun: o.DryRun}
+	report := SSMLayoutReport{From: o.From, To: o.To, Copied: []string{}, Unchanged: []string{}, DryRun: o.DryRun}
 	for _, root := range []string{o.From, o.To} {
 		if !strings.HasPrefix(root, "/") || strings.HasSuffix(root, "/") {
 			return report, fmt.Errorf("ssm layout: root %q must begin with a slash and not end with one", root)
@@ -77,9 +87,18 @@ func MoveSSMLayout(ctx context.Context, api SSMAPI, o SSMLayoutOptions) (SSMLayo
 	if o.From == o.To {
 		return report, errors.New("ssm layout: the v2 and the v3 root are the same")
 	}
+	if err := secrets.CheckRoot(o.To); err != nil {
+		return report, fmt.Errorf("ssm layout: --to-root: %w", err)
+	}
 	source, err := readTree(ctx, api, o.From+configDir)
 	if err != nil {
 		return report, err
+	}
+	keys := map[string]string{}
+	if o.KMSKeyID == "" {
+		if keys, err = readKeys(ctx, api, o.From+configDir); err != nil {
+			return report, err
+		}
 	}
 	dest, err := readTree(ctx, api, o.To+configDir)
 	if err != nil {
@@ -106,13 +125,20 @@ func MoveSSMLayout(ctx context.Context, api SSMAPI, o SSMLayoutOptions) (SSMLayo
 		if o.DryRun {
 			continue
 		}
+		_, existed := dest[v3]
 		in := &awsssm.PutParameterInput{
 			Name: aws.String(o.To + configDir + v3), Value: aws.String(source[name]),
-			Type: types.ParameterTypeSecureString, Overwrite: aws.Bool(true),
+			// Overwrite only what was there when read, and only when asked:
+			// otherwise the write is a create, which SSM refuses atomically if
+			// somebody wrote the parameter since.
+			Type: types.ParameterTypeSecureString, Overwrite: aws.Bool(o.Overwrite && existed),
 			Tier: types.ParameterTierIntelligentTiering,
 		}
-		if o.KMSKeyID != "" {
+		switch key := keys[name]; {
+		case o.KMSKeyID != "":
 			in.KeyId = aws.String(o.KMSKeyID)
+		case key != "" && key != "alias/aws/ssm":
+			in.KeyId = aws.String(key)
 		}
 		if _, err = api.PutParameter(ctx, in); err != nil {
 			return report, fmt.Errorf("ssm layout: writing %s: %w", v3, err)
@@ -123,6 +149,33 @@ func MoveSSMLayout(ctx context.Context, api SSMAPI, o SSMLayoutOptions) (SSMLayo
 			len(report.Conflicts), strings.Join(report.Conflicts, ", "))
 	}
 	return report, nil
+}
+
+// readKeys is the KMS key of every parameter under prefix, by its name below it.
+func readKeys(ctx context.Context, api SSMAPI, prefix string) (map[string]string, error) {
+	out := map[string]string{}
+	var token *string
+	for {
+		page, err := api.DescribeParameters(ctx, &awsssm.DescribeParametersInput{
+			ParameterFilters: []types.ParameterStringFilter{{
+				Key: aws.String("Path"), Option: aws.String("Recursive"), Values: []string{strings.TrimSuffix(prefix, "/")},
+			}},
+			NextToken: token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("ssm layout: describing %s: %w", prefix, err)
+		}
+		for i := range page.Parameters {
+			p := &page.Parameters[i]
+			if name, ok := strings.CutPrefix(aws.ToString(p.Name), prefix); ok {
+				out[name] = aws.ToString(p.KeyId)
+			}
+		}
+		if page.NextToken == nil || *page.NextToken == "" {
+			return out, nil
+		}
+		token = page.NextToken
+	}
 }
 
 // readTree reads every parameter under prefix, decrypted, by its name below it.

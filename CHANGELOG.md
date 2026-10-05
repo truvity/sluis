@@ -102,6 +102,9 @@
   `config.secrets` must be `{source: file, root: /var/run/sluis/secrets}`
   (the default); the `client-secrets` volume and `config.clientSecretsDir`
   are gone. `secretEnv` stays, for `secrets.source: env`.
+  A confidential client's Secret key is still `policy.clients.<id>.secretKey`
+  (default `client-secret`), projected as `clients/<id>/secret` and left out
+  of the rendered policy document.
   `config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`
   (the controllers': `/var/run/github-roster/policy/policy.yaml`,
   `/var/run/slack-roster/policy/policy.yaml`).
@@ -111,7 +114,6 @@
 |---|---|
 | `access`, `overlay` | render the access document first, `sluisctl policy render <dir>`, and pass the result as `policy` |
 | `directory.workspaces` (`backend`, `admin`, `secretName`, `secretKey`, `id`, `serve`, `syncGroups`) | `config.directory.workspaces` (`backend`, `admin`, `id`, `serve`, `syncGroups`, `keySecret: directory/<id>/key`), the key projected with a `secrets` entry `{name: directory/<id>/key, secretName, key}` |
-| `policy.clients.<id>.secretKey` | none: the chart projects the key `client-secret` of the Secret `policy.clients.<id>.secret` names, as `clients/<id>/secret` |
 | `config.clientSecretsDir` | none: `config.secrets` (`{source: file, root: /var/run/sluis/secrets}`, the default) |
 | `config.exchange.clustersFile`, `.awsFile` | `exchange.clusters`, `exchange.aws` (rendered into the policy document), or `policy.exchange` |
 | `config.github.*`, `config.slack.catalogueFile`, `config.exports` | `policy.exchange.github.owners`, `policy.apps.github.runnerTiers`, `githubApps.catalogue` / `slackApps` (or `policy.apps`), `policy.exports` |

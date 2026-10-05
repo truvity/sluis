@@ -1026,7 +1026,7 @@ spec:
               - secret:
                   name: reports-client
                   items:
-                    - key: client-secret
+                    - key: oidc-secret
                       path: clients/reports/secret
         - name: secret-sign-in-client
           secret:

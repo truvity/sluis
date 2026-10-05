@@ -60,11 +60,11 @@ var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A
 // and '-', separated by '/', none empty and none a dot or two.
 func Check(name string) error {
 	if !namePattern.MatchString(name) {
-		return fmt.Errorf("secrets: %q is not a secret name: segments of letters, digits, '.', '_' and '-', separated by '/'", name)
+		return errors.New("secrets: not a secret name: segments of letters, digits, '.', '_' and '-', separated by '/'")
 	}
 	for _, seg := range strings.Split(name, "/") {
 		if seg == "." || seg == ".." {
-			return fmt.Errorf("secrets: %q is not a secret name", name)
+			return errors.New("secrets: not a secret name: no segment may be a dot or two")
 		}
 	}
 	return nil
@@ -83,6 +83,24 @@ func ProviderClientID(provider string) string {
 // ProviderClientSecret is a Google OAuth client's secret.
 func ProviderClientSecret(provider string) string {
 	return "providers/google/" + provider + "/client-secret"
+}
+
+// CheckEnvNames refuses names two of which the env source would read from one
+// variable (`a/b` and `a-b` are both SLUIS_SECRET_A_B): one would silently be
+// the other's secret.
+func CheckEnvNames(names []string) error {
+	seen := map[string]string{}
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		v := EnvName(n)
+		if other, clash := seen[v]; clash && other != n {
+			return fmt.Errorf("secrets: %s and %s are both read from %s: rename one, or use another source", other, n, v)
+		}
+		seen[v] = n
+	}
+	return nil
 }
 
 // EnvName is the variable the env source reads a name from.

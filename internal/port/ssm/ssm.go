@@ -156,6 +156,13 @@ func rootOf(root string) (string, error) {
 	if err := port.CheckSecretPath(strings.TrimPrefix(root, "/")); err != nil {
 		return "", fmt.Errorf("ssm: root %q: %w", root, err)
 	}
+	// An instance named private or export would nest its tree under another's
+	// (or layout v2's /sluis/private, /sluis/export).
+	for _, seg := range strings.Split(strings.Trim(root, "/"), "/") {
+		if seg == privateDir || seg == exportDir {
+			return "", fmt.Errorf("ssm: root %q has a segment %q: an instance may not be named private or export", root, seg)
+		}
+	}
 	return root, nil
 }
 
