@@ -268,22 +268,31 @@ const (
 	sidWebID          = "SluisWebIdentity"
 )
 
-// SSM layout (decision D1a): `private` is sluis's alone, `export` is what
+// SSM layout v3 (docs/decisions/0036): one root per installation,
+// `/sluis/<instance>`; under it `private` is sluis's alone and `export` is what
 // consumers read.
-const (
-	// PrivateParameterPrefix is where sluis keeps its own secrets.
-	PrivateParameterPrefix = "/sluis/private"
-	// ConfigParameterPrefix is the operator's and the stack's: the secrets a
-	// person seeds (`config/oauth/client-id`, `config/clients/<id>`) and the one
-	// Pulumi generates (`config/issuer/state-secret`). sluis only reads them; its
-	// own writes are under `credentials/` (docs/reference/storage-layout.md).
-	ConfigParameterPrefix = PrivateParameterPrefix + "/config"
-	// CredentialsParameterPrefix is where sluis writes the credentials of its
-	// records, by kind.
-	CredentialsParameterPrefix = PrivateParameterPrefix + "/credentials"
-	// ExportParameterPrefix is where sluis writes what consumers read.
-	ExportParameterPrefix = "/sluis/export"
-)
+
+// PrivateParameterPrefix is where sluis keeps its own secrets.
+func PrivateParameterPrefix(instance string) string { return SSMRoot(instance) + "/private" }
+
+// ConfigParameterPrefix is the operator's and the stack's: the secrets a person
+// seeds (`config/providers/google/<id>/client-secret`,
+// `config/clients/<id>/secret`) and the ones Pulumi generates
+// (`config/issuer/state-secret`, `config/recovery/password`). sluis only reads
+// them, by the names its http document gives; its own writes are under
+// `credentials/` (docs/reference/storage-layout.md).
+func ConfigParameterPrefix(instance string) string {
+	return PrivateParameterPrefix(instance) + "/config"
+}
+
+// CredentialsParameterPrefix is where sluis writes the credentials of its
+// records, by kind.
+func CredentialsParameterPrefix(instance string) string {
+	return PrivateParameterPrefix(instance) + "/credentials"
+}
+
+// ExportParameterPrefix is where sluis writes what consumers read.
+func ExportParameterPrefix(instance string) string { return SSMRoot(instance) + "/export" }
 
 // parameterArns is the ARNs a read of a path names: the path itself, which
 // GetParametersByPath is authorised against, and everything under it.
@@ -321,53 +330,45 @@ type functionPolicyIn struct {
 	webIdentity        bool
 	webIdentityAud     string
 	parameterKeyArn    string
+	instance           string
 	logGroupArn        string
 	invokeFunctionArns []string
 }
 
-// privateStatements is a function's grant on /sluis/private, narrowed to what
-// the function does there.
+// privateStatements is a function's grant on /sluis/<instance>/private,
+// narrowed to what the function does there.
 //
-//   - http reads all of it (the operator's config/*, and the credentials of its
-//     records) and writes only credentials/*: it never writes config/*, which is
-//     the operator's and the stack's.
-//   - a controller reads and writes what it is told to by name (its own secret
-//     files, its credentials/*), but config/* is the http function's: the recovery
-//     password, the state secret, the OAuth client and the declared clients. An
-//     explicit Deny, which wins over any Allow, keeps a leaked controller role
-//     from reading, replacing or deleting them.
+//   - every function reads and writes credentials/* (the credentials of its
+//     records), and nothing else of private/;
+//   - http alone reads config/* (the secrets its document names: the recovery
+//     password, the state secret, the OAuth client, the declared clients and
+//     workspaces), and never writes it: config/* is the operator's and the
+//     stack's;
+//   - the controllers are denied config/* outright: an explicit Deny, which
+//     wins over any Allow, keeps a leaked controller role from reading,
+//     replacing or deleting it.
 func privateStatements(in functionPolicyIn) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
+	st := []statement{{
+		"Sid":      sidPrivate,
+		"Effect":   "Allow",
+		"Action":   all,
+		"Resource": parameterArns(in.region, in.account, CredentialsParameterPrefix(in.instance)),
+	}}
 	if in.role == RoleHTTP {
-		return []statement{
-			{
-				"Sid":      sidPrivate,
-				"Effect":   "Allow",
-				"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-				"Resource": parameterArns(in.region, in.account, PrivateParameterPrefix),
-			},
-			{
-				"Sid":      sidPrivate + "Write",
-				"Effect":   "Allow",
-				"Action":   []string{ssmPutParameter, ssmDeleteParameter},
-				"Resource": parameterArns(in.region, in.account, CredentialsParameterPrefix),
-			},
-		}
-	}
-	return []statement{
-		{
-			"Sid":      sidPrivate,
+		return append(st, statement{
+			"Sid":      sidPrivate + "Config",
 			"Effect":   "Allow",
-			"Action":   all,
-			"Resource": parameterArns(in.region, in.account, PrivateParameterPrefix),
-		},
-		{
-			"Sid":      sidPrivate + "NotConfig",
-			"Effect":   "Deny",
-			"Action":   all,
-			"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix),
-		},
+			"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
+			"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix(in.instance)),
+		})
 	}
+	return append(st, statement{
+		"Sid":      sidPrivate + "NotConfig",
+		"Effect":   "Deny",
+		"Action":   all,
+		"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix(in.instance)),
+	})
 }
 
 // functionPolicy is the role of one function. All three get the storage, the
@@ -387,8 +388,8 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	st = append(st, statement{
 		"Sid":      sidExport,
 		"Effect":   "Allow",
-		"Action":   []string{ssmPutParameter, ssmDeleteParameter},
-		"Resource": parameterArns(in.region, in.account, ExportParameterPrefix),
+		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter},
+		"Resource": parameterArns(in.region, in.account, ExportParameterPrefix(in.instance)),
 	})
 	st = append(st, parameterKeyStatements(in.parameterKeyArn)...)
 	st = append(st, statement{
@@ -442,14 +443,14 @@ func webIdentityStatement(audience string) statement {
 }
 
 // ExportReadPolicy is the IAM policy document a consumer's External Secrets
-// Operator role attaches: read on /sluis/export/* and nothing else (and, with a
-// customer-managed parameter key, its decryption through SSM only).
-func ExportReadPolicy(region, account, parameterKeyArn string) (string, error) {
+// Operator role attaches: read on /sluis/<instance>/export/* and nothing else
+// (and, with a customer-managed parameter key, its decryption through SSM only).
+func ExportReadPolicy(region, account, instance, parameterKeyArn string) (string, error) {
 	st := []statement{{
 		"Sid":      sidExport,
 		"Effect":   "Allow",
 		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-		"Resource": parameterArns(region, account, ExportParameterPrefix),
+		"Resource": parameterArns(region, account, ExportParameterPrefix(instance)),
 	}}
 	if parameterKeyArn != "" {
 		st = append(st, statement{

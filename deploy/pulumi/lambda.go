@@ -1,14 +1,10 @@
 package sluispulumi
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/apigatewayv2"
@@ -21,7 +17,8 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ssm"
 	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"go.yaml.in/yaml/v3"
+
+	"github.com/truvity/sluis/internal/config"
 )
 
 // LambdaType is the Pulumi type token of the Lambda component.
@@ -47,19 +44,18 @@ const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
 const DefaultWrappedSigningKeyAlias = "alias/sluis-signing-wrapped"
 
 // StateSecretParameterName is the SSM parameter of the issuer's state secret,
-// `/sluis/private/config/issuer/state-secret`.
-const StateSecretParameterName = ConfigParameterPrefix + "/issuer/state-secret"
+// `/sluis/<instance>/private/config/issuer/state-secret`.
+func StateSecretParameterName(instance string) string {
+	return ConfigParameterPrefix(instance) + "/" + stateSecretName
+}
 
 // RecoveryPasswordParameterName is the SSM parameter of the recovery password,
-// `/sluis/private/config/recovery/password`: a SecureString the library
-// generates and keeps across applies, and the http function reads at cold
-// start into RecoveryPasswordPath.
-const RecoveryPasswordParameterName = ConfigParameterPrefix + "/recovery/password"
-
-// RecoveryPasswordPath is where the http function finds the recovery password
-// (the library lists it in the http function's SLUIS_SECRET_FILES and names it
-// as `recovery.passwordFile` in the http function's configuration).
-const RecoveryPasswordPath = "/tmp/sluis/recovery-password"
+// `/sluis/<instance>/private/config/recovery/password`: a SecureString the
+// library generates and keeps across applies, which the http document names
+// (`recovery.passwordSecret`) and its `secrets` source reads.
+func RecoveryPasswordParameterName(instance string) string {
+	return ConfigParameterPrefix(instance) + "/" + recoveryPasswordName
+}
 
 // DefaultSchedule is the controllers' tick when LambdaArgs.Schedule.Rate is empty.
 const DefaultSchedule = "rate(5 minutes)"
@@ -72,38 +68,47 @@ type LambdaArgs struct {
 	// roles' policies. Required.
 	Region    string
 	AccountID string
+	// Instance is the installation's name (`hive`, `kernel`): its SSM root is
+	// `/sluis/<instance>` (layout v3), so two installations share an account.
+	// Lower-case letters, digits and dashes. Required.
+	Instance string
 
 	// Package is the released zip, `sluis-lambda_<version>_linux_arm64.zip`, with
 	// `bootstrap` at its root: a path on disk or an https URL, read when the
-	// stack is evaluated. Required.
+	// stack is evaluated. It is the functions' code byte for byte: nothing is
+	// added to it. Required.
 	Package string
-	// PackageSHA256 is the zip's expected SHA-256, in hex. Optional, and worth
-	// setting with a URL.
+	// PackageSHA256 is the zip's SHA-256, in hex, from the release's checksums.
+	// Required: a package that does not have it is refused.
 	PackageSHA256 string
+	// PackageVersion is the release the package is, when its file name does not
+	// say (sluis-lambda_<version>_linux_<arch>.zip). A package older than this
+	// library is refused: it cannot read the configuration layer.
+	PackageVersion string
 
-	// Config, GitHubConfig and SlackConfig are the three functions' configuration
-	// files (a `serve`, a `controller-github` and a `controller-slack`
-	// configuration), which the package holds at config/sluis.yaml,
-	// config/github.yaml and config/slack.yaml; each function's
-	// SLUIS_CONFIG_FILE names its own. Required. They hold no secret: a secret is
-	// an `ssm:/sluis/private/...` value of a function's Env.
+	// Config, GitHubConfig and SlackConfig are the three service documents (a
+	// `serve`, a `controller-github` and a `controller-slack` document, v2), which
+	// the configuration layer holds at /opt/sluis/http.yaml, github.yaml and
+	// slack.yaml; each function's SLUIS_CONFIG names its own. Required. They hold
+	// no secret: a secret is named, and the http document's `secrets` source
+	// reads it from /sluis/<instance>/private/config/.
 	//
-	// The http file's `adapters.trigger.settings` names the two controller
+	// The library writes what is its own into them: the apiVersion,
+	// `policy.file`, and in the http document `secrets` ({source: ssm, root:
+	// /sluis/<instance>, region}), `recovery.passwordSecret`, `recovery.enabled`
+	// (from Recovery) and the state secret's name under `signingKey.kms` or
+	// `.kmsWrapped`. A different value written for one of them is refused.
+	//
+	// The http document's `adapters.trigger.settings` names the two controller
 	// functions (`github: sluis-github`, `slack: sluis-slack`, that is
-	// FunctionNamePrefix + "-github" and "-slack"); the functions take no
-	// environment variable for it.
+	// FunctionNamePrefix + "-github" and "-slack").
 	Config, GitHubConfig, SlackConfig string
-	// Catalogues are catalogue files the package holds at config/<name>, by file
-	// name. CataloguePaths are files on disk, read when the stack is evaluated
-	// and merged in under their base names; a name in both is refused unless the
-	// contents are identical, and an unreadable or empty file is refused before
-	// anything is created.
-	//
-	// Config and the catalogues are part of the function package, so a change to
-	// any of them changes the package and redeploys the three functions on the
-	// next `pulumi up`.
-	Catalogues     map[string]string
-	CataloguePaths []string
+	// Policy is the policy document (apiVersion sluis.truvity.github.io/policy/v2,
+	// or a v1 policy file): the layer holds it at /opt/sluis/policy.yaml.
+	// PolicyPath is instead a file or a directory of layers, rendered by sluis's
+	// own renderer (`sluisctl policy render`). Exactly one is required.
+	Policy     string
+	PolicyPath string
 
 	// Storage is the blob bucket (Storage.Grant()). Required.
 	Storage *StorageGrant
@@ -133,8 +138,9 @@ type LambdaArgs struct {
 	// symmetric KMS key, from which the issuer generates and wraps its signing
 	// key pairs (`signingKey.kmsWrapped` in the http function's configuration
 	// names the key). Nil keeps remote signing with the two asymmetric keys
-	// above. With it set the asymmetric keys are not created, unless
-	// WrappedSigning.KeepRemoteSigningKeys.
+	// above. With it set the asymmetric keys are not declared: a stack that
+	// signed remotely before unprotects them (`pulumi state unprotect`) and the
+	// next apply schedules their deletion.
 	WrappedSigning *WrappedSigningArgs
 
 	// FunctionNamePrefix starts the functions' and roles' names:
@@ -142,9 +148,6 @@ type LambdaArgs struct {
 	FunctionNamePrefix string
 	// HTTP, GitHub and Slack tune one function each.
 	HTTP, GitHub, Slack FunctionArgs
-	// Env is set on all three functions, beside SLUIS_ROLE and
-	// SLUIS_CONFIG_FILE, which the library owns.
-	Env map[string]string
 
 	// LogRetentionDays is each function's log group's retention. Default 30.
 	LogRetentionDays int
@@ -200,11 +203,6 @@ type WrappedSigningArgs struct {
 	// KeyAlias is the created key's alias. Default DefaultWrappedSigningKeyAlias.
 	// It must start with "alias/". Ignored with KeyArn.
 	KeyAlias string
-	// KeepRemoteSigningKeys also creates the two asymmetric keys, and grants
-	// kms:Sign and kms:GetPublicKey on them, which is what a stack that signed
-	// remotely before needs until it has dropped them deliberately (they are
-	// protected, so removing them from the program is refused).
-	KeepRemoteSigningKeys bool
 }
 
 // ExportsArgs is the exports schedule: one EventBridge schedule invoking the
@@ -241,19 +239,6 @@ type DirectoryRefreshArgs struct {
 // DirectoryRefreshArgs.Rate is empty: the hub's refresh interval.
 const DefaultDirectoryRefreshSchedule = "rate(15 minutes)"
 
-// SecretFile is an SSM parameter the function writes to a file at cold start
-// (SLUIS_SECRET_FILES, a JSON array of {parameter, path}).
-type SecretFile struct {
-	// Parameter is under /sluis/private/ or /sluis/export/.
-	Parameter string `json:"parameter"`
-	// Path is under /tmp/.
-	Path string `json:"path"`
-}
-
-// StateSecretPath is where the http function finds the issuer's state secret
-// (the library lists it in the http function's SLUIS_SECRET_FILES).
-const StateSecretPath = "/tmp/sluis/state-secret"
-
 // FunctionArgs tunes one function.
 type FunctionArgs struct {
 	// MemoryMB defaults to 512.
@@ -261,15 +246,11 @@ type FunctionArgs struct {
 	// TimeoutSeconds defaults to 30 for http, and to 300 for a controller (a
 	// pass over a whole organisation).
 	TimeoutSeconds int
-	// Env is set on this function alone. SLUIS_SECRET_FILES is the library's.
-	Env map[string]string
-	// SecretFiles are written to files at cold start, beside the http function's
-	// state secret, which the library always lists.
-	SecretFiles []SecretFile
 }
 
 // RecoveryArgs is the recovery sign-in: the way in for the day no directory can
-// vouch for anybody, which on Lambda is a generated password.
+// vouch for anybody, which on Lambda is a generated password at
+// /sluis/<instance>/private/config/recovery/password.
 //
 // The password and its parameter exist whatever Enabled says, so that turning
 // recovery off and on again is a configuration change and never a rotation.
@@ -321,7 +302,8 @@ type TelemetryArgs struct {
 	// LayerArn is the layer version, published in this account and region.
 	// Required with Telemetry.
 	LayerArn pulumi.StringInput
-	// Env is the OTEL_* and layer settings (the endpoint, the protocol). The
+	// Env is the OTEL_* and layer settings (the endpoint, the protocol): with
+	// SLUIS_ROLE and SLUIS_CONFIG, the whole of a function's environment. The
 	// library adds OTEL_SERVICE_NAME, the function's name, unless it is here.
 	Env map[string]string
 }
@@ -368,19 +350,26 @@ type Lambda struct {
 	// ScheduleNames are the schedules, in the order GitHub then Slack targets.
 	ScheduleNames pulumi.StringArrayOutput
 
+	// ConfigLayerArn is the configuration layer's version ARN: the three service
+	// documents and the policy, published immutable and mounted LAST. A change
+	// publishes a new version and updates the functions; an old version is kept,
+	// so re-pointing a function at it is a rollback.
+	ConfigLayerArn pulumi.StringOutput
+
 	// StateSecretParameter is the name of the SSM SecureString that holds the
-	// issuer's OAuth-state secret, `/sluis/private/config/issuer/state-secret`: 32
+	// issuer's OAuth-state secret, `/sluis/<instance>/private/config/issuer/state-secret`: 32
 	// random bytes, base64. The library generates it and keeps it across applies.
 	StateSecretParameter pulumi.StringOutput
 
 	// RecoveryPasswordParameter is the name of the SSM SecureString that holds the
-	// recovery password, `/sluis/private/config/recovery/password`: 40 random
+	// recovery password, `/sluis/<instance>/private/config/recovery/password`: 40 random
 	// letters and digits with no look-alikes. Only the name is an output, never the
 	// value; an operator reads it with `aws ssm get-parameter --with-decryption`.
 	RecoveryPasswordParameter pulumi.StringOutput
 
 	// ExportReadPolicyJSON is the IAM policy document a consumer's External
-	// Secrets Operator role attaches: read on /sluis/export/* and nothing else.
+	// Secrets Operator role attaches: read on /sluis/<instance>/export/* and
+	// nothing else.
 	ExportReadPolicyJSON pulumi.StringOutput
 }
 
@@ -388,19 +377,18 @@ type Lambda struct {
 var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 
 // remoteSigning is whether the two asymmetric signing keys are created: always,
-// but with WrappedSigning, which replaces them unless it keeps them.
-func (a *LambdaArgs) remoteSigning() bool {
-	return a.WrappedSigning == nil || a.WrappedSigning.KeepRemoteSigningKeys
-}
+// but with WrappedSigning, which replaces them.
+func (a *LambdaArgs) remoteSigning() bool { return a.WrappedSigning == nil }
 
-func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
+func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if a == nil {
-		return LambdaArgs{}, nil, errors.New("sluispulumi: LambdaArgs is nil")
+		return LambdaArgs{}, errors.New("sluispulumi: LambdaArgs is nil")
 	}
 	out := *a
 	var missing []string
 	for k, v := range map[string]string{
-		"Region": out.Region, "AccountID": out.AccountID, "Package": out.Package, "Config": strings.TrimSpace(out.Config),
+		"Region": out.Region, "AccountID": out.AccountID, "Instance": out.Instance,
+		"Package": out.Package, "PackageSHA256": out.PackageSHA256, "Config": strings.TrimSpace(out.Config),
 		"GitHubConfig": strings.TrimSpace(out.GitHubConfig), "SlackConfig": strings.TrimSpace(out.SlackConfig),
 		"API.DomainName": out.API.DomainName, "API.TruststorePEM": strings.TrimSpace(out.API.TruststorePEM),
 		"API.TruststoreBucketName": out.API.TruststoreBucketName,
@@ -418,7 +406,16 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 		}
 	}
 	if len(missing) > 0 {
-		return out, nil, fmt.Errorf("sluispulumi: LambdaArgs: required and empty: %v", sortedStrings(missing))
+		return out, fmt.Errorf("sluispulumi: LambdaArgs: required and empty: %v", sortedStrings(missing))
+	}
+	if !instancePattern.MatchString(out.Instance) {
+		return out, fmt.Errorf("sluispulumi: LambdaArgs.Instance %q is lower-case letters, digits and dashes, at most 32", out.Instance)
+	}
+	if (strings.TrimSpace(out.Policy) == "") == (out.PolicyPath == "") {
+		return out, errors.New("sluispulumi: LambdaArgs: set exactly one of Policy and PolicyPath")
+	}
+	if err := checkVersion(out.Package, out.PackageVersion); err != nil {
+		return out, err
 	}
 	if out.SigningKeyAlias == "" {
 		out.SigningKeyAlias = DefaultSigningKeyAlias
@@ -434,32 +431,23 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 			w = &cp
 		}
 		if w.KeyArn == nil && (!strings.HasPrefix(w.KeyAlias, "alias/") || len(w.KeyAlias) == len("alias/")) {
-			return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.WrappedSigning.KeyAlias %q must start with \"alias/\"", w.KeyAlias)
+			return out, fmt.Errorf("sluispulumi: LambdaArgs.WrappedSigning.KeyAlias %q must start with \"alias/\"", w.KeyAlias)
 		}
 	}
 	if out.remoteSigning() {
 		if !out.DisableSigningKeyRS256 && (!strings.HasPrefix(out.SigningKeyRS256Alias, "alias/") || len(out.SigningKeyRS256Alias) == len("alias/")) {
-			return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
+			return out, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyRS256Alias %q must start with \"alias/\"", out.SigningKeyRS256Alias)
 		}
 		if !out.DisableSigningKeyRS256 && out.SigningKeyRS256Alias == out.SigningKeyAlias {
-			return out, nil, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is the ES384 key's alias too")
+			return out, errors.New("sluispulumi: LambdaArgs.SigningKeyRS256Alias is the ES384 key's alias too")
 		}
 		if !strings.HasPrefix(out.SigningKeyAlias, "alias/") || len(out.SigningKeyAlias) == len("alias/") {
-			return out, nil, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyAlias %q must start with \"alias/\"", out.SigningKeyAlias)
+			return out, fmt.Errorf("sluispulumi: LambdaArgs.SigningKeyAlias %q must start with \"alias/\"", out.SigningKeyAlias)
 		}
 	}
 	if out.FunctionNamePrefix == "" {
 		out.FunctionNamePrefix = "sluis"
 	}
-	var enabled *bool
-	if out.Recovery != nil {
-		enabled = out.Recovery.Enabled
-	}
-	merged, err := withRecovery(out.Config, enabled)
-	if err != nil {
-		return out, nil, err
-	}
-	out.Config = merged
 	if out.LogRetentionDays == 0 {
 		out.LogRetentionDays = 30
 	}
@@ -479,89 +467,49 @@ func (a *LambdaArgs) validate() (LambdaArgs, map[string]string, error) {
 		out.Exports.Function = RoleHTTP
 	case RoleHTTP, RoleGitHub, RoleSlack:
 	default:
-		return out, nil, fmt.Errorf("sluispulumi: Exports.Function %q is http, github or slack", out.Exports.Function)
+		return out, fmt.Errorf("sluispulumi: Exports.Function %q is http, github or slack", out.Exports.Function)
 	}
 	if out.Exports.Rate == "" {
 		out.Exports.Rate = DefaultExportsSchedule
 	}
 	if r := out.Exports.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
-		return out, nil, fmt.Errorf("sluispulumi: Exports.Rate %q is not an EventBridge Scheduler expression", r)
+		return out, fmt.Errorf("sluispulumi: Exports.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	if out.DirectoryRefresh.Rate == "" {
 		out.DirectoryRefresh.Rate = DefaultDirectoryRefreshSchedule
 	}
 	if r := out.DirectoryRefresh.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
-		return out, nil, fmt.Errorf("sluispulumi: DirectoryRefresh.Rate %q is not an EventBridge Scheduler expression", r)
-	}
-	for _, f := range []*FunctionArgs{&out.HTTP, &out.GitHub, &out.Slack} {
-		if _, has := f.Env["SLUIS_SECRET_FILES"]; has {
-			return out, nil, errors.New("sluispulumi: SLUIS_SECRET_FILES is the library's: use FunctionArgs.SecretFiles")
-		}
-		if _, has := out.Env["SLUIS_SECRET_FILES"]; has {
-			return out, nil, errors.New("sluispulumi: SLUIS_SECRET_FILES is the library's: use FunctionArgs.SecretFiles")
-		}
-		for _, sf := range f.SecretFiles {
-			if !strings.HasPrefix(sf.Parameter, PrivateParameterPrefix+"/") && !strings.HasPrefix(sf.Parameter, ExportParameterPrefix+"/") {
-				return out, nil, fmt.Errorf("sluispulumi: SecretFiles: %q is not under %s/ or %s/", sf.Parameter, PrivateParameterPrefix, ExportParameterPrefix)
-			}
-			if !strings.HasPrefix(sf.Path, "/tmp/") || strings.Contains(sf.Path, "..") {
-				return out, nil, fmt.Errorf("sluispulumi: SecretFiles: %q is not a path under /tmp/", sf.Path)
-			}
-		}
+		return out, fmt.Errorf("sluispulumi: DirectoryRefresh.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	if out.Schedule.Rate == "" {
 		out.Schedule.Rate = DefaultSchedule
 	}
 	if r := out.Schedule.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") && !strings.HasPrefix(r, "at(") {
-		return out, nil, fmt.Errorf("sluispulumi: Schedule.Rate %q is not an EventBridge Scheduler expression", r)
+		return out, fmt.Errorf("sluispulumi: Schedule.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	for kind, ids := range map[string][]string{"GitHubOrgs": out.Schedule.GitHubOrgs, "SlackWorkspaces": out.Schedule.SlackWorkspaces} {
 		seen := map[string]bool{}
 		for _, id := range ids {
 			if !targetID.MatchString(id) {
-				return out, nil, fmt.Errorf("sluispulumi: Schedule.%s: %q is not a target id (letters, digits, - _ ., at most 40)", kind, id)
+				return out, fmt.Errorf("sluispulumi: Schedule.%s: %q is not a target id (letters, digits, - _ ., at most 40)", kind, id)
 			}
 			if seen[id] {
-				return out, nil, fmt.Errorf("sluispulumi: Schedule.%s: %q is listed twice", kind, id)
+				return out, fmt.Errorf("sluispulumi: Schedule.%s: %q is listed twice", kind, id)
 			}
 			seen[id] = true
 		}
 	}
-	if t := out.Telemetry; t != nil && t.LayerArn == nil {
-		return out, nil, errors.New("sluispulumi: Telemetry.LayerArn is required with Telemetry")
-	}
-	cats, err := mergeCatalogues(out.Catalogues, out.CataloguePaths)
-	if err != nil {
-		return out, nil, err
-	}
-	return out, cats, nil
-}
-
-func mergeCatalogues(inline map[string]string, paths []string) (map[string]string, error) {
-	merged := make(map[string]string, len(inline)+len(paths))
-	for k, v := range inline {
-		merged[k] = v
-	}
-	for _, p := range paths {
-		body, err := os.ReadFile(p)
-		if err != nil {
-			return nil, fmt.Errorf("sluispulumi: CataloguePaths: %w", err)
+	if t := out.Telemetry; t != nil {
+		if t.LayerArn == nil {
+			return out, errors.New("sluispulumi: Telemetry.LayerArn is required with Telemetry")
 		}
-		if strings.TrimSpace(string(body)) == "" {
-			return nil, fmt.Errorf("sluispulumi: CataloguePaths: %s is empty", p)
-		}
-		base := filepath.Base(p)
-		if prev, ok := merged[base]; ok && prev != string(body) {
-			return nil, fmt.Errorf("sluispulumi: CataloguePaths: %s is also in Catalogues with other content", base)
-		}
-		merged[base] = string(body)
-	}
-	for k := range merged {
-		if k == "" || strings.ContainsAny(k, "/\\") || k == "." || k == ".." || k == configName || k == githubConfigName || k == slackConfigName {
-			return nil, fmt.Errorf("sluispulumi: Catalogues has %q: a catalogue is a file name, and not one of the three configuration files", k)
+		for k := range t.Env {
+			if k == "SLUIS_ROLE" || k == config.EnvConfig {
+				return out, fmt.Errorf("sluispulumi: Telemetry.Env: %s is the library's", k)
+			}
 		}
 	}
-	return merged, nil
+	return out, nil
 }
 
 type fnSpec struct {
@@ -574,8 +522,10 @@ type fnSpec struct {
 // role, which is why a grant for one is never a grant for another:
 //
 //   - all three: logs to their own group; S3 on the blob bucket; DynamoDB on the
-//     table; SSM Get, GetByPath, Put and Delete under /sluis/private/* and Put and
-//     Delete under /sluis/export/*; sqs:SendMessage on the audit queue;
+//     table; SSM read and write under /sluis/<instance>/private/credentials/* and
+//     /sluis/<instance>/export/*; sqs:SendMessage on the audit queue;
+//   - http alone: SSM read under /sluis/<instance>/private/config/* (the
+//     secrets its document names), which the controllers are denied;
 //   - http alone: kms:Sign and kms:GetPublicKey on the signing keys (remote
 //     signing) or, with WrappedSigning, kms:GenerateDataKeyPairWithoutPlaintext and
 //     kms:Decrypt on the symmetric key under the encryption context
@@ -587,21 +537,17 @@ type fnSpec struct {
 // controllers are invoked by one EventBridge schedule per target, through a role
 // of their own that may invoke only those two functions.
 func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulumi.ResourceOption) (*Lambda, error) {
-	a, catalogues, err := args.validate()
+	a, err := args.validate()
 	if err != nil {
 		return nil, err
 	}
-	entries, err := loadPackage(a.Package, a.PackageSHA256)
+	pkg, err := loadPackage(a.Package, a.PackageSHA256)
 	if err != nil {
 		return nil, err
 	}
-	added := map[string]string{
-		configDir + "/" + configName:       a.Config,
-		configDir + "/" + githubConfigName: a.GitHubConfig,
-		configDir + "/" + slackConfigName:  a.SlackConfig,
-	}
-	for file, body := range catalogues {
-		added[configDir+"/"+file] = body
+	docs, err := renderDocuments(&a)
+	if err != nil {
+		return nil, err
 	}
 	out := &Lambda{}
 	if err := ctx.RegisterComponentResource(LambdaType, name, out, opts...); err != nil {
@@ -696,6 +642,27 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		}
 	}
 
+	// ---- the configuration layer: the four documents, immutable. A change is a
+	// new version (and the functions move to it, every instance at once); the
+	// old one is kept (SkipDestroy), which is what makes re-pointing a function
+	// at it a rollback.
+	layer, err := lambda.NewLayerVersion(ctx, name+"-config", &lambda.LayerVersionArgs{
+		LayerName:               pulumi.String(a.FunctionNamePrefix + "-config"),
+		Description:             pulumi.String(name + " configuration: the service documents and the policy, at " + LayerRoot),
+		CompatibleRuntimes:      pulumi.StringArray{pulumi.String("provided.al2023")},
+		CompatibleArchitectures: pulumi.StringArray{pulumi.String("arm64")},
+		Code: pulumi.NewAssetArchive(map[string]any{
+			"sluis/" + docHTTP + ".yaml":   pulumi.NewStringAsset(docs[docHTTP]),
+			"sluis/" + docGitHub + ".yaml": pulumi.NewStringAsset(docs[docGitHub]),
+			"sluis/" + docSlack + ".yaml":  pulumi.NewStringAsset(docs[docSlack]),
+			"sluis/" + docPolicy + ".yaml": pulumi.NewStringAsset(docs[docPolicy]),
+		}),
+		SkipDestroy: pulumi.Bool(true),
+	}, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis configuration layer: %w", err)
+	}
+
 	// ---- the functions
 	fnName := func(role string) string { return a.FunctionNamePrefix + "-" + role }
 	fnArn := func(role string) string {
@@ -720,9 +687,6 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		roles[s.role] = role
 
 		env := pulumi.StringMap{}
-		for k, v := range a.Env {
-			env[k] = pulumi.String(v)
-		}
 		if t := a.Telemetry; t != nil {
 			if _, has := t.Env["OTEL_SERVICE_NAME"]; !has {
 				env["OTEL_SERVICE_NAME"] = pulumi.String(fnName(s.role))
@@ -731,41 +695,24 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 				env[k] = pulumi.String(v)
 			}
 		}
-		for k, v := range s.args.Env {
-			env[k] = pulumi.String(v)
-		}
-		files := append([]SecretFile(nil), s.args.SecretFiles...)
-		if s.role == RoleHTTP {
-			files = append([]SecretFile{
-				{Parameter: StateSecretParameterName, Path: StateSecretPath},
-				{Parameter: RecoveryPasswordParameterName, Path: RecoveryPasswordPath},
-			}, files...)
-		}
-		if len(files) > 0 {
-			raw, err := json.Marshal(files)
-			if err != nil {
-				return nil, err
-			}
-			env["SLUIS_SECRET_FILES"] = pulumi.String(string(raw))
-		}
 		env["SLUIS_ROLE"] = pulumi.String(s.role)
-		env["SLUIS_CONFIG_FILE"] = pulumi.String(ConfigFilePath(s.role))
+		env[config.EnvConfig] = pulumi.String(DocumentPath(s.role))
 
-		code, err := buildArchive(entries, added)
-		if err != nil {
-			return nil, err
-		}
+		// The configuration layer is LAST: a layer later in the list wins a
+		// path an earlier one also writes, and nothing may write over the
+		// documents.
 		layers := pulumi.StringArray{}
 		if a.Telemetry != nil {
 			layers = append(layers, a.Telemetry.LayerArn)
 		}
+		layers = append(layers, layer.Arn)
 		fn, err := lambda.NewFunction(ctx, name+"-"+s.role, &lambda.FunctionArgs{
 			Name:          pulumi.String(fnName(s.role)),
 			Role:          role.Arn,
 			Runtime:       pulumi.String("provided.al2023"),
 			Handler:       pulumi.String("bootstrap"),
 			Architectures: pulumi.StringArray{pulumi.String("arm64")},
-			Code:          code,
+			Code:          pulumi.NewFileArchive(pkg),
 			MemorySize:    pulumi.Int(s.args.MemoryMB),
 			Timeout:       pulumi.Int(s.args.TimeoutSeconds),
 			Layers:        layers,
@@ -810,11 +757,14 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis state secret: %w", err)
 	}
+	// Overwrite: `sluis migrate ssm-layout` may have copied the same value to
+	// the v3 path first.
 	pargs := &ssm.ParameterArgs{
-		Name:  pulumi.String(StateSecretParameterName),
-		Type:  pulumi.String("SecureString"),
-		Value: pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput),
-		Tags:  tags,
+		Name:      pulumi.String(StateSecretParameterName(a.Instance)),
+		Type:      pulumi.String("SecureString"),
+		Value:     pulumi.ToSecret(stateSecret.Base64).(pulumi.StringOutput),
+		Overwrite: pulumi.Bool(true),
+		Tags:      tags,
 	}
 	if a.ParameterKeyArn != "" {
 		pargs.KeyId = pulumi.String(a.ParameterKeyArn)
@@ -838,10 +788,11 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis recovery password: %w", err)
 	}
 	rargs := &ssm.ParameterArgs{
-		Name:  pulumi.String(RecoveryPasswordParameterName),
-		Type:  pulumi.String("SecureString"),
-		Value: pulumi.ToSecret(recoveryPassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput),
-		Tags:  tags,
+		Name:      pulumi.String(RecoveryPasswordParameterName(a.Instance)),
+		Type:      pulumi.String("SecureString"),
+		Value:     pulumi.ToSecret(recoveryPassword.Result.ApplyT(unambiguous)).(pulumi.StringOutput),
+		Overwrite: pulumi.Bool(true),
+		Tags:      tags,
 	}
 	if a.ParameterKeyArn != "" {
 		rargs.KeyId = pulumi.String(a.ParameterKeyArn)
@@ -851,7 +802,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
 	}
 
-	exportPolicy, err := ExportReadPolicy(a.Region, a.AccountID, a.ParameterKeyArn)
+	exportPolicy, err := ExportReadPolicy(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn)
 	if err != nil {
 		return nil, err
 	}
@@ -884,6 +835,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.StateSecretParameter = stateParam.Name
 	out.RecoveryPasswordParameter = recoveryParam.Name
 	out.ScheduleNames = schedNames
+	out.ConfigLayerArn = layer.Arn
 	out.ExportReadPolicyJSON = pulumi.String(exportPolicy).ToStringOutput()
 
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
@@ -897,7 +849,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
 		"exportReadPolicyJson": out.ExportReadPolicyJSON, "stateSecretParameter": out.StateSecretParameter,
-		"recoveryPasswordParameter": out.RecoveryPasswordParameter,
+		"recoveryPasswordParameter": out.RecoveryPasswordParameter, "configLayerArn": out.ConfigLayerArn,
 	}); err != nil {
 		return nil, err
 	}
@@ -911,72 +863,6 @@ const recoveryPasswordLength = 40
 // fixed others.
 func unambiguous(s string) string {
 	return strings.NewReplacer("0", "x", "O", "X", "1", "y", "l", "Y", "I", "z").Replace(s)
-}
-
-// withRecovery points the http function's configuration at the recovery
-// password file and, when enabled is set, writes `recovery.enabled`. The
-// configuration is a YAML mapping and is otherwise left as it is written
-// (comments and order are kept; indentation is normalised).
-func withRecovery(config string, enabled *bool) (string, error) {
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(config), &doc); err != nil {
-		return "", fmt.Errorf("sluispulumi: LambdaArgs.Config is not YAML: %w", err)
-	}
-	if doc.Kind == 0 {
-		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
-	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
-		return "", errors.New("sluispulumi: LambdaArgs.Config is not a YAML mapping")
-	}
-	top := doc.Content[0]
-	recovery := mapValue(top, "recovery")
-	if recovery == nil {
-		recovery = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		top.Content = append(top.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "recovery"}, recovery)
-	}
-	if recovery.Kind != yaml.MappingNode {
-		return "", errors.New("sluispulumi: LambdaArgs.Config: recovery is not a mapping")
-	}
-	if v := mapValue(recovery, "passwordFile"); v != nil && v.Value != RecoveryPasswordPath {
-		return "", fmt.Errorf("sluispulumi: LambdaArgs.Config: recovery.passwordFile is the library's (%s): leave it out", RecoveryPasswordPath)
-	}
-	setScalar(recovery, "passwordFile", "!!str", RecoveryPasswordPath)
-	if enabled != nil {
-		want := strconv.FormatBool(*enabled)
-		if v := mapValue(recovery, "enabled"); v != nil && v.Value != want {
-			return "", fmt.Errorf("sluispulumi: LambdaArgs.Config has recovery.enabled: %s and Recovery.Enabled is %s", v.Value, want)
-		}
-		setScalar(recovery, "enabled", "!!bool", want)
-	}
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(&doc); err != nil {
-		return "", err
-	}
-	if err := enc.Close(); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-func mapValue(m *yaml.Node, key string) *yaml.Node {
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			return m.Content[i+1]
-		}
-	}
-	return nil
-}
-
-func setScalar(m *yaml.Node, key, tag, value string) {
-	if v := mapValue(m, key); v != nil {
-		v.Kind, v.Tag, v.Value = yaml.ScalarNode, tag, value
-		return
-	}
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value})
 }
 
 func stringsOf(v []any) []string {
@@ -1028,7 +914,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 			role: role, region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
 			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
-			parameterKeyArn:    a.ParameterKeyArn,
+			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance,
 			invokeFunctionArns: []string{githubArn, slackArn},
 			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,
 		})

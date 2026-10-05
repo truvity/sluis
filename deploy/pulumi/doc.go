@@ -18,10 +18,11 @@
 //		TableName: "acme-sluis",
 //	}, pulumi.Providers(aws))
 //	l, err := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
-//		Region: "eu-central-1", AccountID: accountID,
-//		Package:        "sluis-lambda_1.58.0_linux_arm64.zip", // a path or an https URL
-//		Config:         sluisYAML, GitHubConfig: githubYAML, SlackConfig: slackYAML, // config/{sluis,github,slack}.yaml
-//		CataloguePaths: []string{"catalogues/github-apps.yaml"},
+//		Region: "eu-central-1", AccountID: accountID, Instance: "acme",
+//		Package:        "sluis-lambda_1.62.0_linux_arm64.zip", // a path or an https URL
+//		PackageSHA256:  releaseSHA256,                         // from the release's checksums
+//		Config:         serveYAML, GitHubConfig: githubYAML, SlackConfig: slackYAML,
+//		PolicyPath:     "policy/", // or Policy: a rendered document
 //		Storage:        store.Grant(),
 //		State:          state.Grant(),
 //		AuditQueueArn:  auditQueueArn,
@@ -38,11 +39,16 @@
 // `bootstrap` told apart by SLUIS_ROLE, in no VPC, each with a role of its own:
 // only sluis-http may kms:Sign with the signing key (or, with WrappedSigning, generate
 // and decrypt key pairs under the one symmetric key) and invoke the controllers.
-// The estate's configuration and its catalogues are added to the zip, so a change
-// to either changes the package and redeploys. The issuer's OAuth-state secret is
-// generated and kept in SSM (Lambda.StateSecretParameter). /sluis/private/* in SSM is
-// sluis's alone; /sluis/export/* is for consumers, and
-// Lambda.ExportReadPolicyJSON is the policy that reads it and nothing else.
+// Their code is the release zip, byte for byte, held to its SHA-256; the three
+// service documents and the policy, held to sluis's own loader, are an immutable
+// configuration layer mounted last at /opt/sluis, and a change to any of them
+// publishes a new layer version and updates the functions (the old version is
+// kept, for a rollback). The issuer's OAuth-state secret and the recovery
+// password are generated and kept in SSM under the installation's root,
+// /sluis/<instance> (layout v3). /sluis/<instance>/private/* is sluis's alone,
+// and config/* under it the http function's; /sluis/<instance>/export/* is for
+// consumers, and Lambda.ExportReadPolicyJSON is the policy that reads it and
+// nothing else.
 //
 // RenderPorts renders the `ports:` block of the processes' configuration from
 // the same names.

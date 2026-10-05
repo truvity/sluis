@@ -74,6 +74,43 @@
   library move together. The secrets are read by the document's `secrets`
   source.
 
+- **Breaking: Pulumi library (`deploy/pulumi`): the release zip unchanged, and
+  the configuration as an immutable layer.**
+  - `LambdaArgs.PackageSHA256` is required and checked; the functions' code is
+    the release zip byte for byte (nothing is added to it). A package older
+    than the library (`sluis-lambda_<version>_…zip`, or `PackageVersion`) is
+    refused: v1.61 and older cannot read the layer.
+  - The three service documents (`Config`, `GitHubConfig`, `SlackConfig`, v2)
+    and the policy (`Policy`, a document, or `PolicyPath`, a file or directory
+    rendered by sluis's own renderer) are held to sluis's own loader and
+    published as one `aws.lambda.LayerVersion` (`<prefix>-config`) mounted
+    LAST at `/opt/sluis`; a change publishes a new version and updates the
+    functions, and old versions are kept (a rollback is re-pointing). The
+    library writes the apiVersion, `policy.file`, `secrets` (`ssm`,
+    `/sluis/<instance>`, the region), `recovery.passwordSecret`,
+    `recovery.enabled` and the state secret's name; a document that disagrees
+    is refused.
+  - A function's environment is `SLUIS_ROLE`, `SLUIS_CONFIG=/opt/sluis/<role>.yaml`
+    and the telemetry layer's `OTEL_*`; nothing else.
+  - New required `Instance`: the SSM root `/sluis/<instance>`. The state secret
+    and the recovery password are generated at
+    `/sluis/<instance>/private/config/{issuer/state-secret,recovery/password}`
+    (same values: the random resources are unchanged). IAM: every function
+    reads and writes `<root>/private/credentials/*` and `<root>/export/*` and
+    nothing above them; only the http function reads `<root>/private/config/*`
+    (by path, for its `secrets` source), which the controllers are denied;
+    `ExportReadPolicy` takes the instance and reads `<root>/export/*`. (Before,
+    a controller's allow on `/sluis/private` let `GetParametersByPath` reach
+    `config/*` past its Deny.)
+  - Removed: `Catalogues`, `CataloguePaths`, `Env`, `FunctionArgs.Env`,
+    `FunctionArgs.SecretFiles`, `SecretFile`, `ConfigFilePath`,
+    `StateSecretPath`, `RecoveryPasswordPath` and
+    `WrappedSigningArgs.KeepRemoteSigningKeys`: with `WrappedSigning` the two
+    asymmetric keys are no longer declared. **First:** `pulumi state unprotect`
+    the two keys (`<name>-signing-key`, `<name>-signing-key-rs256`); the apply
+    then schedules their deletion (30 days).
+  - The directory-refresh and exports schedules are unchanged.
+
 ### Added
 
 - **`sluisctl policy render <file or directory> [-o <file>]`.** The one place
