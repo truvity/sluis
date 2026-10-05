@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/app"
@@ -58,7 +58,7 @@ func openStores(t *testing.T, f *config.Serve) *store.Stores {
 func boot(t *testing.T, change ...func(*config.Serve)) *app.App {
 	t.Helper()
 	f := issuerFile(t, change...)
-	cfg, err := app.FromConfig(f)
+	cfg, err := app.FromConfig(f, nil)
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -98,19 +98,6 @@ func console(t *testing.T, change ...func(*config.Serve)) (*http.Client, string,
 		t.Fatalf("cookiejar: %v", err)
 	}
 	return &http.Client{Jar: jar}, server.URL, assembled
-}
-
-// browser is a client that keeps cookies and follows redirects, which is
-// what makes a login flow testable as a person experiences it.
-func browser(t *testing.T, handler http.Handler) (*http.Client, *httptest.Server) {
-	t.Helper()
-	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("cookiejar: %v", err)
-	}
-	return &http.Client{Jar: jar}, server
 }
 
 func get(t *testing.T, client *http.Client, url string) (int, string) {
@@ -215,23 +202,6 @@ func TestTheRedirectsFollowThePublicURL(t *testing.T) {
 	}
 }
 
-// The API listener answers everything the hub knows about every company
-// it serves. Outside a cluster there is nothing to verify a token
-// against, so it is open — and that is a development posture, asserted
-// here so that it cannot become a deployed one unnoticed.
-func TestTheAPIListenerIsOpenOnlyWithNothingToVerifyAgainst(t *testing.T) {
-	assembled := boot(t)
-	client, server := browser(t, assembled.APIHandler())
-
-	code, body := rpc(t, client, server.URL+"/directory.v1.DirectoryService/Describe", "{}")
-	if code != http.StatusOK {
-		t.Fatalf("Describe = %d, %q", code, body)
-	}
-	if !strings.Contains(body, "north.example") {
-		t.Errorf("Describe = %q, want the served domains", body)
-	}
-}
-
 // Turning the hub's own sign-in off closes the routes, and leaves the
 // recovery path and the API alone.
 func TestSignInOffLeavesOneDoor(t *testing.T) {
@@ -293,59 +263,11 @@ func TestImpossibleConfigurationIsRefused(t *testing.T) {
 	}{
 		{"an unknown store", func(f *config.Serve) { f.Store = "postgres" }},
 		{"a log level that is not one", func(f *config.Serve) { f.Log = &config.Log{Level: "chatty"} }},
-		{"a runner tier that is not one", func(f *config.Serve) { f.GitHub = &config.GitHub{RunnerTiers: []string{"Not A Tier"}} }},
 		{"a recovery password variable that is not set", func(f *config.Serve) { f.AdminPasswordEnv = "ACCESS_TEST_NOT_SET" }},
 	} {
-		if _, err := app.FromConfig(issuerFile(t, tc.change)); err == nil {
+		if _, err := app.FromConfig(issuerFile(t, tc.change), nil); err == nil {
 			t.Errorf("%s was accepted", tc.name)
 		}
-	}
-}
-
-// A GitHub App catalogue that cannot be right stops the service at start:
-// an App created from it would hold permissions nothing here can change
-// afterwards, and a grant to a group nobody declares grants nobody.
-func TestAMalformedGitHubAppCatalogueIsRefusedAtStart(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, body string) string {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-
-	withCatalogue := func(path string) func(*config.Serve) {
-		return func(f *config.Serve) { f.GitHub = &config.GitHub{CatalogueFile: path} }
-	}
-	level := write("level.yaml", "apps:\n  - id: renovate\n    org: example-org\n    permissions: {contents: owner}\n")
-	if _, err := app.FromConfig(issuerFile(t, withCatalogue(level))); err == nil || !strings.Contains(err.Error(), "github.catalogueFile") {
-		t.Errorf("a permission level GitHub does not have = %v", err)
-	}
-	if _, err := app.FromConfig(issuerFile(t, withCatalogue(filepath.Join(dir, "absent.yaml")))); err == nil {
-		t.Error("a catalogue file that is not there was accepted")
-	}
-
-	grant := write("grant.yaml", `
-apps:
-  - id: renovate
-    org: example-org
-    permissions: {contents: write}
-    grants:
-      - group: nobody:declares:this
-        repositories: ["*"]
-        permissions: {contents: read}
-`)
-	f := issuerFile(t, withCatalogue(grant))
-	cfg, err := app.FromConfig(f)
-	if err != nil {
-		t.Fatalf("FromConfig: %v", err)
-	}
-	if assembled, err := app.New(context.Background(), cfg, openStores(t, f), slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
-		assembled.Close()
-		t.Error("a grant to a group the policy does not declare was accepted")
-	} else if !strings.Contains(err.Error(), "nobody:declares:this") {
-		t.Errorf("the refusal does not name the group: %v", err)
 	}
 }
 
@@ -448,32 +370,31 @@ func where(t *testing.T, client *http.Client, url string) string {
 // service does not start: an export of an App nobody declared would copy
 // nothing for ever and say nothing.
 func TestExportsAreHeldToWhatTheDeploymentDeclares(t *testing.T) {
-	dir := t.TempDir()
-	catalogue := filepath.Join(dir, "slack.yaml")
-	if err := os.WriteFile(catalogue, []byte("apps:\n  - id: alerts\n    workspace: acme\n    botScopes: [chat:write]\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	export := config.Export{Source: "slack-app", App: "alerts", Path: "slack-apps/alerts"}
+	withExports := func(exports ...config.Export) *config.PolicyDocument {
+		return &config.PolicyDocument{APIVersion: "v2", Exports: exports}
+	}
 	to := &config.Ports{Export: &config.PortsExport{Adapter: "memory"}}
 	for _, tc := range []struct {
 		name   string
 		change func(*config.Serve)
+		policy *config.PolicyDocument
 		want   string
 	}{
-		{"a demonstration", func(f *config.Serve) { f.Demo, f.Ports, f.Exports = true, to, []config.Export{export} }, "demonstration"},
-		{"an App nobody declared", func(f *config.Serve) { f.Demo, f.Ports, f.Exports = false, to, []config.Export{export} }, "not declared in slackApps"},
-		{"a source this build does not know", func(f *config.Serve) {
-			f.Demo, f.Ports, f.Exports = false, to, []config.Export{{Source: "ssh-key", Path: "a/b"}}
-		}, "ssh-key"},
+		{"a demonstration", func(f *config.Serve) { f.Demo, f.Ports = true, to }, withExports(export), "demonstration"},
+		{"an App nobody declared", func(f *config.Serve) { f.Demo, f.Ports = false, to }, withExports(export), "not declared in slackApps"},
+		{"a source this build does not know", func(f *config.Serve) { f.Demo, f.Ports = false, to },
+			withExports(config.Export{Source: "ssh-key", Path: "a/b"}), "ssh-key"},
 	} {
-		if _, err := app.FromConfig(issuerFile(t, tc.change)); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if _, err := app.FromConfig(issuerFile(t, tc.change), tc.policy); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: %v, want an error with %q", tc.name, err, tc.want)
 		}
 	}
-	cfg, err := app.FromConfig(issuerFile(t, func(f *config.Serve) {
-		f.Demo, f.Ports, f.Exports = false, to, []config.Export{export}
-		f.Slack = &config.Slack{CatalogueFile: catalogue}
-	}))
+	declared := withExports(export)
+	declared.Apps = &config.PolicyApps{Slack: &config.AppsSlack{Catalogue: []slackcatalogue.App{
+		{ID: "alerts", Workspace: "acme", BotScopes: []string{"chat:write"}},
+	}}}
+	cfg, err := app.FromConfig(issuerFile(t, func(f *config.Serve) { f.Demo, f.Ports = false, to }), declared)
 	if err != nil {
 		t.Fatal(err)
 	}

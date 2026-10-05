@@ -1,5 +1,67 @@
 ## Unreleased
 
+### Changed
+
+- **Breaking: configuration is four documents, each with an `apiVersion`; the
+  policy is one rendered document.** The three service documents (`serve`,
+  `controller-github`, `controller-slack`) say how a process runs; the new
+  policy document (`schemas/config/policy.schema.json`) says what the
+  installation decides, and every service document names it with
+  `policy.file`. Each document carries `apiVersion:
+  sluis.truvity.github.io/<document>/v2`; this build reads v2 and v1 (no
+  apiVersion), converting a v1 document as it loads it through truvity/policy's
+  versioned loader, so a deployment can roll the binary first and its
+  configuration second. Configuration and policy are read once, at start: a
+  change is a new instance. Moved out of the service documents into the policy
+  document, as values rather than files:
+  - `exchange.clustersFile` → `exchange.clusters`; `exchange.awsFile` →
+    `exchange.aws`; `github.owners` → `exchange.github.owners`;
+  - `github.runnerTiers` → `apps.github.runnerTiers`; `github.catalogueFile`
+    (and the GitHub controller's `catalogueFile`) → `apps.github.catalogue`;
+    `slack.catalogueFile` → `apps.slack.catalogue`;
+  - the controllers' `enabledOrgs` / `enabledWorkspaces` →
+    `controllers.github.enabledOrgs` / `controllers.slack.enabledWorkspaces`;
+  - `exports` → `exports`;
+  - `policyDir` → `policy.file`, naming the one rendered document.
+  `overlayFile` becomes the serve document's `directory.workspaces`. `api`
+  (the directory API listener's guard and `consumersFile`) is removed: `sluis
+  serve` serves no such listener. A v2 document naming a retired key is
+  refused with where it went. The checks the service made at start across
+  these (a catalogue grant naming an undeclared group, a Slack App for an
+  undeclared workspace, an enabled organisation or workspace the policy does
+  not bind, an export of an undeclared App) are the policy document's, run
+  wherever it is loaded. **First:** render the policy with `sluisctl policy
+  render <dir>` and name it in each document's `policy.file`; until then a v1
+  document keeps working unchanged.
+
+### Added
+
+- **`sluisctl policy render <file or directory> [-o <file>]`.** The one place
+  layering happens: merges a directory of v1 policy files, access documents
+  and policy document fragments (`apiVersion: sluis.truvity.github.io/policy/v2`)
+  into the canonical policy document, held to every check the service runs at
+  start. A process loads exactly one policy document.
+- **`SLUIS_CONFIG`** names the service document when no `--config` is given.
+
+### Chart
+
+- **Breaking: the chart renders the four documents, mounted as directories.**
+  `<release>-config`, `<release>-github-roster-config`,
+  `<release>-slack-roster-config` and `<release>-policy`, each mounted as a
+  directory (`/etc/sluis/config`, `/etc/sluis/policy`), never by `subPath`;
+  each pod carries one checksum per document it reads, so a change to one
+  controller's document restarts that controller only, and a policy change
+  restarts all three. The clusters, AWS, overlay and catalogue ConfigMaps are
+  gone: `exchange.clusters`, `exchange.aws`, `githubApps.catalogue` and
+  `slackApps` are rendered into the policy document. `policy` is the policy
+  document without its apiVersion (the chart writes it, and the values schema
+  holds it to the policy schema); `access` and `overlay` are removed (render an
+  access document first, `sluisctl policy render`, and pass the result as
+  `policy`); `directory.workspaces` is removed (declare them in
+  `config.directory.workspaces` and mount each key with `secretMounts`); a
+  confidential client's `secretKey` is removed (the key is `client-secret`).
+  `config.policy.file` (and each controller's) must be
+  `/etc/sluis/policy/policy.yaml`.
 ## v1.61.2
 
 Released automatically as a patch: last-known groups of identities are now kept in the shared State, fixing identity refusals after a cold start on Lambda or during a rollout when the directory cannot be vouched for.

@@ -1,12 +1,26 @@
-// Package config is what each binary of this repository is configured with:
-// one typed configuration per binary, read from one file and validated against
-// a JSON Schema before anything starts.
+// Package config is what each process of this repository is configured with:
+// four documents, each read from one file and validated against a JSON Schema
+// before anything starts.
 //
-// The file is the whole of the configuration. Secrets are the one thing the
-// environment adds, and only the ones the file names: a field that holds a
-// secret holds the NAME of the environment variable, never a value, and the
-// process reads exactly the variables the file names. Telemetry is not here at
-// all; it is OpenTelemetry's own environment (OTEL_*).
+//   - three service documents, one per process: `serve`, `controller-github`
+//     and `controller-slack`, saying how the process runs: listeners,
+//     storage, signing, lifetimes;
+//   - one policy document, `policy`, saying what the installation decides:
+//     the access model's tables, whom the token exchange trusts, which Apps an
+//     operator may make, what each controller may change, and what is copied
+//     out. Every service document names it (`policy.file`).
+//
+// Each document carries `apiVersion`. This build writes v2 and reads v2 and v1:
+// a v1 document (one with no apiVersion) is converted as it is loaded, so a
+// deployment moves on its own schedule. Configuration and policy are immutable
+// for an instance: a change is a new instance (a rollout on Kubernetes, a new
+// configuration layer on Lambda). What stays live is credentials and state.
+//
+// Layering happens only when a policy is rendered (`sluisctl policy render`,
+// [Render]); a process loads exactly one policy document.
+//
+// Secrets are never in a document. Telemetry is not here at all; it is
+// OpenTelemetry's own environment (OTEL_*).
 //
 // The types are written by hand and the schemas are generated from schema/
 // into schemas/config/, which is committed; a test holds the two files to one
@@ -16,36 +30,19 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
-	"time"
+	"github.com/truvity/sluis/internal/config/duration"
+	"github.com/truvity/sluis/internal/exportspec"
 )
 
 // Duration is a time span as the file spells it: a Go duration string such as
 // "30s", "2m" or "168h".
-type Duration time.Duration
+type Duration = duration.Duration
 
-// D returns the span as a time.Duration.
-func (d Duration) D() time.Duration { return time.Duration(d) }
-
-// UnmarshalJSON reads a duration string.
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return fmt.Errorf("a duration is a string such as \"30s\": %w", err)
-	}
-	v, err := time.ParseDuration(s)
-	if err != nil {
-		return err
-	}
-	*d = Duration(v)
-	return nil
-}
-
-// MarshalJSON writes a duration string.
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
-}
+// Export is one copy of a secret the console keeps, made out of the service
+// into a secret store a consumer reads (docs/decisions/0034). It is declared in
+// the policy document's `exports`, and internal/exportspec holds it to its
+// rules.
+type Export = exportspec.Entry
 
 type (
 	// Address is a TCP listener: host:port, an empty host binding every
@@ -80,9 +77,7 @@ type (
 
 	// Exchange is what the token exchange verifies workloads against.
 	Exchange struct {
-		Audience     string `json:"audience,omitempty"`
-		ClustersFile string `json:"clustersFile,omitempty"`
-		AWSFile      string `json:"awsFile,omitempty"`
+		Audience string `json:"audience,omitempty"`
 	}
 
 	// Recovery is the sign-in that needs no directory. A pointer for Enabled:
@@ -95,12 +90,6 @@ type (
 		// PasswordFile is the recovery password, for a hub that is not in a
 		// cluster: the file it is read from, once, at start.
 		PasswordFile string `json:"passwordFile,omitempty"`
-	}
-
-	// API is the directory API listener's guard.
-	API struct {
-		Audience      string `json:"audience,omitempty"`
-		ConsumersFile string `json:"consumersFile,omitempty"`
 	}
 
 	// Forwarded is a sign-in an authenticating proxy in front of the console
@@ -200,33 +189,6 @@ type (
 		Cluster     *bool  `json:"cluster,omitempty"`
 	}
 
-	// Export is one copy of a secret the console keeps, made out of the service
-	// into a secret store a consumer reads (docs/decisions/0034). Source names
-	// what is copied, Path where, and the fields beside them say which.
-	Export struct {
-		// Name identifies the export in the log, the metrics and its lease.
-		// Empty is the source and what it names.
-		Name string `json:"name,omitempty"`
-		// Source is slack-app, github-app, runner-app or bundle.
-		Source string `json:"source"`
-		// App is the catalogue id of a slack-app or a github-app.
-		App string `json:"app,omitempty"`
-		// Tier and Org name a runner-app.
-		Tier string `json:"tier,omitempty"`
-		Org  string `json:"org,omitempty"`
-		// Bundle names a bundle.
-		Bundle string `json:"bundle,omitempty"`
-		// Namespace is the OpenBao namespace written to; empty is the
-		// adapter's.
-		Namespace string `json:"namespace,omitempty"`
-		// Path is the key under the KV mount.
-		Path string `json:"path"`
-		// Properties maps a property of the source to the property written.
-		Properties map[string]string `json:"properties,omitempty"`
-		// Interval is how often the copy is made again with nothing changed.
-		Interval *Duration `json:"interval,omitempty"`
-	}
-
 	// PortsExport names the adapter behind the Export port.
 	PortsExport struct {
 		Adapter string              `json:"adapter,omitempty"`
@@ -313,17 +275,30 @@ type (
 		PathStyle bool   `json:"pathStyle,omitempty"`
 	}
 
-	// GitHub is what the service knows of GitHub: whose CI it verifies and which
-	// Apps it may make.
-	GitHub struct {
-		Owners        []string `json:"owners,omitempty"`
-		RunnerTiers   []string `json:"runnerTiers,omitempty"`
-		CatalogueFile string   `json:"catalogueFile,omitempty"`
+	// PolicyRef names the one policy document a process decides by: the
+	// canonical document `sluisctl policy render` writes. It is read once, at
+	// start; a change is a new instance.
+	PolicyRef struct {
+		File string `json:"file,omitempty"`
 	}
 
-	// Slack is what the service knows of Slack.
-	Slack struct {
-		CatalogueFile string `json:"catalogueFile,omitempty"`
+	// Directory is the corporate directories the deployment declares, which
+	// the service adopts at start (the console connects the others).
+	Directory struct {
+		Workspaces []DirectoryWorkspace `json:"workspaces,omitempty"`
+	}
+
+	// DirectoryWorkspace is one declared workspace. It is deliberately thin:
+	// an id the deployment may know, a backend, an admin to act as, and where
+	// the credential is. Everything else, the domains and the tenant's own
+	// id, is discovered.
+	DirectoryWorkspace struct {
+		ID         string   `json:"id,omitempty"`
+		Backend    string   `json:"backend"`
+		Admin      string   `json:"admin"`
+		KeyFile    string   `json:"keyFile"`
+		Serve      []string `json:"serve,omitempty"`
+		SyncGroups []string `json:"syncGroups,omitempty"`
 	}
 
 	// Audit is the audit installation this process records to.
@@ -362,6 +337,9 @@ type (
 // Serve is the configuration of `sluis serve`: the issuer, the console
 // and the directory hub, which run as one process.
 type Serve struct {
+	// APIVersion is the document's version: v2. A document without one is v1,
+	// which [Load] converts.
+	APIVersion    string `json:"apiVersion"`
 	IssuerURL     string `json:"issuerURL"`
 	Release       string `json:"release,omitempty"`
 	Cluster       string `json:"cluster,omitempty"`
@@ -381,41 +359,46 @@ type Serve struct {
 	Preset   string    `json:"preset,omitempty"`
 	// Adapters maps a concern (state, secrets, blobs, signing, trigger,
 	// schedule, audit) to the adapter that replaces the preset's.
-	Adapters      map[string]AdapterChoice `json:"adapters,omitempty"`
-	PolicyDir     string                   `json:"policyDir,omitempty"`
-	OverlayFile   string                   `json:"overlayFile,omitempty"`
-	PublicURL     string                   `json:"publicURL,omitempty"`
-	PublicRootURL string                   `json:"publicRootURL,omitempty"`
-	SecureCookies *bool                    `json:"secureCookies,omitempty"`
-	GroupsScoping string                   `json:"groupsScoping,omitempty"`
+	Adapters map[string]AdapterChoice `json:"adapters,omitempty"`
+	// Policy names the policy document. Unset is the built-in two groups, or
+	// the demonstration policy under `demo`.
+	Policy        *PolicyRef `json:"policy,omitempty"`
+	PublicURL     string     `json:"publicURL,omitempty"`
+	PublicRootURL string     `json:"publicRootURL,omitempty"`
+	SecureCookies *bool      `json:"secureCookies,omitempty"`
+	GroupsScoping string     `json:"groupsScoping,omitempty"`
 
 	ClientSecretsDir string `json:"clientSecretsDir,omitempty"`
 	AdminPasswordEnv string `json:"adminPasswordEnv,omitempty"`
 
 	Lifetimes   *Lifetimes   `json:"lifetimes,omitempty"`
 	Freshness   *Freshness   `json:"freshness,omitempty"`
+	Directory   *Directory   `json:"directory,omitempty"`
 	Exchange    *Exchange    `json:"exchange,omitempty"`
 	Recovery    *Recovery    `json:"recovery,omitempty"`
-	API         *API         `json:"api,omitempty"`
 	Login       *Login       `json:"login,omitempty"`
 	Console     *Console     `json:"console,omitempty"`
 	OAuthClient *OAuthClient `json:"oauthClient,omitempty"`
 	SigningKey  *SigningKey  `json:"signingKey,omitempty"`
 	Valkey      *Valkey      `json:"valkey,omitempty"`
-	GitHub      *GitHub      `json:"github,omitempty"`
-	Slack       *Slack       `json:"slack,omitempty"`
 	Audit       *Audit       `json:"audit,omitempty"`
-	// Exports are the copies of secrets this service makes out of itself, into
-	// the secret store named by ports.export (docs/decisions/0034).
-	Exports []Export `json:"exports,omitempty"`
+
+	// legacy is what a v1 document named by file, and [PolicyFor] reads it in
+	// place of a policy document: set only by the v1 converter.
+	legacy *legacyPolicy
 }
 
 // Roster is what the two controllers share.
 type Roster struct {
+	// APIVersion is the document's version: v2. A document without one is v1,
+	// which [Load] converts.
+	APIVersion string `json:"apiVersion"`
 	Release    string `json:"release,omitempty"`
-	PolicyDir  string `json:"policyDir"`
-	ConsoleURL string `json:"consoleURL"`
-	TokenFile  string `json:"tokenFile,omitempty"`
+	// Policy names the policy document: the bindings are its github or slack
+	// table, and its `controllers` section is what the controller may change.
+	Policy     *PolicyRef `json:"policy"`
+	ConsoleURL string     `json:"consoleURL"`
+	TokenFile  string     `json:"tokenFile,omitempty"`
 	// Console says how the controller proves itself to the console when the
 	// pod's token file is not the way (AWS Lambda).
 	Console    *RosterConsole `json:"console,omitempty"`
@@ -432,19 +415,20 @@ type Roster struct {
 	Audit    *RosterAudit             `json:"audit,omitempty"`
 	// Probes is where /healthz and /readyz answer.
 	Probes *Address `json:"probes,omitempty"`
+
+	// legacy is what a v1 document named by file: set only by the v1
+	// converter.
+	legacy *legacyPolicy
 }
 
 // ControllerGitHub is the configuration of `sluis controller github`.
 type ControllerGitHub struct {
 	Roster
-	AppsDir       string   `json:"appsDir,omitempty"`
-	CatalogueFile string   `json:"catalogueFile,omitempty"`
-	EnabledOrgs   []string `json:"enabledOrgs,omitempty"`
+	AppsDir string `json:"appsDir,omitempty"`
 }
 
 // ControllerSlack is the configuration of `sluis controller slack`.
 type ControllerSlack struct {
 	Roster
-	CredentialsDir    string   `json:"credentialsDir,omitempty"`
-	EnabledWorkspaces []string `json:"enabledWorkspaces,omitempty"`
+	CredentialsDir string `json:"credentialsDir,omitempty"`
 }

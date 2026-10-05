@@ -1,0 +1,8 @@
+# An access document is a layer: it is rendered (sluisctl policy render) and passed as `policy`.
+# error: additional properties 'access' not allowed
+config:
+  issuerURL: https://issuer.example
+access:
+  groups:
+  - name: env:ssh:admin
+    emails: [ada@example.com]

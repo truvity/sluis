@@ -128,9 +128,9 @@ func (s Sources) has(bundle string) bool {
 	return false
 }
 
-// Prefixes are the State key prefixes whose change makes the export stale:
+// Prefixes are, for one export, the State key prefixes whose change makes the export stale:
 // what a watch on the State listens for.
-func (s Spec) Prefixes() []string {
+func Prefixes(s Spec) []string {
 	switch s.Source {
 	case SourceSlackApp:
 		return []string{"app.slack.cat."}

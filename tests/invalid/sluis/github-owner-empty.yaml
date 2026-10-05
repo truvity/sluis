@@ -1,7 +1,9 @@
-# A github.owners entry may not be empty.
-# error: at '/config/github/owners/0': minLength
+# An exchange.github.owners entry may not be empty.
+# error: at '/policy/exchange/github/owners/0': minLength
 config:
   issuerURL: https://issuer.example
-  github:
-    owners:
-    - ''
+policy:
+  exchange:
+    github:
+      owners:
+      - ''

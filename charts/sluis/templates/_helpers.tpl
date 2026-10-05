@@ -95,10 +95,81 @@ document's, one table, because a client declared either way is projected its
 secret the same way. Returned as YAML, since a template returns a string.
 */}}
 {{- define "sluis.declaredClients" -}}
-{{- $out := dict }}
-{{- range $id, $client := (.Values.policy.clients | default dict) }}{{ $_ := set $out $id $client }}{{ end }}
-{{- range $client := (dig "clients" list (.Values.access | default dict)) }}{{ $_ := set $out $client.name $client }}{{ end }}
-{{- toYaml $out }}
+{{- toYaml (.Values.policy.clients | default dict) }}
+{{- end }}
+
+{{/*
+sluis.document: a document as the chart renders it, its apiVersion first:
+sluis.truvity.github.io/<kind>/v2. Takes (dict "kind" "serve" "doc" <its values>).
+*/}}
+{{- define "sluis.document" -}}
+{{- $d := omit (.doc | default dict) "apiVersion" -}}
+apiVersion: sluis.truvity.github.io/{{ .kind }}/v2
+{{- if $d }}
+{{ toYaml $d }}
+{{- end }}
+{{- end }}
+
+{{/*
+sluis.policyDocument: the policy document. `policy` as the values give it,
+with the sections the chart's own values fill: `exchange.clusters` and
+`exchange.aws` from `exchange`, the catalogues from `githubApps.catalogue`
+and `slackApps` (each entry without its `push`, which is a chart-side
+instruction to External Secrets and not part of an App). A section written
+both ways is refused: one place says it.
+*/}}
+{{- define "sluis.policyDocument" -}}
+{{- $doc := deepCopy (.Values.policy | default dict) -}}
+{{- $exchange := deepCopy (dig "exchange" dict $doc) -}}
+{{- if .Values.exchange.clusters -}}
+{{- if hasKey $exchange "clusters" -}}
+{{- fail "exchange.clusters and policy.exchange.clusters are both set: say the clusters once, in one of them" -}}
+{{- end -}}
+{{- $rows := list -}}
+{{- range .Values.exchange.clusters -}}
+{{- $rows = append $rows (pick . "name" "issuer" "jwksUri") -}}
+{{- end -}}
+{{- $_ := set $exchange "clusters" $rows -}}
+{{- end -}}
+{{- if .Values.exchange.aws.accounts -}}
+{{- if hasKey $exchange "aws" -}}
+{{- fail "exchange.aws and policy.exchange.aws are both set: say the AWS accounts once, in one of them" -}}
+{{- end -}}
+{{- $aws := dict "audience" (.Values.exchange.aws.audience | default (required "config.issuerURL is required" .Values.config.issuerURL | trimSuffix "/")) "maxAge" (.Values.exchange.aws.maxAge | default "5m") "accounts" .Values.exchange.aws.accounts -}}
+{{- $_ := set $exchange "aws" $aws -}}
+{{- end -}}
+{{- if $exchange -}}
+{{- $_ := set $doc "exchange" $exchange -}}
+{{- end -}}
+{{- $apps := deepCopy (dig "apps" dict $doc) -}}
+{{- if .Values.githubApps.catalogue -}}
+{{- $github := deepCopy (dig "github" dict $apps) -}}
+{{- if hasKey $github "catalogue" -}}
+{{- fail "githubApps.catalogue and policy.apps.github.catalogue are both set: declare the Apps once, in one of them" -}}
+{{- end -}}
+{{- $list := list -}}
+{{- range .Values.githubApps.catalogue -}}
+{{- $list = append $list (omit . "push") -}}
+{{- end -}}
+{{- $_ := set $github "catalogue" $list -}}
+{{- $_ := set $apps "github" $github -}}
+{{- end -}}
+{{- if .Values.slackApps -}}
+{{- $slack := deepCopy (dig "slack" dict $apps) -}}
+{{- if hasKey $slack "catalogue" -}}
+{{- fail "slackApps and policy.apps.slack.catalogue are both set: declare the Apps once, in one of them" -}}
+{{- end -}}
+{{- $list := list -}}
+{{- range .Values.slackApps -}}
+{{- $list = append $list (omit . "push") -}}
+{{- end -}}
+{{- $_ := set $slack "catalogue" $list -}}
+{{- $_ := set $apps "slack" $slack -}}
+{{- end -}}
+{{- if $apps -}}
+{{- $_ := set $doc "apps" $apps -}}
+{{- end -}}
+{{- include "sluis.document" (dict "kind" "policy" "doc" $doc) -}}
 {{- end }}
 
 {{/*

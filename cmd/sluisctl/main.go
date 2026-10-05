@@ -151,6 +151,8 @@ func run(args []string) error {
 		return awsConfig(args[1:])
 	case "setup":
 		return setup(args[1:])
+	case "policy":
+		return policyCommand(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return nil
@@ -181,6 +183,8 @@ func usage(to *os.File) {
   pg            the same, running any command instead of psql
   ssh           known-hosts: trust SSH host CAs before the first connect
   exchange      the raw exchange: a token in, a token for an audience out
+
+  policy render the one policy document an installation reads, from its layers
 
 sluisctl's own flags on bao go BEFORE the bao subcommand; bao's own
 (including -namespace) go after it, exactly where bao has always

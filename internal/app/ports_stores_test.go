@@ -20,7 +20,7 @@ var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 func serveConfig(t *testing.T, change ...func(*config.Serve)) app.Config {
 	t.Helper()
-	cfg, err := app.FromConfig(issuerFile(t, append([]func(*config.Serve){func(f *config.Serve) { f.Demo = false }}, change...)...))
+	cfg, err := app.FromConfig(issuerFile(t, append([]func(*config.Serve){func(f *config.Serve) { f.Demo = false }}, change...)...), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

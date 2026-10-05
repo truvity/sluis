@@ -843,7 +843,7 @@ line naming that audience and subject: `dropped` names exactly the groups
 the token stopped carrying. Add whichever of them the relying party
 actually reads to a `groups:` override on that audience's row (a client's,
 a resource's, or `client_documents.groups` for a self-described one) and
-reload the policy — see
+roll it out: a policy change is a new instance — see
 [docs/operations/runbook.md#turning-enforce-on](../operations/runbook.md#turning-enforce-on)
 for the full walk-through.
 
@@ -1220,7 +1220,7 @@ console.
 
 > **The Slack controller, `sluis controller slack`, reads this table.** It is a second
 > process from the `sluis` chart and changes only the workspaces listed
-> in `slackRoster.config.enabledWorkspaces`; every other declared workspace is a dry run. What it
+> in `policy.controllers.slack.enabledWorkspaces`; every other declared workspace is a dry run. What it
 > does with the keys is on
 > [Connect a Slack workspace](../connect/slack-workspace.md) and in
 > [the Slack reconciler](../design/sluis.md#the-slack-reconciler).
@@ -1419,8 +1419,8 @@ rollout, not a login.
 
 ### Groups nothing consumes
 
-At every load — issuer start, issuer policy reload, github-roster start —
-the issuer and github-roster warn if an internal group is declared in the
+At every start of the service or the GitHub controller (the policy is read
+once, at start; a change is a new instance), each warns if an internal group is declared in the
 `groups` table but referenced by none of:
 
 - any client's `requires`

@@ -8,8 +8,6 @@ exchange:
 
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
   valkey:
     address: valkey.example.svc:6379
     passwordEnv: VALKEY_PASSWORD

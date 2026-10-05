@@ -105,7 +105,7 @@ func TestKMSAndFileAreExclusive(t *testing.T) {
 	t.Parallel()
 	f := &config.Serve{IssuerURL: "https://issuer.example",
 		SigningKey: &config.SigningKey{File: "/k", KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecretFile: "/s"}}}
-	if _, err := issuerapp.FromConfig(f); err == nil || !strings.Contains(err.Error(), "exclusive") {
+	if _, err := issuerapp.FromConfig(withPolicy(t, f)); err == nil || !strings.Contains(err.Error(), "exclusive") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -120,10 +120,11 @@ func TestAPlaceholderStateSecretIsRefused(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(policyDir, "policy.yaml"), []byte("version: 1\nlifetimes: { default: 12h }\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		cfg, err := issuerapp.FromConfig(&config.Serve{IssuerURL: "https://issuer.example", PolicyDir: policyDir,
+		cfg, err := issuerapp.FromConfig(withPolicy(t, &config.Serve{IssuerURL: "https://issuer.example",
+			Policy: &config.PolicyRef{File: filepath.Join(policyDir, "policy.yaml")},
 			Listen: &config.Address{Address: ":0"}, Probes: &config.Address{Address: ":0"},
 			SigningKey: &config.SigningKey{KMS: &config.SigningKeyKMS{Keys: []string{"a"},
-				StateSecretFile: writeTemp(t, content)}}})
+				StateSecretFile: writeTemp(t, content)}}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -181,12 +182,12 @@ func TestKMSRS256AndAnRS256FileClash(t *testing.T) {
 	policyDir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(policyDir, "policy.yaml"), []byte("version: 1\nlifetimes: { default: 12h }\n"), 0o600)
 	change := kmsConfig(t, "alias/es")
-	f := &config.Serve{IssuerURL: "https://issuer.example", PolicyDir: policyDir,
+	f := &config.Serve{IssuerURL: "https://issuer.example", Policy: &config.PolicyRef{File: filepath.Join(policyDir, "policy.yaml")},
 		Listen: &config.Address{Address: ":0"}, Probes: &config.Address{Address: ":0"}}
 	change(f)
 	f.SigningKey.AdditionalFiles = []string{file}
 	f.SigningKey.KMS.Additional = []config.SigningKeyKMSAlg{{Alg: "RS256", Keys: []string{"alias/rs"}}}
-	cfg, err := issuerapp.FromConfig(f)
+	cfg, err := issuerapp.FromConfig(withPolicy(t, f))
 	if err != nil {
 		t.Fatal(err)
 	}

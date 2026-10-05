@@ -54,7 +54,9 @@ type Config struct {
 	issuerURL     string
 	allowInsecure bool
 
-	policyPath string
+	// policy is the policy document, when this issuer is assembled on its
+	// own; the merged service hands its halves one [policy.Set] instead.
+	policy *config.PolicyDocument
 
 	inCluster         bool
 	release           string
@@ -68,8 +70,10 @@ type Config struct {
 	cluster           string
 	recoveryAudience  string
 	clientSecretsDir  string
-	clustersPath      string
-	awsPath           string
+	// clusters and aws are whom the token exchange trusts: the policy
+	// document's exchange.clusters and exchange.aws.
+	clusters []config.FederatedCluster
+	aws      config.AWSFederation
 	// consoleAWSAudience is the audience an AWS role's token must carry to be a
 	// bearer at the console, distinct from the exchange's.
 	consoleAWSAudience string
@@ -118,19 +122,20 @@ type Config struct {
 // LogLevel is the level the process should log at.
 func (c Config) LogLevel() slog.Level { return c.logLevel }
 
-// FromConfig builds the process's settings from its configuration file,
-// which the caller has already held to its schema. What a schema cannot say
+// FromConfig builds the process's settings from the service document and the
+// policy document, which the caller has already held to their schemas and
+// checks. What a schema cannot say
 // is checked here, before anything starts: lifetimes that contradict each
 // other, a rotation schedule that cannot work, a scoping mode this build does
 // not know.
-func FromConfig(f *config.Serve) (Config, error) {
+func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	c := Config{
 		port:       listenOr(f.Listen, ":8080"),
 		healthPort: listenOr(f.Probes, ":7070"),
 		issuerURL:  strings.TrimSuffix(f.IssuerURL, "/"),
 
 		allowInsecure:    f.AllowInsecure,
-		policyPath:       f.PolicyDir,
+		policy:           p,
 		inCluster:        f.InCluster,
 		release:          orDefault(f.Release, "sluis"),
 		consoleOrigin:    "",
@@ -141,17 +146,15 @@ func FromConfig(f *config.Serve) (Config, error) {
 		// unqualified subject rather than an invented one.
 		cluster: f.Cluster,
 	}
-	if f.GitHub != nil {
-		c.githubOwners = f.GitHub.Owners
-	}
+	c.githubOwners = p.GitHubOwners()
+	c.clusters = p.Clusters()
+	c.aws = p.AWS()
 	if f.Console != nil {
 		c.consoleOrigin = f.Console.Origin
 		c.consoleClientID = f.Console.Client
 		c.consoleAWSAudience = strings.TrimSpace(f.Console.AWSAudience)
 	}
 	if f.Exchange != nil {
-		c.clustersPath = f.Exchange.ClustersFile
-		c.awsPath = f.Exchange.AWSFile
 		c.audience = f.Exchange.Audience
 	}
 	if r := f.Recovery; r != nil {
@@ -459,10 +462,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 
 	set := deps.Policy
 	if set == nil {
-		declared, loadErr := policy.LoadDeclared(cfg.policyPath)
-		if loadErr != nil {
-			return nil, loadErr
+		if cfg.policy == nil {
+			return nil, errors.New("a policy is required: name the policy document with policy.file")
 		}
+		declared := cfg.policy.Policy
 		if set, err = policy.NewSet(declared); err != nil {
 			return nil, err
 		}
@@ -1126,9 +1129,9 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 	// This service's OWN cluster is a row like any other. There is no
 	// special case for it, because a special case is a second code path
 	// that only one installation exercises.
-	federation, err := verify.LoadFederation(cfg.clustersPath)
-	if err != nil {
-		return nil, nil, err
+	federation := verify.Federation{}
+	for _, row := range cfg.clusters {
+		federation.Clusters = append(federation.Clusters, verify.FederatedCluster{Name: row.Name, Issuer: row.Issuer, JWKSURI: row.JWKSURI})
 	}
 	for _, cluster := range federation.Verifiers(cfg.audience, nil) {
 		verifiers = append(verifiers, cluster)
@@ -1145,10 +1148,7 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 	// cluster, an account is a row naming where its keys are; unlike one
 	// there is no default, because any AWS account can mint a valid token
 	// for a role of its own.
-	awsFederation, err := verify.LoadAWSFederation(cfg.awsPath)
-	if err != nil {
-		return nil, nil, err
-	}
+	awsFederation := awsFederationOf(cfg.aws)
 	for _, account := range awsFederation.Verifiers(nil) {
 		verifiers = append(verifiers, account)
 	}
@@ -1622,4 +1622,20 @@ func warnBroadAWSMatchers(ctx context.Context, set *policy.Set, log *slog.Logger
 func consoleAWSVerifiers(f verify.AWSFederation, audience string, client *http.Client) []*verify.AWSAccount {
 	f.Audience = audience
 	return f.Verifiers(client)
+}
+
+// awsFederationOf is the policy document's exchange.aws as the verifiers take
+// it. The rows were held to their rules when the document was loaded.
+func awsFederationOf(a config.AWSFederation) verify.AWSFederation {
+	out := verify.AWSFederation{Audience: strings.TrimSpace(a.Audience)}
+	if a.MaxAge != nil {
+		out.MaxAge = a.MaxAge.D()
+	}
+	for _, row := range a.Accounts {
+		out.Accounts = append(out.Accounts, verify.AWSAccountRow{
+			Account: row.Account, Name: row.Name, Issuer: strings.TrimSuffix(row.Issuer, "/"),
+			JWKSURI: row.JWKSURI, OrgID: row.OrgID, Algs: row.Algs,
+		})
+	}
+	return out
 }

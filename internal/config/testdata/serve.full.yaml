@@ -1,4 +1,5 @@
 # Every key the schema has, set: the type must hold each one.
+apiVersion: sluis.truvity.github.io/serve/v2
 issuerURL: https://access.example
 release: access-issuer
 cluster: devel
@@ -9,8 +10,15 @@ listen: {address: ":8080"}
 probes: {address: ":7070"}
 log: {level: debug}
 store: kubernetes
-policyDir: /var/run/access-issuer/policy
-overlayFile: /var/run/access-issuer/directory/overlay.yaml
+policy: {file: /etc/sluis/policy/policy.yaml}
+directory:
+  workspaces:
+    - id: C0example
+      backend: google
+      admin: admin@example.com
+      keyFile: /var/run/access-issuer/directory/keys/google/key.json
+      serve: [example.com]
+      syncGroups: [all@example.com]
 publicURL: https://access.example/console
 publicRootURL: https://access.example
 secureCookies: true
@@ -21,10 +29,7 @@ lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
 freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
 exchange:
   audience: access-issuer
-  clustersFile: /var/run/access-issuer/clusters.yaml
-  awsFile: /var/run/access-issuer/aws.yaml
 recovery: {enabled: true, serviceAccount: access-issuer-recovery, audience: access-issuer-recovery}
-api: {audience: directory-roster, consumersFile: /var/run/access-issuer/consumers.yaml}
 login:
   directory: true
   signOutURL: https://access.example/logout
@@ -45,11 +50,6 @@ signingKey:
   activationDelay: 15m
   overlap: 2h
 valkey: {address: "valkey:6379", passwordEnv: VALKEY_PASSWORD, tls: true, cluster: false}
-github:
-  owners: [example-org]
-  runnerTiers: [small, large]
-  catalogueFile: /var/run/access-issuer/github-apps-catalogue.yaml
-slack: {catalogueFile: /var/run/access-issuer/slack-apps-catalogue.yaml}
 audit:
   writer: http://audit.access-issuer.svc:8080
   tokenFile: /var/run/audit/token
@@ -70,22 +70,6 @@ ports:
         mount: jwt-kernel
         role: sluis-writer
         tokenFile: /var/run/openbao/token
-exports:
-  - name: slack-app.alerts
-    source: slack-app
-    app: alerts
-    namespace: kernel
-    path: slack-apps/alerts
-    properties: {bot_token: bot_token}
-    interval: 1h
-  - source: runner-app
-    tier: stable
-    org: example-org
-    namespace: kernel
-    path: arc/example
-  - source: bundle
-    bundle: github-apps
-    path: sluis-backup/github-apps
 platform:
   aws: true
   kubernetes: true

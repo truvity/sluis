@@ -43,8 +43,10 @@ import (
 type Config struct {
 	release string
 	// stores says which adapter backs the storage ports.
-	stores    store.Config
-	policyDir string
+	stores store.Config
+	// policy is the policy document: the bindings are its slack table,
+	// and its controllers.slack section is what this controller changes.
+	policy    *config.PolicyDocument
 	console   string
 	tokenFile string
 	// consoleAWS, when set, replaces the token file with the function role's
@@ -68,20 +70,20 @@ func (c Config) LogLevel() slog.Level { return c.logLevel }
 // Load reads the configuration file, holds it to its schema, and builds the
 // settings from it.
 func Load(file string) (Config, error) {
-	f, err := config.LoadControllerSlack(file)
+	c, err := config.LoadConfig[config.ControllerSlack](file, nil)
 	if err != nil {
 		return Config{}, err
 	}
-	return FromConfig(f)
+	return FromConfig(c.Service, c.Policy)
 }
 
 // FromConfig builds the settings from a configuration already read. What a
 // schema cannot say is checked here, before anything starts.
-func FromConfig(f *config.ControllerSlack) (Config, error) {
+func FromConfig(f *config.ControllerSlack, p *config.PolicyDocument) (Config, error) {
 	c := Config{
 		release:        orDefault(f.Release, "sluis"),
 		stores:         store.FromRoster(&f.Roster),
-		policyDir:      f.PolicyDir,
+		policy:         p,
 		console:        strings.TrimSuffix(f.ConsoleURL, "/"),
 		tokenFile:      orDefault(f.TokenFile, "/var/run/secrets/slack-roster/token"),
 		credentialsDir: orDefault(f.CredentialsDir, "/var/run/slack-roster/credentials"),
@@ -104,7 +106,7 @@ func FromConfig(f *config.ControllerSlack) (Config, error) {
 		c.audit.Writer = a.Writer
 		c.audit.TokenFile = a.TokenFile
 	}
-	for _, workspace := range f.EnabledWorkspaces {
+	for _, workspace := range p.EnabledWorkspaces() {
 		if workspace = strings.TrimSpace(workspace); workspace != "" {
 			c.enabled[workspace] = true
 		}
@@ -124,8 +126,8 @@ func FromConfig(f *config.ControllerSlack) (Config, error) {
 		return Config{}, fmt.Errorf("log.level: %w", err)
 	}
 	switch {
-	case c.policyDir == "":
-		return Config{}, errors.New("policyDir is required: the bindings are the policy's slack table")
+	case c.policy == nil:
+		return Config{}, errors.New("policy.file is required: the bindings are the policy document's slack table")
 	case c.console == "":
 		return Config{}, errors.New("consoleURL is required: who holds a group is the console's to answer")
 	}
@@ -199,10 +201,7 @@ var _ controller.StatusReader = (*rails.BlobReports)(nil)
 
 // New assembles the controller.
 func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
-	declared, err := policy.LoadDeclared(cfg.policyDir)
-	if err != nil {
-		return nil, err
-	}
+	declared := cfg.policy.Policy
 	// Validated with the service's own loader: a controller acting on a
 	// policy the service would refuse is acting on a different model.
 	set, err := policy.NewSet(declared)
@@ -214,7 +213,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	}
 	for workspace := range cfg.enabled {
 		if _, bound := declared.Slack.Workspaces[workspace]; !bound {
-			return nil, fmt.Errorf("enabledWorkspaces names %s, which the policy does not declare", workspace)
+			return nil, fmt.Errorf("controllers.slack.enabledWorkspaces names %s, which the policy does not declare", workspace)
 		}
 	}
 

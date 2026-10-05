@@ -169,3 +169,70 @@ func RefuseRetired(binary string, environ []string) error {
 	b.WriteString(". Remove them and put the setting in the file: docs/reference/configuration.md has the mapping")
 	return fmt.Errorf("%s", b.String())
 }
+
+// The keys a v1 document had that v2 does not, by document, each with where it
+// went. A v2 document that still names one is refused with this message rather
+// than the schema's bare "not a key this service reads": the person reading it
+// is migrating, and needs the new place. A v1 document (no apiVersion) is
+// converted instead (docs/reference/configuration.md, "apiVersion").
+var retiredKeys = map[string]map[string]string{
+	"serve": {
+		"policyDir": "the policy is one rendered document now: name it with policy.file " +
+			"(`sluisctl policy render <dir>` writes it from the directory policyDir named)",
+		"overlayFile":           "the declared workspaces are directory.workspaces in this document",
+		"api":                   "removed: sluis serve serves no directory API listener, so its guard configured nothing",
+		"github":                "moved to the policy document: exchange.github.owners, apps.github.runnerTiers and apps.github.catalogue",
+		"slack":                 "moved to the policy document: apps.slack.catalogue",
+		"exports":               "moved to the policy document: exports",
+		"exchange.clustersFile": "moved to the policy document: exchange.clusters, the rows themselves",
+		"exchange.awsFile":      "moved to the policy document: exchange.aws, the rows themselves",
+	},
+	"controller-github": {
+		"policyDir":     "the policy is one rendered document now: name it with policy.file",
+		"catalogueFile": "the catalogue is the policy document's apps.github.catalogue, read from policy.file",
+		"enabledOrgs":   "moved to the policy document: controllers.github.enabledOrgs",
+	},
+	"controller-slack": {
+		"policyDir":         "the policy is one rendered document now: name it with policy.file",
+		"enabledWorkspaces": "moved to the policy document: controllers.slack.enabledWorkspaces",
+	},
+	"policy": {
+		"version": "a policy document says apiVersion: sluis.truvity.github.io/policy/v2 in place of version: 1",
+		"access":  "an access document is a layer, not a policy document: `sluisctl policy render` reshapes it into one",
+		"overlay": "an access document is a layer, not a policy document: `sluisctl policy render` reshapes it into one",
+	},
+}
+
+// RetiredKeys returns, for one document, every key v2 retired and where it went.
+func RetiredKeys(document string) map[string]string {
+	out := map[string]string{}
+	for k, v := range retiredKeys[document] {
+		out[k] = v
+	}
+	return out
+}
+
+// refuseRetiredKeys fails when a v2 document names a key v2 retired, naming
+// each with where it went.
+func refuseRetiredKeys(document string, doc map[string]any) error {
+	var found []string
+	for key, why := range retiredKeys[document] {
+		var node any = doc
+		for _, part := range strings.Split(key, ".") {
+			m, ok := node.(map[string]any)
+			if !ok {
+				node = nil
+				break
+			}
+			node = m[part]
+		}
+		if node != nil {
+			found = append(found, key+": "+why)
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	slices.Sort(found)
+	return fmt.Errorf("apiVersion v2 retired these keys, which are set:\n  %s", strings.Join(found, "\n  "))
+}

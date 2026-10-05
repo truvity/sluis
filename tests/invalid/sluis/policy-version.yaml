@@ -1,0 +1,6 @@
+# The chart writes the policy document's apiVersion; v1's version is not a key of it.
+# error: at '/policy': additional properties 'version' not allowed
+config:
+  issuerURL: https://issuer.example
+policy:
+  version: 1

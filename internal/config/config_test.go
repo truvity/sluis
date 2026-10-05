@@ -67,7 +67,7 @@ func TestTheTypesAndTheSchemasDescribeTheSameKeys(t *testing.T) {
 		{"serve", &config.Serve{}},
 		{"controller-github", &config.ControllerGitHub{}},
 		{"controller-slack", &config.ControllerSlack{}},
-	} {
+	} { // The policy document is held to its type in policydoc_test.go.
 		t.Run(c.name, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("testdata", c.name+".full.yaml"))
 			if err != nil {
@@ -147,25 +147,25 @@ func jsonEqual(a, b any) bool {
 const minimalIssuer = "issuerURL: https://access.example\n"
 
 func TestAValidFileLoads(t *testing.T) {
-	f, err := config.LoadServe(write(t, minimalIssuer))
+	f, err := config.Load[config.Serve](write(t, minimalIssuer))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if f.IssuerURL != "https://access.example" {
 		t.Errorf("not decoded: %+v", f)
 	}
-	g, err := config.LoadControllerGitHub(write(t, "policyDir: /p\nconsoleURL: http://c:8080/console\ninterval: 5m\nenabledOrgs: [a]\n"))
-	if err != nil || g.Interval.D().String() != "5m0s" || g.EnabledOrgs[0] != "a" {
+	g, err := config.Load[config.ControllerGitHub](write(t, "policyDir: /p\nconsoleURL: http://c:8080/console\ninterval: 5m\nenabledOrgs: [a]\n"))
+	if err != nil || g.Interval.D().String() != "5m0s" || g.APIVersion != config.APIVersion("controller-github") {
 		t.Errorf("controller-github: %v %+v", err, g)
 	}
-	if _, err := config.LoadControllerSlack(write(t, "policyDir: /p\nconsoleURL: http://c:8080/console\n")); err != nil {
+	if _, err := config.Load[config.ControllerSlack](write(t, "policyDir: /p\nconsoleURL: http://c:8080/console\n")); err != nil {
 		t.Errorf("controller-slack: %v", err)
 	}
 }
 
 // What a typo must do: fail, and say which key.
 func TestAnUnknownKeyIsRefusedAndNamed(t *testing.T) {
-	_, err := config.LoadServe(write(t, minimalIssuer+"valkey2: {}\nlisten: {adr: ':1'}\n"))
+	_, err := config.Load[config.Serve](write(t, minimalIssuer+"valkey2: {}\nlisten: {adr: ':1'}\n"))
 	var ce *policyconfig.Error
 	if !errors.As(err, &ce) {
 		t.Fatalf("want a configuration error, got %v", err)
@@ -179,13 +179,13 @@ func TestAnUnknownKeyIsRefusedAndNamed(t *testing.T) {
 }
 
 func TestAMissingRequiredKeyIsRefusedAndNamed(t *testing.T) {
-	if _, err := config.LoadServe(write(t, "store: memory\n")); err == nil || !strings.Contains(err.Error(), "issuerURL") {
+	if _, err := config.Load[config.Serve](write(t, "store: memory\n")); err == nil || !strings.Contains(err.Error(), "issuerURL") {
 		t.Fatalf("want a refusal naming issuerURL, got %v", err)
 	}
-	if _, err := config.LoadControllerGitHub(write(t, "consoleURL: http://c:8080\n")); err == nil || !strings.Contains(err.Error(), "policyDir") {
+	if _, err := config.Load[config.ControllerGitHub](write(t, "consoleURL: http://c:8080\n")); err == nil || !strings.Contains(err.Error(), "policyDir") {
 		t.Fatalf("want a refusal naming policyDir, got %v", err)
 	}
-	if _, err := config.LoadControllerSlack(write(t, "policyDir: /p\n")); err == nil || !strings.Contains(err.Error(), "consoleURL") {
+	if _, err := config.Load[config.ControllerSlack](write(t, "policyDir: /p\n")); err == nil || !strings.Contains(err.Error(), "consoleURL") {
 		t.Fatalf("want a refusal naming consoleURL, got %v", err)
 	}
 }
@@ -202,7 +202,7 @@ func TestASecretInTheFileIsRefused(t *testing.T) {
 		"a password in the issuer":   "issuerURL: https://u:hunter2@access.example\n",
 		"a password in the writer":   minimalIssuer + "audit: {writer: 'http://u:hunter2@audit:8080'}\n",
 	} {
-		_, err := config.LoadServe(write(t, body))
+		_, err := config.Load[config.Serve](write(t, body))
 		if err == nil {
 			t.Errorf("%s was accepted", name)
 			continue
@@ -212,7 +212,7 @@ func TestASecretInTheFileIsRefused(t *testing.T) {
 		}
 	}
 	// A variable NAME is not a value: a value that is not a name is refused.
-	if _, err := config.LoadServe(write(t, minimalIssuer+"valkey: {address: 'v:6379', passwordEnv: 'hunter 2!'}\n")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"valkey: {address: 'v:6379', passwordEnv: 'hunter 2!'}\n")); err == nil {
 		t.Error("a password value in a ...Env field was accepted")
 	}
 }
@@ -230,10 +230,10 @@ func TestADeclaredSecretIsReadFromTheEnvironment(t *testing.T) {
 }
 
 func TestAnEmptyOrMissingFileIsRefused(t *testing.T) {
-	if _, err := config.LoadServe(write(t, "")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, "")); err == nil {
 		t.Error("an empty file was accepted")
 	}
-	if _, err := config.LoadServe(filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
+	if _, err := config.Load[config.Serve](filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
 		t.Error("a missing file was accepted")
 	}
 }
@@ -253,7 +253,7 @@ func TestTheSchemaRefusesWhatTheEnvironmentWasTrustedWith(t *testing.T) {
 		"a negative trusted hop count":        "audit: {writer: 'http://a:1', forwardedForTrustedHops: -1}\n",
 		"a signing key list that is a string": "signingKey: {additionalFiles: /k}\n",
 	} {
-		if _, err := config.LoadServe(write(t, minimalIssuer+extra)); err == nil {
+		if _, err := config.Load[config.Serve](write(t, minimalIssuer+extra)); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
@@ -326,7 +326,7 @@ func TestTheReferenceListsEveryRetiredVariable(t *testing.T) {
 	for _, m := range cell.FindAllStringSubmatch(doc, -1) {
 		listed[m[1]] = true
 	}
-	for _, binary := range schema.Names {
+	for _, binary := range schema.Services {
 		for name := range config.Retired(binary) {
 			if !listed[name] {
 				t.Errorf("%s: the reference's migration table does not list %s", binary, name)
@@ -339,7 +339,7 @@ func TestTheReferenceListsEveryRetiredVariable(t *testing.T) {
 // the one that keeps state where it has always been kept.
 func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 	for _, adapter := range []string{"legacy", "memory"} {
-		if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: "+adapter+"}\n")); err != nil {
+		if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: "+adapter+"}\n")); err != nil {
 			t.Errorf("adapter %s was refused: %v", adapter, err)
 		}
 	}
@@ -350,32 +350,32 @@ func TestThePortsAdapterIsOneOfTheTwo(t *testing.T) {
 		"a sealer":           "ports: {sealer: {adapter: kms, kms: {keyId: alias/ar}}}\n",
 		"a sealer of memory": "ports: {sealer: {adapter: memory}}\n",
 	} {
-		if _, err := config.LoadServe(write(t, minimalIssuer+old)); err == nil {
+		if _, err := config.Load[config.Serve](write(t, minimalIssuer+old)); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
-	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: dynamodb}\n")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb}\n")); err == nil {
 		t.Error("the dynamodb adapter was accepted with no table named")
 	}
-	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {region: eu-west-1}}\n")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {region: eu-west-1}}\n")); err == nil {
 		t.Error("a dynamodb section with no table was accepted")
 	}
 	ddbFile := "ports:\n  adapter: dynamodb\n  dynamodb: {table: sluis, region: eu-west-1, endpoint: 'http://localstack:4566', create: true}\n"
-	if f, err := config.LoadServe(write(t, minimalIssuer+ddbFile)); err != nil {
+	if f, err := config.Load[config.Serve](write(t, minimalIssuer+ddbFile)); err != nil {
 		t.Errorf("the dynamodb adapter was refused: %v", err)
 	} else if d := f.Ports.DynamoDB; d == nil || d.Table != "sluis" || d.Region != "eu-west-1" || !d.Create || d.Endpoint == "" {
 		t.Errorf("ports.dynamodb = %+v", d)
 	}
-	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {table: t, accessKey: x}}\n")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: dynamodb, dynamodb: {table: t, accessKey: x}}\n")); err == nil {
 		t.Error("a dynamodb credential in the file was accepted")
 	}
-	if _, err := config.LoadServe(write(t, minimalIssuer+"ports: {adapter: cassandra}\n")); err == nil {
+	if _, err := config.Load[config.Serve](write(t, minimalIssuer+"ports: {adapter: cassandra}\n")); err == nil {
 		t.Error("an adapter that does not exist was accepted")
 	}
-	if _, err := config.LoadControllerGitHub(write(t, "policyDir: /p\nconsoleURL: http://c:8080\nports: {adapter: cassandra}\n")); err == nil {
+	if _, err := config.Load[config.ControllerGitHub](write(t, "policyDir: /p\nconsoleURL: http://c:8080\nports: {adapter: cassandra}\n")); err == nil {
 		t.Error("a controller accepted an adapter that does not exist")
 	}
-	if _, err := config.LoadControllerSlack(write(t, "policyDir: /p\nconsoleURL: http://c:8080\nports: {adapter: memory}\n")); err != nil {
+	if _, err := config.Load[config.ControllerSlack](write(t, "policyDir: /p\nconsoleURL: http://c:8080\nports: {adapter: memory}\n")); err != nil {
 		t.Errorf("a controller refused the memory adapter: %v", err)
 	}
 }
@@ -387,7 +387,7 @@ func TestThePortsBlobIsChecked(t *testing.T) {
   adapter: legacy
   blob: {adapter: s3, s3: {bucket: b, prefix: ar, region: eu-west-1, kmsKey: alias/ar, endpoint: "http://localhost:4566", pathStyle: true}}
 `
-	c, err := config.LoadServe(write(t, good))
+	c, err := config.Load[config.Serve](write(t, good))
 	if err != nil {
 		t.Fatalf("a Blob over the legacy State was refused: %v", err)
 	}
@@ -401,11 +401,12 @@ func TestThePortsBlobIsChecked(t *testing.T) {
 		"an unknown s3 key":       "ports: {blob: {adapter: s3, s3: {bucket: b, accessKey: x}}}\n",
 		"a blob with no adapter":  "ports: {blob: {s3: {bucket: b}}}\n",
 	} {
-		if _, err := config.LoadServe(write(t, minimalIssuer+bad)); err == nil {
+		if _, err := config.Load[config.Serve](write(t, minimalIssuer+bad)); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
-	if _, err := config.LoadControllerGitHub(write(t, "policyDir: /p\nconsoleURL: http://c:8080\nports: {blob: {adapter: s3, s3: {bucket: b}}}\n")); err != nil {
+	if _, err := config.Load[config.ControllerGitHub](write(t, "policyDir: /p\nconsoleURL: http://c:8080\n"+
+		"ports: {blob: {adapter: s3, s3: {bucket: b}}}\n")); err != nil {
 		t.Errorf("a controller refused ports.blob: %v", err)
 	}
 }
@@ -419,7 +420,7 @@ func TestTheQueryURLNeedsNoWriter(t *testing.T) {
 			"adapters: {audit: {adapter: sqs, settings: {queueURL: 'https://sqs.example/1/q', region: eu-west-1}}}\n",
 		"with the log sink": "audit: {queryURL: 'http://q:1', audience: audit}\nadapters: {audit: {adapter: log}}\n",
 	} {
-		f, err := config.LoadServe(write(t, minimalIssuer+extra))
+		f, err := config.Load[config.Serve](write(t, minimalIssuer+extra))
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue

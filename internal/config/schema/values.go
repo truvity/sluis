@@ -19,12 +19,14 @@ var valuesBase []byte
 // configAt says where each component's configuration sits in the values, and
 // which binary's schema it is held to.
 var configAt = []struct {
-	path   []string
-	schema string
+	path        []string
+	schema      string
+	description string
 }{
-	{[]string{"config"}, "serve"},
-	{[]string{"controllerGithub", "config"}, "controller-github"},
-	{[]string{"controllerSlack", "config"}, "controller-slack"},
+	{[]string{"config"}, "serve", ""},
+	{[]string{"controllerGithub", "config"}, "controller-github", ""},
+	{[]string{"controllerSlack", "config"}, "controller-slack", ""},
+	{[]string{"policy"}, "policy", "The policy document, without its apiVersion, which the chart writes: rendered into the ConfigMap <release>-policy beside the sections the chart's own values fill (exchange.clusters and exchange.aws from `exchange`, the catalogues from `githubApps.catalogue` and `slackApps`). Its schema is schemas/config/policy.schema.json. An access document or a directory of layers is rendered first: `sluisctl policy render`."},
 }
 
 // Values returns the schema of the chart's values.
@@ -67,9 +69,13 @@ func Values() []byte {
 			props = m{}
 			node["properties"] = props
 		}
+		description := c.description
+		if description == "" {
+			description = "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is " + c.schema + "'s: schemas/config/" + c.schema + ".schema.json."
+		}
 		props[c.path[len(c.path)-1]] = m{
 			"$ref":        "#/definitions/config-" + c.schema,
-			"description": "Rendered as it stands into a ConfigMap and mounted as the file the binary reads with --config. Its schema is " + c.schema + "'s: schemas/config/" + c.schema + ".schema.json.",
+			"description": description,
 		}
 	}
 	return encode(root)
@@ -93,6 +99,11 @@ func flatten(defs m, name string, s m) {
 	// schema that required them would fail `helm lint` of the chart as
 	// published. The binary's own schema still requires them.
 	delete(s, "required")
+	// The chart writes the apiVersion of every document it renders: a value
+	// holding one would be a second place for it.
+	if props, ok := s["properties"].(map[string]any); ok {
+		delete(props, "apiVersion")
+	}
 	defs[prefix] = rewrite(s, prefix)
 }
 

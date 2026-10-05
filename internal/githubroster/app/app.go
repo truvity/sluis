@@ -25,7 +25,6 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/consoleauth"
-	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/controller"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/logsafe"
@@ -42,8 +41,10 @@ import (
 type Config struct {
 	release string
 	// stores says which adapter backs the storage ports.
-	stores    store.Config
-	policyDir string
+	stores store.Config
+	// policy is the policy document: the bindings are its github table,
+	// and its controllers.github section is what this controller changes.
+	policy    *config.PolicyDocument
 	console   string
 	tokenFile string
 	// consoleAWS, when set, replaces the token file with the function role's
@@ -59,17 +60,6 @@ type Config struct {
 	// audit is the audit installation the controller records to, with its
 	// own identity; without one it only logs what it did.
 	audit audit.Config
-	// catalogueFile is the GitHub App catalogue's grants, read ONLY so
-	// this controller can tell its own "internal groups are declared but
-	// nothing consumes them" warning about a group a grant names: this
-	// process reconciles GitHub team membership from the policy's GitHub
-	// table and mints no installation tokens itself, so the catalogue is
-	// otherwise none of its business. Empty is an empty catalogue (see
-	// [catalogue.Load]), which is also what a deployment that has not
-	// wired this file to this controller yet gets: the warning then
-	// names every GitHub-derived group a grant elsewhere actually
-	// consumes, exactly as it did before this field existed.
-	catalogueFile string
 }
 
 // LogLevel is the level the process should log at.
@@ -78,20 +68,20 @@ func (c Config) LogLevel() slog.Level { return c.logLevel }
 // Load reads the configuration file, holds it to its schema, and builds the
 // settings from it.
 func Load(file string) (Config, error) {
-	f, err := config.LoadControllerGitHub(file)
+	c, err := config.LoadConfig[config.ControllerGitHub](file, nil)
 	if err != nil {
 		return Config{}, err
 	}
-	return FromConfig(f)
+	return FromConfig(c.Service, c.Policy)
 }
 
 // FromConfig builds the settings from a configuration already read. What a
 // schema cannot say is checked here, before anything starts.
-func FromConfig(f *config.ControllerGitHub) (Config, error) {
+func FromConfig(f *config.ControllerGitHub, p *config.PolicyDocument) (Config, error) {
 	c := Config{
 		release:    orDefault(f.Release, "sluis"),
 		stores:     store.FromRoster(&f.Roster),
-		policyDir:  f.PolicyDir,
+		policy:     p,
 		console:    strings.TrimSuffix(f.ConsoleURL, "/"),
 		tokenFile:  orDefault(f.TokenFile, "/var/run/secrets/github-roster/token"),
 		appsDir:    orDefault(f.AppsDir, "/var/run/github-roster/apps"),
@@ -100,10 +90,6 @@ func FromConfig(f *config.ControllerGitHub) (Config, error) {
 		probes:     ":7070",
 		// The instance is the pod, which is its hostname in a cluster.
 		audit: audit.Config{Version: version.String()},
-		// Named exactly as the merged deployment's own is (internal/app),
-		// so the two never disagree about where the same catalogue file
-		// is mounted from.
-		catalogueFile: f.CatalogueFile,
 	}
 	if f.Console != nil && f.Console.Auth != nil && f.Console.Auth.AWS != nil {
 		if c.consoleAWS = strings.TrimSpace(f.Console.Auth.AWS.Audience); c.consoleAWS == "" {
@@ -118,7 +104,7 @@ func FromConfig(f *config.ControllerGitHub) (Config, error) {
 		c.audit.Writer = a.Writer
 		c.audit.TokenFile = a.TokenFile
 	}
-	for _, org := range f.EnabledOrgs {
+	for _, org := range p.EnabledOrgs() {
 		if org = strings.TrimSpace(org); org != "" {
 			c.enabled[org] = true
 		}
@@ -138,8 +124,8 @@ func FromConfig(f *config.ControllerGitHub) (Config, error) {
 		return Config{}, fmt.Errorf("log.level: %w", err)
 	}
 	switch {
-	case c.policyDir == "":
-		return Config{}, errors.New("policyDir is required: the bindings are the policy's github table")
+	case c.policy == nil:
+		return Config{}, errors.New("policy.file is required: the bindings are the policy document's github table")
 	case c.console == "":
 		return Config{}, errors.New("consoleURL is required: who holds a group is the console's to answer")
 	}
@@ -183,31 +169,17 @@ var _ controller.StatusReader = (*rails.BlobReports)(nil)
 
 // New assembles the controller.
 func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
-	declared, err := policy.LoadDeclared(cfg.policyDir)
-	if err != nil {
-		return nil, err
-	}
+	declared := cfg.policy.Policy
 	// Validated with the service's own loader: a controller acting on a
 	// policy the service would refuse is acting on a different model.
 	set, err := policy.NewSet(declared)
 	if err != nil {
 		return nil, fmt.Errorf("the policy: %w", err)
 	}
-	// A malformed catalogue does NOT stop this controller: unlike the
-	// service that mints installation tokens from it, this one only
-	// reads the catalogue's grants to keep the warning below honest, and
-	// a bad file there is not a reason to stop reconciling GitHub team
-	// membership. An empty path is an empty catalogue either way (see
-	// [catalogue.Load]), so a deployment that has not wired this file to
-	// this controller gets exactly the warning it always got.
-	apps, catalogueErr := catalogue.Load(cfg.catalogueFile)
-	if catalogueErr != nil {
-		log.WarnContext(ctx, "the GitHub App catalogue could not be read: "+
-			"internal groups it grants may be reported as unconsumed",
-			"file", cfg.catalogueFile, "error", catalogueErr)
-		apps = &catalogue.Catalogue{}
-	}
-	if unconsumed := declared.Unconsumed(apps.GrantGroups()...); len(unconsumed) > 0 {
+	// The catalogue's grants are consumers too: the policy document carries
+	// them, so a group that exists only to let some identity mint an App's
+	// token is not reported as unconsumed.
+	if unconsumed := cfg.policy.Unconsumed(); len(unconsumed) > 0 {
 		log.WarnContext(ctx, "internal groups are declared but nothing consumes them",
 			"groups", unconsumed)
 	}
@@ -216,7 +188,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	}
 	for org := range cfg.enabled {
 		if _, bound := declared.GitHub[org]; !bound {
-			return nil, fmt.Errorf("enabledOrgs names %s, which the policy does not bind", org)
+			return nil, fmt.Errorf("controllers.github.enabledOrgs names %s, which the policy does not bind", org)
 		}
 	}
 

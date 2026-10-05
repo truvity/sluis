@@ -243,15 +243,6 @@
         }
       }
     },
-    "policy": {
-      "type": "object"
-    },
-    "access": {
-      "type": "object"
-    },
-    "overlay": {
-      "type": "object"
-    },
     "route": {
       "type": "object",
       "additionalProperties": false,
@@ -785,50 +776,8 @@
     "directory": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The corporate directories this service reads itself.",
+      "description": "The corporate directories this service reads itself. The workspaces a deployment declares are the config's: `config.directory.workspaces`, each key file mounted with `secretMounts`.",
       "properties": {
-        "workspaces": {
-          "type": "array",
-          "description": "Declared workspaces: each names a Secret holding a service-account key and the admin to impersonate.",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "backend",
-              "admin",
-              "secretName"
-            ],
-            "properties": {
-              "backend": {
-                "type": "string"
-              },
-              "admin": {
-                "type": "string"
-              },
-              "secretName": {
-                "type": "string"
-              },
-              "secretKey": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "serve": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "syncGroups": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
         "push": {
           "type": "object",
           "additionalProperties": false,

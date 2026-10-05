@@ -5,19 +5,15 @@
 {{- include "sluis.expectPath" (dict "key" "controllerSlack.config.credentialsDir" "got" $cfg.credentialsDir "want" "/var/run/slack-roster/credentials" "source" "the credentials Secret" "present" true) }}
 {{- include "sluis.expectPath" (dict "key" "controllerSlack.config.recordsDir" "got" $cfg.recordsDir "want" "/var/run/slack-roster/workspaces" "source" "the records ConfigMap" "present" true) }}
 {{- /*
-  The controller refuses to start when enabledWorkspaces names a key the
-  policy does not declare. The policy is inline in values, so say so here, at
-  render time, before the rollout stops the running controller. Skipped when
-  the values carry no policy at all.
+  The controller refuses to start when the policy document's
+  controllers.slack.enabledWorkspaces names a key its slack table does not
+  declare. The policy is inline in values, so say so here, at render time,
+  before the rollout stops the running controller.
 */ -}}
-{{- if or .Values.policy .Values.access }}
-{{- $bound := dict }}
-{{- range $workspace, $_ := dig "slack" "workspaces" dict .Values.policy }}{{ $_ := set $bound $workspace true }}{{ end }}
-{{- range dig "slack" list (.Values.access | default dict) }}{{ $_ := set $bound .workspace true }}{{ end }}
-{{- range $cfg.enabledWorkspaces }}
+{{- $bound := dig "slack" "workspaces" dict .Values.policy }}
+{{- range dig "controllers" "slack" "enabledWorkspaces" list .Values.policy }}
 {{- if not (hasKey $bound .) }}
-{{- fail (printf "controllerSlack.config.enabledWorkspaces names %q, which policy.slack.workspaces does not declare, and nor does access.slack: remove it from enabledWorkspaces, or declare the workspace in the policy" .) }}
-{{- end }}
+{{- fail (printf "policy.controllers.slack.enabledWorkspaces names %q, which policy.slack.workspaces does not declare: remove it from enabledWorkspaces, or declare the workspace in the policy" .) }}
 {{- end }}
 {{- end }}
 {{- include "sluis.controllerRollout" (dict "name" "controllerSlack" "v" .Values.controllerSlack) }}
@@ -77,9 +73,9 @@ metadata:
     app.kubernetes.io/component: controller-slack
 data:
   # What `sluis controller slack --config` reads: `controllerSlack.config`, as the values give
-  # it. The binary validates it against schemas/config/controller-slack.schema.json.
+  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-slack.schema.json.
   config.yaml: |
-    {{- toYaml $cfg | nindent 4 }}
+    {{- include "sluis.document" (dict "kind" "controller-slack" "doc" $cfg) | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -106,8 +102,10 @@ spec:
       labels:
         {{- include "sluis.controllerSlackSelectorLabels" . | nindent 8 }}
       annotations:
-        checksum/config: {{ toYaml $cfg | sha256sum }}
-        # The bindings are read at start, like the service's policy.
+        # One checksum per document this process reads: its own, and the
+        # policy. A change to the service's or the other controller's
+        # document does not restart it.
+        checksum/config: {{ include "sluis.document" (dict "kind" "controller-slack" "doc" $cfg) | sha256sum }}
         checksum/policy: {{ include (print $.Template.BasePath "/policy-configmap.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ $name }}
@@ -127,7 +125,7 @@ spec:
           args:
             - controller
             - slack
-            - --config=/etc/sluis/controller-slack.yaml
+            - --config=/etc/sluis/config/config.yaml
           {{- include "sluis.controllerProbes" (dict "name" "controllerSlack" "cfg" $cfg) | nindent 10 }}
           {{- with include "sluis.otelEnv" (dict "root" . "service" "slack-roster") }}
           env:
@@ -135,11 +133,10 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/controller-slack.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
               readOnly: true
             - name: policy
-              mountPath: /var/run/slack-roster/policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/slack-roster

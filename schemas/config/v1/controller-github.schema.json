@@ -1,0 +1,463 @@
+{
+  "$defs": {
+    "duration": {
+      "description": "A Go duration: 30s, 2m, 168h.",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "type": "string"
+    },
+    "url": {
+      "allOf": [
+        {
+          "pattern": "^https?://\\S+$"
+        },
+        {
+          "not": {
+            "pattern": "^https?://[^/?#\\s]*@"
+          }
+        }
+      ],
+      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "$id": "https://truvity.github.io/sluis/schemas/v1/config/controller-github.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+  "properties": {
+    "adapters": {
+      "additionalProperties": false,
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
+      "properties": {
+        "audit": {
+          "additionalProperties": false,
+          "description": "The adapter for the audit sink, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "blobs": {
+          "additionalProperties": false,
+          "description": "The adapter for blobs, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "schedule": {
+          "additionalProperties": false,
+          "description": "The adapter for the schedule of passes, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "signing": {
+          "additionalProperties": false,
+          "description": "The adapter for token signing, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "The adapter for state, sessions included, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "trigger": {
+          "additionalProperties": false,
+          "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "apiVersion": {
+      "const": "sluis.truvity.github.io/controller-github/v1",
+      "description": "Absent means v1. Added when v2 was: a v1 document may name its version."
+    },
+    "appsDir": {
+      "default": "/var/run/github-roster/apps",
+      "description": "One file per connected organisation: its App's credentials.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "audit": {
+      "additionalProperties": false,
+      "description": "The audit installation the controller records to, as its own workload. Unset only logs what it did.",
+      "properties": {
+        "tokenFile": {
+          "description": "This workload's projected service-account token.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "writer": {
+          "$ref": "#/$defs/url",
+          "description": "The installation's receiver."
+        }
+      },
+      "type": "object"
+    },
+    "catalogueFile": {
+      "description": "The GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. A missing or malformed one is never fatal here.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "console": {
+      "additionalProperties": false,
+      "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+      "properties": {
+        "auth": {
+          "additionalProperties": false,
+          "description": "The proof. Absent, `tokenFile`.",
+          "properties": {
+            "aws": {
+              "additionalProperties": false,
+              "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+              "properties": {
+                "audience": {
+                  "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "audience"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "consoleURL": {
+      "$ref": "#/$defs/url",
+      "description": "The console's API, which answers who holds a group."
+    },
+    "enabledOrgs": {
+      "description": "The organisations the controller changes. Every other bound organisation is derived and reported, and left alone. Each must be one the policy binds.",
+      "items": {
+        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "interval": {
+      "$ref": "#/$defs/duration",
+      "default": "15m",
+      "description": "How long between passes. Positive."
+    },
+    "log": {
+      "$ref": "https://github.com/truvity/policy/schemas/fragments/log.json"
+    },
+    "platform": {
+      "additionalProperties": false,
+      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+      "properties": {
+        "aws": {
+          "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
+          "type": "boolean"
+        },
+        "kubernetes": {
+          "description": "A Kubernetes cluster is available.",
+          "type": "boolean"
+        },
+        "openbao": {
+          "description": "An OpenBao is available.",
+          "type": "boolean"
+        },
+        "replicas": {
+          "default": 1,
+          "description": "How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "runtime": {
+          "description": "Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.",
+          "enum": [
+            "kubernetes",
+            "lambda",
+            "process"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "policyDir": {
+      "description": "The directory the policy is mounted at: the bindings are the policy's github table.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "ports": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "adapter": {
+                "const": "dynamodb"
+              }
+            },
+            "required": [
+              "adapter"
+            ]
+          },
+          "then": {
+            "required": [
+              "dynamodb"
+            ]
+          }
+        }
+      ],
+      "description": "The adapters behind the storage ports (docs/design/ports.md).",
+      "properties": {
+        "adapter": {
+          "default": "legacy",
+          "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+          "enum": [
+            "legacy",
+            "memory",
+            "dynamodb"
+          ]
+        },
+        "blob": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "adapter": {
+                    "const": "s3"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "s3"
+                ]
+              }
+            }
+          ],
+          "description": "Replaces the Blob port (status reports, directory snapshots) with an adapter of its own, whatever `ports.adapter` is. Absent, the Blob is `ports.adapter`'s.",
+          "properties": {
+            "adapter": {
+              "description": "`s3` keeps the blobs in an S3 bucket.",
+              "enum": [
+                "s3"
+              ]
+            },
+            "s3": {
+              "additionalProperties": false,
+              "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
+              "properties": {
+                "bucket": {
+                  "description": "The bucket. It must exist, with public access blocked.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "endpoint": {
+                  "$ref": "#/$defs/url",
+                  "description": "Overrides the S3 address: LocalStack or an S3-compatible store."
+                },
+                "kmsKey": {
+                  "description": "A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "pathStyle": {
+                  "description": "Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need.",
+                  "type": "boolean"
+                },
+                "prefix": {
+                  "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "region": {
+                  "description": "The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`).",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "bucket"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "dynamodb": {
+          "additionalProperties": false,
+          "description": "The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
+          "properties": {
+            "create": {
+              "default": false,
+              "description": "Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it.",
+              "type": "boolean"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/url",
+              "description": "Overrides the DynamoDB address: LocalStack or DynamoDB Local."
+            },
+            "region": {
+              "description": "The table's region. Absent, the SDK's own resolution (`AWS_REGION`).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "table": {
+              "description": "The table's name.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "table"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "preset": {
+      "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
+      "enum": [
+        "server",
+        "k8s-minimal",
+        "k8s-openbao",
+        "aws-serverless",
+        "aws-hybrid",
+        "aws-eks"
+      ]
+    },
+    "probes": {
+      "$ref": "https://github.com/truvity/policy/schemas/fragments/probes.json",
+      "default": {
+        "address": ":7070"
+      }
+    },
+    "recordsDir": {
+      "default": "/var/run/github-roster/records",
+      "description": "The console's records, mounted.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "release": {
+      "default": "sluis",
+      "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "tokenFile": {
+      "default": "/var/run/secrets/github-roster/token",
+      "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "policyDir",
+    "consoleURL"
+  ],
+  "title": "sluis controller github",
+  "type": "object"
+}

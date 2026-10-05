@@ -521,59 +521,6 @@ func TestAdoptDiscoversAndChecksTheTenantID(t *testing.T) {
 	}
 }
 
-func TestParseOverlay(t *testing.T) {
-	t.Parallel()
-
-	overlay, err := hub.ParseOverlay([]byte(`
-workspaces:
-  - backend: google
-    admin: integrations@example.com
-    keyFile: /keys/example/key.json
-  - id: C0known
-    backend: google
-    admin: integrations@other.example
-    keyFile: /keys/other/key.json
-    serve:
-      - one.example
-      - two.example
-`))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(overlay.Workspaces) != 2 {
-		t.Fatalf("workspaces = %+v", overlay.Workspaces)
-	}
-	if overlay.Workspaces[0].ID != "" || overlay.Workspaces[1].ID != "C0known" {
-		t.Errorf("ids = %q, %q", overlay.Workspaces[0].ID, overlay.Workspaces[1].ID)
-	}
-	// serve is optional: omitted means every domain the tenant owns.
-	if len(overlay.Workspaces[0].Serve) != 0 {
-		t.Errorf("serve = %v, want empty when it is not declared", overlay.Workspaces[0].Serve)
-	}
-	if got := overlay.Workspaces[1].Serve; len(got) != 2 || got[0] != "one.example" {
-		t.Errorf("serve = %v", got)
-	}
-
-	// A field nobody reads is a rollout that silently declares nothing.
-	if _, err := hub.ParseOverlay([]byte("workspaces:\n  - backend: google\n    adminEmail: x@y.z\n    keyFile: /k\n")); err == nil {
-		t.Errorf("an unknown key was accepted")
-	}
-	// The three that cannot be discovered are required.
-	for _, missing := range []string{
-		"workspaces:\n  - admin: a@b.c\n    keyFile: /k\n",
-		"workspaces:\n  - backend: google\n    keyFile: /k\n",
-		"workspaces:\n  - backend: google\n    admin: a@b.c\n",
-	} {
-		if _, err := hub.ParseOverlay([]byte(missing)); err == nil {
-			t.Errorf("accepted an incomplete declaration: %q", missing)
-		}
-	}
-	// No file at all is the ordinary standalone case.
-	if o, err := hub.LoadOverlay("/nonexistent/overlay.yaml"); err != nil || len(o.Workspaces) != 0 {
-		t.Errorf("a missing overlay = %+v, %v", o, err)
-	}
-}
-
 // The GitHub column and its facet are the hub's answer, not the browser's,
 // for the same reason the domain filter is: a page of 200 narrowed in the
 // browser says "nobody" while the snapshot holds hundreds. The hub keeps

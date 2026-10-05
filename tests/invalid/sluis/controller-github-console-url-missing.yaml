@@ -2,8 +2,6 @@
 # error: controllerGithub.config.consoleURL is required
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
 console:
   mount: /console
 exchange:

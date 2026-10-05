@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +18,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
+	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/verify"
 	"github.com/truvity/sluis/policy"
@@ -86,12 +85,9 @@ func TestTheTwoAWSDoorsEachTakeOnlyTheirOwnAudience(t *testing.T) {
 // One value for both would make them one door again: refused at start.
 func TestTheSameAudienceForBothAWSDoorsIsRefused(t *testing.T) {
 	t.Parallel()
-	file := filepath.Join(t.TempDir(), "aws.yaml")
-	if err := os.WriteFile(file, []byte("audience: same\naccounts:\n- account: '111122223333'\n  name: prod\n"+
-		"  issuer: https://abc.tokens.sts.global.api.aws\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cfg := Config{awsPath: file, consoleAWSAudience: "same", audience: "x"}
+	cfg := Config{aws: config.AWSFederation{Audience: "same", Accounts: []config.AWSAccount{{
+		Account: "111122223333", Name: "prod", Issuer: "https://abc.tokens.sts.global.api.aws",
+	}}}, consoleAWSAudience: "same", audience: "x"}
 	if _, _, err := openVerifiers(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
 		t.Error("the same audience for both doors was accepted")
 	}

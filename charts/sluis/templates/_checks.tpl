@@ -17,8 +17,8 @@ Two kinds of check live here and nowhere else:
 
 {{/*
 sluis.expectPath: a config key names a file or directory the chart
-mounts. Takes (dict "key" "config.exchange.clustersFile" "got" <the config's
-value> "want" <where the chart mounts it> "source" "exchange.clusters"
+mounts. Takes (dict "key" "config.policy.file" "got" <the config's
+value> "want" <where the chart mounts it> "source" "policy"
 "present" <whether the chart renders and mounts it>).
 
 Present: the key must be exactly where the chart mounts it. Absent: the key
@@ -73,26 +73,20 @@ sluis.checks: everything the service's config must agree with.
 {{- $_ := include "sluis.port" . -}}
 {{- $_ := include "sluis.healthPort" . -}}
 {{- include "sluis.expectRelease" (dict "key" "config.release" "root" . "got" $c.release) -}}
-{{- include "sluis.expectPath" (dict "key" "config.policyDir" "got" $c.policyDir "want" "/var/run/access-issuer/policy" "source" "policy" "present" true) -}}
+{{- include "sluis.expectPath" (dict "key" "config.policy.file" "got" (dig "policy" "file" "" $c) "want" "/etc/sluis/policy/policy.yaml" "source" "policy" "present" true) -}}
 {{- $signing := dig "signingKey" dict $c -}}
 {{- include "sluis.expectPath" (dict "key" "config.signingKey.file" "got" $signing.file "want" (printf "/var/run/access-issuer/signing-key/%s" .Values.signingKey.key) "source" "signingKey.key" "present" true) -}}
 {{- $additional := include "sluis.additionalSigningKeyFiles" . -}}
 {{- if ne (join "," ($signing.additionalFiles | default list)) $additional -}}
 {{- fail (printf "config.signingKey.additionalFiles must be [%s], one file per signingKey.additional entry in the order they are declared (got [%s])" $additional (join ", " ($signing.additionalFiles | default list))) -}}
 {{- end -}}
-{{- $exchange := dig "exchange" dict $c -}}
-{{- include "sluis.expectPath" (dict "key" "config.exchange.clustersFile" "got" $exchange.clustersFile "want" "/var/run/access-issuer/clusters.yaml" "source" "exchange.clusters" "present" (not (empty .Values.exchange.clusters))) -}}
-{{- include "sluis.expectPath" (dict "key" "config.exchange.awsFile" "got" $exchange.awsFile "want" "/var/run/access-issuer/aws.yaml" "source" "exchange.aws.accounts" "present" (not (empty .Values.exchange.aws.accounts))) -}}
-{{- include "sluis.expectPath" (dict "key" "config.overlayFile" "got" $c.overlayFile "want" "/var/run/access-issuer/directory/overlay.yaml" "source" "directory.workspaces" "present" (not (empty .Values.directory.workspaces))) -}}
-{{- include "sluis.expectPath" (dict "key" "config.github.catalogueFile" "got" (dig "github" "catalogueFile" "" $c) "want" "/var/run/access-issuer/github-apps-catalogue.yaml" "source" "githubApps.catalogue" "present" (not (empty .Values.githubApps.catalogue))) -}}
-{{- include "sluis.expectPath" (dict "key" "config.slack.catalogueFile" "got" (dig "slack" "catalogueFile" "" $c) "want" "/var/run/access-issuer/slack-apps-catalogue.yaml" "source" "slackApps" "present" (not (empty .Values.slackApps))) -}}
 {{- include "sluis.expectPath" (dict "key" "config.clientSecretsDir" "got" $c.clientSecretsDir "want" "/var/run/access-issuer/clients" "source" "policy.clients[].secret" "present" (not (empty (include "sluis.confidentialClients" .)))) -}}
 {{- include "sluis.expectAudit" (dict "key" "config.audit.tokenFile" "cfg" $c) -}}
 {{- $openbao := dig "ports" "export" "openbao" dict $c -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.caFile" "got" $openbao.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $openbao) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
-{{- if and $c.exports (not (dig "ports" "export" "adapter" "" $c)) -}}
-{{- fail "config.exports names secrets to copy and config.ports.export names nowhere to copy them to: set config.ports.export (adapter: openbao, and its address and auth), or remove config.exports" -}}
+{{- if and (dig "exports" list .Values.policy) (not (dig "ports" "export" "adapter" "" $c)) (not (dig "adapters" "secrets" "adapter" "" $c)) -}}
+{{- fail "policy.exports names secrets to copy and config.ports.export names nowhere to copy them to: set config.ports.export (adapter: openbao, and its address and auth), or remove policy.exports" -}}
 {{- end -}}
 {{- /*
   Recovery is the one thing left that asks the API server, and deliberately
@@ -157,7 +151,7 @@ sluis.rosterChecks: what a controller's config must agree with. Takes
 {{- fail (printf "%s.config.consoleURL must be %s, the console this release serves (got %q)" .name $want $c.consoleURL) -}}
 {{- end -}}
 {{- include "sluis.expectRelease" (dict "key" (printf "%s.config.release" .name) "root" $root "got" $c.release) -}}
-{{- include "sluis.expectPath" (dict "key" (printf "%s.config.policyDir" .name) "got" $c.policyDir "want" (printf "/var/run/%s/policy" $dir) "source" "policy" "present" true) -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.config.policy.file" .name) "got" (dig "policy" "file" "" $c) "want" "/etc/sluis/policy/policy.yaml" "source" "policy" "present" true) -}}
 {{- include "sluis.expectPath" (dict "key" (printf "%s.config.tokenFile" .name) "got" $c.tokenFile "want" (printf "/var/run/secrets/%s/token" $dir) "source" "the projected ServiceAccount token" "present" true) -}}
 {{- include "sluis.expectAudit" (dict "key" (printf "%s.config.audit.tokenFile" .name) "cfg" $c) -}}
 {{- end -}}

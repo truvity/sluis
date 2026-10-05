@@ -169,11 +169,6 @@
           },
           "type": "object"
         },
-        "catalogueFile": {
-          "description": "The GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. A missing or malformed one is never fatal here.",
-          "minLength": 1,
-          "type": "string"
-        },
         "console": {
           "additionalProperties": false,
           "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
@@ -206,14 +201,6 @@
         "consoleURL": {
           "$ref": "#/definitions/config-controller-github.url",
           "description": "The console's API, which answers who holds a group."
-        },
-        "enabledOrgs": {
-          "description": "The organisations the controller changes. Every other bound organisation is derived and reported, and left alone. Each must be one the policy binds.",
-          "items": {
-            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$",
-            "type": "string"
-          },
-          "type": "array"
         },
         "interval": {
           "$ref": "#/definitions/config-controller-github.duration",
@@ -270,10 +257,20 @@
           },
           "type": "object"
         },
-        "policyDir": {
-          "description": "The directory the policy is mounted at: the bindings are the policy's github table.",
-          "minLength": 1,
-          "type": "string"
+        "policy": {
+          "additionalProperties": false,
+          "description": "The policy document: the bindings are its github table, and its `controllers.github` section is what this controller may change.",
+          "properties": {
+            "file": {
+              "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "type": "object"
         },
         "ports": {
           "additionalProperties": false,
@@ -679,14 +676,6 @@
           "minLength": 1,
           "type": "string"
         },
-        "enabledWorkspaces": {
-          "description": "The workspaces the controller changes, by the policy's key. Each must be one the policy declares.",
-          "items": {
-            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
-            "type": "string"
-          },
-          "type": "array"
-        },
         "interval": {
           "$ref": "#/definitions/config-controller-slack.duration",
           "default": "15m",
@@ -742,10 +731,20 @@
           },
           "type": "object"
         },
-        "policyDir": {
-          "description": "The directory the policy is mounted at: the bindings are the policy's slack table.",
-          "minLength": 1,
-          "type": "string"
+        "policy": {
+          "additionalProperties": false,
+          "description": "The policy document: the bindings are its slack table, and its `controllers.slack` section is what this controller may change.",
+          "properties": {
+            "file": {
+              "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "type": "object"
         },
         "ports": {
           "additionalProperties": false,
@@ -952,6 +951,1094 @@
       "minLength": 1,
       "type": "string"
     },
+    "config-policy": {
+      "additionalProperties": false,
+      "description": "The policy document: what an installation decides, read by every process of it. The access model's tables (docs/reference/policy.md) and beside them whom the exchange trusts, what an operator may make, what each controller may change and what is copied out. Rendered by `sluisctl policy render` from layers; a process reads exactly one. Nothing here is a secret.",
+      "properties": {
+        "apps": {
+          "additionalProperties": false,
+          "description": "What an operator may make on the console.",
+          "properties": {
+            "github": {
+              "additionalProperties": false,
+              "description": "GitHub Apps.",
+              "properties": {
+                "catalogue": {
+                  "description": "Every GitHub App the installation declares (docs/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "One App: created under `org` from the console, and installed there.",
+                    "properties": {
+                      "description": {
+                        "description": "What it is for.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "events": {
+                        "description": "Webhook events; the webhook stays inactive.",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "grants": {
+                        "description": "Who may ask for tokens of it, and for how much.",
+                        "items": {
+                          "additionalProperties": false,
+                          "description": "A grant.",
+                          "properties": {
+                            "group": {
+                              "description": "The internal group.",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "permissions": {
+                              "additionalProperties": {
+                                "enum": [
+                                  "read",
+                                  "write",
+                                  "admin"
+                                ]
+                              },
+                              "description": "Permission name to level: read, write or admin.",
+                              "minProperties": 1,
+                              "type": "object"
+                            },
+                            "repositories": {
+                              "description": "Repository globs.",
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "group",
+                            "repositories",
+                            "permissions"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "id": {
+                        "description": "[a-z0-9-], at most 32, unique; never changes.",
+                        "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                        "type": "string"
+                      },
+                      "installation": {
+                        "description": "all or selected (default).",
+                        "enum": [
+                          "all",
+                          "selected"
+                        ]
+                      },
+                      "name": {
+                        "description": "Default <org>-<id>.",
+                        "maxLength": 34,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "org": {
+                        "description": "The organisation it is created under.",
+                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$",
+                        "type": "string"
+                      },
+                      "permissions": {
+                        "additionalProperties": {
+                          "enum": [
+                            "read",
+                            "write",
+                            "admin"
+                          ]
+                        },
+                        "description": "Permission name to level: read, write or admin.",
+                        "minProperties": 1,
+                        "type": "object"
+                      },
+                      "public": {
+                        "description": "Installable by other organisations.",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "org",
+                      "permissions"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "runnerTiers": {
+                  "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once.",
+                  "items": {
+                    "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "uniqueItems": true
+                }
+              },
+              "type": "object"
+            },
+            "slack": {
+              "additionalProperties": false,
+              "description": "Slack Apps.",
+              "properties": {
+                "catalogue": {
+                  "description": "Every Slack App the installation declares (docs/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "One Slack App, created and installed from the console.",
+                    "properties": {
+                      "botScopes": {
+                        "description": "The bot scopes.",
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "description": {
+                        "description": "At most 140.",
+                        "maxLength": 140,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "[a-z0-9-], at most 32, unique; never changes.",
+                        "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Default <workspace>-<id>.",
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "workspace": {
+                        "description": "A key of the policy's slack.workspaces.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "workspace",
+                      "botScopes"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "claims": {
+          "additionalProperties": {
+            "description": "A claims fragment: merged into the token (docs/reference/policy.md#claims).",
+            "type": "object"
+          },
+          "description": "What a group adds to a token, by group.",
+          "type": "object"
+        },
+        "client_documents": {
+          "additionalProperties": false,
+          "description": "Admits clients that are not declared, by a document they serve about themselves. Off unless it names an origin.",
+          "properties": {
+            "groups": {
+              "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+              "oneOf": [
+                {
+                  "const": "all"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "origins": {
+              "description": "The origins.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "requires": {
+              "description": "The groups a caller must hold.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ttl_cap": {
+              "$ref": "#/definitions/config-policy.duration",
+              "description": "The longest a token lives."
+            }
+          },
+          "type": "object"
+        },
+        "clients": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "A client: who may be issued a token, and for what. Its id is the audience.",
+            "properties": {
+              "backchannel_logout_uri": {
+                "description": "Where a back-channel logout is posted.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "description": {
+                "description": "One line about it on the sign-in page. Public.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "display_name": {
+                "description": "What the sign-in page calls it. Public.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "groups": {
+                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+                "oneOf": [
+                  {
+                    "const": "all"
+                  },
+                  {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "groups_delimiter": {
+                "description": "Rewrites `:` in its `groups` claim (docs/decisions/0015).",
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "description": "public, confidential or exchange.",
+                "enum": [
+                  "public",
+                  "confidential",
+                  "exchange"
+                ]
+              },
+              "redirects": {
+                "description": "The redirect URIs.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "requires": {
+                "description": "The groups a caller must hold, any of them.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secret": {
+                "description": "For a confidential client: the name its secret is delivered under.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "sign_in_exchange": {
+                "description": "It may exchange a sign-in for a token of its own.",
+                "type": "boolean"
+              },
+              "signed_out": {
+                "description": "Where sign-out may return the browser.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "signing_alg": {
+                "description": "The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "ttl_cap": {
+                "$ref": "#/definitions/config-policy.duration",
+                "description": "The longest a token for it lives."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "description": "Who may be issued a token, by client id.",
+          "type": "object"
+        },
+        "controllers": {
+          "additionalProperties": false,
+          "description": "What each controller may CHANGE. Everything else the policy binds is derived every pass and shown with what would happen, and left alone: an organisation or workspace is born disabled.",
+          "properties": {
+            "github": {
+              "additionalProperties": false,
+              "description": "The GitHub controller.",
+              "properties": {
+                "enabledOrgs": {
+                  "description": "The organisations it changes. Each must be bound by the github table.",
+                  "items": {
+                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "slack": {
+              "additionalProperties": false,
+              "description": "The Slack controller.",
+              "properties": {
+                "enabledWorkspaces": {
+                  "description": "The workspaces it changes, by key. Each must be declared by the slack table.",
+                  "items": {
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "exchange": {
+          "additionalProperties": false,
+          "description": "Whom the token exchange trusts. Nothing here is a secret: every row is a name and a URL.",
+          "properties": {
+            "aws": {
+              "additionalProperties": false,
+              "description": "The AWS accounts whose roles' outbound identity tokens (sts:GetWebIdentityToken) are verified. An empty list verifies none.",
+              "properties": {
+                "accounts": {
+                  "description": "The accounts.",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "An account.",
+                    "properties": {
+                      "account": {
+                        "description": "The 12-digit account id.",
+                        "pattern": "^[0-9]{12}$",
+                        "type": "string"
+                      },
+                      "algs": {
+                        "description": "Default both; narrow, never widen.",
+                        "items": {
+                          "enum": [
+                            "ES384",
+                            "RS256"
+                          ]
+                        },
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "issuer": {
+                        "$ref": "#/definitions/config-policy.url",
+                        "description": "From `aws iam get-outbound-web-identity-federation-info`. https."
+                      },
+                      "jwksUri": {
+                        "$ref": "#/definitions/config-policy.url",
+                        "description": "Default <issuer>/.well-known/jwks.json."
+                      },
+                      "name": {
+                        "description": "The estate's word for it, for logs.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "orgId": {
+                        "description": "Require this AWS Organizations id.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "account",
+                      "name",
+                      "issuer"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "audience": {
+                  "description": "The audience the role must request. Required with an account: it is the trust boundary.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxAge": {
+                  "$ref": "#/definitions/config-policy.duration",
+                  "default": "5m",
+                  "description": "Refuse a token whose `iat` is older than this. At most 1h."
+                }
+              },
+              "type": "object"
+            },
+            "clusters": {
+              "description": "The clusters whose ServiceAccount tokens are verified, each against the key set it publishes for itself. This service's own cluster is a row like any other.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A cluster.",
+                "properties": {
+                  "issuer": {
+                    "description": "The `iss` its ServiceAccount tokens carry.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "jwksUri": {
+                    "$ref": "#/definitions/config-policy.url",
+                    "description": "Where its keys are. Unset discovers them from the issuer."
+                  },
+                  "name": {
+                    "description": "The estate's word for it: the cluster in a `service_account` matcher. Renaming a row changes every rule about it.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "issuer"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "github": {
+              "additionalProperties": false,
+              "description": "Whose GitHub Actions tokens are verified, for this issuer's URL as the audience.",
+              "properties": {
+                "owners": {
+                  "description": "The organisations. None verifies none: an empty list would admit every repository there is.",
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "exports": {
+          "description": "The secrets the service copies out of itself into the store its `ports.export` (or its secrets adapter) names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. An unknown source, a source this document does not declare and two exports that would write one key are refused before anything starts.",
+          "items": {
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "source": {
+                      "enum": [
+                        "slack-app",
+                        "github-app"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "app"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "source": {
+                      "const": "runner-app"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "tier",
+                    "org"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "source": {
+                      "const": "bundle"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "bundle"
+                  ]
+                }
+              }
+            ],
+            "description": "One copy: what is copied (`source` and the field that names it) and where it goes (`path`, in `namespace`).",
+            "properties": {
+              "app": {
+                "description": "The catalogue id, for `slack-app` and `github-app`. It must be declared in the catalogue.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "bundle": {
+                "description": "The bundle, for `bundle`: each is what the Kubernetes Secret of that name held, one JSON document per entry. Written with `replace`: the key holds exactly the bundle.",
+                "enum": [
+                  "workspace-credentials",
+                  "github-apps",
+                  "github-links",
+                  "github-runner-apps",
+                  "github-catalogue-apps",
+                  "slack-credentials",
+                  "slack-records"
+                ]
+              },
+              "interval": {
+                "$ref": "#/definitions/config-policy.duration",
+                "default": "1h",
+                "description": "How often the copy is made again with nothing changed, to put back what somebody altered. A change is copied at once; this is the backstop."
+              },
+              "name": {
+                "description": "Identifies the export in the log, the metrics and its lease: lower-case letters, digits, '.', '_' and '-'. Absent, the source and what it names, e.g. `slack-app.alerts`.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "namespace": {
+                "description": "The OpenBao namespace. Absent, `ports.export.openbao.namespace`.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "org": {
+                "description": "The organisation, for `runner-app`.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "path": {
+                "description": "The key under the KV mount: `slack-apps/alerts`. No leading or trailing slash.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "properties": {
+                "additionalProperties": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App. A property export is a PATCH: other properties of the key are left as they are. Not for `bundle`.",
+                "type": "object"
+              },
+              "source": {
+                "description": "What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).",
+                "enum": [
+                  "slack-app",
+                  "github-app",
+                  "runner-app",
+                  "bundle"
+                ]
+              },
+              "tier": {
+                "description": "A runner tier, for `runner-app`. It must be one of `github.runnerTiers`.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "path"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "github": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "An organisation's bindings.",
+            "properties": {
+              "ignore": {
+                "description": "Addresses and logins the controller leaves alone.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "members": {
+                "description": "The groups whose holders belong in the organisation.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "teams": {
+                "additionalProperties": {
+                  "additionalProperties": false,
+                  "description": "A team's binding.",
+                  "properties": {
+                    "maintainers": {
+                      "description": "The groups whose holders are maintainers.",
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "members": {
+                      "description": "The groups whose holders are members.",
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                },
+                "description": "Each team, by slug.",
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "description": "GitHub organisations bound to internal groups, by login.",
+          "type": "object"
+        },
+        "groups": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "A group.",
+            "properties": {
+              "matchers": {
+                "description": "The matchers.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One way a caller comes to be in the group. Exactly one kind is set.",
+                  "properties": {
+                    "aws": {
+                      "additionalProperties": false,
+                      "description": "An IAM role in an account `exchange.aws` federates.",
+                      "properties": {
+                        "account": {
+                          "description": "The 12-digit account id.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "function": {
+                          "description": "A Lambda function's name.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "org_id": {
+                          "description": "The AWS Organizations id.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "path": {
+                          "description": "The role's path.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "description": "The role's name, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "account"
+                      ],
+                      "type": "object"
+                    },
+                    "email": {
+                      "description": "One signed-in address.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "email_domain": {
+                      "description": "Every signed-in address in a domain.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "github": {
+                      "additionalProperties": false,
+                      "description": "A GitHub Actions job, by what its verified token says.",
+                      "properties": {
+                        "environment": {
+                          "description": "The deployment environment.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "event_name": {
+                          "description": "The triggering event.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "job_workflow_ref": {
+                          "description": "The reusable workflow at a ref, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "owner": {
+                          "description": "The repository's owner.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "ref": {
+                          "description": "The ref, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "ref_type": {
+                          "description": "branch or tag.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "repository": {
+                          "description": "owner/name, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha": {
+                          "description": "The commit.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "visibility": {
+                          "description": "public, private or internal.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "workflow": {
+                          "description": "The workflow's name.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "workflow_ref": {
+                          "description": "The workflow file at a ref, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "service_account": {
+                      "additionalProperties": false,
+                      "description": "A ServiceAccount on a federated cluster.",
+                      "properties": {
+                        "cluster": {
+                          "description": "The cluster's name in `exchange.clusters`. Unset is the unqualified subject.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "description": "The ServiceAccount.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "description": "The namespace.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "namespace",
+                        "name"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "members": {
+                "description": "Directory groups whose members are in it.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "description": "Every internal group, by name, and how a caller comes to be in it.",
+          "type": "object"
+        },
+        "lifetimes": {
+          "additionalProperties": {
+            "$ref": "#/definitions/config-policy.duration",
+            "description": "A lifetime."
+          },
+          "description": "How long a token lives, by group, and `default`. The shortest across a caller's groups wins.",
+          "type": "object"
+        },
+        "people": {
+          "additionalProperties": {
+            "description": "The addresses.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Which addresses are one person, by a name the installation chooses.",
+          "type": "object"
+        },
+        "resources": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "A resource a token may be minted for, when it is not the client asking.",
+            "properties": {
+              "absolute_cap": {
+                "$ref": "#/definitions/config-policy.duration",
+                "description": "The longest a session that touched it lives."
+              },
+              "description": {
+                "description": "One line about it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "display_name": {
+                "description": "What the consent page calls it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "groups": {
+                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+                "oneOf": [
+                  {
+                    "const": "all"
+                  },
+                  {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "groups_delimiter": {
+                "description": "Rewrites `:` in its `groups` claim.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "read_only": {
+                "description": "It only reads: an absolute cap past the installation's may be honoured.",
+                "type": "boolean"
+              },
+              "requires": {
+                "description": "The groups a caller must hold, any of them.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "signing_alg": {
+                "description": "The algorithm its tokens are signed with: RS256, ES256 or ES384.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "ttl_cap": {
+                "$ref": "#/definitions/config-policy.duration",
+                "description": "The longest a token for it lives."
+              }
+            },
+            "type": "object"
+          },
+          "description": "What a token may be minted FOR, by resource indicator.",
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "description": "Slack channels bound to internal groups, across workspaces.",
+          "properties": {
+            "workspaces": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A workspace.",
+                "properties": {
+                  "channels": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "description": "A channel's binding.",
+                      "properties": {
+                        "adopt": {
+                          "description": "Adopt an existing channel.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "from": {
+                          "description": "The groups whose holders belong in it.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "ignore": {
+                          "description": "Members left alone.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "mode": {
+                          "description": "How membership is kept.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "private": {
+                          "description": "A private channel.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "description": "Each channel, by name.",
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "Each workspace, by the installation's key.",
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "vocabulary": {
+          "additionalProperties": false,
+          "description": "Which scopes, things and roles a grant name may use, and each thing's role ladder. Optional: absent, any `<scope>:<thing>:<role>` is accepted unchecked.",
+          "properties": {
+            "scopes": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A scope.",
+                "properties": {
+                  "sensitive": {
+                    "description": "Grants on it are sensitive.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "The scopes.",
+              "type": "object"
+            },
+            "things": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A thing.",
+                "properties": {
+                  "roles": {
+                    "additionalProperties": {
+                      "description": "A role: the roles it implies, or `{implies, scopes}` to restrict it to some of its thing's scopes.",
+                      "oneOf": [
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "description": "A role restricted to scopes.",
+                          "properties": {
+                            "implies": {
+                              "description": "The roles it implies.",
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "scopes": {
+                              "description": "The scopes it may be exercised on.",
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "description": "Its roles.",
+                    "type": "object"
+                  },
+                  "scopes": {
+                    "description": "The scopes it exists in.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "The things.",
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "title": "sluis policy",
+      "type": "object"
+    },
+    "config-policy.duration": {
+      "description": "A Go duration: 30s, 2m, 168h.",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "type": "string"
+    },
+    "config-policy.url": {
+      "allOf": [
+        {
+          "pattern": "^https?://\\S+$"
+        },
+        {
+          "not": {
+            "pattern": "^https?://[^/?#\\s]*@"
+          }
+        }
+      ],
+      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
+      "minLength": 1,
+      "type": "string"
+    },
     "config-serve": {
       "additionalProperties": false,
       "allOf": [
@@ -1122,24 +2209,6 @@
           "description": "Accept a plain-http issuer URL, for a local run.",
           "type": "boolean"
         },
-        "api": {
-          "additionalProperties": false,
-          "description": "The directory API's guard.",
-          "properties": {
-            "audience": {
-              "default": "directory-roster",
-              "description": "The audience a consumer's token must carry.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "consumersFile": {
-              "description": "The file naming the ServiceAccounts that may call it. None named admits nobody in a cluster.",
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "type": "object"
-        },
         "audit": {
           "additionalProperties": false,
           "description": "The audit installation this service records to. Unset keeps the trail in the log only.",
@@ -1208,154 +2277,77 @@
           "description": "Two tenants held in memory, which need no credential and no network.",
           "type": "boolean"
         },
+        "directory": {
+          "additionalProperties": false,
+          "description": "The corporate directories this deployment declares: each adopted at start (the console connects the others). Unset declares none.",
+          "properties": {
+            "workspaces": {
+              "description": "The declared workspaces. One that cannot be adopted stops the service.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A workspace: deliberately thin. Its domains and the tenant's own id are discovered.",
+                "properties": {
+                  "admin": {
+                    "description": "The account the credential impersonates.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "backend": {
+                    "description": "The implementation that reads it.",
+                    "enum": [
+                      "google"
+                    ]
+                  },
+                  "id": {
+                    "description": "The backend's tenant id. Optional: given, the adoption checks it.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "keyFile": {
+                    "description": "Where the service-account key is mounted.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "serve": {
+                    "description": "Narrows the tenant to these domains. Empty serves every domain discovered.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "syncGroups": {
+                    "description": "Narrows the tenant to these groups. Empty keeps every group in the served domains.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "backend",
+                  "admin",
+                  "keyFile"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
         "exchange": {
           "additionalProperties": false,
-          "description": "What the token exchange verifies workloads against.",
+          "description": "How the token exchange verifies workloads. Whom it trusts (the clusters, the AWS accounts, the GitHub owners) is the policy document's `exchange`.",
           "properties": {
             "audience": {
               "description": "The audience a workload token must be minted for. Defaults to `release`, so two issuers in one cluster cannot accept each other's proofs.",
               "minLength": 1,
               "type": "string"
-            },
-            "awsFile": {
-              "description": "The file naming the AWS accounts, each by its published key set. Read once at start.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "clustersFile": {
-              "description": "The file naming the federated clusters, each by its published key set. Read once at start.",
-              "minLength": 1,
-              "type": "string"
             }
           },
           "type": "object"
-        },
-        "exports": {
-          "description": "The secrets this service copies out of itself into the store `ports.export` names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. Validated at start; an unknown source, a source this deployment does not declare and two exports that would write one key stop the service before it serves.",
-          "items": {
-            "additionalProperties": false,
-            "allOf": [
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "enum": [
-                        "slack-app",
-                        "github-app"
-                      ]
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "app"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "const": "runner-app"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "tier",
-                    "org"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "const": "bundle"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "bundle"
-                  ]
-                }
-              }
-            ],
-            "description": "One copy: what is copied (`source` and the field that names it) and where it goes (`path`, in `namespace`).",
-            "properties": {
-              "app": {
-                "description": "The catalogue id, for `slack-app` and `github-app`. It must be declared in the catalogue.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "bundle": {
-                "description": "The bundle, for `bundle`: each is what the Kubernetes Secret of that name held, one JSON document per entry. Written with `replace`: the key holds exactly the bundle.",
-                "enum": [
-                  "workspace-credentials",
-                  "github-apps",
-                  "github-links",
-                  "github-runner-apps",
-                  "github-catalogue-apps",
-                  "slack-credentials",
-                  "slack-records"
-                ]
-              },
-              "interval": {
-                "$ref": "#/definitions/config-serve.duration",
-                "default": "1h",
-                "description": "How often the copy is made again with nothing changed, to put back what somebody altered. A change is copied at once; this is the backstop."
-              },
-              "name": {
-                "description": "Identifies the export in the log, the metrics and its lease: lower-case letters, digits, '.', '_' and '-'. Absent, the source and what it names, e.g. `slack-app.alerts`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "namespace": {
-                "description": "The OpenBao namespace. Absent, `ports.export.openbao.namespace`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "org": {
-                "description": "The organisation, for `runner-app`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "path": {
-                "description": "The key under the KV mount: `slack-apps/alerts`. No leading or trailing slash.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "properties": {
-                "additionalProperties": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App. A property export is a PATCH: other properties of the key are left as they are. Not for `bundle`.",
-                "type": "object"
-              },
-              "source": {
-                "description": "What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).",
-                "enum": [
-                  "slack-app",
-                  "github-app",
-                  "runner-app",
-                  "bundle"
-                ]
-              },
-              "tier": {
-                "description": "A runner tier, for `runner-app`. It must be one of `github.runnerTiers`.",
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "source",
-              "path"
-            ],
-            "type": "object"
-          },
-          "type": "array"
         },
         "freshness": {
           "additionalProperties": false,
@@ -1375,36 +2367,6 @@
               "$ref": "#/definitions/config-serve.duration",
               "default": "15m",
               "description": "How often a snapshot is refreshed."
-            }
-          },
-          "type": "object"
-        },
-        "github": {
-          "additionalProperties": false,
-          "description": "What the service knows of GitHub.",
-          "properties": {
-            "catalogueFile": {
-              "description": "The file declaring every GitHub App. A malformed one stops the service.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "owners": {
-              "description": "The organisations whose repositories' CI tokens are verified. None names none: an empty list would admit every repository there is.",
-              "items": {
-                "description": "An organisation.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "runnerTiers": {
-              "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once.",
-              "items": {
-                "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
-                "type": "string"
-              },
-              "type": "array",
-              "uniqueItems": true
             }
           },
           "type": "object"
@@ -1573,11 +2535,6 @@
           },
           "type": "object"
         },
-        "overlayFile": {
-          "description": "The file of declared workspaces, mounted.",
-          "minLength": 1,
-          "type": "string"
-        },
         "platform": {
           "additionalProperties": false,
           "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
@@ -1611,10 +2568,20 @@
           },
           "type": "object"
         },
-        "policyDir": {
-          "description": "The directory the policy is mounted at. Unset is the built-in two groups, or the demonstration policy under `demo`.",
-          "minLength": 1,
-          "type": "string"
+        "policy": {
+          "additionalProperties": false,
+          "description": "The policy document this service decides by. Unset is the built-in two groups, or the demonstration policy under `demo`.",
+          "properties": {
+            "file": {
+              "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "type": "object"
         },
         "ports": {
           "additionalProperties": false,
@@ -2113,18 +3080,6 @@
           },
           "type": "object"
         },
-        "slack": {
-          "additionalProperties": false,
-          "description": "What the service knows of Slack.",
-          "properties": {
-            "catalogueFile": {
-              "description": "The file declaring every Slack App. A malformed one stops the service.",
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "type": "object"
-        },
         "store": {
           "default": "memory",
           "description": "Where what an operator connected is kept: `memory` keeps nothing (a restart is a fresh installation), `kubernetes` keeps it in this namespace.",
@@ -2298,9 +3253,6 @@
     }
   },
   "properties": {
-    "access": {
-      "type": "object"
-    },
     "alerts": {
       "additionalProperties": false,
       "description": "Alert rules, rendered with `renders: alerts`.",
@@ -2763,7 +3715,7 @@
     },
     "config": {
       "$ref": "#/definitions/config-serve",
-      "description": "Rendered as it stands into a ConfigMap and mounted as the file the binary reads with --config. Its schema is serve's: schemas/config/serve.schema.json."
+      "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is serve's: schemas/config/serve.schema.json."
     },
     "console": {
       "additionalProperties": false,
@@ -2782,7 +3734,7 @@
       "properties": {
         "config": {
           "$ref": "#/definitions/config-controller-github",
-          "description": "Rendered as it stands into a ConfigMap and mounted as the file the binary reads with --config. Its schema is controller-github's: schemas/config/controller-github.schema.json."
+          "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is controller-github's: schemas/config/controller-github.schema.json."
         },
         "enabled": {
           "description": "Render the controller. Needs exchange.clusters to name this cluster and console.mount to be set.",
@@ -2863,7 +3815,7 @@
       "properties": {
         "config": {
           "$ref": "#/definitions/config-controller-slack",
-          "description": "Rendered as it stands into a ConfigMap and mounted as the file the binary reads with --config. Its schema is controller-slack's: schemas/config/controller-slack.schema.json."
+          "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is controller-slack's: schemas/config/controller-slack.schema.json."
         },
         "enabled": {
           "description": "Render the controller. Needs exchange.clusters to name this cluster and console.mount to be set.",
@@ -2970,7 +3922,7 @@
     },
     "directory": {
       "additionalProperties": false,
-      "description": "The corporate directories this service reads itself.",
+      "description": "The corporate directories this service reads itself. The workspaces a deployment declares are the config's: `config.directory.workspaces`, each key file mounted with `secretMounts`.",
       "properties": {
         "push": {
           "additionalProperties": false,
@@ -3009,48 +3961,6 @@
             "remoteKey"
           ],
           "type": "object"
-        },
-        "workspaces": {
-          "description": "Declared workspaces: each names a Secret holding a service-account key and the admin to impersonate.",
-          "items": {
-            "additionalProperties": false,
-            "properties": {
-              "admin": {
-                "type": "string"
-              },
-              "backend": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "secretKey": {
-                "type": "string"
-              },
-              "secretName": {
-                "type": "string"
-              },
-              "serve": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "syncGroups": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "backend",
-              "admin",
-              "secretName"
-            ],
-            "type": "object"
-          },
-          "type": "array"
         }
       },
       "type": "object"
@@ -3419,14 +4329,12 @@
     "nodeSelector": {
       "type": "object"
     },
-    "overlay": {
-      "type": "object"
-    },
     "podAnnotations": {
       "type": "object"
     },
     "policy": {
-      "type": "object"
+      "$ref": "#/definitions/config-policy",
+      "description": "The policy document, without its apiVersion, which the chart writes: rendered into the ConfigMap <release>-policy beside the sections the chart's own values fill (exchange.clusters and exchange.aws from `exchange`, the catalogues from `githubApps.catalogue` and `slackApps`). Its schema is schemas/config/policy.schema.json. An access document or a directory of layers is rendered first: `sluisctl policy render`."
     },
     "renders": {
       "description": "What this release renders: `app`, the service and the controllers (the default); `alerts`, only the alert rules; `dashboards`, only the Grafana dashboard ConfigMaps. In the last two nothing else is rendered.",

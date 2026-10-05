@@ -6,7 +6,7 @@ one process, and, with `controllerGithub.enabled` and `controllerSlack.enabled`,
 GitHub and Slack controllers beside it. The chart runs one image, `ghcr.io/truvity/sluis/sluis`,
 as three Deployments: `sluis serve`, `sluis controller github` and
 `sluis controller slack`. Each controller has no listener, and is a dry run for every organisation or
-workspace until it is listed in `controllerGithub.config.enabledOrgs` or `controllerSlack.config.enabledWorkspaces`.
+workspace until it is listed in `policy.controllers.github.enabledOrgs` or `policy.controllers.slack.enabledWorkspaces`.
 Each component is configured by one file, its `config` value, rendered as it
 stands and validated against the schema its binary uses; secrets reach a pod only
 through `secretEnv`. See [docs/reference/configuration.md](../../docs/reference/configuration.md).
@@ -78,7 +78,7 @@ secret store
 
 `controllerSlack` renders the Slack controller (`enabled`, `resources`, the rollout
 (`replicas`, `strategy`, `minReadySeconds`, `podDisruptionBudget`) and the
-controller's `config`: `interval`, `enabledWorkspaces`): it needs `exchange.clusters` to name this cluster and
+controller's `config`: `interval`; the workspaces it changes are `policy.controllers.slack.enabledWorkspaces`): it needs `exchange.clusters` to name this cluster and
 `console.mount` to be set, and egress to `slack.com:443` from the fleet's own
 policy
 ([guide](../../docs/connect/slack-workspace.md#running-the-controller)).

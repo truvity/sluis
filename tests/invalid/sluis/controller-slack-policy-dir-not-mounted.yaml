@@ -1,9 +1,7 @@
-# The chart mounts the policy at one path, and the controller's config must name it.
-# error: controllerSlack.config.policyDir must be /var/run/slack-roster/policy
+# The chart mounts the policy document at one path, and the controller's config must name it.
+# error: controllerSlack.config.policy.file must be /etc/sluis/policy/policy.yaml
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
 console:
   mount: /console
 exchange:
@@ -14,4 +12,5 @@ controllerSlack:
   enabled: true
   config:
     consoleURL: http://sluis.default.svc:8080/console
-    policyDir: /etc/policy
+    policy:
+      file: /etc/policy.yaml

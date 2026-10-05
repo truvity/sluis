@@ -4,21 +4,16 @@
 {{- include "sluis.rosterChecks" (dict "root" . "name" "controllerGithub" "cfg" $cfg "dir" "github-roster") }}
 {{- include "sluis.expectPath" (dict "key" "controllerGithub.config.appsDir" "got" $cfg.appsDir "want" "/var/run/github-roster/apps" "source" "the apps Secret" "present" true) }}
 {{- include "sluis.expectPath" (dict "key" "controllerGithub.config.recordsDir" "got" $cfg.recordsDir "want" "/var/run/github-roster/records" "source" "the records ConfigMap" "present" true) }}
-{{- include "sluis.expectPath" (dict "key" "controllerGithub.config.catalogueFile" "got" $cfg.catalogueFile "want" "/var/run/github-roster/github-apps-catalogue.yaml" "source" "githubApps.catalogue" "present" (not (empty .Values.githubApps.catalogue))) }}
 {{- /*
-  The controller refuses to start when enabledOrgs names an organisation the
-  policy does not bind. The policy is inline in values, so say so here, at
-  render time, before the rollout stops the running controller. Skipped when
-  the values carry no policy at all.
+  The controller refuses to start when the policy document's
+  controllers.github.enabledOrgs names an organisation its github table does
+  not bind. The policy is inline in values, so say so here, at render time,
+  before the rollout stops the running controller.
 */ -}}
-{{- if or .Values.policy .Values.access }}
-{{- $bound := dict }}
-{{- range $org, $_ := dig "github" dict .Values.policy }}{{ $_ := set $bound $org true }}{{ end }}
-{{- range dig "github" list (.Values.access | default dict) }}{{ $_ := set $bound .org true }}{{ end }}
-{{- range $cfg.enabledOrgs }}
+{{- $bound := dig "github" dict .Values.policy }}
+{{- range dig "controllers" "github" "enabledOrgs" list .Values.policy }}
 {{- if not (hasKey $bound .) }}
-{{- fail (printf "controllerGithub.config.enabledOrgs names %q, which policy.github does not bind, and nor does access.github: remove it from enabledOrgs, or bind the organisation in the policy" .) }}
-{{- end }}
+{{- fail (printf "policy.controllers.github.enabledOrgs names %q, which policy.github does not bind: remove it from enabledOrgs, or bind the organisation in the policy" .) }}
 {{- end }}
 {{- end }}
 {{- include "sluis.controllerRollout" (dict "name" "controllerGithub" "v" .Values.controllerGithub) }}
@@ -86,9 +81,9 @@ metadata:
     app.kubernetes.io/component: controller-github
 data:
   # What `sluis controller github --config` reads: `controllerGithub.config`, as the values give
-  # it. The binary validates it against schemas/config/controller-github.schema.json.
+  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-github.schema.json.
   config.yaml: |
-    {{- toYaml $cfg | nindent 4 }}
+    {{- include "sluis.document" (dict "kind" "controller-github" "doc" $cfg) | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -115,18 +110,11 @@ spec:
       labels:
         {{- include "sluis.controllerGithubSelectorLabels" . | nindent 8 }}
       annotations:
-        checksum/config: {{ toYaml $cfg | sha256sum }}
-        # The bindings are read at start, like the service's policy.
+        # One checksum per document this process reads: its own, and the
+        # policy. A change to the service's or the other controller's
+        # document does not restart it.
+        checksum/config: {{ include "sluis.document" (dict "kind" "controller-github" "doc" $cfg) | sha256sum }}
         checksum/policy: {{ include (print $.Template.BasePath "/policy-configmap.yaml") . | sha256sum }}
-        {{- if .Values.githubApps.catalogue }}
-        # The catalogue is read once at start, like the service's own copy
-        # (see deployment.yaml): this controller keeps no App keys and mints
-        # no installation tokens, so it reads the catalogue for one reason
-        # only — the groups its grants name are not reported as unconsumed
-        # — and a changed catalogue should still restart it, the same way a
-        # changed policy does.
-        checksum/github-apps-catalogue: {{ include (print $.Template.BasePath "/github-apps-catalogue-configmap.yaml") . | sha256sum }}
-        {{- end }}
     spec:
       serviceAccountName: {{ $name }}
       securityContext:
@@ -145,7 +133,7 @@ spec:
           args:
             - controller
             - github
-            - --config=/etc/sluis/controller-github.yaml
+            - --config=/etc/sluis/config/config.yaml
           {{- include "sluis.controllerProbes" (dict "name" "controllerGithub" "cfg" $cfg) | nindent 10 }}
           {{- with include "sluis.otelEnv" (dict "root" . "service" "github-roster") }}
           env:
@@ -153,11 +141,10 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/controller-github.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
               readOnly: true
             - name: policy
-              mountPath: /var/run/github-roster/policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/github-roster
@@ -168,12 +155,6 @@ spec:
             - name: records
               mountPath: /var/run/github-roster/records
               readOnly: true
-            {{- if .Values.githubApps.catalogue }}
-            - name: github-apps-catalogue
-              mountPath: /var/run/github-roster/github-apps-catalogue.yaml
-              subPath: catalogue.yaml
-              readOnly: true
-            {{- end }}
             {{- include "sluis.auditMounts" (dict "root" . "cfg" $cfg) | nindent 12 }}
           {{- with .Values.controllerGithub.resources }}
           resources:
@@ -211,11 +192,6 @@ spec:
           configMap:
             name: {{ include "sluis.fullname" . }}-github-orgs
             optional: true
-        {{- if .Values.githubApps.catalogue }}
-        - name: github-apps-catalogue
-          configMap:
-            name: {{ include "sluis.fullname" . }}-github-apps-catalogue
-        {{- end }}
         {{- include "sluis.auditVolumes" (dict "root" . "cfg" $cfg) | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

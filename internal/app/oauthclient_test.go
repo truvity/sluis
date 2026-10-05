@@ -71,7 +71,7 @@ func TestDeclaredOAuthClientIsRefusedWhenWrong(t *testing.T) {
 		"secret both ways": {config.OAuthClient{ID: "x", SecretFile: "/y", SecretEnv: "SLUIS_TEST_OAUTH_SECRET"}, "exclusive"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := app.FromConfig(issuerFile(t, func(f *config.Serve) { f.Demo = false }, withClient(tc.o)))
+			_, err := app.FromConfig(issuerFile(t, func(f *config.Serve) { f.Demo = false }, withClient(tc.o)), nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("err = %v, want it to mention %q", err, tc.want)
 			}

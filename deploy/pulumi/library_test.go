@@ -399,9 +399,15 @@ func schemaOf(t *testing.T, name string) []byte {
 
 // The minimum each binary's file needs beside the ports.
 var required = map[string]map[string]any{
-	"serve":             {"issuerURL": "https://access.example.test"},
-	"controller-github": {"policyDir": "/var/run/sluis/policy", "consoleURL": "https://access.example.test"},
-	"controller-slack":  {"policyDir": "/var/run/sluis/policy", "consoleURL": "https://access.example.test"},
+	"serve": {"apiVersion": "sluis.truvity.github.io/serve/v2", "issuerURL": "https://access.example.test"},
+	"controller-github": {
+		"apiVersion": "sluis.truvity.github.io/controller-github/v2", "consoleURL": "https://access.example.test",
+		"policy": map[string]any{"file": "/etc/sluis/policy/policy.yaml"},
+	},
+	"controller-slack": {
+		"apiVersion": "sluis.truvity.github.io/controller-slack/v2", "consoleURL": "https://access.example.test",
+		"policy": map[string]any{"file": "/etc/sluis/policy/policy.yaml"},
+	},
 }
 
 func validate(t *testing.T, name string, ports map[string]any) error {

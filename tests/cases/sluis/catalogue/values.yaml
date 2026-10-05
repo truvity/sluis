@@ -1,12 +1,15 @@
 # A catalogue of GitHub Apps: one App with a grant, one with defaults.
-# Rendered to a mounted file the config names (`github.catalogueFile`) and rolled out on
+# Rendered into the policy document (`apps.github.catalogue`) and rolled out on
 # change; the same values are parsed by the service's own loader in
 # internal/githubapp/catalogue's tests, so the schema and the parser
 # describe one shape.
 config:
   issuerURL: https://access.example
-  github:
-    catalogueFile: /var/run/access-issuer/github-apps-catalogue.yaml
+# The group a grant names is one the policy declares: the service refuses
+# a grant to nobody.
+policy:
+  groups:
+    all:platform:engineer: {}
 githubApps:
   catalogue:
     - id: renovate

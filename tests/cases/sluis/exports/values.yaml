@@ -2,7 +2,7 @@
 # service itself (docs/decisions/0034): what reproduces, on kernel, the External
 # Secrets PushSecrets the deployment ran before. The chart mounts the CA and
 # projects the token the jwt login presents; WHAT is copied and where is the
-# config's, and the chart renders it as it stands.
+# policy document's (`policy.exports`), and the chart renders it as it stands.
 config:
   issuerURL: https://access.example
   ports:
@@ -22,10 +22,10 @@ config:
           mount: jwt-kernel
           role: sluis-writer
           tokenFile: /var/run/openbao/token
-  slack:
-    catalogueFile: /var/run/access-issuer/slack-apps-catalogue.yaml
-  github:
-    runnerTiers: [preview, stable]
+policy:
+  apps:
+    github:
+      runnerTiers: [preview, stable]
   exports:
     - source: slack-app
       app: alerts
@@ -40,6 +40,9 @@ config:
       bundle: github-apps
       namespace: kernel
       path: sluis-backup/github-apps
+  slack:
+    workspaces:
+      truvity: {}
 slackApps:
   - id: alerts
     workspace: truvity

@@ -1,15 +1,10 @@
-# controllerGithub.actsIn names an organisation the inline policy does not bind.
-# error: controllerGithub.config.enabledOrgs names "old", which policy.github does not bind
+# controllers.github.enabledOrgs names an organisation the inline policy does not bind.
+# error: policy.controllers.github.enabledOrgs names "old", which policy.github does not bind
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
 controllerGithub:
   enabled: true
   config:
-    enabledOrgs:
-    - acme
-    - old
     consoleURL: http://sluis.default.svc:8080/console
 exchange:
   clusters:
@@ -18,5 +13,10 @@ exchange:
 console:
   mount: /console
 policy:
+  groups:
+    a:b:c: {}
   github:
-    acme: {}
+    acme: {members: [a:b:c]}
+  controllers:
+    github:
+      enabledOrgs: [acme, old]
