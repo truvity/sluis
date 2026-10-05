@@ -118,7 +118,8 @@ func NewClient(cfg Config) (*Client, error) {
 	base, err := url.Parse(cfg.Address)
 	if err != nil || base.Host == "" || base.Scheme != "https" ||
 		base.User != nil || (base.Path != "" && base.Path != "/") || base.RawQuery != "" {
-		return nil, fmt.Errorf("openbao: address %q is not an https URL with a host and no path or credentials (a token and a JWT cross this connection: TLS is required)", cfg.Address)
+		return nil, fmt.Errorf("openbao: address %q is not an https URL with a host and no path or credentials "+
+			"(a token and a JWT cross this connection: TLS is required)", cfg.Address)
 	}
 	base.Path = ""
 	mount := cfg.Mount
