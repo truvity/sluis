@@ -36,6 +36,22 @@ loader checks the rest at start, after the rollout. An estate therefore renders 
 commits the output, and runs `sluisctl render --check` in CI so that a committed document is always what the installation
 renders to ([ADR 0038](../../docs/decisions/0038-estates-render-through-sluis.md)).
 
+**Input secrets in documents mode.** What is projected follows the document's *input* source,
+`secrets.source` (with `secrets.root: /var/run/sluis/secrets`), never the credentials adapter (`adapters.secrets`, which
+may be `openbao` and holds what sluis writes). With `secrets.source: file` the chart projects each entry of the chart
+value `secrets` as the file `<root>/<name>` (mode 0440, read-only): the confidential clients' `clients/<id>/secret`,
+`providers/google/default/client-id` and `client-secret`, `issuer/state-secret`. A policy client's `secret` is that
+name, so the Kubernetes Secret behind it is declared here, and the chart refuses a client whose name is not declared:
+
+```yaml
+secrets:
+  - {name: clients/argocd/secret, secretName: sluis-client-argocd, key: client-secret}
+  - {name: providers/google/default/client-secret, secretName: sluis-google, key: client-secret}
+  - {name: issuer/state-secret, secretName: sluis-inputs, key: state-secret}
+```
+
+With `secrets.source: ssm` or `openbao` the inputs are read from the store by name and `secrets` projects nothing.
+
 Three things it will not do for you. It does not create the signing key
 — cert-manager issues one, or external-secrets delivers one, because a
 service that mints its own credential is an exception to how every other

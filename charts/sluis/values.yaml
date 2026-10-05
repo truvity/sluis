@@ -341,7 +341,9 @@ config:
 # `oauthClient.provider`'s providers/google/<provider>/client-id and
 # client-secret, `recovery.passwordSecret`, `signingKey.kms.stateSecret`, a
 # declared workspace's `keySecret`. A confidential client's secret is
-# projected from the Secret its policy entry names, without an entry here.
+# projected from the Secret its policy entry names, without an entry here (values
+# mode); in documents mode (`documents.service`) a client's `secret` is a name, so
+# declare each `clients/<id>/secret` here too, and set `secrets.source: file`.
 #
 #   secrets:
 #     - name: valkey/password
