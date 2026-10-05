@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.65.0
+
 ### Changed
 
 - **`github.com/truvity/policy` v1.44.0 to v1.45.0** (root module and `deploy/pulumi`). v1.45.0 removes `config.Secret` and replaces the `...Env` spellings in its shared fragments with `...Secret` names; sluis used neither (its schemas do not `$ref` those fragments and nothing called `config.Secret`), so no document, schema, chart value or behaviour changes. The unused `config.Secret` wrapper in `internal/config` is removed. sluis keeps its own `internal/secrets` resolver (the `SLUIS_SECRET_<NAME>` env mapping, the legacy v1 locations, the bulk SSM read with a five-minute refresh); it does not yet sit on policy's `config.NewSecrets`.
