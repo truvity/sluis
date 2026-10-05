@@ -306,10 +306,12 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("%s sqs: %v", r, got)
 		}
 		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-		wantRead := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*",
-			ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+		wantRead := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
 		if r == "http" {
-			wantRead = append(wantRead, ssmArn+"/sluis/kernel/private/config", ssmArn+"/sluis/kernel/private/config/*")
+			// http reads its config, and runs the exports (the default), whose
+			// copies it reads back.
+			wantRead = append(wantRead, ssmArn+"/sluis/kernel/private/config", ssmArn+"/sluis/kernel/private/config/*",
+				ssmArn+"/sluis/kernel/export", ssmArn+"/sluis/kernel/export/*")
 		}
 		if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
 			t.Errorf("%s reads %v", r, got)
@@ -593,7 +595,7 @@ func TestADocumentChangesTheLayerAndNeverThePackage(t *testing.T) {
 		if reflect.DeepEqual(base, changed) {
 			t.Errorf("a changed %s document left the layer as it was", name)
 		}
-		if c != code {
+		if !bytes.Equal(must(os.ReadFile(c)), must(os.ReadFile(code))) {
 			t.Errorf("a changed %s document changed the package", name)
 		}
 	}
@@ -1359,8 +1361,13 @@ func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *test
 		}
 		g := rolePolicy(t, rec, role)
 		for _, a := range actions {
-			if !reflect.DeepEqual(g[a], writes) {
-				t.Errorf("%s: %s on %v, want %v", role, a, g[a], writes)
+			want := writes
+			if strings.HasPrefix(a, "ssm:Get") {
+				// The exports run in http: a controller reads none of export/.
+				want = creds
+			}
+			if !reflect.DeepEqual(g[a], want) {
+				t.Errorf("%s: %s on %v, want %v", role, a, g[a], want)
 			}
 		}
 	}
@@ -1383,27 +1390,124 @@ func TestControllersAreDeniedTheConfigPrefixAndHTTPWritesOnlyCredentials(t *test
 // operator's config/* whatever the Deny on config/* says. No controller Allow
 // may name a parent of <root>/private/config, and none names /sluis.
 func TestNoControllerMayReadAParentOfTheConfigPrefix(t *testing.T) {
-	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Function = "github" }})
-	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	config := "/sluis/kernel/private/config"
-	for _, role := range []string{"github", "slack", "http"} {
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
-			if s["Effect"] != "Allow" {
-				continue
-			}
-			for _, res := range strs(s["Resource"]) {
-				path, ok := strings.CutPrefix(res, ssmArn)
-				if !ok {
-					continue
-				}
-				path = strings.TrimSuffix(path, "/*")
-				if !strings.HasPrefix(path, "/sluis/kernel/") {
-					t.Errorf("%s: a grant outside the installation's root: %s", role, res)
-				}
-				if role != "http" && (strings.HasPrefix(config, path+"/") || path == config || strings.HasPrefix(path, config+"/")) {
-					t.Errorf("%s may reach config/* through %s (%v)", role, res, s["Action"])
+	for _, exportsIn := range []string{"http", "github"} {
+		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Function = exportsIn }})
+		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
+		config := "/sluis/kernel/private/config"
+		for _, role := range []string{"github", "slack", "http"} {
+			for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
+				actions := strs(s["Action"])
+				ssmAction := slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, "ssm:") })
+				for _, res := range strs(s["Resource"]) {
+					if ssmAction && res == "*" {
+						t.Errorf("%s: an ssm action on every resource: %v", role, s)
+					}
+					path, ok := strings.CutPrefix(res, ssmArn)
+					if !ok {
+						continue
+					}
+					if strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
+						t.Errorf("%s: a wildcard inside an SSM resource: %s", role, res)
+					}
+					if s["Effect"] != "Allow" {
+						continue
+					}
+					path = strings.TrimSuffix(path, "/*")
+					if !strings.HasPrefix(path, "/sluis/kernel/") {
+						t.Errorf("%s: a grant outside the installation's root: %s", role, res)
+					}
+					if role != "http" && (strings.HasPrefix(config, path+"/") || path == config || strings.HasPrefix(path, config+"/")) {
+						t.Errorf("%s may reach config/* through %s (%v)", role, res, s["Action"])
+					}
 				}
 			}
 		}
+		// Only the role that runs the exports reads export/.
+		for _, role := range []string{"http", "github", "slack"} {
+			reads := slices.ContainsFunc(rolePolicy(t, rec, role)["ssm:GetParameter"], func(r string) bool { return strings.Contains(r, "/export") })
+			if reads != (role == exportsIn) {
+				t.Errorf("exports in %s: %s reads export/ = %v", exportsIn, role, reads)
+			}
+		}
+	}
+}
+
+// With a customer-managed parameter key, each role may use it only for the
+// parameters under the prefixes it reads or writes.
+func TestTheParameterKeyIsHeldToEachRolesPrefixes(t *testing.T) {
+	key := arnp + "kms:" + region + ":" + account + ":key/params"
+	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
+	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
+	for role, want := range map[string][]string{
+		"http":   {ssmArn + "/sluis/kernel/private/credentials/*", ssmArn + "/sluis/kernel/export/*", ssmArn + "/sluis/kernel/private/config/*"},
+		"github": {ssmArn + "/sluis/kernel/private/credentials/*", ssmArn + "/sluis/kernel/export/*"},
+	} {
+		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-"+role+"-policy"), "policy").StringValue()) {
+			if s["Sid"] != "SluisParameterKey" {
+				continue
+			}
+			got := strs(s["Condition"].(map[string]any)["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"])
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: the key's parameters %v, want %v", role, got, want)
+			}
+		}
+	}
+	if !strings.Contains(out["exportReadPolicy"], "/sluis/kernel/export/*") || strings.Contains(out["exportReadPolicy"], "private") {
+		t.Errorf("the consumer's key condition: %s", out["exportReadPolicy"])
+	}
+}
+
+// A document may not point a function at an endpoint of its own, unless the
+// stack says it is a test; the instance may not be named private or export; a
+// document naming remote KMS signing beside WrappedSigning is refused; and the
+// telemetry environment holds telemetry settings only.
+func TestWhatTheLibraryRefusesToPublish(t *testing.T) {
+	for name, e := range map[string]estate{
+		"a secrets endpoint":  {config: "issuerURL: https://x.example\nsecrets: {endpoint: 'https://evil.example'}\n"},
+		"a dynamodb endpoint": {config: "issuerURL: https://x.example\nports: {adapter: dynamodb, dynamodb: {table: t, endpoint: 'https://evil.example'}}\n"},
+		"a controller's": {githubConfig: "consoleURL: https://x.example/console\n" +
+			"ports: {adapter: dynamodb, dynamodb: {table: t, endpoint: 'https://e.example'}}\n"},
+		"instance private": {mutate: func(a *arp.LambdaArgs) { a.Instance = "private" }},
+		"instance export":  {mutate: func(a *arp.LambdaArgs) { a.Instance = "export" }},
+		"kms beside wrapped": {config: "issuerURL: https://x.example\nsigningKey: {kms: {keys: [alias/a]}}\n",
+			mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }},
+	} {
+		if _, _, err := buildLambda(t, e); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	local := estate{config: "issuerURL: https://x.example\nsecrets: {endpoint: 'http://localhost:4566'}\n",
+		mutate: func(a *arp.LambdaArgs) { a.AllowEndpoints = true }}
+	if _, _, err := buildLambda(t, local); err != nil {
+		t.Errorf("an endpoint with AllowEndpoints: %v", err)
+	}
+	for k, ok := range map[string]bool{
+		"OTEL_EXPORTER_OTLP_ENDPOINT": true, "ACCESS_ROSTER_OTLP_AUDIENCE": true, "OPENTELEMETRY_COLLECTOR_CONFIG_URI": true,
+		"AWS_LAMBDA_EXEC_WRAPPER": true, "SLUIS_CONFIG": false, "SLUIS_ROLE": false, "SLUIS_SECRET_FILES": false,
+		"LD_PRELOAD": false, "AWS_REGION": false, "AWS_ENDPOINT_URL_SSM": false, "HTTPS_PROXY": false,
+	} {
+		_, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+			a.Telemetry = &arp.TelemetryArgs{LayerArn: pulumi.String("arn:layer"), Env: map[string]string{k: "x"}}
+		}})
+		if (err == nil) != ok {
+			t.Errorf("Telemetry.Env %s: %v, want accepted=%v", k, err, ok)
+		}
+	}
+}
+
+// The function's code is a copy of the bytes held to the digest, never the
+// caller's file: a file changed after the check is not what is uploaded.
+func TestTheCodeIsTheVerifiedCopyNotTheCallersFile(t *testing.T) {
+	pkg := zipFile(t, nil)
+	rec, _ := mustLambda(t, estate{pkg: pkg})
+	code := packagePath(t, rec.one(t, fnType, "kernel-http"))
+	if code == pkg {
+		t.Fatal("the code is the caller's path")
+	}
+	if !bytes.Equal(must(os.ReadFile(code)), must(os.ReadFile(pkg))) {
+		t.Error("the copy is not the package")
+	}
+	if fi, err := os.Stat(code); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("the copy's mode: %v %v", fi, err)
 	}
 }

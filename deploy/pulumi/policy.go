@@ -302,20 +302,34 @@ func parameterArns(region, account, prefix string) []string {
 }
 
 // parameterKeyStatements is the use of a customer-managed key SecureString
-// parameters are encrypted with, and only through SSM.
-func parameterKeyStatements(keyArn string) []statement {
+// parameters are encrypted with: only through SSM, and only for the parameters
+// under prefixes (SSM puts the parameter's ARN in the encryption context).
+func parameterKeyStatements(keyArn string, actions []string, arns []string) []statement {
 	if keyArn == "" {
 		return nil
 	}
 	return []statement{{
 		"Sid":      sidParamKy,
 		"Effect":   "Allow",
-		"Action":   []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
+		"Action":   actions,
 		"Resource": keyArn,
 		"Condition": map[string]any{
-			"StringLike": map[string]any{"kms:ViaService": "ssm.*.amazonaws.com"},
+			"StringLike": map[string]any{
+				"kms:ViaService":                      "ssm.*.amazonaws.com",
+				"kms:EncryptionContext:PARAMETER_ARN": arns,
+			},
 		},
 	}}
+}
+
+// parameterArnsUnder is the parameters under each prefix, for a key's
+// encryption-context condition.
+func parameterArnsUnder(region, account string, prefixes ...string) []string {
+	out := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		out = append(out, arnPrefix+"ssm:"+region+":"+account+":parameter"+p+"/*")
+	}
+	return out
 }
 
 // functionPolicyIn is what one function's role is rendered from.
@@ -331,6 +345,9 @@ type functionPolicyIn struct {
 	webIdentityAud     string
 	parameterKeyArn    string
 	instance           string
+	// exports is whether this function runs the exports: only it reads what
+	// it wrote under export/ (a copy that is already there writes nothing).
+	exports            bool
 	logGroupArn        string
 	invokeFunctionArns []string
 }
@@ -385,13 +402,22 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	st = append(st, storageStatements(in.bucketArn)...)
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
 	st = append(st, privateStatements(in)...)
+	exportActions := []string{ssmPutParameter, ssmDeleteParameter}
+	if in.exports {
+		exportActions = []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
+	}
 	st = append(st, statement{
 		"Sid":      sidExport,
 		"Effect":   "Allow",
-		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter},
+		"Action":   exportActions,
 		"Resource": parameterArns(in.region, in.account, ExportParameterPrefix(in.instance)),
 	})
-	st = append(st, parameterKeyStatements(in.parameterKeyArn)...)
+	keyPrefixes := []string{CredentialsParameterPrefix(in.instance), ExportParameterPrefix(in.instance)}
+	if in.role == RoleHTTP {
+		keyPrefixes = append(keyPrefixes, ConfigParameterPrefix(in.instance))
+	}
+	st = append(st, parameterKeyStatements(in.parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
+		parameterArnsUnder(in.region, in.account, keyPrefixes...))...)
 	st = append(st, statement{
 		"Sid":      sidAudit,
 		"Effect":   "Allow",
@@ -452,16 +478,7 @@ func ExportReadPolicy(region, account, instance, parameterKeyArn string) (string
 		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
 		"Resource": parameterArns(region, account, ExportParameterPrefix(instance)),
 	}}
-	if parameterKeyArn != "" {
-		st = append(st, statement{
-			"Sid":      sidParamKy,
-			"Effect":   "Allow",
-			"Action":   []string{kmsDecrypt},
-			"Resource": parameterKeyArn,
-			"Condition": map[string]any{
-				"StringLike": map[string]any{"kms:ViaService": "ssm.*.amazonaws.com"},
-			},
-		})
-	}
+	st = append(st, parameterKeyStatements(parameterKeyArn, []string{kmsDecrypt},
+		parameterArnsUnder(region, account, ExportParameterPrefix(instance)))...)
 	return document(st)
 }

@@ -176,6 +176,13 @@ type LambdaArgs struct {
 
 	// Tags are put on everything that takes tags. Default none.
 	Tags map[string]string
+
+	// AllowEndpoints lets the documents name a service endpoint
+	// (`secrets.endpoint`, `ports.dynamodb.endpoint`, any `endpoint`), for a
+	// test against LocalStack. Off, a document naming one is refused: an
+	// endpoint the documents point at is where the function reads its secrets
+	// and its State from, and a forged one would serve forged secrets.
+	AllowEndpoints bool
 }
 
 // WrappedSigningArgs is the symmetric key of the `kms-wrapped` signing adapter.
@@ -408,8 +415,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if len(missing) > 0 {
 		return out, fmt.Errorf("sluispulumi: LambdaArgs: required and empty: %v", sortedStrings(missing))
 	}
-	if !instancePattern.MatchString(out.Instance) {
-		return out, fmt.Errorf("sluispulumi: LambdaArgs.Instance %q is lower-case letters, digits and dashes, at most 32", out.Instance)
+	if !validInstance(out.Instance) {
+		return out, fmt.Errorf("sluispulumi: LambdaArgs.Instance %q is lower-case letters, digits and dashes, at most 32, "+
+			"and not private or export", out.Instance)
 	}
 	if (strings.TrimSpace(out.Policy) == "") == (out.PolicyPath == "") {
 		return out, errors.New("sluispulumi: LambdaArgs: set exactly one of Policy and PolicyPath")
@@ -504,8 +512,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 			return out, errors.New("sluispulumi: Telemetry.LayerArn is required with Telemetry")
 		}
 		for k := range t.Env {
-			if k == "SLUIS_ROLE" || k == config.EnvConfig {
-				return out, fmt.Errorf("sluispulumi: Telemetry.Env: %s is the library's", k)
+			if !telemetryVariable(k) {
+				return out, fmt.Errorf("sluispulumi: Telemetry.Env: %s is not a telemetry setting: the environment holds OTEL_*, "+
+					"the telemetry layer's own (ACCESS_ROSTER_*, OPENTELEMETRY_*) and AWS_LAMBDA_EXEC_WRAPPER, and nothing else", k)
 			}
 		}
 	}
@@ -556,9 +565,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	child := pulumi.Parent(out)
 	tags := tagMap(a.Tags)
 
-	// ---- the signing keys: remote (two asymmetric keys, KMS signs), wrapped (one
-	// symmetric key, the issuer signs with the key pairs it generates under it), or
-	// both while a stack moves from one to the other
+	// ---- the signing keys: remote (two asymmetric keys, KMS signs) or wrapped
+	// (one symmetric key, the issuer signs with the key pairs it generates under it)
 	rsEmpty := pulumi.String("").ToStringOutput()
 	sgArn, sgID, sgAlias := rsEmpty, rsEmpty, rsEmpty
 	rsArn, rsID, rsAlias := rsEmpty, rsEmpty, rsEmpty
@@ -914,7 +922,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName, role string, a *LambdaAr
 			role: role, region: a.Region, account: a.AccountID,
 			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
 			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
-			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance,
+			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance, exports: !a.Exports.Disabled && a.Exports.Function == role,
 			invokeFunctionArns: []string{githubArn, slackArn},
 			webIdentity:        true, webIdentityAud: a.WebIdentityAudience,
 		})
@@ -1169,4 +1177,18 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fns map[strin
 		names = append(names, pulumi.String(rname))
 	}
 	return role, names.ToStringArrayOutput(), nil
+}
+
+// telemetryVariable is whether a variable may be set through Telemetry.Env: the
+// OpenTelemetry SDK's own, the telemetry layer's own, and the exec wrapper a
+// layer installs itself with. Never sluis's (SLUIS_*), never the loader's
+// (LD_*) and never another AWS_* variable.
+func telemetryVariable(k string) bool {
+	switch {
+	case k == "AWS_LAMBDA_EXEC_WRAPPER":
+		return true
+	case strings.HasPrefix(k, "OTEL_"), strings.HasPrefix(k, "ACCESS_ROSTER_"), strings.HasPrefix(k, "OPENTELEMETRY_"):
+		return true
+	}
+	return false
 }

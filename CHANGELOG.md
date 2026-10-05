@@ -106,9 +106,29 @@
     `FunctionArgs.SecretFiles`, `SecretFile`, `ConfigFilePath`,
     `StateSecretPath`, `RecoveryPasswordPath` and
     `WrappedSigningArgs.KeepRemoteSigningKeys`: with `WrappedSigning` the two
-    asymmetric keys are no longer declared. **First:** `pulumi state unprotect`
-    the two keys (`<name>-signing-key`, `<name>-signing-key-rs256`); the apply
-    then schedules their deletion (30 days).
+    asymmetric keys are no longer declared, and a `Config` naming
+    `signingKey.kms` beside it is refused.
+  - Refused in the documents the library publishes: any `endpoint`
+    (`secrets.endpoint`, `ports.dynamodb.endpoint`, ...), unless
+    `AllowEndpoints` (a LocalStack test); an `Instance` named `private` or
+    `export`. `Telemetry.Env` holds `OTEL_*`, the telemetry layer's own
+    (`ACCESS_ROSTER_*`, `OPENTELEMETRY_*`) and `AWS_LAMBDA_EXEC_WRAPPER`, and
+    nothing else. Only the function that runs the exports reads `export/*`;
+    with `ParameterKeyArn`, each role may use the key only for the parameters
+    under its own prefixes (`kms:EncryptionContext:PARAMETER_ARN`).
+  - **Retiring the asymmetric keys (`kms` → `kmsWrapped`), as a step of its
+    own, at low traffic.** The switch drops the old key ids from the JWKS at
+    once, so a token signed by them and still in flight (up to
+    `lifetimes.token`, plus a relying party's JWKS cache) can fail to verify.
+    1. Record both key ids (`pulumi stack output`, or the aliases'
+       `aws kms describe-key`).
+    2. `pulumi state delete` the two keys and their aliases (preferred: the
+       keys stay in AWS untouched), then apply with `WrappedSigning`.
+    3. `aws kms disable-key` each old key; after `lifetimes.token` plus the
+       JWKS cache has passed, `aws kms schedule-key-deletion`.
+    4. Rollback: `aws kms cancel-key-deletion` → `aws kms enable-key` →
+       `pulumi import` the keys and aliases, and apply without
+       `WrappedSigning`.
   - The directory-refresh and exports schedules are unchanged.
 
 ### Added
