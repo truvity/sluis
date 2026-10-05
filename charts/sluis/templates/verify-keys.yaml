@@ -1,4 +1,5 @@
 {{- if and (eq .Values.renders "app") .Values.signingKey.verifyOnly -}}
+{{- include "sluis.verifyOnlyKeys" . -}}
 # PUBLIC keys the service publishes in its JWKS and never signs with: the keys of
 # an earlier signer, kept so tokens it issued verify until they expire. A
 # ConfigMap, because a public key is not a secret. Mounted at

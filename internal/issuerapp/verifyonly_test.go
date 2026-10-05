@@ -39,20 +39,21 @@ func TestVerifyOnlyKeysLoadAtStartAndAPrivateKeyStopsIt(t *testing.T) {
 		t.Fatalf("a public key: %+v %v", got, err)
 	}
 	for name, e := range map[string]config.SigningKeyVerifyOnly{
-		"private":   {File: priv},
-		"missing":   {File: filepath.Join(dir, "none.pem")},
+		"private":   {File: priv, Until: "2026-12-01T00:00:00Z"},
+		"missing":   {File: filepath.Join(dir, "none.pem"), Until: "2026-12-01T00:00:00Z"},
+		"no until":  {File: pub},
 		"bad until": {File: pub, Until: "tomorrow"},
-		"wrong alg": {File: pub, Alg: "RS256"},
+		"wrong alg": {File: pub, Alg: "RS256", Until: "2026-12-01T00:00:00Z"},
 	} {
 		if _, err := loadVerifyOnly([]config.SigningKeyVerifyOnly{e}, log); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	_, err = loadVerifyOnly([]config.SigningKeyVerifyOnly{{File: priv}}, log)
+	_, err = loadVerifyOnly([]config.SigningKeyVerifyOnly{{File: priv, Until: "2026-12-01T00:00:00Z"}}, log)
 	if err == nil || !strings.Contains(err.Error(), "signingKey.verifyOnly[0]") || strings.Contains(err.Error(), "BEGIN") {
 		t.Errorf("the refusal: %v", err)
 	}
-	if _, err = loadVerifyOnly([]config.SigningKeyVerifyOnly{{File: pub}, {File: pub}}, log); err == nil {
+	if _, err = loadVerifyOnly([]config.SigningKeyVerifyOnly{{File: pub, Until: "2026-12-01T00:00:00Z"}, {File: pub, Until: "2026-12-01T00:00:00Z"}}, log); err == nil {
 		t.Error("the same kid twice was accepted")
 	}
 }

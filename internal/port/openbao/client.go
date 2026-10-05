@@ -107,17 +107,18 @@ type Client struct {
 }
 
 type session struct {
-	token   string
-	renewAt time.Time
+	token    string
+	renewAt  time.Time
+	loggedAt time.Time
 }
 
 // NewClient validates the configuration and returns the client. It does not
 // connect: an OpenBao that is down at start must not stop the service.
 func NewClient(cfg Config) (*Client, error) {
 	base, err := url.Parse(cfg.Address)
-	if err != nil || base.Host == "" || (base.Scheme != "https" && base.Scheme != "http") ||
+	if err != nil || base.Host == "" || base.Scheme != "https" ||
 		base.User != nil || (base.Path != "" && base.Path != "/") || base.RawQuery != "" {
-		return nil, fmt.Errorf("openbao: address %q is not an http(s) URL with a host and no path or credentials", cfg.Address)
+		return nil, fmt.Errorf("openbao: address %q is not an https URL with a host and no path or credentials (a token and a JWT cross this connection: TLS is required)", cfg.Address)
 	}
 	base.Path = ""
 	mount := cfg.Mount
@@ -188,7 +189,26 @@ func httpClient(cfg Config) (*http.Client, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = tlsConfig
-	return &http.Client{Transport: transport, Timeout: 30 * time.Second}, nil
+	return &http.Client{
+		Transport: transport, Timeout: 30 * time.Second,
+		// A redirect would carry the token, the namespace and the login JWT to
+		// wherever the server names: the answer is the 3xx itself, an error.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}, nil
+}
+
+// freshToken is how old a token must be before a 403 is put down to the token.
+const freshToken = 30 * time.Second
+
+// tokenAge is how long ago this namespace's token was made; zero if none.
+func (s *Client) tokenAge(ns string) time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, ok := s.sessions[ns]
+	if !ok {
+		return 0
+	}
+	return s.now().Sub(cur.loggedAt)
 }
 
 // call makes one request inside a namespace, logging in first when there is
@@ -203,9 +223,11 @@ func (s *Client) call(ctx context.Context, ns, method, path, contentType string,
 		if err != nil {
 			return 0, nil, err
 		}
-		if status == http.StatusForbidden && attempt == 0 {
+		if status == http.StatusForbidden && attempt == 0 && s.tokenAge(ns) >= freshToken {
 			// A token revoked or expired early reads as forbidden; one fresh
-			// login tells that from a policy that does not allow the write.
+			// login tells that from a policy that does not allow the write. A
+			// token made a moment ago was not revoked: the policy refused, and
+			// a broken policy must not double the logins of every call.
 			continue
 		}
 		return status, raw, nil
@@ -277,7 +299,7 @@ func (s *Client) login(ctx context.Context, ns string, force bool) (string, erro
 	if lease <= 0 {
 		lease = time.Minute
 	}
-	s.sessions[ns] = session{token: out.Auth.ClientToken, renewAt: s.now().Add(lease * 8 / 10)}
+	s.sessions[ns] = session{token: out.Auth.ClientToken, renewAt: s.now().Add(lease * 8 / 10), loggedAt: s.now()}
 	return out.Auth.ClientToken, nil
 }
 

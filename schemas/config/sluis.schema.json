@@ -848,8 +848,9 @@
               "description": "The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency.",
               "properties": {
                 "address": {
-                  "$ref": "#/$defs/url",
-                  "description": "The server, with no path: `https://openbao.example`."
+                  "description": "The server, https only and with no path: `https://openbao.example`. A token and a login JWT cross this connection.",
+                  "pattern": "^https://[^\\s/?#@]+/?$",
+                  "type": "string"
                 },
                 "auth": {
                   "additionalProperties": false,
@@ -1226,13 +1227,14 @@
                 "type": "string"
               },
               "until": {
-                "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache.",
+                "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache. Required: an overlap has an end.",
                 "format": "date-time",
                 "type": "string"
               }
             },
             "required": [
-              "file"
+              "file",
+              "until"
             ],
             "type": "object"
           },

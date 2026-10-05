@@ -27,6 +27,9 @@ type fake struct {
 	requests []string
 	// denyPatch answers 403 to a PATCH, as a policy without `patch` does.
 	denyPatch bool
+	// noMount answers the mount probe as a mount that does not exist, and every
+	// kv path 404; casRequired refuses a write that carries no cas.
+	noMount, casRequired bool
 	// down answers 503 to everything but the login.
 	down bool
 	// loginErr answers the login with this status.
@@ -64,11 +67,21 @@ func (f *fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reply(w, http.StatusForbidden, map[string]any{"errors": []string{"permission denied"}})
 		return
 	}
+	if f.noMount && strings.HasPrefix(path, "kv/") {
+		reply(w, http.StatusNotFound, map[string]any{"errors": []string{}})
+		return
+	}
 	key := ns + "|"
 	switch {
 	case strings.HasPrefix(path, "kv/data/"):
 		key += strings.TrimPrefix(path, "kv/data/")
 		f.data(w, r, key)
+	case strings.HasPrefix(path, "sys/internal/ui/mounts/"):
+		if f.noMount {
+			reply(w, http.StatusNotFound, map[string]any{"errors": []string{}})
+			return
+		}
+		reply(w, http.StatusOK, map[string]any{"data": map[string]any{"path": "kv/"}})
 	case strings.HasPrefix(path, "kv/metadata/") && r.Method == http.MethodGet && r.URL.Query().Get("list") == "true":
 		f.list(w, key+strings.TrimPrefix(path, "kv/metadata/"))
 	case strings.HasPrefix(path, "kv/metadata/") && r.Method == http.MethodDelete:
@@ -144,6 +157,10 @@ func (f *fake) data(w http.ResponseWriter, r *http.Request, key string) {
 		if cur != nil {
 			versions = cur.versions
 		}
+		if f.casRequired && body.Options.Cas == nil {
+			reply(w, http.StatusBadRequest, map[string]any{"errors": []string{"check-and-set parameter required for this call"}})
+			return
+		}
 		if body.Options.Cas != nil && *body.Options.Cas != uint64(versions) {
 			reply(w, http.StatusBadRequest, map[string]any{"errors": []string{"check-and-set parameter did not match the current version"}})
 			return
@@ -206,17 +223,20 @@ func (f *fake) versions(ns, path string) int {
 	return 0
 }
 
-func newServer(t *testing.T, f *fake) string {
+// newServer is a TLS server: the adapter takes https only. The client trusts it.
+func newServer(t *testing.T, f *fake) (string, *http.Client) {
 	t.Helper()
-	srv := httptest.NewServer(f)
+	srv := httptest.NewTLSServer(f)
 	t.Cleanup(srv.Close)
-	return srv.URL
+	return srv.URL, srv.Client()
 }
 
 func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Store {
 	t.Helper()
+	addr, client := newServer(t, f)
 	cfg := openbao.Config{
-		Address:   newServer(t, f),
+		Client:    client,
+		Address:   addr,
 		Namespace: "kernel",
 		Auth: openbao.Auth{
 			Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "sluis-writer",
@@ -329,7 +349,8 @@ func TestOneLoginPerNamespaceIsReusedUntilTheLeaseIsMostlySpent(t *testing.T) {
 
 func TestARevokedTokenIsReplacedOnceAndAPolicyRefusalIsNotRetried(t *testing.T) {
 	f := newFake()
-	s := adapter(t, f, nil)
+	now := time.Now()
+	s := adapter(t, f, func(c *openbao.Config) { c.Now = func() time.Time { return now } })
 	ctx := context.Background()
 	target := port.ExportTarget{Path: "k/v"}
 	if err := s.Put(ctx, target, map[string]string{"a": "1"}, port.ExportReplace); err != nil {
@@ -338,6 +359,15 @@ func TestARevokedTokenIsReplacedOnceAndAPolicyRefusalIsNotRetried(t *testing.T) 
 	f.mu.Lock()
 	f.tokens = map[string]string{}
 	f.mu.Unlock()
+	// A token made a moment ago was not revoked: its 403 is the policy's and
+	// costs no new login.
+	if err := s.Put(ctx, target, map[string]string{"a": "2"}, port.ExportReplace); err == nil {
+		t.Fatal("a fresh token's 403 was retried into success")
+	}
+	if f.logins != 1 {
+		t.Fatalf("%d logins for a fresh token's 403, want 1", f.logins)
+	}
+	now = now.Add(time.Minute)
 	if err := s.Put(ctx, target, map[string]string{"a": "2"}, port.ExportReplace); err != nil {
 		t.Fatalf("a revoked token must cost one new login, not an error: %v", err)
 	}
@@ -413,6 +443,7 @@ func TestNewRefusesWhatIsNotAConfiguration(t *testing.T) {
 		"a path in the address":    func(c *openbao.Config) { c.Address = "https://openbao.example/v1" },
 		"a password in the URL":    func(c *openbao.Config) { c.Address = "https://u:p@openbao.example" },
 		"not http":                 func(c *openbao.Config) { c.Address = "ftp://openbao.example" },
+		"plain http":               func(c *openbao.Config) { c.Address = "http://openbao.example" },
 		"an unknown method":        func(c *openbao.Config) { c.Auth.Method = "approle" },
 		"no role":                  func(c *openbao.Config) { c.Auth.Role = "" },
 		"jwt with no token source": func(c *openbao.Config) { c.Auth.Method = "jwt" },

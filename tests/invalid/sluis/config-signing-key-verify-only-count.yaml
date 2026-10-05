@@ -4,4 +4,4 @@ config:
   issuerURL: https://issuer.example
   signingKey:
     verifyOnly:
-      - file: /var/run/access-issuer/verify-keys/0.pem
+      - {file: /var/run/access-issuer/verify-keys/0.pem, until: "2026-11-05T00:00:00Z"}

@@ -66,6 +66,9 @@ var errPrivateKey = errors.New("issuer: a verify-only key must be a PUBLIC key, 
 
 func parsePublicKey(raw []byte) (crypto.PublicKey, string, error) {
 	trimmed := strings.TrimSpace(string(raw))
+	if strings.Contains(strings.ToUpper(trimmed), "PRIVATE") {
+		return nil, "", errPrivateKey
+	}
 	if strings.HasPrefix(trimmed, "{") {
 		var jwk jose.JSONWebKey
 		if err := json.Unmarshal([]byte(trimmed), &jwk); err != nil {

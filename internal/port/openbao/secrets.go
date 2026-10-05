@@ -149,6 +149,9 @@ func secretsRoot(root string) (string, error) {
 // In implements [port.NamespacedSecrets]: the same installation in another
 // OpenBao namespace, over the same connection (a login is made per namespace).
 func (s *Secrets) In(namespace string) (port.Secrets, error) {
+	if err := port.CheckNamespace(namespace); err != nil {
+		return nil, err
+	}
 	if namespace == s.namespace {
 		return s, nil
 	}
@@ -221,7 +224,7 @@ func (s *Secrets) Put(ctx context.Context, path string, value []byte) (string, e
 	if err != nil {
 		return "", err
 	}
-	return s.write(ctx, path, payload)
+	return s.write(ctx, path, payload, false)
 }
 
 // PutIfVersion implements [port.Secrets]. Atomic on the server (KV's
@@ -255,7 +258,7 @@ func (s *Secrets) PutIfVersion(ctx context.Context, path string, value []byte, v
 			return "", port.ErrConflict
 		}
 	}
-	return s.write(ctx, path, payload)
+	return s.write(ctx, path, payload, true)
 }
 
 func (s *Secrets) prepare(path string, value []byte, cas *uint64) ([]byte, error) {
@@ -274,13 +277,18 @@ func (s *Secrets) prepare(path string, value []byte, cas *uint64) ([]byte, error
 	return raw, nil
 }
 
-func (s *Secrets) write(ctx context.Context, path string, payload []byte) (string, error) {
+func (s *Secrets) write(ctx context.Context, path string, payload []byte, conditional bool) (string, error) {
 	status, body, err := s.c.call(ctx, s.namespace, http.MethodPost, s.dataPath(path), "application/json", payload)
 	if err != nil {
 		return "", err
 	}
 	if status == http.StatusBadRequest && strings.Contains(string(body), "check-and-set") {
-		return "", port.ErrConflict
+		if conditional {
+			return "", port.ErrConflict
+		}
+		// Not a lost race: nothing was conditional. The mount refuses writes that carry no cas.
+		return "", fmt.Errorf("openbao: write %s: the mount requires check-and-set on every write (cas_required): "+
+			"unset cas_required on the mount, which this adapter's unconditional Put cannot satisfy", path)
 	}
 	if status < 200 || status >= 300 {
 		return "", s.refusal("write", path, status, body)
@@ -308,7 +316,7 @@ func (s *Secrets) Delete(ctx context.Context, path string) error {
 		return err
 	}
 	if status == http.StatusNotFound {
-		return nil
+		return s.requireMount(ctx)
 	}
 	if status < 200 || status >= 300 {
 		return s.refusal("delete", path, status, body)
@@ -344,6 +352,11 @@ func (s *Secrets) List(ctx context.Context, prefix string) ([]string, error) {
 			return nil, err
 		}
 		out = append(out, found...)
+	}
+	if len(out) == 0 {
+		if err = s.requireMount(ctx); err != nil {
+			return nil, err
+		}
 	}
 	sort.Strings(out)
 	return out, nil
@@ -387,6 +400,21 @@ func (s *Secrets) walk(ctx context.Context, key, as string, depth int) ([]string
 		paths = append(paths, as+k)
 	}
 	return paths, nil
+}
+
+// requireMount runs after a 404 that reads as "nothing there" (an empty
+// listing, a delete of an absent key), which is also what a wrong mount or a
+// wrong namespace answers. It asks the server whether the mount is there: if it
+// says it is not, the configuration is wrong and the error says so. An answer
+// that is anything else (a policy without access to the endpoint, a server
+// error) proves nothing, and the 404 is taken as it reads.
+func (s *Secrets) requireMount(ctx context.Context) error {
+	status, body, err := s.c.call(ctx, s.namespace, http.MethodGet, "sys/internal/ui/mounts/"+s.c.mount, "", nil)
+	if err != nil || status != http.StatusNotFound {
+		return nil //nolint:nilerr // the probe is advisory
+	}
+	_ = body
+	return fmt.Errorf("openbao: there is no mount %q in namespace %q: check adapters.secrets.settings.mount and .namespace", s.c.mount, s.namespace)
 }
 
 func (s *Secrets) refusal(what, path string, status int, body []byte) error {

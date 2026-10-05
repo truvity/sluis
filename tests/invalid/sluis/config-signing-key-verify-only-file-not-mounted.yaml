@@ -4,7 +4,7 @@ config:
   issuerURL: https://issuer.example
   signingKey:
     verifyOnly:
-      - file: /etc/old.pem
+      - {file: /etc/old.pem, until: "2026-11-05T00:00:00Z"}
 signingKey:
   verifyOnly:
     - pem: |

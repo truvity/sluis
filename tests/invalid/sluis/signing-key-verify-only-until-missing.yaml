@@ -1,0 +1,13 @@
+# A verify-only key has an end.
+# error: missing property 'until'
+config:
+  issuerURL: https://issuer.example
+  signingKey:
+    verifyOnly:
+      - file: /var/run/access-issuer/verify-keys/0.pem
+signingKey:
+  verifyOnly:
+    - pem: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBexample
+        -----END PUBLIC KEY-----

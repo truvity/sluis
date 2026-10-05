@@ -1658,11 +1658,12 @@ func loadVerifyOnly(entries []config.SigningKeyVerifyOnly, log *slog.Logger) ([]
 		if err != nil {
 			return nil, fmt.Errorf("signingKey.verifyOnly[%d]: read %s: %w", i, e.File, err)
 		}
-		var until time.Time
-		if e.Until != "" {
-			if until, err = time.Parse(time.RFC3339, e.Until); err != nil {
-				return nil, fmt.Errorf("signingKey.verifyOnly[%d].until: %q is not an RFC 3339 time", i, e.Until)
-			}
+		if e.Until == "" {
+			return nil, fmt.Errorf("signingKey.verifyOnly[%d].until is required: a key published for good is not an overlap", i)
+		}
+		until, err := time.Parse(time.RFC3339, e.Until)
+		if err != nil {
+			return nil, fmt.Errorf("signingKey.verifyOnly[%d].until: %q is not an RFC 3339 time", i, e.Until)
 		}
 		key, err := issuer.ParseVerifyOnlyKey(raw, e.KeyID, e.Alg, until)
 		if err != nil {
@@ -1672,10 +1673,7 @@ func loadVerifyOnly(entries []config.SigningKeyVerifyOnly, log *slog.Logger) ([]
 			return nil, fmt.Errorf("signingKey.verifyOnly[%d]: kid %q is named twice", i, key.ID)
 		}
 		ids[key.ID] = true
-		if key.Until.IsZero() {
-			log.Warn("a verify-only signing key has no `until`, so it is published for good: set one once the tokens it signed have expired",
-				"kid", key.ID, "algorithm", string(key.Alg))
-		} else if !time.Now().Before(key.Until) {
+		if !time.Now().Before(key.Until) {
 			log.Warn("a verify-only signing key is past its `until` and is not published", "kid", key.ID)
 		}
 		out = append(out, key)

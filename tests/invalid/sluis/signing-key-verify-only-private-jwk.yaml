@@ -1,0 +1,10 @@
+# A JWK with a private member is refused.
+# error: is a JWK with a private member "d"
+config:
+  issuerURL: https://issuer.example
+  signingKey:
+    verifyOnly:
+      - {file: /var/run/access-issuer/verify-keys/0.pem, until: "2026-11-05T00:00:00Z"}
+signingKey:
+  verifyOnly:
+    - pem: '{"kty":"EC","crv":"P-384","x":"a","y":"b","d":"c"}'

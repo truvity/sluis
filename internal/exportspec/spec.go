@@ -120,7 +120,6 @@ const MinInterval = time.Minute
 var (
 	namePattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 	propertyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}$`)
-	namespaceRegexp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}$`)
 	appIDPattern    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 )
 
@@ -239,7 +238,7 @@ func fromEntry(e Entry, declared Declared) (Spec, error) {
 	if err := port.CheckExportPath(e.Path); err != nil {
 		return Spec{}, fmt.Errorf("path: %w", err)
 	}
-	if e.Namespace != "" && !namespaceRegexp.MatchString(e.Namespace) {
+	if e.Namespace != "" && port.CheckNamespace(e.Namespace) != nil {
 		return Spec{}, fmt.Errorf("namespace %q is not an OpenBao namespace", e.Namespace)
 	}
 	spec.Target = port.ExportTarget{Namespace: e.Namespace, Path: e.Path}
