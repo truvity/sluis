@@ -53,10 +53,10 @@ func Open(ctx context.Context, f *config.Serve, more ...string) (Source, error) 
 func Named(f *config.Serve) []string {
 	var out []string
 	if f.Valkey != nil {
-		out = append(out, f.Valkey.PasswordSecret)
+		out = append(out, f.Valkey.LoginSecret)
 	}
 	if f.Recovery != nil {
-		out = append(out, f.Recovery.PasswordSecret)
+		out = append(out, f.Recovery.LoginSecret)
 	}
 	if o := f.OAuthClient; o != nil && o.Provider != "" {
 		out = append(out, ProviderClientID(o.Provider), ProviderClientSecret(o.Provider))

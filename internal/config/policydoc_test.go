@@ -518,8 +518,8 @@ func TestAV1ServeDocumentsSecretsAreNamedAndLocated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Valkey.PasswordSecret != "valkey/password" || s.OAuthClient.Provider != "default" ||
-		s.Recovery.PasswordSecret != "recovery/password" || s.SigningKey.KMS.StateSecret != "issuer/state-secret" ||
+	if s.Valkey.LoginSecret != "valkey/password" || s.OAuthClient.Provider != "default" ||
+		s.Recovery.LoginSecret != "recovery/password" || s.SigningKey.KMS.StateSecret != "issuer/state-secret" ||
 		s.Directory.Workspaces[0].KeySecret != "directory/C0acme/key" {
 		t.Errorf("the names: %+v %+v %+v %+v", s.Valkey, s.OAuthClient, s.Recovery, s.SigningKey.KMS)
 	}

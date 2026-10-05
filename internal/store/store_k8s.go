@@ -27,9 +27,9 @@ type Backend = legacy.Backend
 type k8sConfig struct {
 	// Valkey is where the shared cache is; an empty address is none.
 	Valkey valkey.Config
-	// ValkeyPasswordSecret names its password, resolved through Secrets when
+	// ValkeyLoginSecret names its password, resolved through Secrets when
 	// the Valkey is opened. Empty is none.
-	ValkeyPasswordSecret string
+	ValkeyLoginSecret string
 	// KubeClient, when set, opens the namespace's objects in place of the
 	// pod's own ServiceAccount: an operator's tool that runs from a
 	// workstation (sluis migrate) names a kubeconfig this way.
@@ -39,7 +39,7 @@ type k8sConfig struct {
 func (c *Config) fromServeK8s(f *config.Serve) error {
 	c.Valkey = valkeyOf(f.Release, f.Valkey)
 	if f.Valkey != nil {
-		c.ValkeyPasswordSecret = f.Valkey.PasswordSecret
+		c.ValkeyLoginSecret = f.Valkey.LoginSecret
 	}
 	return nil
 }
@@ -91,13 +91,13 @@ func valkeyOf(release string, v *config.Valkey) valkey.Config {
 
 // valkeyPassword resolves the password the document names, when it names one.
 func valkeyPassword(ctx context.Context, cfg Config) (string, error) {
-	if cfg.ValkeyPasswordSecret == "" {
+	if cfg.ValkeyLoginSecret == "" {
 		return "", nil
 	}
 	if cfg.Secrets == nil {
 		return "", errors.New("valkey.passwordSecret: no secrets source is configured")
 	}
-	password, err := cfg.Secrets.Get(ctx, cfg.ValkeyPasswordSecret)
+	password, err := cfg.Secrets.Get(ctx, cfg.ValkeyLoginSecret)
 	if err != nil {
 		return "", fmt.Errorf("valkey.passwordSecret: %w", err)
 	}

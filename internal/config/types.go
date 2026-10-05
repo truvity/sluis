@@ -87,9 +87,9 @@ type (
 		Enabled        *bool  `json:"enabled,omitempty"`
 		ServiceAccount string `json:"serviceAccount,omitempty"`
 		Audience       string `json:"audience,omitempty"`
-		// PasswordSecret names the recovery password, for a hub that is not
+		// LoginSecret (`passwordSecret`) names the recovery password, for a hub that is not
 		// in a cluster: `recovery/password` in the layout.
-		PasswordSecret string `json:"passwordSecret,omitempty"`
+		LoginSecret string `json:"passwordSecret,omitempty"`
 	}
 
 	// Forwarded is a sign-in an authenticating proxy in front of the console
@@ -184,10 +184,10 @@ type (
 
 	// Valkey is the shared store for logins in progress and snapshots.
 	Valkey struct {
-		Address        string `json:"address,omitempty"`
-		PasswordSecret string `json:"passwordSecret,omitempty"`
-		TLS            bool   `json:"tls,omitempty"`
-		Cluster        *bool  `json:"cluster,omitempty"`
+		Address     string `json:"address,omitempty"`
+		LoginSecret string `json:"passwordSecret,omitempty"`
+		TLS         bool   `json:"tls,omitempty"`
+		Cluster     *bool  `json:"cluster,omitempty"`
 	}
 
 	// PortsExport names the adapter behind the Export port.
