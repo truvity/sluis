@@ -236,14 +236,14 @@ func TestRenderHoldsTheOutputsToTheLoader(t *testing.T) {
 // the others are still filled in.
 func TestANamedAdapterWinsOverAResource(t *testing.T) {
 	in := installation(t, "hive")
-	in.Adapters = map[string]config.AdapterChoice{"state": {Adapter: "memory"}}
+	in.Adapters = map[string]config.AdapterChoice{"audit": {Adapter: "log"}}
 	service, _, err := config.Render(in)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(service)
-	if !strings.Contains(s, "adapter: memory") || strings.Contains(s, "adapter: dynamodb") {
-		t.Errorf("state was not replaced:\n%s", s)
+	if !strings.Contains(s, "adapter: log") || strings.Contains(s, "adapter: sqs") {
+		t.Errorf("audit was not replaced:\n%s", s)
 	}
 	if !strings.Contains(s, "adapter: s3") {
 		t.Errorf("blobs were not filled in:\n%s", s)
@@ -367,5 +367,64 @@ func TestTheInstallationTypeAndItsSchemaDescribeTheSameKeys(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// The adapters table is free-form settings, and what Render carries into the
+// document is held to the rules a document keeps: no credential value, https
+// for an OpenBao, and nothing that contradicts the shape or the preset.
+func TestRenderRefusesAnAdapterTableThatBreaksTheRules(t *testing.T) {
+	choice := func(adapter string, settings map[string]any) map[string]config.AdapterChoice {
+		return map[string]config.AdapterChoice{"secrets": {Adapter: adapter, Settings: settings}}
+	}
+	for name, c := range map[string]struct {
+		base   string
+		change func(*config.Installation)
+		want   string
+	}{
+		"a token value in settings": {"truvity", func(in *config.Installation) {
+			in.Adapters = choice("openbao", map[string]any{"address": "https://openbao.example.test", "token": "x", "root": "sluis"})
+		}, "adapters.secrets.settings.token"},
+		"a nested password": {"truvity", func(in *config.Installation) {
+			in.Adapters = choice("openbao", map[string]any{"address": "https://openbao.example.test", "auth": map[string]any{"password": "x"}})
+		}, "settings.auth.password"},
+		"a secret key name": {"hive", func(in *config.Installation) {
+			in.Adapters = map[string]config.AdapterChoice{"state": {Adapter: "dynamodb", Settings: map[string]any{"table": "t", "secretAccessKey": "x"}}}
+		}, "secretAccessKey"},
+		"an http OpenBao": {"truvity", func(in *config.Installation) {
+			in.Adapters = choice("openbao", map[string]any{"address": "http://openbao.example.test", "root": "sluis"})
+		}, "https"},
+		"secrets other than ssm on Lambda": {"hive", func(in *config.Installation) {
+			in.Adapters = choice("openbao", map[string]any{"address": "https://openbao.example.test", "root": "sluis"})
+		}, "shape lambda keeps its secrets in ssm"},
+		"signing by file on Lambda": {"hive", func(in *config.Installation) {
+			in.Adapters = map[string]config.AdapterChoice{"signing": {Adapter: "file"}}
+		}, "shape lambda signs with"},
+		"an OpenBao on Lambda": {"hive", func(in *config.Installation) {
+			in.OpenBao = &config.OpenBao{Address: "https://openbao.example.test", Root: "sluis", Auth: config.OpenBaoLogin{Method: "jwt", Role: "r"}}
+		}, "openbao is set"},
+		"an adapter that contradicts the preset": {"truvity", func(in *config.Installation) {
+			in.Adapters = map[string]config.AdapterChoice{"state": {Adapter: "postgres"}}
+		}, "contradicts preset"},
+		"ssm secrets beside an openbao adapter": {"truvity", func(in *config.Installation) {
+			in.Secrets = &config.Secrets{Source: "ssm", Root: "/sluis/kernel"}
+		}, "secrets.source is ssm"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := installation(t, c.base)
+			c.change(in)
+			if _, _, err := config.Render(in); err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error %v, want one naming %q", err, c.want)
+			}
+		})
+	}
+	// The allowed override still works: OpenBao secrets on k8s-aws (the fixture), a ...File and a ...Secret key.
+	in := installation(t, "truvity")
+	in.Adapters = choice("openbao", map[string]any{
+		"address": "https://openbao.example.test", "root": "sluis", "stateSecret": "x/y",
+		"auth": map[string]any{"method": "jwt", "role": "r", "tokenFile": "/t"},
+	})
+	if _, _, err := config.Render(in); err != nil {
+		t.Errorf("an allowed override was refused: %v", err)
 	}
 }

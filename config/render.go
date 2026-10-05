@@ -219,6 +219,9 @@ func (in *Installation) service() (*internal.Sluis, error) {
 		errs = append(errs, err)
 	}
 	s.Adapters = adapters
+	if err := in.checkAdapters(s, adapters); err != nil {
+		errs = append(errs, err)
+	}
 	s.Controllers = in.serviceControllers()
 	return s, errors.Join(errs...)
 }
@@ -553,4 +556,102 @@ func verify(service, policy []byte) error {
 		errs = append(errs, fmt.Errorf("the policy document: %w", err))
 	}
 	return errors.Join(errs...)
+}
+
+// overrides are the adapters a named adapter may be, per concern, when it is
+// not the preset's own: the ones a platform really chooses between. Anything
+// else contradicts the preset and is refused, not carried into the document.
+var overrides = map[string][]string{
+	"state":    {"dynamodb"},
+	"blobs":    {"s3", "off"},
+	"secrets":  {"ssm", "openbao"},
+	"signing":  {"kms", "kms-wrapped", "file"},
+	"trigger":  {"invoke", "dynamodb", "http"},
+	"schedule": {"eventbridge", "ticker"},
+	"audit":    {"sqs", "connect", "log"},
+}
+
+// credentialWords make a settings key one that would hold a credential's value.
+var credentialWords = []string{"token", "password", "passwd", "secret", "credential", "privatekey", "apikey", "accesskey"}
+
+// checkAdapters holds the adapter table the document will carry to what the
+// shape and the preset say, and its settings to the rule that a document never
+// carries a credential: a key that names one holds a NAME (`...Secret`) or a
+// path (`...File`), never a value.
+func (in *Installation) checkAdapters(s *internal.Sluis, table map[string]internal.AdapterChoice) error {
+	var errs []error
+	preset := port.PresetTable(port.Preset(s.Preset))
+	for _, concern := range slices.Sorted(maps.Keys(table)) {
+		choice := table[concern]
+		if want := preset[port.Concern(concern)]; want != "" && choice.Adapter != want && !slices.Contains(overrides[concern], choice.Adapter) {
+			errs = append(errs, fmt.Errorf("adapters.%s is %q, which contradicts preset %s (%s): an override is one of %v",
+				concern, choice.Adapter, s.Preset, want, overrides[concern]))
+		}
+		for _, bad := range credentialKeys(choice.Settings, "adapters."+concern+".settings") {
+			errs = append(errs, fmt.Errorf("%s names a credential: a document carries the NAME of a secret (...Secret) or a file (...File), never a value", bad))
+		}
+		if choice.Adapter == "openbao" {
+			if addr, _ := choice.Settings["address"].(string); !strings.HasPrefix(addr, "https://") {
+				errs = append(errs, fmt.Errorf("adapters.%s.settings.address must be an https URL: a login token crosses this connection", concern))
+			}
+		}
+	}
+	if in.Shape == ShapeLambda {
+		if c, ok := table["secrets"]; ok && c.Adapter != "ssm" {
+			errs = append(errs, fmt.Errorf("adapters.secrets is %q: shape lambda keeps its secrets in ssm", c.Adapter))
+		}
+		if c, ok := table["signing"]; ok && c.Adapter != "kms-wrapped" && c.Adapter != "kms" {
+			errs = append(errs, fmt.Errorf("adapters.signing is %q: shape lambda signs with kms-wrapped or kms", c.Adapter))
+		}
+		if in.OpenBao != nil {
+			errs = append(errs, errors.New("openbao is set and shape lambda keeps its secrets in ssm"))
+		}
+	}
+	if c := table["secrets"]; c.Adapter == "openbao" && s.Secrets != nil && s.Secrets.Source == "ssm" {
+		errs = append(errs, errors.New("secrets.source is ssm and adapters.secrets is openbao: a document names one place its secrets are"))
+	}
+	return errors.Join(errs...)
+}
+
+// credentialKeys are the paths of the keys under v that would hold a
+// credential's value: not a name (`...Secret`) and not a path (`...File`).
+func credentialKeys(v any, at string) []string {
+	var out []string
+	switch t := v.(type) {
+	case map[string]any:
+		for _, k := range slices.Sorted(maps.Keys(t)) {
+			lower := strings.ToLower(k)
+			if !strings.HasSuffix(lower, "file") && !strings.HasSuffix(lower, "secret") {
+				for _, w := range credentialWords {
+					if strings.Contains(lower, w) {
+						out = append(out, at+"."+k)
+						break
+					}
+				}
+			}
+			out = append(out, credentialKeys(t[k], at+"."+k)...)
+		}
+	case []any:
+		for i, x := range t {
+			out = append(out, credentialKeys(x, fmt.Sprintf("%s[%d]", at, i))...)
+		}
+	}
+	return out
+}
+
+// ConsoleAudience is the audience an AWS role's web identity token is minted
+// for to be a bearer at the console: `console.awsAudience`, else the console's
+// URL (the service's own default).
+func ConsoleAudience(in *Installation) string {
+	if in.Console != nil && in.Console.AWSAudience != "" {
+		return in.Console.AWSAudience
+	}
+	if in.Issuer.ConsoleURL != "" {
+		return in.Issuer.ConsoleURL
+	}
+	root := in.Issuer.RootURL
+	if root == "" {
+		root = strings.TrimSpace(in.Issuer.URL)
+	}
+	return strings.TrimSuffix(root, "/") + "/console"
 }
