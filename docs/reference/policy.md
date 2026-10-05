@@ -94,7 +94,7 @@ installation that names neither behaves exactly as it did.
 ## Naming
 
 Every grant is named **`<scope>:<thing>:<role>`** — *role, on thing, in
-scope* — and the reasoning is in [design/trust.md](../design/trust.md#naming).
+scope* — and the reasoning is in [design/trust.md](../explanation/trust.md#naming).
 `scope` is an environment, a tenant id, or `all`; `thing` is what the role
 is on (a subsystem such as `k8s`, a project such as `shop`, an application
 such as `access-roster`); `role` is from that thing's own ladder. The two
@@ -103,7 +103,7 @@ carries a session lifetime, `emp:<slug>` is a person. The loader warns on
 a name in neither shape. In force since v0.9.3.
 
 The grammar, `all`, sensitive scopes and the naming anti-patterns are
-[docs/taxonomy.md](../taxonomy.md); what a *name* is checked against, once
+[docs/taxonomy.md](taxonomy.md); what a *name* is checked against, once
 an installation opts in, is the next section.
 
 ## Vocabulary
@@ -165,7 +165,7 @@ implies is operator's own entry — `admin: [deployer, operator]` above
 means admin implies BOTH, branching rather than chaining. `implies` may
 only name another declared role of the **same** thing, and validation
 refuses a graph with a cycle, naming the role it closes at. See
-[taxonomy.md#inheritance](../taxonomy.md#inheritance) for how the implied
+[taxonomy.md#inheritance](taxonomy.md#inheritance) for how the implied
 roles are actually granted — that happens once, in evaluation, not here:
 this table is only the declaration.
 
@@ -194,7 +194,7 @@ distinctly from a scope the *thing* does not have: `kernel:ssh:user` is
 refused — `ssh` does declare `kernel`, but `user` restricts itself to
 `devel` — with a message naming the role's own scopes, `role "user" of
 thing "ssh" is valid only on scopes [devel]`. A [mapping
-wildcard](../taxonomy.md#mapping-wildcards) skips rather than refuses: `*:ssh:user`
+wildcard](taxonomy.md#mapping-wildcards) skips rather than refuses: `*:ssh:user`
 expands to `devel:ssh:user` alone, silently leaving out `kernel`, `stage`
 and `prod` the same way it already skips a thing that lacks the role
 entirely — see the next section for when that empties a wildcard
@@ -214,7 +214,7 @@ evaluation should quietly work around. See
 `groups` key, such as `*:k8s:admin` or `devel:*:viewer` — need a declared
 vocabulary and are refused without one. A role wildcard (`S:T:*`) is
 always refused, and so is `*:*:*`. See
-[taxonomy.md#mapping-wildcards](../taxonomy.md#mapping-wildcards) for the
+[taxonomy.md#mapping-wildcards](taxonomy.md#mapping-wildcards) for the
 grammar and [Groups → token, by deep merge](#groups--token-by-deep-merge)
 for how a wildcard key is expanded and unioned with a caller's concrete
 groups.
@@ -375,7 +375,7 @@ workflow), and `workflow_ref` the file the run started from: together
 with `ref` and `event_name` they pin a group to one reviewed workflow on
 one branch, run the way it is meant to run, rather than to every job a
 repository can run. That is the shape a group behind a write grant of a
-[catalogue App](../connect/github-apps-catalogue.md#pinning-a-grant-to-one-workflow)
+[catalogue App](../how-to/connect/github-apps-catalogue.md#pinning-a-grant-to-one-workflow)
 should have.
 
 `matchers` are conditions on a verified proof, so they also cover a
@@ -444,7 +444,7 @@ ID token (ArgoCD and Kargo both do) must not have to make a second call
 to learn who signed in. The userinfo endpoint answers the same set.
 
 **`groups` is the whole of the authorization a token carries**, as
-[../design/trust.md](../design/trust.md) sets out: flat, one string
+[../design/trust.md](../explanation/trust.md) sets out: flat, one string
 per internal group, never a structured roles claim beside it. Every
 relying party binds those strings as they are — a `ClusterRoleBinding`
 subject, an ArgoCD `g,` line, a `requires` here — and nothing re-maps
@@ -761,7 +761,7 @@ reading of the rule, and it is also the useful one for report mode: every
 such audience's tokens log "would drop everything" until it is given a
 row, an allow-listed origin, or an override, to read.
 
-**`rung:` and `emp:` names** are not grants ([taxonomy.md](../taxonomy.md))
+**`rung:` and `emp:` names** are not grants ([taxonomy.md](taxonomy.md))
 and have no `<scope>:<thing>` pair, so pair matching never keeps them.
 An override keeps one of them either of two ways: naming the FULL
 two-segment name outright (`groups: [rung:sre]`), for one specific name;
@@ -808,9 +808,9 @@ Turning enforce on is opt-in and per installation: the chart's default
 stays `report`, and an installation is expected to run report first, read
 what it logs, and add a `groups:` override to any client or resource the
 log names, before ever setting `groupsScoping: enforce` — see
-[docs/operations/runbook.md#reading-the-groups-scoping-report](../operations/runbook.md#reading-the-groups-scoping-report)
+[docs/operations/runbook.md#reading-the-groups-scoping-report](../how-to/day-two.md#reading-the-groups-scoping-report)
 and
-[docs/operations/runbook.md#turning-enforce-on](../operations/runbook.md#turning-enforce-on).
+[docs/operations/runbook.md#turning-enforce-on](../how-to/day-two.md#turning-enforce-on).
 
 **What enforce narrows, and what it does not.** Every place a token or
 `/userinfo` writes `groups` narrows to `kept`: the ID token, the access
@@ -844,7 +844,7 @@ the token stopped carrying. Add whichever of them the relying party
 actually reads to a `groups:` override on that audience's row (a client's,
 a resource's, or `client_documents.groups` for a self-described one) and
 roll it out: a policy change is a new instance — see
-[docs/operations/runbook.md#turning-enforce-on](../operations/runbook.md#turning-enforce-on)
+[docs/operations/runbook.md#turning-enforce-on](../how-to/day-two.md#turning-enforce-on)
 for the full walk-through.
 
 ## Groups delimiter (per audience, opkssh interop)
@@ -904,7 +904,7 @@ against the real names, and this only rewrites what survives it.
   must never need escaping to carry.
 - **An ASCII letter, digit or `-`** — exactly `[A-Za-z0-9-]`, what every
   scope, thing and role this codebase's own vocabulary examples are built
-  from ([taxonomy.md](../taxonomy.md)). A delimiter drawn from the same
+  from ([taxonomy.md](taxonomy.md)). A delimiter drawn from the same
   alphabet a name is written in is exactly the separator-collision mistake
   this restricts against.
 
@@ -982,7 +982,7 @@ console's own short-lived mint (`MintFor`) it is that call's own target.
 
 **A pin naming an algorithm this installation has no key for is refused
 at issuer start**, not on the first token that would have needed it — see
-`signingKey.additional` in [access-issuer.md](access-issuer.md). Fail
+`signingKey.additional` in [access-issuer.md](configuration.md). Fail
 loudly, at start, or an operator's `signing_alg: RS256` on a row nobody
 minted an RS256 key for would silently keep signing ES384 forever.
 
@@ -1201,7 +1201,7 @@ here".
 | not connected yet | connecting it: the installation-wide operator, or an operator of a directory |
 
 "Operated" is every action on the workspace and on its [catalogue
-Apps](../connect/slack-apps-catalogue.md): connecting, creating, installing and
+Apps](../how-to/connect/slack-apps-catalogue.md): connecting, creating, installing and
 reinstalling, and finishing an install when Slack sends the browser back (the
 role is checked again there, for whoever is signed in then). A catalogue App is
 created in a workspace that is **already connected**: the page refuses with
@@ -1222,8 +1222,8 @@ console.
 > process from the `sluis` chart and changes only the workspaces listed
 > in `policy.controllers.slack.enabledWorkspaces`; every other declared workspace is a dry run. What it
 > does with the keys is on
-> [Connect a Slack workspace](../connect/slack-workspace.md) and in
-> [the Slack reconciler](../design/sluis.md#the-slack-reconciler).
+> [Connect a Slack workspace](../how-to/connect/slack-workspace.md) and in
+> [the Slack reconciler](../explanation/design.md#the-slack-reconciler).
 
 ```yaml
 slack:
@@ -1239,7 +1239,7 @@ Channels in the policy are fed by **internal groups** (`from`), for channels
 the infrastructure owns, such as alert channels. Channels managed
 interactively on the console are not here: they are records fed by **directory
 groups**. See
-[console channels](../connect/slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console).
+[console channels](../how-to/connect/slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console).
 
 A policy channel is fed by internal groups only (`from`). Individual addresses
 (`members`) and directory groups (`sources`) are fields of a console channel

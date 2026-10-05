@@ -1,7 +1,7 @@
 # 0027 — The State port: NATS JetStream on Kubernetes, DynamoDB on AWS
 
 **Status:** Accepted; supersedes the store statement in
-[design/sluis.md](../design/sluis.md#the-store) ("plain
+[design/sluis.md](../explanation/design.md#the-store) ("plain
 Kubernetes objects … no cloud parameter store, no cache") once the migration
 in [0031](0031-a-generic-migration-tool.md) has run
 **Date:** 2026-10-02
@@ -54,7 +54,7 @@ whatever the engine did.
 **Key layouts need no secondary index.** Everything a caller looks up is either
 the key itself or a prefix: sessions are `ses.<person>.<sid>` (DynamoDB:
 partition `SES#<person>`), and a pointer `sid.<sid>` maps a session id to its
-person. The full table is in [design/ports.md](../design/ports.md).
+person. The full table is in [design/ports.md](../explanation/ports.md).
 
 **Blobs go to S3 on both platforms:** the reconcilers' status reports and the
 directory snapshots. They are too large for an item and are read whole.

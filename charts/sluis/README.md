@@ -15,7 +15,7 @@ Published to `ghcr.io/truvity/charts/sluis` on every
 `v*` tag of the repository; the tag is the chart's version.
 
 What the chart includes, what it expects and every value are documented in
-[docs/reference/access-issuer.md](../../docs/reference/access-issuer.md).
+[docs/reference/access-issuer.md](../../docs/reference/configuration.md).
 `Moving from the `access-issuer` chart is one release's change, with two values to keep every object's name:
 [docs/reference/configuration.md](../../docs/reference/configuration.md#migrating-from-the-access-issuer-chart).
 `values.schema.json` is strict at the top level: an unknown key fails the
@@ -75,7 +75,7 @@ the program that manages the organisation — with what each is for and why
 they are separate identities. It is values to read and copy, not a
 default: creating an App is an owner of the organisation confirming a
 manifest
-([guide](../../docs/connect/github-apps-catalogue.md#a-default-set)).
+([guide](../../docs/how-to/connect/github-apps-catalogue.md#a-default-set)).
 
 `slackApps` declares Slack Apps the way `githubApps.catalogue` declares GitHub
 Apps: an operator creates each from
@@ -83,18 +83,18 @@ the console with a throwaway app configuration token (used once, never
 stored), an owner of the workspace installs it, and the bot token is kept in
 `<release>-slack-catalogue-apps`. An entry may `push` that one key to a
 secret store
-([guide](../../docs/connect/slack-apps-catalogue.md)).
+([guide](../../docs/how-to/connect/slack-apps-catalogue.md)).
 
 `config.controllers.slack` runs the Slack controller in the process (`consoleURL`, `interval`; the
 workspaces it changes are `policy.controllers.slack.enabledWorkspaces`): it needs `exchange.clusters`
 to name this cluster and `console.mount` to be set, and egress to `slack.com:443` from the fleet's own
 policy
-([guide](../../docs/connect/slack-workspace.md#running-the-controller)).
+([guide](../../docs/how-to/connect/slack-workspace.md#running-the-controller)).
 `slackState.push` is a recovery copy of the Slack state: two `PushSecret`s, one
 for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 `<release>-slack-records` at `recordsRemoteKey` (the two keys must differ), with
 `deletionPolicy` fixed at `None`; it needs `config.store: kubernetes`
-([runbook](../../docs/operations/runbook.md#slack-state)).
+([runbook](../../docs/how-to/day-two.md#slack-state)).
 
 The pod rolls so that a failed start leaves the old pod running: the default `RollingUpdate`
 keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/readyz`,
@@ -102,8 +102,8 @@ keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/rea
 finished starting. A controller in the process runs in every replica, so `replicaCount` above 1
 needs the tick leases in a State the replicas share: the chart refuses it unless
 `config.ports.adapter` is `dynamodb`
-([why](../../docs/operations/runbook.md#a-controller-release-that-crash-loops),
-[when a second replica is safe](../../docs/operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)).
+([why](../../docs/how-to/day-two.md#a-controller-release-that-crash-loops),
+[when a second replica is safe](../../docs/how-to/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)).
 The controllers read the console as this pod's own ServiceAccount, so the policy's exchange must
 admit that account (`all:access-roster:viewer`), and the audit installation knows one workload.
 

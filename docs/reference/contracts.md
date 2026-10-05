@@ -244,7 +244,7 @@ anything the deployment owns.
 ## `directoryroster.v1.GitHubService`
 
 The console's view of GitHub organisations. Read-only: the controller
-acts, this shows. See [connect/github-organisation.md](../connect/github-organisation.md).
+acts, this shows. See [connect/github-organisation.md](../how-to/connect/github-organisation.md).
 
 A role below is the installation-wide role, or the same role over the directory
 recorded as the owner of the organisation concerned (see
@@ -268,7 +268,7 @@ are installation-wide alone.
 | `DisconnectGitHubLinkApp` | operator | — | `invalidated`, `app_settings_url` | makes every self-link unverifiable — a profile match or an import stands — then forgets the App |
 | `BeginGitHubRunnerAppConnect` | operator | `org`, `tier` | `url`, `manifest` | starts creating a runner App — the App one tier's self-hosted runners register with in one organisation — or finishing installing one; the same two clicks as an organisation's App. `invalid_argument` for a tier the deployment does not declare in `githubRunnerApps.tiers`; `failed_precondition` for an unbound organisation or one whose App for that tier is already installed |
 | `DisconnectGitHubRunnerApp` | operator | `org`, `tier` | `uninstalled`, `detail`, `app_settings_url` | uninstalls the runner App and forgets its keys; runners registered with it stop getting jobs |
-| `BeginGitHubCatalogueAppConnect` | operator | `id` | `url`, `manifest` | starts creating an App the catalogue declares, under the organisation its entry names, or finishing installing one created before; the same two clicks as an organisation's App. `invalid_argument` for an id the catalogue does not declare; `failed_precondition` for one already installed, and where the deployment keeps no state in Kubernetes. See [connect/github-apps-catalogue.md](../connect/github-apps-catalogue.md) |
+| `BeginGitHubCatalogueAppConnect` | operator | `id` | `url`, `manifest` | starts creating an App the catalogue declares, under the organisation its entry names, or finishing installing one created before; the same two clicks as an organisation's App. `invalid_argument` for an id the catalogue does not declare; `failed_precondition` for one already installed, and where the deployment keeps no state in Kubernetes. See [connect/github-apps-catalogue.md](../how-to/connect/github-apps-catalogue.md) |
 | `DisconnectGitHubCatalogueApp` | operator | `id` | `uninstalled`, `detail`, `app_settings_url` | uninstalls the App, then forgets its record and keys — even when the uninstall fails, which `detail` explains. The App stays on GitHub; `app_settings_url` is where its owner deletes it. Works for an App whose entry the catalogue no longer declares |
 | `CheckGitHubCatalogueApp` | operator | `id` | `app` | asks GitHub again, as the App, what the App and its installation hold, bypassing the minute `GetGitHubStatus` caches it for |
 | `ConfirmGitHubRemovals` | operator | `org`, `fingerprint` | — | lets exactly the removal set the organisation's latest report names go ahead. `failed_precondition` when the report shows a different set. Lapses after a day |
@@ -376,7 +376,7 @@ Kubernetes.
 
 The console's view of the Slack workspaces the policy declares, and the calls
 that operate a connection. The controller acts; this shows and operates the
-connection. See [connect/slack-workspace.md](../connect/slack-workspace.md).
+connection. See [connect/slack-workspace.md](../how-to/connect/slack-workspace.md).
 
 | RPC | Role | Request | Response | Notes |
 |---|---|---|---|---|
@@ -421,7 +421,7 @@ channel.
 ## `directoryroster.v1.SlackAppService`
 
 The catalogue of Slack Apps (`slackApps`), mirroring the GitHub App catalogue.
-See [connect/slack-apps-catalogue.md](../connect/slack-apps-catalogue.md).
+See [connect/slack-apps-catalogue.md](../how-to/connect/slack-apps-catalogue.md).
 
 | RPC | Role | Request | Response | Notes |
 |---|---|---|---|---|
@@ -471,7 +471,7 @@ service-account token. The console's Audit page reads the installation's
 `audit.v1.QueryService`, forwarded by the console under `<mount>/audit/`
 with a token minted for the person signed in; only that service's methods
 pass, and only for somebody signed in. See
-[operations/runbook.md](../operations/runbook.md#audit-what-happened-lately).
+[operations/runbook.md](../how-to/day-two.md#audit-what-happened-lately).
 The actions and what each carries are the catalogue,
 [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
 (version 1.6.0, with the `roster.slack_*` actions). The GitHub and Slack
@@ -482,7 +482,7 @@ controllers record for themselves, each with its own service-account token.
 Not a console service: the issuer's token endpoint, documented here
 because it is the contract a job, a script or `sluisctl` codes against
 when it asks for a GitHub App installation token of a
-[catalogue App](../connect/github-apps-catalogue.md#minting-a-token). It
+[catalogue App](../how-to/connect/github-apps-catalogue.md#minting-a-token). It
 is RFC 8693 token exchange on the same `/token` as every other exchange;
 a request is an installation token's when **both**
 `requested_token_type` is the type below **and** `audience` starts
@@ -547,7 +547,7 @@ its permissions. GitHub is sent that narrowing explicitly.
 | `server_error` | 500 | GitHub or the App's key failed |
 
 Every request, minted or refused, is one `roster.github_token.minted`
-record ([fields](../connect/github-apps-catalogue.md#audit)); the token
+record ([fields](../how-to/connect/github-apps-catalogue.md#audit)); the token
 is never in it. The same request is also kept in this service's own
 memory, so that the App's page can show the last ten without narrowing
 the trail to one App — `ListGitHubAppTokens` above.

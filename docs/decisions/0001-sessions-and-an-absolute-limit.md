@@ -9,7 +9,7 @@ Three things get called a session here, and each has exactly one owner.
 The issuer holds the **SSO session** with the browser and one
 **per-client session** — a refresh chain, indexed and revocable — per
 identity and client
-([design/sluis.md#sessions-and-sign-out](../design/sluis.md#sessions-and-sign-out)).
+([design/sluis.md#sessions-and-sign-out](../explanation/design.md#sessions-and-sign-out)).
 An application signed in through either door then keeps **its own local
 session**, on its own clock. A limit enforced at the issuer can only ever
 reach the first two; the third is somebody else's state.
@@ -55,7 +55,7 @@ surface that has to be reasoned about, which is exactly where this
 repository has found real bugs before — a revoke path that ended one
 session and left its parent SSO session standing looked, from the
 console, like a complete sign-out
-([design/sluis.md#telling-the-relying-party-back-channel-logout](../design/sluis.md#telling-the-relying-party-back-channel-logout)).
+([design/sluis.md#telling-the-relying-party-back-channel-logout](../explanation/design.md#telling-the-relying-party-back-channel-logout)).
 
 **Gateway OIDC's caveats, worth stating rather than discovering:**
 
@@ -65,7 +65,7 @@ console, like a complete sign-out
   short `ttl_cap`;
 - there is no server-side session to receive Back-Channel Logout — the
   refresh interval is the whole dial
-  ([design/access-proxy.md#sign-out](../design/access-proxy.md#sign-out));
+  ([design/access-proxy.md#sign-out](../how-to/connect/oauth2-proxy.md#sign-out));
 - the `groups` claim rides in the cookie, so it grows with group count;
 - a misconfigured gateway policy can fail open rather than closed.
 
@@ -79,7 +79,7 @@ the limit binds what comes back to the issuer, not what does not.
 An application already running a multi-day session of its own needs a
 deliberate choice, not the default: cap its session at or under 24h, or
 wire up
-[Back-Channel Logout](../design/sluis.md#telling-the-relying-party-back-channel-logout)
+[Back-Channel Logout](../explanation/design.md#telling-the-relying-party-back-channel-logout)
 and accept the window that leaves. Silence on this from the application's
 own design is not a safe default.
 
@@ -91,7 +91,7 @@ console — would buy near-zero-lag revocation. Rejected: it puts the
 issuer in every request path of every application it touches, forces a
 shared parent domain across consoles that otherwise share nothing, and
 rebuilds `access-proxy` a second time inside the issuer, which
-[design/access-proxy.md#why-not-something-else](../design/access-proxy.md#why-not-something-else)
+[design/access-proxy.md#why-not-something-else](../how-to/connect/oauth2-proxy.md#why-not-something-else)
 already argues against for the proxy that exists today. Revisit only if
 sub-minute revocation becomes a hard requirement, and then as a separate,
 opt-in component — not folded into the issuer's own request path.

@@ -1,19 +1,19 @@
 # Documentation
 
 One entry point. Four other pages here are themselves indexes —
-[doctrine.md](doctrine.md), [reference.md](reference.md),
-[adoption.md](adoption.md), [safety.md](safety.md) — each the table of
+[doctrine.md](explanation/doctrine.md), [reference.md](index.md),
+[adoption.md](getting-started/README.md), [safety.md](explanation/safety.md) — each the table of
 contents for its own pages; this page is where you start when you do not
 yet know which of those you want.
 
 ## Where to start
 
-- [adoption.md](adoption.md) — prerequisites, install order, connecting
+- [adoption.md](getting-started/README.md) — prerequisites, install order, connecting
   things, migrating, and the zero-diff gate
-- [safety.md](safety.md) — what is refused and why, the failure
+- [safety.md](explanation/safety.md) — what is refused and why, the failure
   semantics, and the traps
-- [reference.md](reference.md) — every value, flag, input and output
-- [doctrine.md](doctrine.md) — the design rules, and who owns what
+- [reference.md](index.md) — every value, flag, input and output
+- [doctrine.md](explanation/doctrine.md) — the design rules, and who owns what
 - [CHANGELOG.md](../CHANGELOG.md) — what changed for a consumer, per
   version
 
@@ -21,47 +21,47 @@ yet know which of those you want.
 
 | You want to | Read |
 |---|---|
-| understand the ideas behind it | [why.md](why.md), then [design/trust.md](design/trust.md) |
-| see every piece and how they connect | [architecture.md](architecture.md) |
-| learn the words this repository uses precisely | [concepts.md](concepts.md) |
-| see every integration point at a glance | [integrations.md](integrations.md) |
+| understand the ideas behind it | [why.md](explanation/why.md), then [design/trust.md](explanation/trust.md) |
+| see every piece and how they connect | [architecture.md](explanation/architecture.md) |
+| learn the words this repository uses precisely | [concepts.md](explanation/concepts.md) |
+| see every integration point at a glance | [integrations.md](explanation/integrations.md) |
 | write the policy | [reference/policy.md](reference/policy.md) |
-| name a grant, or declare a vocabulary that checks it | [taxonomy.md](taxonomy.md) |
-| connect the corporate directory people sign in with | [connect/corporate-directory.md](connect/corporate-directory.md), and [operations/connect-runbook.md](operations/connect-runbook.md) |
-| give a CI job an identity with no stored secret | [connect/github-actions.md](connect/github-actions.md) |
+| name a grant, or declare a vocabulary that checks it | [taxonomy.md](reference/taxonomy.md) |
+| connect the corporate directory people sign in with | [connect/corporate-directory.md](how-to/connect/corporate-directory.md), and [operations/connect-runbook.md](how-to/connect/google-workspace.md) |
+| give a CI job an identity with no stored secret | [connect/github-actions.md](how-to/connect/github-actions.md) |
 | move an installation from the `access-issuer` chart and the three images to the one `sluis` chart and image | [reference/configuration.md — migrating from the access-issuer chart](reference/configuration.md#migrating-from-the-access-issuer-chart) |
-| choose a deployment (AWS, Kubernetes, OpenBao, Lambda), see which adapters exist, or add one in a fork | [guides/choosing-a-deployment.md](guides/choosing-a-deployment.md), [reference/adapters.md](reference/adapters.md) (generated), [guides/diy-adapter.md](guides/diy-adapter.md) |
-| deploy it | [operations/adoption-plain-helm.md](operations/adoption-plain-helm.md), [reference/configuration.md](reference/configuration.md) (and [the configuration file](reference/configuration.md#the-configuration-file), with the [migration from environment variables](reference/configuration.md#migrating-from-environment-variables)), then [operations/connect-runbook.md](operations/connect-runbook.md) |
-| run it: what to check, what to back up, how to restore | [operations/runbook.md](operations/runbook.md), [configuration.md — restoring from the Secrets alone](reference/configuration.md#restoring-from-the-secrets-alone) |
-| run it on AWS: the Pulumi library for the bucket, key, table and Pod Identity roles | [deployment/aws.md](deployment/aws.md) |
-| run more than one replica of the issuer | [operations/high-availability.md](operations/high-availability.md) |
+| choose a deployment (AWS, Kubernetes, OpenBao, Lambda), see which adapters exist, or add one in a fork | [guides/choosing-a-deployment.md](getting-started/README.md), [reference/adapters.md](reference/adapters.md) (generated), [guides/diy-adapter.md](how-to/add-an-adapter.md) |
+| deploy it | [operations/adoption-plain-helm.md](how-to/install-with-helm.md), [reference/configuration.md](reference/configuration.md) (and [the configuration file](reference/configuration.md#the-configuration-file), with the [migration from environment variables](reference/configuration.md#migrating-from-environment-variables)), then [operations/connect-runbook.md](how-to/connect/google-workspace.md) |
+| run it: what to check, what to back up, how to restore | [operations/runbook.md](how-to/day-two.md), [configuration.md — restoring from the Secrets alone](reference/configuration.md#restoring-from-the-secrets-alone) |
+| run it on AWS: the Pulumi library for the bucket, key, table and Pod Identity roles | [deployment/aws.md](reference/pulumi-library.md) |
+| run more than one replica of the issuer | [operations/high-availability.md](how-to/high-availability.md) |
 | see what it publishes, alert on it, put it on a dashboard | [operations/telemetry.md](operations/telemetry.md) |
 | use it from a laptop or a CI job | [reference/sluisctl.md](reference/sluisctl.md) |
-| put a console behind the gateway | [connect/console-app.md](connect/console-app.md) |
-| decide whether a console signs itself in or lets the gateway do it, then build the gateway shape | [connect/choosing-native-or-gateway-oidc.md](connect/choosing-native-or-gateway-oidc.md) |
-| keep a GitHub organisation's teams in step with the policy | [connect/github-organisation.md](connect/github-organisation.md) |
-| declare GitHub Apps as data and create them from the console | [connect/github-apps-catalogue.md](connect/github-apps-catalogue.md) |
-| keep a Slack workspace's channels in step with the policy (and with directory groups, for console channels), read what the controller did and confirm held removals | [connect/slack-workspace.md](connect/slack-workspace.md) |
-| connect a Slack workspace from the console | [connect/slack-workspace.md](connect/slack-workspace.md#connect-a-workspace-from-the-console) |
-| manage ordinary Slack channels from the console, fed by directory groups and individual addresses | [connect/slack-workspace.md](connect/slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console) |
+| put a console behind the gateway | [connect/console-app.md](how-to/connect/console-app.md) |
+| decide whether a console signs itself in or lets the gateway do it, then build the gateway shape | [connect/choosing-native-or-gateway-oidc.md](how-to/connect/choosing-native-or-gateway-oidc.md) |
+| keep a GitHub organisation's teams in step with the policy | [connect/github-organisation.md](how-to/connect/github-organisation.md) |
+| declare GitHub Apps as data and create them from the console | [connect/github-apps-catalogue.md](how-to/connect/github-apps-catalogue.md) |
+| keep a Slack workspace's channels in step with the policy (and with directory groups, for console channels), read what the controller did and confirm held removals | [connect/slack-workspace.md](how-to/connect/slack-workspace.md) |
+| connect a Slack workspace from the console | [connect/slack-workspace.md](how-to/connect/slack-workspace.md#connect-a-workspace-from-the-console) |
+| manage ordinary Slack channels from the console, fed by directory groups and individual addresses | [connect/slack-workspace.md](how-to/connect/slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console) |
 | bind a Slack channel in git, fed by internal groups | [reference/policy.md](reference/policy.md#slack-channels) |
-| declare Slack Apps as data and create and install them from the console | [connect/slack-apps-catalogue.md](connect/slack-apps-catalogue.md) |
-| share Slack Connect channels between your own workspaces, edited on the console | [connect/slack-connect-channels.md](connect/slack-connect-channels.md) |
-| give a Pulumi or Terraform program that manages the organisation an identity of its own | [connect/infrastructure-as-code.md](connect/infrastructure-as-code.md) |
+| declare Slack Apps as data and create and install them from the console | [connect/slack-apps-catalogue.md](how-to/connect/slack-apps-catalogue.md) |
+| share Slack Connect channels between your own workspaces, edited on the console | [connect/slack-connect-channels.md](how-to/connect/slack-connect-channels.md) |
+| give a Pulumi or Terraform program that manages the organisation an identity of its own | [connect/infrastructure-as-code.md](how-to/connect/infrastructure-as-code.md) |
 | connect a cluster, an AWS account, ArgoCD, Kargo, a workflow | [connect/](connect/) |
-| mint a short-lived SSH, database or client certificate | [connect/openbao.md](connect/openbao.md) |
-| SSH in for a person, a machine or a host | [connect/ssh.md](connect/ssh.md) |
-| connect a Model Context Protocol server or client | [connect/mcp.md](connect/mcp.md) |
-| reach PostgreSQL with a short-lived client certificate | [connect/postgresql.md](connect/postgresql.md) |
-| see what the conformance suite said, and why | [conformance.md](conformance.md) |
-| run the conformance suite | [operations/conformance.md](operations/conformance.md) |
-| let an AWS Lambda, ECS task or EC2 instance exchange its IAM role's token | [connect/aws-workloads.md](connect/aws-workloads.md) |
-| build a service that accepts both people and workloads | [connect/service-to-service.md](connect/service-to-service.md) |
-| see how the console is organised (IDENTITY, ACCESS, SYSTEMS, ADMIN) and what each Systems tab does | [design/sluis.md](design/sluis.md#the-console) |
-| understand how the GitHub and Slack controllers share one set of rails, and what neither will ever do | [design/sluis.md](design/sluis.md#reconciler-rails), [safety.md](safety.md#the-reconcilers-what-they-refuse-to-do) |
-| read the trail: what each Slack action is recorded as | [architecture.md](architecture.md#the-audit-trail-and-who-writes-it), [CHANGELOG.md](../CHANGELOG.md) (audit catalogue 1.6.0) |
-| see what runs on which platform, and how far each piece has got | [capabilities.md](capabilities.md) |
-| read the specification of the storage, secrets, trigger and identity ports | [design/ports.md](design/ports.md) |
+| mint a short-lived SSH, database or client certificate | [connect/openbao.md](how-to/connect/openbao.md) |
+| SSH in for a person, a machine or a host | [connect/ssh.md](how-to/connect/ssh.md) |
+| connect a Model Context Protocol server or client | [connect/mcp.md](how-to/connect/mcp.md) |
+| reach PostgreSQL with a short-lived client certificate | [connect/postgresql.md](how-to/connect/postgresql.md) |
+| see what the conformance suite said, and why | [conformance.md](explanation/conformance-findings.md) |
+| run the conformance suite | [operations/conformance.md](how-to/run-conformance.md) |
+| let an AWS Lambda, ECS task or EC2 instance exchange its IAM role's token | [connect/aws-workloads.md](how-to/connect/aws-workloads.md) |
+| build a service that accepts both people and workloads | [connect/service-to-service.md](how-to/connect/service-to-service.md) |
+| see how the console is organised (IDENTITY, ACCESS, SYSTEMS, ADMIN) and what each Systems tab does | [design/sluis.md](explanation/design.md#the-console) |
+| understand how the GitHub and Slack controllers share one set of rails, and what neither will ever do | [design/sluis.md](explanation/design.md#reconciler-rails), [safety.md](explanation/safety.md#the-reconcilers-what-they-refuse-to-do) |
+| read the trail: what each Slack action is recorded as | [architecture.md](explanation/architecture.md#the-audit-trail-and-who-writes-it), [CHANGELOG.md](../CHANGELOG.md) (audit catalogue 1.6.0) |
+| see what runs on which platform, and how far each piece has got | [capabilities.md](reference/capabilities.md) |
+| read the specification of the storage, secrets, trigger and identity ports | [design/ports.md](explanation/ports.md) |
 | see why a decision was made, and what it forecloses | [decisions/](decisions/README.md) |
-| extend it — a new directory backend, a new kind of client | [development/extending.md](development/extending.md) |
+| extend it — a new directory backend, a new kind of client | [development/extending.md](how-to/extend.md) |
 | change the console or run it locally | [CONTRIBUTING.md](../CONTRIBUTING.md) |

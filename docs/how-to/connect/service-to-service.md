@@ -1,0 +1,227 @@
+# A service calls another service
+
+What a workload presents when it calls one of ours, what the called
+service accepts, and how to build a service of your own that gets both
+right. The rule underneath is [design/trust.md](../../explanation/trust.md):
+**two anchors, chosen by scope** — the cluster for a workload next door,
+the issuer for everything further away.
+
+## Decide which anchor, in one question
+
+*Is the caller a workload in the same cluster as the service?*
+
+| Yes | No |
+|---|---|
+| present the caller's **ServiceAccount token**, projected for the service's audience | obtain an **issuer token** first — by exchange for a workload or a CI job, by sign-in for a person — and present that |
+
+That is the whole decision. Do not put an exchange in front of a
+same-cluster call "for uniformity": the issuer would verify the same
+ServiceAccount token and re-sign it, a round trip that adds no trust on
+the hottest paths in the estate. Do not verify another cluster's keys
+directly to avoid the issuer: that is a third anchor per cluster, and
+the issuer exists so that decision is made once.
+
+## Calling with a ServiceAccount token (same cluster)
+
+The caller mounts a projected token **for the service's audience**. A
+token for any other audience — the API server's default included — is
+refused, which is what keeps every mounted token in the cluster from
+being a credential for every service in it.
+
+```yaml
+volumes:
+  - name: my-service-token
+    projected:
+      sources:
+        - serviceAccountToken:
+            audience: my-service            # the service's audience, from its values
+            expirationSeconds: 3600
+            path: token
+```
+
+Read the file on **every call**, not once: the kubelet rotates it under
+the pod. Send it as `Authorization: Bearer …` — there is no client
+library for this and none is needed, because it is a file and a header.
+
+On the service side, the caller must be **named**. Reaching the port is
+not being allowed to ask: state the callers your listener admits and
+treat an empty list as admitting nobody rather than everybody. A
+NetworkPolicy admitting the caller's namespace is the second layer, never
+the only one.
+
+> **sluis's own console API accepts exactly this**, for a
+> controller running beside the issuer. The GitHub controller reads
+> `AccessService.ListHolders` with its projected token, audience
+> `config.exchange.audience`, and the policy names it in a `service_account`
+> matcher — see [reference/contracts.md](../../reference/contracts.md).
+> The one difference from the pattern above is how the token is
+> checked: against the cluster's published key set, the same rows token
+> exchange uses, rather than a TokenReview, so that the service holds no
+> access to the cluster it runs in. The directory's own
+> `DirectoryService` is still not served: the one consumer it had is the
+> same process now.
+
+## Calling with an issuer token (anywhere else)
+
+A **workload in another cluster** exchanges its own ServiceAccount token
+at the issuer for a token whose audience is the service:
+
+```
+POST /token
+Authorization: Basic base64(<the service's client id>:)
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=<the workload's ServiceAccount token>
+subject_token_type=urn:ietf:params:oauth:token-type:jwt
+audience=<the service's client id>
+```
+
+The caller **names itself in the Basic header, with an empty secret**.
+An exchange client has no secret — the subject token is the credential
+— but the library authenticates every token request by HTTP Basic, and
+a `client_id` sent only in the form is refused as `invalid_client`.
+Verified 2026-09-12 with a stage ServiceAccount token traded for
+`exchange-probe`.
+
+The issuer verifies the subject token against the **key set that cluster
+publishes** for its own ServiceAccount tokens — never by calling the
+cluster. It then resolves the ServiceAccount through the policy's
+`service_account` matchers to internal groups, checks the client's
+`requires`, and mints. The service verifies the result against the
+issuer's JWKS and its own audience, the same verifier a console uses for
+a forwarded bearer.
+
+Connecting a cluster's workloads is therefore one row and no credential:
+
+```yaml
+exchange:
+  clusters:
+    - name: dev
+      issuer: https://oidc.eks.eu-central-1.amazonaws.com/id/EXAMPLE
+```
+
+EKS publishes that key set per cluster — it is what IRSA rests on — and
+Talos serves the same keys at the API server's `/openid/v1/jwks`. The
+issuer's own cluster is a row like any other, and the issuer holds access
+to none of them.
+
+What this gives up, said plainly: a TokenReview would notice a deleted
+ServiceAccount and a key set does not, so a token stays usable until it
+expires. Bound tokens are short-lived, so the window is minutes — and the
+alternative was a kubeconfig per cluster held by the service whose whole
+design is to hold almost no credential.
+
+A **CI job** does the same with its platform token: see
+[github-actions.md](github-actions.md). A **person** — a laptop over
+the network, a script an engineer runs — signs in once with `sluisctl
+login` and exchanges from the cached login: `sluisctl token --audience
+<client id>` prints the token, `sluisctl exchange` the whole response.
+
+That works because the CLI's own client, a `public` one, declares
+`sign_in_exchange: true`: of every token this issuer signs, the access
+token of a live sign-in at such a client, presented by that client, is
+the **only** one the exchange takes as a proof. An ID token names a
+person too, and is handed to every relying party they sign in to, so it
+is refused — a holder of one could otherwise exchange it for any
+audience the person's groups admit.
+
+Every one of these needs the service declared as a **client** in the
+policy, with `requires` naming the internal groups that may call it:
+
+```yaml
+groups:
+  all:inventory:reader:
+    matchers:
+      - service_account: { namespace: team-sync, name: team-sync }   # a workload, this or any cluster the issuer trusts
+clients:
+  inventory:
+    kind: public
+    requires: [all:inventory:reader, all:access-roster:operator]
+```
+
+The group is named for what it is a role *on* — `<scope>:<thing>:<role>`,
+here a reader of the directory across the installation — not for who is
+in it ([naming](../../explanation/trust.md#naming)).
+
+## Building a service that accepts callers
+
+Serve people and workloads with **one anchor each**, and never mount an
+operator RPC where a workload's proof alone admits. Two listeners is the
+plain way to keep them apart; one listener with both verifiers, which is
+what sluis's own API does, works when every route says which
+proof it takes:
+
+| Listener | Behind | Verifier | Accepts |
+|---|---|---|---|
+| console | gateway-native OIDC on Envoy Gateway (the default), upstream oauth2-proxy run by hand on any other gateway, or your own code flow | `Issuer` (issuer URL + this console's client id) | people |
+| API | Service DNS | `Cluster` (a token check, audience, the names it admits), and `Issuer` too when remote callers exist | workloads here; anything further away through the issuer |
+
+`Cluster` takes the check as a function: a TokenReview against your own
+API server, or a verification against the cluster's published key set
+as sluis does, so that it holds no access to the cluster it runs
+in.
+
+In Go, both verifiers come from the module as **structs** and a listener
+composes what it needs:
+
+```go
+cluster := &identity.Cluster{
+    Review:   kube.ReviewToken,        // yours, or client-go's
+    Audience: "my-service",
+    Name:     "prod",                  // so the same namespace on two clusters is two callers
+    Groups:   []string{"prod:k8s:admin"},
+}
+issuer := &identity.Issuer{
+    URL:      "https://issuer.example.internal",
+    Audience: "my-service",            // this service's client id at the issuer
+}
+
+// Either anchor, tried in order, first to answer wins.
+http.ListenAndServe(":8080", identity.Middleware(cluster, issuer)(api))
+```
+
+**Structs and not constructors, and no `ctx`.** A service must start
+whether or not the issuer is reachable: discovery is lazy and cached, and
+the key set refetches itself when a signature names a key it has not
+seen, which makes rotation a non-event.
+
+**`Review` is supplied, not built**, or every consumer that only needs
+the issuer would inherit Kubernetes client libraries for a path it never
+runs. **`Groups` is stated by the listener**, because a TokenReview says
+*who* and never *what they may do* — a token the issuer signed carries
+its groups, a ServiceAccount token does not.
+
+Whichever anchor proved the caller, the handler sees one
+`identity.Verified` and cannot tell which answered. **The grant is keyed
+by the caller, not by the anchor**: a consumer proven either way is the
+same consumer and gets the same answer. If your service keeps a grant
+table of its own, key it the same way, so there is one table behind both
+doors.
+
+A verifier that could not **reach** the issuer stops the chain rather
+than falling through to the next one, because trying the next would turn
+an outage into *your token is bad* and send a legitimate caller to
+authenticate again, repeatedly.
+
+A service that serves **only workloads next door** needs only the
+cluster verifier and no client at the issuer. A service that serves
+**only people** needs only the issuer verifier, behind the proxy, and no
+API listener at all. Add the second anchor when the second kind of
+caller appears, not before.
+
+## What never to do
+
+- **A shared secret between two services.** There is always a
+  ServiceAccount token or an issuer token to use instead.
+- **An API key on the console listener**, or a browser session on the
+  API listener. Two ports, two anchors.
+- **Trusting a header** (`X-Forwarded-Email` and friends) outside a
+  local run. It asks who can reach the port, not who signed anything.
+- **Re-mapping group names** on the way in. The name in the policy is
+  the name in the token is the name in your role check.
+
+## Recovery is not one of these
+
+Break-glass at the service and the issuer is a person minting a
+ServiceAccount token by hand. It is the cluster anchor used deliberately
+as the floor for the day the issuer is unavailable, not a pattern for a
+service to imitate: see [design/trust.md](../../explanation/trust.md#recovery-is-the-root-not-a-back-door).

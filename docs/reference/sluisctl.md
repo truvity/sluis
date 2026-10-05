@@ -70,7 +70,7 @@ Every command that names an audience takes `--audience`, `--issuer` and
 `--client`, defaulting to what `login` wrote; `aws` also takes `--role`
 for a role the audience does not encode.
 
-`github-token` names a [catalogue App](../connect/github-apps-catalogue.md#minting-a-token)
+`github-token` names a [catalogue App](../how-to/connect/github-apps-catalogue.md#minting-a-token)
 instead: `--app <id>`, `--repository <name>` (repeatable, without the
 owner; none asks for a token not narrowed to any, which only a grant of
 every repository allows), `--permission <name>=<level>` (repeatable; none
@@ -119,7 +119,7 @@ a sibling.
 **`--login-ns` (or `$SLUISCTL_BAO_LOGIN_NAMESPACE`) logs in at a PARENT
 namespace instead**, for an installation that keeps its logins at one
 namespace while data lives in per-project children — see
-[connect/openbao.md#logins-at-a-parent-namespace](../connect/openbao.md#logins-at-a-parent-namespace).
+[connect/openbao.md#logins-at-a-parent-namespace](../how-to/connect/openbao.md#logins-at-a-parent-namespace).
 The target namespace must be `--login-ns` itself or a descendant of it
 (a path-segment prefix, not a string prefix: `dev` is not a parent of
 `devel`), checked before any exchange is made — a target the login
@@ -241,7 +241,7 @@ the same way.
 
 Used as an AWS `credential_process` — the primary use, one CI cache tool
 at a time — see
-[docs/connect/r2-storage.md](../connect/r2-storage.md).
+[docs/connect/r2-storage.md](../how-to/connect/r2-storage.md).
 
 ### What each failure exits with
 
@@ -299,7 +299,7 @@ same login, even when their own target `-ns` differ (one a descendant of
 the other, both descendants of the shared login namespace). The
 certificate itself is always signed, and cached, in `-ns` — the target —
 regardless of where the login happened; see
-[connect/openbao.md#logins-at-a-parent-namespace](../connect/openbao.md#logins-at-a-parent-namespace).
+[connect/openbao.md#logins-at-a-parent-namespace](../how-to/connect/openbao.md#logins-at-a-parent-namespace).
 
 ### The certificate
 
@@ -345,7 +345,7 @@ certificate, so a server behind a different CA needs its root named a
 different way (a repository's service file `sslrootcert=`, or the
 caller's own `PGSSLROOTCERT`) — this only supplies what nothing else
 already decided.
-[connect/postgresql.md](../connect/postgresql.md) is the how-to,
+[connect/postgresql.md](../how-to/connect/postgresql.md) is the how-to,
 including the server side and a committed, secret-free service file as
 the recommended repo pattern.
 
@@ -365,7 +365,7 @@ the recommended repo pattern.
 `~/.ssh/known_hosts.d/sluisctl` by default, so a laptop trusts a
 fleet's SSH host certificate authorities before the first connection
 instead of being prompted for one — see
-[connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca](../connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
+[connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca](../how-to/connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
 for the shape of what it replaces, and
 [docs/decisions/0016](../decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md)
 for why this is a laptop-configuration command rather than an OpenBAO
@@ -512,7 +512,7 @@ command line exits `2`.
 Each release carries `sluisctl_<version>_nix-flake.tar.gz`,
 a Nix flake over that release's own archives; a repository adds its URL
 with `#sluisctl` to `devbox.json`
-([design](../design/sluisctl.md#installing-it)). The release's archives
+([design](../explanation/sluisctl.md#installing-it)). The release's archives
 are there too for a plain download.
 
 ## Where things are kept
@@ -624,7 +624,7 @@ and no login cache: every proof is the job's own token, exchanged afresh,
 though `kube-token`, `aws` and `r2` keep their per-credential caches
 ([above](#where-things-are-kept)) there as anywhere. A repository that would rather
 download nothing of ours uses the action, which is `curl` and `jq`
-([../connect/github-actions.md](../connect/github-actions.md)).
+([../connect/github-actions.md](../how-to/connect/github-actions.md)).
 
 ## Exit codes
 

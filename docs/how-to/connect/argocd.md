@@ -1,0 +1,53 @@
+# Connect ArgoCD
+
+**Anchor:** the issuer; ArgoCD runs its own OIDC code flow, so no proxy.
+It reads groups from the ID token and maps them in its own policy;
+nothing about that policy changes when the issuer does.
+
+1. A client in the issuer's policy:
+   ```yaml
+   clients:
+     argocd:
+       kind: confidential
+       display_name: Argo CD          # the sign-in page: "Sign in to continue to Argo CD"
+       description: deployments on the prod cluster
+       secret: argocd-oidc-client
+       redirects:  [https://argocd.example.internal/auth/callback]
+       signed_out: [https://argocd.example.internal/]
+       requires:   [prod:k8s:admin, prod:k8s:viewer]
+   ```
+2. ArgoCD's `oidc.config`:
+   ```yaml
+   name: Corporate
+   issuer: https://issuer.example.internal
+   clientID: $argocd-secret:oidc.clientID
+   clientSecret: $argocd-secret:oidc.clientSecret
+   requestedScopes: [openid, profile, email, groups]
+   logoutURL: https://issuer.example.internal/end_session?id_token_hint={{token}}&post_logout_redirect_uri=https://argocd.example.internal
+   ```
+3. `policy.csv` binds the **cluster tier** of its own scope —
+   `g, prod:k8s:admin, role:admin` — rather than owning a
+   `prod:argocd:*` name: being admin of the cluster is the
+   qualification for being admin of the ArgoCD that manages it
+   ([naming](../../explanation/trust.md#naming)). Give ArgoCD a `thing` of its
+   own only when its ladder genuinely diverges from the cluster's.
+   During a rename, list both spellings; drop the old with the old
+   issuer.
+4. Keep ArgoCD's local admin until a policy-granted identity has signed in
+   as an admin, then `admin.enabled: "false"`.
+
+The `argocd` CLI logs in through the same client with the browser flow;
+no separate client is needed.
+
+`oidc.config` has no signing-algorithm setting and needs none: ArgoCD
+verifies with go-oidc's provider verifier, which takes the algorithms the
+issuer's discovery document advertises (its `util/oidc/provider.go`), so
+the chart's default ES384 key verifies as an RSA one would. An
+installation with a relying party that accepts RS256 only sets
+`signingKey.certificate: {algorithm: RSA, size: 2048, encoding: PKCS1}`
+([reference](../../reference/configuration.md)).
+
+`display_name` and `description` are shown to anyone who starts a
+sign-in, so they carry nothing a stranger should not read. ArgoCD runs
+its own session, so a revoke at the issuer reaches it at its next token
+refresh; it does not consume a back-channel logout.

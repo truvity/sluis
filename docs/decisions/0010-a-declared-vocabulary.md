@@ -6,7 +6,7 @@
 ## Context
 
 Every grant is named `<scope>:<thing>:<role>`
-([design/trust.md#naming](../design/trust.md#naming),
+([design/trust.md#naming](../explanation/trust.md#naming),
 [reference/policy.md#naming](../reference/policy.md#naming)), and the
 loader has never checked what a segment MEANS — only that the shape has
 three non-empty parts. `prod:k8s:admin` and `prod:k8s:adimn` are both
@@ -51,7 +51,7 @@ inheritance exists. It never crosses scope: holding a role on `all`
 never implies the same role on an environment, and the reverse never
 holds either — the two are unrelated axes, and mixing them is exactly the
 mistake `all` invites when used for a thing that is not once-per-installation
-([taxonomy.md](../taxonomy.md)).
+([taxonomy.md](../reference/taxonomy.md)).
 
 **Mapping wildcards are a `groups`-key-only shorthand, not a new kind of
 grant.** `*` in the scope and/or thing position of a `groups` key

@@ -7,7 +7,7 @@
 
 [0011](0011-ssh-people-opkssh-machines-and-hosts-openbao.md) put host
 certificates on the secret store's own SSH CA, and
-[docs/connect/ssh.md](../connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
+[docs/connect/ssh.md](../how-to/connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
 already documents the manual side of trusting it: fetch the CA's public
 key (`bao read ssh/config/ca`, or read it off any certificate with
 `ssh-keygen -L`), then add one `@cert-authority <pattern> <key>` line to
@@ -100,7 +100,7 @@ at all.
 *authorization* — it fetches a public key that, by construction, proves
 nothing on its own; the CA's own signing role, and who may ask it to
 sign a host certificate, stay exactly where
-[docs/connect/ssh.md](../connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
+[docs/connect/ssh.md](../how-to/connect/ssh.md#hosts-host-certificates-from-openbaos-ssh-ca)
 already puts them, with the secret store's own owners. A `url:` entry
 handed something other than an OpenSSH public key, or a key whose own
 integrity depends on the URL's own TLS trust, gets exactly the trust that
@@ -110,7 +110,7 @@ no more and no less.
 ## Alternatives considered
 
 **A docs recipe only** (the manual `bao read` / `ssh-keygen -L` steps
-[docs/connect/ssh.md](../connect/ssh.md) already has), matching 0013's
+[docs/connect/ssh.md](../how-to/connect/ssh.md) already has), matching 0013's
 general preference for documentation over a new command. Rejected:
 unlike a single `bao kv get`, trusting a CA safely needs a FILE this
 tool owns outright (never a blind append to `known_hosts` itself, which

@@ -95,7 +95,7 @@ the dependency; run it on its own with `just vuln`, the same way
   afterwards. A patch cut only for dependency bumps has no heading. A change
   to `internal/audit/catalogue/roster.yaml` needs a new catalogue `version`
   and its `testdata/released/roster-<version>.yaml` fixture in the same pull
-  request ([extending.md](docs/development/extending.md#7-an-audit-action)).
+  request ([extending.md](docs/how-to/extend.md#7-an-audit-action)).
 - **Rebase-merge only.** Branch from `master`, never stack pull requests.
 - **Generated code is committed.** `just generate` rebuilds `gen/` from
   `proto/`; CI does not run buf. A contract change and its generated code
@@ -146,7 +146,7 @@ needs a real corporate OAuth client, so the code flow and token exchange
 are exercised by the tests rather than by hand.
 
 The console's rules are in
-[docs/design/sluis.md](docs/design/sluis.md), under "The
+[docs/design/sluis.md](docs/explanation/design.md), under "The
 console": two
 mirrored sides, every name a link, one meaning per visual form (a name is
 a link, a chip is a state and nothing else, facts are a label over a
@@ -163,10 +163,10 @@ rather than the pixels for anything animated.
 
 The store and runtime are being refactored to use stable ports (see
 [0026](docs/decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)–[0032](docs/decisions/0032-one-configuration-file-one-binary-one-chart.md)
-and [docs/design/ports.md](docs/design/ports.md)). During this migration:
+and [docs/design/ports.md](docs/explanation/ports.md)). During this migration:
 
 - New features must read and write state only through the ports in
-  [docs/design/ports.md](docs/design/ports.md), never through new
+  [docs/design/ports.md](docs/explanation/ports.md), never through new
   ConfigMap/Secret writes or new Valkey keys.
 - New configuration goes into the configuration file (ADR 0032), not new
   environment variables.
@@ -191,7 +191,7 @@ accounts and CI on the issuer, resources and client-described clients in
 the policy, the GitHub and Slack controllers acting in real organisations and workspaces, runner
 Apps from the console, the audit trail kept by an audit installation, and
 the console's state restorable from five Secrets and the Slack state. The conformance run at
-1.0 is in [docs/conformance.md](docs/conformance.md).
+1.0 is in [docs/conformance.md](docs/explanation/conformance-findings.md).
 [CHANGELOG.md](CHANGELOG.md) is the record of what exists at each
 version; read the newest entries before the design documents, which
 describe the shape rather than the latest release.
@@ -205,7 +205,7 @@ call; verifying another cluster's key set directly; minting a structured
 roles claim beside `groups`; re-mapping group names in a library; a
 ConfigMap watch instead of a `checksum/policy` rollout. Naming a group is
 its own set of anti-patterns, out of this file's scope — see
-[docs/taxonomy.md](docs/taxonomy.md).
+[docs/taxonomy.md](docs/reference/taxonomy.md).
 
 ## Releasing
 
