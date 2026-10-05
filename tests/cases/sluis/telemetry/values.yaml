@@ -1,5 +1,6 @@
+replicaCount: 1
 # Telemetry wired (ADR 0006): every pod of the app gets the SDK environment,
-# a service name of its own, and the extra OTEL_* entries; the secrets volume
+# the one process's service name, and the extra OTEL_* entries; the secrets volume
 # still renders beside it on the service.
 exchange:
   clusters:
@@ -11,18 +12,15 @@ config:
   valkey:
     address: valkey.example.svc:6379
     passwordSecret: valkey/password
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
 secrets:
   - name: valkey/password
     secretName: valkey
     key: password
-controllerGithub:
-  enabled: true
-  config:
-    consoleURL: http://sluis.default.svc:8080/console
-controllerSlack:
-  enabled: true
-  config:
-    consoleURL: http://sluis.default.svc:8080/console
 telemetry:
   otlp:
     endpoint: http://gateway.observability.svc:4318

@@ -1,0 +1,55 @@
+{{- if eq .Values.renders "app" -}}
+{{- $github := include "sluis.controllerOn" (dict "root" . "kind" "github") -}}
+{{- $slack := include "sluis.controllerOn" (dict "root" . "kind" "slack") -}}
+{{- if or $github $slack }}
+---
+# What the controllers in this process may do to the cluster, bound to the
+# service's own account (there is one account and one pod). Update, by name,
+# the ConfigMaps they report into, and the one Secret people's linked GitHub
+# accounts are kept in: each link's token pair rotates every time it is renewed,
+# and the renewed pair has to be written back. The service creates those
+# objects -- `create` cannot be narrowed to a name -- so this grants no create,
+# and in particular no ConfigMap that would read to the service as a workspace
+# record. The Secrets with the Apps' keys and the ConfigMaps with the console's
+# records are mounted volumes, so no other Secret or ConfigMap is readable, and
+# watching them for a change (an install, a Refresh) needs no permission either.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sluis.fullname" . }}-controllers
+  labels:
+    {{- include "sluis.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      {{- if $github }}
+      - {{ printf "%s-github-status" (include "sluis.fullname" .) | quote }}
+      {{- end }}
+      {{- if $slack }}
+      - {{ printf "%s-slack-status" (include "sluis.fullname" .) | quote }}
+      {{- end }}
+    verbs: ["get", "update", "patch"]
+  {{- if $github }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ printf "%s-github-links" (include "sluis.fullname" .) | quote }}]
+    verbs: ["get", "update"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sluis.fullname" . }}-controllers
+  labels:
+    {{- include "sluis.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sluis.fullname" . }}-controllers
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sluis.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{ end -}}

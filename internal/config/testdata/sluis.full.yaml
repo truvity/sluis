@@ -1,0 +1,99 @@
+# Every key the schema has, set: the type must hold each one.
+apiVersion: sluis.truvity.github.io/sluis/v3
+issuerURL: https://access.example
+release: access-issuer
+cluster: devel
+allowInsecure: true
+demo: true
+inCluster: true
+listen: {address: ":8080"}
+probes: {address: ":7070"}
+log: {level: debug}
+store: kubernetes
+policy: {file: /etc/sluis/policy/policy.yaml}
+directory:
+  workspaces:
+    - id: C0example
+      backend: google
+      admin: admin@example.com
+      keySecret: directory/C0example/key
+      serve: [example.com]
+      syncGroups: [all@example.com]
+publicURL: https://access.example/console
+publicRootURL: https://access.example
+secureCookies: true
+groupsScoping: enforce
+secrets: {source: ssm, root: /sluis/example, region: eu-west-1, endpoint: "http://localhost:4566", refresh: 5m}
+lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
+freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
+exchange:
+  audience: access-issuer
+recovery: {enabled: true, serviceAccount: access-issuer-recovery, audience: access-issuer-recovery, passwordSecret: recovery/password}
+login:
+  directory: true
+  signOutURL: https://access.example/logout
+  forwarded: {issuer: https://proxy.example, audience: access, emailHeader: X-Email}
+console: {origin: https://access.example, client: console, awsAudience: https://access.example/console}
+oauthClient:
+  id: client-id
+  provider: default
+  secretName: google-oauth
+  idKey: client-id
+  secretKey: client-secret
+signingKey:
+  file: /var/run/access-issuer/signing-key/tls.key
+  additionalFiles: [/var/run/access-issuer/signing-key-rs256/tls.key]
+  pollInterval: 30s
+  activationDelay: 15m
+  overlap: 2h
+valkey: {address: "valkey:6379", passwordSecret: valkey/password, tls: true, cluster: false}
+audit:
+  writer: http://audit.access-issuer.svc:8080
+  tokenFile: /var/run/audit/token
+  queryURL: http://audit-query.access-issuer.svc:8080
+  audience: audit
+  forwardedForTrustedHops: 1
+ports:
+  adapter: memory
+  export:
+    adapter: openbao
+    openbao:
+      address: https://openbao.kernel.truvity.private
+      caFile: /var/run/openbao/ca.pem
+      mount: kv
+      namespace: kernel
+      auth:
+        method: jwt
+        mount: jwt-kernel
+        role: sluis-writer
+        tokenFile: /var/run/openbao/token
+platform:
+  aws: true
+  kubernetes: true
+  openbao: true
+  runtime: lambda
+  replicas: 2
+preset: aws-hybrid
+adapters:
+  state: {adapter: dynamodb, settings: {table: sluis, region: eu-west-1}}
+controllers:
+  github:
+    consoleURL: http://access-issuer.access.svc:8080/console
+    tokenFile: /var/run/secrets/github-roster/token
+    console:
+      auth:
+        aws:
+          audience: https://access.example/console
+    recordsDir: /var/run/github-roster/records
+    appsDir: /var/run/github-roster/apps
+    interval: 15m
+  slack:
+    consoleURL: http://access-issuer.access.svc:8080/console
+    tokenFile: /var/run/secrets/slack-roster/token
+    console:
+      auth:
+        aws:
+          audience: https://access.example/console
+    recordsDir: /var/run/slack-roster/workspaces
+    credentialsDir: /var/run/slack-roster/credentials
+    interval: 10m

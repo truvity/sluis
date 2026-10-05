@@ -1,85 +1,4 @@
 ---
-# Source: sluis/templates/controller-pdb.yaml
-# More than one replica is there to keep a controller running through a
-# voluntary disruption (a node drain, a cluster upgrade): without a budget a
-# drain may evict every replica at once.
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: sluis-github-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-github
-spec:
-  minAvailable: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: sluis-github-roster
-      app.kubernetes.io/instance: sluis
-
----
-# Source: sluis/templates/controller-pdb.yaml
-# More than one replica is there to keep a controller running through a
-# voluntary disruption (a node drain, a cluster upgrade): without a budget a
-# drain may evict every replica at once.
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: sluis-slack-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-slack
-spec:
-  minAvailable: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: sluis-slack-roster
-      app.kubernetes.io/instance: sluis
-
----
-# Source: sluis/templates/controller-github.yaml
-# The controller's own account. It holds two permissions: updating its one
-# report, and updating the one Secret people's linked GitHub accounts are
-# kept in — each link's token pair rotates every time it is renewed, and
-# the renewed pair has to be written back. The Secret with the Apps' keys
-# and the ConfigMap with the console's records are mounted volumes, so no
-# other Secret or ConfigMap is readable at all, and watching them for a
-# change (an install, a Refresh) needs no permission either.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: sluis-github-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-github
-
----
-# Source: sluis/templates/controller-slack.yaml
-# The controller's own account. It holds one permission: updating its one
-# report. The Secret with the workspaces' bot tokens and the ConfigMap with
-# the console's records are mounted volumes, so no Secret or other ConfigMap
-# is readable at all.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: sluis-slack-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-slack
-
----
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
@@ -112,7 +31,7 @@ metadata:
 # Source: sluis/templates/configmap.yaml
 # What `sluis serve --config` reads: `config`, as the values give it, with
 # nothing added, renamed or dropped but the apiVersion the chart writes. The
-# binary validates it against schemas/config/serve.schema.json at start, and
+# binary validates it against schemas/config/sluis.schema.json at start, and
 # values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
@@ -126,9 +45,14 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
-    apiVersion: sluis.truvity.github.io/serve/v2
+    apiVersion: sluis.truvity.github.io/sluis/v3
     audit:
       tokenFile: /var/run/audit/token
+    controllers:
+      github:
+        consoleURL: http://sluis.default.svc:8080/console
+      slack:
+        consoleURL: http://sluis.default.svc:8080/console
     inCluster: true
     issuerURL: https://issuer.example
     lifetimes:
@@ -140,6 +64,11 @@ data:
       address: :8080
     policy:
       file: /var/run/access-issuer/policy/policy.yaml
+    ports:
+      adapter: dynamodb
+      dynamodb:
+        region: eu-west-1
+        table: sluis
     probes:
       address: :7070
     recovery:
@@ -154,72 +83,6 @@ data:
       file: /var/run/access-issuer/signing-key/tls.key
       pollInterval: 30s
     store: kubernetes
-
----
-# Source: sluis/templates/controller-github.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-github-roster-config
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-github
-data:
-  # What `sluis controller github --config` reads: `controllerGithub.config`, as the values give
-  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-github.schema.json.
-  config.yaml: |
-    apiVersion: sluis.truvity.github.io/controller-github/v2
-    appsDir: /var/run/github-roster/apps
-    audit:
-      tokenFile: /var/run/audit/token
-    consoleURL: http://sluis.default.svc:8080/console
-    interval: 15m
-    policy:
-      file: /var/run/github-roster/policy/policy.yaml
-    ports:
-      adapter: dynamodb
-      dynamodb:
-        region: eu-west-1
-        table: sluis-github
-    recordsDir: /var/run/github-roster/records
-    tokenFile: /var/run/secrets/github-roster/token
-
----
-# Source: sluis/templates/controller-slack.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-slack-roster-config
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-slack
-data:
-  # What `sluis controller slack --config` reads: `controllerSlack.config`, as the values give
-  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-slack.schema.json.
-  config.yaml: |
-    apiVersion: sluis.truvity.github.io/controller-slack/v2
-    audit:
-      tokenFile: /var/run/audit/token
-    consoleURL: http://sluis.default.svc:8080/console
-    credentialsDir: /var/run/slack-roster/credentials
-    interval: 15m
-    policy:
-      file: /var/run/slack-roster/policy/policy.yaml
-    ports:
-      adapter: dynamodb
-      dynamodb:
-        region: eu-west-1
-        table: sluis
-    probes:
-      address: :9090
-    recordsDir: /var/run/slack-roster/workspaces
-    tokenFile: /var/run/secrets/slack-roster/token
 
 ---
 # Source: sluis/templates/policy-configmap.yaml
@@ -291,53 +154,37 @@ subjects:
     namespace: default
 
 ---
-# Source: sluis/templates/controller-github.yaml
-# Update, by name, the one ConfigMap it reports into. The service creates
-# that object — `create` cannot be narrowed to a name — so this account
-# cannot create any ConfigMap, and in particular none that would read to
-# the service as a workspace record.
+# Source: sluis/templates/controllers.yaml
+# What the controllers in this process may do to the cluster, bound to the
+# service's own account (there is one account and one pod). Update, by name,
+# the ConfigMaps they report into, and the one Secret people's linked GitHub
+# accounts are kept in: each link's token pair rotates every time it is renewed,
+# and the renewed pair has to be written back. The service creates those
+# objects -- `create` cannot be narrowed to a name -- so this grants no create,
+# and in particular no ConfigMap that would read to the service as a workspace
+# record. The Secrets with the Apps' keys and the ConfigMaps with the console's
+# records are mounted volumes, so no other Secret or ConfigMap is readable, and
+# watching them for a change (an install, a Refresh) needs no permission either.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: sluis-github-roster
+  name: sluis-controllers
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-github
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
-    resourceNames: ["sluis-github-status"]
+    resourceNames:
+      - "sluis-github-status"
+      - "sluis-slack-status"
     verbs: ["get", "update", "patch"]
-  # Created by the service, like the report, so this can name it.
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames: ["sluis-github-links"]
     verbs: ["get", "update"]
-
----
-# Source: sluis/templates/controller-slack.yaml
-# Update, by name, the one ConfigMap it reports into. The service creates
-# that object — `create` cannot be narrowed to a name — so this account
-# cannot create any ConfigMap, and in particular none that would read to
-# the service as a workspace record.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: sluis-slack-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-slack
-rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    resourceNames: ["sluis-slack-status"]
-    verbs: ["get", "update", "patch"]
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -360,45 +207,23 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
-# Source: sluis/templates/controller-github.yaml
+# Source: sluis/templates/controllers.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: sluis-github-roster
+  name: sluis-controllers
   labels:
     app.kubernetes.io/name: sluis
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-github
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: sluis-github-roster
+  name: sluis-controllers
 subjects:
   - kind: ServiceAccount
-    name: sluis-github-roster
-    namespace: default
-
----
-# Source: sluis/templates/controller-slack.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: sluis-slack-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-slack
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: sluis-slack-roster
-subjects:
-  - kind: ServiceAccount
-    name: sluis-slack-roster
+    name: sluis
     namespace: default
 
 ---
@@ -442,248 +267,6 @@ spec:
       targetPort: issuer
 
 ---
-# Source: sluis/templates/controller-github.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sluis-github-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-github
-spec:
-  # Rolled so that a new pod must be Ready before an old one goes: a
-  # start that fails (the 2026-10-04 rollout, where every new pod crashed
-  # at start) leaves the old pod running. More than one replica is safe only
-  # on a shared State (see sluis.controllerRollout), and `replicas` is
-  # refused above 1 without one.
-  replicas: 2
-  minReadySeconds: 10
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: sluis-github-roster
-      app.kubernetes.io/instance: sluis
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: sluis-github-roster
-        app.kubernetes.io/instance: sluis
-      annotations:
-        # One checksum per document this process reads: its own, and the
-        # policy. A change to the service's or the other controller's
-        # document does not restart it.
-        checksum/config: d779d41db6636f97295cc536e736c7763beffefb16f420bdbaa0857c2533560c
-        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
-    spec:
-      serviceAccountName: sluis-github-roster
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: controller-github
-          image: "ghcr.io/truvity/sluis/sluis:0.0.0"
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          args:
-            - controller
-            - github
-            - --config=/etc/sluis/controller-github.yaml
-          ports:
-            - name: health
-              containerPort: 7070
-          livenessProbe:
-            httpGet: { path: /healthz, port: health }
-          readinessProbe:
-            httpGet: { path: /readyz, port: health }
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          volumeMounts:
-            - name: config
-              mountPath: /etc/sluis/controller-github.yaml
-              subPath: config.yaml
-              readOnly: true
-            - name: policy
-              mountPath: /var/run/github-roster/policy
-              readOnly: true
-            - name: token
-              mountPath: /var/run/secrets/github-roster
-              readOnly: true
-            - name: apps
-              mountPath: /var/run/github-roster/apps
-              readOnly: true
-            - name: records
-              mountPath: /var/run/github-roster/records
-              readOnly: true
-            
-      volumes:
-        - name: config
-          configMap:
-            name: sluis-github-roster-config
-        - name: policy
-          configMap:
-            name: sluis-policy
-        # The token the console verifies, for the audience it accepts a
-        # workload's token for. Rotated by the kubelet; the controller reads
-        # the file on every call.
-        - name: token
-          projected:
-            sources:
-              - serviceAccountToken:
-                  audience: sluis
-                  expirationSeconds: 3600
-                  path: token
-        # One file per connected organisation. Optional: before anything is
-        # connected there may be nothing, and the controller reports each
-        # bound organisation as not connected rather than failing to start.
-        - name: apps
-          secret:
-            secretName: sluis-github-apps
-            optional: true
-        # The console's records beside them: each organisation's record, the
-        # operators' confirmations and their requests for a pass now. The
-        # controller watches it, so a Refresh runs a pass at once. Optional
-        # for the same reason.
-        - name: records
-          configMap:
-            name: sluis-github-orgs
-            optional: true
-        
-
----
-# Source: sluis/templates/controller-slack.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sluis-slack-roster
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: controller-slack
-spec:
-  # Rolled so that a new pod must be Ready before an old one goes: a
-  # start that fails (the 2026-10-04 rollout, where every new pod crashed
-  # at start) leaves the old pod running. More than one replica is safe only
-  # on a shared State (see sluis.controllerRollout), and `replicas` is
-  # refused above 1 without one.
-  replicas: 2
-  minReadySeconds: 30
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: sluis-slack-roster
-      app.kubernetes.io/instance: sluis
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: sluis-slack-roster
-        app.kubernetes.io/instance: sluis
-      annotations:
-        # One checksum per document this process reads: its own, and the
-        # policy. A change to the service's or the other controller's
-        # document does not restart it.
-        checksum/config: 6435215242a0fb568fc5c2d64d3e541c52e71cb234ebd09ebb77c989da1c4f9d
-        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
-    spec:
-      serviceAccountName: sluis-slack-roster
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: controller-slack
-          image: "ghcr.io/truvity/sluis/sluis:0.0.0"
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          args:
-            - controller
-            - slack
-            - --config=/etc/sluis/controller-slack.yaml
-          ports:
-            - name: health
-              containerPort: 9090
-          livenessProbe:
-            httpGet: { path: /healthz, port: health }
-          readinessProbe:
-            httpGet: { path: /readyz, port: health }
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          volumeMounts:
-            - name: config
-              mountPath: /etc/sluis/controller-slack.yaml
-              subPath: config.yaml
-              readOnly: true
-            - name: policy
-              mountPath: /var/run/slack-roster/policy
-              readOnly: true
-            - name: token
-              mountPath: /var/run/secrets/slack-roster
-              readOnly: true
-            - name: credentials
-              mountPath: /var/run/slack-roster/credentials
-              readOnly: true
-            - name: workspaces
-              mountPath: /var/run/slack-roster/workspaces
-              readOnly: true
-            
-      volumes:
-        - name: config
-          configMap:
-            name: sluis-slack-roster-config
-        - name: policy
-          configMap:
-            name: sluis-policy
-        # The token the console verifies, for the audience it accepts a
-        # workload's token for. Rotated by the kubelet; the controller reads
-        # the file on every call.
-        - name: token
-          projected:
-            sources:
-              - serviceAccountToken:
-                  audience: sluis
-                  expirationSeconds: 3600
-                  path: token
-        # One file per connected workspace: the app's credentials and its bot
-        # token. Optional: before anything is connected there may be nothing,
-        # and the controller reports each declared workspace as not connected
-        # rather than failing to start.
-        - name: credentials
-          secret:
-            secretName: sluis-slack-credentials
-            optional: true
-        # The console's records beside them: each workspace's record, the
-        # shared channels' definitions and the operators' confirmations.
-        # Optional for the same reason.
-        - name: workspaces
-          configMap:
-            name: sluis-slack-workspaces
-            optional: true
-        
-
----
 # Source: sluis/templates/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -708,9 +291,9 @@ spec:
       annotations:
         # Configuration and policy are immutable for an instance: each document
         # is read once, at start, so a change to either is a rollout. One
-        # checksum per document this process reads, and no other: a change
-        # to a controller's own document does not restart the service.
-        checksum/config: 85f4130aa9acfed72b1dd77b8375a5c34d14bf7e1a96eb691e8898a09b52b409
+        # checksum per document this process reads: the service document (the
+        # controllers' sections are in it) and the policy.
+        checksum/config: 14c03e9064be7add77011cc86d28fe794f5fb6ea22f352418638a2128a9be30e
         checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis
@@ -754,6 +337,27 @@ spec:
             - name: tmp
               mountPath: /tmp
             
+            # The GitHub controller's: the token the console verifies for it, the
+            # Apps' credentials and the console's records.
+            - name: github-token
+              mountPath: /var/run/secrets/github-roster
+              readOnly: true
+            - name: github-apps
+              mountPath: /var/run/github-roster/apps
+              readOnly: true
+            - name: github-records
+              mountPath: /var/run/github-roster/records
+              readOnly: true
+            # The Slack controller's, likewise.
+            - name: slack-token
+              mountPath: /var/run/secrets/slack-roster
+              readOnly: true
+            - name: slack-credentials
+              mountPath: /var/run/slack-roster/credentials
+              readOnly: true
+            - name: slack-workspaces
+              mountPath: /var/run/slack-roster/workspaces
+              readOnly: true
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
@@ -786,6 +390,49 @@ spec:
         - name: tmp
           emptyDir: {}
         
+        # The token the console verifies, for the audience it accepts a
+        # workload's token for. Rotated by the kubelet; the controller reads
+        # the file on every call.
+        - name: github-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sluis
+                  expirationSeconds: 3600
+                  path: token
+        # One file per connected organisation. Optional: before anything is
+        # connected there may be nothing, and the controller reports each
+        # bound organisation as not connected rather than failing to start.
+        - name: github-apps
+          secret:
+            secretName: sluis-github-apps
+            optional: true
+        # The console's records beside them: each organisation's record, the
+        # operators' confirmations and their requests for a pass now. Optional
+        # for the same reason.
+        - name: github-records
+          configMap:
+            name: sluis-github-orgs
+            optional: true
+        - name: slack-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sluis
+                  expirationSeconds: 3600
+                  path: token
+        # One file per connected workspace: the app's credentials and its bot
+        # token. Optional: before anything is connected there may be nothing.
+        - name: slack-credentials
+          secret:
+            secretName: sluis-slack-credentials
+            optional: true
+        # The console's records beside them: each workspace's record, the
+        # shared channels' definitions and the operators' confirmations.
+        - name: slack-workspaces
+          configMap:
+            name: sluis-slack-workspaces
+            optional: true
 
 ---
 # Source: sluis/templates/signing-key.yaml

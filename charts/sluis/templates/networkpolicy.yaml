@@ -9,8 +9,8 @@
 # that list would be a chart that breaks a login the day a provider adds
 # a hostname. The fleet's own egress policy is where that belongs: a
 # Kubernetes NetworkPolicy cannot name a host, and the Slack controller
-# (controllerSlack) needs slack.com:443 to be allowed there, as the GitHub
-# controller needs api.github.com:443.
+# (config.controllers.slack) needs slack.com:443 to be allowed there, as the
+# GitHub controller needs api.github.com:443.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -36,25 +36,14 @@ spec:
         {{- end }}
       ports:
         - port: {{ include "sluis.port" . }}
-    {{- if .Values.controllerGithub.enabled }}
-    # The GitHub controller beside it, reading the console's API with its
-    # own ServiceAccount token.
+    {{- if or (include "sluis.controllerOn" (dict "root" . "kind" "github")) (include "sluis.controllerOn" (dict "root" . "kind" "slack")) }}
+    # The controllers in this process read the console's API through this
+    # release's own Service, which may route the call to another replica of
+    # the pod: so the pods admit one another on the issuer's port.
     - from:
         - podSelector:
             matchLabels:
-              {{- include "sluis.controllerGithubSelectorLabels" . | nindent 14 }}
-      ports:
-        - port: {{ include "sluis.port" . }}
-    {{- end }}
-    {{- if .Values.controllerSlack.enabled }}
-    # The Slack controller beside it, reading the console's API with its
-    # own ServiceAccount token. Its own traffic to Slack (slack.com:443,
-    # over TLS) leaves the pod, which this policy does not govern: see the
-    # note on egress at the top.
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "sluis.controllerSlackSelectorLabels" . | nindent 14 }}
+              {{- include "sluis.selectorLabels" . | nindent 14 }}
       ports:
         - port: {{ include "sluis.port" . }}
     {{- end }}

@@ -1,0 +1,10 @@
+# A controller needs exchange.clusters (template `fail`): the service verifies its ServiceAccount token against that key set.
+# error: config.controllers.github needs exchange.clusters
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+console:
+  mount: /console

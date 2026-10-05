@@ -1,8 +1,0 @@
-# The access-issuer chart's controllers were githubRoster and slackRoster, each with an image of its own; they are controllerGithub and controllerSlack, on the one image.
-# error: at '': additional properties 'githubRoster' not allowed
-config:
-  issuerURL: https://issuer.example
-githubRoster:
-  enabled: true
-  image:
-    repository: ghcr.io/truvity/sluis/github-roster

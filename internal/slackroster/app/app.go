@@ -67,9 +67,24 @@ type Config struct {
 // LogLevel is the level the process should log at.
 func (c Config) LogLevel() slog.Level { return c.logLevel }
 
+// ConsoleURL is the console's API the controller reads.
+func (c Config) ConsoleURL() string { return c.console }
+
 // Load reads the configuration file, holds it to its schema, and builds the
 // settings from it.
+//
+// The file is either the controller's own document (`sluis controller slack`,
+// deprecated) or the one service document, whose `controllers.slack` section
+// is this controller: a deployment that still runs the controller apart reads
+// the document the process it was folded into reads.
 func Load(file string) (Config, error) {
+	if config.IsSluis(file) {
+		c, err := config.LoadConfig[config.Sluis](file, nil)
+		if err != nil {
+			return Config{}, err
+		}
+		return FromService(c.Service, c.Policy)
+	}
 	c, err := config.LoadConfig[config.ControllerSlack](file, nil)
 	if err != nil {
 		return Config{}, err
@@ -130,6 +145,25 @@ func FromConfig(f *config.ControllerSlack, p *config.PolicyDocument) (Config, er
 		return Config{}, errors.New("policy.file is required: the bindings are the policy document's slack table")
 	case c.console == "":
 		return Config{}, errors.New("consoleURL is required: who holds a group is the console's to answer")
+	}
+	return c, nil
+}
+
+// FromService builds the settings of the Slack controller that the one service
+// document runs (`controllers.slack`), from the document and the policy it
+// names. The controller shares the process's release, policy, ports, adapters,
+// audit installation and log level, and, with the `ssm` secrets source, its root.
+func FromService(s *config.Sluis, p *config.PolicyDocument) (Config, error) {
+	f := s.SlackController()
+	if f == nil {
+		return Config{}, errors.New("controllers.slack is not set")
+	}
+	c, err := FromConfig(f, p)
+	if err != nil {
+		return Config{}, err
+	}
+	if sec := s.Secrets; sec != nil && sec.Source == "ssm" {
+		c.stores.SecretsRoot = sec.Root
 	}
 	return c, nil
 }
@@ -314,7 +348,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 
 // Run passes until the context is done, or the audit installation refuses
 // the catalogue after the start, which ends the process the way a refusal
-// at the start would have.
+// at the start would have. It is the controller as a process of its own
+// (`sluis controller`, deprecated): it serves its own probes, which in the one
+// process are the service's.
 func (a *App) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -328,7 +364,26 @@ func (a *App) Run(ctx context.Context) error {
 			done <- err
 		}
 	}()
+	go func() { done <- a.RunLoop(ctx, nil) }()
+	return <-done
+}
+
+// Readiness is the controller's answer to "did it start": closed until
+// [App.RunLoop] begins. The one process adds it to the readiness it serves.
+func (a *App) Readiness() health.Dependency { return a.ready.Dependency() }
+
+// RunLoop is the controller's loop alone, for the one process that serves the
+// probes. It opens readiness, waits for ready (when not nil) before the first
+// pass, then passes until the context is done, or the audit installation
+// refuses the catalogue after the start, which ends it with that error.
+func (a *App) RunLoop(ctx context.Context, ready func(context.Context)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	a.ready.Open()
+	if ready != nil {
+		ready(ctx)
+	}
+	done := make(chan error, 1)
 	go func() { done <- a.controller.Run(ctx) }()
 	select {
 	case err := <-a.fatal:

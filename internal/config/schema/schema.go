@@ -22,10 +22,13 @@ const policy = "https://github.com/truvity/policy/schemas/"
 // Names are the documents, as the schema files are named:
 // schemas/config/<name>.schema.json. The first three are the service documents,
 // one per process; `policy` is the one policy document they all name.
-var Names = []string{"serve", "controller-github", "controller-slack", "policy"}
+var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "policy"}
 
 // Services are the service documents: the ones a process is started with.
-var Services = []string{"serve", "controller-github", "controller-slack"}
+// `sluis` is the one document of the one process (v3): the serve settings and,
+// under `controllers`, the controllers it runs. The other three are what a
+// deployment that still runs the processes apart reads, for one release.
+var Services = []string{"sluis", "serve", "controller-github", "controller-slack"}
 
 // Group is the group of the documents' kinds: `apiVersion` is
 // `<Group>/<document>/v<N>` (truvity/policy docs/contracts/config.md, rule 7).
@@ -34,6 +37,13 @@ const Group = "sluis.truvity.github.io"
 // apiVersion is the `apiVersion` every v2 document carries.
 func apiVersion(name string) m {
 	return m{"const": Group + "/" + name + "/v2", "description": "Which version of which document this is. " + Group + "/" + name + "/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/configuration.md)."}
+}
+
+// apiVersionSluis is the `apiVersion` of the one service document, v3. A
+// binary reads it, and also the v2 `serve` document (and v1, which has none)
+// as a service with no controllers.
+func apiVersionSluis() m {
+	return m{"const": Group + "/sluis/v3", "description": "Which version of which document this is. " + Group + "/sluis/v3 is the one service document: the process that serves the issuer and the console and, under `controllers`, runs the GitHub and Slack controllers. A binary still reads the v2 `serve` document (and v1, which has no apiVersion) as this document with no controllers (docs/reference/configuration.md)."}
 }
 
 // policyRef is `policy`: the policy document a process decides by.
@@ -337,6 +347,47 @@ func serveSchema() m {
 		})
 }
 
+// sluisSchema is the one service document: every key of `serve`, at the top
+// level, and `controllers`. A controller shares what the process already says
+// (the release, the policy, the storage ports and adapters, the audit
+// installation, the log level and the probes), so its section holds only what
+// is its own.
+func sluisSchema() m {
+	s := serveSchema()
+	props, _ := s["properties"].(m)
+	props["apiVersion"] = apiVersionSluis()
+	props["controllers"] = obj("The controllers this process runs beside the issuer and the console, each in its own loop. A controller that is absent is off. Which organisations and workspaces a running controller may CHANGE is the policy document's `controllers.<kind>.enabledOrgs` and `enabledWorkspaces`, as before. A controller reads the console's API as a workload, so the policy's exchange must admit its proof (a ServiceAccount token on Kubernetes, the function role's web identity token on Lambda).", m{
+		"github": obj("The GitHub controller: makes each GitHub organisation's teams match the policy's github table.", controllerProps(
+			"/var/run/secrets/github-roster/token", "/var/run/github-roster/records",
+			"appsDir", "One file per connected organisation: its App's credentials. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.", "/var/run/github-roster/apps")),
+		"slack": obj("The Slack controller: makes each Slack workspace's user groups match the policy's slack table.", controllerProps(
+			"/var/run/secrets/slack-roster/token", "/var/run/slack-roster/workspaces",
+			"credentialsDir", "One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.", "/var/run/slack-roster/credentials")),
+	})
+	s["$id"] = BaseID + "sluis.schema.json"
+	s["title"] = "sluis"
+	s["description"] = "The configuration of `sluis serve`, the one process of sluis: the issuer, the console and the directory hub and, under `controllers`, the GitHub and Slack controllers. On Kubernetes it is one Deployment; on AWS Lambda it is one function." + secretsNote
+	return s
+}
+
+// controllerProps is what is a controller's own in the one document.
+func controllerProps(tokenDefault, recordsDefault, dirKey, dirDescription, dirDefault string) m {
+	return m{
+		"consoleURL": url("The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes."),
+		"tokenFile":  strDefault("This pod's projected ServiceAccount token, presented to the console and read afresh on every call.", tokenDefault),
+		"console": obj("How the controller proves itself to the console, when the pod's `tokenFile` is not the way.", m{
+			"auth": obj("The proof. Absent, `tokenFile`.", m{
+				"aws": obj("The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.", m{
+					"audience": str("The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file."),
+				}, "audience"),
+			}),
+		}),
+		"recordsDir": strDefault("The console's records, mounted. Read only with `ports.adapter: legacy`.", recordsDefault),
+		dirKey:       strDefault(dirDescription, dirDefault),
+		"interval":   duration("How long between passes. Positive.", "15m"),
+	}
+}
+
 // portsSchema is the `ports` section both kinds of file share. Only the
 // service copies secrets out of itself, so only its file may name an Export.
 func portsSchema(export bool) m {
@@ -479,6 +530,8 @@ func controllerSlackSchema() m {
 func Schema(name string) ([]byte, bool) {
 	var s m
 	switch name {
+	case "sluis":
+		s = sluisSchema()
 	case "serve":
 		s = serveSchema()
 	case "controller-github":

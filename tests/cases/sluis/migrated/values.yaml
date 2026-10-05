@@ -1,3 +1,4 @@
+replicaCount: 1
 # An installation moved from the access-issuer chart, as the migration guide
 # says: both overrides name what it had, so every object keeps its name and
 # every Deployment keeps its selector.
@@ -15,15 +16,8 @@ exchange:
 config:
   issuerURL: https://issuer.example
   release: access-issuer
-
-controllerGithub:
-  enabled: true
-  config:
-    release: access-issuer
-    consoleURL: http://access-issuer.default.svc:8080/console
-
-controllerSlack:
-  enabled: true
-  config:
-    release: access-issuer
-    consoleURL: http://access-issuer.default.svc:8080/console
+  controllers:
+    github:
+      consoleURL: http://access-issuer.default.svc:8080/console
+    slack:
+      consoleURL: http://access-issuer.default.svc:8080/console

@@ -1,0 +1,6 @@
+# The controllers are not Deployments of their own any more: `controllerGithub` and `controllerSlack` are `config.controllers.github` and `.slack`, removed, not aliased.
+# error: at '': additional properties 'controllerGithub' not allowed
+config:
+  issuerURL: https://issuer.example
+controllerGithub:
+  enabled: true

@@ -31,7 +31,7 @@ metadata:
 # Source: sluis/templates/configmap.yaml
 # What `sluis serve --config` reads: `config`, as the values give it, with
 # nothing added, renamed or dropped but the apiVersion the chart writes. The
-# binary validates it against schemas/config/serve.schema.json at start, and
+# binary validates it against schemas/config/sluis.schema.json at start, and
 # values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
@@ -45,7 +45,7 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
-    apiVersion: sluis.truvity.github.io/serve/v2
+    apiVersion: sluis.truvity.github.io/sluis/v3
     audit:
       tokenFile: /var/run/audit/token
     inCluster: true
@@ -289,9 +289,9 @@ spec:
       annotations:
         # Configuration and policy are immutable for an instance: each document
         # is read once, at start, so a change to either is a rollout. One
-        # checksum per document this process reads, and no other: a change
-        # to a controller's own document does not restart the service.
-        checksum/config: d676a70bb30971998b3cb87c93e8a1d1c92db03cb65742105c578c77c424b10b
+        # checksum per document this process reads: the service document (the
+        # controllers' sections are in it) and the policy.
+        checksum/config: dbe4e224e28aeb7c740e60e56012807666f4ff00fac2eb13cd5027b049e77c56
         checksum/policy: f17f0038a19a4b72fe2c2ed70d5458fc8a11890925ebd6fbf1b1f539fc8b9354
     spec:
       serviceAccountName: sluis

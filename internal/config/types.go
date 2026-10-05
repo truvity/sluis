@@ -445,3 +445,92 @@ type ControllerSlack struct {
 	Roster
 	CredentialsDir string `json:"credentialsDir,omitempty"`
 }
+
+// Sluis is the one service document: the process that serves the issuer, the
+// console and the directory hub and, beside them, runs the controllers it
+// names. Every key of [Serve] is a key of it, at the top level, and
+// `controllers` is what it adds. apiVersion is v3 (`sluis.truvity.github.io/
+// sluis/v3`); a v2 `serve` document, or a v1 one, loads as a Sluis with no
+// controllers.
+//
+// A controller shares what the process already says: the release, the policy,
+// the storage ports and adapters, the audit installation, the log level and
+// the probes. Its own section holds what is its own, and a section that is
+// absent is a controller that is off.
+type Sluis struct {
+	Serve
+	Controllers *Controllers `json:"controllers,omitempty"`
+}
+
+// Controllers are the controllers the one process runs. A nil one is off.
+type Controllers struct {
+	GitHub *GitHubController `json:"github,omitempty"`
+	Slack  *SlackController  `json:"slack,omitempty"`
+}
+
+// ControllerCommon is what both controllers' sections share.
+type ControllerCommon struct {
+	// ConsoleURL is the console's API. Unset is the document's `publicURL`.
+	ConsoleURL string `json:"consoleURL,omitempty"`
+	TokenFile  string `json:"tokenFile,omitempty"`
+	// Console says how the controller proves itself to the console when the
+	// pod's token file is not the way (AWS Lambda).
+	Console    *RosterConsole `json:"console,omitempty"`
+	RecordsDir string         `json:"recordsDir,omitempty"`
+	Interval   *Duration      `json:"interval,omitempty"`
+}
+
+// GitHubController is `controllers.github`.
+type GitHubController struct {
+	ControllerCommon
+	AppsDir string `json:"appsDir,omitempty"`
+}
+
+// SlackController is `controllers.slack`.
+type SlackController struct {
+	ControllerCommon
+	CredentialsDir string `json:"credentialsDir,omitempty"`
+}
+
+// roster is what the controller's own section and the process's shared keys
+// make, as the split controller's document would have said it.
+func (s *Sluis) roster(c *ControllerCommon) Roster {
+	r := Roster{
+		APIVersion: APIVersion("controller-github"), Release: s.Release, Policy: s.Policy,
+		ConsoleURL: c.ConsoleURL, TokenFile: c.TokenFile, Console: c.Console,
+		RecordsDir: c.RecordsDir, Interval: c.Interval, Log: s.Log, Ports: s.Ports,
+		Platform: s.Platform, Preset: s.Preset, Adapters: s.Adapters,
+		legacy: s.legacy,
+	}
+	if r.ConsoleURL == "" {
+		r.ConsoleURL = s.PublicURL
+	}
+	if s.Audit != nil {
+		r.Audit = &RosterAudit{Writer: s.Audit.Writer, TokenFile: s.Audit.TokenFile}
+	}
+	return r
+}
+
+// GitHubController is the split GitHub controller's document that this one
+// says, or nil when `controllers.github` is absent. The controller's assembly
+// reads it as it reads the document of `sluis controller github`.
+func (s *Sluis) GitHubController() *ControllerGitHub {
+	if s.Controllers == nil || s.Controllers.GitHub == nil {
+		return nil
+	}
+	g := s.Controllers.GitHub
+	r := s.roster(&g.ControllerCommon)
+	r.APIVersion = APIVersion("controller-github")
+	return &ControllerGitHub{Roster: r, AppsDir: g.AppsDir}
+}
+
+// SlackController is [Sluis.GitHubController] for Slack.
+func (s *Sluis) SlackController() *ControllerSlack {
+	if s.Controllers == nil || s.Controllers.Slack == nil {
+		return nil
+	}
+	g := s.Controllers.Slack
+	r := s.roster(&g.ControllerCommon)
+	r.APIVersion = APIVersion("controller-slack")
+	return &ControllerSlack{Roster: r, CredentialsDir: g.CredentialsDir}
+}

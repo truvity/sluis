@@ -1,0 +1,14 @@
+# A controller reads the console's API, and with no mount there is none.
+# error: config.controllers.slack needs console.mount
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example
+console:
+  mount: ''

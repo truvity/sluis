@@ -19,14 +19,15 @@ Two kinds of check live here and nowhere else:
 sluis.expectPath: a config key names a file or directory the chart
 mounts. Takes (dict "key" "config.policy.file" "got" <the config's
 value> "want" <where the chart mounts it> "source" "policy"
-"present" <whether the chart renders and mounts it>).
+"present" <whether the chart renders and mounts it>), and "default" true when
+leaving the key unset is right because the binary's own default is the mount.
 
 Present: the key must be exactly where the chart mounts it. Absent: the key
 must be unset, because it names a file nothing provides.
 */}}
 {{- define "sluis.expectPath" -}}
 {{- $got := .got | default "" -}}
-{{- if and .present (ne $got .want) -}}
+{{- if and .present (ne $got .want) (not (and .default (eq $got ""))) -}}
 {{- fail (printf "%s must be %s, where the chart mounts what %s renders (got %q)" .key .want .source $got) -}}
 {{- end -}}
 {{- if and (not .present) $got -}}
@@ -87,6 +88,7 @@ sluis.checks: everything the service's config must agree with.
 {{- end -}}
 {{- end -}}
 {{- include "sluis.expectAudit" (dict "key" "config.audit.tokenFile" "cfg" $c) -}}
+{{- include "sluis.controllersChecks" . -}}
 {{- $openbao := dig "ports" "export" "openbao" dict $c -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.caFile" "got" $openbao.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $openbao) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
@@ -135,30 +137,78 @@ sluis.checks: everything the service's config must agree with.
 {{- end -}}
 
 {{/*
-sluis.rosterChecks: what a controller's config must agree with. Takes
-(dict "root" $ "name" "controllerGithub" "cfg" <its config> "dir" "github-roster").
+sluis.controllerChecks: what a controller's section of the config must agree
+with. The release, the policy and the audit token are the service's own and are
+held by sluis.checks above. Takes (dict "root" $ "kind" "github" "dir" "github-roster").
 */}}
-{{- define "sluis.rosterChecks" -}}
+{{- define "sluis.controllerChecks" -}}
 {{- $root := .root -}}
-{{- $c := .cfg -}}
+{{- $name := printf "config.controllers.%s" .kind -}}
+{{- $c := get (dig "controllers" dict $root.Values.config) .kind -}}
 {{- $dir := .dir -}}
 {{- if not $root.Values.exchange.clusters -}}
-{{- fail (printf "%s.enabled needs exchange.clusters to name this cluster: the service verifies the controller's ServiceAccount token against that key set, and with no row it verifies nothing" .name) -}}
+{{- fail (printf "%s needs exchange.clusters to name this cluster: the service verifies the controller's ServiceAccount token against that key set, and with no row it verifies nothing" $name) -}}
 {{- end -}}
 {{- if not (include "sluis.consoleMount" $root) -}}
-{{- fail (printf "%s.enabled needs console.mount: the controller reads the console's API, and with no mount there is none" .name) -}}
+{{- fail (printf "%s needs console.mount: the controller reads the console's API, and with no mount there is none" $name) -}}
 {{- end -}}
 {{- $want := printf "http://%s.%s.svc:%s%s" (include "sluis.fullname" $root) $root.Release.Namespace (include "sluis.port" $root) (include "sluis.consoleMount" $root) -}}
 {{- if not $c.consoleURL -}}
-{{- fail (printf "%s.config.consoleURL is required: who holds a group is the console's to answer; write %s, this release's own Service" .name $want) -}}
+{{- fail (printf "%s.consoleURL is required: who holds a group is the console's to answer; write %s, this release's own Service" $name $want) -}}
 {{- end -}}
 {{- if ne (trimSuffix "/" $c.consoleURL) $want -}}
-{{- fail (printf "%s.config.consoleURL must be %s, the console this release serves (got %q)" .name $want $c.consoleURL) -}}
+{{- fail (printf "%s.consoleURL must be %s, the console this release serves (got %q)" $name $want $c.consoleURL) -}}
 {{- end -}}
-{{- include "sluis.expectRelease" (dict "key" (printf "%s.config.release" .name) "root" $root "got" $c.release) -}}
-{{- include "sluis.expectPath" (dict "key" (printf "%s.config.policy.file" .name) "got" (dig "policy" "file" "" $c) "want" (printf "/var/run/%s/policy/policy.yaml" $dir) "source" "policy" "present" true) -}}
-{{- include "sluis.expectPath" (dict "key" (printf "%s.config.tokenFile" .name) "got" $c.tokenFile "want" (printf "/var/run/secrets/%s/token" $dir) "source" "the projected ServiceAccount token" "present" true) -}}
-{{- include "sluis.expectAudit" (dict "key" (printf "%s.config.audit.tokenFile" .name) "cfg" $c) -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.tokenFile" $name) "got" $c.tokenFile "want" (printf "/var/run/secrets/%s/token" $dir) "source" "the projected ServiceAccount token" "present" true "default" true) -}}
+{{- if eq .kind "github" -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.appsDir" $name) "got" $c.appsDir "want" "/var/run/github-roster/apps" "source" "the apps Secret" "present" true "default" true) -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.recordsDir" $name) "got" $c.recordsDir "want" "/var/run/github-roster/records" "source" "the records ConfigMap" "present" true "default" true) -}}
+{{- /*
+  The controller refuses to start when the policy document's
+  controllers.github.enabledOrgs names an organisation its github table does
+  not bind. The policy is inline in values, so say so here, at render time,
+  before the rollout stops the running pod.
+*/ -}}
+{{- $bound := dig "github" dict $root.Values.policy -}}
+{{- range dig "controllers" "github" "enabledOrgs" list $root.Values.policy -}}
+{{- if not (hasKey $bound .) -}}
+{{- fail (printf "policy.controllers.github.enabledOrgs names %q, which policy.github does not bind: remove it from enabledOrgs, or bind the organisation in the policy" .) -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.credentialsDir" $name) "got" $c.credentialsDir "want" "/var/run/slack-roster/credentials" "source" "the credentials Secret" "present" true "default" true) -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.recordsDir" $name) "got" $c.recordsDir "want" "/var/run/slack-roster/workspaces" "source" "the records ConfigMap" "present" true "default" true) -}}
+{{- $bound := dig "slack" "workspaces" dict $root.Values.policy -}}
+{{- range dig "controllers" "slack" "enabledWorkspaces" list $root.Values.policy -}}
+{{- if not (hasKey $bound .) -}}
+{{- fail (printf "policy.controllers.slack.enabledWorkspaces names %q, which policy.slack.workspaces does not declare: remove it from enabledWorkspaces, or declare the workspace in the policy" .) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+sluis.controllersChecks: what the controllers the config names, as a whole,
+must agree with. More than one replica is safe only when the tick leases are
+shared: a lease is exclusive across pods only when the State that holds it is.
+With the `legacy` adapter a controller keeps its leases in its own memory, so
+two replicas would each act on every target and make every change twice
+(duplicate invitations and removals, which the platform answers with an error
+that reads as a failure). Only `ports.adapter: dynamodb` shares them.
+*/}}
+{{- define "sluis.controllersChecks" -}}
+{{- $root := . -}}
+{{- $any := false -}}
+{{- range $kind, $dir := dict "github" "github-roster" "slack" "slack-roster" -}}
+{{- if include "sluis.controllerOn" (dict "root" $root "kind" $kind) -}}
+{{- $any = true -}}
+{{- include "sluis.controllerChecks" (dict "root" $root "kind" $kind "dir" $dir) -}}
+{{- end -}}
+{{- end -}}
+{{- $adapter := dig "ports" "adapter" "legacy" $root.Values.config -}}
+{{- if and $any (gt (int $root.Values.replicaCount) 1) (not (has $adapter (list "dynamodb"))) -}}
+{{- fail (printf "replicaCount is %d and config.controllers runs a controller in every replica, which needs the tick leases in a State every replica shares: set config.ports.adapter to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicaCount at 1 otherwise" (int $root.Values.replicaCount) $adapter) -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -180,26 +230,5 @@ never the endpoint, which has a value of its own so that one place sets it.
 {{- if not (hasPrefix "OTEL_" $name) -}}
 {{- fail (printf "telemetry.otlp.extraEnv holds OpenTelemetry SDK variables only: %q does not start with OTEL_ (a secret reaches a pod through secretEnv, the rest through config)" $name) -}}
 {{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-sluis.controllerRollout: what a controller's replicas and strategy must agree
-with. Takes (dict "name" "controllerGithub" "v" <its values>).
-
-More than one replica is safe only when the tick leases are shared: a lease is
-exclusive across pods only when the State that holds it is. With the `legacy`
-adapter a controller keeps its leases in its own memory, so two replicas would
-each act on every target and make every change twice (duplicate invitations
-and removals, which the platform answers with an error that reads as a
-failure). Only `ports.adapter: dynamodb` shares them.
-*/}}
-{{- define "sluis.controllerRollout" -}}
-{{- $adapter := dig "ports" "adapter" "legacy" (.v.config | default dict) -}}
-{{- if and (gt (int .v.replicas) 1) (not (has $adapter (list "dynamodb"))) -}}
-{{- fail (printf "%s.replicas is %d, which needs the tick leases in a State every replica shares: set %s.config.ports.adapter to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicas at 1 otherwise: readiness gating and a rolling update already keep the old pod until the new one is Ready" .name (int .v.replicas) .name $adapter) -}}
-{{- end -}}
-{{- if and (eq .v.strategy.type "Recreate") (gt (int .v.replicas) 1) -}}
-{{- fail (printf "%s.strategy.type is Recreate with %d replicas: Recreate stops every replica before the new ones start, which is the outage the replicas exist to prevent. Use RollingUpdate, or set replicas to 1" .name (int .v.replicas)) -}}
 {{- end -}}
 {{- end -}}

@@ -1,11 +1,13 @@
-# sluis — the token service and its controllers: one image, one chart.
+# sluis — the token service and its controllers: one image, one chart, one
+# process.
 #
-# What this chart renders: a `serve` Deployment (`sluis serve`), a
-# Service, a ServiceAccount with the one cluster-scoped permission the
-# exchange needs, a NetworkPolicy, the policy ConfigMap, the Gateway API
-# route for its host, and the cert-manager Certificate that produces its
-# signing key; with `controllerGithub.enabled` and `controllerSlack.enabled`,
-# a Deployment for each controller (`sluis controller github|slack`).
+# What this chart renders: ONE Deployment (`sluis serve`), a Service, a
+# ServiceAccount with the one cluster-scoped permission the exchange needs, a
+# NetworkPolicy, the service document and the policy document as ConfigMaps,
+# the Gateway API route for its host, and the cert-manager Certificate that
+# produces its signing key. The GitHub and Slack controllers run in that same
+# process, each in a loop of its own, when `config.controllers.github` and
+# `config.controllers.slack` name them.
 #
 # What it expects to exist: a directory hub to ask about people, and an
 # issuer for that Certificate. The signing key is deliberately not this
@@ -24,8 +26,8 @@ fullnameOverride: ""
 
 # What this release renders.
 #
-#   app         the service and the controllers (the default: everything
-#               above and below renders as it always has).
+#   app         the service, with the controllers its config names (the
+#               default).
 #   alerts      ONLY the alert rules (`alerts`), as a VMRule or a
 #               PrometheusRule. Nothing else is rendered and nothing else is
 #               validated: install it a second time, where the metrics
@@ -35,9 +37,8 @@ fullnameOverride: ""
 #               cluster Grafana runs on.
 #
 # Not to be confused with `route` (the Gateway API route), `exchange.clusters`
-# (workloads' home clusters) or `controllerGithub`/`controllerSlack` (which
-# controllers run): this chooses which of three kinds of object this release
-# is. The signals the rules and the dashboard read, and the install, are in
+# (workloads' home clusters) or `config.controllers` (which controllers run):
+# this chooses which of three kinds of object this release is. The signals the rules and the dashboard read, and the install, are in
 # docs/operations/telemetry.md.
 renders: app
 
@@ -194,7 +195,7 @@ dashboards:
   labels: {}
 
 image:
-  # The one image: `serve` and both controllers are subcommands of it.
+  # The one image, and the one command the Deployment runs: `sluis serve`.
   repository: ghcr.io/truvity/sluis/sluis
   # Empty uses the chart's appVersion, which the release stamps from the
   # git tag. Pin it here only to run something other than the chart's own
@@ -202,11 +203,13 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-# The service's configuration: the file `sluis serve --config` reads,
-# rendered as it stands into a ConfigMap and mounted. Everything the
-# service decides is here and nothing is rendered into it: what you write is
+# The service document: the file `sluis serve --config` reads, rendered as it
+# stands into a ConfigMap and mounted. It is the one document of the one
+# process (apiVersion sluis.truvity.github.io/sluis/v3): the issuer, the console
+# and the directory hub at the top level, and the GitHub and Slack controllers
+# under `controllers`. Everything the service decides is here and nothing is rendered into it: what you write is
 # what the binary is given, and `values.schema.json` holds it to the same
-# schema the binary validates it against (schemas/config/serve.schema.json),
+# schema the binary validates it against (schemas/config/sluis.schema.json),
 # so a misspelt or misplaced key fails `helm install` and not a container.
 # docs/reference/configuration.md describes every key.
 #
@@ -279,6 +282,25 @@ config:
   # Everything else the schema has is unset, which is the binary's default.
   # The commonest, as an example:
   #
+  #   # The controllers that run in this process. Each is off unless named; a
+  #   # section may be left empty (`github: {}`) for the defaults, which are the
+  #   # paths the chart mounts. `consoleURL` is where the controller reads the
+  #   # console: this release's own Service,
+  #   # http://<full name>.<namespace>.svc:<port><console.mount>, which the
+  #   # chart requires and prints when it is wrong. A controller reads the
+  #   # console as a workload with this pod's ServiceAccount token: the
+  #   # policy's exchange must name this cluster and put the account in
+  #   # `all:access-roster:viewer`. What a controller CHANGES is the policy
+  #   # document's `controllers.<kind>.enabledOrgs` / `enabledWorkspaces`.
+  #   # More than one replica needs the tick leases in a shared State
+  #   # (`ports.adapter: dynamodb`); the chart refuses it otherwise.
+  #   controllers:
+  #     github:
+  #       consoleURL: http://sluis.access.svc:8080/console
+  #       interval: 15m
+  #     slack:
+  #       consoleURL: http://sluis.access.svc:8080/console
+  #
   #   valkey:
   #     address: valkey.example.svc:6379
   #     passwordSecret: valkey/password                       # with `secrets`
@@ -289,7 +311,7 @@ config:
   #         keySecret: directory/example/key
   #
   # The chart writes the apiVersion of every document it renders
-  # (sluis.truvity.github.io/serve/v2, .../policy/v2), so
+  # (sluis.truvity.github.io/sluis/v3, .../policy/v2), so
   # neither `config` nor `policy` carries one. Whose CI tokens are verified
   # (`policy.exchange.github.owners`), the runner tiers
   # (`policy.apps.github.runnerTiers`) and the exports (`policy.exports`) are
@@ -320,8 +342,8 @@ secretEnv: []
 # Telemetry is the OpenTelemetry SDK's own environment (ADR 0006), never the
 # config file (ADR 0032). With `otlp.endpoint` set, every pod of `renders: app`
 # gets OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL and an
-# OTEL_SERVICE_NAME of its own (`access-issuer`, `github-roster`, `slack-roster`,
-# the names the binary uses), then each `extraEnv` entry. Unset, nothing is
+# OTEL_SERVICE_NAME of `access-issuer` (the one process's name: the controllers
+# report under it), then each `extraEnv` entry. Unset, nothing is
 # rendered and the pods export nothing. How to wire it: docs/operations/telemetry.md.
 telemetry:
   otlp:
@@ -579,8 +601,8 @@ exchange:
 # and the App catalogues), `controllers` (what each controller may change)
 # and `exports`. The chart adds `exchange.clusters` and `exchange.aws` from
 # `exchange`, and the catalogues from `githubApps.catalogue` and `slackApps`.
-# One ConfigMap, <release>-policy, mounted as the policy directory by the service
-# and both controllers: a change rolls all three.
+# One ConfigMap, <release>-policy, mounted as the policy directory by the one
+# process: a change rolls it.
 #
 # A deployment that layers its policy (a directory of files, an access
 # document) renders it first, `sluisctl policy render <dir>`, and passes the
@@ -699,127 +721,6 @@ serviceAccount:
   #     eks.amazonaws.com/role-arn: <the role's ARN>
   annotations: {}
 
-# The GitHub controller: makes each GitHub organisation's teams match the
-# policy's `github` table, and reports on the console's GitHub page.
-#
-# A second process beside the service, from this chart, because it holds
-# GitHub App keys and writes to GitHub — neither belongs in the login path.
-# It has no listener. It reads the console's API with its own
-# ServiceAccount token, which the service verifies against this cluster's
-# key set: `exchange.clusters` must name this cluster, and the policy must
-# put the controller's account in `all:access-roster:viewer` (to read who
-# holds a group). It records what it did to the audit installation itself,
-# with a token of its own (see `audit`).
-controllerGithub:
-  enabled: false
-  # The controller's configuration: the file `sluis controller github --config` reads,
-  # rendered as it stands (schemas/config/controller-github.schema.json).
-  #
-  # `consoleURL` is where the controller reads the console: this release's
-  # Service, `http://<full name>.<namespace>.svc:<port><console.mount>`,
-  # which the chart requires and prints when it is wrong. The organisations it
-  # CHANGES are the policy document's `controllers.github.enabledOrgs`: every
-  # other organisation the policy binds is derived every pass and shown on the
-  # GitHub page with what would happen, and nothing is done to it.
-  config:
-    policy:
-      file: /var/run/github-roster/policy/policy.yaml
-    tokenFile: /var/run/secrets/github-roster/token
-    appsDir: /var/run/github-roster/apps
-    recordsDir: /var/run/github-roster/records
-    interval: 15m
-    audit:
-      tokenFile: /var/run/audit/token
-    # consoleURL: http://sluis.access.svc:8080/console
-  resources: {}
-  # How many controller pods run. One is the default. More than one is safe
-  # ONLY when the tick leases are shared, which needs
-  # `config.ports.adapter` to be `dynamodb`: with `legacy` each pod
-  # keeps its leases in its own memory and every replica would act on every
-  # target. The chart refuses `replicas` above 1 without a shared adapter.
-  # Beside a shared State, each target is ticked by one replica at a time and
-  # the others skip it.
-  replicas: 1
-  # The rollout. The default starts the new pod first and removes the old one
-  # only when the new one is Ready, so a release whose pods crash at start
-  # (2026-10-04, sluis 1.57.0) leaves the running controller alone. `Recreate`
-  # stops the old pod first and is the outage that day: a controller down for
-  # as long as the new pods take to become Ready, or never. Beside the legacy
-  # adapter the new pod's first pass can overlap the old pod's last for a few
-  # seconds, with leases in each pod's memory; set `Recreate` to forbid that
-  # overlap at the price of the gap.
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-  # A new pod must stay Ready this many seconds before it counts as available,
-  # so a pod that listens and then fails does not retire the old one.
-  minReadySeconds: 10
-  # Rendered only when `replicas` is above 1: a drain keeps this many pods.
-  podDisruptionBudget:
-    enabled: true
-    minAvailable: 1
-# The Slack controller: makes each Slack workspace's channels match the
-# policy's `slack` table, and reports on the console's Slack page.
-#
-# A second process beside the service, from this chart, because it holds bot
-# tokens and writes to Slack — neither belongs in the login path. It has no
-# listener. It reads the console's API with its own ServiceAccount token,
-# which the service verifies against this cluster's key set:
-# `exchange.clusters` must name this cluster, and the policy must put the
-# controller's account in `all:access-roster:viewer` (to read who holds a
-# group). It records what it did to the audit installation itself, with a
-# token of its own (see `audit`). It needs egress to slack.com:443, which
-# this chart does not open (see `networkPolicy`): the fleet's egress policy
-# does. See docs/connect/slack-workspace.md.
-controllerSlack:
-  enabled: false
-  # The controller's configuration: the file `sluis controller slack --config` reads,
-  # rendered as it stands (schemas/config/controller-slack.schema.json).
-  #
-  # `consoleURL` is where the controller reads the console, as for
-  # `controllerGithub`. The workspaces it CHANGES are the policy document's
-  # `controllers.slack.enabledWorkspaces`.
-  config:
-    policy:
-      file: /var/run/slack-roster/policy/policy.yaml
-    tokenFile: /var/run/secrets/slack-roster/token
-    credentialsDir: /var/run/slack-roster/credentials
-    recordsDir: /var/run/slack-roster/workspaces
-    interval: 15m
-    audit:
-      tokenFile: /var/run/audit/token
-    # consoleURL: http://sluis.access.svc:8080/console
-  resources: {}
-  # How many controller pods run. One is the default. More than one is safe
-  # ONLY when the tick leases are shared, which needs
-  # `config.ports.adapter` to be `dynamodb`: with `legacy` each pod
-  # keeps its leases in its own memory and every replica would act on every
-  # target. The chart refuses `replicas` above 1 without a shared adapter.
-  # Beside a shared State, each target is ticked by one replica at a time and
-  # the others skip it.
-  replicas: 1
-  # The rollout. The default starts the new pod first and removes the old one
-  # only when the new one is Ready, so a release whose pods crash at start
-  # (2026-10-04, sluis 1.57.0) leaves the running controller alone. `Recreate`
-  # stops the old pod first and is the outage that day: a controller down for
-  # as long as the new pods take to become Ready, or never. Beside the legacy
-  # adapter the new pod's first pass can overlap the old pod's last for a few
-  # seconds, with leases in each pod's memory; set `Recreate` to forbid that
-  # overlap at the price of the gap.
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-  # A new pod must stay Ready this many seconds before it counts as available,
-  # so a pod that listens and then fails does not retire the old one.
-  minReadySeconds: 10
-  # Rendered only when `replicas` is above 1: a drain keeps this many pods.
-  podDisruptionBudget:
-    enabled: true
-    minAvailable: 1
 # Runner Apps: the GitHub App a self-hosted runner scale set in one tier
 # registers with, one per organisation per tier, created by an operator on
 # the console's GitHub page (Apps). The tiers an operator may create one for
@@ -982,17 +883,17 @@ slackApps: []
 # So there is no `session.push`. If a later installation asks for one, the
 # answer is this paragraph rather than a knob.
 
-# The audit installation this service and the controllers record to: its
+# The audit installation this process (the service and its controllers) records to: its
 # receiver (`config.audit.writer`), its query service (`queryURL`), the
 # client the Audit page's tokens carry (`audience`) and how many proxies sit
-# in front (`forwardedForTrustedHops`) are each component's config. What the
+# in front (`forwardedForTrustedHops`) are `config`'s. What the
 # chart owns is the projected token each presents to the receiver, mounted
 # where `config.audit.tokenFile` says (the chart refuses another path).
 #
 # The service account's projected token is how the installation knows this
 # workload: its `workloadIdentity.workloads` must map
-# system:serviceaccount:<namespace>:<this release's service account> -- and
-# the controller's, when it runs -- to the source `roster`.
+# system:serviceaccount:<namespace>:<this release's service account> to the
+# source `roster`: the controllers run as that same account.
 audit:
   # The projected token presented to the receiver.
   token:

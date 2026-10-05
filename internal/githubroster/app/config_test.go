@@ -65,3 +65,23 @@ func TestTheProbesAddressIsConfigurable(t *testing.T) {
 		t.Error("probes with no address was accepted")
 	}
 }
+
+// The controller also reads the one service document, whose `controllers.github`
+// section it is: a controller that still runs apart is configured by the file
+// the process it was folded into reads.
+func TestTheControllerReadsTheOneServiceDocument(t *testing.T) {
+	policy := write(t, "apiVersion: sluis.truvity.github.io/policy/v2\ngroups: {x:y:z: {}}\ngithub: {a: {members: [x:y:z]}}\n"+
+		"controllers: {github: {enabledOrgs: [a]}}\n")
+	head := "apiVersion: sluis.truvity.github.io/sluis/v3\nissuerURL: https://access.example\npolicy: {file: " + policy + "}\n" +
+		"publicURL: https://access.example/console\n"
+	cfg, err := app.Load(write(t, head+"controllers: {github: {interval: 5m}}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ConsoleURL() != "https://access.example/console" {
+		t.Errorf("the console is %q: unset it is the service's publicURL", cfg.ConsoleURL())
+	}
+	if _, err := app.Load(write(t, head+"controllers: {slack: {}}\n")); err == nil || !strings.Contains(err.Error(), "controllers.github") {
+		t.Errorf("a document that does not run this controller was accepted, or the refusal does not say so: %v", err)
+	}
+}

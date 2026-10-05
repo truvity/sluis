@@ -1,9 +1,10 @@
 // Command sluis is the whole product in one binary, one image and one
-// chart (docs/decisions/0032).
+// chart (docs/decisions/0032), and one process: `sluis serve` is the issuer, the
+// hub, the console and, beside them, the controllers its document names.
 //
-//	sluis serve --config <file>              the issuer, the hub and the console
-//	sluis controller github --config <file>  the GitHub controller's loop
-//	sluis controller slack --config <file>   the Slack controller's loop
+//	sluis serve --config <file>              the one process: the issuer, the hub, the console and its controllers
+//	sluis controller github --config <file>  the GitHub controller's loop alone (deprecated)
+//	sluis controller slack --config <file>   the Slack controller's loop alone (deprecated)
 //	sluis tick github <target> --config <file>  one GitHub target's tick, once
 //	sluis tick slack <target> --config <file>   one Slack workspace's tick, once
 //	sluis migrate --from <config> --to <config>  copy the State between storages (docs/decisions/0031)
@@ -13,8 +14,12 @@
 // package, internal/rosterapp and internal/{github,slack}roster/app; this file
 // only chooses which one to start and stops it.
 //
-// `controller <kind>` is a long-running loop, one Deployment per kind: the
-// Kubernetes runner. `tick <kind> <target>` is the unit of work the loop is made
+// `serve` runs every controller its service document (apiVersion
+// sluis.truvity.github.io/sluis/v3) names under `controllers`, each in a loop of
+// its own beside the service. `controller <kind>` is the
+// same loop as a process of its own, kept for one release for a deployment that
+// still runs the controllers apart; it reads either its own v2 document or the
+// one document, and says it is deprecated. `tick <kind> <target>` is the unit of work the loop is made
 // of (docs/decisions/0029), run once under the target's lease and then exit: an
 // operator's command now, and the shape of a function that lives for one
 // invocation later. A target is an organisation's login or `github:links` for
@@ -67,9 +72,9 @@ func usage(out io.Writer) {
 	_, _ = fmt.Fprint(out, `Usage: sluis <command> [--config <file>]
 
 Commands:
-  serve                 the issuer, the directory hub and the console
-  controller github     the GitHub controller: keeps each organisation's teams as the policy says
-  controller slack      the Slack controller: keeps each workspace's channels as the policy says
+  serve                 the one process: the issuer, the directory hub and the console, and the controllers the document names
+  controller github     (deprecated) the GitHub controller alone: keeps each organisation's teams as the policy says
+  controller slack      (deprecated) the Slack controller alone: keeps each workspace's channels as the policy says
   tick github <target>  one GitHub tick, once: an organisation's login, or github:links for the link check
   tick slack <target>   one Slack tick, once: a workspace's key
   migrate               copy the State from one storage to another: --from <config> --to <config>
@@ -78,8 +83,9 @@ Commands:
 Each command but migrate takes --config <file> and nothing else but --version and --help (a tick also
 takes its target, first); migrate takes --from and --to, each a configuration file, and its own flags
 (--dry-run, --overwrite, --i-have-stopped-writers: see 'sluis migrate --help'). A file is
-validated against schemas/config/<command>.schema.json (serve, controller-github, controller-slack; a
-tick reads its controller's, migrate reads serve's) before anything starts. A tick runs under the
+validated against schemas/config/<command>.schema.json (sluis, the one document, for serve; controller-github
+and controller-slack for a controller that runs apart, which may also read the one document; a tick and migrate
+read either) before anything starts. A tick runs under the
 target's lease and exits 0 when another runner holds it.
 
 A tick REFUSES to run while the leases are held in this process only (no shared State, which is the
@@ -101,7 +107,7 @@ func run(args []string, out io.Writer) error {
 		_, _ = fmt.Fprintln(out, "sluis", version.String())
 		return nil
 	case "serve":
-		return start(out, "sluis serve", "serve", args[1:], serve)
+		return start(out, "sluis serve", "sluis", args[1:], serve)
 	case "controller":
 		if len(args) < 2 {
 			usage(out)
@@ -224,6 +230,10 @@ func serve(ctx context.Context, file string) error {
 	return service.Run(ctx)
 }
 
+// deprecatedController is what a controller that runs apart says at start.
+const deprecatedController = "running a controller as a process of its own is deprecated and goes in the next release: " +
+	"`sluis serve` runs the controllers its document names under `controllers` (apiVersion sluis.truvity.github.io/sluis/v3)"
+
 func controllerGitHub(ctx context.Context, file string) error {
 	cfg, err := githubapp.Load(file)
 	if err != nil {
@@ -234,6 +244,7 @@ func controllerGitHub(ctx context.Context, file string) error {
 		return err
 	}
 	defer flush()
+	log.WarnContext(ctx, deprecatedController, "command", "sluis controller github")
 
 	controller, err := githubapp.New(ctx, cfg, log)
 	if err != nil {
@@ -253,6 +264,7 @@ func controllerSlack(ctx context.Context, file string) error {
 		return err
 	}
 	defer flush()
+	log.WarnContext(ctx, deprecatedController, "command", "sluis controller slack")
 
 	controller, err := slackapp.New(ctx, cfg, log)
 	if err != nil {

@@ -64,6 +64,7 @@ func TestTheTypesAndTheSchemasDescribeTheSameKeys(t *testing.T) {
 		name string
 		into any
 	}{
+		{"sluis", &config.Sluis{}},
 		{"serve", &config.Serve{}},
 		{"controller-github", &config.ControllerGitHub{}},
 		{"controller-slack", &config.ControllerSlack{}},
@@ -428,5 +429,110 @@ func TestTheQueryURLNeedsNoWriter(t *testing.T) {
 		if f.Audit == nil || f.Audit.QueryURL == "" || f.Audit.Writer != "" {
 			t.Errorf("%s: audit = %+v, want a query URL and no writer", name, f.Audit)
 		}
+	}
+}
+
+// The one service document: the serve keys at the top level and, under
+// `controllers`, the controllers it runs. An absent controller is off.
+func TestTheOneServiceDocumentLoads(t *testing.T) {
+	body := "apiVersion: " + config.APIVersion("sluis") + "\n" + minimalIssuer + `publicURL: https://access.example/console
+controllers:
+  github: {interval: 5m, consoleURL: "http://c:8080/console"}
+  slack: {}
+`
+	s, err := config.Load[config.Sluis](write(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.IssuerURL != "https://access.example" || s.APIVersion != config.APIVersion("sluis") {
+		t.Errorf("the serve keys were not decoded at the top level: %+v", s.Serve)
+	}
+	g, sl := s.GitHubController(), s.SlackController()
+	if g == nil || g.Interval.D().String() != "5m0s" || g.ConsoleURL != "http://c:8080/console" {
+		t.Errorf("github controller: %+v", g)
+	}
+	// An unset consoleURL is the console's public URL, and a controller shares
+	// the process's own settings.
+	if sl == nil || sl.ConsoleURL != "https://access.example/console" {
+		t.Errorf("slack controller: %+v", sl)
+	}
+	if g.Release != s.Release || g.Policy != s.Policy {
+		t.Errorf("a controller does not share the process's release and policy: %+v", g.Roster)
+	}
+	off, err := config.Load[config.Sluis](write(t, "apiVersion: "+config.APIVersion("sluis")+"\n"+minimalIssuer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.GitHubController() != nil || off.SlackController() != nil {
+		t.Error("a controller that the document does not name is on")
+	}
+}
+
+// N-1: a v2 serve document, and a v1 one, load as the one document with no
+// controllers, so that a deployment moves its documents on its own schedule.
+func TestAServeDocumentLoadsAsTheOneDocumentWithNoControllers(t *testing.T) {
+	for name, body := range map[string]string{
+		"v2": "apiVersion: " + config.APIVersion("serve") + "\n" + minimalIssuer,
+		"v1": minimalIssuer,
+	} {
+		s, err := config.Load[config.Sluis](write(t, body))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if s.IssuerURL != "https://access.example" || s.Controllers != nil || s.GitHubController() != nil {
+			t.Errorf("%s: %+v", name, s)
+		}
+	}
+}
+
+// The one document is strict: an unknown key is refused and named, in the
+// controllers' sections as at the top, and a key the controllers share with
+// the process is not a key of theirs.
+func TestTheOneServiceDocumentIsStrict(t *testing.T) {
+	head := "apiVersion: " + config.APIVersion("sluis") + "\n" + minimalIssuer
+	for name, extra := range map[string]string{
+		"an unknown top-level key":                   "valkey2: {}\n",
+		"an unknown controller":                      "controllers: {gitlab: {}}\n",
+		"an unknown key of a controller":             "controllers: {github: {bogus: 1}}\n",
+		"a controller's own policy":                  "controllers: {github: {policy: {file: /p}}}\n",
+		"a controller's own release":                 "controllers: {slack: {release: x}}\n",
+		"a controller's probes":                      "controllers: {slack: {probes: {address: ':1'}}}\n",
+		"a controller's interval that is not one":    "controllers: {github: {interval: a while}}\n",
+		"a controller's console url with a password": "controllers: {github: {consoleURL: 'http://u:p@c:1'}}\n",
+		"a v2 controller document's version":         "apiVersion: " + config.APIVersion("controller-github") + "\n",
+	} {
+		body := head + extra
+		if strings.HasPrefix(extra, "apiVersion") {
+			body = minimalIssuer + extra
+		}
+		if _, err := config.Load[config.Sluis](write(t, body)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	_, err := config.Load[config.Sluis](write(t, head+"controllers: {github: {bogus: 1}}\n"))
+	if err == nil || !strings.Contains(err.Error(), "bogus") {
+		t.Errorf("the refusal does not name the key: %v", err)
+	}
+}
+
+// A v3 document names the policy as a v2 one does.
+func TestTheOneServiceDocumentNamesThePolicy(t *testing.T) {
+	dir := t.TempDir()
+	pol := filepath.Join(dir, "policy.yaml")
+	if err := os.WriteFile(pol, []byte("apiVersion: "+config.APIVersion("policy")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svc := filepath.Join(dir, "sluis.yaml")
+	body := "apiVersion: " + config.APIVersion("sluis") + "\n" + minimalIssuer + "policy: {file: " + pol + "}\n"
+	if err := os.WriteFile(svc, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := config.LoadConfig[config.Sluis](svc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Policy == nil {
+		t.Error("the policy the document names was not read")
 	}
 }

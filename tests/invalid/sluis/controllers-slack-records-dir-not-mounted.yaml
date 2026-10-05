@@ -1,0 +1,15 @@
+# The console's records are mounted at one path.
+# error: config.controllers.slack.recordsDir must be /var/run/slack-roster/workspaces
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
+      recordsDir: /etc/records
+console:
+  mount: /console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example

@@ -1,10 +1,21 @@
-# Both controllers at two replicas (owner decision R9a, 2026-10-04): what makes
-# a rollout safe. Two replicas need the tick leases in a State they share, so
-# each controller names the shared adapter (DynamoDB, one table each); the chart then renders a PodDisruptionBudget beside each. The rollout
-# and the readiness probe are the defaults: the new pod is Ready before the
-# old one goes, and Ready means the process finished starting.
+# The controllers in the one process at two replicas: what makes a rollout
+# safe. Two replicas need the tick leases in a State they share, so the one
+# document names the shared adapter (DynamoDB); the rollout and the readiness
+# probe are the defaults: the new pod is Ready before the old one goes, and
+# Ready means the process, controllers included, finished starting.
+replicaCount: 2
 config:
   issuerURL: https://issuer.example
+  ports:
+    adapter: dynamodb
+    dynamodb:
+      table: sluis
+      region: eu-west-1
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
 exchange:
   clusters:
     - name: example-cluster
@@ -12,28 +23,3 @@ exchange:
       jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
 console:
   mount: /console
-controllerGithub:
-  enabled: true
-  replicas: 2
-  config:
-    consoleURL: http://sluis.default.svc:8080/console
-    ports:
-      adapter: dynamodb
-      dynamodb:
-        table: sluis-github
-        region: eu-west-1
-controllerSlack:
-  enabled: true
-  replicas: 2
-  minReadySeconds: 30
-  podDisruptionBudget:
-    minAvailable: 1
-  config:
-    consoleURL: http://sluis.default.svc:8080/console
-    probes:
-      address: ":9090"
-    ports:
-      adapter: dynamodb
-      dynamodb:
-        table: sluis
-        region: eu-west-1

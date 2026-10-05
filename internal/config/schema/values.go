@@ -23,9 +23,7 @@ var configAt = []struct {
 	schema      string
 	description string
 }{
-	{[]string{"config"}, "serve", ""},
-	{[]string{"controllerGithub", "config"}, "controller-github", ""},
-	{[]string{"controllerSlack", "config"}, "controller-slack", ""},
+	{[]string{"config"}, "sluis", ""},
 	{[]string{"policy"}, "policy", "The policy document, without its apiVersion, which the chart writes: rendered into the ConfigMap <release>-policy beside the sections the chart's own values fill (exchange.clusters and exchange.aws from `exchange`, the catalogues from `githubApps.catalogue` and `slackApps`). Its schema is schemas/config/policy.schema.json. An access document or a directory of layers is rendered first: `sluisctl policy render`."},
 }
 

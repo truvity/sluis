@@ -1,9 +1,0 @@
-# controllers.github.enabledOrgs names GitHub logins.
-# error: at '/policy/controllers/github/enabledOrgs/0': 'acme_corp' does not match pattern
-config:
-  issuerURL: https://issuer.example
-policy:
-  controllers:
-    github:
-      enabledOrgs:
-      - acme_corp
