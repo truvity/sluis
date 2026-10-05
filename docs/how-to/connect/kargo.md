@@ -62,7 +62,7 @@ Keep Kargo's admin account until a policy-granted admin has logged in.
 ## Sign-out and revocation, as Kargo actually does them
 
 Kargo runs the flow itself, so what its buttons mean differs from a
-console behind access-proxy — and it is worth knowing before somebody
+console behind a gateway-side proxy — and it is worth knowing before somebody
 reports it. Verified against Kargo 1.11.2 on 2026-09-12
 ([hack/verify_kargo.py](../../../hack/verify_kargo.py) repeats it).
 

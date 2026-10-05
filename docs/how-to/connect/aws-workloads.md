@@ -151,7 +151,7 @@ clients:
 ```
 
 The fields and glob rules are in the
-[policy reference](../../reference/policy.md#the-aws-matcher). `account` is
+[policy reference](../../reference/policy-groups.md#the-aws-matcher). `account` is
 exact and required.
 
 ### 5. Exchange

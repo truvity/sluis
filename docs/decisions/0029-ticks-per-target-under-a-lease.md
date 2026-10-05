@@ -118,7 +118,7 @@ own process and the chart stays at one replica with `Recreate`).
 ## Implementation note (B3-3)
 
 **The hand-off landed**, with the domain stores on the ports
-([ports.md](../explanation/ports.md#the-domain-stores)), for any adapter but
+([ports.md](../explanation/domain-stores.md)), for any adapter but
 `legacy`:
 
 - **The pending-share record** `share.<host>.<channel>` is the hand-off. The host's

@@ -49,7 +49,7 @@ is not a scope name, a name or description Slack would refuse, or an entry
 whose `workspace` the policy's `slack.workspaces` does not name. Add the
 workspace's key to the policy first, then connect it on the console's Slack
 area: the policy never carries its team, owner or domains (see
-[where they come from](slack-workspace.md#where-a-workspaces-team-owner-and-domains-come-from)).
+[where they come from](../../explanation/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)).
 Until the workspace is connected, and has recorded its team at its first
 install, Create and Install are refused with *connect the workspace first*.
 
@@ -121,7 +121,7 @@ again.
 Creating, installing and reinstalling need the **operator** role: the
 installation-wide operator, or the scoped operator of the directory
 workspace recorded as the Slack workspace's owner when it was connected (see
-[who owns a Slack workspace](../../reference/policy.md#who-owns-a-slack-workspace)).
+[who owns a Slack workspace](../../reference/policy-ownership.md#who-owns-a-slack-workspace)).
 A workspace connected with no owner is operated by the installation-wide
 operator alone. The owner is read from the workspace's connection record, not
 from the policy; only the installation-wide operator changes it. A viewer sees the Apps of the workspaces they may view and
@@ -154,7 +154,7 @@ error message or an audit record.
 > `ports.adapter` other than `legacy` the service copies the token itself, with
 > `exports: [{source: slack-app, app: <id>, path: slack-apps/<id>}]` into an
 > OpenBao KV mount, written as `bot_token`, the property `push` wrote
-> ([configuration reference](../../reference/configuration.md#exports-and-the-export-port),
+> ([configuration reference](../../reference/exports.md),
 > [0034](../../decisions/0034-exports-go-to-openbao-directly.md)).
 
 `push` makes External Secrets copy **one key**, the bot token, to a store

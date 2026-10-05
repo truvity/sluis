@@ -2,7 +2,7 @@
 
 What a workload presents when it calls one of ours, what the called
 service accepts, and how to build a service of your own that gets both
-right. The rule underneath is [design/trust.md](../../explanation/trust.md):
+right. The rule underneath is [trust model](../../explanation/trust.md):
 **two anchors, chosen by scope** — the cluster for a workload next door,
 the issuer for everything further away.
 
@@ -224,4 +224,4 @@ caller appears, not before.
 Break-glass at the service and the issuer is a person minting a
 ServiceAccount token by hand. It is the cluster anchor used deliberately
 as the floor for the day the issuer is unavailable, not a pattern for a
-service to imitate: see [design/trust.md](../../explanation/trust.md#recovery-is-the-root-not-a-back-door).
+service to imitate: see [trust model](../../explanation/trust.md#recovery-is-the-root-not-a-back-door).

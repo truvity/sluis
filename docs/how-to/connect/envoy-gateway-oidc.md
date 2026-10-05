@@ -32,14 +32,14 @@ clients:
                             # ID token with a fixed-algorithm verifier
 ```
 
-`kind: confidential` for the same reason `access-proxy`'s client is
+`kind: confidential` for the same reason a proxy client is
 confidential: the filter, not the browser, holds the secret and redeems
 the authorization code
-([reference/policy.md#clients--audience-and-gate](../../reference/policy.md#clients--audience-and-gate)).
+([reference/policy-clients.md#clients](../../reference/policy-clients.md#clients)).
 `requires` is checked at sign-in and again at every refresh — the second
 check is why a grant withdrawn after a token was issued still ends at
 the next refresh rather than living out the token's full lifetime
-([design/sluis.md#who-may-open-which-console](../../explanation/design.md#who-may-open-which-console)).
+([design](../../explanation/sessions.md#who-may-open-which-console)).
 `ttl_cap` is the whole of this shape's revocation story, because there is
 no Back-Channel Logout receiver here (below) — see
 [Trap 1](#trap-1-per-request-refresh-races-rotating-refresh-tokens) before
@@ -135,7 +135,7 @@ A few fields worth explaining rather than copying blind:
 - **`forwardAccessToken: true`** puts the issuer's access token in the
   upstream `Authorization` header, which is what an app's own backend
   reads with the Go or TypeScript `identity` verifier exactly as it would
-  behind `access-proxy`
+  behind a gateway proxy
   ([connect/console-app.md](console-app.md)).
 - **The `jwt` block is not there to authenticate the request again** —
   `oidc` already did that. It exists so `groups` can be read out of a
@@ -156,7 +156,7 @@ A few fields worth explaining rather than copying blind:
   practice, only in the schema.** The field defaults to `String`, which
   matches a single scalar claim exactly — never this issuer's `groups`,
   which is always a flat array of internal group names
-  ([reference/policy.md#groups--token-by-deep-merge](../../reference/policy.md#groups--token-by-deep-merge)).
+  ([reference/policy-groups.md#groups-to-token-by-deep-merge](../../reference/policy-groups.md#groups-to-token-by-deep-merge)).
   Leave it out and the rule silently never matches, because a
   string-typed match against an array claim is not the same comparison.
 - **`authorization.defaultAction: Deny`** is also the library default
@@ -168,7 +168,7 @@ A few fields worth explaining rather than copying blind:
 
 The filter serves `logoutPath` (default `/logout` if you don't set one;
 this example moves it to `/oauth2/sign_out` only to keep a link a former
-`access-proxy` console already has). Visiting it clears the filter's own
+console already had under the removed `access-proxy` chart). Visiting it clears the filter's own
 cookies, and — because `endSessionEndpoint` is set above — redirects on
 to the issuer's own sign-out, ending that person's SSO session too. That
 half is real RP-initiated logout, and it works today.
@@ -181,11 +181,11 @@ So an operator's revoke somewhere else — the console's *Revoke a session*
 or *sign out everywhere*, a directory suspension — reaches this console
 only at its next refresh, bounded by the access token's own lifetime and
 the client's `ttl_cap`
-([design/sluis.md#telling-the-relying-party-back-channel-logout](../../explanation/design.md#telling-the-relying-party-back-channel-logout)).
-That is exactly the shape `access-proxy` always had, at the shorter of
+([design](../../explanation/back-channel-logout.md)).
+That is the shape the removed `access-proxy` chart had, at the shorter of
 the two dials — this filter's own refresh cadence versus this client's
 `ttl_cap` — rather than a fixed one-minute `session.refresh`
-([design/access-proxy.md](oauth2-proxy.md)).
+([oauth2-proxy recipe](oauth2-proxy.md)).
 
 ## Traps
 
@@ -235,7 +235,7 @@ jwt:
         uri: https://issuer.example.internal/keys
         cacheDuration: 5m
         backendRefs:
-          - name: access-issuer
+          - name: sluis
             port: 443
 ```
 

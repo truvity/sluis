@@ -9,15 +9,15 @@ mutual TLS. `sluisctl bao <args…>` authenticates and runs the real
 else OpenBAO can do); `sluisctl pg`/`psql` do the same and additionally
 mint a Postgres client certificate
 ([ADR 0013](../../decisions/0013-openbao-access-through-the-bao-cli.md),
-[reference](../../reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged),
-[reference](../../reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command)).
+[reference](../../reference/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged),
+[reference](../../reference/sluisctl-wrappers.md#pg--psql-a-postgres-client-certificate-then-a-command)).
 This replaces `sluisctl credential`, removed in v1.34.0.
 
 The contract between the two sides — the doors, the claims, the two
 clients, the credential paths and every failure mode — is
 [truvity/openbao's docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md),
 tested there against a real server; what this side must provide for it is
-[integrations/openbao.md](openbao.md).
+[the issuer side](openbao-issuer-side.md).
 
 Nothing here is a second identity system. The policy decides **who may
 ask**; the manager's roles decide **what they get**; the certificate
@@ -222,4 +222,4 @@ happens too) — go AFTER it, exactly where `bao` has always accepted
 them. The token is cached under
 sluisctl's own config directory, never `~/.vault-token` and never bao's
 own token helper file; `sluisctl bao --forget` revokes and clears it.
-Full reference: [reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged](../../reference/sluisctl.md#bao-authenticate-then-run-bao-unchanged).
+Full reference: [reference/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged](../../reference/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged).

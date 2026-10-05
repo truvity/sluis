@@ -1,13 +1,13 @@
 # 0028 — Nothing writes ConfigMaps or Secrets; written secrets are sealed
 
-**Status:** Accepted; extended by [0034](0034-exports-go-to-openbao-directly.md); amended by [0036](0036-configuration-is-immutable-per-instance.md)
+**Status:** Accepted; partly superseded (2026-10-04): sealing is retired, the rule that nothing writes ConfigMaps or Secrets stands; extended by [0034](0034-exports-go-to-openbao-directly.md); amended by [0036](0036-configuration-is-immutable-per-instance.md)
 **Date:** 2026-10-02
 
 > **Superseded (2026-10-04).** Sealing is retired entirely: the Sealing
 > port, the KMS sealer, the `sluis:binding` encryption context and `ports.sealer`
 > are gone. A dynamic secret is written to the Secrets port (SSM in production)
 > under `private/<key>/<ref>`, and State holds only the record that names it
-> ([design/ports.md](../explanation/ports.md#the-domain-stores)). The rule that nothing
+> ([design/ports.md](../explanation/domain-stores.md)). The rule that nothing
 > writes ConfigMaps or Secrets stands. The text below is the decision as it was
 > taken.
 

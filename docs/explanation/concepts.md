@@ -26,7 +26,7 @@ policy's `slack.workspaces` table, and is owned by one directory workspace (its
 
 | Term | Means |
 |---|---|
-| **anchor** | a root of trust a service verifies a caller against. There are exactly two: the **cluster** (a ServiceAccount token checked by the API server, bound to an audience — proves a workload *here*) and the **issuer** (access-issuer's signing key — proves an identity the policy has resolved, from anywhere). A service accepts one or both, by the scope of who calls it, and never a third. [design/trust.md](trust.md) |
+| **anchor** | a root of trust a service verifies a caller against. There are exactly two: the **cluster** (a ServiceAccount token checked by the API server, bound to an audience — proves a workload *here*) and the **issuer** (sluis's signing key — proves an identity the policy has resolved, from anywhere). A service accepts one or both, by the scope of who calls it, and never a third. [trust.md](trust.md) |
 | **proof** | something a service can verify without authenticating anyone: a corporate sign-in's ID token, a CI platform's identity token, a Kubernetes ServiceAccount token. Every proof resolves to internal groups; after that a person and a job are the same thing |
 | **the waist** | the internal group name: the one currency of authorization, whichever anchor proved the caller. In a token it is the flat `groups` claim and nothing else; in a binding, a `requires`, a role check, it is the same string, never re-mapped |
 | **federated issuer** | an OpenID issuer whose tokens sluis accepts as a proof for token exchange, trusted by its public key set and nothing else: GitHub Actions, and every cluster's own ServiceAccount-token issuer. A new cluster is one row naming its key set. The issuer holds no credential for any of them |
@@ -40,43 +40,27 @@ policy's `slack.workspaces` table, and is owned by one directory workspace (its
 | **matcher** | a condition on a verified proof: a CI repository and ref, a ServiceAccount, a signed-in address or its domain. Where attributes live, and the only place they do |
 | **claim fragment** | what an internal group adds to a token. Every held group's fragment is deep-merged: lists union, maps recurse, and two groups setting one scalar differently is refused when the policy loads |
 | **lifetime** | how long a token lives: the shortest across the caller's groups, then the client's cap. A property of the privilege, never of where the person signed in |
-| **client** | a relying party: the software *asking* for a token. Its `requires` is who may be issued one, and it is **declared** by the deployment — never created by a console and never registered by a workload. One exception, off unless configured: a client may identify itself by an HTTPS URL serving a document about itself, admitted only from an allow-listed origin, so what stays answerable by reading the repository is the set of *origins* rather than the set of clients. [reference/policy.md](../reference/policy.md#clients-that-describe-themselves) |
+| **client** | a relying party: the software *asking* for a token. Its `requires` is who may be issued one, and it is **declared** by the deployment — never created by a console and never registered by a workload. One exception, off unless configured: a client may identify itself by an HTTPS URL serving a document about itself, admitted only from an allow-listed origin, so what stays answerable by reading the repository is the set of *origins* rather than the set of clients. [reference/policy.md](../reference/policy-clients.md#clients-that-describe-themselves) |
 | **resource** | what a token is *for*, when that is not the client asking. A client names one with `resource` (RFC 8707) and it becomes the token's audience; with none, the client's own id is. Declared, with its own `requires` — so the client says who may ask and the resource says what may be asked for, and both apply. [reference/policy.md](../reference/policy.md#resources--what-a-token-is-for) |
-| **scope** | a role held over one workspace rather than the installation, written `<workspace id>:access-roster:operator` in the groups table — the first segment of every grant's `<scope>:<thing>:<role>` name ([design/trust.md](trust.md#naming)). It gates every action done TO that workspace (a directory workspace, or a GitHub organisation or Slack workspace it owns) and filters what its holder lists; it never widens or narrows the installation-wide role, and recovery is never scoped |
+| **scope** | a role held over one workspace rather than the installation, written `<workspace id>:access-roster:operator` in the groups table — the first segment of every grant's `<scope>:<thing>:<role>` name ([trust.md](trust.md#naming)). It gates every action done TO that workspace (a directory workspace, or a GitHub organisation or Slack workspace it owns) and filters what its holder lists; it never widens or narrows the installation-wide role, and recovery is never scoped |
 
 ## The console
 
-The console **reads**. It shows every person, every provider group, every
-internal group, every rule that grants one, every open session, and
-every GitHub organisation and Slack workspace with what its controller would
-change — the whole chain from a directory to a client, a team or a channel, and
-why each link exists. What it changes is bootstrap, removal and confirmation
-rather than policy: it **connects** a directory by admin consent and a GitHub
-organisation, the link App or a runner App by an owner creating the App, and a
-Slack workspace (a configuration token pasted once, then OAuth install) and a
-catalogue Slack App the same way, each of which genuinely needs a browser
-because there is no infrastructure-as-code way to obtain that credential; it
-**revokes** a session and **disconnects** what it connected; it **keeps**
-console channel and Slack Connect records; it **archives** a channel in Slack
-only when asked to, as an opt-in when forgetting an ordinary console channel;
-it **asks for a pass now** (Refresh); and it **confirms** a set of removals a
-controller held, Slack's the same way as GitHub's, or **imports** GitHub links
-approved elsewhere.
-
-It cannot change who is in an internal group. That is the policy, rendered from
-the installation's own access model and reviewed in git. There is one
-deliberate exception in kind, not in rule: **console channels and Slack Connect
-channels** are records the console writes, because the people who own a Slack
-channel are not the people who own the infrastructure. They are fed by directory
-groups and individual addresses, never by internal groups, are audited action by
-action (`roster.slack_console_channel.*`, `roster.slack_shared_channel.*`),
-backed up, and shown beside the policy's channels with their kind. Git remains
-the complete history of access to infrastructure; the trail is the history of
-these records.
+The console **reads**: every person, provider group, internal group, rule, session, GitHub organisation and Slack
+workspace, with what its controller would change. It cannot change who is in an internal group; that is the policy,
+rendered from the installation's own access model and reviewed in git. What it writes is bootstrap, removal and
+confirmation: it **connects** a directory (admin consent), a GitHub organisation or App, and a Slack workspace or App,
+each of which needs a browser because there is no infrastructure-as-code way to obtain that credential; it **revokes**
+a session, **disconnects** what it connected, **asks for a pass now** (Refresh), **confirms** a set of removals a
+controller held, **imports** GitHub links approved elsewhere, and **keeps** console channel and Slack Connect records.
+Those records are the one deliberate exception in kind: the people who own a Slack channel are not the people who own
+the infrastructure, so they are fed by directory groups and addresses, never internal groups, and audited action by
+action (`roster.slack_console_channel.*`, `roster.slack_shared_channel.*`). Git remains the complete history of access
+to infrastructure; the trail is the history of these records. [The design](console.md) has the rest.
 
 | Term | Means |
 |---|---|
-| **exposure** | a console placed behind a gateway (gateway-native OIDC on Envoy Gateway, upstream oauth2-proxy on other gateways, or your own flow): a hostname, a backend, and (for proxied shapes) a posture. The gateway or proxy runs the login against the issuer, keeps the session, forwards the bearer |
+| **exposure** | a console placed behind a gateway (gateway-native OIDC on Envoy Gateway, [oauth2-proxy run by hand](../how-to/connect/oauth2-proxy.md) on another gateway, or your own flow): a hostname, a backend, and (for proxied shapes) a posture. The gateway or proxy runs the login against the issuer, keeps the session, forwards the bearer |
 | **posture** | what an exposure enforces: `authenticated` — any identity the issuer would mint for this client passes, and the client's `requires` at the issuer is the gate; `groups` — the gateway itself checks the claim, which suits a caller that already carries a token and cannot serve a browser that does not yet have one |
 | **session** | what the issuer holds for one identity and one client: a refresh token and how it was obtained. Listed on a person's page and a client's page, revocable by an operator, and by the person for their own — "sign out everywhere". A proxy's browser session is one of them, seen from the proxy's side |
 | **bootstrap surface** | the paths a console publishes on a route the proxy does *not* cover: its sign-in page, recovery, and the consent callback — so that a redirect from a directory is never swallowed by a login prompt. A request there carries **no gateway identity, by design**; the consent callback takes its operator from the state the service signed when an operator started the flow |

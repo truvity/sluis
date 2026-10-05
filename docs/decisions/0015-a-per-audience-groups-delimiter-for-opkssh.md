@@ -35,7 +35,7 @@ matches either.
 
 This is upstream's bug, not a gap in what this issuer mints — a `groups`
 claim that says `devel:ssh:user`, verbatim, exactly as
-[Groups → token, by deep merge](../reference/policy.md#groups--token-by-deep-merge)
+[Groups → token, by deep merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)
 promises every other relying party. Waiting for opkssh to fix its own
 parser is the right long-term answer and is not this repository's to
 schedule. In the meantime, opkssh-facing SSH access is unusable through
@@ -104,7 +104,7 @@ removed — nothing else in this schema depends on it existing.
 
 **An installation that points this at its own hub client locks itself
 out of its own console.** [The service's own two groups, and scoping
-them](../reference/policy.md#the-services-own-two-groups-and-scoping-them)
+them](../reference/policy-ownership.md#the-services-own-two-groups)
 are parsed by splitting the SAME `:` this option removes; the reference
 documentation says so plainly, and nothing here adds a code-level guard
 against it, the same way nothing stops an operator from pinning an

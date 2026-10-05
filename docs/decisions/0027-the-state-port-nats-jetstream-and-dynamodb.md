@@ -1,7 +1,6 @@
 # 0027 — The State port: NATS JetStream on Kubernetes, DynamoDB on AWS
 
-**Status:** Accepted; supersedes the store statement in
-[design/sluis.md](../explanation/design.md#the-store) ("plain
+**Status:** Accepted; partly superseded (2026-10-04): the NATS JetStream half was removed, the DynamoDB half stands. It supersedes the store statement in [the store](../explanation/store.md) ("plain
 Kubernetes objects … no cloud parameter store, no cache") once the migration
 in [0031](0031-a-generic-migration-tool.md) has run
 **Date:** 2026-10-02

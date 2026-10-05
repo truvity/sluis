@@ -65,7 +65,7 @@ special case in the service, only a backend with no network behind it.
   document under a version it already holds. `TestTheConstructorsAreTheCatalogue`
   (`internal/audit/events_test.go`) fails on a declared action with no
   constructor, and `just audit-catalogue` on an emitted action that is not
-  declared. See [extending.md](extend.md#7-an-audit-action).
+  declared. See [extend](extend.md#7-an-audit-action).
 - **Audit:** every record a test makes goes through `audittest`, which
   holds it to the catalogue exactly as the installation would, so a test
   that records something the catalogue refuses fails; the issuer's and the
@@ -88,18 +88,12 @@ rather than the body of `main` for exactly that reason: `main()` cannot
 be tested and these can, and each of the three carries an acceptance
 suite.
 
-The **acceptance** tests boot the whole service from the
-environment, the way the chart configures one, and walk the use cases
+The **acceptance** tests boot the whole service from its configuration document, the way the chart configures one, and walk the use cases
 over the real handlers: a person signs in through a directory and reaches
 the console with the role their membership grants; recovery reaches it
 without any membership at all; turning either off closes routes rather
 than hiding buttons; the setup steps carry this installation's own
-redirect URIs. The **environment** test compares every variable the binary
-reads against every one the chart sets, reading both lists from the source
-so neither can be restated wrongly. It exists because five settings were
-being read and never set, and the worst of them built every OAuth redirect
-from `http://localhost:8081` — invisible in every local run, fatal in the
-first deployment.
+redirect URIs.
 
 ## Against a real API server
 
@@ -120,13 +114,9 @@ audience; and the same three questions for a consumer on the API listener.
 It is a command rather than a `go test` package because it needs a
 cluster, and `go test ./...` should not assume one.
 
-Installing the chart is the other half, and neither `helm lint` nor a
-render can do it: they check that the YAML is well formed, not that the
-thing it describes starts. The first real install refused to boot because
-the rendered policy carried no `version`. Build an image with `ko build
---local`, load it, and install into the same throwaway cluster. Point it at any
-cluster and namespace you may create objects in; it cleans up by the
-labels it wrote, including when a check fails.
+Installing the chart is the other half, and neither `helm lint` nor a render can do it: they check that the YAML is well
+formed, not that the thing it describes starts. That is by hand against a cluster you may create objects in
+([install](install-with-helm.md)).
 
 ## Issuer and CLI
 
@@ -134,8 +124,8 @@ The issuer's verifiers run against recorded tokens with rotated keys and
 a fake directory; the policy engine against fixtures; the OpenID
 Provider surface against the library's own tests, and, by hand and
 before a release that touches it, against the OpenID Foundation's suite
-([operations/conformance.md](run-conformance.md)), whose
-results are [conformance.md](../explanation/conformance-findings.md). `sluisctl` is tested against the
+([run the conformance suite](run-conformance.md)), whose
+results are on [the findings page](../explanation/conformance-findings.md). `sluisctl` is tested against the
 acceptance issuer with a fake cloud STS and a kind cluster, on a laptop
 path and on a simulated CI path.
 
@@ -169,7 +159,8 @@ The chart is tested without a cluster, in `just chart-lint`:
   template change therefore arrives as a reviewable diff of what the
   cluster will be sent. The chart has a `minimal` case and a `full` case
   that sets the values; the other cases take the other side of each
-  switch (`headless`, `listenerset`, `attach`, `multiroute`, ...). After
+  switch (`headless`, `listenerset`, `route`, ...), and `documents-truvity` renders the
+  documents mode from an installation's rendered documents, held byte for byte. After
   changing a template or a case, run `just golden` and review the diff
   before committing it.
 - **Negative fixtures.** `tests/invalid/<chart>/<rule>.yaml`, one per

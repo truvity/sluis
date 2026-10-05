@@ -59,7 +59,7 @@ the ref is a branch or a tag:
 job_workflow_ref: acme/platform/.github/workflows/deploy.yml@refs/heads/main }`
 admits the deploy workflow on main and not a pull request's run of an
 edited copy. The same groups can hold a grant of a
-[catalogue App](github-apps-catalogue.md#minting-a-token), and the job
+[catalogue App](github-app-tokens.md#minting-a-token), and the job
 then asks for an installation token with the action's `github-app` input.
 
 ## Workflow side: the action
@@ -88,7 +88,7 @@ issuer accepts from GitHub — and then makes one RFC 8693 token exchange
 per audience at `<issuer>/token`: `grant_type` token-exchange,
 `subject_token` the job's token (type `jwt`), `audience` the client, the
 same client presented in HTTP Basic with an empty secret. What comes
-back is an **access-issuer token for that one client**, carrying the
+back is a **sluis token for that one client**, carrying the
 groups the job's matchers put it in; the client's `requires` decided
 whether it was minted at all. For `github-app` the same exchange asks for
 `requested_token_type=urn:access-roster:params:oauth:token-type:github-installation-token`
@@ -103,7 +103,7 @@ Every token is masked before it is written anywhere.
 | `kubeconfig` | `"false"` | `"true"` writes a kubeconfig with one user and one context per `k8s:` audience, the token as bearer, and exports `KUBECONFIG`. The cluster entry (address, CA) is not written: it comes from the platform's own kubeconfig |
 | `default-profile` | `""` | a profile to export as `AWS_PROFILE`; it must be one this run wrote, or the step fails |
 | `region` | `""` | written into every AWS profile |
-| `github-app` | `""` | a [catalogue App](github-apps-catalogue.md#minting-a-token) id to mint an installation token of, under the catalogue's grants |
+| `github-app` | `""` | a [catalogue App](github-app-tokens.md#minting-a-token) id to mint an installation token of, under the catalogue's grants |
 | `repositories` | `""` | names without the owner, comma, space or newline separated, to narrow that token to. Empty asks for a token not narrowed to any, which only a grant of every repository allows |
 | `permissions` | `""` | `name:level` (or `name=level`), to narrow that token to. Empty asks for exactly what the grant allows |
 
@@ -159,7 +159,7 @@ jobs:
 Nothing is stored in the calling repository and nothing needs rotating
 there: what the job may have is the catalogue App's grant for the groups
 the job's matchers put it in, which is where a `job_workflow_ref` pin
-belongs ([pinning a grant](github-apps-catalogue.md#pinning-a-grant-to-one-workflow)).
+belongs ([pinning a grant](github-app-tokens.md#pinning-a-grant-to-one-workflow)).
 Keep the two sources in two jobs if the workflow offers both: a job's
 `permissions` are static, and one that asks for `id-token: write` fails
 every caller that did not grant it.
@@ -205,7 +205,7 @@ A consumer that is neither kubectl nor an AWS SDK reads `sluisctl token
 --audience <client>` from stdin, in a job and on a laptop alike.
 
 **Both targets go through the issuer, never directly.** A cluster trusts
-one OIDC issuer and that is access-issuer, so a GitHub token can never be
+one OIDC issuer and that is sluis, so a GitHub token can never be
 presented to an API server; and cloud accounts trust the issuer's
 audiences rather than GitHub's subjects, so the policy stays in one file
 instead of in every account's trust policies.

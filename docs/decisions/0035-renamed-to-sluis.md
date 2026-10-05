@@ -1,6 +1,6 @@
 # 0035 — Renamed to sluis
 
-**Status:** Accepted
+**Status:** Accepted; its NATS-bucket and `sluis:binding` rows are moot since [0027](0027-the-state-port-nats-jetstream-and-dynamodb.md) and [0028](0028-nothing-writes-configmaps-or-secrets.md) removed NATS and sealing (2026-10-04); the kept contract names still stand
 **Date:** 2026-10-03
 
 ## Context

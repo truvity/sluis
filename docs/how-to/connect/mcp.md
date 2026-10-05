@@ -5,7 +5,7 @@ Protocol server is a resource a token is minted *for*
 ([reference/policy.md#resources--what-a-token-is-for](../../reference/policy.md#resources--what-a-token-is-for));
 its client is usually software this installation never deployed and
 cannot enumerate — somebody's editor, a hosted assistant — which is the
-case [Clients that describe themselves](../../reference/policy.md#clients-that-describe-themselves)
+case [Clients that describe themselves](../../reference/policy-clients.md#clients-that-describe-themselves)
 exists for. The two mechanisms below are independent and normally used
 together: a client identifies itself with a URL, and separately asks for
 a token scoped to one resource rather than to itself.

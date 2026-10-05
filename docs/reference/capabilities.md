@@ -1,11 +1,11 @@
 # Capabilities
 
-What runs where, and how far each piece has got. The target shape is decided in
-[decisions/0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)
-to
-[0034](../decisions/0034-exports-go-to-openbao-directly.md) and
-specified in [design/ports.md](../explanation/ports.md); this page is the status of each
-part against it, and is updated in the change that moves a cell.
+What runs where, and how far each piece has got, on the two permanent platforms. The shape is in
+[ports and adapters](../explanation/ports.md) (decisions
+[0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md) to
+[0034](../decisions/0034-exports-go-to-openbao-directly.md)); this page is the status of each part against it, and is
+updated in the change that moves a cell. **The adapters themselves** (what exists, what it needs, which presets name it,
+built or on request) are in the generated [adapters](adapters.md): this page does not repeat that table.
 
 | Mark | Meaning |
 |---|---|
@@ -14,42 +14,36 @@ part against it, and is updated in the change that moves a cell.
 | ✅ | supported: released, documented, and covered by CI |
 | — | not applicable on this platform |
 
-Two platforms are supported permanently, so a blank is a gap and not a choice.
-A cell reads for the **installation as shipped today**; "today" is the 1.52.4
-release and what has landed since.
+Two platforms are supported permanently, so a blank is a gap and not a choice. A cell reads for master, which is the
+Unreleased section of the [changelog](../../CHANGELOG.md).
 
 ## Ports and adapters
 
+Which adapter fills each concern is [adapters](adapters.md); the presets that name them are unavailable for `server`,
+`k8s-minimal` and `k8s-openbao` and available for `aws-serverless`, `aws-hybrid` and `k8s-aws`. The rows here are what
+is built around the adapters.
+
 | Piece | Kubernetes | AWS Lambda |
 |---|---|---|
-| State: in-memory (tests, one local process) | ✅ | — |
-| State, Blob, Trigger, Secrets, Identity: the ports' in-memory adapter (`internal/port/memory`) | 🧪 | — |
-| State: Kubernetes objects and Valkey (the current store) | ✅ | — |
-| State: the ports' `legacy` adapter over that store (temporary, until the migration of [0031](../decisions/0031-a-generic-migration-tool.md) has run) | 🧪 | — |
-| Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (the token pair in Secrets, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Secrets adapter) | 🧪 | 📄 |
-| State, session index and Trigger: DynamoDB (`internal/port/dynamodb`, `ports.adapter: dynamodb`; one table, polling Watch and Trigger; run on LocalStack, not yet on AWS) | 🧪 | 🧪 |
-| Blob: S3 (reports, snapshots; `internal/port/s3blob`, `ports.blob`) | 🧪 | 🧪 |
-| Trigger: KV watch (across processes) | 🧪 | — |
-| Trigger: asynchronous invoke | — | 📄 |
-| Export: copies of the secrets the console keeps (a Slack App's bot token, the runner and catalogue Apps, seven recovery bundles) written into OpenBao KV by the service itself, asynchronously, per-export lease, retried with backoff (`internal/port/openbao`, `internal/exports`, `ports.export` and `exports`, [0034](../decisions/0034-exports-go-to-openbao-directly.md); needs a `ports.adapter` other than `legacy`) | 🧪 | 📄 |
+| Ports as Go interfaces (`internal/port`) and the apps depending on them | ✅ | ✅ |
+| Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (the token pair in Secrets, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Secrets adapter) | ✅ | ✅ |
+| Secrets in OpenBao (`adapters.secrets: openbao`, layout v3, compare-and-swap by KV `cas`; in the Unreleased section of the changelog) | 🧪 | 🧪 |
+| Export: copies of the secrets the console keeps (a Slack App's bot token, the runner and catalogue Apps, recovery bundles) written by the service itself, asynchronously, per-export lease, retried with backoff (`internal/exports`, `ports.export` and `exports`, [0034](../decisions/0034-exports-go-to-openbao-directly.md)); to OpenBao KV, or through the Secrets port (SSM) | ✅ | ✅ |
 | Export: the `jwt` login with the web identity token of AWS outbound federation, for a function in the VPC reaching OpenBao through its internal load balancer (the adapter takes a `TokenSource`; no Lambda wiring yet) | — | 📄 |
 | Export: the External Secrets `PushSecret`s of the chart (`slackApps[].push`, `directory.push`, `githubApps.push`, `githubApps.catalogue[].push`, `slackState.push`; need `config.store: kubernetes`) | deprecated, replaced by the above | — |
 | Inputs: mounted ConfigMaps and Secrets | ✅ | — |
-| Inputs: file in the image or a parameter store | — | 📄 |
-| Audit sink: `http` | ✅ | — |
-| Audit sink: `sqs` (`adapters.audit`; `internal/audit/sqs.go`; the writer Lambda consumes the queue) | 🧪 | 📄 |
-| Ports as Go interfaces (`internal/port`) and the apps depending on them | 🧪 | 📄 |
-| Port conformance suite: in-memory and legacy | 🧪 | — |
+| Inputs: the configuration layer, or a parameter store | — | ✅ |
+| Port conformance suite: in-memory and legacy | ✅ | — |
 | Port conformance suite: Export (in-memory, and OpenBao against a fake KV mount) | 🧪 | 🧪 |
-| Port conformance suite: DynamoDB (LocalStack and an in-memory fake of the API; `migrate` into and out of it) | 🧪 | 🧪 |
+| Port conformance suite: DynamoDB (LocalStack and an in-memory fake of the API; `migrate` into and out of it) | ✅ | ✅ |
 
 ## Runtime
 
 | Piece | Kubernetes | AWS Lambda |
 |---|---|---|
-| Issuer, console and directory hub | ✅ | 📄 |
-| GitHub reconciler | ✅ (one replica; two with a DynamoDB State, 🧪) | 📄 |
-| Slack reconciler | ✅ (one replica; two with a DynamoDB State, 🧪) | 📄 |
+| Issuer, console and directory hub | ✅ | ✅ |
+| GitHub reconciler | ✅ (one replica; two with a DynamoDB State, 🧪) | ✅ |
+| Slack reconciler | ✅ (one replica; two with a DynamoDB State, 🧪) | ✅ |
 | `Tick(target)` with a lease per target, a report per target, and a trigger that ticks only its target (on the legacy adapter: the lease is exclusive across pods only with a shared State, and a controller has none; the console reaches a controller through the mounted records, polled) | 🧪 | 📄 |
 | Two replicas of a reconciler | 🧪 (chart `replicas`: refused unless `ports.adapter` is `dynamodb`) | — |
 | Slack Connect handoff: the host's tick notifies the guest's; the guest-side probe is the host's tick's | 🧪 | 📄 |
@@ -57,10 +51,10 @@ release and what has landed since.
 | Slack `users.info` cache on the State (`cache.slack.user.<workspace>.<id>`, 24 h; `slack_roster.user_cache` counts hits and misses) | 🧪 | 📄 |
 | Shared inputs of the Slack controller in the State (`cache.<digest>.<name>`) | 📄 (stays in memory) | 📄 |
 | Controllers reading the console's records from the State instead of mounted files (`ports.adapter` other than `legacy`) | 🧪 | 📄 |
-| One Lambda function: the issuer and console behind an API Gateway HTTP API, and the controllers' ticks from EventBridge Scheduler (v1.63) | — | 📄 |
-| One binary `sluis` (`serve`, which runs the GitHub and Slack controllers in-process; `controller github|slack` deprecated, removed in the next release; `tick <github|slack> <target>` runs one tick once; `migrate --from <config> --to <config>` copies the State between storages) | 🧪 | 📄 |
+| One Lambda function: the issuer and console behind an API Gateway HTTP API, and the controllers' ticks from EventBridge Scheduler (v1.63, [0037](../decisions/0037-one-process-everywhere.md)) | — | ✅ |
+| One binary `sluis` (v1.63, [0037](../decisions/0037-one-process-everywhere.md): `serve`, which runs the GitHub and Slack controllers in-process; `controller github|slack` deprecated, removed in the next release; `tick <github|slack> <target>` runs one tick once; `migrate --from <config> --to <config>` copies the State between storages) | 🧪 | 📄 |
 | One chart `sluis` (one Deployment, `sluis serve`; the controllers are `config.controllers.*`) | 🧪 | — |
-| One service document (`sluis/v3`) validated against a schema | 🧪 | 📄 |
+| One service document (`sluis/v3`) validated against a schema | ✅ | ✅ |
 
 ## Identity
 

@@ -1,9 +1,16 @@
 # Go module `github.com/truvity/sluis`
 
-What a Go service behind the gateway imports. The shape follows
-[../design/trust.md](../explanation/trust.md): **exactly two verifiers**, one
-per anchor, and one `Verified` whichever proved the caller — so a handler
-never learns which anchor answered and cannot come to depend on it.
+**Status:** built. Packages: `identity`, `tokens`, `policy`, `config`, and `backend` (the contract a directory backend
+implements, see [extending](../how-to/extend.md)). The TypeScript counterpart is [typescript.md](typescript.md).
+
+What a Go service behind the gateway imports, so that it implements none of three things itself: **who is calling**,
+**may they do this**, and **how do I call the next service as myself**. The shape follows
+[trust.md](../explanation/trust.md): **exactly two verifiers**, one per anchor, and one `Verified`
+(`Subject, Email, Name, GivenName, FamilyName, Groups, ServiceAccount`) whichever proved the caller, so a handler never
+learns which anchor answered and cannot come to depend on it. The module is where the two-anchor rule stops being
+documentation and becomes the shape a service is given. Its rules: no framework leaks across packages, every verifier
+is constructed from an anchor's coordinates and nothing else, no global state, no third verifier and no group
+re-mapping anywhere. The worked example is [service to service](../how-to/connect/service-to-service.md).
 
 sluis uses this itself rather than keeping a copy. A library its
 own author does not use is a library nobody has tested against a real
@@ -28,7 +35,7 @@ service, policy, err := config.Render(in)   // sluis.yaml and policy.yaml, as by
 
 The public configuration package: the document types of the service document (v3) and
 the policy document (v2), `Load` and `Validate` against the authored schemas, and the
-[installation](configuration.md#the-installation-document), the typed input an estate
+[installation](installation-document.md), the typed input an estate
 writes once. `Render` is deterministic and holds both outputs to the loader the service
 runs at start; it is what `sluisctl render` and the Pulumi library
 (`LambdaArgs.Installation`) call, so no estate hand-renders the documents
@@ -52,10 +59,8 @@ you did not write.
 
 ## A console behind a proxy that forwards a bearer — the issuer anchor
 
-The proxy in front — gateway-native OIDC, `access-proxy` (deprecated,
-Envoy Gateway only), or a hand-run `oauth2-proxy` on any other gateway —
-makes no difference here: whichever one it is, the module reads whatever
-forwards a verified bearer.
+The gateway in front (gateway-native OIDC, or an [oauth2-proxy run by hand](../how-to/connect/oauth2-proxy.md) on
+another gateway) makes no difference here: the module reads whatever forwards a verified bearer.
 
 ```go
 issuer := &identity.Issuer{
@@ -64,7 +69,7 @@ issuer := &identity.Issuer{
 }
 
 mux := http.NewServeMux()
-mux.Handle(identity.WhoAmIPath, identity.WhoAmI(version))
+mux.Handle(identity.WhoAmIPath, identity.WhoAmI(version))   // GET /.access/whoami, for the UI
 mux.Handle("/admin/", identity.Require("all:roster:operator")(admin))
 
 http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
@@ -125,6 +130,9 @@ repeatedly.
 **No group re-mapping, anywhere.** The name in the policy is the name in
 the token is the name in the role check. A second vocabulary is a second
 place for access to mean something different.
+
+**One whoami shape.** `WhoAmI` serves `GET /.access/whoami`; the body is specified once, in
+[contracts](contracts.md#the-whoami-endpoint), and the UI half reads it ([typescript.md](typescript.md)).
 
 **No token parsing in a browser.** That is the TypeScript package's rule
 and this one's corollary: the browser asks the application, and the

@@ -170,7 +170,7 @@ groups:
 not something the issuer computes.** `groups` is a flat set — the whole
 of the authorization a token carries, with no built-in widening absent
 one
-([reference/policy.md#groups--token-by-deep-merge](../../reference/policy.md#groups--token-by-deep-merge)) —
+([reference/policy-groups.md#groups-to-token-by-deep-merge](../../reference/policy-groups.md#groups-to-token-by-deep-merge)) —
 so *"operator can do what user can, admin can do what operator can"*
 is expressed by repeating a group across `auth_id` lines for the
 principals each role should reach, not by one group implying another:
@@ -364,7 +364,7 @@ the public key `bao read ssh/config/ca` (or `ssh-keygen -L -f
 **`sluisctl ssh known-hosts` automates exactly this line**, for every
 CA an installation configures, refreshed automatically by `sluisctl
 login` — see
-[reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](../../reference/sluisctl.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect)
+[reference/sluisctl-wrappers.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](../../reference/sluisctl-wrappers.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect)
 and
 [decisions/0016](../../decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md).
 It complements opkssh above: opkssh authenticates the *person*; this

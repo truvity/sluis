@@ -9,7 +9,7 @@ OIDC provider that shapes a token the same way could stand in its place
 `r2broker` binary unchanged, the same shape
 [ADR 0013](../../decisions/0013-openbao-access-through-the-bao-cli.md)
 already ships for `sluisctl bao`
-([reference](../../reference/sluisctl.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)).
+([reference](../../reference/sluisctl-wrappers.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)).
 
 **sluis carries no R2 logic at all.** No bucket, no prefix, no
 permission is decided here — the broker holds the parent credential and

@@ -27,7 +27,7 @@ identity *inside* itself: per-user authorization from `groups`, per-user
 audit, or tokens of its own to call something else.
 
 **For a gateway that is not Envoy Gateway**, use upstream `oauth2-proxy`
-yourself — see [docs/design/access-proxy.md](oauth2-proxy.md)
+yourself — see [oauth2-proxy recipe](oauth2-proxy.md)
 for the recipe. The `access-proxy` chart was removed in v1.32.0
 ([ADR 0003](../../decisions/0003-deprecate-access-proxy.md)).
 
@@ -42,7 +42,7 @@ the code, because the process holding the session is the one serving the
 page. That is the directory console, and it is a property of that pair
 rather than a pattern to copy. The directory console's areas (Overview,
 IDENTITY, ACCESS, SYSTEMS with GitHub and Slack, ADMIN) are described in
-[the design](../../explanation/design.md#the-console) and in
+[the design](../../explanation/console.md) and in
 [Slack](slack-workspace.md) and [GitHub](github-organisation.md).
 
 ## What you write
@@ -107,7 +107,7 @@ in the check.
 For gateway-native OIDC on Envoy Gateway, use a `SecurityPolicy` of the
 gateway's own (see [envoy-gateway-oidc.md](envoy-gateway-oidc.md)).
 For a gateway that is not Envoy Gateway, run `oauth2-proxy` yourself
-(see [docs/design/access-proxy.md](oauth2-proxy.md) for the
+(see [oauth2-proxy recipe](oauth2-proxy.md) for the
 recipe; the `access-proxy` chart was removed in v1.32.0).
 For your own flow in the console, your chart alone and no proxy at all:
 

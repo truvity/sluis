@@ -7,27 +7,21 @@ fit.* This page is an index; the pages below hold the argument. For a map
 of every page in the repository, not just these, see
 [index.md](../index.md).
 
-- [why.md](why.md) — the situation it starts from, the problems it
-  solves, and the principles every design question is decided by
-- [concepts.md](concepts.md) — the words used precisely
-- [architecture.md](architecture.md) — every piece and how it connects,
-  and [who owns what](architecture.md#who-owns-what): sluis, the
-  directories, the relying parties
-- [design/trust.md](trust.md) — two anchors and one vocabulary of
-  internal groups: the rule under everything
-- [design/sluis.md](design.md) — one process, the
-  directory model, freshness, sessions, the console, the GitHub and
-  Slack controllers and the rails they share, the audit trail
-- [design/access-proxy.md](../how-to/connect/oauth2-proxy.md) — why the proxy is
-  upstream oauth2-proxy in a chart and no code of ours
-- [design/sluisctl.md](sluisctl.md) — why a CLI at all, the
-  GitHub Action, and the credential broker's list of decisions it does
-  not make
-- [design/libraries.md](../reference/libraries.md) — the Go module and the
-  TypeScript package, and the whoami contract between them
-- [integrations.md](integrations.md) — every integration, case by case
-- [development/extending.md](../how-to/extend.md) — where something
-  new plugs in, and what it must ship with
+- [why.md](why.md): the situation it starts from, the problems it solves, and the principles every design question is
+  decided by
+- [concepts.md](concepts.md): the words used precisely
+- [architecture.md](architecture.md): every piece and how it connects, and
+  [who owns what](architecture.md#who-owns-what): sluis, the directories, the relying parties
+- [trust.md](trust.md): two anchors and one vocabulary of internal groups, the rule under everything
+- [design.md](design.md): one process, the directory model, freshness, sessions, the console, the GitHub and Slack
+  controllers and the rails they share, the audit trail
+- [ports.md](ports.md): the ports and adapters the process runs on
+- [sluisctl.md](sluisctl.md): why a CLI at all, the GitHub Action, and the credential broker's list of decisions it
+  does not make
+- [integrations.md](integrations.md): every integration, case by case
+- [safety.md](safety.md): what can break and how sluis prevents it
+- [conformance-findings.md](conformance-findings.md): what the OpenID conformance suite found
+- [How to extend](../how-to/extend.md): where something new plugs in, and what it must ship with
 - [decisions/](../decisions/README.md) — the accepted decisions this doctrine
   follows from, one record per decision, with what was weighed against it
 - the Slack rules that decide design questions, each its own record:

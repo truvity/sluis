@@ -17,7 +17,7 @@ the same feature wearing different clothes:
 - a system that cannot — because it has its own membership model with no
   token in front of it — gets a **membership**, kept in step by a
   reconciler. GitHub teams are the one built today
-  ([design/sluis.md#the-github-controller](../explanation/design.md#the-github-controller));
+  ([github-controller.md](../explanation/github-controller.md));
   a chat workspace's channel membership is the next candidate for the
   same shape.
 
@@ -38,7 +38,7 @@ access key, a database password held on that system's behalf) and reading
 per-system mapping from an internal group to that system's own roles — an
 RBAC binding, a policy attached to a login — is real and useful, and it is
 published as a **recipe** (a connect page under
-[connect/](../connect/), such as
+[how-to/connect/](../how-to/connect/), such as
 [connect/openbao.md](../how-to/connect/openbao.md)), never carried as a
 first-class feature of the service itself. A recipe can go stale without
 taking the issuer down with it; a feature cannot.

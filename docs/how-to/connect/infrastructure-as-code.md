@@ -30,7 +30,7 @@ Apps — `iac` in the [default set](github-apps-catalogue.md#a-default-set)
 **Take the exchange unless you cannot.** A job that can ask for a token
 holds nothing between runs, is narrowed to the repositories and
 permissions one grant allows, and leaves a record of every mint; that is
-[minting a token](github-apps-catalogue.md#minting-a-token), and it is
+[minting a token](github-app-tokens.md#minting-a-token), and it is
 the whole of what CI needs.
 
 The store is for the case the exchange cannot serve: a program whose
@@ -219,7 +219,7 @@ steps:
 
 The job holds no key, the token dies within the hour, and the request is
 in the audit trail with the grant it was decided under
-([details](github-apps-catalogue.md#minting-a-token)). The same is
+([details](github-app-tokens.md#minting-a-token)). The same is
 available to a laptop and to any script as `sluisctl github-token`.
 
 ## The copy is a real credential
@@ -254,4 +254,4 @@ That means:
 Backing up the *whole* Secret for restore is a different job with a
 different shape — one PushSecret over every key, including each App's
 record — and it is
-[Backing it up](github-apps-catalogue.md#backing-it-up).
+[Backing it up](github-app-keys.md#backing-it-up).

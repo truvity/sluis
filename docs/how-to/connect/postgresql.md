@@ -4,7 +4,7 @@
 including a CloudNativePG cluster — with a client certificate that lives
 minutes, not a password that lives until somebody remembers to rotate it.
 `sluisctl psql` / `sluisctl pg --` are the couriers
-([reference](../../reference/sluisctl.md#pg--psql-a-postgres-client-certificate-then-a-command),
+([reference](../../reference/sluisctl-wrappers.md#pg--psql-a-postgres-client-certificate-then-a-command),
 replacing `sluisctl credential db`, removed in v1.34.0 —
 [ADR 0013](../../decisions/0013-openbao-access-through-the-bao-cli.md)).
 This page is the database-specific half of
@@ -56,7 +56,7 @@ Four steps, read from `cmd/sluisctl/pg.go` and `cmd/sluisctl/bao.go`:
    is set to its own common name and `PGSSLMODE` to `verify-full`, but
    **only when the caller has not already chosen one** (an explicit
    `-U`/`user=`, or a service file's own `user=`, always wins; see
-   [reference/sluisctl.md#the-environment](../../reference/sluisctl.md#the-environment)
+   [reference/sluisctl-wrappers.md#the-environment](../../reference/sluisctl-wrappers.md#the-environment)
    for what was verified about libpq's precedence here). **`PGSSLROOTCERT`
    follows the same rule, and is skipped entirely when the role returned
    no CA at all.** The PKI's own CA — what the client certificate chains

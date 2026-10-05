@@ -11,7 +11,7 @@ is how to build the gateway-native shape once you have made it.
 
 There are three things that get called a session here, and only one of
 them is this issuer's to reach directly
-([design/sluis.md#sessions-and-sign-out](../../explanation/design.md#sessions-and-sign-out)):
+([design](../../explanation/sessions.md)):
 
 - the **SSO session**, a cookie at the issuer's own host;
 - a **per-client refresh chain** — one refresh token per identity and
@@ -27,8 +27,8 @@ session revoked; an access or ID token's `exp` is capped at
 `auth_time+absolute` even when its ordinary lifetime would reach
 further; and a silent `/authorize` against an SSO session already past
 the limit ends that session first rather than completing against it
-([design/sluis.md#the-absolute-session-limit](../../explanation/design.md#the-absolute-session-limit),
-[reference/configuration.md#values](../../reference/configuration.md#values),
+([design](../../explanation/sessions.md#the-absolute-session-limit),
+[chart values](../../reference/chart-values.md),
 [ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md)). It
 reaches the third session — the application's own — only if that
 application comes back to ask. That is the whole of the boundary, and it
@@ -72,7 +72,7 @@ application itself documents it:
 - **OpenBAO is two different things wearing one name.** `openbao-ui`,
   the console, is a confidential client running its own code flow,
   capped by `ttl_cap: 5m` on its policy row
-  ([integrations/openbao.md](openbao.md)) — class A,
+  ([the issuer side](openbao-issuer-side.md)) — class A,
   same shape as any gateway-fronted app. The **Vault-style token**
   OpenBAO mints once a login succeeds on `jwt-roster` is class B: it
   carries its own time-to-live and renews against OpenBAO itself, never
@@ -106,7 +106,7 @@ application itself documents it:
 | ArgoCD | B — own `users.session.duration` | confidential client, own redirect; no `signing_alg` pin — its verifier (go-oidc's provider verifier) accepts whatever the issuer's discovery document advertises ([connect/argocd.md](argocd.md)) |
 | Kargo | A — refreshes, capped by `ttl_cap` | two public clients (UI + CLI); **needs `signing_alg: RS256`** — its verifier is built with no `SupportedSigningAlgs` and defaults to RS256 without reading discovery ([connect/kargo.md](kargo.md), [ADR 0009](../../decisions/0009-a-default-signing-algorithm-and-per-audience-exceptions.md)) |
 | Kubernetes API server (kube-apiserver / a managed control plane's OIDC identity provider) | A — `sluisctl`/kubelogin refresh it | one public client per cluster; **often needs `signing_alg: RS256`** — `--oidc-signing-algs` defaults to RS256 and a managed control plane's associated identity provider may accept only RS256 with no algorithm setting exposed at all ([connect/kubernetes-cluster.md](kubernetes-cluster.md)) |
-| OpenBAO UI | A — own OIDC flow, `ttl_cap: 5m` | confidential client; no `signing_alg` pin needed — OpenBAO's JWT auth reads whichever algorithm discovery advertises unless `jwt_supported_algs` is set to pin one ([integrations/openbao.md](openbao.md)) |
+| OpenBAO UI | A — own OIDC flow, `ttl_cap: 5m` | confidential client; no `signing_alg` pin needed — OpenBAO's JWT auth reads whichever algorithm discovery advertises unless `jwt_supported_algs` is set to pin one ([the issuer side](openbao-issuer-side.md)) |
 | Grafana (`generic_oauth`) | B — own session; cap `login_maximum_lifetime_duration` yourself | confidential client (Grafana redeems the code server-side); its own signing-algorithm acceptance is not verified here |
 | Headlamp | not verified — confirm whether it refreshes or mints its own session before choosing | not verified |
 | A simple internal console, no auth of its own | A — entirely through the gateway's own OIDC filter; the console holds no session at all | confidential client (the filter holds the secret); `signing_alg` only if something downstream reads the forwarded ID token with a fixed-algorithm verifier |
@@ -129,20 +129,20 @@ application itself documents it:
   repository has found real bugs before: a revoke path that ended one
   session and left its parent SSO session standing looked, from the
   console, like a complete sign-out
-  ([design/sluis.md#telling-the-relying-party-back-channel-logout](../../explanation/design.md#telling-the-relying-party-back-channel-logout)).
+  ([design](../../explanation/back-channel-logout.md)).
 
 ## oauth2-proxy, and when it is still the answer
 
 The use case for `oauth2-proxy` narrowed when gateway-native OIDC matured.
 This repository's `access-proxy` chart (removed in v1.32.0;
 [ADR 0003](../../decisions/0003-deprecate-access-proxy.md),
-[design/access-proxy.md](oauth2-proxy.md)) was only ever
+[oauth2-proxy recipe](oauth2-proxy.md)) was only ever
 Envoy Gateway's external authorization backend, and gateway-native OIDC
 on that same Envoy Gateway is now the default replacement.
 
 **For a gateway that is not Envoy Gateway**, run upstream `oauth2-proxy`
 yourself, with a declared confidential client of this issuer, the way the
-removed chart wired it — see [design/access-proxy.md](oauth2-proxy.md)
+removed chart wired it — see [oauth2-proxy recipe](oauth2-proxy.md)
 for the shape to copy. Its server-side session store is not a reason to
 prefer it over gateway-native OIDC: `oauth2-proxy` encrypts each session
 with a key that lives only in the browser's own cookie, so nothing
@@ -155,5 +155,5 @@ one either way.
   gateway-native shape, and its traps
 - [console-app.md](console-app.md) — a console with its own backend API:
   what you write and deploy for each shape
-- [reference/policy.md#clients--audience-and-gate](../../reference/policy.md#clients--audience-and-gate) —
+- [reference/policy-clients.md#clients](../../reference/policy-clients.md#clients) —
   every field a client row takes

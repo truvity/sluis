@@ -4,7 +4,7 @@
 sluis targets four OpenID Foundation profiles. A profile is
 claimed only once the suite says so, which is why this page carries
 the last run rather than an intention. The procedure for producing a
-run is [operations/conformance.md](../how-to/run-conformance.md); this page
+run is [run-conformance.md](../how-to/run-conformance.md); this page
 is what the last one said and what each of its columns means.
 
 **Last run 2026-09-12 against the deployed issuer at v1.0.0**, from the
@@ -98,7 +98,7 @@ at a name that resolves to `127.0.0.1` is, from the pod, the pod's own
 loopback, and pods cannot reach the tailnet either. So the suite runs in
 the cluster, at a hostname of its own, exactly while the
 conformance client rows are declared — see
-[operations/conformance.md](../how-to/run-conformance.md). Only its
+[run-conformance.md](../how-to/run-conformance.md). Only its
 relying-party paths are public; the control plane is reached over the
 tailnet.
 
@@ -133,7 +133,7 @@ click away
 because it needs no credential and guards the discovery document, which
 changes silently when a provider option changes.
 
-[operations/conformance.md](../how-to/run-conformance.md) is the
+[run-conformance.md](../how-to/run-conformance.md) is the
 procedure, and [hack/conformance_drive.py](../../hack/conformance_drive.py)
 drives headless Chrome through the browser half — signing in through
 recovery, and answering the suite's manual steps with a screenshot of the

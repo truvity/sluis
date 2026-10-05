@@ -1,6 +1,6 @@
 # 0005 — ES384 is the signing algorithm
 
-**Status:** Accepted; partly superseded by [0009](0009-a-default-signing-algorithm-and-per-audience-exceptions.md)
+**Status:** Accepted; partly superseded by [0009](0009-a-default-signing-algorithm-and-per-audience-exceptions.md) (ES384 stays the default; it is no longer the only algorithm an audience may have)
 **Date:** 2026-09-25
 
 ## Context
@@ -9,7 +9,7 @@ What the issuer signs with follows from the key it is given:
 `signingKey.certificate.algorithm`/`.size`/`.encoding` selects RSA or
 ECDSA on P-256, P-384 or P-521, and the choice determines whether every
 token is RS256, ES256, ES384 or ES512
-([reference/configuration.md#what-the-chart-includes-what-it-expects](../reference/configuration.md#what-the-chart-includes-what-it-expects)). The
+([chart values](../reference/chart-values.md)). The
 signing key is never minted by the service itself — cert-manager issues
 it, or a deployment delivers it — so this decision is about the
 **default** a fresh installation gets when it sets nothing.

@@ -5,7 +5,7 @@ dashboard that read it, and how to install them. The contract it follows is
 [0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)
 to
 [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md) and
-[design/ports.md](../explanation/ports.md): telemetry is the OpenTelemetry
+[ports](../explanation/ports.md): telemetry is the OpenTelemetry
 environment and nothing else, it is exported only when a collector is named, and
 it carries no personal data.
 
@@ -18,7 +18,7 @@ variables on the pods and the SDK reads them:
 |---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Names a collector for metrics and traces. Unset (and neither signal's own variable below set), nothing is exported and every instrument records into a no-op. |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | The same, for one signal. |
-| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. The one process names itself `access-issuer` when `OTEL_SERVICE_NAME` is unset. Since v1.63 the controllers' series carry `access-issuer` too: **a dashboard or alert that selects `service_name` `github-roster` or `slack-roster` must select `access-issuer`** (the controllers' own metric names, and the `kind` and `target` labels, are unchanged). |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. The one process names itself `access-issuer` when `OTEL_SERVICE_NAME` is unset (the resource's historic name, kept so series and dashboards keep their identity). Since v1.63 the controllers' series carry it too: **a dashboard or alert that selects `service_name` `github-roster` or `slack-roster` must select `access-issuer`** (the controllers' own metric names, and the `kind` and `target` labels, are unchanged). |
 | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | The sampler. **Unset, it is parent based with `always_on`**: a caller's decision wins and every root trace is kept. |
 
 **The sampler default is provisional.** truvity/audit keeps a tenth of root
@@ -32,45 +32,10 @@ on the pods gives audit's behaviour without a release.
 
 ## Wiring it with the chart
 
-The chart sets those variables on every pod of `renders: app` from one value
-block, so an installation does not hand-write them into each Deployment:
-
-```yaml
-telemetry:
-  otlp:
-    endpoint: http://<gateway>.<namespace>.svc:4318   # empty: no export, nothing rendered
-    protocol: http/protobuf                            # the default
-    extraEnv: {}                                       # any other OTEL_* variable
-```
-
-With `endpoint` set, the one pod gets
-`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, an
-`OTEL_SERVICE_NAME` of `access-issuer`, and the `extraEnv` entries. (Before v1.63 the
-controller pods reported as `github-roster` and `slack-roster`; those names are retired.) With `endpoint` empty
-the chart renders nothing and the pods export nothing
+The chart sets those variables on the pod from one value block, `telemetry.otlp` (`endpoint`, `protocol`, `extraEnv`).
+With `endpoint` empty it renders nothing and the pod exports nothing
 ([policy ADR 0006](https://github.com/truvity/policy/blob/master/docs/decisions/0006-telemetry-is-the-sdk-environment.md)).
-
-An installation on a cluster with the estate's metrics gateway, and a trace
-sampler of a tenth of root traces:
-
-```yaml
-telemetry:
-  otlp:
-    endpoint: http://otlp-gateway.observability.svc:4318
-    extraEnv:
-      OTEL_TRACES_SAMPLER: parentbased_traceidratio
-      OTEL_TRACES_SAMPLER_ARG: "0.1"
-```
-
-The estate's convention is `http://<gateway>:4318` over `http/protobuf`; the
-cluster, namespace and tier become labels at the gateway, so none is set here
-(see truvity/observability `docs/emitting.md`). The chart refuses an endpoint
-that is not an http(s) URL, an `extraEnv` name that does not start with `OTEL_`,
-and `OTEL_EXPORTER_OTLP_ENDPOINT` in `extraEnv`, which belongs in `endpoint`.
-Anything secret (`OTEL_EXPORTER_OTLP_HEADERS` with a token) is not for
-`extraEnv`, which is rendered as plain values: put it in a Secret and reach the
-pod through `secretEnv`. The `renders: alerts` and `renders: dashboards` modes
-ignore the block.
+The steps, and what the chart refuses, are in [install telemetry](../how-to/install-telemetry.md).
 
 ## Traces
 
@@ -119,6 +84,9 @@ unit as a suffix (`access_issuer.http.requests` is
 `access_issuer_http_requests_total`). Only the cluster, the namespace and the
 tier become labels from the resource; every label below is a metric attribute.
 
+<!-- generated: telemetry-metrics -->
+Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and the controllers' packages.
+
 ### The issuer
 
 | Metric | Type | Labels | What it says |
@@ -132,6 +100,7 @@ tier become labels from the resource; every label below is a metric attribute.
 | `access_issuer.signing_keys_published` | gauge | `algorithm` | Keys in the JWKS, per algorithm. Healthy is at least one. |
 | `access_issuer.signing_key.active_since_timestamp` | gauge, `s` | `algorithm` | When the active key became active (Unix seconds). |
 | `access_issuer.signing_key_transitions` | counter | `event`, `algorithm` | Keys seen, activated, retired. |
+| `access_issuer.kms_signatures` | counter | `kid`, `result` | `kms:Sign` calls of a KMS signer: `ok`, `throttled` or `error` ([signing with KMS](../how-to/sign-with-aws-kms.md)). |
 
 **Why `client_id` is a safe label.** The policy declares every client, so an
 installation has tens, not thousands, and the label cannot grow with its users.
@@ -217,6 +186,8 @@ configuration and never carries a path, a namespace or a value. An attempt is al
 span (`export`, with the target kind and the outcome). The log names the export and
 the target on every failure and never a value.
 
+<!-- /generated -->
+
 ### No workspace or organisation label on the issuer's series
 
 Nothing on the issuer's or the ports' series is labelled by workspace,
@@ -234,20 +205,25 @@ threshold is a value (`alerts.rules.<rule>`) and its reason is in the comment
 above the rule in `charts/sluis/templates/alerts.yaml`. Every
 aggregation keeps the cluster label, since one store holds many clusters.
 
+<!-- generated: telemetry-alerts -->
+Source: `charts/sluis/templates/alerts.yaml` and `alerts.rules` in `charts/sluis/values.yaml`.
+
 | Alert | Severity | Fires when | Default threshold |
 |---|---|---|---|
-| `SluisNoSigningKeyPublished` | critical | An algorithm has no published key. | `< 1` for 5m |
-| `SluisSigningKeyRotationStalled` | warning | The active key is older than a certificate's life less its renewal. | 350 days (30240000s) for 1h |
-| `SluisIssuer5xx` | critical | A share of the listener's requests is answered 5xx. | over 5% and at least 5 errors, over 10m, for 10m |
-| `SluisTokenEndpointSlow` | warning | The token endpoint's p99 is high. | over 2s, over 10m, for 15m |
-| `SluisTickFailing` | warning | One target's ticks keep failing. | 3 in 45m |
-| `SluisTickStale` | critical | A target has had no ok tick for a long while (absence). | 3600s (four default intervals), for 10m |
-| `SluisLeaseLost` | warning | Leases of one kind are lost repeatedly. | 3 in 1h |
-| `SluisGitHubRateLimitLow` | warning | GitHub's budget is nearly spent, for long. | under 100 for 30m |
-| `SluisSeatsShort` | warning | An organisation lacks the seats to invite. | `> 0` for 30m |
-| `SluisPortErrors` | critical | Storage port calls are failing. | over 5% and at least 5 errors, over 5m, for 10m |
-| `SluisExportFailing` | warning | One export's copy keeps failing. | 3 in 30m, for 15m |
-| `SluisExportStale` | warning | An export has not had its copy in the store for a long while (absence). | 10800s (three default intervals), for 10m |
+| `AccessRosterNoSigningKeyPublished` | critical | An algorithm has no published key. | `< 1` for 5m |
+| `AccessRosterSigningKeyRotationStalled` | warning | The active key is older than a certificate's life less its renewal. | 350 days (30240000s) for 1h |
+| `AccessRosterIssuer5xx` | critical | A share of the listener's requests is answered 5xx. | over 5% and at least 5 errors, over 10m, for 10m |
+| `AccessRosterTokenEndpointSlow` | warning | The token endpoint's p99 is high. | over 2s, over 10m, for 15m |
+| `AccessRosterTickFailing` | warning | One target's ticks keep failing. | 3 in 45m |
+| `AccessRosterTickStale` | critical | A target has had no ok tick for a long while (absence). | 3600s (four default intervals), for 10m |
+| `AccessRosterLeaseLost` | warning | Leases of one kind are lost repeatedly. | 3 in 1h |
+| `AccessRosterGitHubRateLimitLow` | warning | GitHub's budget is nearly spent, for long. | under 100 for 30m |
+| `AccessRosterSeatsShort` | warning | An organisation lacks the seats to invite. | `> 0` for 30m |
+| `AccessRosterPortErrors` | critical | Storage port calls are failing. | over 5% and at least 5 errors, over 5m, for 10m |
+| `AccessRosterExportFailing` | warning | One export's copy keeps failing. | 3 in 30m, for 15m |
+| `AccessRosterExportStale` | warning | An export has not had its copy in the store for a long while (absence). | 10800s (three default intervals), for 10m |
+
+<!-- /generated -->
 
 A rule whose series is absent does not fire: whether the issuer or the
 controller is running at all is the platform's alert on its own scrape, not
@@ -255,7 +231,7 @@ this chart's.
 
 ### Runbook
 
-#### SluisNoSigningKeyPublished
+#### AccessRosterNoSigningKeyPublished
 
 The issuer's key ring holds no key to publish for an algorithm, so its JWKS is
 empty: no relying party can verify a token, and a new one cannot be signed. Look
@@ -265,7 +241,7 @@ file was not read ("the active signing key changed" and "a signing key was seen"
 are the lines that say a key arrived). A rollout shows a zero for seconds; five
 minutes is not a rollout.
 
-#### SluisSigningKeyRotationStalled
+#### AccessRosterSigningKeyRotationStalled
 
 The active key has not been replaced. cert-manager replaces the certificate
 `signingKey.certificate.renewBefore` ahead of its end (720h before 8760h by
@@ -277,21 +253,21 @@ or `renewBefore`, set `maxAgeSeconds` to their difference plus two weeks; if the
 key is rotated by hand (`signingKey.existingSecret`), turn the rule off or set it
 to your cadence.
 
-#### SluisIssuer5xx
+#### AccessRosterIssuer5xx
 
 The listener answers server errors. The dashboard's 5xx panel names the route,
-the issuer's log has the error. If `SluisPortErrors` is also firing, the
+the issuer's log has the error. If `AccessRosterPortErrors` is also firing, the
 store is the cause: look there first. Otherwise a directory that cannot be
 reached (`directory_unreachable` in the sign-in failures) or a policy that does
 not load are the usual causes.
 
-#### SluisTokenEndpointSlow
+#### AccessRosterTokenEndpointSlow
 
 Token requests are slow at the 99th percentile. A token is signed in memory and
-costs one store write, so look at the port latency panel (a slow Valkey, or a
-slow API server on the namespace's objects), then the size of the policy.
+costs one store write, so look at the port latency panel (a slow DynamoDB, or a
+slow API server on the namespace's objects with the legacy store), then the size of the policy.
 
-#### SluisTickFailing
+#### AccessRosterTickFailing
 
 A controller's ticks of one target failed three times in 45 minutes. The
 controller's page in the console shows the report and the error; in the log it
@@ -300,46 +276,45 @@ uninstalled App, a revoked credential and GitHub being down are the causes. The
 console answering under another policy during a rollout is retried within
 seconds and does not reach this rule.
 
-#### SluisTickStale
+#### AccessRosterTickStale
 
 A target has completed no tick for an hour. This is the absence rule: it fires
 when the controller is not running, when nobody can take the lease, and when the
-loop hangs. Check the controller's Deployment, whether a lease is held by a
+loop hangs. Check the sluis pod (the controllers run in it, one process), whether a lease is held by a
 runner that is gone (it expires on its own after its lifetime), and the log. A
 target the policy no longer declares fires for at most a day and then leaves,
 because the last value is looked back over a day; remove it from the policy
 first.
 
-#### SluisLeaseLost
+#### AccessRosterLeaseLost
 
 A lease is lost when another runner takes it over, or it could not be renewed
 for a whole lifetime. One loss is the design working: the tick stopped before its
-next write. Repeated losses are two runners on one target (a `tick` Job beside
-the Deployment, or more than one replica where the State is not shared (the chart refuses that), see
-[high-availability.md](../how-to/high-availability.md)) or a State that cannot be reached
-to renew: see `SluisPortErrors`.
+next write. Repeated losses are two runners on one target (more than one replica where the State is not shared, which the chart
+refuses; see [high availability](../how-to/high-availability.md)) or a State that cannot be reached
+to renew: see `AccessRosterPortErrors`.
 
-#### SluisGitHubRateLimitLow
+#### AccessRosterGitHubRateLimitLow
 
 GitHub's budget for a resource has been under 100 requests for half an hour.
 `github_roster_rate_limited_total` says how often a call already waited. Lengthen
 the controller's `interval`, or look for something else spending the App's budget.
 
-#### SluisSeatsShort
+#### AccessRosterSeatsShort
 
 An organisation has fewer free seats than the invitations the policy admits. The
 controller is healthy; buy a seat or remove a member who no longer belongs and
 the next pass sends the invitations.
 
-#### SluisPortErrors
+#### AccessRosterPortErrors
 
-More than 5% of the calls to a storage port failed. State and index are Valkey or
-the namespace's ConfigMaps and Secrets; blobs are the reports' ConfigMaps.
+More than 5% of the calls to a storage port failed. State and index are DynamoDB, or the
+namespace's ConfigMaps and Secrets with the legacy store; blobs are S3, or the reports' ConfigMaps.
 `unavailable` is the store being down (check its own health and the
 NetworkPolicy to it); `error` is anything else, and the log line beside it names
 the call. Lost conflicts and missing keys are not counted.
 
-#### SluisExportFailing
+#### AccessRosterExportFailing
 
 An export's copy into OpenBao failed three times in half an hour, held for fifteen
 minutes. What a consumer reads there is stale; nothing live is affected, which is why
@@ -351,7 +326,7 @@ namespace; `unavailable` is OpenBao being down, sealed or unreachable, or its
 certificate not trusted (`ports.export.openbao.caFile`). An export that fails from the
 first attempt has no last-success series, which is why this rule exists beside the next.
 
-#### SluisExportStale
+#### AccessRosterExportStale
 
 An export has not had its copy in the store for three hours, with an interval of one.
 It catches what the failure counter cannot: the service is not running its exports
@@ -363,45 +338,8 @@ been copied and is then removed, and not before.
 
 ## Installing the modes
 
-The chart's `renders` value chooses what a release is. The default, `app`, is the
-service and the controllers exactly as before. The other two render **only** the
-named objects and validate nothing else, so a second release can carry them
-where the metrics store and Grafana look for them:
-
-```yaml
-# alerts: a VMRule (or alerts.format: prometheusrule) for the ruler
-renders: alerts
-alerts:
-  namespace: sluis        # where the service runs; its series are selected by it
-  ruleLabels:
-    k8s_cluster_name: prod        # for the Alertmanager routing tree
-```
-
-```yaml
-# dashboards: ConfigMaps for Grafana's sidecar, installed on the cluster Grafana runs on
-renders: dashboards
-dashboards:
-  namespace: monitoring
-```
-
-```sh
-helm install sluis-alerts oci://ghcr.io/truvity/charts/sluis \
-  -n monitoring -f alerts.yaml
-```
-
-`alerts.ruleLabels` is added to every rule beside its `severity`, and
-`alerts.rules.<rule>.labels` to one rule. `alerts.runbookBaseUrl` is where the
-anchors above are (empty renders no link).
-
-### The dashboard
-
-`access-roster overview - $cluster` holds to truvity/observability's dashboard
-contract: a `datasource` variable that every panel uses, a `cluster` variable
-filled by `label_values()`, a `namespace` variable, `$cluster` in the title and
-in every query, and no datasource UID written into it. Its rows: is it healthy;
-the issuer's requests, errors and latency by route; tokens, sign-ins and keys;
-the controllers' ticks and leases; the storage ports; the exports; GitHub rate limits and
-seats.
+The chart's `renders` value chooses what a release is: `app` (the default), `alerts` or `dashboards`. The last two render only
+the named objects. Installing them is [install telemetry](../how-to/install-telemetry.md).
 
 ## How it is held
 
