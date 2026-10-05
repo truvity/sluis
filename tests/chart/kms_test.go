@@ -150,7 +150,8 @@ func TestTheRotationAlertFollowsTheRotationInterval(t *testing.T) {
 	}
 	// The default rotation is 24h: 26h.
 	noRotateEvery := filepath.Join(t.TempDir(), "values.yaml")
-	if err := os.WriteFile(noRotateEvery, []byte("renders: alerts\nconfig:\n  signingKey:\n    file: null\n    kmsWrapped: {keyId: alias/k, stateSecret: s}\n"), 0o600); err != nil {
+	if err := os.WriteFile(noRotateEvery, []byte("renders: alerts\nconfig:\n  signingKey:\n    file: null\n"+
+		"    kmsWrapped: {keyId: alias/k, stateSecret: s}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := threshold("-f", noRotateEvery); got != "93600" {

@@ -232,7 +232,8 @@ func TestTheSecretsExportHonoursAnEntrysNamespace(t *testing.T) {
 		t.Errorf("kernel: %v %v", got, ok)
 	}
 	// A patch keeps the other properties.
-	if err := e.Put(ctx, port.ExportTarget{Namespace: "devel", Path: "github-runner-app/preview/truvity"}, map[string]string{"github-installation-id": "2"}, port.ExportPatch); err != nil {
+	more := map[string]string{"github-installation-id": "2"}
+	if err := e.Put(ctx, port.ExportTarget{Namespace: "devel", Path: "github-runner-app/preview/truvity"}, more, port.ExportPatch); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ = f.read("devel", "sluis/export/github-runner-app/preview/truvity"); len(got) != 3 {
