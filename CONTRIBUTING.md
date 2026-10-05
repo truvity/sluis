@@ -240,17 +240,33 @@ runs the pin locally:
   pinned library as a consumer would (the `replace` dropped, the root module
   fetched at the release tag with `GOPROXY=direct`, `go build` and `go vet`,
   `hack/build-as-consumer.sh`) before the `deploy/pulumi/vX.Y.Z` ref exists.
-  The `checkout` step keeps no credential (`persist-credentials: false`); the
-  token is in the API calls only.
+  The `checkout` step keeps no credential (`persist-credentials: false`).
+
+  **The library's ref is created with an App token, not `github.token`.** The
+  `pulumi-tag` job exchanges its GitHub identity token at the sluis issuer
+  (`ci-actions/token-exchange`, `vars.ACCESS_ROSTER_ISSUER`) for an
+  installation token of the catalogue App `truvity-ci-automation` (slug
+  `truvity-ci-automation-roster`, the App that tags the root `v*` too),
+  narrowed to this repository and `contents: write`; no key or secret is
+  involved, and the token is used in the API calls only. A tag ruleset
+  (`workflow_only_tags` in github-structure) names that App as the only bypass
+  for `deploy/pulumi/v*`, so nobody else can create, move or delete the
+  library's tag. The built-in `GITHUB_TOKEN` cannot be a ruleset bypass
+  (GitHub answers `422 Actor GitHub Actions integration must be part of the
+  ruleset source or owner organization`), which is why it is an App. The
+  issuer must grant this workflow file a token of the App for this repository
+  (`cfg/access.yaml` in gitops); without that grant the job fails at the
+  exchange, before any ref is written. Root `v*` tags stay pushed by hand,
+  signed, under the team-gated `release-tags` ruleset.
 
   **A `deploy/pulumi/vX.Y.Z` tag pushed by hand at the release commit is refused
   by design:** the job accepts an existing tag only when it is a child of the
   release commit with the pinned `go.mod`, and fails otherwise, because a tag
   that a proxy has fetched cannot be taken back. The recovery is to delete the
   wrong tag before any proxy fetches it, or, once one has, to cut the next
-  version, and to re-run the job for the right one. An owner step, not done
-  here: a tag ruleset restricting `deploy/pulumi/v*` to the release workflow
-  makes the hand-push impossible instead of refused.
+  version, and to re-run the job for the right one. With the ruleset in place a
+  hand-push is also rejected by GitHub; deleting a wrong tag then needs the
+  App's bypass too, that is an org owner changing the ruleset.
 - **No breaking patch.** Auto-release refuses to cut a patch while the
   CHANGELOG entries after the newest release contain `**Breaking:`
   (`hack/check-no-breaking-patch.sh`; the `guard` job of `auto-release.yaml`).

@@ -146,6 +146,19 @@ jobs:
   # `go vet` (hack/build-as-consumer.sh). The require on master is whatever it
   # was and never has to be bumped.
   #
+  # THE REF IS CREATED WITH AN APP TOKEN, NOT github.token. A tag ruleset
+  # reserves `deploy/pulumi/v*` for the catalogue App
+  # truvity-ci-automation (the App `auto-release.yaml` tags the root v* with;
+  # slug truvity-ci-automation-roster) as its only bypass, so nobody else can
+  # create, move or delete the library's tag. The built-in GITHUB_TOKEN cannot be
+  # a ruleset bypass (GitHub answers 422 "Actor GitHub Actions integration must
+  # be part of the ruleset source or owner organization"), hence the App. The job
+  # exchanges its own GitHub identity token at the sluis issuer for an
+  # installation token narrowed to this repository and `contents: write`: no key,
+  # no secret, nothing to rotate. `id-token: write` is what the exchange needs,
+  # and the issuer's grant must name this job's workflow file (cfg/access.yaml).
+  # The token is masked by the action and goes to the API calls only.
+  #
   # Idempotent, so that a re-run of a release does not fail on its own tag: a tag
   # that exists counts when it is that very commit (a child of the release
   # commit with the pinned go.mod). It refuses a tag that exists at anything else:
@@ -155,7 +168,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read # the checkout; the tag is written with the App token
+      id-token: write # the token exchange
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -163,12 +177,19 @@ jobs:
           # none here, and a credential left in .git/config is one more place
           # a step could read it.
           persist-credentials: false
+      - uses: truvity/ci-actions/token-exchange@de28ab4e61adb8b217c0838886cc6e4b2c71b398 # v1.9.0
+        id: app
+        with:
+          issuer: ${{ vars.ACCESS_ROSTER_ISSUER }}
+          github-app: truvity-ci-automation
+          repositories: ${{ github.event.repository.name }}
+          permissions: contents:write
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: deploy/pulumi/go.mod
       - name: tag the Pulumi library at the release commit, pinned to the release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.github-token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
