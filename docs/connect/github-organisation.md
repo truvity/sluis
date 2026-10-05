@@ -116,13 +116,14 @@ so the cluster's egress policy must allow it.
 
 ## Running the controller
 
-The controller is a second process from the same chart:
+The controller is a loop inside the one `sluis serve` process (v1.63; it was a Deployment of its own before), named in the service document:
 
 ```yaml
-controllerGithub:
-  enabled: true
-  config:
-    consoleURL: http://access-issuer.access.svc:8080/console   # this release's own Service
+config:
+  controllers:
+    github:
+      consoleURL: http://access-issuer.access.svc:8080/console   # this release's own Service
+      interval: 15m
 policy:
   controllers:
     github:
@@ -140,7 +141,7 @@ and the policy puts its account in the group that reads who holds a group:
 groups:
   all:access-roster:viewer:
     matchers:
-      - service_account: { cluster: prod, namespace: access-issuer, name: access-issuer-github-roster }
+      - service_account: { cluster: prod, namespace: access-issuer, name: access-issuer }   # the release's own ServiceAccount: the controller runs as it
 ```
 
 One group, not two. The controller used to need a `reporter` group as well,
@@ -151,10 +152,12 @@ What it does is recorded in the audit trail by the controller itself, with
 its own token, when an audit installation is connected (`audit.*`); the
 installation must map its account to the source `roster`.
 
-The account's name is `<release>-github-roster`. The chart refuses to
+The controller runs as the release's own ServiceAccount, `<release>` (v1.62's
+`<release>-github-roster` is gone: update the policy's matcher and the audit
+installation's workload map). The chart refuses to
 render the controller without an `exchange.clusters` row or a console
 mount, because either absence is a controller that can never read
-anything. `githubRoster.interval` (15 minutes) is how long between
+anything. `config.controllers.github.interval` (15 minutes) is how long between
 passes. Like the [Slack controller](slack-workspace.md#a-pass-runs-promptly-after-an-install),
 it does not wait out the interval for what an operator just did: see
 [A pass runs promptly](#a-pass-runs-promptly).

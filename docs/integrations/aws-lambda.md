@@ -1,6 +1,6 @@
 # sluis on AWS Lambda
 
-sluis runs as three AWS Lambda functions from one zip. Nothing is in a VPC: every
+sluis runs as ONE AWS Lambda function from one zip. Nothing is in a VPC: every
 dependency (DynamoDB, S3, KMS, SSM, SQS, Lambda) is an AWS API the function reaches
 over its role, and the only inbound path is an API Gateway HTTP API.
 
@@ -8,48 +8,50 @@ The Kubernetes build is unchanged and stays what kernel and hive run where they 
 it. This page is the other platform
 ([decision 0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)).
 
-## One binary, one zip, three functions
+## One binary, one zip, one function
 
 The release attaches `sluis-lambda_<version>_linux_arm64.zip`. It holds one file,
 `bootstrap`, at the zip root: an arm64 Linux binary for the `provided.al2023` runtime.
 It is about 50 MB, and the zip about 14 MB (for reference, the Kubernetes binary is
-about 80 MB). The same zip is deployed as three functions, and the environment
-variable `SLUIS_ROLE` chooses what each one is:
+about 80 MB). The zip is deployed as ONE function (v1.63;
+[decision 0037](../decisions/0037-one-process-everywhere.md)), and the function takes
+four kinds of event:
 
-| Function | `SLUIS_ROLE` | What it runs | Invoked by |
-|---|---|---|---|
-| `http` | `http` | The issuer and the console: the same `net/http` mux the Kubernetes server serves | API Gateway HTTP API, payload format 2.0 |
-| `github` | `github` | The GitHub roster controller: ONE pass for ONE organisation | EventBridge Scheduler, and an async invoke from `http` |
-| `slack` | `slack` | The Slack roster controller: ONE pass for ONE workspace | EventBridge Scheduler, and an async invoke from `http` |
+| Event | What it runs | Sent by |
+|---|---|---|
+| An API Gateway HTTP API event, payload format 2.0 | The issuer and the console: the same `net/http` mux the Kubernetes server serves | API Gateway |
+| `{"kind":"tick"\|"run","target":"<id>"}` | ONE pass of ONE target, run by the controller the policy says the target belongs to (the GitHub controller's organisations and `github:links`, the Slack controller's workspaces) | EventBridge Scheduler (`tick`), and an async invoke from the console (`run`) |
+| `{"kind":"exports"}` | Every declared export, once | EventBridge Scheduler |
+| `{"kind":"refresh"}` | One directory refresh | EventBridge Scheduler |
 
-The binary reads `SLUIS_ROLE` once, at cold start. A missing or unknown role stops the
-start (an Init error in the platform's terms) and the log line says which.
+The controllers do not loop on Lambda: each pass is assembled for its invocation, as
+before. `SLUIS_ROLE` is retired: a function that still sets it is refused at cold
+start, and the log line says why. The function's timeout is 300 s by default (API
+Gateway still cuts a request at 30 s) and its memory is one setting (512 MB); a
+controller pass shares both with the issuer.
 
 The zip is the release, **byte for byte**: the Pulumi library deploys the file it
 was given, after checking its SHA-256 (`PackageSHA256`, from the release's
 checksums), so an installation can show that the code that runs is the code that
-was released. What makes the three functions an installation's is not in the
+was released. What makes the function an installation's is not in the
 zip but in a configuration layer ([below](#configuration-is-a-layer)).
 
 ```mermaid
 flowchart LR
-    GW[API Gateway HTTP API] -->|payload 2.0| H[http function]
-    SCH[EventBridge Scheduler<br/>one schedule per target] -->|tick| G[github function]
-    SCH -->|tick| S[slack function]
-    H -->|async invoke: run| G
-    H -->|async invoke: run| S
-    H & G & S --> D[(DynamoDB<br/>state, sessions, leases)]
-    H & G & S --> B[(S3 blobs)]
-    H -->|kms:Sign| K[KMS]
-    H -->|secrets, at cold start and every 5m| P[SSM Parameter Store]
-    G & S -->|credentials| P
-    L[config layer<br/>/opt/sluis] -.->|read at start| H & G & S
-    H & G & S -->|emit| Q[SQS audit]
+    GW[API Gateway HTTP API] -->|payload 2.0| F[the function]
+    SCH[EventBridge Scheduler<br/>one schedule per target] -->|tick, exports, refresh| F
+    F -->|async invoke: run| F
+    F --> D[(DynamoDB<br/>state, sessions, leases)]
+    F --> B[(S3 blobs)]
+    F -->|kms:Sign| K[KMS]
+    F -->|secrets, credentials| P[SSM Parameter Store]
+    L[config layer<br/>/opt/sluis] -.->|read at start| F
+    F -->|emit| Q[SQS audit]
 ```
 
 ## Events
 
-**`http`** receives an API Gateway HTTP API event, payload format 2.0 (a REST API or an
+**An API Gateway event** is an API Gateway HTTP API event, payload format 2.0 (a REST API or an
 ALB sends another shape and is refused). The function turns it into an `http.Request`
 and runs the handler:
 
@@ -65,7 +67,7 @@ requires: it drops a header of that name. A body that is not UTF-8 text, or has 
 500, a request that cannot be read 400, and a response over the platform's 6 MB limit
 502 with a log line that says why.
 
-**`github` and `slack`** receive one of two JSON events, which run the same pass:
+**A controller pass** is asked for by one of two JSON events, which run the same pass:
 
 ```json
 {"kind":"tick","target":"<id>"}
@@ -73,9 +75,9 @@ requires: it drops a header of that name. A body that is not UTF-8 text, or has 
 ```
 
 `tick` is what an EventBridge Scheduler schedule sends, one schedule per target.
-`run` is "run a pass now": the `http` function sends it with an asynchronous invoke
+`run` is "run a pass now": the function sends it to itself with an asynchronous invoke
 when a console write concerns the target. A target is a GitHub organisation's login
-(or `github:links`, the link check) for `github`, and a workspace's key for `slack`.
+(or `github:links`, the link check) for the GitHub controller, and a workspace's key for the Slack controller.
 
 Each invocation assembles the controller, runs ONE pass of the target under the
 target's lease in DynamoDB, closes it (which flushes the audit queue) and returns:
@@ -88,10 +90,10 @@ target's lease in DynamoDB, closes it (which flushes the audit queue) and return
 |---|---|
 | `ran` | The pass ran to its end. |
 | `contended` | Another invocation holds the target's lease. This one ends cleanly: it returns success, so the platform does not retry it or count an error. The other invocation's pass is the one that counts. |
-| `unknown` | A `run` for a target this controller does not run. Only a `run`: see below. |
+| `unknown` | A `run` for a target the policy does not declare. Only a `run`: see below. |
 
 A failed pass returns an error, which the scheduler's retry policy sees. A `tick` for
-a target the controller does not run is also an error: a schedule that names nobody's
+a target no controller runs is also an error: a schedule that names nobody's
 target is a mistake to see. A `run` is a hint, and the one for an unknown target ends
 cleanly as `unknown`.
 
@@ -101,8 +103,8 @@ both run. The controller refuses to run its pass when the State is not shared, s
 function that was configured with `memory` fails at its first event and not by
 acting twice.
 
-**`http` also receives `{"kind":"exports"}`**, from an EventBridge Scheduler
-schedule (15 minutes, on the `sluis-http` function; the infrastructure library's default). The
+**The function also receives `{"kind":"exports"}`**, from an EventBridge Scheduler
+schedule (15 minutes; the infrastructure library's default). The
 Kubernetes process keeps the exports current with a loop that also watches the
 sources; a function has neither, so each invocation makes every declared export
 once (the secrets under `/sluis/<instance>/export/...` and the other targets of the policy document's `exports`),
@@ -118,27 +120,27 @@ invocation's. `outcome` is `none` when the deployment declares no export. If any
 export could not be made the invocation FAILS, so the schedule's retry and an
 alarm on the function's errors see a copy that is going stale. A change to a
 source is picked up at the next schedule, up to one interval later. Any other
-`kind` on `http` is refused.
+`kind` is refused.
 
 ### Run now
 
-The `http` function's console notifies the `trigger` port when a write concerns a
-target. On Lambda that port is the `invoke` adapter: `Notify` is an asynchronous
-invoke (`InvocationType: Event`) of the controller function with
+The console notifies the `trigger` port when a write concerns a target. On Lambda
+that port is the `invoke` adapter: `Notify` is an asynchronous invoke
+(`InvocationType: Event`) of the function itself with
 `{"kind":"run","target":"<id>"}`, and returns as soon as the platform queues it.
-`Subscribe` is unused, since the platform starts the function. The adapter is told
-which kind a target is by the policy that declares it (a declared Slack workspace is
-`slack`, a bound GitHub organisation is `github`), so one function is invoked. A target
-the policy does not declare invokes both, and the one that does not run it ends
+`Subscribe` is unused, since the platform starts the function. Both `github` and
+`slack` settings of the adapter name this one function, and the Pulumi library
+writes them. The function runs the pass under the controller the policy says the
+target belongs to (a declared Slack workspace is `slack`, a bound GitHub
+organisation is `github`); a `run` of a target the policy does not declare ends
 as `unknown`.
 
 ## Environment
 
 | Variable | Function | Meaning |
 |---|---|---|
-| `SLUIS_ROLE` | all | `http`, `github` or `slack`. Required. |
-| `SLUIS_CONFIG` | all | The function's service document: `/opt/sluis/<role>.yaml` in the configuration layer. The library sets it. |
-| `OTEL_*` | all | OpenTelemetry's own, as on Kubernetes. The telemetry layer sets the endpoint. |
+| `SLUIS_CONFIG` | the function | The service document: `/opt/sluis/sluis.yaml` in the configuration layer. The library sets it. |
+| `OTEL_*` | the function | OpenTelemetry's own, as on Kubernetes. The telemetry layer sets the endpoint. |
 
 That is the whole environment: there is no other variable and no flag, and no
 secret, since a document names its secrets and does not hold them. A retired
@@ -154,62 +156,60 @@ run-now functions' names are in the document, not in the environment
 
 The installation's configuration is **not** in the zip. It is one immutable
 Lambda layer, `<prefix>-config` (`provided.al2023`, arm64), which the library
-publishes from the four documents and mounts **last** in each function's layer
+publishes from the two documents and mounts **last** in the function's layer
 list, so nothing the telemetry layer or another brings can shadow it. Lambda
 extracts a layer under `/opt`, and this one holds `sluis/`:
 
 ```text
-/opt/sluis/http.yaml     the http function's document (a `serve` document, v2)
-/opt/sluis/github.yaml   the github function's document (a `controller-github` document, v2)
-/opt/sluis/slack.yaml    the slack function's document (a `controller-slack` document, v2)
-/opt/sluis/policy.yaml   the policy document every function's `policy.file` names
+/opt/sluis/sluis.yaml    the service document (`sluis/v3`, controllers included)
+/opt/sluis/policy.yaml   the policy document `policy.file` names
 ```
 
-A function's `SLUIS_CONFIG` names its own document, and `policy.file` in each
-names `/opt/sluis/policy.yaml`. The documents are the same ones the Kubernetes
-build reads ([configuration](../reference/configuration.md#the-configuration-file)),
-each validated against its schema at cold start, before the function takes an
-event.
+`SLUIS_CONFIG` names the service document, and `policy.file` in it names
+`/opt/sluis/policy.yaml`. The service document is the one the Kubernetes build
+reads ([configuration](../reference/configuration.md#the-service-document-sluisyaml)),
+validated against its schema at cold start, before the function takes an event.
 
 Configuration and policy are **immutable for an instance**
 ([0036](../decisions/0036-configuration-is-immutable-per-instance.md)): a change
-publishes a new layer version and updates the functions, and AWS replaces every
+publishes a new layer version and updates the function, and AWS replaces every
 instance at once. There are no aliases and no canary: the function stays on
-`$LATEST`. Old layer versions are kept, so a rollback is pointing a function at the
+`$LATEST`. Old layer versions are kept, so a rollback is pointing the function at the
 previous one. A policy change is a manual `pulumi up`; nothing deploys it on merge.
 
 The library holds each document to sluis's own loader (`config.Load`) **before it
 publishes anything**, since a layer outlives the deploy that made it, so a
-document the binary would refuse is refused there. Into the documents it writes
-what is its own, and refuses a document that says otherwise, naming the key:
+document the binary would refuse is refused there. Into the service document it
+writes what is its own, and refuses a document that says otherwise, naming the key:
 
-- every document: `apiVersion` and `policy.file`;
-- the http document: `secrets` (`{source: ssm, root: /sluis/<instance>, region}`),
+- `apiVersion` and `policy.file`;
+- `secrets` (`{source: ssm, root: /sluis/<instance>, region}`),
   `recovery.passwordSecret`, `recovery.enabled` (from `Recovery`) and the state
-  secret's name under `signingKey.kms` or `signingKey.kmsWrapped`.
+  secret's name under `signingKey.kms` or `signingKey.kmsWrapped`;
+- with the `invoke` trigger, `adapters.trigger.settings.github` and `.slack`: this
+  function.
 
 The policy is `Policy` (a document) or `PolicyPath` (a file or a directory of
 layers, rendered by sluis's own renderer, the one `sluisctl policy render` runs).
-The three service documents are `Config`, `GitHubConfig` and `SlackConfig`.
+The service document is `Config`.
 
 On Lambda a document selects its adapters by name per concern
 ([ports](../design/ports.md)):
 
 ```yaml
-# /opt/sluis/http.yaml (the http function)
-apiVersion: sluis.truvity.github.io/serve/v2
+# /opt/sluis/sluis.yaml
+apiVersion: sluis.truvity.github.io/sluis/v3
 platform: { aws: true, runtime: lambda }   # or: preset: aws-serverless
 adapters:
   state:   { adapter: dynamodb, settings: { table: sluis } }
   blobs:   { adapter: s3,       settings: { bucket: sluis-blobs, prefix: blobs/ } }
-  trigger: { adapter: invoke,   settings: { github: sluis-github, slack: sluis-slack } }
+  trigger: { adapter: invoke,   settings: { github: sluis, slack: sluis } }
 ```
 
-`legacy` is refused on the Lambda runtime. The controllers' documents take the
-same `platform`, `preset` and `adapters` keys as the service's, so that all three
-functions resolve the same table: the state (and so the leases), the blobs and the
-audit sink. The audit adapter is `sqs` (`adapters.audit.settings.queueURL`); on Lambda
-each record is sent before the call that made it returns, and every function flushes
+`legacy` is refused on the Lambda runtime. The controllers share the document's
+`platform`, `preset` and `adapters`, so the issuer and both controllers resolve the
+same table: the state (and so the leases), the blobs and the audit sink. The audit adapter is `sqs` (`adapters.audit.settings.queueURL`); on Lambda
+each record is sent before the call that made it returns, and the function flushes
 what is still queued before its invocation returns, since the platform freezes the
 process afterwards (a controller does it by closing, which delivers its queue).
 
@@ -231,7 +231,7 @@ put the root's parameters under another tree, and the root is refused at start.
 
 A document names its secrets and holds none of them: `signingKey.kmsWrapped.stateSecret:
 issuer/state-secret`, `recovery.passwordSecret: recovery/password`,
-`oauthClient.provider`, a declared workspace's `keySecret`. The http document's
+`oauthClient.provider`, a declared workspace's `keySecret`. The document's
 `secrets` (`source: ssm`, which the library writes) delivers each name from the
 SecureString `/sluis/<instance>/private/config/<name>`: at cold start the function
 reads **every parameter under that prefix at once**, decrypted and paged, and again
@@ -242,7 +242,7 @@ the path and never a value. The names are listed in
 
 The library generates the two that are its own, in the paths above:
 
-- `config/issuer/state-secret`: base64 of 32 random bytes, read by the http function;
+- `config/issuer/state-secret`: base64 of 32 random bytes, read by the function;
 - `config/recovery/password`: 40 random letters and digits with no look-alikes, which
   an operator reads with `aws ssm get-parameter --with-decryption`
   ([Recovery on Lambda](../operations/recovery-on-lambda.md)).
@@ -254,47 +254,46 @@ instead of reporting a conflict. What an operator seeds (a Google OAuth client's
 `clients/<id>/secret`) is `put-parameter` as a SecureString under
 `/sluis/<instance>/private/config/`.
 
-## IAM: one role per function
+## IAM: one role
 
-Each function has its own role (decision D5a), only `http` can sign a token, and
-every SSM grant is under `/sluis/<instance>/`:
+The function has ONE role, named `<FunctionName>` (decision
+[0037](../decisions/0037-one-process-everywhere.md)): the issuer's permissions and
+the controllers' in one policy. **The controllers' code runs with the issuer's
+permissions**, so the per-role isolation of v1.62 (a controller role could not read
+`private/config` or sign) is gone by decision. Every SSM grant is still under
+`/sluis/<instance>/`:
 
-| Permission | `http` | `github` | `slack` |
-|---|:-:|:-:|:-:|
-| `kms:Sign`, `kms:GetPublicKey` on the token-signing key (remote signing), or `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the symmetric key under the context `purpose=sluis-signing` (`kms-wrapped`) | yes | no | no |
-| `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table | yes | yes | yes |
-| `s3:GetObject`, `PutObject`, `DeleteObject`, `ListBucket` on the blob bucket and prefix | yes | yes | yes |
-| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` on `<root>/private/credentials/*` and `<root>/export/*`, for the secrets adapter (`ssm`) that keeps the service's credentials and exports | yes | yes | yes |
-| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` on `<root>/private/config/*`: the secrets its document names, read by path, never written | yes | **denied** | **denied** |
-| `kms:Decrypt` through SSM on the key encrypting the parameters, when a customer key is set | yes | yes | yes |
-| `sqs:SendMessage` on the audit queue | yes | yes | yes |
-| `lambda:InvokeFunction` on the `github` and `slack` functions | yes | no | no |
-| `sts:GetWebIdentityToken` (the controller's proof to the console, see below) | no | yes | yes |
-| `logs:*` as usual | yes | yes | yes |
+| Permission | The role |
+|---|:-:|
+| `kms:Sign`, `kms:GetPublicKey` on the token-signing key (remote signing), or `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the symmetric key under the context `purpose=sluis-signing` (`kms-wrapped`) | yes |
+| `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table | yes |
+| `s3:GetObject`, `PutObject`, `DeleteObject`, `ListBucket` on the blob bucket and prefix | yes |
+| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` on `<root>/private/credentials/*` and `<root>/export/*`, for the secrets adapter (`ssm`) that keeps the service's credentials and exports | yes |
+| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` on `<root>/private/config/*`: the secrets the document names, read by path, never written | yes |
+| `kms:Decrypt` through SSM on the key encrypting the parameters, when a customer key is set | yes |
+| `sqs:SendMessage` on the audit queue | yes |
+| `lambda:InvokeFunction` on the function itself (run now) | yes |
+| `sts:GetWebIdentityToken` (the controllers' proof to the console, see below), held to `WebIdentityAudience` | yes |
+| `logs:*` as usual | yes |
 
-`<root>` is `/sluis/<instance>`. A controller reads and writes its credentials and
-nothing of `private/config`: the recovery password, the state secret, the OAuth
-client and the declared clients are the http function's, and an explicit Deny on
-`<root>/private/config`, which wins over any Allow, keeps a leaked controller role
-from reading, replacing or deleting them. (The v1.61 library allowed a controller `/sluis/private/*`, which let
-`GetParametersByPath` reach `config/*` past its Deny; the v1.62 library grants
-only `private/credentials` and `export`, and a test asserts that no controller
-Allow names a parent of `private/config`.) Every grant ends at the instance, so a
-second installation in the account is out of reach of the first.
+`<root>` is `/sluis/<instance>`. There are no explicit denials: the keyring is
+writable by the one role. Every grant ends at the instance, so a second
+installation in the account is out of reach of the first, and the IAM test holds
+that no grant has a `*` but a trailing `/*`.
 
 A consumer of the exports (an External Secrets Operator role) attaches
 `ExportReadPolicy(region, account, instance, key)`, which reads `<root>/export/*`
-and nothing else. EventBridge Scheduler needs its own role, with
-`lambda:InvokeFunction` on the function it schedules.
+and nothing else. EventBridge Scheduler needs its own role, which the library makes,
+with `lambda:InvokeFunction` on the one function and nothing else.
 
 ## How a controller authenticates to the console
 
 A controller reads the console's API (who holds a group, the organisations'
-credentials) as a workload. In a cluster that is its projected ServiceAccount
+credentials) as a workload. In a cluster that is the pod's projected ServiceAccount
 token. On Lambda it is the function role's **outbound web identity token**: the
 controller calls `sts:GetWebIdentityToken` for the console's own audience (see below),
 presents the token as the bearer of every call, and reuses it for under four
-minutes (a warm execution environment reuses it across invocations). The `http`
+minutes (a warm execution environment reuses it across invocations). The same
 function's issuer verifies it against the account's published key set, with the
 same per-account verifiers token exchange uses, and takes the role as the caller.
 
@@ -312,14 +311,14 @@ token minted for one is no proof at the other:
 | Door | Audience | Set in |
 |---|---|---|
 | Token exchange (`/token`) | `exchange.aws.audience` of the policy document | the policy document |
-| The console's API (a controller's bearer) | `console.awsAudience`, default `<issuerURL>/console` | the `http` document |
+| The console's API (a controller's bearer) | `console.awsAudience`, default `<issuerURL>/console` | the service document |
 
-The controllers request the console audience: `console.auth.aws.audience` in the
-`github` and `slack` documents must equal the issuer's `console.awsAudience`.
+The controllers request the console audience: `controllers.github.console.auth.aws.audience` and
+`controllers.slack.console.auth.aws.audience` must equal the issuer's `console.awsAudience`.
 The issuer refuses to start with the same value for both doors.
 
 ```yaml
-# the http document
+# the service document
 console:
   awsAudience: https://sluis.example/console   # optional: this is the default
 ```
@@ -333,16 +332,23 @@ exchange:
 ```
 
 ```yaml
-# the github and slack documents
-console:
-  auth:
-    aws:
-      audience: https://sluis.example/console  # = the issuer's console.awsAudience
+# the service document, controllers section
+controllers:
+  github:
+    console:
+      auth:
+        aws:
+          audience: https://sluis.example/console  # = the issuer's console.awsAudience
+  slack:
+    console:
+      auth:
+        aws:
+          audience: https://sluis.example/console
 ```
 
 Absent, the controller reads `tokenFile`, as on Kubernetes. Three things must agree:
 
-1. **IAM.** The `github` and `slack` roles are allowed `sts:GetWebIdentityToken`
+1. **IAM.** The function's role is allowed `sts:GetWebIdentityToken`
    (the account has outbound identity federation enabled), and the permission can be
    held to the console audience with the condition key
    `sts:IdentityTokenAudience`:
@@ -352,21 +358,20 @@ Absent, the controller reads `tokenFile`, as on Kubernetes. Three things must ag
     "Condition":{"ForAnyValue:StringEquals":{"sts:IdentityTokenAudience":"https://sluis.example/console"}}}
    ```
 
-   So a controller role can mint a console bearer and nothing for token exchange.
+   So the role can mint a console bearer and nothing for token exchange.
    Only a role that is meant to exchange gets the exchange audience.
 2. **The issuer.** The policy document's `exchange.aws.accounts` lists the account
    (`issuer` from `aws iam get-outbound-web-identity-federation-info`). The console
    door uses the same accounts with `console.awsAudience`.
 3. **The policy.** The role is entitled to what the policy's `aws` matchers say,
-   and to nothing without one. Declare the controllers as viewers (enough to read
-   who holds a group):
+   and to nothing without one. Declare the function's role as a viewer (enough to read
+   who holds a group); it is the role that was `sluis-github` and `sluis-slack`:
 
 ```yaml
 groups:
   all:sluis:viewer:
     matchers:
-      - aws: { account: "111122223333", role: sluis-github }
-      - aws: { account: "111122223333", role: sluis-slack }
+      - aws: { account: "111122223333", role: sluis }   # <FunctionName>
 ```
 
 A role the policy does not name is nobody at the console, however well its token
@@ -377,14 +382,45 @@ the role unless that is meant.
 
 ## Version coupling
 
-The binary and the Pulumi library move together. A binary of 1.62 refuses the v1.61
+The binary and the Pulumi library move together. A binary of 1.63 refuses `SLUIS_ROLE` (and a v2 `controller` document is not a function's), and a binary of 1.62 refuses the v1.61
 library's environment (`SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES`, `ssm:` values) and
 will not start on a function deployed that way; the library refuses a package older
 than its own minor (read from `sluis-lambda_<version>_linux_<arch>.zip`, or from
-`PackageVersion`), because an older binary cannot read the configuration layer. So a
-function is on binary 1.62 **and** library 1.62, never one without the other, and the
+`PackageVersion`; `MinPackageVersion` is 1.63), because an older binary cannot read the configuration layer. So a
+function is on binary 1.63 **and** library 1.63, never one without the other, and the
 library's module (`deploy/pulumi`, which requires the root module at the same
 version) is pinned to the same release.
+
+## Moving a v1.62 installation to v1.63 (one function)
+
+Bump the binary and the library together, in one apply. No data moves: SSM,
+DynamoDB and S3 are unchanged.
+
+1. **Merge the three documents into one `sluis/v3` document** (`Config`). The
+   `serve` document's keys stay where they are; the controllers' `consoleURL`,
+   `console.auth.aws.audience` and `interval` go under `controllers.github` and
+   `controllers.slack`. `ports`, `adapters`, `audit` and `secrets` are the one
+   document's, and the controllers' copies are dropped. Remove `GitHubConfig`,
+   `SlackConfig`, `HTTP`, `GitHub`, `Slack` and `Exports.Function` from `LambdaArgs`; set
+   `Function` (`MemoryMB`, `TimeoutSeconds`) if the defaults do not fit.
+2. **Keep the function in place: `FunctionName: "<prefix>-http"`.** The function, role,
+   policy, log group and API integration then keep their identities and nothing is
+   replaced. At the default (`sluis`) they are replaced under the new name, the new
+   created before the old are deleted, and the old log group's events go with it.
+3. **Admit the one role in the policy and the audit installation.** The policy's
+   `aws` matchers (the controllers' viewer group above) and the audit installation's
+   `workloadIdentity` map name the role that is now the function's
+   (`<FunctionName>`), where they named `<prefix>-github` and `<prefix>-slack`.
+   Add the new matcher in a policy change that ships first, so the function is
+   admitted the moment it runs.
+4. **Apply.** The library destroys the `<prefix>-github` and `<prefix>-slack`
+   functions, roles, policies, log groups and invoke configs; the schedules keep
+   their names and now point at the one function. Delete nothing by hand.
+5. **Check.** `aws lambda list-functions` shows one function of the instance;
+   a `{"kind":"tick","target":"<org>"}` test invoke returns `"outcome":"ran"`;
+   a dashboard that selected `service_name` `github-roster` or `slack-roster` now selects `access-issuer`.
+
+The Pulumi library's entry is in [deployment on AWS](../deployment/aws.md).
 
 ## Moving an installation to v1.62
 
@@ -471,7 +507,7 @@ stop and look. Prefer the first.
   does. The Kubernetes process also refreshes it on a timer; a function has no process
   between invocations to keep one in, and a refresh a request started is finished
   before the response is returned to the platform.
-- `http` is one assembled service per execution environment, kept across
+- The service (issuer and console) is assembled once per execution environment, kept across
   invocations. A controller is assembled per invocation, as `sluis tick` does.
 - The exports' runner, a background loop, is not started: the `exports` event makes the copies on a schedule instead.
 

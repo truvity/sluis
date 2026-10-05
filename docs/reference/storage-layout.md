@@ -202,5 +202,5 @@ source (an export's `properties` map may rename them):
 | `bundle` | one property per entry of the bundle (disaster-recovery copies; an SSM parameter holds at most 8 KiB, so a large bundle is refused: send bundles to OpenBao) |
 
 An identical export writes nothing, so SSM makes no new version. The `exports`
-event of the `sluis-http` function (`{"kind":"exports"}`) writes them on a
+event of the one Lambda function (`{"kind":"exports"}`) writes them on a
 schedule.

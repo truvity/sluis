@@ -214,15 +214,17 @@ when I retried" as a fluke.
 
 ## The controllers: how they roll, and when a second replica is safe
 
-`controllerGithub` and `controllerSlack` each run one pod by default, rolled by
-`RollingUpdate` with `maxUnavailable: 0` and `maxSurge: 1`: the new pod starts
-beside the old one, and the old one is removed only when the new one is Ready.
-Ready means the process finished starting (the policy loaded, the stores open,
+Since v1.63 the GitHub and Slack controllers run inside the one `sluis serve` process, so
+the Deployment `<release>` carries them: it runs its `replicaCount` pods, rolled by
+Kubernetes' default `RollingUpdate`: a new pod starts beside the old ones, and an old one
+is removed only when the new one is Ready.
+Ready means the whole process, each controller included, finished starting (the policy loaded, the stores open,
 the audit catalogue accepted; `/readyz` on `probes.address`, default `:7070`).
-A release whose pods crash at start therefore leaves the running controller
-alone. Before 2026-10-04 the chart used `Recreate` and no probe, which
+A release whose pods crash at start therefore leaves the running pods
+alone. A controller in the process runs in every replica, so **`replicaCount` above 1
+with a controller is refused at render unless `config.ports.adapter` is `dynamodb`.** (Before 2026-10-04 the controllers' Deployments used `Recreate` and no probe, which
 deleted the old pod first: see
-[a controller release that crash-loops](runbook.md#a-controller-release-that-crash-loops).
+[a controller release that crash-loops](runbook.md#a-controller-release-that-crash-loops).)
 
 Each target (an organisation, a workspace, the GitHub link check) is ticked under
 a lease taken from the State port
@@ -231,10 +233,10 @@ one replica only one acts on a target at a time and the others skip it. **A leas
 keeps another pod off only when the State is shared**, and that is the whole
 condition for a second replica:
 
-| `ports.adapter` | Leases | `replicas` above 1 |
+| `ports.adapter` | Leases | `replicaCount` above 1 |
 |---|---|---|
-| `dynamodb` | in the shared State: one holder per target across every pod | safe, and the chart renders a `PodDisruptionBudget` |
-| `legacy` (the default), `memory` | in each pod's own memory (a controller is configured with no Valkey) | **refused at render**: every replica would act on every target, and make each change twice |
+| `dynamodb` | in the shared State: one holder per target across every pod | safe |
+| `legacy` (the default), `memory` | in each pod's own memory (a controller is configured with no Valkey) | **refused at render** with a controller named: every replica would act on every target, and make each change twice |
 
 With more than one replica the evidence is these, in the code:
 
@@ -271,13 +273,12 @@ With more than one replica the evidence is these, in the code:
   audit catalogue at start, which is a registration of what is already there. The Slack Connect
   hand-off and the Slack member cache are on the State port with these adapters.
 
-`strategy` is the operator's. With the `legacy` adapter the new pod's first pass
+With the `legacy` adapter the new pod's first pass
 can overlap the old pod's last for the few seconds until the old pod is removed,
 and the leases are in each pod's memory, so the two do not exclude each other
 for that time (a duplicate invitation, which GitHub or Slack answers with an
-error that reads as a failure). `strategy: {type: Recreate}` restores the old
-behaviour (no overlap, and the gap), and the chart refuses `Recreate` with more
-than one replica.
+error that reads as a failure). The chart sets no `strategy`; a post-renderer can set
+`Recreate` for no overlap, at the cost of the gap.
 
 `sluis tick <github|slack> <target> --config <file>` runs one target's tick once
 under its lease, for an operator. With the `legacy` adapter it refuses to run
@@ -298,9 +299,8 @@ team.
 
 **The chart renders no PodDisruptionBudget for the service, and no pod
 anti-affinity or topology-spread rule** (checked against
-`charts/sluis/templates/`). The controllers are the exception: with `replicas`
-above 1 the chart renders one `PodDisruptionBudget` for each
-(`controller-pdb.yaml`, `podDisruptionBudget.minAvailable`, default 1). An
+`charts/sluis/templates/`); the controllers' PodDisruptionBudgets went with their
+Deployments in v1.63. An
 installation that wants the service's replicas
 kept off the same node, or wants to guarantee at least one stays up
 through a voluntary disruption (a node drain, a cluster upgrade), adds
@@ -340,11 +340,8 @@ outside the process; `readinessProbe` calls `/readyz`, follows Valkey
 would fire first (`timeoutSeconds: 3` against the service's own 2-second
 check; `failureThreshold: 3` at `periodSeconds: 10`, so a replica leaves
 rotation within thirty seconds of real trouble, comfortably longer than a
-reconnect takes). The controllers carry probes of their own (`/healthz` and
-`/readyz` on their `probes.address`): liveness follows nothing, and readiness
-opens once the process has finished starting, with `periodSeconds: 5` and
-`minReadySeconds: 10` so a pod that listens and then fails does not retire the
-old one.
+reconnect takes). Since v1.63 `/readyz` also means that each controller the
+document names has begun, and a controller that fails to start stops the process.
 
 ## Upgrades
 

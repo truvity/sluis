@@ -8,10 +8,12 @@ calls the constructors and renders the processes' configuration from the same
 names.
 
 **Lambda is the main path** (decision of 2026-10-04: Truvity and hive both run
-sluis on AWS Lambda). `NewLambda` is the whole of it: three functions, a role
-each, the HTTP API with a mutual-TLS custom domain, the signing key and the
+sluis on AWS Lambda). `NewLambda` is the whole of it: ONE function, one role,
+the HTTP API with a mutual-TLS custom domain, the signing key and the
 schedules. `NewKubernetesIdentity` (EKS Pod Identity) is kept for an installation
-that still runs the Deployments, and is not extended.
+that still runs the Deployment, and is not extended. Since v1.63 sluis is one process
+everywhere ([decision 0037](../decisions/0037-one-process-everywhere.md)): one
+function, one role, and on Kubernetes one Deployment, one ServiceAccount, one role.
 
 **Nothing here is deployed by this repository.** The library is tested against
 Pulumi's mocks (`just pulumi-test`): it declares the right resources with the
@@ -28,8 +30,8 @@ State on NATS simply omits the table:
 |---|---|---|
 | `NewStorage` | `sluis:aws:Storage` | the blob bucket |
 | `NewState` | `sluis:aws:State` | the DynamoDB table of the DynamoDB adapter |
-| `NewLambda` | `sluis:aws:Lambda` | the three functions, their roles, the API, the signing key, the schedules |
-| `NewKubernetesIdentity` | `sluis:aws:KubernetesIdentity` | one EKS Pod Identity role per process (not the main path) |
+| `NewLambda` | `sluis:aws:Lambda` | the function, its role, the API, the signing key, the schedules |
+| `NewKubernetesIdentity` | `sluis:aws:KubernetesIdentity` | the one EKS Pod Identity role of the one pod (not the main path) |
 
 and `RenderPorts` (`RenderPortsYAML`), which renders the `ports:` block.
 [The Lambda section](#lambda) has the Lambda stack; the example below is the
@@ -46,9 +48,7 @@ ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "kernel", &sluispulumi.Kubernet
 	ClusterName: "kernel", ClusterArn: clusterArn, AccountID: accountID,
 	Namespace:              "sluis",
 	PermissionsBoundaryArn: boundaryArn,
-	Serve:                  sluispulumi.ProcessArgs{ServiceAccount: "sluis"},
-	GitHub:                 sluispulumi.ProcessArgs{ServiceAccount: "sluis-github"},
-	Slack:                  sluispulumi.ProcessArgs{ServiceAccount: "sluis-slack"},
+	ServiceAccount:         "sluis",
 	Storage:                store.Grant(),
 	State:                  state.Grant(),
 }, pulumi.Providers(awsProvider))
@@ -122,8 +122,11 @@ secondary index: the adapter's Index is items of the same table.
 
 ## Kubernetes identity
 
-One EKS Pod Identity role per process, so that a grant for one is never a grant
-for another.
+ONE EKS Pod Identity role, for the one pod: the service and the GitHub and Slack
+controllers run in one process, in one Deployment, as one ServiceAccount (v1.63,
+[decision 0037](../decisions/0037-one-process-everywhere.md)). The per-process roles
+of v1.62 are gone, and with them the isolation between the issuer and a controller:
+the controllers' code runs with the issuer's permissions.
 
 ### Inputs (`KubernetesIdentityArgs`)
 
@@ -132,39 +135,41 @@ for another.
 | `ClusterName` | required | The EKS cluster the associations are made in. |
 | `ClusterArn`, `AccountID` | required | Pin each trust policy to the cluster: the source ARN and the source account EKS stamps on every assume. |
 | `Region` | provider's | Set on each association. |
-| `Namespace` | required | The namespace of the three ServiceAccounts. |
-| `PermissionsBoundaryArn` | none | The boundary of every role. The estate's rule is that a role has one (gitops uses `pb@default`). |
-| `RoleNamePrefix` | the component's name | Roles are `<prefix>-sluis-serve`, `<prefix>-sluis-github` and `<prefix>-sluis-slack`; each role's managed policy has the role's name. |
-| `Serve`, `GitHub`, `Slack` | | A `ProcessArgs`: `ServiceAccount` (empty creates no role; required for `Serve`) and `Description` (the policy's, which IAM cannot change once set). |
+| `Namespace` | required | The namespace of the ServiceAccount. |
+| `PermissionsBoundaryArn` | none | The boundary of the role. The estate's rule is that a role has one (gitops uses `pb@default`). |
+| `RoleNamePrefix` | the component's name | The role is `<prefix>-sluis` (was `<prefix>-sluis-serve`); its managed policy has the role's name. |
+| `ServiceAccount` | required | The ServiceAccount the pod runs as, in `Namespace`. |
+| `Description` | says what the role is allowed | The policy's description, which IAM cannot change once set (a change replaces the policy). |
+| `Instance`, `Region`, `ParameterKeyArn` | none | With `Instance` (the installation's name, as in `NewLambda`; `Region` is then required), the role has the Lambda role's SSM grants under `/sluis/<instance>/`: credentials read/write, config read, exports, and `ParameterKeyArn` through SSM only. |
 | `Storage` | required | `Storage.Grant()`. |
-| `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the serve role (and only it) may `kms:Sign` and `kms:GetPublicKey` with them. |
-| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`: a key whose policy reserves the signing context to the signing roles (list this role in `WrappedSigning.AdditionalSigningRoleArns`, or in the denial merged into a shared key). Set, the serve role (and only it) may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
+| `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the role may `kms:Sign` and `kms:GetPublicKey` with them. |
+| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([Signing on AWS](#signing-on-aws)): the Lambda stack's `WrappedSigningKeyArn`: a key whose policy reserves the signing context to the signing roles (list this role in `WrappedSigning.AdditionalSigningRoleArns`, or in the denial merged into a shared key). Set, the role may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
 | `State` | none | `State.Grant()`. Nil when the State is on NATS: the roles then carry no DynamoDB grant. |
 
 ### Outputs
 
-`ServeRoleArn`, `ServeRoleName`, `GitHubRoleArn`, `GitHubRoleName`,
-`SlackRoleArn`, `SlackRoleName`; empty for a role that was not asked for.
+`RoleArn`, `RoleName` (v1.62's `ServeRoleArn`, `GitHubRoleArn`, `SlackRoleArn` and the
+names are gone).
 
-### What is created, per process
+### What is created
 
 A customer-managed policy and a role with the same name, the attachment, and one
 `PodIdentityAssociation` of the ServiceAccount with the role. The trust policy
 lets `pods.eks.amazonaws.com` assume the role (`sts:AssumeRole` and
 `sts:TagSession`) only for this account and cluster, this namespace and this one
-ServiceAccount. A ServiceAccount takes one association, so two processes on one
-ServiceAccount are refused.
+ServiceAccount. A ServiceAccount takes one association.
 
 ### IAM, whole
 
-Every role has the same grants; they are the whole of its policy.
+The role's grants are the whole of its policy (with `Instance`, the SSM grants of the
+Lambda role are added; see [IAM](#iam-one-role)).
 
 | Sid | Actions | Resource |
 |---|---|---|
 | `SluisBlobs` | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | the bucket's objects |
 | `SluisBlobList` | `s3:ListBucket` | the bucket (a read of an absent key is a 404 only with it, a 403 without) |
-| `SluisSigning`, serve only, with `SigningKeyArns` | `kms:Sign`, `kms:GetPublicKey` | the signing keys |
-| `SluisWrappedSigning`, serve only, with `WrappedSigningKeyArn` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | the symmetric key, only with `kms:EncryptionContext:purpose` = `sluis-signing` and no context keys beside `purpose`, `alg`, `kid` |
+| `SluisSigning`, with `SigningKeyArns` | `kms:Sign`, `kms:GetPublicKey` | the signing keys |
+| `SluisWrappedSigning`, with `WrappedSigningKeyArn` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | the symmetric key, only with `kms:EncryptionContext:purpose` = `sluis-signing` and no context keys beside `purpose`, `alg`, `kid` |
 | `SluisState`, with State | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | the table |
 | `SluisStateKey`, with a table key | `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey`, `kms:DescribeKey` | the table's key, only through DynamoDB (`kms:ViaService`) |
 
@@ -173,8 +178,7 @@ is the start-up check and the readiness probe. Nothing is granted on `*`.
 
 ## The configuration
 
-`RenderPorts` renders the `ports:` block of the file `serve` and both controllers
-read, from names the components were given, so none waits for a resource:
+`RenderPorts` renders the `ports:` block of the service document (`sluis serve` and its controllers read it), from names the components were given, so none waits for a resource:
 
 ```go
 y, _ := sluispulumi.RenderPortsYAML(sluispulumi.PortsArgs{
@@ -198,12 +202,12 @@ binds to it and checks it. Credentials are the platform's. Without `TableName`
 no State adapter is written (the schema's default) and only the blob is. Sealing
 is retired, so `KeyID` is optional: set, it renders the `sealer:` block of an
 installation still on a key of its own, and left empty no sealer is written. The NATS adapter's own block is the identity stack's: `RenderPorts`
-refuses it. The tests hold the block to the schemas of all three binaries, so a
+refuses it. The tests hold the block to the schema in `schemas/config`, so a
 key renamed in `schemas/config` fails there.
 
 ## Switching the serving pod to its own role
 
-The serving pod gets a role of its own, `<prefix>-sluis-serve`, replacing the
+The serving pod gets a role of its own, `<prefix>-sluis` (v1.62: `<prefix>-sluis-serve`), replacing the
 shared `kernel-access-issuer-audit` role (decision N9a). That role also carries
 the audit-events writer's grants, which are the audit side's and are not in this
 library. What gitops does at the switch:
@@ -216,7 +220,7 @@ library. What gitops does at the switch:
    the library's, or the create fails; the pod loses its credentials for the
    moment between them, so do it in a quiet window.
 3. Keep the audit events' grants. Attach gitops's own managed policy for them to
-   the library's serve role, with a `RolePolicyAttachment` on `ServeRoleName`,
+   the library's role, with a `RolePolicyAttachment` on `RoleName`,
    or give the audit writer another path: the library neither carries nor
    removes them.
 4. Retire `kernel-access-issuer-audit` and its policy when the last object under
@@ -224,19 +228,17 @@ library. What gitops does at the switch:
 
 ## Lambda
 
-`NewLambda` is the Lambda shape: **three functions from one zip, with the configuration in a layer**, a role each,
-the HTTP API in front of one of them, the token-signing key, and a schedule per
+`NewLambda` is the Lambda shape: **one function from one zip, with the configuration in a layer**, one role,
+the HTTP API in front of it, the token-signing key, and a schedule per
 controller target.
 
 ```go
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
 	Instance:       "kernel",    // the SSM root /sluis/kernel (layout v3)
-	Package:        "dist/sluis-lambda_1.62.0_linux_arm64.zip", // or an https URL
+	Package:        "dist/sluis-lambda_1.63.0_linux_arm64.zip", // or an https URL
 	PackageSHA256:  "<the release's digest, pinned here>",
-	Config:         sluisYAML,   // /opt/sluis/http.yaml: the http function's `serve` document
-	GitHubConfig:   githubYAML,  // /opt/sluis/github.yaml
-	SlackConfig:    slackYAML,   // /opt/sluis/slack.yaml
+	Config:         sluisYAML,   // /opt/sluis/sluis.yaml: the one v3 service document, controllers included
 	PolicyPath:     "policy/",   // rendered into /opt/sluis/policy.yaml (or Policy: a document)
 	Storage:        store.Grant(),
 	State:          state.Grant(),
@@ -251,14 +253,17 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 }, pulumi.Providers(awsProvider))
 ```
 
-### The functions
+### The function
 
-`sluis-http`, `sluis-github` and `sluis-slack` (`FunctionNamePrefix`, default
-`sluis`) are one `bootstrap` on `provided.al2023`, arm64, **in no VPC**. The role
-a function plays is its environment, and the environment is only this:
-`SLUIS_ROLE` is `http`, `github` or `slack`; `SLUIS_CONFIG` is its own document,
-`/opt/sluis/http.yaml`, `/opt/sluis/github.yaml` or `/opt/sluis/slack.yaml`; and
-the telemetry layer's `OTEL_*`.
+`sluis` (`FunctionName`, default `FunctionNamePrefix`, which is `sluis`) is one
+`bootstrap` on `provided.al2023`, arm64, **in no VPC**. It serves the API's events
+(the issuer and the console), runs the controllers' passes (`{"kind":"tick"|"run","target":...}`,
+one invocation per target, by the controller the policy says the target belongs
+to) and the `exports` and `refresh` events. Its environment is only this:
+`SLUIS_CONFIG` is `/opt/sluis/sluis.yaml`, and the telemetry layer's `OTEL_*`.
+`SLUIS_ROLE` is retired: a function that still sets it is refused. The timeout is
+300 s by default (API Gateway still cuts a request at 30 s) and the memory is one
+setting (512 MB).
 
 **The package** is the released `sluis-lambda_<version>_linux_arm64.zip` (with
 `bootstrap` at its root), read from a path or an https URL when the stack is
@@ -268,19 +273,18 @@ digest; a local file is copied to a temporary file first, so what is checked is 
 is deployed. **Take the digest from a reviewed pin in the stack's source, never from a
 file fetched at deploy time beside the zip**: a digest that arrives with the zip
 proves nothing about it. The package must be of the library's own minor or newer
-(1.62 or later), or it is refused: an older binary cannot read the layer.
+(1.63 or later), or it is refused: an older binary cannot read the layer.
 
 **The configuration** is one immutable `aws.lambda.LayerVersion`, `<prefix>-config`,
-mounted last at `/opt/sluis`: the three service documents (`Config`, `GitHubConfig`,
-`SlackConfig`, v2) and the policy (`Policy`, a document, or `PolicyPath`, a file or
+mounted last at `/opt/sluis`: the service document (`Config`, the one v3 document, controllers included) and the policy (`Policy`, a document, or `PolicyPath`, a file or
 directory rendered by sluis's own renderer). Each is held to sluis's own loader before
 anything is published, and the library writes what is its own into them (the
-`apiVersion`, `policy.file`, and in the http document `secrets`, `recovery.*` and the
-state secret's name); a document that disagrees is refused, naming the key. **A change
-to a document publishes a new layer version and updates the three functions**, never
+`apiVersion`, `policy.file`, and in the service document `secrets`, `recovery.*`, the
+state secret's name and, for the `invoke` trigger, this function's name); a document that disagrees is refused, naming the key. **A change
+to a document publishes a new layer version and updates the function**, never
 silently. The documents are not a secret: secrets are SSM parameters, named by the
 documents and read by path, below. Because the layer is retained (`SkipDestroy`, so a
-rollback is re-pointing a function), a secret pasted into a document would persist in
+rollback is re-pointing the function), a secret pasted into a document would persist in
 every layer version and in Pulumi state; if one was, rotate it and remove the versions
 with `aws lambda delete-layer-version`. Documents may not name an `endpoint`
 (`secrets.endpoint`, `ports.dynamodb.endpoint`, ...), because the function would read
@@ -291,30 +295,31 @@ test against LocalStack. See [AWS Lambda](../integrations/aws-lambda.md#configur
 
 | Field | Default | Meaning |
 |---|---|---|
-| `Region`, `AccountID` | required | Name the SSM parameters and the other functions in the roles' policies. |
+| `Region`, `AccountID` | required | Name the SSM parameters and the function in the role's policy. |
 | `Instance` | required | The installation's name (`hive`, `kernel`): lower-case letters, digits and dashes, never `private` or `export`. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account. |
 | `Package`, `PackageSHA256`, `PackageVersion` | required, required, from the file name | The released zip, deployed unchanged; its SHA-256 (a reviewed pin); the release it is, when its name does not say. |
-| `Config`, `GitHubConfig`, `SlackConfig` | required | The three service documents (`serve`, `controller-github`, `controller-slack`, v2), in the configuration layer. The http document's `adapters.trigger.settings` must name the controllers, `github: <prefix>-github` and `slack: <prefix>-slack`: the functions take no environment variable for it. |
+| `Config` | required | The one service document (`sluis/v3`: the `serve` keys at the top level and `controllers.github` / `controllers.slack`), in the configuration layer. With the `invoke` trigger the library writes `adapters.trigger.settings` (`github` and `slack` are this function); a document that names another is refused. `GitHubConfig`, `SlackConfig` are gone. |
 | `Policy`, `PolicyPath` | exactly one | The policy document, or a file or directory of layers rendered by sluis's renderer (`sluisctl policy render`); the layer holds it at `/opt/sluis/policy.yaml`. The GitHub and Slack catalogues are in it (`apps.github.catalogue`, `apps.slack.catalogue`). |
 | `AllowEndpoints` | false | Lets the documents name a service `endpoint`, for a LocalStack test. Off, one is refused. |
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
 | `AuditQueueArn` | required | The audit stack's ingest queue. |
-| `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use. Absent, the AWS-managed key, which needs no grant. Present, each role may use it through SSM only. |
+| `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use. Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
 | `SigningKeyAlias` | `alias/sluis-signing` | The ES384 signing key's alias. |
 | `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
-| `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([Signing on AWS](#signing-on-aws)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](#iam-one-role-per-function). |
-| `FunctionNamePrefix` | `sluis` | `<prefix>-http`, `-github`, `-slack`, and `<prefix>-scheduler`. |
-| `HTTP`, `GitHub`, `Slack` | 512 MB; 30 s for http, 300 s for a controller | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`. |
-| `LogRetentionDays` | 30 | Each function's log group. |
-| `PermissionsBoundaryArn` | none | The boundary of every role. |
+| `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([Signing on AWS](#signing-on-aws)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](#iam-one-role). |
+| `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, and the function when `FunctionName` is not set. |
+| `FunctionName` | `FunctionNamePrefix` | The function, its role, policy and log group. **A v1.62 installation sets `<prefix>-http` here**, which keeps its function, role, log group and API integration in place: see [Moving from v1.62](#moving-from-v162-three-functions-to-one). |
+| `Function` | 512 MB; 300 s | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`. (`HTTP`, `GitHub` and `Slack` are gone.) |
+| `LogRetentionDays` | 30 | The function's log group. |
+| `PermissionsBoundaryArn` | none | The boundary of the role and the scheduler's. |
 | `API.DomainName`, `API.CertificateArn` | required | The custom domain and the ACM certificate for it, in the region (the caller supplies it, for example a Cloudflare Origin CA certificate imported to ACM). |
 | `API.TruststorePEM`, `API.TruststoreBucketName` | required | The client-CA bundle for mutual TLS, and the bucket the library uploads it to. |
 | `API.KeepDefaultEndpoint` | false | Leaves the default `execute-api` endpoint on, for the cutover's acceptance suite to run against `ApiUrl` before the DNS switch. Turn it off again after: it is a way round the client certificate. |
 | `Schedule.GitHubOrgs`, `Schedule.SlackWorkspaces` | none | The targets, one schedule each. |
 | `Schedule.Rate` | `rate(5 minutes)` | The EventBridge Scheduler expression. |
-| `Exports.Function`, `Exports.Rate`, `Exports.Disabled` | `http`, `rate(15 minutes)`, false | The exports schedule: which function owns the exports (`http`, so `<prefix>-http`, `github` or `slack`) and how often it is invoked with `{"kind":"exports"}`. |
-| `DirectoryRefresh.Rate`, `DirectoryRefresh.Disabled` | `rate(15 minutes)`, false | The directory refresh schedule: how often the http function is invoked with `{"kind":"refresh"}` to take a new snapshot of every connected directory, under the refresh lease. Lambda has no refresh loop; a request that finds a snapshot due refreshes it too. |
-| `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the github and slack roles may ask STS for. |
+| `Exports.Rate`, `Exports.Disabled` | `rate(15 minutes)`, false | The exports schedule: how often the function is invoked with `{"kind":"exports"}`. (`Exports.Function` is gone.) |
+| `DirectoryRefresh.Rate`, `DirectoryRefresh.Disabled` | `rate(15 minutes)`, false | The directory refresh schedule: how often the function is invoked with `{"kind":"refresh"}` to take a new snapshot of every connected directory, under the refresh lease. Lambda has no refresh loop; a request that finds a snapshot due refreshes it too. |
+| `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the role may ask STS for. |
 | `Telemetry.LayerArn`, `Telemetry.Env` | nil: no layer | The observability `otlp-lambda` layer and its settings: `Telemetry.Env` holds `OTEL_*`, the layer's own (`ACCESS_ROSTER_*`, `OPENTELEMETRY_*`) and `AWS_LAMBDA_EXEC_WRAPPER`, and nothing else (never `SLUIS_*`, `LD_*` or another `AWS_*`). Optional, so an estate whose collector is not ready leaves it out. `OTEL_SERVICE_NAME` is the function's name unless given. |
 | `Tags` | none | On everything that takes tags. |
 
@@ -325,8 +330,8 @@ test against LocalStack. See [AWS Lambda](../integrations/aws-lambda.md#configur
 | `SigningKeyArn`, `SigningKeyID`, `SigningKeyAlias` | The ES384 token-signing key. |
 | `SigningKeyRS256Arn`, `SigningKeyRS256ID`, `SigningKeyRS256Alias` | The RS256 token-signing key (empty when disabled). |
 | `WrappedSigningKeyArn`, `WrappedSigningKeyAlias` | The symmetric key of `WrappedSigning` (`KeyArn` when given; the alias is empty then, and without `WrappedSigning`). |
-| `HTTPFunctionArn`, `GitHubFunctionArn`, `SlackFunctionArn` and the `...FunctionName`s | The functions. |
-| `HTTPRoleArn`, `GitHubRoleArn`, `SlackRoleArn` and the `...RoleName`s | Their roles. |
+| `FunctionArn`, `FunctionName` | The function (replace `HTTP|GitHub|SlackFunctionArn` and the names). |
+| `RoleArn`, `RoleName` | Its role (replace `HTTP|GitHub|SlackRoleArn` and the names). |
 | `APIID`, `APIURL` | The HTTP API and its default endpoint (it answers only with `KeepDefaultEndpoint`). |
 | `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
 | `TruststoreBucketName`, `TruststoreURI` | The client-CA bundle. |
@@ -337,11 +342,11 @@ test against LocalStack. See [AWS Lambda](../integrations/aws-lambda.md#configur
 
 ### The API
 
-An HTTP API (payload format 2.0) with a `$default` route to `sluis-http`, behind
+An HTTP API (payload format 2.0) with a `$default` route to the function, behind
 a regional custom domain (TLS 1.2 or later) with **mutual TLS**: the truststore
 is `TruststorePEM` in a bucket of its own (versioned, encrypted, closed to the
 public and to plain HTTP, protected), not in the blob bucket, because the
-functions can write that one and a function that can replace the client CA has
+function can write that one and a function that can replace the client CA has
 no use for a client certificate. The domain names the object's version, so a
 new PEM redeploys it. This is Cloudflare's authenticated origin pulls: the PEM is
 Cloudflare's origin-pull CA. The default endpoint is disabled unless
@@ -350,57 +355,54 @@ Cloudflare's origin-pull CA. The default endpoint is disabled unless
 ### The schedules
 
 One EventBridge schedule per target, `<prefix>-github-<org>` and
-`<prefix>-slack-<workspace>`, each invoking the github or the slack function with
+`<prefix>-slack-<workspace>` (named as before), each invoking the one function with
 `{"kind":"tick","target":"<id>"}`. A target is letters, digits and `- _ . :`, at
 most 40 (`github:links` is the link check; a colon is a `-` in the schedule's name). The scheduler has a role of its own, `<prefix>-scheduler`, that may
-invoke those two functions and nothing else; no schedule and no controller
-function retries, because the next tick runs the pass again.
+invoke the one function and nothing else; no schedule retries, because the next tick runs the pass again.
 
 ### The exports schedule
 
-`<prefix>-exports` invokes the function that owns the exports (`Exports.Function`,
-default `http`, that is `sluis-http`) with `{"kind":"exports"}`, every
-`Exports.Rate` (default 15 minutes), through the same scheduler role, which may
-invoke that function too. Whether the function understands the event is the
-app's: the app side lands separately. The controllers' outbound web identity
+`<prefix>-exports` invokes the function with `{"kind":"exports"}`, every
+`Exports.Rate` (default 15 minutes), through the same scheduler role. The controllers' outbound web identity
 needs outbound identity federation enabled in the account (STS answers
 `OutboundWebIdentityFederationDisabled` otherwise); the library does not enable
 it.
 
 ### The environment the app reads
 
-Per function the library sets `SLUIS_ROLE`, `SLUIS_CONFIG` (that function's own
-document in the layer) and, from `Telemetry.Env`, the `OTEL_*` of the telemetry layer.
-That is all: the v1.61 library's `Env`, `FunctionArgs.Env`, `SLUIS_SECRET_FILES` and
-`<NAME>=ssm:` mappings are gone, and the binary refuses them. A secret is named in a
-document and read by its `secrets` source (`ssm`, root `/sluis/<instance>`). The http
-document names the controllers in `adapters.trigger.settings` (`github:
-<prefix>-github`, `slack: <prefix>-slack`).
+The library sets `SLUIS_CONFIG` (`/opt/sluis/sluis.yaml`, the one document in the
+layer) and, from `Telemetry.Env`, the `OTEL_*` of the telemetry layer. That is all:
+`SLUIS_ROLE`, the v1.61 library's `Env`, `FunctionArgs.Env`, `SLUIS_SECRET_FILES` and
+`<NAME>=ssm:` mappings are gone, and the binary refuses them. A secret is named in the
+document and read by its `secrets` source (`ssm`, root `/sluis/<instance>`).
 
-### IAM: one role per function
+### IAM: one role
 
-Each function has a role and an inline policy named after it, and nothing is
-granted on `*`.
+The function has one role and an inline policy named after it (`<FunctionName>`), and
+nothing is granted on `*` (but the one action that takes no resource, below). The
+controllers' code runs with these permissions: the per-role isolation of v1.62 is
+gone by decision.
 
-| Grant | http | github | slack |
-|---|---|---|---|
-| Logs: `logs:CreateLogStream`, `logs:PutLogEvents` on its own log group | yes | yes | yes |
-| S3: `GetObject`, `PutObject`, `DeleteObject` on the bucket's objects; `ListBucket` on the bucket | yes | yes | yes |
-| DynamoDB: `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table (and its key, through DynamoDB only) | yes | yes | yes |
-| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` under `/sluis/<instance>/private/credentials/*` | yes | yes | yes |
-| SSM: the same under `/sluis/<instance>/export/*` (only the function that runs the exports reads it) | yes | yes | yes |
-| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath` under `/sluis/<instance>/private/config/*`: the secrets its document names, never written | yes | **denied** | **denied** |
-| `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only, and only for the parameters under the role's own prefixes (with the key) | yes | yes | yes |
-| `sqs:SendMessage` on the audit ingest queue | yes | yes | yes |
-| `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not declared with `WrappedSigning`) | **yes** | no | no |
-| `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` on the symmetric key, with the conditions in [Signing on AWS](#signing-on-aws) (`WrappedSigning`) | **yes** | no | no |
-| `lambda:InvokeFunction` on the github and slack functions ("run a pass now") | **yes** | no | no |
-| `sts:GetWebIdentityToken` (on `*`: the action takes no resource; with `WebIdentityAudience`, only for that audience), so a controller authenticates to the console with its role's outbound token | no | **yes** | **yes** |
+| Grant | |
+|---|:-:|
+| Logs: `logs:CreateLogStream`, `logs:PutLogEvents` on its own log group | yes |
+| S3: `GetObject`, `PutObject`, `DeleteObject` on the bucket's objects; `ListBucket` on the bucket | yes |
+| DynamoDB: `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table (and its key, through DynamoDB only) | yes |
+| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` under `/sluis/<instance>/private/credentials/*` and `/sluis/<instance>/export/*` | yes |
+| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath` under `/sluis/<instance>/private/config/*`: the secrets its document names, never written | yes |
+| `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only, and only for the parameters under the role's own prefixes (with the key) | yes |
+| `sqs:SendMessage` on the audit ingest queue | yes |
+| `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not declared with `WrappedSigning`) | yes |
+| `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` on the symmetric key, with the conditions in [Signing on AWS](#signing-on-aws) (`WrappedSigning`) | yes |
+| `lambda:InvokeFunction` on the function itself ("run a pass now"), and nothing else | yes |
+| `sts:GetWebIdentityToken` (on `*`: the action takes no resource; with `WebIdentityAudience`, only for that audience), so the controllers authenticate to the console with the role's outbound token | yes |
+
+There are no explicit denials: the key ring is writable by the one role.
 
 With remote signing (no `WrappedSigning`) both estates sign with two keys:
 `ECC_NIST_P384` (ES384) and `RSA_3072` (RS256), each usage `SIGN_VERIFY`,
 protected, with a 30-day deletion window and AWS's default key policy, so the
-http role's policy is what grants its use. With `WrappedSigning` there is one
+role's policy is what grants its use. With `WrappedSigning` there is one
 symmetric key instead (below). The roles carry a permissions boundary when
 `PermissionsBoundaryArn` is set.
 
@@ -502,7 +504,7 @@ to the role later does not widen what it can do with the key:
 | Sid | Effect | Principal | Action | Condition |
 |---|---|---|---|---|
 | `EnableIAMPolicies` | Allow | the account root | `kms:*` | none (IAM policies govern the key, and key administration is the account's) |
-| `SluisSigningContextReserved` | Deny | `*` | `kms:Decrypt`, `kms:Encrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKey*`, `kms:CreateGrant` | `kms:EncryptionContext:purpose` is `sluis-signing`, and `aws:PrincipalArn` is **not** one of the signing roles (the http role, and `WrappedSigning.AdditionalSigningRoleArns`, the Kubernetes serve role) |
+| `SluisSigningContextReserved` | Deny | `*` | `kms:Decrypt`, `kms:Encrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKey*`, `kms:CreateGrant` | `kms:EncryptionContext:purpose` is `sluis-signing`, and `aws:PrincipalArn` is **not** one of the signing roles (the function's role, and `WrappedSigning.AdditionalSigningRoleArns`, the Kubernetes role) |
 | `SluisSigningRolePurposeOnly` | Deny | `*` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | `aws:PrincipalArn` is a signing role, and `kms:EncryptionContext:purpose` is not `sluis-signing` |
 | `SluisSigningRoleContextKeysOnly` | Deny | `*` | the same two | a signing role, and `ForAnyValue:StringNotEquals kms:EncryptionContextKeys` `["purpose","alg","kid"]` |
 | `SluisSigningRoleNothingElse` | Deny | `*` | `NotAction` the same two | a signing role |
@@ -521,7 +523,7 @@ it creates; `sluispulumi.WrappedKeyPolicyStatements(roleArns)` returns them):
     "Action": ["kms:Decrypt", "kms:Encrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant"],
     "Condition": {
       "StringEquals": {"kms:EncryptionContext:purpose": "sluis-signing"},
-      "ArnNotEquals": {"aws:PrincipalArn": ["<the http role's ARN>", "<the Kubernetes serve role's ARN, if it signs>"]}
+      "ArnNotEquals": {"aws:PrincipalArn": ["<the function role's ARN>", "<the Kubernetes role's ARN, if it signs>"]}
     }
   },
   {
@@ -569,14 +571,10 @@ presents that purpose, so no one else can ever unwrap a signing key. The other
 users of the key (an unseal, a secrets provider) present no context or different
 ones, never `purpose=sluis-signing`, and are untouched. The signing roles'
 own denials (above) keep them to that context in the other direction.
-**Writes to the key ring.** The github and slack roles always carry (with
-remote signing too; the Kubernetes identity's non-serve roles with a State)
-`SluisNoKeyringWrites`: a Deny of `PutItem`, `UpdateItem`, `DeleteItem` and
-`BatchWriteItem` on the table when `dynamodb:LeadingKeys` is `keyring`,
-`keyring-index` or `keyring-retired`. Only the signing roles may write them. The
-key-generation lease cannot be denied this way: it shares the `lease` partition
-with the controllers' own leases. Anyone else with write access to the table is
-inside the trust boundary above.
+**Writes to the key ring.** With one role (v1.63) there is no role that is denied the
+key ring: the v1.62 `SluisNoKeyringWrites` denial on the GitHub and Slack roles is gone,
+since the controllers run in the signing process. Whoever else has write access to
+the table is inside the trust boundary above.
 
 **Monitoring rotation.** A rotation that keeps failing is a warning per attempt
 and the key keeps signing, so alert on it: the issuer logs at ERROR, at most
@@ -652,13 +650,44 @@ With KMS signing the issuer still needs a secret to HMAC-sign OAuth flow state.
 The library generates it: a `random.RandomBytes` of 32 bytes (no keepers, so an
 apply never rotates it), stored base64 as the SecureString
 `/sluis/<instance>/private/config/issuer/state-secret` (under `ParameterKeyArn` when set), secret
-in state and in `pulumi up`'s output. `StateSecretParameter` is its name. Only
-`sluis-http` needs it: its document names it (`stateSecret: issuer/state-secret`) and its
+in state and in `pulumi up`'s output. `StateSecretParameter` is its name. The
+function reads it: its document names it (`stateSecret: issuer/state-secret`) and its
 `secrets` source reads it. Rotating it
 is `pulumi up --replace` on the `RandomBytes` resource, which signs everyone's
 in-flight sign-in out.
 
 The recovery sign-in has its own parameter, `/sluis/<instance>/private/config/recovery/password`, generated by the library: see [Recovery on Lambda](../operations/recovery-on-lambda.md).
+
+### Moving from v1.62 (three functions) to one
+
+Needs the v1.63 library and the v1.63 release zip (`MinPackageVersion` is 1.63), applied
+together. The Pulumi parts of this page depend on the library change that lands them
+([truvity/sluis#316](https://github.com/truvity/sluis/pull/316)). No data moves.
+
+1. Merge `Config`, `GitHubConfig` and `SlackConfig` into one v3 `Config`: the `serve`
+   keys stay at the top, the controllers' `consoleURL`, `console.auth.aws.audience` and
+   `interval` go under `controllers.github` and `controllers.slack`, and the controllers'
+   copies of `ports`, `adapters`, `audit` and `secrets` are dropped.
+2. Remove `GitHubConfig`, `SlackConfig`, `HTTP`, `GitHub`, `Slack` and
+   `Exports.Function` from the args; read `FunctionArn`, `FunctionName`, `RoleArn` and
+   `RoleName` instead of the `HTTP|GitHub|Slack` outputs.
+3. **Set `FunctionName: "<prefix>-http"`** to keep the existing function, role, policy,
+   log group and API integration: nothing is replaced. At the default, `sluis`, they are
+   replaced under the new name (created before the old are deleted, and the old log
+   group's events go with it).
+4. Admit the one role: the policy's `aws` matchers and the audit installation's
+   workload map name `<FunctionName>` where they named `<prefix>-github` and
+   `<prefix>-slack`. Ship that policy change first.
+5. Apply. The `<prefix>-github` and `<prefix>-slack` functions, roles, policies, log
+   groups and invoke configs are destroyed; the schedules keep their names and point at
+   the one function.
+
+On EKS (`NewKubernetesIdentity`): replace `Serve`, `GitHub` and `Slack` with
+`ServiceAccount` (the one the Deployment now runs as). Pulumi replaces the serve role
+under its new name (`<prefix>-sluis`) and destroys the github and slack roles and
+associations; ServiceAccount takes one association, so do it in a quiet window as in
+[the switch above](#switching-the-serving-pod-to-its-own-role). The Helm side is in the
+[chart README](../../charts/sluis/README.md#moving-from-v162-three-deployments-to-one).
 
 ### SSM layout
 

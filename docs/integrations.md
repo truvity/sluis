@@ -25,9 +25,9 @@ flowchart TB
   subgraph ar["sluis"]
     direction LR
     hub["the directory<br/>inside access-issuer"]:::hub
-    iss["access-issuer<br/>the issuer, the console"]:::token
-    ghr["github-roster<br/>the controller, same chart"]:::token
-    slr["slack-roster<br/>the controller, same chart"]:::token
+    iss["sluis serve<br/>the issuer, the console"]:::token
+    ghr["the GitHub controller<br/>a loop inside sluis serve"]:::token
+    slr["the Slack controller<br/>a loop inside sluis serve"]:::token
     lib["Go module · TS package<br/>inside applications"]:::token
     ctl["sluisctl<br/>on laptops and in jobs"]:::token
     act["exchange action<br/>in workflows"]:::token
@@ -59,9 +59,9 @@ flowchart TB
   lib -. "⑪ reads the bearer,<br/>serves /.access/whoami" .-> consoles
   ctl -- "⑫ code + PKCE on loopback,<br/>then exchange" --> iss
   act -- "⑬ exchange, shell only" --> iss
-  iss -. "⑭ who holds each group<br/>console API, own ServiceAccount token" .-> ghr
+  iss -. "⑭ who holds each group<br/>console API, the pod's own ServiceAccount token" .-> ghr
   ghr -- "⑭ invites, teams, removals<br/>as each organisation's App" --> ghteams
-  iss -. "⑲ who holds each group, who is in each directory group<br/>console API, own ServiceAccount token" .-> slr
+  iss -. "⑲ who holds each group, who is in each directory group<br/>console API, the pod's own ServiceAccount token" .-> slr
   slr -- "⑲ invites, removals, channels<br/>as each workspace's App" --> slack
   aws -. "⑮ AWS's own tooling<br/>with --profile" .-> reg
 
@@ -78,9 +78,9 @@ flowchart TB
 | Kind | Name | What it is | Who deploys or uses it | Status |
 |---|---|---|---|---|
 | **Service** | `sluis serve` | the whole of sluis | the platform, once per installation | **running** since 0.6; the directory folded in at 0.12 ([design](design/sluis.md)); all four OpenID profiles run with no failure ([conformance](conformance.md)) |
-| **Service** | `sluis controller github` | the GitHub controller: one loop beside the service that keeps every connected organisation's teams as the policy says | the platform, from the same chart and image | **acting** since 1.5; each organisation a dry run until listed in `policy.controllers.github.enabledOrgs` |
-| **Service** | `sluis controller slack` | the Slack controller: one loop beside the service that keeps every connected workspace's channels as the policy says ([connect](connect/slack-workspace.md)) | the platform, from the same chart and image | **acting** since 1.41; each workspace a dry run until listed in `policy.controllers.slack.enabledWorkspaces` |
-| **Helm chart** | `sluis` (the `access-issuer` chart until v1.52.4) | the whole service, up to three processes from one image; expects a Valkey, and an audit installation to record into | the platform | published per tag |
+| **Service** | the GitHub controller (`config.controllers.github` of `sluis serve`; `sluis controller github` is deprecated for one release) | the GitHub controller: one loop inside the service process that keeps every connected organisation's teams as the policy says | the platform, in the same process (since 1.63) | **acting** since 1.5; each organisation a dry run until listed in `policy.controllers.github.enabledOrgs` |
+| **Service** | the Slack controller (`config.controllers.slack` of `sluis serve`; `sluis controller slack` is deprecated for one release) | the Slack controller: one loop inside the service process that keeps every connected workspace's channels as the policy says ([connect](connect/slack-workspace.md)) | the platform, in the same process (since 1.63) | **acting** since 1.41; each workspace a dry run until listed in `policy.controllers.slack.enabledWorkspaces` |
+| **Helm chart** | `sluis` (the `access-issuer` chart until v1.52.4) | the whole service, ONE Deployment from one image (since v1.63; three before); expects a Valkey, and an audit installation to record into | the platform | published per tag |
 | **Helm chart** | `access-proxy` | removed in v1.32.0 ([ADR 0003](decisions/0003-deprecate-access-proxy.md)) — was oauth2-proxy and its wiring in front of one console with no OpenID flow of its own on Envoy Gateway only. Gateway-native OIDC replaces it there; for other gateways, run upstream oauth2-proxy yourself. See [design/access-proxy.md](design/access-proxy.md) | was Envoy Gateway only | removed in v1.32.0 |
 | **Go module** | `github.com/truvity/sluis` | `identity` (the two verifiers and a net/http middleware), `policy`, `tokens`, and `backend`, the contract a directory backend implements | every Go service and console | published per tag |
 | **TypeScript package** | `@truvity/sluis`, on GitHub Packages | `useIdentity()`, `<UserBadge/>` over `/.access/whoami`; `/server` verifies a bearer in Node | every console UI, and Node services | published per tag |

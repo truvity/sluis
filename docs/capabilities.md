@@ -57,11 +57,10 @@ release and what has landed since.
 | Slack `users.info` cache on the State (`cache.slack.user.<workspace>.<id>`, 24 h; `slack_roster.user_cache` counts hits and misses) | 🧪 | 📄 |
 | Shared inputs of the Slack controller in the State (`cache.<digest>.<name>`) | 📄 (stays in memory) | 📄 |
 | Controllers reading the console's records from the State instead of mounted files (`ports.adapter` other than `legacy`) | 🧪 | 📄 |
-| HTTP function behind the Lambda Web Adapter and an API Gateway HTTP API | — | 📄 |
-| Tick function on EventBridge Scheduler | — | 📄 |
-| One binary `sluis` (`serve`, `controller github`, `controller slack`; `tick <github|slack> <target>` runs one tick once; `migrate --from <config> --to <config>` copies the State between storages) | 🧪 | 📄 |
-| One chart `sluis` (`serve`, `controller-github`, `controller-slack`) | 🧪 | — |
-| One configuration file validated against a schema (per subcommand) | 🧪 | 📄 |
+| One Lambda function: the issuer and console behind an API Gateway HTTP API, and the controllers' ticks from EventBridge Scheduler (v1.63) | — | 📄 |
+| One binary `sluis` (`serve`, which runs the GitHub and Slack controllers in-process; `controller github|slack` deprecated, removed in the next release; `tick <github|slack> <target>` runs one tick once; `migrate --from <config> --to <config>` copies the State between storages) | 🧪 | 📄 |
+| One chart `sluis` (one Deployment, `sluis serve`; the controllers are `config.controllers.*`) | 🧪 | — |
+| One service document (`sluis/v3`) validated against a schema | 🧪 | 📄 |
 
 ## Identity
 

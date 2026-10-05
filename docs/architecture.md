@@ -75,12 +75,12 @@ flowchart TB
   ci["GitHub Actions"]
   gw["Envoy Gateway<br/>one data plane, native OIDC per console"]
 
-  subgraph ar["sluis — one chart, up to three Deployments"]
+  subgraph ar["sluis — one chart, one Deployment, one process"]
     issuer["the issuer<br/>OpenID provider · six grants<br/>login page · session service"]
     dir["the directory<br/>snapshots · routing by domain<br/>authoritative per domain"]
     con["the console<br/>React, mounted at /console/"]
     ctl["the GitHub controller<br/>one pass per interval per organisation<br/>born disabled, dry run until listed"]
-    sctl["the Slack controller<br/>slack-roster · one pass per interval per workspace<br/>born disabled, dry run until listed"]
+    sctl["the Slack controller<br/>one pass per interval per workspace<br/>born disabled, dry run until listed"]
   end
 
   vk[("Valkey<br/>sessions · single sign-on · auth requests<br/>one snapshot per workspace")]
@@ -120,27 +120,27 @@ flowchart TB
   issuer -. "trusted by" .-> rp
 ```
 
-**The GitHub controller is a second process, not a second service.** It
-holds the GitHub App keys and writes to GitHub, neither of which belongs
-in the login path, so it runs in its own Deployment with no listener. It
-reads the console's API with its own ServiceAccount token, the way any
-workload would, and reports into a ConfigMap the console shows. Every
+**The GitHub controller is a loop in the same process, not a second service** (since
+v1.63, [0037](decisions/0037-one-process-everywhere.md): there was a Deployment of its
+own before). It holds the GitHub App keys and writes to GitHub; the accepted cost is
+that its code runs with the service's permissions and in its pod, and a controller that
+cannot start stops the process. It reads the console's API, over the release's own
+Service, with the pod's ServiceAccount token, the way any workload would, and reports into a ConfigMap the console shows. Every
 organisation is a dry run until the chart lists it in
 `policy.controllers.github.enabledOrgs`; removing one from the list is the emergency stop. A pass
-runs every `controllerGithub.interval` (15 minutes) and also, without waiting, when
+runs every `config.controllers.github.interval` (15 minutes) and also, without waiting, when
 the mounted credentials or records change (a new installation) or an operator
 presses **Refresh** (looked at every 30 seconds, and as quick as the kubelet
 refreshes the mounted files: within a couple of minutes).
 
-**The Slack controller is the same shape.** `slack-roster` holds each Slack
-workspace's bot token, writes to Slack, and runs in its own Deployment (one
-replica, recreated rather than rolled) beside the service with no listener. It
-reads the console's API with its own ServiceAccount token and replaces one
+**The Slack controller is the same shape.** It holds each Slack
+workspace's bot token, writes to Slack, and runs as a loop of its own in the same
+process. It reads the console's API with the pod's ServiceAccount token and replaces one
 ConfigMap, `<release>-slack-status`, which the service creates and the
 controller may only update by name. Its records, the connections and the
 console's channel records, are mounted read-only from
 `<release>-slack-workspaces`; its credentials from `<release>-slack-credentials`.
-A pass runs every `controllerSlack.interval` (15 minutes) and also, without waiting,
+A pass runs every `config.controllers.slack.interval` (15 minutes) and also, without waiting,
 when the mounted credentials or records (including the console's channel and
 Slack Connect records) change or an operator presses **Refresh** (looked at every
 30 seconds, and as quick as the kubelet refreshes the mounted files: within a
