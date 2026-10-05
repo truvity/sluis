@@ -246,7 +246,7 @@ config:
   # `githubApps.catalogue` and `slackApps`) and mounts. Change the path and
   # the chart refuses until the mount agrees.
   policy:
-    file: /etc/sluis/policy/policy.yaml
+    file: /var/run/access-issuer/policy/policy.yaml
   signingKey:
     file: /var/run/access-issuer/signing-key/tls.key
     pollInterval: 30s
@@ -561,7 +561,7 @@ exchange:
 # and the App catalogues), `controllers` (what each controller may change)
 # and `exports`. The chart adds `exchange.clusters` and `exchange.aws` from
 # `exchange`, and the catalogues from `githubApps.catalogue` and `slackApps`.
-# One ConfigMap, <release>-policy, mounted at /etc/sluis/policy by the service
+# One ConfigMap, <release>-policy, mounted as the policy directory by the service
 # and both controllers: a change rolls all three.
 #
 # A deployment that layers its policy (a directory of files, an access
@@ -705,7 +705,7 @@ controllerGithub:
   # GitHub page with what would happen, and nothing is done to it.
   config:
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/github-roster/policy/policy.yaml
     tokenFile: /var/run/secrets/github-roster/token
     appsDir: /var/run/github-roster/apps
     recordsDir: /var/run/github-roster/records
@@ -765,7 +765,7 @@ controllerSlack:
   # `controllers.slack.enabledWorkspaces`.
   config:
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/slack-roster/policy/policy.yaml
     tokenFile: /var/run/secrets/slack-roster/token
     credentialsDir: /var/run/slack-roster/credentials
     recordsDir: /var/run/slack-roster/workspaces

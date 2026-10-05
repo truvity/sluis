@@ -45,11 +45,11 @@
 
 ### Chart
 
-- **Breaking: the chart renders the four documents, mounted as directories.**
-  `<release>-config`, `<release>-github-roster-config`,
-  `<release>-slack-roster-config` and `<release>-policy`, each mounted as a
-  directory (`/etc/sluis/config`, `/etc/sluis/policy`), never by `subPath`;
-  each pod carries one checksum per document it reads, so a change to one
+- **Breaking: the chart renders the four documents.** `<release>-config`,
+  `<release>-github-roster-config`, `<release>-slack-roster-config` and
+  `<release>-policy`, at the paths they had (each service document by
+  `subPath`, read once at start; the policy as the directory each process
+  had for it); each pod carries one checksum per document it reads, so a change to one
   controller's document restarts that controller only, and a policy change
   restarts all three. The clusters, AWS, overlay and catalogue ConfigMaps are
   gone: `exchange.clusters`, `exchange.aws`, `githubApps.catalogue` and
@@ -60,8 +60,9 @@
   `policy`); `directory.workspaces` is removed (declare them in
   `config.directory.workspaces` and mount each key with `secretMounts`); a
   confidential client's `secretKey` is removed (the key is `client-secret`).
-  `config.policy.file` (and each controller's) must be
-  `/etc/sluis/policy/policy.yaml`.
+  `config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`
+  (the controllers': `/var/run/github-roster/policy/policy.yaml`,
+  `/var/run/slack-roster/policy/policy.yaml`).
 ## v1.61.2
 
 Released automatically as a patch: last-known groups of identities are now kept in the shared State, fixing identity refusals after a cold start on Lambda or during a rollout when the directory cannot be vouched for.

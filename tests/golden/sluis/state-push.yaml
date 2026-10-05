@@ -58,7 +58,7 @@ data:
     listen:
       address: :8080
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/access-issuer/policy/policy.yaml
     probes:
       address: :7070
     recovery:
@@ -222,7 +222,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads, and no other: a change
         # to a controller's own document does not restart the service.
-        checksum/config: 651bdc77444395555d308d2a849b712d2246eb639585131cc248062f4c8fc016
+        checksum/config: 9a707a7d816056562c71acd555a45abf7c632470c5e7938e612663c3e4d153c1
         checksum/policy: d8fee78c7b9f81d2a4c598c3b432515f29384a0f4a1fe3e4ccda3db4f307843b
     spec:
       serviceAccountName: sluis
@@ -249,15 +249,16 @@ spec:
           # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/config.yaml
           volumeMounts:
-            # Directories, never a subPath: a document is one file in its own
-            # ConfigMap's directory.
+            # Read once, at start: a subPath is enough, since a change replaces
+            # the pod (checksum/*). The policy keeps its directory.
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/access-issuer/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key

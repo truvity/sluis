@@ -125,7 +125,7 @@ spec:
           args:
             - controller
             - slack
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/controller-slack.yaml
           {{- include "sluis.controllerProbes" (dict "name" "controllerSlack" "cfg" $cfg) | nindent 10 }}
           {{- with include "sluis.otelEnv" (dict "root" . "service" "slack-roster") }}
           env:
@@ -133,10 +133,11 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/controller-slack.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/slack-roster/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/slack-roster

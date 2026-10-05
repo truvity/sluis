@@ -50,7 +50,7 @@ spec:
           # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/config.yaml
           {{- /* Beside the secrets, the SDK variables telemetry.otlp names (ADR 0006). */}}
           {{- $otel := include "sluis.otelEnv" (dict "root" . "service" "access-issuer") }}
           {{- if or .Values.secretEnv $otel }}
@@ -70,13 +70,14 @@ spec:
             {{- end }}
           {{- end }}
           volumeMounts:
-            # Directories, never a subPath: a document is one file in its own
-            # ConfigMap's directory.
+            # Read once, at start: a subPath is enough, since a change replaces
+            # the pod (checksum/*). The policy keeps its directory.
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/access-issuer/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
