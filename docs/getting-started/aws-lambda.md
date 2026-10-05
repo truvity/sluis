@@ -129,7 +129,7 @@ const (
 	version      = "1.64.0"
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
-	auditQueue   = "arn:aws:sqs:" + region + ":" + account + ":demo-audit-ingest"
+	auditQueue   = "<the audit ingest queue ARN>"
 )
 
 func main() {
