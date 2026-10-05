@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.63.0
+
+One process everywhere (ADR 0037): on AWS Lambda one function and one role, on Kubernetes one Deployment and one Pod Identity role, configured by one service document `sluis.yaml` (`apiVersion` v3, with `controllers.github` and `controllers.slack`) plus the canonical `policy.yaml`. No data migration from 1.62; binary 1.63 and the Pulumi library 1.63 deploy together.
+
 ### Changed
 
 - **Breaking: one process everywhere.** `sluis serve` is the whole of sluis:
