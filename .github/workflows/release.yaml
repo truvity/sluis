@@ -30,12 +30,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Before anything is built or published: refuse a tag the Pulumi library
-  # disagrees with. deploy/pulumi requires github.com/truvity/sluis, and the
-  # library is tagged at this same commit; a require at another version ships
-  # a library built against the wrong root, and a published tag cannot be taken
-  # back. No require (the library no longer imports the root) passes.
-  # `just release-check <tag>` runs the same script locally.
+  # Before anything is built or published: refuse a tag whose Pulumi library
+  # cannot be pinned to it. deploy/pulumi requires github.com/truvity/sluis and
+  # the library is tagged (by pulumi-tag below) at a commit whose require is
+  # THIS release: hack/pin-pulumi-require.sh makes that go.mod, and the check
+  # holds the result to the tag, so a go.mod the pin cannot handle stops the
+  # release here, before anything is published, and not at the end of it. The
+  # require on master is never bumped by hand.
+  # `just release-check <tag>` runs the same two scripts locally.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -43,10 +45,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: deploy/pulumi requires this release or nothing
+      - name: deploy/pulumi can be pinned to this release
         env:
           TAG: ${{ github.ref_name }}
-        run: ./hack/check-release-require.sh "$TAG"
+        run: |
+          set -euo pipefail
+          ./hack/pin-pulumi-require.sh "$TAG" - < deploy/pulumi/go.mod > "$RUNNER_TEMP/go.mod"
+          ./hack/check-release-require.sh "$TAG" "$RUNNER_TEMP/go.mod"
 
   release:
     needs: gate
@@ -125,14 +130,23 @@ jobs:
   # directory: `deploy/pulumi/vX.Y.Z` is how
   # `go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z` finds it, and a plain
   # `vX.Y.Z` does not. release-public.yaml (truvity/ci-workflows) cuts nothing but
-  # the tag that triggered it, so this job adds the library's at the same commit,
-  # once the release itself succeeded.
+  # the tag that triggered it, so this job adds the library's, once the release
+  # itself succeeded.
   #
-  # Idempotent, so that a re-run of a release does not fail on its own tag, and
-  # a tag a person pushed by hand (signed, annotated) counts when it peels to
-  # the release commit. It refuses a tag that already exists at another
-  # commit: a tag fetched once cannot be taken back, and the proxy remembers
-  # the first.
+  # THE LIBRARY'S TAG IS NOT THE RELEASE COMMIT. deploy/pulumi builds against the
+  # root module beside it (a `replace`), and a consumer, who does not get the
+  # replace, builds it against the root module at the version its go.mod
+  # REQUIRES. That require used to be bumped by hand before every tag, and a
+  # library tagged with a stale one compiled for nobody (it used a package its
+  # require did not have). So the tag points at a commit made here: a child of
+  # the release commit whose deploy/pulumi/go.mod requires THIS release, and
+  # nothing else differs (hack/pin-pulumi-require.sh, which has a test). The
+  # require on master is whatever it was and never has to be bumped.
+  #
+  # Idempotent, so that a re-run of a release does not fail on its own tag: a tag
+  # that exists counts when it is that very commit (a child of the release
+  # commit with the pinned go.mod). It refuses a tag that exists at anything else:
+  # a tag fetched once cannot be taken back, and the proxy remembers the first.
   pulumi-tag:
     needs: release
     runs-on: ubuntu-latest
@@ -140,16 +154,19 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: tag the Pulumi library at the release commit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: tag the Pulumi library at the release commit, pinned to the release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           # deploy/pulumi is a module of its own, so that Pulumi is not in the
-          # root's dependency graph; it does not depend on the root.
+          # root's dependency graph.
           for dir in deploy/pulumi; do
             tag="$dir/${GITHUB_REF_NAME}"
+            pinned="$(mktemp)"
+            hack/pin-pulumi-require.sh "${GITHUB_REF_NAME}" - < "$dir/go.mod" > "$pinned"
             if ref=$(gh api "repos/$REPO/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha' 2>/dev/null); then
               read -r otype existing <<<"$ref"
               # A signed or annotated tag is an object of its own: the ref
@@ -158,12 +175,25 @@ jobs:
               while [ "$otype" = "tag" ]; do
                 read -r otype existing < <(gh api "repos/$REPO/git/tags/$existing" --jq '.object.type + " " + .object.sha')
               done
-              if [ "$otype" = "commit" ] && [ "$existing" = "$GITHUB_SHA" ]; then
-                echo "$tag already points at $GITHUB_SHA"
+              parent=""
+              if [ "$otype" = "commit" ]; then
+                parent="$(gh api "repos/$REPO/git/commits/$existing" --jq '.parents | if length == 1 then .[0].sha else "" end')"
+              fi
+              if [ "$otype" = "commit" ] && [ "$parent" = "$GITHUB_SHA" ] \
+                 && gh api -H 'Accept: application/vnd.github.raw+json' "repos/$REPO/contents/$dir/go.mod?ref=$existing" | cmp -s - "$pinned"; then
+                echo "$tag already points at $existing, the release commit with the require pinned"
                 continue
               fi
-              echo "::error::$tag exists at $existing ($otype), not at the release commit $GITHUB_SHA"
+              echo "::error::$tag exists at $existing ($otype), not at the release commit $GITHUB_SHA with $dir/go.mod pinned to ${GITHUB_REF_NAME}"
               exit 1
             fi
-            gh api "repos/$REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA" --jq .ref
+            base_tree="$(gh api "repos/$REPO/git/commits/$GITHUB_SHA" --jq .tree.sha)"
+            blob="$(gh api "repos/$REPO/git/blobs" -f "content=$(base64 -w0 "$pinned")" -f encoding=base64 --jq .sha)"
+            tree="$(jq -n --arg base "$base_tree" --arg path "$dir/go.mod" --arg blob "$blob" \
+              '{base_tree: $base, tree: [{path: $path, mode: "100644", type: "blob", sha: $blob}]}' \
+              | gh api "repos/$REPO/git/trees" --input - --jq .sha)"
+            commit="$(jq -n --arg msg "$dir ${GITHUB_REF_NAME}: require github.com/truvity/sluis ${GITHUB_REF_NAME}" --arg tree "$tree" --arg parent "$GITHUB_SHA" \
+              '{message: $msg, tree: $tree, parents: [$parent]}' \
+              | gh api "repos/$REPO/git/commits" --input - --jq .sha)"
+            gh api "repos/$REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$commit" --jq .ref
           done

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime/debug"
 	"strconv"
@@ -12,7 +13,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/truvity/sluis/internal/config"
+	sluisconfig "github.com/truvity/sluis/config"
 )
 
 // The documents of the configuration layer, by the name each has in it.
@@ -32,6 +33,12 @@ const (
 // layer outlives the deploy that published it, so a document the binary would
 // refuse is refused here, before anything is created.
 //
+// The documents come from LambdaArgs.Installation, rendered by
+// github.com/truvity/sluis/config (the renderer `sluisctl render` runs), or,
+// deprecated, from Config and Policy or PolicyPath, which are checked as
+// follows. An installation is rendered into the same Config and Policy first,
+// so that one set of checks covers both ways in.
+//
 // Into the service document the library writes what is its own: the apiVersion
 // (v3), `policy.file`, `secrets` (ssm, the installation's root), the recovery
 // password's and the state secret's names, `recovery.enabled`, and, for the
@@ -44,7 +51,11 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = own(doc, "Config", "apiVersion", config.APIVersion("sluis")); err != nil {
+	original, err := yamlMap(a.Config, "Config")
+	if err != nil {
+		return nil, err
+	}
+	if err = own(doc, "Config", "apiVersion", sluisconfig.APIVersion("sluis")); err != nil {
 		return nil, err
 	}
 	policy, err := child(doc, "Config", "policy")
@@ -63,11 +74,23 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 				"endpoints; AllowEndpoints is for a test against LocalStack", at)
 		}
 	}
-	raw, err := yaml.Marshal(doc)
-	if err != nil {
-		return nil, err
+	if a.Installation != nil {
+		// The renderer wrote this document, and the library's own keys with it:
+		// they are held to be what the library would write, and the bytes are
+		// the renderer's own, so that `sluisctl render` shows what the function
+		// reads.
+		if !reflect.DeepEqual(doc, original) {
+			return nil, errors.New("sluispulumi: LambdaArgs.Installation: the rendered service document and the library disagree " +
+				"about a key the library owns: this is a bug in the library")
+		}
+		out[docSluis] = a.Config
+	} else {
+		raw, err := yaml.Marshal(doc)
+		if err != nil {
+			return nil, err
+		}
+		out[docSluis] = string(raw)
 	}
-	out[docSluis] = string(raw)
 	policyDoc, err := renderPolicy(a)
 	if err != nil {
 		return nil, err
@@ -77,6 +100,82 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// withInstallation renders LambdaArgs.Installation into Config and Policy, the
+// arguments the rest of the library reads, after completing the installation
+// with what the arguments say and refusing one that says another: the library
+// owns the shape, and the instance, region, account and function name are one
+// fact stated once.
+func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
+	if strings.TrimSpace(a.Config) != "" || strings.TrimSpace(a.Policy) != "" || a.PolicyPath != "" {
+		return a, errors.New("sluispulumi: LambdaArgs.Installation replaces Config, Policy and PolicyPath: set the installation, or the documents, not both")
+	}
+	in := *a.Installation
+	aws := sluisconfig.AWS{}
+	if in.AWS != nil {
+		aws = *in.AWS
+	}
+	in.AWS = &aws
+	var errs []error
+	fill := func(what, installation string, arg string, set func(string)) {
+		switch {
+		case installation == "":
+			set(arg)
+		case arg != "" && arg != installation:
+			errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.%s is %q and the installation's is %q: say it once", what, arg, installation))
+		}
+	}
+	switch in.Shape {
+	case "":
+		in.Shape = sluisconfig.ShapeLambda
+	case sluisconfig.ShapeLambda:
+	default:
+		errs = append(errs, fmt.Errorf("sluispulumi: LambdaArgs.Installation.Shape is %q: the library deploys shape lambda", in.Shape))
+	}
+	fill("Instance", in.Instance, a.Instance, func(v string) { in.Instance = v })
+	fill("Region", aws.Region, a.Region, func(v string) { aws.Region = v })
+	fill("AccountID", aws.Account, a.AccountID, func(v string) { aws.Account = v })
+	fn := a.FunctionName
+	if fn == "" {
+		fn = a.FunctionNamePrefix
+	}
+	if fn == "" {
+		fn = sluisconfig.DefaultFunctionName
+	}
+	fill("FunctionName", aws.FunctionName, a.FunctionName, func(string) { aws.FunctionName = fn })
+	if err := errors.Join(errs...); err != nil {
+		return a, err
+	}
+	if a.Instance == "" {
+		a.Instance = in.Instance
+	}
+	if a.Region == "" {
+		a.Region = aws.Region
+	}
+	if a.AccountID == "" {
+		a.AccountID = aws.Account
+	}
+	if a.FunctionName == "" {
+		a.FunctionName = aws.FunctionName
+	}
+	if r := a.Recovery; r != nil && r.Enabled != nil {
+		rec := sluisconfig.Recovery{}
+		if in.Recovery != nil {
+			rec = *in.Recovery
+		}
+		if rec.Enabled != nil && *rec.Enabled != *r.Enabled {
+			return a, fmt.Errorf("sluispulumi: LambdaArgs.Recovery.Enabled is %v and the installation's recovery.enabled is %v: say it once", *r.Enabled, *rec.Enabled)
+		}
+		rec.Enabled = r.Enabled
+		in.Recovery = &rec
+	}
+	service, policy, err := sluisconfig.Render(&in)
+	if err != nil {
+		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
+	}
+	a.Config, a.Policy = string(service), string(policy)
+	return a, nil
 }
 
 // ownServe writes the service document's library-owned keys.
@@ -158,7 +257,7 @@ func ownTrigger(doc map[string]any, a *LambdaArgs) error {
 // PolicyPath (a file or a directory of layers, rendered by sluis's own
 // renderer).
 func renderPolicy(a *LambdaArgs) (string, error) {
-	var doc *config.PolicyDocument
+	var doc *sluisconfig.PolicyDocument
 	switch {
 	case strings.TrimSpace(a.Policy) != "":
 		dir, err := os.MkdirTemp("", "sluis-policy-")
@@ -170,12 +269,12 @@ func renderPolicy(a *LambdaArgs) (string, error) {
 		if err = os.WriteFile(file, []byte(a.Policy), 0o600); err != nil {
 			return "", err
 		}
-		if doc, err = config.Load[config.PolicyDocument](file); err != nil {
+		if doc, err = sluisconfig.Load[sluisconfig.PolicyDocument](file); err != nil {
 			return "", fmt.Errorf("sluispulumi: LambdaArgs.Policy: %w", err)
 		}
 	default:
 		var err error
-		if doc, err = config.Render(a.PolicyPath); err != nil {
+		if doc, err = sluisconfig.RenderPolicyLayers(a.PolicyPath); err != nil {
 			return "", fmt.Errorf("sluispulumi: LambdaArgs.PolicyPath: %w", err)
 		}
 	}
@@ -199,8 +298,8 @@ func validateDocuments(docs map[string]string) error {
 	}
 	var errs []error
 	for name, load := range map[string]func(string) error{
-		docSluis:  func(p string) error { _, err := config.Load[config.Sluis](p); return err },
-		docPolicy: func(p string) error { _, err := config.Load[config.PolicyDocument](p); return err },
+		docSluis:  func(p string) error { _, err := sluisconfig.Load[sluisconfig.Sluis](p); return err },
+		docPolicy: func(p string) error { _, err := sluisconfig.Load[sluisconfig.PolicyDocument](p); return err },
 	} {
 		p, err := path(name)
 		if err != nil {

@@ -1,0 +1,259 @@
+# A Truvity-shaped installation: sluis as a pod on Kubernetes with AWS storage
+# (preset k8s-aws), its secrets in an OpenBao under root `sluis` in the
+# namespace `kernel`, KMS-wrapped signing with a verify-only key for the
+# cutover from file keys, eight exports (one into the namespace `devel`),
+# twenty clients, two GitHub organisations, a Slack workspace and both
+# controllers. Every name is a placeholder; no value here is a secret.
+apiVersion: sluis.truvity.github.io/installation/v1
+instance: kernel
+shape: kubernetes
+preset: k8s-aws
+release: sluis
+cluster: kernel
+
+issuer:
+  url: https://access.example.test
+  secureCookies: true
+  groupsScoping: enforce
+
+log: {level: info}
+lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
+
+aws:
+  account: "111122223333"
+  region: eu-central-1
+  table: example-sluis-kernel
+  bucket: example-sluis-kernel-111122223333
+
+openbao:
+  address: https://openbao.example.test
+  caFile: /var/run/access-issuer/openbao-ca/ca.pem
+  namespace: kernel
+  root: sluis
+  auth:
+    method: kubernetes
+    mount: kubernetes
+    role: sluis
+    tokenFile: /var/run/openbao/token
+
+signingKey:
+  kmsWrapped:
+    keyId: alias/example-sluis-signing
+    algorithms: [ES384, RS256]
+    rotateEvery: 24h
+  overlap: 25h
+  verifyOnly:
+    - file: /var/run/access-issuer/verify-keys/0.pem
+      alg: ES384
+      until: "2026-11-01T00:00:00Z"
+
+recovery:
+  enabled: true
+  serviceAccount: sluis-recovery
+  audience: sluis-recovery
+login: {directory: false}
+console: {client: access-console}
+oauthClient: {provider: default}
+valkey:
+  address: valkey-sluis.sluis.svc:6379
+  cluster: true
+audit:
+  writer: http://audit.audit.svc:8080
+  queryURL: http://audit-query.audit.svc:8080
+  audience: audit
+  tokenFile: /var/run/audit/token
+  forwardedForTrustedHops: 2
+
+exchange:
+  audience: sluis
+  clusters:
+    - {name: kernel, issuer: "https://kubernetes.default.svc"}
+    - {name: devel, issuer: "https://oidc.devel.example.test", jwksUri: "https://oidc.devel.example.test/keys"}
+    - {name: stage, issuer: "https://oidc.stage.example.test"}
+    - {name: prod, issuer: "https://oidc.prod.example.test"}
+  aws:
+    audience: https://access.example.test
+    maxAge: 5m
+    accounts:
+      - {account: "111122223333", name: kernel, issuer: "https://sts-issuer.example.test"}
+  github:
+    owners: [example-org, example-forms]
+
+apps:
+  github:
+    runnerTiers: [stable, large, canary]
+    catalogue:
+      - id: release
+        org: example-org
+        permissions: {contents: write, pull_requests: read}
+        grants:
+          - group: all:ci:runner
+            repositories: ["infra-*"]
+            permissions: {contents: write}
+  slack:
+    catalogue:
+      - id: alerts
+        workspace: example
+        botScopes: [chat:write]
+      - id: deadman
+        workspace: example
+        botScopes: [chat:write]
+
+controllers:
+  github:
+    consoleURL: http://sluis.sluis.svc:8080/console
+    interval: 15m
+    enabledOrgs: [example-org, example-forms]
+  slack:
+    consoleURL: http://sluis.sluis.svc:8080/console
+    interval: 15m
+    enabledWorkspaces: [example]
+
+exports:
+  - {name: arc-runner-stable, source: runner-app, tier: stable, org: example-org, path: github-runner-app/stable/example-org}
+  - {name: arc-runner-large, source: runner-app, tier: large, org: example-org, path: github-runner-app/large/example-org}
+  - {name: arc-runner-canary, source: runner-app, tier: canary, org: example-forms, path: github-runner-app/canary/example-forms}
+  - {name: release-app, source: github-app, app: release, path: github-apps/release}
+  - {name: slack-alerts, source: slack-app, app: alerts, path: slack-apps/alerts}
+  - {name: slack-deadman, source: slack-app, app: deadman, namespace: devel, path: slack-apps/deadman}
+  - {name: backup-github-apps, source: bundle, bundle: github-apps, path: sluis-backup/github-apps}
+  - {name: backup-slack-credentials, source: bundle, bundle: slack-credentials, path: sluis-backup/slack-credentials}
+
+access:
+  groups:
+    all:access-roster:viewer:
+      matchers: [{email_domain: example.test}]
+    all:ci:runner:
+      matchers:
+        - github: {owner: example-org, ref: refs/heads/main}
+        - github: {owner: example-forms, ref: refs/heads/main}
+    all:access-roster:operator:
+      members: [admin@example.test]
+    all:argocd:admin:
+      members: [admin@example.test]
+    all:grafana:admin:
+      members: [admin@example.test]
+    all:kargo:admin:
+      members: [admin@example.test]
+    all:vmauth:viewer:
+      members: [admin@example.test]
+    all:headlamp:admin:
+      members: [admin@example.test]
+    all:registry:admin:
+      members: [admin@example.test]
+    all:outline:member:
+      members: [admin@example.test]
+    all:audit:security:
+      members: [admin@example.test]
+    all:k8s:admin:
+      members: [admin@example.test]
+    all:ssh:operator:
+      members: [admin@example.test]
+    all:aws:admin:
+      members: [admin@example.test]
+    all:docs:reader:
+      members: [admin@example.test]
+    all:linear:reader:
+      members: [admin@example.test]
+    all:github:reader:
+      members: [admin@example.test]
+  lifetimes:
+    default: 4h
+  clients:
+    access-console:
+      kind: public
+      redirects: [https://access.example.test/console/callback]
+      requires: [all:access-roster:viewer]
+    argocd:
+      kind: confidential
+      secret: clients/argocd/secret
+      redirects: [https://argocd.example.test/callback]
+      signing_alg: RS256
+      requires: [all:argocd:admin]
+    grafana:
+      kind: confidential
+      secret: clients/grafana/secret
+      redirects: [https://grafana.example.test/callback]
+      requires: [all:grafana:admin]
+    kargo:
+      kind: confidential
+      secret: clients/kargo/secret
+      redirects: [https://kargo.example.test/callback]
+      signing_alg: RS256
+      requires: [all:kargo:admin]
+    vmauth:
+      kind: confidential
+      secret: clients/vmauth/secret
+      redirects: [https://vmauth.example.test/callback]
+      requires: [all:vmauth:viewer]
+    headlamp:
+      kind: confidential
+      secret: clients/headlamp/secret
+      redirects: [https://headlamp.example.test/callback]
+      requires: [all:headlamp:admin]
+    harbor:
+      kind: confidential
+      secret: clients/harbor/secret
+      redirects: [https://harbor.example.test/callback]
+      requires: [all:registry:admin]
+    outline:
+      kind: confidential
+      secret: clients/outline/secret
+      redirects: [https://outline.example.test/callback]
+      requires: [all:outline:member]
+    audit:
+      kind: exchange
+      requires: [all:audit:security]
+    ci-github:
+      kind: exchange
+      requires: [all:ci:runner]
+    ci-gitlab:
+      kind: exchange
+      requires: [all:ci:runner]
+    k8s-kernel:
+      kind: exchange
+      requires: [all:k8s:admin]
+    kargo-cli:
+      kind: public
+      redirects: [http://localhost:8013/callback]
+      signing_alg: RS256
+      requires: [all:kargo:admin]
+    opkssh:
+      kind: public
+      redirects: [http://localhost:8014/callback]
+      signing_alg: RS256
+      requires: [all:ssh:operator]
+    aws-cli:
+      kind: public
+      redirects: [http://localhost:8015/callback]
+      requires: [all:aws:admin]
+    zot-cli:
+      kind: public
+      redirects: [http://localhost:8016/callback]
+      requires: [all:registry:admin]
+    sluisctl:
+      kind: public
+      redirects: [http://localhost:8017/callback]
+      requires: [all:access-roster:viewer]
+    mcp-docs:
+      kind: public
+      redirects: [http://localhost:8018/callback]
+      requires: [all:docs:reader]
+    mcp-linear:
+      kind: public
+      redirects: [http://localhost:8019/callback]
+      requires: [all:linear:reader]
+    mcp-github:
+      kind: public
+      redirects: [http://localhost:8019/callback]
+      requires: [all:github:reader]
+  github:
+    example-org:
+      members: [all:access-roster:viewer]
+    example-forms:
+      members: [all:access-roster:viewer]
+  slack:
+    workspaces:
+      example:
+        channels:
+          ops: {private: true, from: [all:access-roster:operator]}

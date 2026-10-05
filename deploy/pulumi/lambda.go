@@ -18,7 +18,7 @@ import (
 	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/truvity/sluis/internal/config"
+	sluisconfig "github.com/truvity/sluis/config"
 )
 
 // LambdaType is the Pulumi type token of the Lambda component.
@@ -81,12 +81,26 @@ type LambdaArgs struct {
 	// library is refused: it cannot read the configuration layer.
 	PackageVersion string
 
+	// Installation is what the estate knows about this installation: the
+	// service document and the policy document are rendered from it by
+	// github.com/truvity/sluis/config, the renderer `sluisctl render` runs, so a
+	// Lambda estate and a Kubernetes one write their documents the same way.
+	// The library fills in what is its own (the shape lambda, Instance, Region,
+	// AccountID and the function's name, from the arguments it is given) and
+	// refuses an installation that says another. Exactly one of Installation
+	// and Config is required.
+	Installation *sluisconfig.Installation
+
 	// Config is the service document (v3, apiVersion sluis.truvity.github.io/
 	// sluis/v3: the serve keys and, under `controllers`, the controllers the
 	// function runs), which the configuration layer holds at
 	// /opt/sluis/sluis.yaml; the function's SLUIS_CONFIG names it. Required. It
 	// holds no secret: a secret is named, and its `secrets` source reads it from
 	// /sluis/<instance>/private/config/.
+	//
+	// Deprecated: write an Installation and let the library render the document.
+	// Config, Policy and PolicyPath keep working for one minor and are removed
+	// after it; NewLambda logs a warning while one is used.
 	//
 	// The library writes what is its own into it: the apiVersion, `policy.file`,
 	// `secrets` ({source: ssm, root: /sluis/<instance>, region}),
@@ -99,7 +113,10 @@ type LambdaArgs struct {
 	// Policy is the policy document (apiVersion sluis.truvity.github.io/policy/v2,
 	// or a v1 policy file): the layer holds it at /opt/sluis/policy.yaml.
 	// PolicyPath is instead a file or a directory of layers, rendered by sluis's
-	// own renderer (`sluisctl policy render`). Exactly one is required.
+	// own renderer (`sluisctl policy render`). With Config, exactly one is
+	// required.
+	//
+	// Deprecated: see Config. An Installation holds the policy as well.
 	Policy     string
 	PolicyPath string
 
@@ -396,6 +413,12 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		return LambdaArgs{}, errors.New("sluispulumi: LambdaArgs is nil")
 	}
 	out := *a
+	if out.Installation != nil {
+		var err error
+		if out, err = out.withInstallation(); err != nil {
+			return out, err
+		}
+	}
 	var missing []string
 	for k, v := range map[string]string{
 		"Region": out.Region, "AccountID": out.AccountID, "Instance": out.Instance,
@@ -548,6 +571,10 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, err
 	}
+	if args.Installation == nil {
+		_ = ctx.Log.Warn("sluispulumi: LambdaArgs.Config, Policy and PolicyPath are deprecated and are removed after the next minor: "+
+			"write the estate's facts as LambdaArgs.Installation (github.com/truvity/sluis/config) and the library renders both documents", nil)
+	}
 	docs, err := renderDocuments(&a)
 	if err != nil {
 		return nil, err
@@ -690,7 +717,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			env[k] = pulumi.String(v)
 		}
 	}
-	env[config.EnvConfig] = pulumi.String(DocumentPath(docSluis))
+	env[sluisconfig.EnvConfig] = pulumi.String(DocumentPath(docSluis))
 
 	// The configuration layer is LAST: a layer later in the list wins a path an
 	// earlier one also writes, and nothing may write over the documents.

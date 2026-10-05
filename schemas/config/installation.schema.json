@@ -1,0 +1,2144 @@
+{
+  "$defs": {
+    "duration": {
+      "description": "A Go duration: 30s, 2m, 168h.",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "type": "string"
+    },
+    "secretName": {
+      "description": "The NAME of a secret, delivered as `secrets.source` says: `valkey/password`, `issuer/state-secret`. A value is never in the document.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+      "type": "string"
+    },
+    "url": {
+      "allOf": [
+        {
+          "pattern": "^https?://\\S+$"
+        },
+        {
+          "not": {
+            "pattern": "^https?://[^/?#\\s]*@"
+          }
+        }
+      ],
+      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "$id": "https://truvity.github.io/sluis/schemas/v1/config/installation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "shape": {
+            "const": "lambda"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "aws": {
+            "required": [
+              "region"
+            ]
+          }
+        },
+        "required": [
+          "aws"
+        ]
+      }
+    }
+  ],
+  "description": "What an estate knows about one installation of sluis, from which `sluisctl render` and the Pulumi library write the service document and the policy document. A superset of the two: a section is under the key the document gives it, and the installation adds the shape it runs in and the AWS and OpenBao resources it is built on. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
+  "properties": {
+    "access": {
+      "additionalProperties": false,
+      "description": "The access model's tables (docs/reference/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
+      "properties": {
+        "claims": {
+          "additionalProperties": {
+            "description": "A claims fragment: merged into the token (docs/reference/policy.md#claims).",
+            "type": "object"
+          },
+          "description": "What a group adds to a token, by group.",
+          "type": "object"
+        },
+        "client_documents": {
+          "additionalProperties": false,
+          "description": "Admits clients that are not declared, by a document they serve about themselves. Off unless it names an origin.",
+          "properties": {
+            "groups": {
+              "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+              "oneOf": [
+                {
+                  "const": "all"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "origins": {
+              "description": "The origins.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "requires": {
+              "description": "The groups a caller must hold.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ttl_cap": {
+              "$ref": "#/$defs/duration",
+              "description": "The longest a token lives."
+            }
+          },
+          "type": "object"
+        },
+        "clients": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "A client: who may be issued a token, and for what. Its id is the audience.",
+            "properties": {
+              "backchannel_logout_uri": {
+                "description": "Where a back-channel logout is posted.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "description": {
+                "description": "One line about it on the sign-in page. Public.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "display_name": {
+                "description": "What the sign-in page calls it. Public.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "groups": {
+                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+                "oneOf": [
+                  {
+                    "const": "all"
+                  },
+                  {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "groups_delimiter": {
+                "description": "Rewrites `:` in its `groups` claim (docs/decisions/0015).",
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "description": "public, confidential or exchange.",
+                "enum": [
+                  "public",
+                  "confidential",
+                  "exchange"
+                ]
+              },
+              "redirects": {
+                "description": "The redirect URIs.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "requires": {
+                "description": "The groups a caller must hold, any of them.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secret": {
+                "description": "For a confidential client: the name its secret is delivered under.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "sign_in_exchange": {
+                "description": "It may exchange a sign-in for a token of its own.",
+                "type": "boolean"
+              },
+              "signed_out": {
+                "description": "Where sign-out may return the browser.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "signing_alg": {
+                "description": "The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "ttl_cap": {
+                "$ref": "#/$defs/duration",
+                "description": "The longest a token for it lives."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "description": "Who may be issued a token, by client id.",
+          "type": "object"
+        },
+        "github": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "An organisation's bindings.",
+            "properties": {
+              "ignore": {
+                "description": "Addresses and logins the controller leaves alone.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "members": {
+                "description": "The groups whose holders belong in the organisation.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "teams": {
+                "additionalProperties": {
+                  "additionalProperties": false,
+                  "description": "A team's binding.",
+                  "properties": {
+                    "maintainers": {
+                      "description": "The groups whose holders are maintainers.",
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "members": {
+                      "description": "The groups whose holders are members.",
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                },
+                "description": "Each team, by slug.",
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "description": "GitHub organisations bound to internal groups, by login.",
+          "type": "object"
+        },
+        "groups": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "A group.",
+            "properties": {
+              "matchers": {
+                "description": "The matchers.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One way a caller comes to be in the group. Exactly one kind is set.",
+                  "properties": {
+                    "aws": {
+                      "additionalProperties": false,
+                      "description": "An IAM role in an account `exchange.aws` federates.",
+                      "properties": {
+                        "account": {
+                          "description": "The 12-digit account id.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "function": {
+                          "description": "A Lambda function's name.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "org_id": {
+                          "description": "The AWS Organizations id.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "path": {
+                          "description": "The role's path.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "description": "The role's name, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "account"
+                      ],
+                      "type": "object"
+                    },
+                    "email": {
+                      "description": "One signed-in address.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "email_domain": {
+                      "description": "Every signed-in address in a domain.",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "github": {
+                      "additionalProperties": false,
+                      "description": "A GitHub Actions job, by what its verified token says.",
+                      "properties": {
+                        "environment": {
+                          "description": "The deployment environment.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "event_name": {
+                          "description": "The triggering event.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "job_workflow_ref": {
+                          "description": "The reusable workflow at a ref, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "owner": {
+                          "description": "The repository's owner.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "ref": {
+                          "description": "The ref, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "ref_type": {
+                          "description": "branch or tag.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "repository": {
+                          "description": "owner/name, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha": {
+                          "description": "The commit.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "visibility": {
+                          "description": "public, private or internal.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "workflow": {
+                          "description": "The workflow's name.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "workflow_ref": {
+                          "description": "The workflow file at a ref, a glob.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "service_account": {
+                      "additionalProperties": false,
+                      "description": "A ServiceAccount on a federated cluster.",
+                      "properties": {
+                        "cluster": {
+                          "description": "The cluster's name in `exchange.clusters`. Unset is the unqualified subject.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "description": "The ServiceAccount.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "description": "The namespace.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "namespace",
+                        "name"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "members": {
+                "description": "Directory groups whose members are in it.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "description": "Every internal group, by name, and how a caller comes to be in it.",
+          "type": "object"
+        },
+        "lifetimes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/duration",
+            "description": "A lifetime."
+          },
+          "description": "How long a token lives, by group, and `default`. The shortest across a caller's groups wins.",
+          "type": "object"
+        },
+        "people": {
+          "additionalProperties": {
+            "description": "The addresses.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Which addresses are one person, by a name the installation chooses.",
+          "type": "object"
+        },
+        "resources": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "A resource a token may be minted for, when it is not the client asking.",
+            "properties": {
+              "absolute_cap": {
+                "$ref": "#/$defs/duration",
+                "description": "The longest a session that touched it lives."
+              },
+              "description": {
+                "description": "One line about it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "display_name": {
+                "description": "What the consent page calls it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "groups": {
+                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+                "oneOf": [
+                  {
+                    "const": "all"
+                  },
+                  {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "groups_delimiter": {
+                "description": "Rewrites `:` in its `groups` claim.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "read_only": {
+                "description": "It only reads: an absolute cap past the installation's may be honoured.",
+                "type": "boolean"
+              },
+              "requires": {
+                "description": "The groups a caller must hold, any of them.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "signing_alg": {
+                "description": "The algorithm its tokens are signed with: RS256, ES256 or ES384.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "ttl_cap": {
+                "$ref": "#/$defs/duration",
+                "description": "The longest a token for it lives."
+              }
+            },
+            "type": "object"
+          },
+          "description": "What a token may be minted FOR, by resource indicator.",
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "description": "Slack channels bound to internal groups, across workspaces.",
+          "properties": {
+            "workspaces": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A workspace.",
+                "properties": {
+                  "channels": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "description": "A channel's binding.",
+                      "properties": {
+                        "adopt": {
+                          "description": "Adopt an existing channel.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "from": {
+                          "description": "The groups whose holders belong in it.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "ignore": {
+                          "description": "Members left alone.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "mode": {
+                          "description": "How membership is kept.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "private": {
+                          "description": "A private channel.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "description": "Each channel, by name.",
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "Each workspace, by the installation's key.",
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "vocabulary": {
+          "additionalProperties": false,
+          "description": "Which scopes, things and roles a grant name may use, and each thing's role ladder. Optional: absent, any `<scope>:<thing>:<role>` is accepted unchecked.",
+          "properties": {
+            "scopes": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A scope.",
+                "properties": {
+                  "sensitive": {
+                    "description": "Grants on it are sensitive.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "The scopes.",
+              "type": "object"
+            },
+            "things": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "A thing.",
+                "properties": {
+                  "roles": {
+                    "additionalProperties": {
+                      "description": "A role: the roles it implies, or `{implies, scopes}` to restrict it to some of its thing's scopes.",
+                      "oneOf": [
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "description": "A role restricted to scopes.",
+                          "properties": {
+                            "implies": {
+                              "description": "The roles it implies.",
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "scopes": {
+                              "description": "The scopes it may be exercised on.",
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "description": "Its roles.",
+                    "type": "object"
+                  },
+                  "scopes": {
+                    "description": "The scopes it exists in.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "description": "The things.",
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "adapters": {
+      "additionalProperties": false,
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
+      "properties": {
+        "audit": {
+          "additionalProperties": false,
+          "description": "The adapter for the audit sink, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "blobs": {
+          "additionalProperties": false,
+          "description": "The adapter for blobs, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "schedule": {
+          "additionalProperties": false,
+          "description": "The adapter for the schedule of passes, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "signing": {
+          "additionalProperties": false,
+          "description": "The adapter for token signing, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "The adapter for state, sessions included, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        },
+        "trigger": {
+          "additionalProperties": false,
+          "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
+          "properties": {
+            "adapter": {
+              "description": "The adapter's name, as the compatibility matrix lists it.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "settings": {
+              "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
+              "type": "object"
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "apiVersion": {
+      "const": "sluis.truvity.github.io/installation/v1",
+      "description": "Which version of which document this is. sluis.truvity.github.io/installation/v1 is what this build reads and writes."
+    },
+    "apps": {
+      "additionalProperties": false,
+      "description": "What an operator may make on the console.",
+      "properties": {
+        "github": {
+          "additionalProperties": false,
+          "description": "GitHub Apps.",
+          "properties": {
+            "catalogue": {
+              "description": "Every GitHub App the installation declares (docs/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+              "items": {
+                "additionalProperties": false,
+                "description": "One App: created under `org` from the console, and installed there.",
+                "properties": {
+                  "description": {
+                    "description": "What it is for.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "events": {
+                    "description": "Webhook events; the webhook stays inactive.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "grants": {
+                    "description": "Who may ask for tokens of it, and for how much.",
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "A grant.",
+                      "properties": {
+                        "group": {
+                          "description": "The internal group.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "permissions": {
+                          "additionalProperties": {
+                            "enum": [
+                              "read",
+                              "write",
+                              "admin"
+                            ]
+                          },
+                          "description": "Permission name to level: read, write or admin.",
+                          "minProperties": 1,
+                          "type": "object"
+                        },
+                        "repositories": {
+                          "description": "Repository globs.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "group",
+                        "repositories",
+                        "permissions"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "id": {
+                    "description": "[a-z0-9-], at most 32, unique; never changes.",
+                    "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "installation": {
+                    "description": "all or selected (default).",
+                    "enum": [
+                      "all",
+                      "selected"
+                    ]
+                  },
+                  "name": {
+                    "description": "Default <org>-<id>.",
+                    "maxLength": 34,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "org": {
+                    "description": "The organisation it is created under.",
+                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$",
+                    "type": "string"
+                  },
+                  "permissions": {
+                    "additionalProperties": {
+                      "enum": [
+                        "read",
+                        "write",
+                        "admin"
+                      ]
+                    },
+                    "description": "Permission name to level: read, write or admin.",
+                    "minProperties": 1,
+                    "type": "object"
+                  },
+                  "public": {
+                    "description": "Installable by other organisations.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org",
+                  "permissions"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "runnerTiers": {
+              "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once.",
+              "items": {
+                "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$",
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "description": "Slack Apps.",
+          "properties": {
+            "catalogue": {
+              "description": "Every Slack App the installation declares (docs/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
+              "items": {
+                "additionalProperties": false,
+                "description": "One Slack App, created and installed from the console.",
+                "properties": {
+                  "botScopes": {
+                    "description": "The bot scopes.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "description": {
+                    "description": "At most 140.",
+                    "maxLength": 140,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "id": {
+                    "description": "[a-z0-9-], at most 32, unique; never changes.",
+                    "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Default <workspace>-<id>.",
+                    "maxLength": 35,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "workspace": {
+                    "description": "A key of the policy's slack.workspaces.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "workspace",
+                  "botScopes"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "audit": {
+      "additionalProperties": false,
+      "description": "The audit installation this service records to. Unset keeps the trail in the log only.",
+      "properties": {
+        "audience": {
+          "default": "audit",
+          "description": "The client whose audience the Audit page's tokens carry.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "forwardedForTrustedHops": {
+          "default": 0,
+          "description": "How many of the deployment's own proxies append to X-Forwarded-For; zero records the peer.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queryURL": {
+          "$ref": "#/$defs/url",
+          "description": "The query service, for the console's Audit page. Its own setting: it needs no `writer`, so the page works with the `sqs` and `log` sinks. A path prefix (`https://audit.example/sluis`) is kept and the procedure path appended."
+        },
+        "tokenFile": {
+          "description": "This workload's projected service-account token, presented on every call.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "writer": {
+          "$ref": "#/$defs/url",
+          "description": "The installation's receiver."
+        }
+      },
+      "type": "object"
+    },
+    "aws": {
+      "additionalProperties": false,
+      "description": "The AWS account and the resources the installation is built on. Each resource named here becomes the adapter setting that uses it (`state` the table, `blobs` the bucket, `audit` the queue), unless `adapters` names that concern.",
+      "properties": {
+        "account": {
+          "description": "The 12-digit account id.",
+          "pattern": "^[0-9]{12}$",
+          "type": "string"
+        },
+        "auditQueueURL": {
+          "$ref": "#/$defs/url",
+          "description": "The audit ingest queue the `sqs` audit adapter sends to."
+        },
+        "bucket": {
+          "description": "The S3 bucket of the `s3` blobs adapter.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "functionName": {
+          "description": "The function's name (shape `lambda`), which the `invoke` trigger names for a run-now. Default `sluis`; the Pulumi library supplies its own `FunctionName`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "region": {
+          "description": "The region of the resources and of the SSM parameters. Required for shape `lambda`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "table": {
+          "description": "The DynamoDB table of the `dynamodb` state adapter.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "cluster": {
+      "description": "Names the cluster the installation runs on in a ServiceAccount's subject (the service document's `cluster`).",
+      "minLength": 1,
+      "type": "string"
+    },
+    "console": {
+      "additionalProperties": false,
+      "description": "Where the console is published, for the sign-in that starts there.",
+      "properties": {
+        "awsAudience": {
+          "description": "The audience an AWS role's web identity token must be minted for to be a bearer at the console (a Lambda controller). Its own, distinct from the AWS federation file's, so a token for token exchange is no proof here and the reverse. Default `<issuerURL>/console`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "client": {
+          "description": "The client id the console signs in as.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "origin": {
+          "description": "The console's origin, when it is not the issuer's.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "controllers": {
+      "additionalProperties": false,
+      "description": "The controllers this installation runs, each in its own loop; an absent one is off. A section's own keys go to the service document's `controllers`; `enabledOrgs` and `enabledWorkspaces` go to the policy document's.",
+      "properties": {
+        "github": {
+          "additionalProperties": false,
+          "description": "The GitHub controller: makes each GitHub organisation's teams match the policy's github table.",
+          "properties": {
+            "appsDir": {
+              "default": "/var/run/github-roster/apps",
+              "description": "One file per connected organisation: its App's credentials. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "console": {
+              "additionalProperties": false,
+              "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+              "properties": {
+                "auth": {
+                  "additionalProperties": false,
+                  "description": "The proof. Absent, `tokenFile`.",
+                  "properties": {
+                    "aws": {
+                      "additionalProperties": false,
+                      "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                      "properties": {
+                        "audience": {
+                          "description": "The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "audience"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "consoleURL": {
+              "$ref": "#/$defs/url",
+              "description": "The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes."
+            },
+            "enabledOrgs": {
+              "description": "The organisations the controller may CHANGE (the policy document's `controllers.github.enabledOrgs`). Each must be bound by `access.github`. The rest are derived every pass and left alone.",
+              "items": {
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "interval": {
+              "$ref": "#/$defs/duration",
+              "default": "15m",
+              "description": "How long between passes. Positive."
+            },
+            "recordsDir": {
+              "default": "/var/run/github-roster/records",
+              "description": "The console's records, mounted. Read only with `ports.adapter: legacy`.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "default": "/var/run/secrets/github-roster/token",
+              "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "slack": {
+          "additionalProperties": false,
+          "description": "The Slack controller: makes each Slack workspace's user groups match the policy's slack table.",
+          "properties": {
+            "console": {
+              "additionalProperties": false,
+              "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+              "properties": {
+                "auth": {
+                  "additionalProperties": false,
+                  "description": "The proof. Absent, `tokenFile`.",
+                  "properties": {
+                    "aws": {
+                      "additionalProperties": false,
+                      "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                      "properties": {
+                        "audience": {
+                          "description": "The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file.",
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "audience"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "consoleURL": {
+              "$ref": "#/$defs/url",
+              "description": "The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes."
+            },
+            "credentialsDir": {
+              "default": "/var/run/slack-roster/credentials",
+              "description": "One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "enabledWorkspaces": {
+              "description": "The workspaces the controller may CHANGE (the policy document's `controllers.slack.enabledWorkspaces`), by the key of `access.slack.workspaces`.",
+              "items": {
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "interval": {
+              "$ref": "#/$defs/duration",
+              "default": "15m",
+              "description": "How long between passes. Positive."
+            },
+            "recordsDir": {
+              "default": "/var/run/slack-roster/workspaces",
+              "description": "The console's records, mounted. Read only with `ports.adapter: legacy`.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "default": "/var/run/secrets/slack-roster/token",
+              "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "directory": {
+      "additionalProperties": false,
+      "description": "The corporate directories this deployment declares: each adopted at start (the console connects the others). Unset declares none.",
+      "properties": {
+        "workspaces": {
+          "description": "The declared workspaces. One that cannot be adopted stops the service.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A workspace: deliberately thin. Its domains and the tenant's own id are discovered.",
+            "properties": {
+              "admin": {
+                "description": "The account the credential impersonates.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "backend": {
+                "description": "The implementation that reads it.",
+                "enum": [
+                  "google"
+                ]
+              },
+              "id": {
+                "description": "The backend's tenant id. Optional: given, the adoption checks it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "keySecret": {
+                "$ref": "#/$defs/secretName",
+                "description": "The secret the service-account key is: `directory/<id>/key`."
+              },
+              "serve": {
+                "description": "Narrows the tenant to these domains. Empty serves every domain discovered.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "syncGroups": {
+                "description": "Narrows the tenant to these groups. Empty keeps every group in the served domains.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "backend",
+              "admin",
+              "keySecret"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "exchange": {
+      "additionalProperties": false,
+      "description": "How the token exchange verifies workloads and whom it trusts. `audience` is written to the service document; the clusters, the AWS accounts and the GitHub owners are the policy document's `exchange`.",
+      "properties": {
+        "audience": {
+          "description": "The audience a workload token must be minted for (the service document's `exchange.audience`). Defaults to `release`, so two issuers in one cluster cannot accept each other's proofs.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "aws": {
+          "additionalProperties": false,
+          "description": "The AWS accounts whose roles' outbound identity tokens (sts:GetWebIdentityToken) are verified. An empty list verifies none.",
+          "properties": {
+            "accounts": {
+              "description": "The accounts.",
+              "items": {
+                "additionalProperties": false,
+                "description": "An account.",
+                "properties": {
+                  "account": {
+                    "description": "The 12-digit account id.",
+                    "pattern": "^[0-9]{12}$",
+                    "type": "string"
+                  },
+                  "algs": {
+                    "description": "Default both; narrow, never widen.",
+                    "items": {
+                      "enum": [
+                        "ES384",
+                        "RS256"
+                      ]
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "issuer": {
+                    "$ref": "#/$defs/url",
+                    "description": "From `aws iam get-outbound-web-identity-federation-info`. https."
+                  },
+                  "jwksUri": {
+                    "$ref": "#/$defs/url",
+                    "description": "Default <issuer>/.well-known/jwks.json."
+                  },
+                  "name": {
+                    "description": "The estate's word for it, for logs.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "orgId": {
+                    "description": "Require this AWS Organizations id.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "account",
+                  "name",
+                  "issuer"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "audience": {
+              "description": "The audience the role must request. Required with an account: it is the trust boundary.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxAge": {
+              "$ref": "#/$defs/duration",
+              "default": "5m",
+              "description": "Refuse a token whose `iat` is older than this. At most 1h."
+            }
+          },
+          "type": "object"
+        },
+        "clusters": {
+          "description": "The clusters whose ServiceAccount tokens are verified, each against the key set it publishes for itself. This service's own cluster is a row like any other.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A cluster.",
+            "properties": {
+              "issuer": {
+                "description": "The `iss` its ServiceAccount tokens carry.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "jwksUri": {
+                "$ref": "#/$defs/url",
+                "description": "Where its keys are. Unset discovers them from the issuer."
+              },
+              "name": {
+                "description": "The estate's word for it: the cluster in a `service_account` matcher. Renaming a row changes every rule about it.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "issuer"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "github": {
+          "additionalProperties": false,
+          "description": "Whose GitHub Actions tokens are verified, for this issuer's URL as the audience.",
+          "properties": {
+            "owners": {
+              "description": "The organisations. None verifies none: an empty list would admit every repository there is.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "exports": {
+      "description": "The secrets the service copies out of itself into the store its `ports.export` (or its secrets adapter) names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. An unknown source, a source this document does not declare and two exports that would write one key are refused before anything starts.",
+      "items": {
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "source": {
+                  "enum": [
+                    "slack-app",
+                    "github-app"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "app"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "source": {
+                  "const": "runner-app"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "tier",
+                "org"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "source": {
+                  "const": "bundle"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "bundle"
+              ]
+            }
+          }
+        ],
+        "description": "One copy: what is copied (`source` and the field that names it) and where it goes (`path`, in `namespace`).",
+        "properties": {
+          "app": {
+            "description": "The catalogue id, for `slack-app` and `github-app`. It must be declared in the catalogue.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "bundle": {
+            "description": "The bundle, for `bundle`: each is what the Kubernetes Secret of that name held, one JSON document per entry. Written with `replace`: the key holds exactly the bundle.",
+            "enum": [
+              "workspace-credentials",
+              "github-apps",
+              "github-links",
+              "github-runner-apps",
+              "github-catalogue-apps",
+              "slack-credentials",
+              "slack-records"
+            ]
+          },
+          "interval": {
+            "$ref": "#/$defs/duration",
+            "default": "1h",
+            "description": "How often the copy is made again with nothing changed, to put back what somebody altered. A change is copied at once; this is the backstop."
+          },
+          "name": {
+            "description": "Identifies the export in the log, the metrics and its lease: lower-case letters, digits, '.', '_' and '-'. Absent, the source and what it names, e.g. `slack-app.alerts`.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "namespace": {
+            "description": "The OpenBao namespace. Absent, `ports.export.openbao.namespace`.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "org": {
+            "description": "The organisation, for `runner-app`.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "description": "The key under the KV mount: `slack-apps/alerts`. No leading or trailing slash.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "properties": {
+            "additionalProperties": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App. A property export is a PATCH: other properties of the key are left as they are. Not for `bundle`.",
+            "type": "object"
+          },
+          "source": {
+            "description": "What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).",
+            "enum": [
+              "slack-app",
+              "github-app",
+              "runner-app",
+              "bundle"
+            ]
+          },
+          "tier": {
+            "description": "A runner tier, for `runner-app`. It must be one of `github.runnerTiers`.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "path"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "freshness": {
+      "additionalProperties": false,
+      "description": "How the directory's snapshot is kept current.",
+      "properties": {
+        "freshnessWindow": {
+          "$ref": "#/$defs/duration",
+          "default": "30m",
+          "description": "How old a snapshot may be and still be answered from."
+        },
+        "probeInterval": {
+          "$ref": "#/$defs/duration",
+          "default": "5m",
+          "description": "How often the directory is probed."
+        },
+        "refreshInterval": {
+          "$ref": "#/$defs/duration",
+          "default": "15m",
+          "description": "How often a snapshot is refreshed."
+        }
+      },
+      "type": "object"
+    },
+    "instance": {
+      "description": "The installation's name (`hive`, `kernel`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private` and `export` would nest under another's tree.",
+      "not": {
+        "enum": [
+          "private",
+          "export"
+        ]
+      },
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+      "type": "string"
+    },
+    "issuer": {
+      "additionalProperties": false,
+      "description": "The issuer and where a browser reaches the console.",
+      "properties": {
+        "consoleURL": {
+          "$ref": "#/$defs/url",
+          "description": "Where a browser reaches the console, with its mount (`publicURL`). Default `<url>/console`."
+        },
+        "groupsScoping": {
+          "description": "How far per-audience `groups` scoping has been taken: `off`, `report` or `enforce` (`groupsScoping`).",
+          "enum": [
+            "off",
+            "report",
+            "enforce"
+          ]
+        },
+        "rootURL": {
+          "$ref": "#/$defs/url",
+          "description": "The host's root (`publicRootURL`). Default `url`."
+        },
+        "secureCookies": {
+          "description": "Mark session cookies Secure (`secureCookies`). Unset follows the https of the URL.",
+          "type": "boolean"
+        },
+        "url": {
+          "$ref": "#/$defs/url",
+          "description": "The issuer (the service document's `issuerURL`): baked into every token and every relying party's trust."
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "lifetimes": {
+      "additionalProperties": false,
+      "description": "How long what the issuer hands out lives.",
+      "properties": {
+        "absolute": {
+          "$ref": "#/$defs/duration",
+          "default": "24h",
+          "description": "A session, at most. Positive, and at least `token`: a session has to end SOMETIME after sign-in, and an access token cannot outlive the session that grants it."
+        },
+        "hold": {
+          "$ref": "#/$defs/duration",
+          "default": "4h",
+          "description": "How long a removal is held before it takes effect."
+        },
+        "refresh": {
+          "$ref": "#/$defs/duration",
+          "default": "12h",
+          "description": "A refresh token."
+        },
+        "session": {
+          "$ref": "#/$defs/duration",
+          "default": "12h",
+          "description": "The console's own session cookie, capped at `absolute`."
+        },
+        "token": {
+          "$ref": "#/$defs/duration",
+          "default": "1h",
+          "description": "An access token."
+        }
+      },
+      "type": "object"
+    },
+    "log": {
+      "$ref": "https://github.com/truvity/policy/schemas/fragments/log.json"
+    },
+    "login": {
+      "additionalProperties": false,
+      "description": "How a person signs in to the console.",
+      "properties": {
+        "directory": {
+          "default": true,
+          "description": "Sign in with the corporate directory.",
+          "type": "boolean"
+        },
+        "forwarded": {
+          "additionalProperties": false,
+          "description": "A sign-in an authenticating proxy has already done.",
+          "properties": {
+            "audience": {
+              "description": "The audience its token carries.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "emailHeader": {
+              "description": "The header that carries the signed-in address.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "issuer": {
+              "description": "The proxy's issuer.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "signOutURL": {
+          "description": "Where sign-out sends the browser.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "oauthClient": {
+      "additionalProperties": false,
+      "description": "The OAuth client registered once with the directory backend: it drives both admin consent and operator sign-in.",
+      "properties": {
+        "id": {
+          "description": "The client id, for a local run. Not a secret.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "idKey": {
+          "description": "The key of the id in that Secret.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "provider": {
+          "description": "Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it. One segment of a secret's name.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "type": "string"
+        },
+        "secretKey": {
+          "description": "The key of the secret in that Secret.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "secretName": {
+          "description": "The Kubernetes Secret the client is declared in, which the console shows and cannot change.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "openbao": {
+      "additionalProperties": false,
+      "description": "An OpenBao the secrets are kept in (the `openbao` secrets adapter, layout v3 under `root`); the exports go there too. Setting it chooses that adapter for `secrets` unless `adapters.secrets` names another. It is an answer to the preset's question: the preset's own answers do not ask for an OpenBao.",
+      "properties": {
+        "address": {
+          "description": "The server, https only and with no path.",
+          "pattern": "^https://[^\\s/?#@]+/?$",
+          "type": "string"
+        },
+        "auth": {
+          "additionalProperties": false,
+          "description": "How the service logs in: a role of the kubernetes or jwt auth method, with a token read from a file.",
+          "properties": {
+            "method": {
+              "description": "The auth method.",
+              "enum": [
+                "kubernetes",
+                "jwt"
+              ]
+            },
+            "mount": {
+              "description": "The auth method's mount.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "role": {
+              "description": "The role.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "description": "The projected token.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "role"
+          ],
+          "type": "object"
+        },
+        "caFile": {
+          "description": "The PEM bundle the server's certificate chains to.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "mount": {
+          "description": "The KV version 2 mount. Default the adapter's.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The OpenBao namespace.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "root": {
+          "description": "The root of the layout inside the mount: `sluis`.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "root",
+        "auth"
+      ],
+      "type": "object"
+    },
+    "policyFile": {
+      "description": "Where the service finds the policy document (the service document's `policy.file`). Default by shape: `/opt/sluis/policy.yaml` (lambda, the configuration layer), `/var/run/access-issuer/policy/policy.yaml` (kubernetes, where the chart mounts it), `/etc/sluis/policy.yaml` (server).",
+      "minLength": 1,
+      "type": "string"
+    },
+    "preset": {
+      "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `k8s-aws` (sluis as a pod on Kubernetes with AWS storage: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao with `adapters.secrets`). `aws-eks` is the deprecated name of `k8s-aws`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
+      "enum": [
+        "server",
+        "k8s-minimal",
+        "k8s-openbao",
+        "aws-serverless",
+        "aws-hybrid",
+        "k8s-aws",
+        "aws-eks"
+      ]
+    },
+    "recovery": {
+      "additionalProperties": false,
+      "description": "The sign-in that needs no directory: in a cluster, a token for a ServiceAccount proven against the API server; anywhere else, a password. Unset is off for the issuer and, for the hub, on.",
+      "properties": {
+        "audience": {
+          "description": "The audience its token must carry.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable.",
+          "type": "boolean"
+        },
+        "passwordSecret": {
+          "$ref": "#/$defs/secretName",
+          "description": "Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."
+        },
+        "serviceAccount": {
+          "description": "The ServiceAccount whose token signs in.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "release": {
+      "default": "sluis",
+      "description": "The name the installation's objects carry (the service document's `release`). On Kubernetes, the release's full name.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "secrets": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "enum": [
+                  "file",
+                  "ssm"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "root"
+            ]
+          }
+        }
+      ],
+      "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/url",
+          "description": "`ssm`: overrides the SSM address, for LocalStack."
+        },
+        "refresh": {
+          "$ref": "#/$defs/duration",
+          "default": "5m",
+          "description": "`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it."
+        },
+        "region": {
+          "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "root": {
+          "description": "`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "default": "env",
+          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/private/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (layout v3, root /sluis/<instance>).",
+          "enum": [
+            "env",
+            "file",
+            "ssm"
+          ]
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "shape": {
+      "description": "Where the installation runs: `lambda` (one AWS Lambda function), `kubernetes` (one Deployment) or `server` (one process). It fixes the paths the documents name and what is derived.",
+      "enum": [
+        "lambda",
+        "kubernetes",
+        "server"
+      ]
+    },
+    "signingKey": {
+      "additionalProperties": false,
+      "description": "The issuer's signing keys: provisioned, never minted here.",
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "file",
+              "kms"
+            ]
+          },
+          {
+            "required": [
+              "file",
+              "kmsWrapped"
+            ]
+          },
+          {
+            "required": [
+              "kms",
+              "kmsWrapped"
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "activationDelay": {
+          "$ref": "#/$defs/duration",
+          "default": "15m",
+          "description": "How long a newly published key waits before a replica signs with it. At least `pollInterval`."
+        },
+        "additionalFiles": {
+          "description": "Every OTHER algorithm this installation signs with at once, one file per algorithm.",
+          "items": {
+            "description": "A key file.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "file": {
+          "description": "The primary key. Unset generates one for this process, which a local run may do and nothing else should. Exclusive with `kms`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "kms": {
+          "additionalProperties": false,
+          "description": "Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`.",
+          "properties": {
+            "additional": {
+              "description": "Every OTHER algorithm this installation signs with at once, each on its own rotation track, as `signingKey.additionalFiles` does for files. RS256 is the one that exists: for relying parties that need it (Kargo, EKS's OIDC provider).",
+              "items": {
+                "additionalProperties": false,
+                "description": "One algorithm's keys.",
+                "properties": {
+                  "alg": {
+                    "description": "The algorithm.",
+                    "enum": [
+                      "RS256"
+                    ]
+                  },
+                  "keys": {
+                    "description": "RSA_2048, RSA_3072 or RSA_4096 SIGN_VERIFY keys, oldest first, the last signing; same rotation rules as `keys`.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "alg",
+                  "keys"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "keys": {
+              "description": "ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each.",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "region": {
+              "description": "The keys' region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "stateSecret": {
+              "$ref": "#/$defs/secretName",
+              "description": "The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."
+            }
+          },
+          "required": [
+            "keys"
+          ],
+          "type": "object"
+        },
+        "kmsWrapped": {
+          "additionalProperties": false,
+          "description": "Sign with key pairs AWS KMS generates and wraps under ONE symmetric key (the `kms-wrapped` adapter): a new pair per algorithm every `rotateEvery`, published before it signs and kept after it is replaced. The private key is decrypted into process memory to sign. Exclusive with `file` and `kms`.",
+          "properties": {
+            "algorithms": {
+              "description": "The algorithms signed with, the first the installation default. Unset is ES384 and RS256. EdDSA is not supported yet.",
+              "items": {
+                "enum": [
+                  "ES384",
+                  "RS256"
+                ]
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "keyId": {
+              "description": "The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "prepublish": {
+              "$ref": "#/$defs/duration",
+              "default": "15m",
+              "description": "How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`."
+            },
+            "region": {
+              "description": "The key's region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "retain": {
+              "$ref": "#/$defs/duration",
+              "description": "How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`."
+            },
+            "rotateEvery": {
+              "$ref": "#/$defs/duration",
+              "default": "24h",
+              "description": "How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h."
+            },
+            "stateSecret": {
+              "$ref": "#/$defs/secretName",
+              "description": "The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."
+            }
+          },
+          "required": [
+            "keyId"
+          ],
+          "type": "object"
+        },
+        "overlap": {
+          "$ref": "#/$defs/duration",
+          "description": "How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew."
+        },
+        "pollInterval": {
+          "$ref": "#/$defs/duration",
+          "default": "30s",
+          "description": "How often the files are re-read."
+        },
+        "verifyOnly": {
+          "description": "PUBLIC keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire: the overlap of a cutover from file keys to `kmsWrapped`. Each is dropped from the JWKS at its `until`. A private key stops the start.",
+          "items": {
+            "additionalProperties": false,
+            "description": "One public key.",
+            "properties": {
+              "alg": {
+                "description": "The key's algorithm. Unset follows the key.",
+                "enum": [
+                  "ES256",
+                  "ES384",
+                  "ES512",
+                  "RS256"
+                ]
+              },
+              "file": {
+                "description": "A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "kid": {
+                "description": "The `kid` the old tokens carry. Unset is the RFC 7638 thumbprint of the key, which is what a file signer derived for it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "until": {
+                "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache. Required: an overlap has an end.",
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "file",
+              "until"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "valkey": {
+      "additionalProperties": false,
+      "description": "The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
+      "properties": {
+        "address": {
+          "allOf": [
+            {
+              "pattern": "^[^\\s/]+:[0-9]{1,5}$"
+            },
+            {
+              "not": {
+                "pattern": "@"
+              }
+            }
+          ],
+          "description": "host:port, with no credentials.",
+          "type": "string"
+        },
+        "cluster": {
+          "default": true,
+          "description": "Speak the cluster protocol. A plain single server needs it off.",
+          "type": "boolean"
+        },
+        "passwordSecret": {
+          "$ref": "#/$defs/secretName",
+          "description": "The secret the password is (`valkey/password`). Unset connects with none."
+        },
+        "tls": {
+          "description": "Speak TLS to the server.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "apiVersion",
+    "instance",
+    "shape",
+    "issuer"
+  ],
+  "title": "sluis installation",
+  "type": "object"
+}

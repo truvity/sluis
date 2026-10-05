@@ -1,6 +1,6 @@
 # 0036 — Configuration and policy are immutable per instance; credentials and State are read live
 
-**Status:** Accepted; amended by [0037](0037-one-process-everywhere.md); follows up [0007](0007-breaking-changes-inside-1x.md) (the deferred deprecation window), refines [0032](0032-one-configuration-file-one-binary-one-chart.md), amends [0028](0028-nothing-writes-configmaps-or-secrets.md) and [0031](0031-a-generic-migration-tool.md) only where they name SSM paths or configuration documents
+**Status:** Accepted; amended by [0037](0037-one-process-everywhere.md); refined by [0038](0038-estates-render-through-sluis.md); follows up [0007](0007-breaking-changes-inside-1x.md) (the deferred deprecation window), refines [0032](0032-one-configuration-file-one-binary-one-chart.md), amends [0028](0028-nothing-writes-configmaps-or-secrets.md) and [0031](0031-a-generic-migration-tool.md) only where they name SSM paths or configuration documents
 **Date:** 2026-10-05
 
 ## Context

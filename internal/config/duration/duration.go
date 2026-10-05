@@ -7,6 +7,7 @@ package duration
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	yaml "go.yaml.in/yaml/v3"
@@ -37,9 +38,23 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	return d.parse(s)
 }
 
+// String is the span as a document writes it: Go's own form with the zero
+// trailing units left off, so 1h is "1h" and not "1h0m0s". It parses back to
+// the same span.
+func (d Duration) String() string {
+	s := time.Duration(d).String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
 // MarshalJSON writes a duration string.
 func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
+	return json.Marshal(d.String())
 }
 
 // UnmarshalYAML reads a duration string.
@@ -52,4 +67,4 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // MarshalYAML writes a duration string.
-func (d Duration) MarshalYAML() (any, error) { return time.Duration(d).String(), nil }
+func (d Duration) MarshalYAML() (any, error) { return d.String(), nil }

@@ -1,0 +1,77 @@
+apiVersion: sluis.truvity.github.io/sluis/v3
+adapters:
+  audit:
+    adapter: sqs
+    settings:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+      region: eu-central-1
+  blobs:
+    adapter: s3
+    settings:
+      bucket: example-sluis-111122223333
+      region: eu-central-1
+  secrets:
+    adapter: ssm
+    settings:
+      region: eu-central-1
+      root: /sluis/hive
+  state:
+    adapter: dynamodb
+    settings:
+      region: eu-central-1
+      table: example-sluis
+  trigger:
+    adapter: invoke
+    settings:
+      github: sluis-http
+      slack: sluis-http
+audit:
+  audience: audit
+  queryURL: https://audit.example.test/sluis
+console:
+  client: access-console
+controllers:
+  github:
+    consoleURL: https://access.example.test/console
+    interval: 15m
+exchange:
+  audience: access-issuer
+freshness:
+  freshnessWindow: 30m
+  probeInterval: 5m
+  refreshInterval: 15m
+groupsScoping: report
+issuerURL: https://access.example.test
+lifetimes:
+  absolute: 24h
+  hold: 4h
+  refresh: 12h
+  session: 12h
+  token: 1h
+log:
+  level: info
+login:
+  directory: true
+oauthClient:
+  provider: default
+policy:
+  file: /opt/sluis/policy.yaml
+preset: aws-hybrid
+publicRootURL: https://access.example.test
+publicURL: https://access.example.test/console
+recovery:
+  enabled: false
+  passwordSecret: recovery/password
+release: access-issuer
+secrets:
+  region: eu-central-1
+  root: /sluis/hive
+  source: ssm
+secureCookies: true
+signingKey:
+  activationDelay: 30s
+  kmsWrapped:
+    keyId: alias/example-unseal
+    region: eu-central-1
+    stateSecret: issuer/state-secret
+  pollInterval: 30s

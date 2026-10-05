@@ -1,0 +1,102 @@
+# Every key the installation's schema has, set, and valid: the type holds each
+# one, and writes it back as it was. It is a binding test, not an installation
+# anyone would run (the rendered documents are the golden ones).
+apiVersion: sluis.truvity.github.io/installation/v1
+instance: full
+shape: kubernetes
+preset: k8s-aws
+release: sluis
+cluster: kernel
+policyFile: /var/run/access-issuer/policy/policy.yaml
+issuer:
+  url: https://access.example.test
+  consoleURL: https://access.example.test/console
+  rootURL: https://access.example.test
+  secureCookies: true
+  groupsScoping: report
+log: {level: info}
+lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
+freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
+secrets: {source: file, root: /var/run/sluis/secrets}
+aws:
+  account: "111122223333"
+  region: eu-central-1
+  functionName: sluis
+  table: example-sluis
+  bucket: example-sluis-bucket
+  auditQueueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+openbao:
+  address: https://openbao.example.test
+  caFile: /var/run/access-issuer/openbao-ca/ca.pem
+  mount: secret
+  namespace: kernel
+  root: sluis
+  auth: {method: kubernetes, mount: kubernetes, role: sluis, tokenFile: /var/run/openbao/token}
+adapters:
+  state: {adapter: dynamodb, settings: {table: other-table}}
+signingKey:
+  kmsWrapped: {keyId: alias/example-signing, region: eu-central-1, stateSecret: issuer/state-secret, algorithms: [ES384], rotateEvery: 24h, prepublish: 15m, retain: 25h}
+  pollInterval: 30s
+  activationDelay: 15m
+  overlap: 25h
+  verifyOnly:
+    - {file: /var/run/access-issuer/verify-keys/0.pem, kid: old, alg: ES384, until: "2026-11-01T00:00:00Z"}
+recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery, passwordSecret: recovery/password}
+login: {directory: false, signOutURL: https://access.example.test/signed-out, forwarded: {issuer: https://proxy.example.test, audience: proxy, emailHeader: X-Email}}
+console: {origin: https://access.example.test, client: access-console, awsAudience: https://access.example.test/console}
+oauthClient: {provider: default, secretName: oauth, idKey: client-id, secretKey: client-secret}
+valkey: {address: valkey.example.svc:6379, passwordSecret: valkey/password, tls: true, cluster: true}
+directory:
+  workspaces:
+    - {id: tenant, backend: google, admin: admin@example.test, keySecret: directory/tenant/key, serve: [example.test], syncGroups: [staff@example.test]}
+audit: {writer: http://audit.example.svc:8080, tokenFile: /var/run/audit/token, queryURL: http://audit-query.example.svc:8080, audience: audit, forwardedForTrustedHops: 2}
+exchange:
+  audience: sluis
+  clusters:
+    - {name: kernel, issuer: "https://kubernetes.default.svc", jwksUri: "https://kernel.example.test/keys"}
+  aws:
+    audience: https://access.example.test
+    maxAge: 5m
+    accounts:
+      - {account: "111122223333", name: kernel, issuer: "https://sts.example.test", jwksUri: "https://sts.example.test/keys", orgId: o-example, algs: [ES384]}
+  github:
+    owners: [example-org]
+apps:
+  github:
+    runnerTiers: [stable]
+    catalogue:
+      - {id: release, org: example-org, permissions: {contents: write}}
+  slack:
+    catalogue:
+      - {id: alerts, workspace: example, botScopes: [chat:write]}
+controllers:
+  github:
+    consoleURL: http://sluis.example.svc:8080/console
+    tokenFile: /var/run/secrets/github-roster/token
+    recordsDir: /var/run/github-roster/records
+    interval: 15m
+    appsDir: /var/run/github-roster/apps
+    enabledOrgs: [example-org]
+  slack:
+    consoleURL: http://sluis.example.svc:8080/console
+    interval: 15m
+    enabledWorkspaces: [example]
+exports:
+  - {name: alerts, source: slack-app, app: alerts, namespace: kernel, path: slack-apps/alerts, interval: 1h}
+access:
+  groups:
+    all:access-roster:operator:
+      members: [admin@example.test]
+  clients:
+    access-console:
+      kind: public
+      redirects: [https://access.example.test/console/callback]
+      requires: [all:access-roster:operator]
+  github:
+    example-org:
+      members: [all:access-roster:operator]
+  slack:
+    workspaces:
+      example:
+        channels:
+          ops: {private: true, from: [all:access-roster:operator]}
