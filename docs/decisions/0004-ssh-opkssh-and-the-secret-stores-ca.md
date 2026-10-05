@@ -1,6 +1,6 @@
 # 0004 — SSH: opkssh for people, the secret store's SSH CA for hosts
 
-**Status:** Accepted; partly superseded by [0011](0011-ssh-people-opkssh-machines-and-hosts-openbao.md)
+**Status:** Accepted; partly superseded by [0011](0011-ssh-people-opkssh-machines-and-hosts-openbao.md) (machines and hosts move to the secret store); refined by [0015](0015-a-per-audience-groups-delimiter-for-opkssh.md)
 **Date:** 2026-09-25
 
 ## Context
@@ -71,7 +71,7 @@ tracked reason the direct path is not there yet. When ES384 support
 lands, the migration is: declare opkssh's client, write the
 `oidc:groups:` policy on each server, cut over, then remove the broker
 subcommand and its documentation, following the removal shape in
-[design/sluis.md#appendix-what-was-removed-and-why](../explanation/design.md#appendix-what-was-removed-and-why).
+[not-served.md#what-was-removed-and-why](../explanation/not-served.md#what-was-removed-and-why).
 
 ## Alternatives considered
 

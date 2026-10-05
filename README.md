@@ -6,378 +6,83 @@
 > Formerly **access-roster** (CLI `accessctl`, now `sluisctl`). What changed
 > and what deliberately did not: [ADR 0035](docs/decisions/0035-renamed-to-sluis.md).
 
-**The policy is the product.** One file in git turns the groups your
-people already have in the corporate directory, and the identities your
-machines already hold — a GitHub Actions job, a Kubernetes ServiceAccount
-— into one vocabulary of **internal groups**, gated per audience at one
-small OpenID provider.
+**The policy is the product.** sluis is one small OpenID provider and one policy file in git. The file turns the groups
+your people already have in the corporate directory, and the identities your machines already hold (a GitHub Actions job,
+a Kubernetes ServiceAccount), into one vocabulary of internal groups, gated per audience.
 
-Everything that can read a claim gets that vocabulary **minted into a
-token**: Kubernetes, AWS, ArgoCD, Kargo and every console behind your
-gateway trust that one token, and so do CI jobs and workloads, from the
-identity they already hold. Everything that cannot read a claim — GitHub
-teams and Slack channels — gets it **reconciled into a membership** instead,
-by a controller reading the same file. A console shows you who holds what and
-why, and an audit installation of its own, rendered beside it, keeps who
-did what. A leaver disappears from the directory and, within a freshness
-window, from everything downstream: authoritative or held, never guessed.
+Everything that can read a claim gets that vocabulary minted into a token. Everything that cannot (GitHub teams, Slack
+channels) gets it reconciled into a membership by a controller that reads the same file. Nothing here authenticates
+anyone: sign-in, passwords and MFA stay with the corporate directory. sluis has no database of record and no users of its
+own. It runs as one process ([ADR 0037](docs/decisions/0037-one-process-everywhere.md)).
+Why it exists and how it differs from an identity product: [why sluis](docs/explanation/why.md).
 
-Nothing here authenticates anyone. Sign-in, passwords, MFA and device
-policy stay with Google Workspace, and later Entra. This verifies the
-result, knows the directory, and applies the policy — configured from a
-Helm chart, with no database of record and no users of its own.
+## Deployment shapes
 
-## What ships
+| Shape | What runs | Start with |
+|---|---|---|
+| AWS Lambda | one function, one role; DynamoDB state, SSM or OpenBao secrets, S3 blobs, KMS-wrapped signing | [AWS Lambda](docs/getting-started/aws-lambda.md) |
+| Kubernetes on AWS (`k8s-aws`) | one Deployment, one Pod Identity role; the same AWS adapters | [Kubernetes on AWS](docs/getting-started/kubernetes-aws.md) |
+| Kubernetes, legacy store | one Deployment; state in Kubernetes objects and Valkey (older installations) | [legacy store](docs/getting-started/kubernetes-legacy-store.md) |
 
-Every artifact is stamped by one tag, `vX.Y.Z`; pin one version of this
-repository.
-
-| Artifact | Published at | For | |
-|---|---|---|---|
-| `sluis` chart and image | `oci://ghcr.io/truvity/charts/sluis`, `ghcr.io/truvity/sluis/sluis` | the installation, once. One binary, one process, one image, one chart: `serve` (the directory, the policy, the OpenID provider, the login page, the console and the audit trail) and, as loops inside it, the GitHub controller (keeps every connected GitHub organisation's teams as the policy says, reporting to the console) and the Slack controller (the same for Slack channels; a dry run until a workspace is in `policy.controllers.slack.enabledWorkspaces`), named in `config.controllers`. The chart runs ONE Deployment; on AWS Lambda it is one function ([0037](docs/decisions/0037-one-process-everywhere.md)). Replaces the `access-issuer` chart and the `access-issuer`, `github-roster` and `slack-roster` images: [the migration](docs/reference/configuration.md#migrating-from-the-access-issuer-chart) | shipped |
-| Go module | `github.com/truvity/sluis` | services and consoles in Go: verify a bearer, read the caller's groups | shipped |
-| TypeScript package | `@truvity/sluis` on GitHub Packages | console UIs: `useIdentity()` over `/.access/whoami`; Node services: verify a bearer | shipped |
-| `sluisctl` | the release's archives, and a Nix flake on every release | people on laptops and CI jobs: one sign-in, then kubeconfigs, AWS credentials, a token for any audience, and short-lived certificates a secret manager mints | shipped |
-| GitHub Action | `truvity/sluis@<commit>` | workflows: one exchange, then a kubeconfig, AWS profiles, or a GitHub App token | shipped |
-| the policy | one file, one schema | the issuer and the controllers | shipped |
-| an Entra directory backend | — | a second corporate directory, behind the same workspace record | planned |
-
-## Who it is for
-
-A platform team running Kubernetes, with the Gateway API, cert-manager,
-and a corporate directory in Google Workspace, that wants one issuer for
-its clusters, cloud accounts, consoles and CI instead of an identity
-product. Envoy Gateway gets you gateway-native OIDC, the default now for a
-console with no authorization model of its own. For a gateway that is not
-Envoy Gateway, run upstream oauth2-proxy yourself. A Valkey (for
-more than one replica), an audit installation (for a trail that is a
-record) and OpenBAO (for certificates) are optional. **None of those is
-installed here**: the charts point at them. Nor is the signing key minted
-here — cert-manager issues it, or the installation delivers it — and no
-password, MFA or device policy lives here: sign-in stays with the
-corporate directory.
-
-### The niche
-
-Every mature identity provider can do this. None of them is built for
-it, and the difference is what you run to get it.
-
-| | dex | Keycloak, Zitadel, Authentik | Okta, Auth0, Entra ID | Teleport | **sluis** |
-|---|---|---|---|---|---|
-| runs on | a ConfigMap | a database, an operator, a login UI you theme | someone else's cloud | its own Auth and Proxy services, plus an agent per resource | a ConfigMap |
-| users | none, federates | its own user store, plus federation | its own user store | its own local users, plus SSO connectors | none, federates |
-| groups in the token | yes for Google Workspace, given a service account with domain-wide delegation; other IdPs only if they send them | after you write a mapper or a login hook per IdP | after you configure a sync | not a token: short-lived certificates carry roles an SSO connector mapped once, at login | read from the directory, always |
-| several corporate IdPs, one issuer | yes | yes | yes | yes, several SSO connectors (OIDC, SAML, GitHub) | yes |
-| one policy file for people **and** machines | no policy at all | no; roles per client, in the UI or the database | no; per-app assignments | no; roles are Teleport's own resources, separate from the SSO mapping | yes, in git — and GitHub teams in the same file |
-| CI and workloads without a stored secret | token exchange (RFC 8693), but the client still needs a stored secret | machine users, with secrets | machine users, with secrets | yes — Machine ID's own join methods (cloud IAM, Kubernetes, CI OIDC) | token exchange from GitHub's or the cluster's own token |
-| audience gating for cloud roles | no | via custom mappers | via app assignments | not verified | a `requires` list per client |
-| who is in this group and why, at a glance | no | the admin UI, eventually | the admin UI | its own web UI | the directory console |
-| operational footprint | tiny | large, and you own it | none, and you rent it | large: an Auth Service, a Proxy Service and an agent per resource | tiny |
-
-dex comes closest to this shape: its Google connector reads Workspace
-groups given a service account with domain-wide delegation, and it can
-exchange a machine's own token for one of its own (RFC 8693). What it
-does not have is a policy — no file mapping those groups to audiences, no
-per-client gate, and no GitHub-teams reconciliation, so each of those is
-a mapper, a hook or a sync written and run per relying party. The heavy
-providers can be made to do all of it, at the cost of running an identity
-product to use about a fifth of one. Teleport issues its own SSH,
-database and Kubernetes certificates and runs its own access proxy in
-front of your infrastructure; sluis does not try to be that.
-sluis is dex's shape, with the directory read built in and one
-policy file doing the rest: minted into tokens where a relying party can
-read a claim, reconciled into memberships where it cannot.
-
-### What you get
-
-**As a person.** Sign in once, at one page, with your corporate account.
-Every console behind the gateway opens without another login. One
-`sluisctl login` on your laptop, and `kubectl` works on every cluster
-you are granted, AWS credentials come with no long-lived key, and a token
-for any other audience is one command away. Link your GitHub account
-once and the teams the policy puts you in follow. Sign out once: it ends
-immediately at every client wired for Back-Channel Logout; for a
-gateway-fronted console it ends within that token's own lifetime or
-`ttl_cap`, since the gateway learns only at its next refresh; and an
-application that minted its own session after signing in is reached only
-through Back-Channel Logout, or whatever limit it put on that session
-itself
-([how each kind finds out](docs/explanation/design.md#telling-the-relying-party-back-channel-logout)).
-
-**As a machine.** A GitHub Actions job presents the identity token it
-already has and receives one for AWS or a cluster, under a rule that
-names the repository, the ref and, if you want, the repository's
-visibility. The same `sluisctl`, kubeconfig and AWS profile a person
-uses on a laptop work unchanged inside the job. A workload in any
-cluster does the same with its ServiceAccount token. No secret is stored
-anywhere, and the rule sits in the same file as the human ones.
-
-**As the operator.** One chart. The policy is values. The console shows
-every person, every directory group, every internal group, every rule
-that grants one, every open session, every GitHub organisation with
-what the controller would change and why, and every Slack workspace and channel,
-with its people and why each is held. A leaver disappears from the
-directory and, within the freshness window, from everything downstream,
-GitHub teams included. Every sign-in, refusal, exchange, revoke and
-console action is one record in an S3 bucket you own. What the console
-adds at runtime lives in a handful of Secrets that a copy of restores.
-
-## The model
-
-The **directory** says who a person is and which directory groups they
-are in. The **policy** maps directory groups, CI jobs and workloads into
-**internal groups**, named `<scope>:<thing>:<role>`. A **client** is
-everything that trusts the issuer — a cluster, a cloud role, a console —
-and names the internal groups it `requires`; it is usually a row in the
-policy, but a client the installation does not deploy may instead
-describe itself by an allow-listed URL. A **resource** is what a token is
-*for*, when that is not the client asking — a client names one (RFC
-8707) and it becomes the token's audience, with its own `requires`. A
-token is minted for a client or a resource, carries the internal groups,
-and is refused before it exists when neither gate is satisfied.
-
-### The shape
-
-```mermaid
-flowchart LR
-  idp["Corporate directory<br/>Google Workspace, Entra later"]
-  gh["GitHub Actions"]
-  k8s["Any cluster's<br/>ServiceAccount tokens"]
-
-  subgraph ar["sluis"]
-    iss["the issuer<br/>reads the directory · applies the policy · mints tokens<br/>serves the login page and the console"]
-    ctl["the GitHub controller<br/>keeps each organisation's teams as the policy says"]
-    sctl["the Slack controller<br/>keeps each workspace's channels as the policy says"]
-  end
-
-  gg["Envoy Gateway OIDC<br/>gateway-native, per console with no OIDC of its own"]
-  apps["Kubernetes · AWS · ArgoCD · Kargo · consoles"]
-  orgs["GitHub organisations"]
-  slack["Slack workspaces"]
-  aud[("audit installation<br/>the audit trail, in this service's namespace")]
-
-  idp -- "sign-in, and directory reads" --> iss
-  gh -- "token exchange" --> iss
-  k8s -- "token exchange" --> iss
-  iss --> gg --> apps
-  iss -- "trusted by" --> apps
-  iss -. "who holds which group" .-> ctl
-  ctl -- "invites, teams, removals" --> orgs
-  iss -. "who holds which group" .-> sctl
-  sctl -- "invites, channels, removals" --> slack
-  iss -- "every record" --> aud
-  ctl -- "what it did" --> aud
-  sctl -- "what it did" --> aud
-```
-
-One chart, one Valkey, one bucket. A login makes no network call except
-to the corporate directory — and, for a client that identifies itself by
-a URL instead of a policy row, one bounded, cached HTTPS fetch of that
-client's own document, from an allow-listed host only
-([reference/policy.md](docs/reference/policy.md#clients-that-describe-themselves)).
-An application that needs identity *inside* itself — per-user
-authorization from `groups`, per-user audit, tokens of its own to call
-something else, the way ArgoCD and Kargo do — signs in as its own client
-of the issuer directly: **native OIDC**. A console with no authorization
-model of its own, that only needs *may this person reach it at all*,
-defaults instead to **gateway-native OIDC**: an Envoy Gateway
-`SecurityPolicy` with `oidc:` against a declared client, gated by that
-client's `requires`, with no OIDC code in the console
-([which door](docs/decisions/0001-sessions-and-an-absolute-limit.md)).
-On a gateway that is not Envoy Gateway, run upstream oauth2-proxy
-yourself, with a declared confidential client row of this issuer. The GitHub
-controller and the Slack controller are second processes from the same chart,
-asking the issuer who holds which group and acting on GitHub with an App, or on
-Slack with a bot, that an owner created from the console; each acts only in the
-organisations or workspaces listed in its `enabledOrgs` / `enabledWorkspaces`, and a removal rests on a
-vouched directory answer and never exceeds half a target without an operator's
-confirmation.
-
-### Many in, many out, one point in the middle
-
-Every row is a guide of its own: follow it and add one more without
-asking anyone.
-
-| Fans in | Fans out |
-|---|---|
-| [corporate directories](docs/how-to/connect/corporate-directory.md): several Google Workspaces, Entra next — each a workspace with its own credential and its own served domains | [Kubernetes clusters, for people](docs/how-to/connect/kubernetes-cluster.md): each trusts the one issuer as its identity provider |
-| [CI platforms](docs/how-to/connect/github-actions.md) — GitHub Actions today: one federated issuer, an owner allow-list | [AWS accounts](docs/how-to/connect/aws-account.md): each trusts the one issuer as an OIDC provider |
-| [every cluster's own ServiceAccount tokens](docs/how-to/connect/service-to-service.md), for workloads: one row per cluster naming its key set; [AWS IAM roles' outbound-federation tokens](docs/how-to/connect/aws-workloads.md), one row per account | [GitHub organisations](docs/how-to/connect/github-organisation.md): one controller App each, bindings in the same policy, and a runner App per tier for self-hosted runners |
-| | [Slack workspaces](docs/how-to/connect/slack-workspace.md): one bot each, channels bound in the same policy, console channels fed by directory groups, and [Slack Connect channels](docs/how-to/connect/slack-connect-channels.md) between your own workspaces; [Slack Apps](docs/how-to/connect/slack-apps-catalogue.md) declared as data |
-| | [consoles and applications](docs/how-to/connect/console-app.md): one client row each |
-
-Adding one of anything is one row and one trust registration. The
-issuer URL, the policy file and the console never multiply.
-
-Everything in both columns is built and in use, with one exception: the
-second directory backend (Entra) is designed behind the same workspace
-record and not written yet.
-[architecture.md](docs/explanation/architecture.md#fan-in-and-fan-out) says how each
-row is expressed in configuration.
-
-## Install and a worked example
-
-```sh
-helm install sluis oci://ghcr.io/truvity/charts/sluis \
-  --version X.Y.Z --namespace sluis --create-namespace \
-  --values issuer-values.yaml
-```
-
-```yaml
-config:                                    # `sluis serve`'s configuration file, as it stands
-  issuerURL: https://access.example.com    # stable for the life of the installation
-  release: sluis                   # the release's full name
-  publicRootURL: https://access.example.com
-  publicURL: https://access.example.com/console
-  valkey:
-    address: valkey.sluis.svc:6379
-  oauthClient:                             # keys client-id and client-secret
-    secretName: access-issuer-google-client
-    idFile: /var/run/access-issuer/oauth-client/client-id
-    secretFile: /var/run/access-issuer/oauth-client/client-secret
-  console:
-    client: access-console
-secretMounts:
-  - { secretName: access-issuer-google-client, mountPath: /var/run/access-issuer/oauth-client }
-# signingKey.certificate is left at its default: a P-384 key, so every token is ES384.
-# A relying party that accepts only RS256 (Kargo; kube-apiserver flags left at their
-# default) needs {algorithm: RSA, size: 2048, encoding: PKCS1} there instead.
-route:
-  host: access.example.com
-  rootRedirect: /console/
-  gatewayClassName: example-gateway-class
-  certificate: { issuerName: example-ca, issuerKind: ClusterIssuer }
-policy:
-  groups:
-    all:access-roster:operator:
-      members: [platform-admins@example.com]
-      matchers:                                   # the first way in: recovery
-        - service_account: { namespace: sluis, name: access-issuer-recovery }
-    all:access-roster:viewer:
-      matchers: [{ email_domain: example.com }]
-  clients:
-    access-console:
-      kind: public
-      redirects: [https://access.example.com/console/]
-      requires: [all:access-roster:operator, all:access-roster:viewer]
-```
-
-Then sign in once with a recovery token
-(`kubectl -n sluis create token access-issuer-recovery --audience access-issuer-recovery`),
-and the console's Overview walks the rest: connecting the directory, and
-the first operator who signs in as themselves.
-[docs/operations/adoption-plain-helm.md](docs/how-to/install-with-helm.md)
-is the whole walk-through, with the prerequisites and a gateway-native OIDC
-setup for consoles with no authorization model of their own.
-
-## Consumers
-
-The sluis chart installs in `truvity/gitops` and a second, non-AWS estate.
-The Go module is imported by `truvity/gitops` (for `policy`, in its render
-tests) and by `truvity/gemaal` (for `identity`), and used by CI workflows
-via the `sluisctl` command. The `sluis` chart
-serves as a token audience for `truvity/cloudflare` (r2broker) and
-`truvity/observability` (vmauth). Developers use `sluisctl` to mint
-credentials locally; it is also used in CI jobs. The GitHub Action
-`truvity/sluis` is used in workflows for token exchange.
-
-## Neighbours
-
-`sluis` is the issuer in a three-part system with two other
-repositories:
-
-- **openbao**: sluis mints tokens; openbao is a relying party that
-  trusts them and issues certificates. See
-  [openbao's docs/integrations/sluis.md](https://github.com/truvity/openbao/blob/master/docs/integrations/sluis.md).
-- **audit**: every decision, sign-in, refusal, exchange and console action
-  is one record in the audit trail, written by the issuer and by each
-  controller for itself.
-- **workstation**: `sluisctl` (from this repository) and `awsctl` both mint
-  AWS credentials on a developer machine; `sluisctl` is the estate path,
-  `awsctl` the SSO fallback (when sluis is unreachable).
-
-## Conformance
-
-sluis targets four OpenID Foundation profiles. A profile is
-claimed only once the suite says so, so this is the last run rather than
-an intention.
-
-**Last run 2026-09-12 against the deployed issuer at v1.0.0**, from the
-suite running in the cluster.
-
-| Profile | Passed | Review | Skipped | Warning | **Failed** |
-|---|--:|--:|--:|--:|--:|
-| [Config OP](https://openid.net/certification/connect_op_testing/) | 1 | 0 | 0 | 0 | **0** |
-| [Basic OP](https://openid.net/certification/connect_op_testing/) | 21 | 4 | 4 | 6 | **0** |
-| [RP-Initiated Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 3 | 8 | 0 | 0 | **0** |
-| [Back-Channel Logout OP](https://openid.net/certification/connect_op_logout_testing/) | 2 | 0 | 0 | 0 | **0** |
-
-The Foundation's rule is that only FAILED or INTERRUPTED disqualify a
-profile. **REVIEW** is a screenshot the suite hands to a person; all
-twelve were looked at on this run and each shows the page its step
-demanded. **WARNING** is mostly personal data this issuer declines to
-hold — a birthdate, a gender, a locale — with one real defect among
-them found and fixed in v0.15.2. The logout pair the Foundation requires
-for a submission, RP-Initiated plus Back-Channel, is green for the first
-time; the first Back-Channel run found two defects, fixed in v0.17.1.
-Every column, and why, is in
-[docs/conformance.md](docs/explanation/conformance-findings.md).
+The presets `server`, `k8s-minimal` and `k8s-openbao` are unavailable: they name adapters that are planned and not built
+([adapters](docs/reference/adapters.md)). To choose between the shapes, read [getting started](docs/getting-started/README.md).
 
 ## Documentation
 
-[docs/index.md](docs/index.md) is the one entry point: a map to every
-page, organised by what you are trying to do. Three starting points from
-there are worth naming here — [docs/adoption.md](docs/getting-started/README.md) for
-what taking this into use requires, [docs/safety.md](docs/explanation/safety.md) for
-what is refused and why, and [CHANGELOG.md](CHANGELOG.md) for what
-changed for a consumer, per version. To pick a deployment (and see which
-adapters exist), read
-[docs/guides/choosing-a-deployment.md](docs/getting-started/README.md);
-to add an adapter in a fork,
-[docs/guides/diy-adapter.md](docs/how-to/add-an-adapter.md).
+[docs/index.md](docs/index.md) is the one entry point, organised by what you are trying to do: tutorials
+(`docs/getting-started/`), tasks (`docs/how-to/`), reference (`docs/reference/`), explanation (`docs/explanation/`) and
+decisions (`docs/decisions/`). Upgrading is `docs/how-to/upgrade/`: [v1.62](docs/how-to/upgrade/v1.62.md),
+[v1.63](docs/how-to/upgrade/v1.63.md), [v1.64](docs/how-to/upgrade/v1.64.md). [CHANGELOG.md](CHANGELOG.md) says what
+changed, per version; the steps are in the upgrade pages. What is refused and why: [safety](docs/explanation/safety.md).
+OpenID conformance results: [conformance](docs/explanation/conformance-findings.md).
+
+## What ships
+
+Every artifact is stamped by one tag, `vX.Y.Z`; pin one version of this repository.
+
+| Artifact | Published at | For |
+|---|---|---|
+| `sluis` chart and image | `oci://ghcr.io/truvity/charts/sluis`, `ghcr.io/truvity/sluis/sluis` | the installation on Kubernetes: one image, one chart, one Deployment (`sluis serve`, with the GitHub and Slack controllers as loops inside it, named in `config.controllers`). Chart values: [chart README](charts/sluis/README.md) |
+| `resource-proxy` image | `ghcr.io/truvity/sluis/resource-proxy` | the resource-server sidecar a consumer's chart names beside the container it fronts |
+| `sluis-lambda_<version>_linux_arm64.zip` | the release's assets | the AWS Lambda function (arm64): the release zip, deployed unchanged by the Pulumi library |
+| `sluis_<version>_<os>_<arch>` archives | the release's assets | the `sluis` binary (`serve`, `migrate`), the `resource-proxy` binary and the `sluis-acceptance` test binary |
+| `sluisctl` | the release's archives (`sluisctl_<version>_<os>_<arch>`), and a Nix flake on every release | people on laptops and CI jobs: sign in, then kubeconfigs, AWS credentials, tokens for any audience, `render` and `policy render` |
+| `accessctl_<version>_<os>_<arch>` | the release's assets | `sluisctl` under its old name, deprecated |
+| `sluis-config-schemas_<version>.tar.gz` | the release's assets | the JSON Schemas of the service, policy and installation documents |
+| `sluis-audit-catalogue_<version>.tar.gz` | the release's assets | the audit catalogue `roster.yaml` with every schema it references: the audit writer refuses to start without them |
+| `checksums.txt` | the release's assets | SHA-256 of every archive above |
+| Pulumi library | `github.com/truvity/sluis/deploy/pulumi` (tag `deploy/pulumi/vX.Y.Z`) | AWS infrastructure and the Lambda: [Pulumi library](docs/reference/pulumi-library.md) |
+| Go module | `github.com/truvity/sluis` | services and consoles in Go: verify a bearer, read the caller's groups ([Go module](docs/reference/go-module.md)) |
+| TypeScript package | `@truvity/sluis` on GitHub Packages | console UIs: `useIdentity()` over `/.access/whoami`; Node services: verify a bearer |
+| GitHub Action | `truvity/sluis@<commit>` | workflows: one exchange, then a kubeconfig, AWS profiles, or a GitHub App token |
+| an Entra directory backend | none | planned: a second corporate directory behind the same workspace record |
 
 ## The rule that makes this repository public
 
-**Mechanism only.** Nothing here names an account, a zone, a hostname, a
-cluster, an issuer or a secret path of any installation: every such thing
-is a value with a neutral example, and the installation supplies it from
-its own repository. Examples use `example.com`, `*.example` and the
-`acme` and `globex` organisations. The rule covers code, docs, the
-CHANGELOG, tests, commit messages and pull request text, because public
-history cannot be unpublished. It is enforced mechanically:
-[`hack/leak-canary.sh`](hack/leak-canary.sh), vendored from the shared
-copy in `ci-workflows`, is a `just check` recipe and a CI job, and every
-exception it carries is written down in the script with its reason.
-
-This repository follows the shared
-[component contract](https://github.com/truvity/policy/blob/master/docs/contracts/component.md).
-
-## Status
-
-Used in production by its maintainers. [CHANGELOG.md](CHANGELOG.md) says
-what exists at each version, and releases are on the
-[releases page](https://github.com/truvity/sluis/releases).
+**Mechanism only.** Nothing here names an account, a zone, a hostname, a cluster, an issuer or a secret path of any
+installation: every such thing is a value with a neutral example (`example.com`, `acme`, `globex`), and the installation
+supplies it from its own repository. The rule covers code, docs, the CHANGELOG, tests, commit messages and pull request
+text, and [`hack/leak-canary.sh`](hack/leak-canary.sh) enforces it in `just check` and in CI. This repository follows the
+shared [component contract](https://github.com/truvity/policy/blob/master/docs/contracts/component.md).
 
 ## Development
 
 ```sh
 devbox shell        # or direnv: Go, buf, golangci-lint, helm, just, lefthook
 just check          # build, test, lint, chart-lint, telemetry, archive-check, docs-check, leak-canary, audit-catalogue, ts
-just vuln           # govulncheck; separate from check — a new CVE must not turn it red
-just generate       # proto → gen/ after a contract change; the generated code is committed
+just vuln           # govulncheck; separate from check, a new CVE must not turn it red
+just generate       # proto to gen/ after a contract change; the generated code is committed
 ```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and the console's
-build order.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and the console's build order.
 
 ## Releasing
 
-Push a tag `vX.Y.Z`: the release workflow publishes the images, the
-chart, `sluisctl` and its Nix flake, and the TypeScript package at that
-version, and the Go module and the Action are the same tag. Auto-release
-is armed and cuts patch tags when changes merge to master; a minor needs its
+Push a tag `vX.Y.Z`: the release workflow publishes the images, the chart, `sluisctl` and its Nix flake, the TypeScript
+package, the Go module and the Action at that version. The Pulumi library's tag is cut by the release itself, with its
+`require` pinned to the release. Auto-release cuts patch tags when changes merge to master; a minor needs its
 `## vX.Y.0` CHANGELOG heading and is tagged by hand.
 
-## Licence
+## Status and licence
 
-MIT — see [LICENSE](LICENSE).
+Used in production by its maintainers; [releases](https://github.com/truvity/sluis/releases). MIT, see [LICENSE](LICENSE).

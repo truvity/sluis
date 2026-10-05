@@ -1,9 +1,27 @@
 # Connect an AWS account, without Identity Center
 
-**Anchor:** the issuer; the account trusts its JWKS and reads `aud`.
+## Purpose
 
+Let people and CI jobs assume AWS roles with sluis tokens, with no Identity Center: the account trusts sluis's JWKS and
+reads `aud`.
 
-## Account side, once
+## Preconditions
+
+- Rights to create an IAM OIDC identity provider and roles in the account.
+- sluis's issuer URL is reachable by AWS and serves its JWKS.
+- The roles' clients and groups exist in the policy (below).
+
+## Before you start
+
+- **Preview the trust policies before applying them** and read the `aud` condition: a role whose `aud` does not match
+  the client id fails as `AccessDenied` on `AssumeRoleWithWebIdentity`, with no hint which half is wrong.
+- **One trust policy per role**, no per-user statements, no group claims: the decision rides in `aud`.
+
+## Steps
+
+**Anchor:** the issuer.
+
+### 1. Account side, once
 
 An IAM OIDC identity provider for the issuer URL, and per role a trust
 policy that names the role's audience:
@@ -29,7 +47,13 @@ custom issuer the trust policy can see `sub`, `aud`, `amr` and `email`,
 and the decision rides in `aud`. Add a `sub` condition when a role is for
 one workload only.
 
-## Policy
+**Expect**: the account lists the provider and the role.
+
+**Verify**: `aws iam get-open-id-connect-provider` shows the issuer URL.
+
+**Rollback**: delete the role, then the provider.
+
+### 2. Policy
 
 Each role is a client of kind `exchange`; `requires` says who may assume it:
 
@@ -39,7 +63,13 @@ clients:
   aws:111122223333:platform-deployer: { kind: exchange, requires: [ci-platform] }
 ```
 
-## Person side
+**Expect**: the client appears for a person holding `requires`.
+
+**Verify**: render the policy and read the client.
+
+**Rollback**: remove the client row.
+
+### 3. Person side
 
 `sluisctl setup` (or `aws-config` alone) writes a profile per granted
 role, named `<role>@<account>`:
@@ -56,7 +86,13 @@ credentials. The issuer takes that sign-in as a proof only because
 sluisctl's own client declares `sign_in_exchange: true`; no other token
 it signs is one.
 
-## Job side
+**Expect**: `aws sts get-caller-identity --profile <role>@<account>` names the assumed role.
+
+**Verify**: the same command.
+
+**Rollback**: delete the profile.
+
+### 4. Job side
 
 The action with `audiences: aws:111122223333:platform-deployer` exchanges
 the job's GitHub token at the issuer and writes the profile
@@ -68,9 +104,14 @@ exchanges the job's own token there
 GitHub: no direct GitHub provider is configured, and CI's entitlements
 live in the policy.
 
-## On top: every other AWS service
+**Expect**: a job on an allowed ref assumes the role; one on another ref is refused.
 
-ECR, CodeArtifact, S3, anything: `--profile <role>@<account>`, or
-`AWS_PROFILE`. Nothing here knows those services; see
+**Verify**: run it on both.
+
+**Rollback**: remove the machine group matcher.
+
+## Afterwards
+
+Every other AWS service (ECR, CodeArtifact, S3, anything) works on top: `--profile <role>@<account>`, or `AWS_PROFILE`. Nothing here knows those services; see
 [registries-and-artifacts.md](registries-and-artifacts.md) for the
 registry and artifact recipes.

@@ -88,6 +88,6 @@ mounts are unchanged, and the telemetry service names are unchanged. The one
 change of name an installation must act on is the chart's own, which is part of
 every object's name; `nameOverride` and `fullnameOverride` keep it, and the
 migration is in
-[reference/configuration.md](../reference/configuration.md#migrating-from-the-access-issuer-chart).
+[reference/configuration.md](../how-to/migrate-from-the-access-issuer-chart.md).
 The old binaries, the three images and the `access-issuer` chart are not
 published after this change: as the decision says, no alias is kept.

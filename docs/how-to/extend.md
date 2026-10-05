@@ -16,7 +16,7 @@ than starting up empty.
 from a consent the console runs, or from an uploaded key. Register it
 under a name. The service's record, routing, snapshots, freshness and
 console need no change; Directories gains a button. Ship: the
-backend's fake, a consent-runbook page, and the acceptance scenarios
+backend's fake, a consent runbook page under `docs/how-to/connect/`, and the acceptance scenarios
 connect / revoke / domain move against the fake.
 
 ## 2. A proof kind (another CI platform, a cloud's workload identity)
@@ -37,7 +37,7 @@ trust boundary is configuration the verifier refuses to run without**
 token from a public platform for their own repository, so signature and
 expiry alone prove that *a* job ran somewhere. A verifier adds a proof to
 the issuer's estate anchor; it never adds a third anchor to a service
-([../design/trust.md](../explanation/trust.md)). Ship: a fake issuer minting
+([trust](../explanation/trust.md)). Ship: a fake issuer minting
 real signatures in the test, the refusal cases (a stranger's owner, a
 foreign audience, a forged signature, an empty allow-list), and a policy
 test.
@@ -45,7 +45,7 @@ test.
 ## 3. A matcher kind, or a table
 
 `policy/`: a matcher is a `Matcher` over a verified proof's claims; a
-new proof kind brings its own. The seven tables are the whole schema: a
+new proof kind brings its own. The tables of the [policy](../reference/policy.md#the-tables) are the whole schema: a
 need that cannot be met by a new group, a new client or a new matcher
 kind is a need for a new dimension, and the answer to that is no — see
 [reference/policy.md](../reference/policy.md) for why.
@@ -65,7 +65,7 @@ reason the type is the seam.
 
 ## 5. A relying-party recipe
 
-`docs/connect/<thing>.md`: what the relying party trusts (issuer, client,
+`docs/how-to/connect/<thing>.md`: what the relying party trusts (issuer, client,
 audience or groups), the client it needs, the policy shape,
 the person side and the job side. If it needs a new audience prefix,
 name it in [reference/policy.md](../reference/policy.md).
@@ -128,9 +128,10 @@ status document and the audit actions stay in the system's own package
 [ADR 0024](../decisions/0024-reconciler-rails-are-shared-pieces-not-a-framework.md).
 A new one ships with: its fake of the system (`internal/slackapp/slackfake` is
 the worked example), a pure `reconcile` package tested without I/O, a status
-document the console shows, a chart value `…Roster.config.enabled…` (born disabled), its
-audit actions, and a `docs/connect/<system>.md` page. Order the rollout so the
-console, which the controller reads, goes first.
+document the console shows, a `controllers.<kind>` section of the service document and `enabledOrgs`-style list in the policy (born a dry run), its
+audit actions, and a `docs/how-to/connect/<system>.md` page. A controller runs inside the one `sluis serve` process
+([ADR 0037](../decisions/0037-one-process-everywhere.md)): it needs no Deployment of its own, and its proof must be
+admitted by the policy's exchange.
 
 ## What is not an extension point
 

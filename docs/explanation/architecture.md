@@ -8,19 +8,11 @@ as Mermaid, which GitHub renders inline.
 
 ## The rule under everything
 
-Every arrow in this document rests on one of exactly two roots of trust,
-and which one is decided by how far away the caller is, never by
-preference. [design/trust.md](trust.md) is the argument; this is
-the summary.
-
-| Anchor | Proves | Used for |
-|---|---|---|
-| **the issuer** — its signing key, published as a key set | an identity the policy has resolved to internal groups | everything: people, CI, workloads, every relying party |
-| **the cluster** — a ServiceAccount token the API server checks | a workload running *here* | recovery alone: the way in on the day the directory is broken, which should depend on nothing else |
-
-Whichever anchor proved a caller, what a service acts on is one thing: a
-flat list of **internal group names**, the `groups` claim, never
-re-mapped. There is no third anchor and no second vocabulary.
+Every arrow here rests on one of exactly two roots of trust, chosen by how far away the caller is, never by
+preference: **the issuer** (its signing key, published as a key set: everything, for people, CI, workloads and every
+relying party) and **the cluster** (a ServiceAccount token the API server checks: recovery alone). Whichever proved a
+caller, a service acts on one thing: a flat list of internal group names, the `groups` claim, never re-mapped.
+[trust.md](trust.md) is the argument and the naming; it is not repeated here.
 
 ## Context
 
@@ -53,18 +45,13 @@ flowchart TB
   ci --> rp
 ```
 
-Nothing in sluis has a database of record. Nothing authenticates
-anyone. The directories hold the people; the relying parties hold their
-own roles; sluis holds the policy, a snapshot of the directory,
-the sessions it has open, and what an operator connected through the
-console: directory credentials, GitHub Apps, people's GitHub links, Slack
-workspace connections and the console's own Slack channel records.
-The snapshot and the sessions live in Valkey — disposable state, rebuilt
-from the directory and re-opened at the next sign-in, not a record of
-anything (see "What each store holds" below).
-The audit trail is the one thing it writes that outlives it, and it is
-kept by an audit installation of its own, rendered beside it in the same
-namespace.
+Nothing in sluis is a database of record. Nothing authenticates anyone. The directories hold the people; the relying
+parties hold their own roles; sluis holds the policy, a snapshot of the directory, the sessions it has open, and what
+an operator connected through the console: directory credentials, GitHub Apps, people's GitHub links, Slack workspace
+connections and the console's own Slack channel records. All of that is behind the State and Secrets ports (see
+"What each store holds" below); the snapshot and the sessions are disposable, rebuilt from the directory and
+re-opened at the next sign-in. The audit trail is the one thing it writes that outlives it, and it is kept by an audit
+installation of its own, rendered beside it in the same namespace.
 
 ## Containers
 
@@ -75,7 +62,7 @@ flowchart TB
   ci["GitHub Actions"]
   gw["Envoy Gateway<br/>one data plane, native OIDC per console"]
 
-  subgraph ar["sluis — one chart, one Deployment, one process"]
+  subgraph ar["sluis — one process"]
     issuer["the issuer<br/>OpenID provider · six grants<br/>login page · session service"]
     dir["the directory<br/>snapshots · routing by domain<br/>authoritative per domain"]
     con["the console<br/>React, mounted at /console/"]
@@ -83,10 +70,9 @@ flowchart TB
     sctl["the Slack controller<br/>one pass per interval per workspace<br/>born disabled, dry run until listed"]
   end
 
-  vk[("Valkey<br/>sessions · single sign-on · auth requests<br/>one snapshot per workspace")]
-  cfg[("policy · clients · federated clusters<br/>ConfigMaps from the chart")]
-  sec[("signing key · workspace credentials<br/>GitHub Apps · people's links · runner Apps · catalogue Apps<br/>Slack bot tokens · catalogue Apps<br/>Secrets")]
-  rec[("Slack records and reports<br/>ConfigMaps: slack-workspaces, slack-status")]
+  st[("State port<br/>sessions · single sign-on · auth requests · records · reports<br/>directory snapshots")]
+  cfg[("policy · clients · federated clusters<br/>the mounted documents")]
+  sec[("Secrets port<br/>workspace credentials · GitHub Apps · people's links<br/>runner and catalogue Apps · Slack bot tokens")]
   aud[("audit installation<br/>receiver · writer · query service · jobs")]
 
   idp["Google Workspace"]
@@ -100,14 +86,14 @@ flowchart TB
   ci -- "exchange" --> issuer
 
   issuer -- "who is this address<br/>[a function call]" --> dir
-  issuer --> vk
+  issuer --> st
   issuer --> cfg
   issuer --> sec
   issuer -- "sign-in" --> idp
   issuer -- "records; the Audit page reads as the person" --> aud
   ctl -- "records, as itself" --> aud
   sctl -- "records, as itself" --> aud
-  dir --> vk
+  dir --> st
   dir --> sec
   dir -- "reads" --> idp
   con -. "same origin, the browser's own cookie" .-> issuer
@@ -115,50 +101,35 @@ flowchart TB
   ctl -- "as the organisation's App<br/>[a Secret mounted as files]" --> gho
   sctl -- "who holds which group, directory groups, served domains, vouching<br/>[the console's API, its own ServiceAccount token]" --> issuer
   sctl -- "as each workspace's bot<br/>[a Secret mounted as files]" --> slk
-  issuer -- "writes records" --> rec
-  sctl -- "reads records, writes its report" --> rec
+  sctl -- "reads records, writes its report" --> st
   issuer -. "trusted by" .-> rp
 ```
 
-**The GitHub controller is a loop in the same process, not a second service** (since
-v1.63, [0037](../decisions/0037-one-process-everywhere.md): there was a Deployment of its
-own before). It holds the GitHub App keys and writes to GitHub; the accepted cost is
-that its code runs with the service's permissions and in its pod, and a controller that
-cannot start stops the process. It reads the console's API, over the release's own
-Service, with the pod's ServiceAccount token, the way any workload would, and reports into a ConfigMap the console shows. Every
-organisation is a dry run until the chart lists it in
-`policy.controllers.github.enabledOrgs`; removing one from the list is the emergency stop. A pass
-runs every `config.controllers.github.interval` (15 minutes) and also, without waiting, when
-the mounted credentials or records change (a new installation) or an operator
-presses **Refresh** (looked at every 30 seconds, and as quick as the kubelet
-refreshes the mounted files: within a couple of minutes).
+**The GitHub and Slack controllers are loops in the same process, not services** (since v1.63,
+[0037](../decisions/0037-one-process-everywhere.md): each had a Deployment of its own before). The accepted cost is that
+their code runs with the service's permissions, and a controller that cannot start stops the process. Each reads the
+console's API with the pod's own ServiceAccount token, the way any workload would, and reports into a record the
+console shows.
 
-**The Slack controller is the same shape.** It holds each Slack
-workspace's bot token, writes to Slack, and runs as a loop of its own in the same
-process. It reads the console's API with the pod's ServiceAccount token and replaces one
-ConfigMap, `<release>-slack-status`, which the service creates and the
-controller may only update by name. Its records, the connections and the
-console's channel records, are mounted read-only from
-`<release>-slack-workspaces`; its credentials from `<release>-slack-credentials`.
-A pass runs every `config.controllers.slack.interval` (15 minutes) and also, without waiting,
-when the mounted credentials or records (including the console's channel and
-Slack Connect records) change or an operator presses **Refresh** (looked at every
-30 seconds, and as quick as the kubelet refreshes the mounted files: within a
-couple of minutes). Every Slack workspace is a dry run until the chart lists it
-in `policy.controllers.slack.enabledWorkspaces`; removing one from the list is the emergency stop. The
-two controllers share one set of rails (`internal/rails`): the pass loop and its
-policy-retry backoff, the two questions put to the console (who holds a group,
-and does the directory vouch for this address) gated by the policy digest, the
-held-once ledger, the last-good-report journal, the removal breaker and its
-fingerprint, the dry-run switch, and the watch that wakes a pass when mounted
-credentials or records change or an operator asks for one. See
-[Connect a Slack workspace](../how-to/connect/slack-workspace.md) and
-[the design](design.md#the-slack-reconciler).
+- **GitHub** holds the GitHub App keys and writes to GitHub: one pass per organisation every
+  `config.controllers.github.interval` (15 minutes). Every organisation is a dry run until the policy lists it in
+  `policy.controllers.github.enabledOrgs`.
+- **Slack** holds each workspace's bot token and writes to Slack: one pass per workspace every
+  `config.controllers.slack.interval` (15 minutes), reading its records and writing its report through the State port.
+  Every workspace is a dry run until `policy.controllers.slack.enabledWorkspaces` lists it.
+
+Removing a name from either list is the emergency stop. A pass also runs without waiting when the credentials or
+records it reads change, or an operator presses **Refresh**. The two share one set of rails (`internal/rails`): the
+pass loop and its policy-retry backoff, the two questions put to the console (who holds a group, does the directory
+vouch for this address) gated by the policy digest, the held-once ledger, the last-good-report journal, the removal
+breaker and its fingerprint, the dry-run switch, and the wake-up. See
+[Connect a GitHub organisation](../how-to/connect/github-organisation.md),
+[Connect a Slack workspace](../how-to/connect/slack-workspace.md) and [the design](design.md#the-slack-reconciler).
 
 **A login makes no network call except to the corporate directory** — and,
 for a client that identifies itself by a URL instead of a policy row, one
 bounded, cached HTTPS fetch of that client's own document, from an
-allow-listed host only ([policy.md](../reference/policy.md#clients-that-describe-themselves)).
+allow-listed host only ([policy.md](../reference/policy-clients.md#clients-that-describe-themselves)).
 The answer about a person is a function call, so the ConnectRPC hop, the
 TokenReview, the NetworkPolicy hop and the class of failure where two
 halves disagreed about one person are all gone. That fetch is the one
@@ -173,16 +144,18 @@ mounted under `/console/`, same-origin with the issuer, so its session
 pages call the issuer with the browser's own cookie and no bearer in
 JavaScript.
 
-**What each store holds, and what losing it costs.**
+**What each store holds, and what losing it costs.** Where each one lives is the adapter's choice
+([ports](ports.md), [adapters](../reference/adapters.md)): `dynamodb` for State with SSM or OpenBao for Secrets and S3
+for blobs on AWS; the `legacy` adapter keeps the ConfigMaps, Secrets and Valkey of the older estates until their
+cutover ([0031](../decisions/0031-a-generic-migration-tool.md)). Replicas coordinate through the State port, not
+through a Valkey of their own ([high availability](../how-to/high-availability.md)).
 
 | Store | Holds | Lost means |
 |---|---|---|
-| Valkey | auth requests, tokens, per-client sessions, the single sign-on record, one snapshot per workspace | everyone signs in again, and one refresh per directory |
-| ConfigMaps | the policy, the clients, the federated clusters | git |
-| Secrets the chart delivers | the signing key, the OAuth client | whatever delivered them; the runbook |
-| Secrets the service writes | the directories' credentials, each GitHub organisation's App, the link App, people's link tokens, the runner Apps, the catalogue Apps, each Slack workspace's bot token and App credentials (`<release>-slack-credentials`) and the catalogue Slack Apps' (`<release>-slack-catalogue-apps`) — each entry carrying a copy of its record | a copy of the Secrets (five GitHub and directory ones, plus the Slack credentials and the Slack records mirror when `slackState.push` is used) restores every one of them, records included ([configuration](../reference/configuration.md#restoring-from-the-secrets-alone)); a link token that rotated since means that person links again |
-| ConfigMap `<release>-slack-workspaces` | the Slack workspaces' connection records (no secret), the console's channel records `_channel.*`, Slack Connect records `_shared.*`, operators' removal confirmations `_confirm.*` and pass requests `_pass.*` | the records, unless `slackState.push` mirrored them: a copy of the same records is kept in Secret `<release>-slack-records` and repopulates the ConfigMap at start when it is empty |
-| ConfigMap `<release>-slack-status` | the Slack controller's last report per workspace | the next pass (up to one interval); the console says "not reported" meanwhile |
+| State | auth requests, tokens, per-client sessions, the single sign-on record, the signing-key schedule, the console's records (directory, GitHub and Slack connections, channel records), the controllers' reports | everyone signs in again, and one refresh per directory; the connection records are what a restore brings back |
+| Blobs | directory snapshots, controller reports too large for an item | one refresh per directory |
+| Secrets port | the directories' credentials, each GitHub organisation's App, the link App, people's link tokens, the runner Apps, the catalogue Apps, each Slack workspace's bot token and App credentials | whatever delivered them; reconnect from the console, and a link token that rotated since means that person links again ([restoring](../how-to/back-up-and-restore.md)) |
+| The mounted documents | the policy, the clients, the federated clusters, the signing key | git |
 | the audit installation | the audit trail: one record per action, kept, locked and signed by the installation | its own archive; while its writer is unreachable records wait in each pod's queue, and a recovery sign-in is refused rather than left unrecorded |
 
 ## Fan-in and fan-out
@@ -200,7 +173,7 @@ expressed in configuration and whether it is built.
 | GitHub organisations | one controller App per organisation, created and installed by its owner from the console; `github` bindings in the policy naming internal groups, with an `ignore` list per organisation; an account becomes a person's by their own link, a public-profile match or an import, and a link is checked every pass; one runner App per organisation per tier for self-hosted runners | **built and acting**: joiners, movers and leavers with nobody in the loop, and the controller stops itself where somebody is needed — seats, removals over half an organisation, owners |
 | Slack workspaces | one bot per workspace, connected from the console by pasting a configuration token once (the owning directory is chosen there); channels as **policy** (`slack.workspaces.<key>.channels`, internal groups) or as **console records** (directory groups and individual addresses, ordinary or Slack Connect); strict channels (private only) also remove; a person with no Slack account is waited for, never created | **built; acting only where listed in `policy.controllers.slack.enabledWorkspaces`**: adds people, removes only from strict private channels and only on a directory-vouched answer under the breakers; never creates accounts, never touches user groups, never removes from a public channel |
 | CI platforms | one federated issuer row; `ci` rules on repository, ref and visibility | **built**: the verifier, `sluisctl` inside a job, and the GitHub Action at the repository root — `curl` and `jq`, so nothing of ours is downloaded into a job |
-| consoles and applications | one client row each, with a display name and description the sign-in page shows; for consoles with no OpenID flow of their own, use gateway-native OIDC (Envoy Gateway) or run upstream oauth2-proxy yourself (other gateways); back-channel logout for applications that opt in | **built**: the directory console (it signs in as a client of the issuer it shares an origin with), Kargo and its CLI, `sluisctl` as a public client |
+| consoles and applications | one client row each, with a display name and description the sign-in page shows; for consoles with no OpenID flow of their own, use gateway-native OIDC ([Envoy Gateway](../how-to/connect/envoy-gateway-oidc.md)) or, on another gateway, [oauth2-proxy run by hand](../how-to/connect/oauth2-proxy.md); back-channel logout for applications that opt in | **built**: the directory console (it signs in as a client of the issuer it shares an origin with), Kargo and its CLI, `sluisctl` as a public client |
 
 What never multiplies: the issuer URL, the signing key, the policy file,
 the console, the login page.
@@ -238,7 +211,7 @@ That is what makes one issuer serve many clusters cheaply: a new cluster
 is one row naming its key set, not a credential held anywhere. Device
 flow, client credentials and JWT bearer were served through 0.11 and are
 gone; introspection never applied, because these are JWTs verified
-offline ([why](../reference/configuration.md#endpoints)).
+offline ([why](../reference/endpoints.md)).
 
 Three of the six are grants and three are endpoints, so
 `grant_types_supported` prints three: `authorization_code`,
@@ -261,8 +234,9 @@ Three layers, and none is the fallback for another.
   asked for.
 - **The gateway or proxy decides whether a browser is signed in.** Nothing more.
   It runs the code flow, holds the session, forwards the token. For Envoy
-  Gateway, use the native OIDC filter. For other gateways, run upstream
-  oauth2-proxy yourself.
+  Gateway, use the native OIDC filter. For another gateway, run upstream
+  oauth2-proxy yourself ([recipe](../how-to/connect/oauth2-proxy.md); the `access-proxy` chart was removed in v1.32.0,
+  [0003](../decisions/0003-deprecate-access-proxy.md)).
 - **The application decides what the token opens.** From its own
   tables, or from the `groups` claim. An application with no roles of
   its own is exactly the one whose check sits at the issuer.
@@ -300,19 +274,12 @@ Three layers, and none is the fallback for another.
 
 ## The audit trail and who writes it
 
-Three writers, each recording as itself: the service (sign-ins, token exchanges,
-every console action including connecting a Slack workspace, writing a channel
-or Slack Connect record, confirming removals and archiving a channel), the
-GitHub controller (member invitations, additions, removals, holds) and the Slack
-controller (`roster.slack_channel.created` and `.adopted`,
-`roster.slack_member.invited` and `.removed`, `roster.slack_shared.invited` and
-`.accepted`, `roster.slack_action.held`, `roster.slack_leaver.reported`). Slack
-channel actions carry the channel and workspace as targets, so a channel's page
-in the console is the trail narrowed to it. A directory group or an individual
-address that feeds a console channel is a target (`directory_group`,
-`directory_user`), never data. The catalogue is versioned (1.6.0 now): any
-change to it needs a new version and a released fixture, and an installation
-refuses a changed document under a version it already holds.
+Three writers, each recording as itself: the service (sign-ins, token exchanges, every console action), the GitHub
+controller (invitations, additions, removals, holds) and the Slack controller (channels, invitations, removals, Slack
+Connect, holds, leavers). The catalogue is `internal/audit/catalogue/roster.yaml`; its version moves with any change,
+and an installation refuses a changed document under a version it already holds. A Slack channel's page in the console
+is the trail narrowed to its targets. Directory groups and addresses that feed a console channel are targets
+(`directory_group`, `directory_user`), never data. [Audit in the design](design.md#audit) has the rest.
 
 ## Failure semantics
 
@@ -324,7 +291,7 @@ refuses a changed document under a version it already holds.
 | Domain claimed by two workspaces | `authoritative=false` for that domain on both |
 | Address in no served domain | `in_domain=false`: no opinion |
 | Account missing from the snapshot | one live read first; `found=false` only after the backend said so |
-| Valkey unreachable | every domain non-authoritative until it returns |
+| the State store unreachable | every domain non-authoritative until it returns; sign-ins that need State fail |
 | Credential revoked or admin suspended | probe fails → provisional; reconnect is the recovery |
 | A request would wait on the directory | it does not: the work runs detached and the answer is *first snapshot pending* |
 | A signed-in operator's own account turns non-authoritative | last granted role kept for a bounded window; nothing new granted |
@@ -332,7 +299,7 @@ refuses a changed document under a version it already holds.
 | sluis is down | no new sign-ins anywhere; existing sessions and tokens live to expiry; recovery is by cluster proof |
 | the audit installation unreachable | records wait in each pod's queue and are delivered when its writer answers; the queue is bounded, and past its bound the oldest are dropped and counted; the Audit page cannot be read; a recovery sign-in is refused meanwhile |
 | a GitHub pass fails | the last report with rows stands; the pass is retried next interval; nothing is removed on a failed read |
-| the console answers the controller under another policy | the pass changes nothing and is tried again within seconds, six times at most before the interval resumes: a rollout restarts the two at different moments, and a removal decided across that gap would be wrong |
+| the console answers the controller under another policy | the pass changes nothing and is tried again within seconds, six times at most before the interval resumes: during a rollout old and new pods overlap, and a removal decided across that gap would be wrong |
 | an organisation's seats cannot be read | nobody is invited into it until they can |
 | a Slack workspace is not connected or not installed yet | that workspace reports a `waiting` pass with no error; nothing else is affected |
 | a Slack pass cannot read the workspace whole (missing scope, rate limit that outlasts retries, a failed page) | the workspace's report is kept with the failure on it; nothing is decided or changed on a partial read |

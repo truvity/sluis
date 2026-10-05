@@ -3,7 +3,7 @@
 The grammar every grant name follows, what each segment means, and the
 anti-patterns a name falls into when it does not. This page is about the
 NAME; what a name is checked against, when an installation opts in, is
-[reference/policy.md#vocabulary](policy.md#vocabulary).
+[policy-vocabulary.md](policy-vocabulary.md).
 
 ## The grammar
 
@@ -19,7 +19,7 @@ between, lowercase. *Role, on thing, in scope.*
 So: `prod:k8s:admin`, `devel:argocd:deployer`, `all:grafana:viewer`,
 `all:access-roster:operator` — *admin of prod's Kubernetes*, *deployer of
 devel's ArgoCD*, *viewer of the one Grafana this installation has*,
-*operator of this hub, installation-wide*.
+*operator of sluis, installation-wide*.
 
 **Two-segment names are not grants, deliberately**, and are exempt from
 everything on this page: `rung:<name>` carries a session lifetime;
@@ -27,7 +27,7 @@ everything on this page: `rung:<name>` carries a session lifetime;
 *a role on a thing*. A reader who sees two segments knows it is not a
 grant; there are no other two-segment families, and a name that is
 neither three segments nor one of these two is unconventional — see
-[reference/policy.md's validation section](policy.md#validation-at-load).
+[validation at load](policy-validation.md#refused-at-load).
 
 ## What `all` means
 
@@ -45,7 +45,7 @@ environment through one scope that was never supposed to mean that.
 
 ## Sensitive scopes
 
-A [declared vocabulary](policy.md#vocabulary) marks a scope
+A [declared vocabulary](policy-vocabulary.md) marks a scope
 `sensitive` — `kernel` and `prod`, typically, the two an installation
 least wants reached by anything less deliberate than a scope named
 outright. It changes exactly one thing: a [mapping
@@ -66,7 +66,7 @@ own entry, and evaluation walks the chain — so a ladder can chain
 
 Holding `S:T:admin` therefore also holds every role admin implies,
 transitively, on the **same** `S:T`. This is applied once, at evaluation
-— [reference/policy.md#groups--token-by-deep-merge](policy.md#groups--token-by-deep-merge)
+— [policy-groups.md#groups-to-token-by-deep-merge](policy-groups.md#groups-to-token-by-deep-merge)
 — so every downstream reader sees the expanded set without knowing
 inheritance exists: a `requires` gate, a token's `groups` claim, a GitHub
 team or a Slack channel bound to `S:T:viewer` fed by someone who is only ever `S:T:admin`.
@@ -86,7 +86,7 @@ scopes — `ssh`'s `user` role valid on `devel` alone, even though `ssh`
 itself also declares `kernel`, `stage` and `prod` — using an object form
 (`user: { scopes: [devel] }`) in place of the plain implies-list one
 (`admin: []`). See
-[reference/policy.md#per-role-scopes](policy.md#per-role-scopes)
+[policy-vocabulary.md#per-role-scopes](policy-vocabulary.md#per-role-scopes)
 for the full syntax and the load-time checks.
 
 This is a second, finer axis than [what `all`
@@ -109,7 +109,7 @@ that was never meant to reach `kernel`.
 Groups-table key, and nowhere else — never in `requires`, a GitHub
 binding, a Slack channel's `from`, `claims` or `lifetimes`, and never in the role position:
 `*:k8s:admin`, `devel:*:viewer`, but not `devel:k8s:*` and not `*:*:*`.
-Wildcards need a [declared vocabulary](policy.md#vocabulary);
+Wildcards need a [declared vocabulary](policy-vocabulary.md);
 without one, `*` is an ordinary character with no special meaning refused
 at load, because nothing could say what it should expand to.
 
@@ -145,7 +145,7 @@ the specific reason.
 | Name | Reads as |
 |---|---|
 | `prod:k8s:admin` | admin of prod's Kubernetes |
-| `all:access-roster:operator` | operator of this hub, installation-wide |
+| `all:access-roster:operator` | operator of sluis, installation-wide |
 | `C0north:access-roster:viewer` | viewer of one directory only |
 | `C0north:access-roster:operator` | operator over one directory, which also operates the GitHub organisations and Slack workspaces that directory owns |
 | `*:k8s:admin` (Groups key only) | admin of every non-sensitive environment's Kubernetes |

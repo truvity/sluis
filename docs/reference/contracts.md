@@ -1,6 +1,6 @@
 # The console's contracts
 
-The issuer's endpoints are in [configuration.md](configuration.md#endpoints). This
+The issuer's endpoints are in [configuration.md](endpoints.md). This
 page is what the **console** calls: the services behind its pages.
 
 The proto files under [`proto/`](../../proto) are the source of truth;
@@ -53,12 +53,14 @@ request. Roles come from membership of two declared policy groups:
 the viewers group reads, the operators group writes. A directory's own
 operators and viewers (`<directory-workspace-id>:access-roster:operator` and
 `:viewer`) hold the same roles over the Slack workspaces and GitHub
-organisations that directory owns; see [configuration.md#roles](configuration.md#roles).
+organisations that directory owns; see [console roles](console-roles.md).
 Unauthenticated RPCs get `unauthenticated`; a missing role gets
 `permission_denied`.
 
-**A workload calling the console's API** — a controller beside the
-issuer: the GitHub controller and the Slack controller — presents its own projected
+**A workload calling the console's API** — the GitHub controller and the Slack
+controller, which run in the same process as the console since v1.63
+([decision 0037](../decisions/0037-one-process-everywhere.md)) and still call it as a
+workload — presents its own projected
 ServiceAccount token as `Authorization: Bearer`, with the audience token
 exchange uses (`config.exchange.audience`, the release name by default). It is
 verified against the same cluster key sets as an exchange, so only a
@@ -248,7 +250,7 @@ acts, this shows. See [connect/github-organisation.md](../how-to/connect/github-
 
 A role below is the installation-wide role, or the same role over the directory
 recorded as the owner of the organisation concerned (see
-[configuration.md#roles](configuration.md#roles)); the link App and the links
+[console roles](console-roles.md)); the link App and the links
 are installation-wide alone.
 
 | RPC | Role | Request | Response | Notes |
@@ -471,7 +473,7 @@ service-account token. The console's Audit page reads the installation's
 `audit.v1.QueryService`, forwarded by the console under `<mount>/audit/`
 with a token minted for the person signed in; only that service's methods
 pass, and only for somebody signed in. See
-[operations/runbook.md](../how-to/day-two.md#audit-what-happened-lately).
+[read the audit trail](../how-to/read-the-audit-trail.md).
 The actions and what each carries are the catalogue,
 [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
 (version 1.6.0, with the `roster.slack_*` actions). The GitHub and Slack
@@ -482,7 +484,7 @@ controllers record for themselves, each with its own service-account token.
 Not a console service: the issuer's token endpoint, documented here
 because it is the contract a job, a script or `sluisctl` codes against
 when it asks for a GitHub App installation token of a
-[catalogue App](../how-to/connect/github-apps-catalogue.md#minting-a-token). It
+[catalogue App](../how-to/connect/github-app-tokens.md#minting-a-token). It
 is RFC 8693 token exchange on the same `/token` as every other exchange;
 a request is an installation token's when **both**
 `requested_token_type` is the type below **and** `audience` starts
@@ -547,7 +549,7 @@ its permissions. GitHub is sent that narrowing explicitly.
 | `server_error` | 500 | GitHub or the App's key failed |
 
 Every request, minted or refused, is one `roster.github_token.minted`
-record ([fields](../how-to/connect/github-apps-catalogue.md#audit)); the token
+record ([fields](slack.md#audit)); the token
 is never in it. The same request is also kept in this service's own
 memory, so that the App's page can show the last ten without narrowing
 the trail to one App — `ListGitHubAppTokens` above.
@@ -585,10 +587,10 @@ TOKEN=$(cat /var/run/secrets/sluis/token)
 
 # WhoAmI, over GET (Connect's idempotent-GET encoding)
 curl -s -H "authorization: Bearer $TOKEN" \
-  'http://access-issuer.access-issuer.svc:8080/console/directoryroster.v1.AccessService/WhoAmI?encoding=json&message=%7B%7D'
+  'http://sluis.<namespace>.svc:8080/console/directoryroster.v1.AccessService/WhoAmI?encoding=json&message=%7B%7D'
 
 # ListHolders, over POST
 curl -s -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"group":"prod:k8s:viewer"}' \
-  http://access-issuer.access-issuer.svc:8080/console/directoryroster.v1.AccessService/ListHolders
+  http://sluis.<namespace>.svc:8080/console/directoryroster.v1.AccessService/ListHolders
 ```

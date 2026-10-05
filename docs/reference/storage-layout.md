@@ -46,7 +46,7 @@ seeds them, sluis reads them), and `credentials/`, which sluis writes.
 | `<root>/export/<export-name>` | a copy for a consumer: see [Exports](#exports) | sluis |
 
 The names under `config/` are the ones the documents give
-([configuration](configuration.md#secrets)); the http function reads them by path
+([configuration](secrets.md#the-names)); the http function reads them by path
 through the serve document's `secrets` source.
 
 **Identity directories.** `directory/<provider>/` is the rule for every identity
@@ -74,7 +74,7 @@ begins `u-`) is written `u-` and its bytes in hex.
 
 `sluis migrate ssm-layout --to-root /sluis/<instance>` copies the first three rows
 and deletes nothing; `sluis migrate` moves the credentials
-([configuration](configuration.md#ssm-layout-v3)). The v1.60 layout's own move
+([configuration](secrets.md#ssm-layout-v3)). The v1.60 layout's own move
 (`/sluis/private/oauth/...` to `config/`) is older still: the `<NAME>=ssm:` environment mappings and
 `SLUIS_SECRET_FILES` entries it named are gone, replaced by the documents' secret names.
 IAM follows the root: every grant is under `/sluis/<instance>/`.
@@ -83,9 +83,20 @@ IAM follows the root: every grant is under `/sluis/<instance>/`.
 
 One table, `pk` (string, hash) and `sk` (string, range). Every State item has the
 record **kind** as `pk` and the record's **id** as `sk` (slash-separated when
-compound); `lkey` holds the logical key the item was written for, `v` the value,
-`rev` the revision, `expires` the TTL, and `k` = `i` marks an Index member.
-Because `pk` is the kind, `dynamodb:LeadingKeys` grants a role the kinds it writes.
+compound). Because `pk` is the kind, `dynamodb:LeadingKeys` grants a role the kinds it writes.
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `pk` | S | partition key: the record kind, or the Index set's kind for a member |
+| `sk` | S | sort key: the id (at most 1 KiB), or `<set id>/<member>` |
+| `lkey` | S | the logical key the item was written for (the set, for a member) |
+| `v` | B | the value (State) |
+| `rev` | N | the revision: a random 64-bit number drawn on every write |
+| `expires` | N | epoch seconds the item is dead from; absent when permanent. The table's TTL attribute |
+| `k` | S | `i` for an Index member; absent for a State record, so no State listing returns a member |
+
+The logical keys the service writes are in [keys](keys.md); how the adapter conditions its writes is in
+[adapter details](port-adapters.md#the-dynamodb-adapter).
 
 | pk (kind) | sk (id) | What it is |
 |---|---|---|

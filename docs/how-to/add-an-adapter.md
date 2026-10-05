@@ -30,8 +30,8 @@ and preset the adapter belongs to.
 4. **The config schema entry**, then `just config-schemas`. The schemas under
    `schemas/config` and the chart's `values.schema.json` are generated and
    checked for drift.
-5. **The chart's values and templates**: environment, RBAC and network egress the
-   adapter needs, with the goldens (`just golden`; review the diff).
+5. **The chart's values and templates**: RBAC and network egress the adapter needs, with the goldens
+   (`just golden`; review the diff). Settings reach the adapter through the service document's `adapters.<concern>.settings`.
 6. **A Pulumi resource in `deploy/pulumi`** if it needs cloud infrastructure (a
    table, a queue, a key, a role grant).
 7. **Regenerate the matrix**: `just adapters-doc`. Your adapter appears as

@@ -19,7 +19,7 @@ The domain scope is what makes domain discovery possible at all: which
 addresses this service answers for is decided by reading a tenant's own
 domain list, not by configuration. The domains a directory serves are also how
 the Slack controller finds a person in the workspaces the directory owns
-([where they come from](slack-workspace.md#where-a-workspaces-team-owner-and-domains-come-from)).
+([where they come from](../../explanation/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)).
 
 **Admin consent, through the console.** The installation registers one
 OAuth client, the way a SaaS vendor would, and every company connects by
@@ -46,7 +46,7 @@ The full click-through for both — the one-time Google Cloud project and
 OAuth client, the consent-screen traps (Testing mode's seven-day refresh
 tokens, the Admin SDK API that must be enabled before the first read),
 and the per-workspace steps — is
-[operations/connect-runbook.md](google-workspace.md).
+[Connect Google Workspace](google-workspace.md).
 
 ## Chart values
 
@@ -57,10 +57,10 @@ and its Secret is mounted where the config says:
 config:
   oauthClient:                            # keys client-id and client-secret
     secretName: google-oauth-client
-    idFile: /var/run/access-issuer/oauth-client/client-id
-    secretFile: /var/run/access-issuer/oauth-client/client-secret
+    idFile: /var/run/sluis/oauth-client/client-id
+    secretFile: /var/run/sluis/oauth-client/client-secret
 secretMounts:
-  - { secretName: google-oauth-client, mountPath: /var/run/access-issuer/oauth-client }
+  - { secretName: google-oauth-client, mountPath: /var/run/sluis/oauth-client }
 ```
 
 A service-account key is a **declared workspace**, in the chart's
@@ -79,7 +79,7 @@ directory:
 
 Every value, including `syncGroups` and what the chart renders from this
 block, is in
-[reference/configuration.md#declared-workspaces-directoryworkspaces](../../reference/configuration.md#declared-workspaces-directoryworkspaces).
+[declared workspaces](../../reference/declared-workspaces.md).
 A declared workspace is read-only in the console: remove it from the
 values to disconnect it, rather than clicking there.
 
@@ -90,10 +90,10 @@ A record in a ConfigMap the console shows and a credential in
 credential carrying a copy of its record. That Secret is the one a directory
 connection writes. The whole backup of what the console adds is the set of
 Secrets listed under
-[restoring from the Secrets alone](../../reference/configuration.md#restoring-from-the-secrets-alone):
+[restoring from the Secrets alone](../back-up-and-restore.md):
 put them back and the next start rebuilds the records. The chart renders a
 recovery copy for this one with `directory.push`. A directory that is the owner
 of GitHub organisations or Slack workspaces also owns their access: see
 [GitHub](github-organisation.md) and
-[Slack](slack-workspace.md#where-a-workspaces-team-owner-and-domains-come-from).
+[Slack](../../explanation/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from).
 Connecting and disconnecting are recorded in the audit trail.

@@ -45,7 +45,7 @@ side, which of the chosen groups land there, and **warns about a group whose
 directory owns no side of this channel**: its members would have no account
 path on any side and would be held. That is allowed, and said. Members of a
 group are resolved through nested groups, as for an ordinary
-[console channel](slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console).
+[console channel](slack-console-channels.md).
 
 **A record from before directory groups.** A record written when `from` named
 internal groups cannot be read as directory groups, and is not. It is listed
@@ -81,7 +81,7 @@ accept on the next pass), *waiting for acceptance*, *active*, *needs you*
 
 - **Create, edit, delete:** the operator over the **host** workspace's owner
   (the directory recorded as the host's owner when it was connected, see
-  [slack-workspace.md](slack-workspace.md#where-a-workspaces-team-owner-and-domains-come-from)),
+  [slack-workspace.md](../../explanation/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)),
   or the installation-wide operator. The
   operator of a **guest** workspace's owner alone may not: a channel is owned
   by its host.
@@ -110,7 +110,7 @@ A channel can exist long before the roster does: made by a person in one
 workspace, shared with others, each side naming it and choosing its own
 visibility. The controller finds these (a console channel that is not shared
 is found the same way; see
-[slack-workspace.md](slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console)).
+[slack-workspace.md](slack-console-channels.md)).
 For every connected workspace it lists
 the Slack Connect channels its bot **can see** (public ones, and private ones
 the bot is a member of) and publishes them in the workspace's report as
@@ -204,7 +204,7 @@ someone removes them in Slack. Archive a channel in Slack itself if it should
 end. The console never archives a Slack Connect channel, whoever hosts it:
 archiving closes it for every organisation in it. (For an ordinary console
 channel the delete dialog has an opt-in *Also archive*; see
-[Archiving](slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console).)
+[Archiving](slack-console-channels.md).)
 
 ## Where it is kept
 
@@ -229,7 +229,7 @@ Like a console channel's record, a Slack Connect record's data counts them as `s
 `members` (since catalogue 1.6.0 for `sources`); the groups and addresses themselves are targets.
 Audit catalogue 1.5.0 added the `directory_user` target type and the `members` count. Audit catalogue 1.2.0 added the
 `directory_group` target type and the console channel actions, see
-[slack-workspace.md](slack-workspace.md#console-channels-ordinary-channels-managed-on-the-console).
+[slack-workspace.md](slack-console-channels.md).
 
 The actor is the person. An edit that changes nothing writes and records
 nothing.

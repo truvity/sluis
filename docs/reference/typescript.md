@@ -1,5 +1,8 @@
 # TypeScript package `@truvity/sluis`
 
+**Status:** built. Three entry points: the root (`fetchIdentity()` and the `Identity` type), `/react` (`useIdentity()`,
+`<UserBadge/>`) and `/server` (a Node verifier, below). The Go counterpart is [go-module.md](go-module.md).
+
 What a console needs from the identity it is behind: who the caller is,
 what that gets them, and the way out. The browser half parses no token —
 the browser asks the application it is already talking to, and the
@@ -88,8 +91,9 @@ interface Identity {
 }
 ```
 
-Those are the fields `/.access/whoami` actually serves, which every Go
-adapter in this family answers with. `useIdentity()` asks once on mount
+Those are the fields `/.access/whoami` serves; the endpoint is specified once, in
+[contracts](contracts.md#the-whoami-endpoint), and the console's own answer adds its roles and scopes. If it is not
+served, the UI renders as signed out. `useIdentity()` asks once on mount
 and aborts on unmount: the answer changes when a session ends, and that is
 something the application discovers on its next call rather than something
 a poll would catch usefully.

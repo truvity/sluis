@@ -1,73 +1,50 @@
-# Choosing a deployment
+# Getting started: choose a deployment
 
-sluis is ports and adapters: each concern (state, secrets, blobs, signing,
-trigger, schedule, audit) is served by an adapter chosen **by name**. A *preset*
-names one adapter per concern, so you answer a few questions about your platform
-instead of choosing seven adapters.
+sluis is ports and adapters: each concern (state, secrets, blobs, signing, trigger, schedule, audit) is served by an
+adapter chosen **by name**. A *preset* names one adapter per concern, so you answer a few questions about your platform
+instead of choosing seven adapters. One tutorial per shape follows from the answers.
 
 ## The decision tree
 
 ```text
-AWS? ── no ──► Kubernetes? ── no ──► server
- │                 └─ yes ─► OpenBao? ── yes ─► k8s-openbao
- │                                      └ no ─► k8s-minimal
+AWS? ── no ──► Kubernetes? ── no ──► server              (unavailable)
+ │                 └─ yes ─► OpenBao? ── yes ─► k8s-openbao   (unavailable)
+ │                                      └ no ─► k8s-minimal   (unavailable)
  └─ yes ─► Kubernetes? ── no ──► aws-serverless
                └─ yes ─► sluis on Lambda? ── yes ─► aws-hybrid
                                             └ no ─► k8s-aws
 ```
 
-The answers are the `platform` block of the serve configuration (`aws`,
-`kubernetes`, `openbao`, `runtime`, `replicas`); `preset` names a preset outright.
-The same tree is `port.PresetFor` in `internal/port/resolve.go`.
-
-### Modifiers
-
-A preset is a starting point. Modifiers change one concern, with
-`adapters.<concern>` in the configuration:
-
-| Modifier | Meaning |
-|---|---|
-| `+valkey` | sessions on Valkey, hosted by ElastiCache, MemoryDB, in the cluster or externally |
-| `+postgres` | state in PostgreSQL: CloudNativePG, RDS, Aurora or external |
-| `+s3` | blobs in any S3-compatible store |
-| audit level `full\|lite\|log` | how much of the audit trail is kept; see [audit's deployment levels](https://github.com/truvity/audit/blob/master/docs/deployment/levels.md) |
-| signing `kms\|transit\|generated\|file` | where the token-signing key lives: AWS KMS, an OpenBao transit key, one generated at start and shared through state, or a file the platform mounts |
-
-**Hosting is deploy-level, not code.** One adapter covers several providers:
-`valkey` is the same adapter whether the server is ElastiCache, MemoryDB, a pod in
-your cluster or something you run yourself. You change the endpoint, not the
-code.
-
-## The presets
-
-| Preset | For |
-|---|---|
-| `aws-hybrid` | AWS and Kubernetes, with sluis itself on Lambda. **The implemented, maintained path.** |
-| `k8s-aws` | AWS and Kubernetes, with sluis as a pod on EKS: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao. (`aws-eks` is its deprecated name) |
-| `aws-serverless` | AWS with no Kubernetes: Lambda only |
-| `k8s-openbao` | Kubernetes with OpenBao, off AWS |
-| `k8s-minimal` | Kubernetes alone, off AWS |
-| `server` | one host: no AWS, no Kubernetes |
-
-Which adapter each preset names for each concern is in the
+The answers are the `platform` block of the service document (`aws`, `kubernetes`, `openbao`, `runtime`); `preset`
+names a preset outright, and an installation's shape picks one when it names none
+([the installation document](../reference/installation-document.md)). The same tree is
+`port.PresetFor` in `internal/port/resolve.go`. Which adapter each preset names for each concern is in the
 [generated matrix](../reference/adapters.md#presets).
 
-## Support levels
+## The tutorials
 
-- **Implemented.** Built, registered and run by the maintainers' estates.
-  `aws-hybrid` is the implemented, maintained path: it is what Truvity and hive
-  run.
-- **On request.** Designed and listed in the matrix, not built. Start refuses an
-  adapter that is only planned, naming it. It is built when a user asks for it.
-- **DIY.** Fork, add an adapter through a fixed checklist, run it yourself:
-  [adding an adapter in a fork](../how-to/add-an-adapter.md). It is an extension, not a rewrite.
+| You have | Preset | Tutorial |
+|---|---|---|
+| AWS, and you want sluis on Lambda (with or without Kubernetes beside it) | `aws-hybrid`, `aws-serverless` | [sluis on AWS Lambda](aws-lambda.md) |
+| Kubernetes on EKS, and you want sluis as a pod with DynamoDB, S3 and KMS | `k8s-aws` | [Kubernetes with AWS storage](kubernetes-aws.md) |
+| An installation that already runs on Kubernetes objects and Valkey | `legacy` adapters, no preset | [An existing installation on the legacy store](kubernetes-legacy-store.md) |
 
-## The matrix
+`aws-hybrid` is the path the maintainers' estates run. A single concern can be changed on top of a preset with
+`adapters.<concern>` in the configuration; the adapters that exist, what each needs and the runtimes it works on are in
+[reference/adapters.md](../reference/adapters.md), generated from the registry so that it cannot drift from the code.
+An adapter that does not exist is added in a fork: [adding an adapter](../how-to/add-an-adapter.md). The design behind
+the registry, resolution order and start-up validation is in
+[ports](../explanation/ports.md#adapters-presets-and-the-platform).
 
-[reference/adapters.md](../reference/adapters.md) lists every adapter per concern
-with what it needs (AWS, Kubernetes, OpenBao), the runtimes it works on and
-whether it is implemented or on request. It is generated from the registry
-(`just adapters-doc`), so it cannot drift from the code.
+## Availability
 
-For the design behind the registry, resolution order and start-up validation, see
-[design/ports.md](../explanation/ports.md#adapters-presets-and-the-platform).
+A preset that names an adapter which is not built is **unavailable**: loading it fails with a message that names the
+preset and the missing adapters, unless `adapters` replaces every one of them. There is no tutorial for these:
+
+- `server`: unavailable. Its state, secrets, blobs, signing and trigger adapters are planned, not built.
+- `k8s-minimal`: unavailable. Its state, secrets, blobs and trigger adapters are planned, not built.
+- `k8s-openbao`: unavailable. Its state, blobs, signing and trigger adapters are planned, not built.
+
+Available: `aws-serverless`, `aws-hybrid`, `k8s-aws`. `aws-eks` is the deprecated name of `k8s-aws`: it resolves to it
+and start warns. The list is generated from the registry:
+[adapters, availability](../reference/adapters.md#availability).

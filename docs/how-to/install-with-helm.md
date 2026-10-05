@@ -1,198 +1,219 @@
-# Adopting it with plain Helm
+# Install sluis with Helm
 
-Nothing in sluis assumes a GitOps controller. The `sluis`
-chart is an ordinary OCI Helm chart, every value an installation needs is in its
-own values file, and every Secret it reads is one the installation creates. This
-page installs the issuer with `helm install`, signs in for the first time, and
-says how to take new releases without ArgoCD or Kargo. Every name below is a
-placeholder: `example.com` for your domain, `eu-example-1` for your region.
+## Purpose
 
-The `access-proxy` chart was removed in v1.32.0
-([ADR 0003](../decisions/0003-deprecate-access-proxy.md)): on Envoy Gateway,
-gateway-native OIDC replaces it and needs no chart of ours; for any other
-gateway, run upstream oauth2-proxy yourself (step 4).
+Install the `sluis` chart on Kubernetes with plain `helm install`, sign in for the first time, and take later releases
+without ArgoCD or Kargo. Every name below is a placeholder: `example.com` for your domain, `eu-west-1` for your region.
 
-## Prerequisites
+The chart is one OCI chart, `oci://ghcr.io/truvity/charts/sluis`, and runs one image, `ghcr.io/truvity/sluis/sluis`, as
+one Deployment (`sluis serve`; the GitHub and Slack controllers run inside it,
+[ADR 0037](../decisions/0037-one-process-everywhere.md)). It is configured by two **rendered documents**, the service
+document and the policy document, which `sluisctl render` writes from an installation
+([ADR 0038](../decisions/0038-estates-render-through-sluis.md)). Moving from the `access-issuer` chart is
+[its own page](migrate-from-the-access-issuer-chart.md). The `access-proxy` chart was removed in v1.32.0
+([ADR 0003](../decisions/0003-deprecate-access-proxy.md)).
+
+## Preconditions
 
 | Needed | For | Notes |
 |---|---|---|
-| Kubernetes | the issuer | the issuer's recovery sign-in asks the API server to review a ServiceAccount token, so it runs in the cluster it trusts |
-| cert-manager, and a `ClusterIssuer` | the issuer | two certificates: the **signing key** (by default from a `ClusterIssuer` named `selfsigned`; only the key is used) and the TLS certificate for its Gateway (`route.certificate`). Or deliver the signing key yourself and set `signingKey.existingSecret` |
-| Gateway API, and a controller that serves a `GatewayClass` | the issuer's route | the chart renders a `Gateway` of `route.gatewayClassName` and two `HTTPRoute`s. With `route.parentRefs` it attaches to a parent you already have and renders no Gateway. Without `route.host` it renders no route at all, for a trial by port-forward |
-| Envoy Gateway | gateway-native OIDC for consoles (optional) | a `SecurityPolicy` with an `oidc:` block (`gateway.envoyproxy.io/v1alpha1`); see [../connect/console-app.md](connect/console-app.md) |
-| a Valkey (or any Redis-protocol store) | the issuer with more than one replica | the chart does not install one. One replica of the issuer may run without it (`replicaCount: 1`, `valkey.address: ""`), keeping sessions in memory |
-| a Google Workspace, and an OAuth client in a Google Cloud project | people signing in, and the directory the groups are read from | the one upstream that is built; a second directory backend (Entra) is designed and not written. [connect-runbook.md](connect/google-workspace.md) walks through the client |
-| an audit installation ([truvity/audit](https://github.com/truvity/audit)) | the audit trail (optional) | without `audit.writer` nothing is kept beyond the log line every record also is, and the service says so at start. This service writes no object itself: the installation owns the archive |
-| OpenBAO, or a Vault with the same API | short-lived SSH, database and client certificates (optional) | not installed by these charts; [../connect/openbao.md](connect/openbao.md) |
+| Kubernetes | the pod | recovery sign-in asks the API server to review a ServiceAccount token, so sluis runs in the cluster it trusts |
+| AWS: a DynamoDB table, an S3 bucket, a KMS key | state, blobs, signing | the `k8s-aws` preset is the one Kubernetes preset that is built. `k8s-minimal` and `k8s-openbao` are unavailable (loading one fails naming the missing adapters): see [adapters](../reference/adapters.md) |
+| a pod identity for the AWS role | the above | EKS Pod Identity (renders nothing) or `serviceAccount.awsIdentity: irsa` with `awsRoleArn`; the chart carries no credential |
+| SSM parameters, or OpenBao, for the secrets | the OAuth client, the state secret, each confidential client's secret | seeded under `/sluis/<instance>/private/config/`, layout in [configuration](../reference/secrets.md#ssm-layout-v3); with an `openbao` or `ssm` adapter the chart projects no Kubernetes Secret for them |
+| Gateway API and a controller serving a `GatewayClass` | the route | the chart renders a `Gateway` (or attaches to `route.parentRefs`) and two `HTTPRoute`s. Without `route.host` it renders no route, for a trial by port-forward |
+| cert-manager and a `ClusterIssuer` | the TLS certificate of the Gateway (`route.certificate`) | the signing key is KMS here, so no signing Certificate is rendered |
+| a Google Workspace and an OAuth client | people signing in, and the directory | [Google Workspace](connect/google-workspace.md) walks through the client |
+| `sluisctl`, `helm`, `kubectl` | rendering and installing | |
+| an audit installation ([truvity/audit](https://github.com/truvity/audit)) | the audit trail (optional) | without `audit.writer` nothing is kept beyond the log line each record also is, and the service says so at start |
 
-## Install order
+Replicas above one need `adapters.state` `dynamodb`, so the tick leases are shared; the chart refuses to render
+otherwise ([high availability](high-availability.md)). Valkey is optional (the directory cache); see
+[configuration](provide-a-valkey.md).
 
-1. **Valkey**, from whatever chart you already use.
-2. **The Secrets** the values will name. The issuer holds no RBAC to read
-   a Secret through the API; each one is mounted as a file.
+## Before you start
 
-   ```sh
-   kubectl create namespace access-issuer
-   kubectl -n access-issuer create secret generic access-issuer-google-client \
-     --from-literal=client-id=<google client id> \
-     --from-literal=client-secret=<google client secret>
-   # one per confidential client in the policy, key client-secret
-   kubectl -n access-issuer create secret generic dashboard-oidc-client \
-     --from-literal=client-secret=<a long random string>
-   ```
+- **Documents mode is the way; values mode is deprecated.** Setting `config` and `policy` as values still works for one
+  minor, then goes. `NOTES.txt` says so while it is used. Rendered documents are trusted: the chart does not re-validate
+  them, so produce them with `sluisctl render` and never edit them by hand. Looks like: a `helm template` failure naming
+  a key to change in the installation, or a service that refuses to start after the rollout.
+- **Preview before every apply, and read the preview.** `helm template` and `diff` (step 4 and
+  [Afterwards](#afterwards)); a policy that fails to load fails the rollout, not a sign-in, and the old pods keep serving.
+- **The release's full name is part of the documents.** The Roles, ConfigMaps and Secrets are named from it. If
+  `release` in the installation differs from the Helm release name, the chart fails the render naming both.
+- **The Secrets must exist before the pod starts.** A name that is not delivered stops the start and names where it was
+  looked for.
+- **The audit catalogue needs its schemas.** If you run the audit installation, its writer refuses to start without the
+  `.json` schemas; they ship as the release asset `sluis-audit-catalogue_<version>.tar.gz`.
+- **Nobody bumps `deploy/pulumi/go.mod` by hand before a tag**: the Pulumi library require is pinned by the release
+  (`hack/pin-pulumi-require.sh`, [CONTRIBUTING.md](../../CONTRIBUTING.md)). This matters only to estates that also
+  use the Pulumi library.
+- **Deleting a key from a document needs state surgery** when it is a persisted setting (a signing key ring, an adapter
+  swap): moving state is [migrate state](migrate-state.md), not an edit.
 
-3. **The issuer.** One tag releases every artifact here; pin the charts
-   at the same version.
+## Steps
 
-   ```sh
-   helm install sluis oci://ghcr.io/truvity/charts/sluis \
-     --version X.Y.Z --namespace access-issuer --values issuer-values.yaml
-   ```
+### 1. Write the installation and render it
 
-   ```yaml
-   config:                                    # `sluis serve`'s configuration file, as it stands
-     issuerURL: https://access.example.com    # stable for the life of the installation
-     release: sluis                   # the release's full name
-     publicRootURL: https://access.example.com
-     publicURL: https://access.example.com/console
-     valkey:
-       address: valkey.access-issuer.svc:6379 # two replicas share sessions here
-     oauthClient:                             # keys client-id and client-secret
-       secretName: access-issuer-google-client
-       idFile: /var/run/access-issuer/oauth-client/client-id
-       secretFile: /var/run/access-issuer/oauth-client/client-secret
-     console:
-       client: access-console
-     audit:                                   # optional; see the prerequisites
-       writer: http://audit.example-ns.svc:8080        # the installation's receiver
-       queryURL: http://audit-query.example-ns.svc:8080 # its query service, for the Audit page
+**Run**
 
-   secretMounts:
-     - secretName: access-issuer-google-client
-       mountPath: /var/run/access-issuer/oauth-client
-
-   route:
-     host: access.example.com
-     rootRedirect: /console/
-     gatewayClassName: example-gateway-class  # a GatewayClass your controller serves
-     certificate:
-       issuerName: example-ca                 # a cert-manager issuer you own
-       issuerKind: ClusterIssuer
-
-   policy:
-     groups:
-       all:access-roster:operator:
-         members: [platform-admins@example.com]
-         matchers:
-           # the recovery account: how the first operator gets in
-           - service_account: { namespace: access-issuer, name: access-issuer-recovery }
-       all:access-roster:viewer:
-         matchers: [{ email_domain: example.com }]
-       all:dashboard:viewer:
-         members: [everyone@example.com]
-     clients:
-       access-console:
-         kind: public
-         display_name: sluis
-         redirects: [https://access.example.com/console/]
-         requires: [all:access-roster:operator, all:access-roster:viewer]
-       dashboard.example.com:                 # a console's client: its id is the proxied host
-         kind: confidential
-         secret: dashboard-oidc-client        # key client-secret, in the issuer's namespace
-         display_name: Dashboard
-         redirects: [https://dashboard.example.com/oauth2/callback]
-         signed_out: [https://dashboard.example.com/]
-         requires: [all:dashboard:viewer]
-   ```
-
-   The policy is the whole of who may do what; its format is
-   [../reference/policy.md](../reference/policy.md), and every value is
-   in [../reference/configuration.md](../reference/configuration.md). A
-   malformed policy fails the rollout, not a sign-in: the previous pods
-   keep serving.
-
-4. **For a console that has no OpenID flow of its own**, use the gateway's
-   native OIDC support — declare a `SecurityPolicy` with an `oidc:` block
-   ([../connect/console-app.md](connect/console-app.md)). The
-   `access-proxy` chart was removed in v1.32.0
-   ([../decisions/0003-deprecate-access-proxy.md](../decisions/0003-deprecate-access-proxy.md)).
-   If your gateway is not Envoy Gateway, run upstream `oauth2-proxy`
-   yourself following the recipe in
-   [../design/access-proxy.md](connect/oauth2-proxy.md).
-
-Both values files above render with the charts in this repository
-(`helm template` with `--namespace` as shown), and the policy loads.
-
-## First sign-in
-
-Nobody can sign in through the directory until a directory is connected,
-and it is connected from the console. The way in before that is the
-**recovery sign-in**: a short-lived ServiceAccount token that the API
-server vouches for, which the policy above puts in the operators group.
-
-```sh
-kubectl -n access-issuer create token access-issuer-recovery \
-  --audience access-issuer-recovery --duration 10m
+```yaml
+# installation.yaml
+apiVersion: sluis.truvity.github.io/installation/v1
+instance: example                 # the SSM root is /sluis/example
+shape: kubernetes
+preset: k8s-aws
+release: sluis                    # the Helm release name
+issuer:
+  url: https://access.example.com # stable for the life of the installation
+aws: {region: eu-west-1, table: sluis, bucket: sluis-blobs}
+signingKey:
+  kmsWrapped: {keyId: alias/sluis-signing}
+recovery: {enabled: true, serviceAccount: sluis-recovery, audience: sluis-recovery}
+console: {client: access-console}
+oauthClient: {provider: default}
+access:
+  groups:
+    all:access-roster:operator:
+      members: [platform-admins@example.com]
+      matchers:
+        - service_account: {namespace: sluis, name: sluis-recovery}   # how the first operator gets in
+    all:access-roster:viewer:
+      matchers: [{email_domain: example.com}]
+  clients:
+    access-console:
+      kind: public
+      display_name: sluis
+      redirects: [https://access.example.com/console/]
+      requires: [all:access-roster:operator, all:access-roster:viewer]
 ```
 
-Open `https://access.example.com/login` (or port-forward the Service's
-port 8080), expand **Recovery sign-in**, and paste the token. The
-console's Overview then lists what is left: connect the Google Workspace
-by admin consent (the OAuth client needs the two redirect URIs
-`https://access.example.com/connect/google/callback` and
-`https://access.example.com/login/google/callback`), and check that your
-own directory group lands you in the operators group. Sign out, sign in
-as yourself, and search for yourself: your page shows the membership
-that granted each group. Who may mint a recovery token is the cluster's
-RBAC on `serviceaccounts/token` for that one account
-([runbook.md](day-two.md#day-one)).
+```sh
+sluisctl render --installation installation.yaml --out rendered/
+```
 
-**Controllers.** `githubRoster.enabled` and `slackRoster.enabled` are both off by
-default, and a GitHub organisation or Slack workspace they know is a dry run
-until listed in `policy.controllers.github.enabledOrgs` / `policy.controllers.slack.enabledWorkspaces`; see
-[the runbook](day-two.md#enabling-a-slack-workspace).
+**Expect** `rendered/sluis.yaml` (`sluis.truvity.github.io/sluis/v3`) and `rendered/policy.yaml` (`.../policy/v2`), exit 0.
+The installation's keys are in [configuration](../reference/installation-document.md), the
+policy's in [policy](../reference/policy.md).
 
-From there each connection is one guide: a
-[cluster](connect/kubernetes-cluster.md), an
-[AWS account](connect/aws-account.md),
-[GitHub Actions](connect/github-actions.md), a
-[laptop](../reference/sluisctl.md).
+**Verify** commit both documents, and run `sluisctl render --installation installation.yaml --out rendered/ --check` in
+CI: it exits 1 with a diff when a committed document is not what the installation renders to.
 
-## Without ArgoCD or Kargo
+**Rollback** none, because nothing is applied yet; discard the files.
 
-ArgoCD and Kargo appear in these docs as **relying parties** — consoles
-that sign in against the issuer ([argocd.md](connect/argocd.md),
-[kargo.md](connect/kargo.md)) — not as the way to deploy it. With plain
-Helm:
+### 2. Create the namespace and seed the secrets
 
-- **Pin one version** and keep the values files in your
-  own repository. The policy is values, so a change of who may do what is
-  a reviewed change to that file followed by `helm upgrade`; the pods
-  roll on a policy change by checksum.
-- **Take a release through the zero-diff gate** ([../adoption.md](../getting-started/README.md)):
-  render the pinned version and the new one with your values and compare.
+**Run**
+
+```sh
+kubectl create namespace sluis
+aws ssm put-parameter --type SecureString --name /sluis/example/private/config/providers/google/default/client-id     --value <google client id>
+aws ssm put-parameter --type SecureString --name /sluis/example/private/config/providers/google/default/client-secret --value <google client secret>
+aws ssm put-parameter --type SecureString --name /sluis/example/private/config/issuer/state-secret --value "$(openssl rand -base64 32)"
+# one per confidential client in the policy
+aws ssm put-parameter --type SecureString --name /sluis/example/private/config/clients/<client-id>/secret --value <random>
+```
+
+**Expect** each call prints a parameter version.
+
+**Verify** `aws ssm get-parameters-by-path --path /sluis/example/private/config/ --recursive --query 'Parameters[].Name'`
+lists the four names (names only; never print values).
+
+**Rollback** `aws ssm delete-parameter --name <name>`; nothing reads them yet.
+
+### 3. Write the deployment values
+
+**Run** a `values.yaml` with only deployment-level keys:
+
+```yaml
+route:
+  host: access.example.com
+  rootRedirect: /console/
+  gatewayClassName: example-gateway-class   # a GatewayClass your controller serves
+  certificate: {issuerName: example-ca, issuerKind: ClusterIssuer}
+serviceAccount:
+  awsIdentity: pod-identity                  # or irsa, with awsRoleArn
+replicaCount: 2
+```
+
+**Expect** nothing yet; `config`, `policy` and the exchange lists are refused beside the documents, so nothing is said
+twice. Everything else is in the chart's [README](../../charts/sluis/README.md) and `values.schema.json` (strict: an
+unknown key fails the render).
+
+**Verify** done in step 4.
+
+**Rollback** none, because it is a local file.
+
+### 4. Preview, then install
+
+**Run**
+
+```sh
+helm template sluis oci://ghcr.io/truvity/charts/sluis --version X.Y.Z --namespace sluis \
+  -f values.yaml --set-file documents.service=rendered/sluis.yaml --set-file documents.policy=rendered/policy.yaml
+```
+
+Read the output, then the same arguments with `helm install ... --namespace sluis`. One tag releases every artifact;
+pin the chart at one version.
+
+**Expect** a ServiceAccount, the `sluis-config` and `sluis-policy` ConfigMaps, one Deployment `sluis`, a Service, a
+Gateway, two HTTPRoutes, a Certificate. The release reaches Ready: the readiness probe on `/readyz` means the whole
+process, controllers included, finished starting.
+
+**Verify** `kubectl -n sluis rollout status deploy/sluis`, then `curl -s https://access.example.com/.well-known/openid-configuration`
+returns the issuer's URL.
+
+**Rollback** `helm uninstall sluis -n sluis` removes the objects; the SSM parameters and the DynamoDB state stay (state
+holds the directory connections and keys: delete them only on purpose).
+
+### 5. First sign-in
+
+**Run**
+
+```sh
+kubectl -n sluis create token sluis-recovery --audience sluis-recovery --duration 10m
+```
+
+Open `https://access.example.com/login`, expand **Recovery sign-in** and paste the token. The console's Overview lists
+what is left: connect the Google Workspace by admin consent (the OAuth client needs the redirect URIs
+`https://access.example.com/connect/google/callback` and `https://access.example.com/login/google/callback`), and
+check that your directory group lands you in the operators group. Who may mint a token is the cluster's RBAC on
+`serviceaccounts/token` for that one account ([day two](day-one.md)).
+
+**Expect** the Overview page, with this installation's own values to copy.
+
+**Verify** sign out, sign in as yourself, search for yourself: your page shows the membership that granted each group.
+
+**Rollback** none, because a token is short-lived; set `recovery.enabled: false` in the installation once the
+directory is connected, render and upgrade.
+
+Controllers: `controllers.github` and `controllers.slack` in the installation turn them on; an organisation or workspace
+is a dry run until listed in `enabledOrgs` / `enabledWorkspaces` ([day two](enable-slack-workspace.md)).
+Then connect what you need: a [cluster](connect/kubernetes-cluster.md), an [AWS account](connect/aws-account.md),
+[GitHub Actions](connect/github-actions.md), a [laptop](../reference/sluisctl.md). A console with no OpenID flow of its
+own uses the gateway's OIDC ([console app](connect/console-app.md)); on any other gateway run upstream oauth2-proxy
+([recipe](connect/oauth2-proxy.md)).
+
+## Afterwards
+
+Nothing here needs a GitOps controller. ArgoCD and Kargo appear in these docs as **relying parties** ([ArgoCD](connect/argocd.md),
+[Kargo](connect/kargo.md)). Taking a release by hand:
+
+- Keep the installation, the rendered documents and `values.yaml` in your own repository. A change of who may do what is a
+  reviewed change to the installation, then `sluisctl render`, then `helm upgrade`; the pod rolls on a document change by
+  checksum.
+- Take a release through the zero-diff gate: render the pinned version and the new one with your values and compare.
 
   ```sh
-  helm template sluis oci://ghcr.io/truvity/charts/sluis \
-    --version OLD --namespace access-issuer -f issuer-values.yaml > old.yaml
-  helm template sluis oci://ghcr.io/truvity/charts/sluis \
-    --version NEW --namespace access-issuer -f issuer-values.yaml > new.yaml
-  diff -u old.yaml new.yaml
+  for v in OLD NEW; do helm template sluis oci://ghcr.io/truvity/charts/sluis --version $v --namespace sluis \
+    -f values.yaml --set-file documents.service=rendered/sluis.yaml --set-file documents.policy=rendered/policy.yaml > $v.yaml; done
+  diff -u OLD.yaml NEW.yaml
   ```
 
-  An image tag and the version labels move on every release; anything
-  else in the diff should be a line of [CHANGELOG.md](../../CHANGELOG.md).
-  Then `helm upgrade` with the same values.
-- **Back up what the console adds.** Five Secrets, and the Slack state if the
-  Slack controller is used (`<release>-slack-credentials`,
-  `<release>-slack-records`, `<release>-slack-catalogue-apps`;
-  `slackState.push` copies the first two), hold everything that cannot be
-  minted again; with no controller copying them, copy them yourself
-  ([restoring from the Secrets alone](../reference/configuration.md#restoring-from-the-secrets-alone),
-  [Slack state](day-two.md#slack-state)).
-- **Adopting objects that already exist.** Moving an issuer
-  that was installed another way into this chart is the same gate:
-  choose the release name and values so the render reproduces the live
-  objects' names, and make the switch one change whose diff is empty.
-  Moving from another identity provider is
-  [migration-from-an-idp.md](migrate-from-an-idp.md).
+  An image tag and the version labels move on every release; anything else is a line of
+  [CHANGELOG.md](../../CHANGELOG.md). Read the release's page under `docs/how-to/upgrade/` first, then `helm upgrade`.
+- Back up what the console adds: the Secrets and the state that cannot be minted again
+  ([restoring from the Secrets alone](back-up-and-restore.md),
+  [Slack state](back-up-and-restore.md#1-know-what-there-is)). On DynamoDB, turn on the table's point-in-time recovery.
+- Moving from another identity provider is [migrate from an IdP](migrate-from-an-idp.md); from the `access-issuer` chart, [its migration](migrate-from-the-access-issuer-chart.md).
+- Tell the people who use the consoles when the issuer URL or a client's redirects change.

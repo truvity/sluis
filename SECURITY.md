@@ -77,7 +77,7 @@ Only the latest release is supported with security updates.
   allow-list. Every fetch is capped at 64 KiB and 5 seconds, follows no
   redirect, is cached for 10 minutes with no stale fallback on a failure,
   and a declared client in the policy always wins over a document one.
-  See [docs/reference/policy.md](docs/reference/policy.md#clients-that-describe-themselves).
+  See [docs/reference/policy.md](docs/reference/policy-clients.md#clients-that-describe-themselves).
 - The **audit trail** is kept by an audit installation connected as a
   plugin, which sluis reaches as its own workload (a projected
   service-account token) and holds no bucket or key for. Ordinary records

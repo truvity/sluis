@@ -1,11 +1,9 @@
-# The conformance run
+# Run the OpenID conformance suite
 
-access-issuer claims four OpenID Foundation profiles, and the claim is
-worth exactly what the suite says about it. This is how to run it.
+## Purpose
 
-> The exit criterion for `v1.0.0` is a green run of all four.
-> One of them runs unattended; three need a person at a
-> browser, because the whole point of them is that a person signs in.
+Run the four OpenID Foundation profiles sluis claims against an installation, and decide whether the run is clean. What
+the last run said is on [the findings page](../explanation/conformance-findings.md); this page is the procedure.
 
 | profile | plan | attended |
 | -- | -- | -- |
@@ -14,400 +12,168 @@ worth exactly what the suite says about it. This is how to run it.
 | RP-Initiated Logout | `oidcc-rp-initiated-logout-certification-test-plan` | yes |
 | Back-Channel Logout | `oidcc-backchannel-rp-initiated-logout-certification-test-plan` | yes |
 
-**Why the fourth exists.** The Foundation does not certify RP-Initiated
-Logout on its own: a logout certification is RP-Initiated **plus at
-least one** of Session Management, Front-Channel or Back-Channel. We
-serve Back-Channel and only Back-Channel, for reasons that are about
-what a browser will actually do rather than about effort — see
-[the design note](../explanation/design.md#telling-the-relying-party-back-channel-logout). So this pair is the
-smallest set that can be submitted, and neither half counts alone.
+The Foundation certifies logout only as RP-Initiated **plus at least one** of Session Management, Front-Channel or
+Back-Channel. sluis serves Back-Channel only ([why](../explanation/back-channel-logout.md)),
+so the RP-Initiated and Back-Channel pair is the smallest set that can be submitted; neither half counts alone.
 
+## Preconditions
 
-## When to run it
+- A person, for the attended profiles, at every major and minor release, as a whole. Not on a schedule and not in CI: one
+  profile passing daily reads as "conformance passes" while the two that sign somebody in have not run for weeks. A patch
+  release needs no run, unless it touches the issuing path.
+- The suite running in the cluster of the installation under test, from the Foundation's image, as Service
+  `conformance-suite` in namespace `conformance` (the scripts assume both; deploying it is the estate's, not this
+  chart's). It must be reachable by the issuer: a logout token is a server-to-server POST, and a suite on a laptop at a
+  name that resolves to `127.0.0.1` is, from the pod, the pod's own loopback.
+- Only the suite's relying-party half (`/test/`: the callback, the post-logout landing page, the back-channel endpoint) is
+  published on its hostname. The control plane (UI, API, stored client secrets) is on the ClusterIP only, because the
+  suite has no login of its own: reach it over the tailnet.
+- `kubectl` for that cluster (a context that authenticates through OIDC needs `kubectl-oidc_login` on PATH; set
+  `KUBECTL="kubectl --context ..."` to wrap it), `curl`, `jq`, `python3`, headless Chrome.
+- The installation under test uses the namespace `access-issuer` and the recovery ServiceAccount `access-issuer-recovery`:
+  `hack/conformance_drive.py` and `hack/conformance-plans.sh` hard-code both, and read the client secrets from
+  Secrets named `conformance-client`, `conformance-2-client`, `conformance-bc-client` and `conformance-bc-2-client`
+  (key `client-secret`) in that namespace.
 
-**At every major and minor release**, by a person, as a whole: all three
-profiles, including the steps the suite hands to a human. Not on a
-schedule, and not in CI.
+## Before you start
 
-It used to run the Config profile daily and nothing else. That is worse
-than no check, because one profile passing daily reads as "conformance
-passes" while the two that actually sign somebody in have not been run
-for weeks — and those two are where every defect has been. The Config
-workflow is still there for a single click
-([.github/workflows/conformance.yaml](../../.github/workflows/conformance.yaml)),
-because it needs no credential and guards the discovery document, which
-changes silently when a provider option changes.
+- **Run one plan at a time.** The suite serves each plan's callback under its `alias`. A second plan with the same alias
+  interrupts the running one, and says so only in its own log ("Stopping test due to alias conflict"), which from
+  outside looks like a hang. A different alias is refused a redirect the clients never registered.
+- **The alias in the client's paths must equal the plan's `alias`** (`access-issuer` below): a mismatch reads as the
+  issuer refusing the redirect.
+- **Every call to the suite carries `X-Forwarded-Proto: https`.** At the ClusterIP there is no nginx to add it, and the
+  suite refuses a request that does not claim HTTPS. The scripts add it; a hand-typed `curl` has to.
+- **The driver must be a real browser.** The suite's callback is an HTML page that posts the result back with JavaScript;
+  `curl` reaches it, never runs it, and the module sits in WAITING after the authorization succeeded.
+- **`requires` is mandatory on a client** (the policy refuses to load a client that requires no group), and it must
+  name a group the driver holds. The driver signs in as the recovery ServiceAccount, which has no email: it holds
+  `all:access-roster:operator` through a `service_account` matcher and not `viewer` (email domain), so a row requiring
+  only viewer refuses the driver and every module fails at the sign-in.
+- **The Back-Channel plan needs its own client pair.** A client that declares `backchannel_logout_uri` is POSTed a token
+  at every sign-out, which the RP-Initiated modules count as a failure; a client that declares none is never contacted
+  and every Back-Channel module waits. Hence two pairs.
+- **A recovery sign-in cannot prove the claim-bearing modules.** A ServiceAccount has no address or name, so
+  `oidcc-scope-email`, `oidcc-scope-profile` and `oidcc-alternate-happy-flow` warn for a reason that does not exist for a
+  person. The unattended run is evidence for the protocol modules; those and the screenshot modules
+  (`oidcc-prompt-login`, the missing-response-type error page) need a person's pass with a real Google sign-in.
+- **Preview the policy change before it is applied, and read the preview**: the four client rows are temporary and go in
+  and out through the estate's normal change (`sluisctl render`, then upgrade), [install](install-with-helm.md).
+- **The freeze before a migration** (skip-reconcile, [day two](cutover.md)) is not
+  involved: never run the suite during a cutover.
 
-A patch release does not need a run. A patch that touches the issuing
-path is not a patch.
-
-The run is not done until every module is **PASSED, REVIEW, WARNING or
-SKIPPED** — the Foundation's rule is that only FAILED and INTERRUPTED
-disqualify a profile — and until somebody has *looked at* the evidence
-attached to each REVIEW, which is a screenshot of a page. A REVIEW whose
-screenshot shows the wrong page is a failure that the suite cannot see.
-
-## The suite
-
-**It runs in the cluster**, from the Foundation's published image, and
-it exists exactly while the conformance client rows are declared: the
-installation's configuration renders the suite together with those two
-rows (namespace `conformance`), and removing the rows removes the
-suite. One thing to add for a run, one thing to take out.
-
-Why in the cluster and not on a laptop, where it used to run at
-`localhost.emobix.co.uk`. Three of the four plans are driven by a
-browser and work against an issuer anywhere. The fourth, Back-Channel
-Logout, is the one place the **issuer has to reach the suite**: a logout
-token is a server-to-server POST, and a name that resolves to
-`127.0.0.1` is, from the pod, the pod's own loopback. Pods cannot reach
-the tailnet either. So the suite has a hostname on the cluster like every other
-console, and the issuer reaches it through the same edge with a
-certificate it already verifies.
-
-Only the relying-party half is published at that name — `/test/` (the
-callback, the post-logout landing page, the back-channel endpoint) and
-the two static paths the callback page loads. The **control plane** —
-the UI, the API that creates plans and reads results, the stored client
-secrets — is on the ClusterIP only, because the suite's developer
-profile has no login of its own. Reach it over the tailnet:
-
-```bash
-S=http://$(kubectl -n conformance get svc conformance-suite -o jsonpath='{.spec.clusterIP}'):8080
-H='X-Forwarded-Proto: https'
-curl -s -H "$H" "$S/api/runner/available"   # 200 once it is up; the first start takes a minute
-```
-
-**Every call carries that header.** The suite refuses a request that
-does not claim to have arrived over HTTPS — its own nginx normally says
-so — and at the ClusterIP there is no nginx. The drivers add it
-themselves; a hand-typed `curl` has to.
-
-Everything below drives it over that API, so a run is a script and not a
-sequence of clicks. The drivers take the address as `SUITE=$S`. The
-suite's own pages (`plan-detail.html`, `log-detail.html`) are at the
-same address; the public hostname answers them with nothing, and that
-is the point.
-
-## Config — unattended
-
-Needs no client and no browser: it reads the discovery document and the
-key set, and checks them against the specification.
-
-```bash
-S=http://$(kubectl -n conformance get svc conformance-suite -o jsonpath='{.spec.clusterIP}'):8080; H='X-Forwarded-Proto: https'
-cat > config.json <<'JSON'
-{
-  "alias": "access-issuer-config",
-  "description": "access-issuer — Config profile",
-  "server": { "discoveryUrl": "https://access.example.com/.well-known/openid-configuration" },
-  "client": { "client_id": "conformance", "client_secret": "unused-here" }
-}
-JSON
-
-PLAN=$(curl -s -H "$H" -X POST "$S/api/plan?planName=oidcc-config-certification-test-plan" \
-  -H 'Content-Type: application/json' --data-binary @config.json | jq -r .id)
-TEST=$(curl -s -H "$H" -X POST "$S/api/runner?test=oidcc-discovery-endpoint-verification&plan=$PLAN" | jq -r .id)
-curl -s -H "$H" "$S/api/info/$TEST" | jq '{status, result}'
-```
-
-Change the discovery URL to point at whichever installation is under
-test. Nothing about this run touches the installation's configuration.
-
-**Last run: 2026-09-12 against `access.example.com` at 0.17.0 —
-FINISHED / PASSED.** Discovery now also advertises
-`backchannel_logout_supported` and `backchannel_logout_session_supported`,
-both `true`, which the Back-Channel plan's own discovery module checks. Worth repeating after anything that changes discovery, since
-that is the whole of what it reads.
-
-## Basic OP and RP-Initiated Logout — attended
-
-These sign somebody in, so they need clients at the issuer and a person
-to complete the flow at the provider.
+## Steps
 
 ### 1. Declare the clients
 
-The plans want **three** client slots and they map onto **two** clients:
-
-| slot | what it is |
-| -- | -- |
-| `client` | the primary client, authenticating with `client_secret_basic` |
-| `client_secret_post` | the same client again — the library takes the credential from the Basic header *or* the form, so one confidential client serves both |
-| `client2` | a second client, for the tests that check a code issued to one cannot be redeemed by another |
-
-They are ordinary declared rows in the estate's access matrix,
-under `roster.clients`, and they are **temporary**: add them for the run
-and take them out afterwards. A standing client whose only purpose was a
-certification is surface with no consumer.
+**Run** add four rows to the installation's `access.clients`, render and upgrade. They are temporary: a standing client
+whose only purpose was a certification is surface with no consumer. Each pair is `kind: confidential`, with its secret
+`clients/<id>/secret` delivered like any client's ([configuration](../reference/secrets.md#the-names)).
 
 ```yaml
-  - name: conformance
-    # The suite's own hostname. Every path below is host-relative, so
-    # this one name is the redirect the issuer accepts, the landing
-    # page, and the BASE_URL the suite starts with.
-    hostname: conformance.prod.example.com
-    redirects:  [/test/a/access-issuer/callback]
-    signed_out: [/test/a/access-issuer/post_logout_redirect]
-    requires: [all:access-roster:operator, all:access-roster:viewer]
-  - name: conformance-2
-    hostname: conformance.prod.example.com
-    redirects:  [/test/a/access-issuer/callback]
-    signed_out: [/test/a/access-issuer/post_logout_redirect]
-    requires: [all:access-roster:operator, all:access-roster:viewer]
-  # The Back-Channel plan's pair: the same endpoints plus the address a
-  # logout token is POSTed to. Kept apart from the pair above on
-  # purpose -- the RP-Initiated modules FAIL a test that receives a
-  # back-channel request it did not expect, and since 0.17.1 every
-  # sign-out sends one to every client that signed somebody in.
-  - name: conformance-bc
-    hostname: conformance.prod.example.com
-    redirects:  [/test/a/access-issuer/callback]
-    signed_out: [/test/a/access-issuer/post_logout_redirect]
-    backchannel_logout: /test/a/access-issuer/backchannel_logout
-    requires: [all:access-roster:operator, all:access-roster:viewer]
-  - name: conformance-bc-2
-    hostname: conformance.prod.example.com
-    redirects:  [/test/a/access-issuer/callback]
-    signed_out: [/test/a/access-issuer/post_logout_redirect]
-    backchannel_logout: /test/a/access-issuer/backchannel_logout
-    requires: [all:access-roster:operator, all:access-roster:viewer]
+conformance:       # and conformance-2: slots `client`/`client_secret_post` and `client2`
+  kind: confidential
+  redirects: [https://conformance.example.com/test/a/access-issuer/callback]
+  signed_out: [https://conformance.example.com/test/a/access-issuer/post_logout_redirect]
+  requires: [all:access-roster:operator, all:access-roster:viewer]
+conformance-bc:    # and conformance-bc-2: the Back-Channel pair
+  kind: confidential
+  redirects: [https://conformance.example.com/test/a/access-issuer/callback]
+  signed_out: [https://conformance.example.com/test/a/access-issuer/post_logout_redirect]
+  backchannel_logout_uri: https://conformance.example.com/test/a/access-issuer/backchannel_logout
+  requires: [all:access-roster:operator, all:access-roster:viewer]
 ```
 
-The alias in those paths (`access-issuer`) has to match the `alias` in
-the test configuration below — the suite serves each test plan's
-callback under its own alias, and a mismatch reads as the issuer
-refusing the redirect. The hostname is also what the suite is started
-with, so a run needs no hand-kept agreement between three places: the
-`hostname` here is read by the chart that renders the suite.
+The plans want three client slots that map onto two clients: `client` and `client_secret_post` are the same client (the
+credential comes from the Basic header or the form), `client2` is a second, for the tests that check a code issued to one
+cannot be redeemed by the other. Fields: [policy](../reference/policy.md).
 
-**`requires` is mandatory** and these are no exception: the policy
-refuses to load a client that requires no group, with *"client
-%q requires no group, so nobody may use it"*. An earlier version of this
-page said to leave it off, which would have failed the render before a
-single test ran.
+**Expect** the rollout completes.
 
-**Both groups, and the operator one is the load-bearing half.** Since
-1.1.0 `requires` is enforced on the browser flow, and the driver signs
-in as RECOVERY — a ServiceAccount. `all:access-roster:viewer` is matched
-by email domain, which a ServiceAccount has none of, so a row requiring
-only viewer refuses the driver and every module fails at the sign-in.
-Recovery holds `all:access-roster:operator` through a `service_account`
-matcher, which is why it is listed. A human running the plans by hand
-would pass on either.
+**Verify** `kubectl -n access-issuer get secret conformance-client` exists, and
+`curl -s https://<issuer>/.well-known/openid-configuration | jq .backchannel_logout_supported` is `true`.
 
-Name a group the person running the suite already holds.
-`all:access-roster:viewer` is the bootstrap matcher that admits the
-`acme.example` domain, so it is the smallest thing that works here — the
-tests sign in as a real person, and that person has to be admitted like
-any other.
+**Rollback** remove the rows (this is also step 5).
 
-### 2. Read the secrets
+### 2. Create the plans
 
-They are generated in the cluster and never leave it, which is the
-point. Read them at the moment you need them, and do not put them in a
-file that outlives the run:
+**Run**
 
-```bash
-kubectl -n access-issuer get secret conformance-client \
-  -o jsonpath='{.data.client-secret}' | base64 -d
+```sh
+ISSUER=https://access.example.com KUBECTL="kubectl --context prod@oidc" hack/conformance-plans.sh v1.64.0
 ```
 
-### 3. Configure and run
+It finds the suite's ClusterIP, reads the secrets at the moment of use into a temporary directory that is removed on
+exit (they are never printed), and creates the four plans, with these variants (ask `GET /api/plan/available` rather than
+guess): Basic OP `server_metadata=discovery`, `client_registration=static_client`; the two logout plans
+`client_registration=static_client`, `response_type=code` (sluis serves only `code`). Posting the Basic variant to a
+logout plan returns an error with no plan id.
 
-The whole of this section is one script, which reads the secrets
-itself and prints the four plan ids:
+**Expect** `SUITE=http://<ip>:8080` and four lines `config|basic|rp-logout|backchannel <plan-id>`.
 
-```bash
-ISSUER=https://access.example.com KUBECTL="kubectl --context prod@oidc" hack/conformance-plans.sh v1.0.0
+**Verify** each id resolves: `curl -s -H 'X-Forwarded-Proto: https' $SUITE/api/plan/<id> | jq .planName`.
+
+**Rollback** none needed: a plan is a record inside the suite. It holds the client secrets, which is why the control
+plane is not public.
+
+### 3. Run Config (unattended)
+
+**Run**
+
+```sh
+SUITE=http://<ip>:8080 ISSUER=https://access.example.com CONTEXT=prod@oidc hack/conformance_drive.py <config-plan-id>
 ```
 
-What follows is what it does, for when a plan has to be made by hand.
+Config needs no client and no browser: it reads the discovery document and the key set. It is also what the workflow
+`.github/workflows/conformance.yaml` runs on a manual dispatch with an `issuer` input, which needs no credential.
 
+**Expect** `FINISHED / PASSED`.
 
-```bash
-S=http://$(kubectl -n conformance get svc conformance-suite -o jsonpath='{.spec.clusterIP}'):8080; H='X-Forwarded-Proto: https'
-cat > basic.json <<JSON
-{
-  "alias": "access-issuer",
-  "description": "access-issuer — Basic OP",
-  "server": { "discoveryUrl": "https://access.example.com/.well-known/openid-configuration" },
-  "client":  { "client_id": "conformance",   "client_secret": "$FIRST_SECRET" },
-  "client2": { "client_id": "conformance-2", "client_secret": "$SECOND_SECRET" },
-  "client_secret_post": { "client_id": "conformance", "client_secret": "$FIRST_SECRET" }
-}
-JSON
+**Verify** repeat it after anything that changes discovery; that is all it reads.
 
-curl -s -H "$H" -X POST "$S/api/plan?planName=oidcc-basic-certification-test-plan&variant=%7B%22server_metadata%22%3A%22discovery%22%2C%22client_registration%22%3A%22static_client%22%7D" \
-  -H 'Content-Type: application/json' --data-binary @basic.json | jq -r .id
+**Rollback** none, because it changes nothing in the installation.
+
+### 4. Run the three attended plans, one at a time
+
+**Run**, for each of `basic`, `rp-logout`, `backchannel`, in that order:
+
+```sh
+SUITE=http://<ip>:8080 ISSUER=https://access.example.com CONTEXT=prod@oidc hack/conformance_drive.py <plan-id>
 ```
 
-Then run every module of the plan in order:
+The suite has no "run all": the driver starts each module in order (Basic OP has thirty), waits for it, and prints the
+result. `--from <module>` resumes after a failure; `--only <module>` runs one; `--manual` leaves the sign-in to a person.
+The driver starts a **fresh browser per module**, because several say "remove any cookies you may have received from
+the OpenID Provider": a carried session fails `oidcc-prompt-none-not-logged-in`, correct behaviour recorded as a
+defect. It signs in as recovery whenever the issuer asks, and answers the suite's screenshot requests from the browser
+it drives (eight of the eleven RP-Initiated modules end on a refusal page the issuer served; it photographs every
+issuer page passed through and the latest answers).
 
-```bash
-ISSUER=https://access.example.com CONTEXT=prod@oidc hack/conformance_drive.py <plan-id>
-```
+**Expect** every module PASSED, REVIEW, WARNING or SKIPPED. Only FAILED and INTERRUPTED disqualify a profile. REVIEW
+means a person must look at the attached evidence, a screenshot.
 
-**In headless Chrome, and it has to be a browser**, with `SUITE=$S` so
-the driver's API calls go to the ClusterIP while the browser follows the
-suite's public callbacks. The suite's callback
-is an HTML page that posts the result back with JavaScript: `curl`
-follows every redirect, reaches that page, never runs it, and the module
-sits in WAITING while the authorization it was waiting for has already
-succeeded. That reads as a hang, and it is why a plan can show a row of
-grey boxes with nothing obviously wrong.
+**Verify** open the evidence of each REVIEW and check it shows the right page: a REVIEW whose screenshot shows the
+wrong page is a failure the suite cannot see. A Back-Channel module stuck in WAITING after "Received front channel
+redirect; waiting for back channel request", with `connection refused` in the issuer's log, means the issuer cannot
+reach the suite (see Preconditions).
 
-Signing in is RECOVERY rather than a person at a Google prompt, which is
-what makes thirty modules unattended — and which **changes what some of
-them prove**, see below.
+**Rollback** none, because a run only signs in and out; a stuck module is interrupted by starting the next.
 
-The suite's own page has no *run all* — each module is a separate click,
-and Basic OP has thirty of them. The script starts them in order, waits
-for each, and prints the result, so the clicking that is left is only the
-part that needs a person. A module waiting for a sign-in says so with the
-URL to open; `--from <module>` resumes after a failure instead of
-re-running what already passed.
+### 5. Clean up
 
-**Screenshots are answered too.** Eight of the eleven RP-Initiated Logout
-modules end at a page the suite cannot see: the issuer must REFUSE, so
-there is no redirect back and no callback. The suite asks a human to
-upload a screenshot of that page and waits. Unanswered, the module sits
-in WAITING until the next one interrupts it — which is what a row of
-eight greyed-out logout results was, and it was a step nobody had
-performed rather than a server fault. The driver takes the screenshot
-from the browser it is already driving and uploads it, then marks the URL
-visited so the suite stops waiting for a callback that is not coming.
+**Run** export each plan's results from the suite and attach them to the ticket (a green run nobody kept cannot be
+checked). Then remove the four client rows, render and upgrade.
 
-A FRESH BROWSER is started for each module, because several of them say
-so in as many words: *"please remove any cookies you may have received
-from the OpenID Provider before proceeding"*. Without it the driver
-carries one sign-in through the whole plan, and
-`oidcc-prompt-none-not-logged-in` fails — the issuer is asked whether
-anybody is signed in, a live session says yes, and it completes silently,
-which is correct behaviour being recorded as a defect.
+**Expect** the rows and their secrets are gone.
 
-*When* it takes that shot is the whole of it. The suite logs the review
-step BEFORE it hands the browser the end_session URL, so a driver that
-uploads the moment the placeholder appears photographs the suite's own
-"processing response" page — eight identical screenshots of the wrong
-thing, uploaded successfully. Every one of these steps ends on a page the
-ISSUER served, so that is the test the driver applies before shooting.
+**Verify** `curl -s https://<issuer>/.well-known/openid-configuration` is unchanged, and
+`kubectl -n access-issuer get secret conformance-client` is `NotFound`.
 
-And *which page* is the other half. Two shapes of step, and they want
-opposite things. The logout steps end ON the page in question and the
-browser stays there. The re-authentication steps — `oidcc-prompt-login`
-and `oidcc-max-age-1` — want the login prompt shown during the **second**
-authorization, which is a page the driver fills in and leaves; by the
-time the placeholder is logged the browser is back on the suite's
-callback. So every issuer page passed through is photographed on the way,
-and the latest one answers.
+**Rollback** to run again, repeat step 1. Forgetting this step is the only way a run leaves anything behind.
 
-These finish as **REVIEW**, which is not a failure: it is the suite saying
-a human must look at the evidence. The evidence is attached, and signing
-it off is a person's job at certification time.
+## Afterwards
 
-**`KUBECTL`** overrides how the driver runs kubectl, for the case where
-reaching the cluster needs more than the binary — a context that
-authenticates through OIDC needs the `kubectl-oidc_login` credential
-plugin on PATH, and kubectl only says so once its cached token expires,
-which is a plan that runs for ten minutes and then dies in the middle.
-
-Or open the suite's own pages at `$S` over the tailnet, find the plan,
-and run its modules by hand.
-
-### What a recovery sign-in cannot prove
-
-A recovery subject is a ServiceAccount, not a person: it has no address
-and no name, so `userinfo` returns no `email`, no `name` and no
-`preferred_username`. Every module that checks the claims a scope
-implies — `oidcc-scope-email`, `oidcc-scope-profile`,
-`oidcc-alternate-happy-flow` — therefore warns for a reason that does not
-exist when a person signs in.
-
-So the unattended run is evidence for the PROTOCOL modules and not for
-the claim-bearing ones. Those, and the two that require a screenshot
-(`oidcc-prompt-login`, and the missing-response-type error page), are a
-person's pass with a real Google sign-in.
-
-### Run one plan at a time
-
-The suite serves every plan's callback under its `alias`, and the
-declared clients register exactly one callback — so a second plan with a
-different alias is refused a redirect it never registered, and a second
-plan with the SAME alias interrupts the running one. The interrupted test
-says so only in its own log ("Stopping test due to alias conflict"),
-which from outside looks exactly like a hang. Each one that reaches a sign-in stops and
-waits for you: a browser window opens on the issuer's chooser, you sign
-in with Google as usual, and the test continues on its own.
-
-The logout plan is **not** the same call. It takes a different set of
-variants — `client_registration` and `response_type`, with no
-`server_metadata` — and posting the Basic OP variant to it returns an
-error with no plan id rather than a plan:
-
-```bash
-variant='%7B%22client_registration%22%3A%22static_client%22%2C%22response_type%22%3A%22code%22%7D'
-curl -s -H "$H" -X POST "$S/api/plan?planName=oidcc-rp-initiated-logout-certification-test-plan&variant=$variant" \
-  -H 'Content-Type: application/json' --data-binary @basic.json | jq -r .id
-```
-
-`response_type=code` because this issuer serves only `code` — which is
-the whole reason the other response types are absent from discovery. Ask
-the suite rather than guess; `GET /api/plan/available` lists each plan's
-variant keys and their permitted values.
-
-The Back-Channel plan takes the **same** variants as that one, and is
-started the same way:
-
-```bash
-curl -s -H "$H" -X POST "$S/api/plan?planName=oidcc-backchannel-rp-initiated-logout-certification-test-plan&variant=$variant" \
-  -H 'Content-Type: application/json' --data-binary @basic.json | jq -r .id
-```
-
-What it needs that the others do not is **a client declaring where to
-send the logout token**, and it must be a client the OTHER plans do not
-use. Back-Channel Logout is opt-in per client, so a row that declares
-none is never contacted and every module of this plan waits for a token
-that is not coming; and a row that declares one is contacted at every
-sign-out, which the RP-Initiated modules count as a failure. Hence the
-`conformance-bc` pair: the Back-Channel plan's configuration names
-those two, and `hack/conformance-plans.sh` does so.
-
-The alias in the address is the same alias as the callback, for the
-same reason: the suite serves every endpoint of a plan under it.
-
-**And the issuer must be able to reach the suite.** This is the one
-module where it has to: a logout token is a server-to-server POST, and
-a suite on a laptop at a name that resolves to `127.0.0.1` is, from the
-pod, the pod's own loopback. The module then sits in WAITING after
-*"Received front channel redirect; waiting for back channel request"*
-while the issuer logs `connection refused` against the registered URL.
-That log line is the proof the mechanism ran; the module needs the suite
-on a host the cluster can reach, with a certificate the issuer trusts
-— or the Foundation's hosted suite.
-
-### 4. Afterwards
-
-- Export each plan's results from the suite and attach them to the
-  ticket. A green run nobody kept is a green run nobody can check.
-- **Remove the four client rows.** This is the step that gets forgotten,
-  and it is the only one that leaves anything behind.
-
-## What the run has already found
-
-Pointing the suite at the live issuer is not a formality. It found that
-a refused bearer at `/userinfo` carried no `WWW-Authenticate` header,
-which RFC 6750 requires — a 401 a conforming client cannot act on,
-written inside a dependency and invisible from our side of it. Fixed in
-v0.10.0.
-
-## What is deliberately not in the target
-
-Token exchange is served and is **not** part of any profile claimed
-here. It is now the only one: the device flow, JWT bearer and client
-credentials were served through 0.11 and are gone.
-
-The reverse also has to hold, and since 0.11 it is the half worth
-running: nothing this family's design names as *out* may be found
-served. A grant withdrawn from discovery that goes on ANSWERING is the
-failure that hides, because the metadata looks right. See
-[../reference/configuration.md](../reference/configuration.md#endpoints).
+- Update [the findings page](../explanation/conformance-findings.md) with the date, version and plan ids.
+- Tell whoever submits to the Foundation which plan ids are the pair.
+- A grant withdrawn from discovery must also stop answering: the half worth checking is that nothing the design names as
+  out is served ([endpoints](../reference/endpoints.md)).

@@ -9,7 +9,7 @@ Three things get called a session here, and each has exactly one owner.
 The issuer holds the **SSO session** with the browser and one
 **per-client session** — a refresh chain, indexed and revocable — per
 identity and client
-([design/sluis.md#sessions-and-sign-out](../explanation/design.md#sessions-and-sign-out)).
+([sessions.md](../explanation/sessions.md)).
 An application signed in through either door then keeps **its own local
 session**, on its own clock. A limit enforced at the issuer can only ever
 reach the first two; the third is somebody else's state.
@@ -28,7 +28,7 @@ places: at refresh, at a silent `/authorize` (so an SSO session cannot be
 extended past it by opening a second console), and on the console's own
 session. `auth_time` is fixed at sign-in and carried unchanged across
 every refresh
-([reference/policy.md#groups--token-by-deep-merge](../reference/policy.md#groups--token-by-deep-merge)),
+([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)),
 so the limit is measured from when the person actually authenticated —
 never reset by use. No token outlives it. There is **no idle timeout** at
 the issuer, for the reason above: it has nothing to measure idleness with.
@@ -55,7 +55,7 @@ surface that has to be reasoned about, which is exactly where this
 repository has found real bugs before — a revoke path that ended one
 session and left its parent SSO session standing looked, from the
 console, like a complete sign-out
-([design/sluis.md#telling-the-relying-party-back-channel-logout](../explanation/design.md#telling-the-relying-party-back-channel-logout)).
+([back-channel-logout.md](../explanation/back-channel-logout.md)).
 
 **Gateway OIDC's caveats, worth stating rather than discovering:**
 
@@ -65,7 +65,7 @@ console, like a complete sign-out
   short `ttl_cap`;
 - there is no server-side session to receive Back-Channel Logout — the
   refresh interval is the whole dial
-  ([design/access-proxy.md#sign-out](../how-to/connect/oauth2-proxy.md#sign-out));
+  ([design/access-proxy.md#sign-out](../how-to/connect/oauth2-proxy.md#3-wire-sign-out));
 - the `groups` claim rides in the cookie, so it grows with group count;
 - a misconfigured gateway policy can fail open rather than closed.
 
@@ -79,7 +79,7 @@ the limit binds what comes back to the issuer, not what does not.
 An application already running a multi-day session of its own needs a
 deliberate choice, not the default: cap its session at or under 24h, or
 wire up
-[Back-Channel Logout](../explanation/design.md#telling-the-relying-party-back-channel-logout)
+[Back-Channel Logout](../explanation/back-channel-logout.md)
 and accept the window that leaves. Silence on this from the application's
 own design is not a safe default.
 

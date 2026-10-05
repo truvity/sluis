@@ -1,5 +1,26 @@
 # Connect a Kubernetes cluster
 
+## Purpose
+
+Let people and CI jobs sign in to a cluster's API server with sluis.
+
+## Preconditions
+
+- Access to the cluster's API server configuration (EKS: an identity provider config; kubeadm: `--oidc-*` flags).
+- The policy declares the cluster's groups, and sluis is reachable from the API server at its issuer URL.
+- A break-glass path that does not go through sluis (see the end of this page).
+
+## Before you start
+
+- **Match the signing algorithm to the cluster.** The chart's default key signs ES384 and kube-apiserver defaults to
+  RS256. A managed cluster (EKS) accepts RS256 only. Look: the sign-in succeeds in the browser and every `kubectl` call
+  answers `Unauthorized`. Fix it in the cluster-side step below.
+- **Preview the policy before applying it** (`sluisctl policy render`) and read the group names: RBAC binds them exactly
+  as the policy spells them, so a typo is a silent denial.
+- **Keep the break-glass role until a policy-granted admin has used the cluster.**
+
+## Steps
+
 **Anchor:** the issuer. The API server trusts it with one client id per
 cluster and reads the `groups` claim into RBAC, binding the internal
 group names exactly as the policy spells them. People use **kubelogin**
@@ -10,7 +31,9 @@ exec plugin behind it.
 is the other anchor and does not come here:
 [service-to-service.md](service-to-service.md).)
 
-## Cluster side
+### 1. Cluster side
+
+**Run**:
 
 - A static, public client per cluster: `id: k8s:<cluster>`.
 - The API server's OIDC configuration (EKS: an identity provider config;
@@ -39,7 +62,15 @@ is the other anchor and does not come here:
   in the policy. Name the groups after what the bindings already say and
   the cutover changes no binding.
 
-## Policy
+**Expect**: the API server accepts `k8s:<cluster>` tokens for the groups claim.
+
+**Verify**: `kubectl auth whoami` after step 3 names the person and the groups.
+
+**Rollback**: remove the identity provider config; the break-glass path stays.
+
+### 2. Policy
+
+**Run**:
 
 The cluster is a public client. The group names its RBAC binds **are**
 the internal groups; nothing is re-mapped on the way:
@@ -64,7 +95,15 @@ apart. Renaming an installation's existing bindings is safe to do
 gradually: RBAC binds any number of group names to one ClusterRole, so
 the old and the new spelling coexist until the old issuer is gone.
 
-## Person side
+**Expect**: `sluisctl kubeconfig` lists the cluster for a person holding `requires`.
+
+**Verify**: render the policy and read the client row.
+
+**Rollback**: remove the client row.
+
+### 3. Person side
+
+**Run**:
 
 Either `sluisctl kubeconfig`, which writes a context per granted
 cluster with `sluisctl kube-token` as the exec plugin, or a hand-written
@@ -85,9 +124,17 @@ cluster's audience, which the issuer allows only because sluisctl's own
 client declares `sign_in_exchange: true`
 ([service-to-service.md](service-to-service.md#calling-with-an-issuer-token-anywhere-else)).
 
-## Job side
+**Expect**: `kubectl get ns` works with the person's groups.
 
-The API server trusts one issuer, access-issuer, so a job's GitHub token is
+**Verify**: `kubectl auth whoami`.
+
+**Rollback**: delete the context.
+
+### 4. Job side
+
+**Run**:
+
+The API server trusts one issuer, sluis, so a job's GitHub token is
 never presented to it. Either the action, `truvity/sluis` pinned
 to a release with `audiences: k8s:<cluster>`, exchanges the job's token
 at the issuer and writes a kubeconfig with the resulting token; or the
@@ -98,7 +145,15 @@ The machine group's matchers on repository, ref and visibility decide
 which jobs may. The token's lifetime is the issuer's CI client setting;
 a step that outlives it re-runs the action.
 
-## Break-glass
+**Expect**: a job granted by the machine group gets a working kubeconfig.
 
-Outside the issuer: the cloud's own cluster access mechanism bound to a
-break-glass cloud role.
+**Verify**: run the job once on a branch the matchers allow, and once on one they do not.
+
+**Rollback**: remove the machine group's matcher.
+
+## Afterwards
+
+- **Break-glass** is outside sluis: the cloud's own cluster access mechanism bound to a break-glass cloud role. Test it
+  once a quarter.
+- Tell the cluster's owners that a revoke reaches the API server at the token's expiry (the client's `ttl_cap`).
+

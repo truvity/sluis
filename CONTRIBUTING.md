@@ -57,9 +57,9 @@ frontend/                 the console: Vite + React + MUI, its built
 ts/                       the TypeScript package; dist/ is built and
                           published to GitHub Packages by the release
 proto/  gen/              contracts and committed generated code
-docs/                     why, concepts, architecture, design per
-                          battery, reference, connect guides,
-                          operations, development
+docs/                     getting-started, how-to (with upgrade/),
+                          reference, explanation, decisions (ADRs),
+                          plus operations/telemetry.md
 ```
 
 Public Go packages stay free of Kubernetes and framework specifics
@@ -146,7 +146,7 @@ needs a real corporate OAuth client, so the code flow and token exchange
 are exercised by the tests rather than by hand.
 
 The console's rules are in
-[docs/design/sluis.md](docs/explanation/design.md), under "The
+[docs/explanation/design.md](docs/explanation/design.md), under "The
 console": two
 mirrored sides, every name a link, one meaning per visual form (a name is
 a link, a chip is a state and nothing else, facts are a label over a
@@ -163,10 +163,10 @@ rather than the pixels for anything animated.
 
 The store and runtime are being refactored to use stable ports (see
 [0026](docs/decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)–[0032](docs/decisions/0032-one-configuration-file-one-binary-one-chart.md)
-and [docs/design/ports.md](docs/explanation/ports.md)). During this migration:
+and [docs/explanation/ports.md](docs/explanation/ports.md)). During this migration:
 
 - New features must read and write state only through the ports in
-  [docs/design/ports.md](docs/explanation/ports.md), never through new
+  [docs/explanation/ports.md](docs/explanation/ports.md), never through new
   ConfigMap/Secret writes or new Valkey keys.
 - New configuration goes into the configuration file (ADR 0032), not new
   environment variables.
@@ -178,10 +178,10 @@ The documents are the authority, and decisions and their dates are
 recorded in the repository — in the design documents themselves, and in
 the pull request that made the change; when a document and a pull
 request disagree, the document wins and the pull request gets a comment.
-Read in this order: `docs/design/trust.md`
+Read in this order: `docs/explanation/trust.md`
 (the rule under everything — two trust anchors chosen by scope, `groups`
-as the one vocabulary), `docs/connect/service-to-service.md` (the how-to
-that rule produces), `docs/integrations.md` (every case with its
+as the one vocabulary), `docs/how-to/connect/service-to-service.md` (the how-to
+that rule produces), `docs/explanation/integrations.md` (every case with its
 anchor), then the design of whatever you touch. `docs/reference/*` says
 exactly what each battery exposes; `CHANGELOG.md` says what exists today.
 
@@ -191,7 +191,7 @@ accounts and CI on the issuer, resources and client-described clients in
 the policy, the GitHub and Slack controllers acting in real organisations and workspaces, runner
 Apps from the console, the audit trail kept by an audit installation, and
 the console's state restorable from five Secrets and the Slack state. The conformance run at
-1.0 is in [docs/conformance.md](docs/explanation/conformance-findings.md).
+1.0 is in [docs/explanation/conformance-findings.md](docs/explanation/conformance-findings.md).
 [CHANGELOG.md](CHANGELOG.md) is the record of what exists at each
 version; read the newest entries before the design documents, which
 describe the shape rather than the latest release.
@@ -205,7 +205,7 @@ call; verifying another cluster's key set directly; minting a structured
 roles claim beside `groups`; re-mapping group names in a library; a
 ConfigMap watch instead of a `checksum/policy` rollout. Naming a group is
 its own set of anti-patterns, out of this file's scope — see
-[docs/taxonomy.md](docs/reference/taxonomy.md).
+[docs/reference/taxonomy.md](docs/reference/taxonomy.md).
 
 ## Releasing
 

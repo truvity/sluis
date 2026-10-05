@@ -1,246 +1,195 @@
-# Moving the State: `sluis migrate`
+# Move the State with `sluis migrate`
 
-How to move an installation's State from one storage to another with
-`sluis migrate`, and how to undo it. The decision is
-[0031](../decisions/0031-a-generic-migration-tool.md): one generic command, the
-move order **Kubernetes objects, then DynamoDB**, and **data and runtime never
-move in the same step**. (The decision also named a NATS JetStream step; that
-adapter was removed, and the order is now the two steps here.) This page is that
-step: today's ConfigMaps, Secrets and Valkey to a DynamoDB table, with the
-credentials in the Secrets port and every login kept alive. The same command,
-with the two files the other way round, is the rollback.
+## Purpose
 
-A side may be a DynamoDB table (`ports.adapter: dynamodb`), as a destination or a
-source: the exporters read its sessions with their lifetimes left.
+Copy an installation's State, its secrets and the controllers' reports from one storage to another with
+`sluis migrate`, and undo it with the same command.
 
-## What it does
+The decision is [0031](../decisions/0031-a-generic-migration-tool.md): one generic command, and **data and runtime
+never move in the same step**. The move order today is **Kubernetes objects (ConfigMaps, Secrets, and Valkey where one
+holds the sessions) to DynamoDB**; the intermediate key-value step the decision named was removed with its adapter on
+2026-10-04 ([0027](../decisions/0027-the-state-port-nats-jetstream-and-dynamodb.md)). Moving a whole installation to AWS, with the
+freeze, the switch and the rollback, is [the cutover](cutover.md); this page is the command.
 
-```
-sluis migrate --from <old serve config> --to <new serve config> [flags]
-```
+## Preconditions
 
-Each side is the **`serve` configuration file** of that storage, the same file the
-Deployment reads: `ports.*` (and for the legacy storage `store`, `release` and
-`valkey`) say where the State is, and the file is validated against the same
-schema. There is no second configuration to keep in step.
+- A `serve` configuration file for each side, the one the Deployment reads (`ports.*`, and for the legacy storage
+  `store`, `release` and `valkey`). The file is validated against the same schema; there is no second configuration.
+- The destination names a **working Secrets adapter** (`ssm` or `openbao`): credentials are written to the destination's
+  Secrets, never into State, and the start is refused without one. For DynamoDB: `ports.adapter: dynamodb`,
+  `ports.dynamodb` (table, region; the workload's own identity is the credential), and `ports.blob` (S3) if the reports
+  move. **Remove `valkey.address` from the destination file**: DynamoDB holds the shared state and the start is refused
+  with both. Keep `store`, `release` and `inCluster`: the console's cluster-only objects still use them.
+- From a workstation: `--kubeconfig`, `--kube-context` and `--namespace` (default: the pod's ServiceAccount) read the
+  source namespace, and the source's Valkey is reached through the address its file names, a port-forward from there.
+- A destination layout older than v3 for SSM config parameters is moved first with `sluis migrate ssm-layout --to-root
+  /sluis/<instance>` (it copies, deletes nothing, and takes `--dry-run`).
 
-It copies **through the business interfaces, never as bytes**: a workspace and its
-credential are read from the source's own store and written to the destination's,
-so a secret is written to the destination's Secrets (`credentials/<kind>/<id>/<ref>`) and
-a record lands in the layout its adapter keeps. (For the same reason a
-destination that is not the legacy storage needs a working Secrets adapter: a
-copy is a read through the source's store and a write through the destination's,
-not a copy of bytes.)
+## Before you start
 
-| Domain | What | How the lifetime is kept |
+Each of these has bitten an installation.
+
+- **Preview before every apply, and read the preview.** `--dry-run` reads both sides and writes nothing; run it against
+  the live installation first, with no freeze. Anything it lists under `refused` (a record over 256 KiB, a credential
+  over 8 KiB, an empty or invalid key) ends a real run non-zero before a write, and `--overwrite` does not change that.
+- **The source must be quiet, and the tool cannot check.** A copy is a snapshot: a session opened while it runs is a copy
+  of neither state. A run that writes needs `--i-have-stopped-writers`, a statement you make. In the one process the
+  writers are the issuer's sign-ins, the console and both controllers together, so the freeze is the one Deployment at
+  0. A GitOps controller that owns the Deployment scales it back, and the chart refuses `replicaCount: 0`
+  (`minimum: 1` in `values.schema.json`): freeze with the controller's own pause, for Argo CD
+  `argocd.argoproj.io/skip-reconcile: "true"` on the Application, then `kubectl scale --replicas=0`
+  ([cutover](cutover.md#before-you-start)).
+- **A destination that is not empty can already hold a different value.** The run stops before writing and names the key:
+  a Lambda's first smoke start creates `console/session-key`, so a real run after one needs `--overwrite`. Use
+  `--overwrite` only when the source's value is the one to keep.
+- **Sessions are left behind by default.** The issuer's sessions, refresh tokens, codes in flight and Index sets are not
+  copied: people sign in again. `--with-sessions` keeps them, each with the lifetime it has left on the source (the
+  DynamoDB to DynamoDB case, say). The key ring's schedule (`issuer:keyring:*`, retired-key tombstones included) is
+  always copied so a token issued before the move keeps verifying; `issuer:kms:*` (the fingerprint of a KMS-signed
+  installation's state secret) never is.
+- **Left out on purpose:** leases (transient), the hub's snapshots (a cache), and the controllers' hand-offs and caches
+  (`share.`, `cache.`, `dedupe.`). `--skip` names domains to leave out. A backup to a file (`--backup`) does not exist;
+  a backup today is a copy to a second storage, the same command with a second `--to`.
+
+What moves, and how each lifetime is kept:
+
+| Domain | What | Lifetime |
 |---|---|---|
 | `directory` | workspaces and their credentials | permanent |
-| `github` | organisations with the App key, the link App, runner and catalogue Apps, people's links (token pairs and the `Revision` counter exactly as they were), the operators' confirmations and requests for a pass | permanent; a confirmation or request keeps its own timestamp and the destination's store ages it as it ages its own |
+| `github` | organisations with the App key, the link App, runner and catalogue Apps, people's links (token pairs and the `Revision` counter exactly as they were), confirmations and requests for a pass | permanent; a confirmation or request keeps its own timestamp |
 | `slack` | workspaces with their secrets, catalogue Apps, Slack Connect and console channel records, confirmations and requests for a pass | the same |
 | `console` | the console's session-signing key | permanent |
-| `issuer` | the signing keys' schedule (`issuer:keyring:*`, retired-key tombstones included), always. With `--with-sessions` also sessions with their person and client indices, refresh tokens and the markers of spent ones, the browser SSO, minted tokens' records, and the authorization requests and codes in flight | the schedule and, with `--with-sessions`, **each record is written with the lifetime it has left on the source**, so nobody signs in again and a session expires when it would have |
-| `blobs` | the controllers' last reports | none |
+| `issuer` | the signing keys' schedule always; with `--with-sessions` also sessions with their indices, refresh tokens and spent markers, the browser SSO, minted tokens' records, authorization requests and codes | each record is written with the lifetime it has left on the source |
+| `blobs` | the controllers' last reports | none. `--blobs auto` (default) copies only when the two sides keep them in different places; `copy` and `skip` force either |
 
-**Sessions are left behind by default.** An installation's move to AWS (the runbook's
-"Cutover: migrating an installation") does not copy the issuer's sessions, refresh
-tokens, codes in flight or Index sets: people sign in again. Pass `--with-sessions` for a
-move that must keep them signed in (NATS or DynamoDB to DynamoDB, say). The key ring's
-schedule is always copied, so a token issued before the move keeps verifying, and
-`issuer:kms:*` (the fingerprint of a KMS-signed installation's state secret) is never
-copied.
+It copies **through the business interfaces, never as bytes**, so a secret read from the source's store is written to the
+destination's Secrets (`credentials/<kind>/<id>/<ref>`, storage layout v2) and a record lands in the layout its adapter
+keeps. It prints no value: the report names keys, and an issuer key by kind and a short hash
+(`issuer:session:#3fa9c1d2`).
 
-**What a destination would refuse is found first.** The plan checks each item against the
-destination's limits (a record over 256 KiB, a credential over 8 KiB, an empty or invalid
-key) and the dry run lists them under `refused`, with a summary per concern (`concerns`:
-state, secrets, blobs, with counts and bytes) also printed on stderr. Anything refused
-ends the run non-zero before a write, and `--overwrite` does not change that.
+## Steps
 
-**From a workstation** the source's namespace is read through `--kubeconfig`,
-`--kube-context` and `--namespace` (default: the pod's ServiceAccount); the Valkey of the
-source is reached through the address its configuration names, a port-forward from there.
+### 1. Preview
 
-Left out on purpose: **leases** (transient, and owned by whoever runs), the hub's
-**snapshots** (a cache it rewrites on its first refresh), and the controllers'
-hand-offs and caches (`share.`, `cache.`, `dedupe.`), which a tick rebuilds.
-`--skip` names domains to leave out (`directory`, `github`, `slack`, `console`,
-`issuer`, `blobs`). The reports are copied only when the two sides keep them in
-different places (`--blobs auto`, the default: legacy objects to S3 is a copy, S3
-to the same S3 prefix is not); `--blobs copy|skip` forces either.
+**Run**
 
-**A backup or export to a file** (`--backup <file>`, a file adapter as one end) is
-not built: there is no file adapter yet. A backup today is a copy to a second
-storage, which is the same command with a second `--to`.
-
-## The safety it holds
-
-1. **It refuses unless the source is quiet.** A copy is a snapshot: a session
-   opened or a link refreshed while it runs is a copy of neither state. A run that
-   writes needs `--i-have-stopped-writers`. This is a statement the operator
-   makes, not a check, and it is the **simpler safe option** over a console
-   "maintenance" switch: the writers are not only the console. The issuer writes a
-   session on every sign-in and every refresh, and both controllers write
-   reports and refresh links, so a switch in the console would leave three of the
-   four writers running, and one in all four is a change to every write path
-   (and to a chart) for a thing that happens once per installation. Scaling the
-   Deployments to 0 stops all of them with what the chart already has. The cost is
-   that sign-in is down for the window, which is minutes (the run is a few hundred
-   small reads and writes), and which the runbook below makes explicit.
-2. **A plan comes first and writes nothing.** The run reads both sides and says,
-   for every item, whether it is new, already there with the same value, or there
-   with another one. Without `--overwrite` a destination that **holds a different
-   value fails the run, naming the key, before a single write**. With `--overwrite`
-   the destination takes the source's value.
-3. **`--dry-run` is the plan and stops.** It prints the counts per domain and kind
-   and touches nothing, not even the objects a legacy destination would need
-   created. It needs no `--i-have-stopped-writers`, so it can run against the live
-   installation, and should, first.
-4. **It verifies.** After the copy it reads the source and the destination again,
-   fresh, through the same interfaces, secrets read from each side's Secrets, and compares every
-   source item with the destination's. A source that changed during the copy shows
-   as a mismatch, so a missed writer is found, not hidden. For the issuer's state
-   it also checks that each copy has no lifetime longer than the source's, and not
-   none where the source had some.
-5. **It is idempotent.** A re-run after a failure plans again, finds what is
-   already there equal, and copies what is missing; a record already equal is not
-   rewritten. A store that fails half way leaves a destination that the next run
-   completes.
-6. **It prints no value.** The report names keys and counts. The issuer's keys
-   carry bearer values (a code, a session id, an address), so a report names them
-   by kind and a short hash (`issuer:session:#3fa9c1d2`), enough to find one on
-   either side.
-
-## The report
-
-JSON on stdout (the log is on stderr); `--report-blob <name>` also writes it to a
-Blob name on the destination. The exit status is `0` only when `ok` is true.
-
-```json
-{
-  "from": "old.yaml", "to": "new.yaml", "fromAdapter": "legacy", "toAdapter": "dynamodb",
-  "dryRun": false, "overwrite": false,
-  "startedAt": "...", "finishedAt": "...",
-  "steps": [
-    {"domain": "github", "kind": "organisations", "source": 3, "new": 3, "present": 0,
-     "copied": 3, "verified": 3},
-    {"domain": "issuer", "kind": "state", "source": 412, "new": 412, "present": 0,
-     "copied": 412, "verified": 412}
-  ],
-  "totals": {"domain": "all", "kind": "all", "source": 415, "new": 415, "present": 0,
-             "copied": 415, "verified": 415},
-  "conflicts": [], "unreadable": [], "mismatches": [], "notes": [],
-  "ok": true
-}
+```sh
+sluis migrate --from old.yaml --to new.yaml \
+  --kubeconfig ~/.kube/config --kube-context <context> --namespace <namespace> --dry-run
 ```
 
-`source` is the readable items on the source; `new`, `present` and `conflicts`
-are the plan; `copied` is what was written; `verified` and `mismatched` are the
-second read. `unreadable` lists what the source's own store cannot present (a
-record that does not decode): it is reported, not copied, and everything else is
-still copied and verified, then the run ends non-zero. `notes` say what was left
-out and why.
+**Expect** a JSON report on stdout and a summary on stderr, with items and bytes per concern (state, secrets, blobs) and
+a `REFUSED` line per item the destination would refuse. Exit 0 only when `ok` is true.
+**Verify** `conflicts` is empty (the destination should be empty), `unreadable` is empty, `refused` is empty. Fix what it
+names (or, for a record that is truly dead, delete it) and run again until it exits 0.
+**Rollback**: none, because a dry run writes nothing, not even the objects a legacy destination would need created.
 
-## Procedure: Kubernetes objects to DynamoDB
+### 2. Freeze the writers
 
-Before the window, with nothing stopped:
+**Run** scale the Deployment to 0 (with the pause above under a GitOps controller) and wait until the pods are gone.
+Sign-in is down from here until the new installation is up; a relying party holding a valid access token keeps working
+until it expires.
+**Expect** no pod of the release.
+**Verify** `kubectl -n <namespace> get pods -l app.kubernetes.io/instance=<release>` is empty.
+**Rollback**: scale back up and remove the pause.
 
-1. **Prepare the new configuration.** A copy of the Deployment's `serve` file with
-   `ports.adapter: dynamodb`, `ports.dynamodb` (the table, the region; the
-   workload's own identity is the credential), a secrets adapter (the destination's
-   credentials go there, and the start is refused without one) and, if the reports
-   are to move, `ports.blob` (S3). **Remove `valkey.address`**: DynamoDB holds the
-   shared state and the start is refused with both. Keep `store`, `release` and
-   `inCluster` as they are: they are what the console's cluster-only objects
-   (the token review, the declared OAuth client) still use.
-2. **Dry-run against the live installation.** It reads the old objects and
-   Valkey and the new table, and writes nothing:
+### 3. Run
 
-   ```
-   sluis migrate --from old.yaml --to new.yaml --dry-run
-   ```
+**Run** from the workstation:
 
-   Read `totals`, `conflicts` (the destination should be empty, so there should be
-   none) and `unreadable`. Fix what it names before the window.
+```sh
+sluis migrate --from old.yaml --to new.yaml \
+  --kubeconfig ~/.kube/config --kube-context <context> --namespace <namespace> \
+  --i-have-stopped-writers
+```
 
-In the window:
+or, in the cluster, as a one-off Job from the chart's image with the chart's ServiceAccount (it needs the Role the
+Deployment has) and both files mounted. The identity that reaches DynamoDB and the secrets store must be the same one:
 
-3. **Stop every writer.** Scale to 0 the issuer and console (`serve`), the GitHub
-   controller and the Slack controller. Sign-in is down from here until step 7,
-   and a relying party holding a valid access token keeps working until it expires.
-   Wait until the pods are gone.
-4. **Run it**, as a one-off pod from the chart's image, with the chart's
-   ServiceAccount (it needs the Role the Deployments have, to read the objects),
-   the Deployment's environment (the Valkey password a file names) and both files
-   mounted. A sketch to adapt from the `serve` Deployment's pod template (the
-   the identity that reaches DynamoDB and the secrets store must be the same
-   one):
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata: {name: sluis-migrate}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: <the chart's ServiceAccount>
+      containers:
+        - name: migrate
+          image: <the chart's image, the same tag>
+          args: [migrate, --from=/etc/migrate/old.yaml, --to=/etc/migrate/new.yaml,
+                 --i-have-stopped-writers, --report-blob=reports/migrate-<date>.json]
+          # env, volumeMounts and volumes as the Deployment's, plus the two files (a ConfigMap).
+```
 
-   ```yaml
-   apiVersion: batch/v1
-   kind: Job
-   metadata: {name: sluis-migrate}
-   spec:
-     backoffLimit: 0
-     template:
-       spec:
-         restartPolicy: Never
-         serviceAccountName: <the chart's ServiceAccount>
-         containers:
-           - name: migrate
-             image: <the chart's image, the same tag>
-             args: [migrate, --from=/etc/migrate/old.yaml, --to=/etc/migrate/new.yaml,
-                    --i-have-stopped-writers, --report-blob=reports/migrate-<date>.json]
-             # env, volumeMounts and volumes as the serve Deployment's, plus
-             # the two files above (a ConfigMap).
-   ```
+`kubectl logs job/sluis-migrate` is the report on stdout and the log on stderr. `--report-blob <name>` also writes the
+report to a Blob name on the destination.
+**Expect** it to plan first (every item new, equal, or different), copy, then read both sides again.
+**Verify** read the report in step 4.
+**Rollback**: nothing on the source was written; see [Rollback](#rollback).
 
-   `kubectl logs job/sluis-migrate` is the report on stdout and the log on
-   stderr; `kubectl wait --for=condition=complete` is the gate.
-5. **Read the report.** `ok: true`, `mismatches: []`, `conflicts: []`,
-   `unreadable: []`, and `totals.verified` equal to `totals.source`. If a run
-   failed part way, **run the same command again**: it completes the copy. If
-   `conflicts` is not empty the destination was not empty: decide whether it is
-   stale (`--overwrite`) or the wrong table.
-6. **Switch and roll.** Put the new `config` (the file of step 1) into the chart's
-   values and upgrade, with the Deployments' replicas back up. Nothing was written
-   to the source, so the old objects and Valkey are exactly as they were.
-7. **Check.** The console loads and shows the same workspaces, organisations and
-   Slack workspaces; a person signed in before the window **is still signed in**
-   and a refresh token from before it refreshes; the GitHub and Slack controllers
-   tick (`access_roster.ticks` in [telemetry.md](../operations/telemetry.md)); the log says
-   `keeping state in DynamoDB` and `the domain records in the state port,
-   credentials in Secrets`.
-8. **Leave the old store in place** (ADR 0031) until the step after it has been
-   green for a day: do not delete the ConfigMaps, the Secrets or the Valkey.
+The run is idempotent: it creates what is absent, leaves what is equal alone, and after a failure the same command
+completes the copy.
 
-Data and runtime do not move together: this step moves only where the State is.
-The runtime (the same pods, then the Lambda platform beside them, then the origin)
-is a later step, released and proven separately.
+### 4. Read the report
+
+**Run** read the JSON.
+**Expect**
+
+```json
+{ "ok": true, "dryRun": false, "overwrite": false,
+  "steps": [{"domain": "github", "kind": "organisations", "source": 3, "new": 3, "present": 0, "copied": 3, "verified": 3}],
+  "totals": {"source": 415, "copied": 415, "verified": 415},
+  "conflicts": [], "unreadable": [], "mismatches": [], "notes": [] }
+```
+
+`source` is the readable items; `new`, `present`, `conflicts` are the plan; `copied` is what was written; `verified` and
+`mismatched` are the second read. `unreadable` lists what the source's store cannot present (a record that does not
+decode): reported, not copied, everything else is still copied and verified, then the run ends non-zero.
+**Verify** `ok: true`, `mismatches`, `conflicts` and `unreadable` empty, `totals.verified` equal to `totals.source`. A
+source that changed during the copy shows as a mismatch, so a missed writer is found, not hidden.
+**Rollback**: see [Rollback](#rollback).
+
+### 5. Switch and check
+
+**Run** put the new `serve` file into the chart's values (or follow [the cutover](cutover.md)) and bring the replicas
+back.
+**Expect** the log says `keeping state in DynamoDB` and the domain records in the state port, credentials in Secrets.
+**Verify** the console shows the same workspaces, organisations and Slack workspaces; with `--with-sessions`, a person
+signed in before the window is still signed in and a refresh token from before it refreshes; the controllers tick
+(`access_roster.ticks`, [telemetry](../operations/telemetry.md)).
+**Rollback**: see [Rollback](#rollback).
 
 ## Rollback
 
-**Before step 6** nothing has changed on the source: scale the writers back up with
-the old values.
+**Before the switch**, nothing on the source was written: scale the Deployment back up with the old values.
 
-**After step 6**, while the old objects are still there, stop the writers again and
-copy back with the files the other way round:
+**After the switch**, while the old objects are still there, freeze again and copy back with the files swapped:
 
-```
+```sh
 sluis migrate --from new.yaml --to old.yaml --overwrite --i-have-stopped-writers
 ```
 
-`--overwrite` is needed because the old objects hold the older values. It writes
-today's ConfigMaps, Secrets and Valkey (creating any object that is gone, as the
-service does at its start), carrying every record, secret and session, with the
-lifetimes they have left. Then put `ports.adapter` back (and `valkey.address`) and
-roll. The report says the same things in this direction.
+`--overwrite` is needed because the old objects hold older values. It writes the ConfigMaps, Secrets and Valkey (creating
+any object that is gone), carrying every record, secret and session with the lifetimes left. Then put `ports.adapter`
+(and `valkey.address`) back and roll.
 
 ## When it says no
 
 | It says | Meaning and what to do |
 |---|---|
-| `refusing to copy while the source can still change` | `--i-have-stopped-writers` is missing: stop the writers, then pass it. |
+| `refusing to copy while the source can still change` | `--i-have-stopped-writers` is missing: freeze, then pass it. |
 | `the destination already holds a different value`, naming `<domain>/<kind> <key>` | Nothing was written. The destination is not empty or is the wrong one. Look, then `--overwrite` if the destination's value is the stale one. |
-| `the destination does not match the source after the copy` | A key whose second read differs: a writer was still running, or an adapter lost a write. The `mismatches` name them; stop what writes, and run again. |
-| `the source holds items its store cannot read` | A record that does not decode. The rest is copied and verified; fix or delete the named record and run again to confirm. |
-| `ports.adapter dynamodb: ... secrets adapter` | The destination has no working Secrets: credentials are written there, never into State. |
-| `store unavailable` while copying | The destination (or source) went away. Run the same command again. |
+| `the destination does not match the source after the copy` | A key whose second read differs: a writer was still running, or an adapter lost a write. `mismatches` names them; stop what writes and run again. |
+| `the source holds items its store cannot read` | A record that does not decode. The rest is copied and verified; fix or delete the named record and run again. |
+| `ports.adapter dynamodb: ... secrets adapter` | The destination has no working Secrets adapter. |
+| `store unavailable` while copying | A side went away. Run the same command again. |
+
+## Afterwards
+
+- **Leave the old store in place** (ADR 0031): do not delete the ConfigMaps, the Secrets or the Valkey until the new
+  installation has been healthy for as long as you want a rollback to stay cheap.
+- Data and runtime do not move together: this step moves only where the State is. The runtime move is a later step,
+  released and proven separately.

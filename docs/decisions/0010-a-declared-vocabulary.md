@@ -44,7 +44,7 @@ when one does not fit.
 `operator` → `viewer`) or a branch (`admin` implying both `deployer` and
 `operator`) is expressed by what each role's own entry says, and the
 transitive closure is computed once, in evaluation
-([reference/policy.md#groups--token-by-deep-merge](../reference/policy.md#groups--token-by-deep-merge)),
+([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)),
 so a `requires` gate, a token's `groups` claim and GitHub team
 reconciliation all see the expanded set without any of them knowing
 inheritance exists. It never crosses scope: holding a role on `all`

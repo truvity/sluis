@@ -13,7 +13,7 @@ An installation has **exactly two trust anchors**, and a service accepts
 | Anchor | Root of trust | Scope | Proves |
 |---|---|---|---|
 | **the cluster** | the API server: a ServiceAccount token checked with a TokenReview, bound to an audience | this cluster | **recovery alone**: *somebody who can mint a token for the recovery account here*. A workload's token is now verified against the key set its own cluster publishes, so it is the issuer anchor and not this one — which is what lets one issuer serve many clusters while holding access to none |
-| **the issuer** | access-issuer's signing key, published as JWKS | the estate: every cluster, every cloud account, CI, people | *an identity this installation's policy has resolved to internal groups* |
+| **the issuer** | sluis's signing key, published as JWKS | the estate: every cluster, every cloud account, CI, people | *an identity this installation's policy has resolved to internal groups* |
 
 They are not two authorities that could disagree. **The issuer is built
 on the cluster**: its workload verifier turns a ServiceAccount token into
@@ -107,7 +107,7 @@ three segments, `:` between, lowercase. *Role, on thing, in scope.*
 | Segment | Is | Examples |
 |---|---|---|
 | `scope` | an environment, a tenant id, or `all` | `dev`, `prod`, `C0north`, `all` |
-| `thing` | what the role is **on**: a subsystem, a project, an application | `k8s`, `shop`, `github-roster`, `access-roster` |
+| `thing` | what the role is **on**: a subsystem, a project, an application | `k8s`, `shop`, `argocd` |
 | `role` | from that thing's own ladder | `admin`, `viewer`, `auditor`, `deployer`, `approver`, `operator` |
 
 So: `prod:k8s:admin`, `prod:shop:deployer`, `all:access-roster:operator`,
@@ -174,27 +174,24 @@ the only one left standing.
 It is not a third anchor, it is not "dual trust", and it must stay the
 **only** human path that bypasses the issuer.
 
-## The proxy under the rule
+## The gateway under the rule
 
-A console is for people, so it lives on the issuer anchor **only**.
-`access-proxy` holds the browser session and forwards the issuer's token;
-the console verifies it against issuer and audience. It never accepts a
-ServiceAccount token, and there is no reason it should: nothing in a
-cluster opens a web page.
+A console is for people, so it lives on the issuer anchor **only**. The gateway (Envoy Gateway's native OIDC filter,
+or an upstream oauth2-proxy run by hand on another gateway: [recipe](../how-to/connect/oauth2-proxy.md)) holds the
+browser session and forwards the issuer's token; the console verifies it against issuer and audience. It never accepts
+a ServiceAccount token: nothing in a cluster opens a web page.
 
-Two gates decide who gets in, and they are not duplicates. The **issuer's
-`requires`** on the client is primary: a caller in none of its groups is
-refused before a token exists, so the proxy never sees a session. The
-**proxy's `groups` posture** is defence in depth and route-level
-narrowing — *this path needs a stricter group than the client as a
-whole*. Keep both; know which is which.
+Two gates decide who gets in, and they are not duplicates. The **issuer's `requires`** on the client is primary: a
+caller in none of its groups is refused before a token exists, so the gateway never sees a session. The **gateway's
+`groups` posture** is defence in depth and route-level narrowing: *this path needs a stricter group than the client as
+a whole*. Keep both; know which is which.
 
 ## A service that has both a console and an API
 
 The plain shape, and the one to copy when nothing argues otherwise:
 
 ```
-console listener   → behind gateway-native OIDC, access-proxy, or its own code flow → issuer anchor
+console listener   → behind gateway-native OIDC, oauth2-proxy, or its own code flow → issuer anchor
 API listener       → reached by Service DNS                    → cluster anchor (+ issuer, for remote callers)
 ```
 
@@ -224,47 +221,19 @@ grant table, two doors.
 
 ### Admission is not authorization
 
-*The directory API these grants governed is not served today: its one
-consumer, the issuer, is the same process. The shape stays written down
-for the day it returns.*
-
-Being a consumer and being a consumer of *everything* were one decision,
-and that was the gap. A caller admitted at all could enumerate every
-group of every company the service reads. One consumer — the issuer — needs
-exactly that; the next one needs one directory and one question.
-
-So a consumer is declared with a grant along three axes: **which
-directory** (workspaces, or the domains they serve), **which groups**,
-and **which questions** (`resolve`, `groups`, `describe`, `probe`). No
-grant is full read, so nothing that predates them changes meaning.
-
-Two properties follow, and both are deliberate:
-
-- **Outside the grant answers as unserved does.** Not found, not in
-  domain, no groups — identical to an address in a domain this service never
-  serves. A refusal would confirm the domain exists, which is what the
-  grant withholds; and consumers already read the unserved answer
-  fail-safe, so nothing has to learn a new failure mode.
-- **Discovery is itself scoped.** `Describe` lists only granted domains.
-  A grant on the questions alone would still hand every admitted caller
-  the shape of every company the service serves.
-
-The API listener stays read-only whatever a grant says: there is no read
-class that can be spelled to reach a write.
+The directory API is not served today (its one consumer, the issuer, is the same process; see
+[contracts](../reference/contracts.md)). The rule it was designed under stands for the day it returns: being a
+consumer must not mean being a consumer of everything, so a consumer is declared with a grant along three axes (which
+directory, which groups, which questions), and outside the grant answers exactly as an unserved domain does, never as a
+refusal that would confirm the domain exists. Discovery is scoped the same way, and the API stays read-only whatever a
+grant says.
 
 ## The libraries are where the rule becomes shape
 
-The Go module offers **two verifiers and nothing else**: `Issuer`
-(bearer or forwarded token, issuer URL + audience) and `Cluster` (a
-ServiceAccount token: a check you supply, an audience, the names it
-admits). A service composes them per route. Both yield one `Verified`
-with `Groups []string`, so a handler never learns which anchor proved
-the caller and cannot come to depend on it. The TypeScript package,
-`@truvity/sluis`, reads that from `/.access/whoami` and
-translates nothing.
-
-There is no third verifier and no "trust this header" mode that outlives
-a local run. See [libraries.md](../reference/libraries.md).
+The Go module offers **two verifiers and nothing else**, `Issuer` and `Cluster`, both yielding one `Verified` with
+`Groups []string`, so a handler never learns which anchor proved the caller. There is no third verifier and no "trust
+this header" mode that outlives a local run. The surface is in [the Go module](../reference/go-module.md); the
+TypeScript package carries the same caller to a UI ([typescript](../reference/typescript.md)).
 
 ## What this rules out
 
@@ -281,14 +250,9 @@ a local run. See [libraries.md](../reference/libraries.md).
 
 ## Related
 
-- [sluis.md](design.md) — the whole service: what the
-  estate anchor verifies and mints, the directory model behind it, and
-  recovery.
-- [access-proxy.md](../how-to/connect/oauth2-proxy.md) — the console exposure.
-- [libraries.md](../reference/libraries.md) — the two verifiers.
-- [../connect/service-to-service.md](../how-to/connect/service-to-service.md) —
-  the how-to for a service calling another.
-- [../reference/policy.md](../reference/policy.md) — internal groups, the
-  claim tables, and what a token is minted *for*: a client, a declared
-  **resource** (RFC 8707), or a client that describes itself by an
-  allow-listed URL (a Client ID Metadata Document).
+- [design.md](design.md): the whole service: what the estate anchor verifies and mints, the directory model, recovery.
+- [oauth2-proxy](../how-to/connect/oauth2-proxy.md): a console behind a gateway that is not Envoy Gateway.
+- [Go module](../reference/go-module.md): the two verifiers.
+- [Service to service](../how-to/connect/service-to-service.md): the how-to for a service calling another.
+- [policy](../reference/policy.md): internal groups, the claim tables, and what a token is minted *for*: a client, a
+  declared **resource** (RFC 8707), or a client that describes itself by an allow-listed URL.

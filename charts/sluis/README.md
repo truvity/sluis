@@ -15,11 +15,18 @@ Published to `ghcr.io/truvity/charts/sluis` on every
 `v*` tag of the repository; the tag is the chart's version.
 
 What the chart includes, what it expects and every value are documented in
-[docs/reference/access-issuer.md](../../docs/reference/configuration.md).
-`Moving from the `access-issuer` chart is one release's change, with two values to keep every object's name:
-[docs/reference/configuration.md](../../docs/reference/configuration.md#migrating-from-the-access-issuer-chart).
-`values.schema.json` is strict at the top level: an unknown key fails the
-render.
+[docs/reference/configuration.md](../../docs/reference/configuration.md). A release of the chart's earlier name
+moves with two values that keep every object's name:
+[the migration](../../docs/how-to/migrate-from-the-access-issuer-chart.md).
+`values.schema.json` is strict at the top level: an unknown key fails the render.
+
+Two ways to give the chart its configuration:
+
+- **Documents mode (preferred).** `documents.service` (the service document, `sluis.yaml` v3) and `documents.policy`
+  (the policy document, `policy.yaml` v2), rendered by `sluisctl render`. The chart keeps only the deployment-level
+  values (image, resources, replicas, route, alerts, mounts).
+- **Values mode (deprecated, removed after one minor).** `config`, `policy`, `exchange.clusters`, `exchange.aws`,
+  `githubApps.catalogue` and `slackApps` render the two documents. NOTES.txt says so while it is used.
 
 **Rendered documents are trusted, so they must come from `sluisctl render`.** With `documents.service` and
 `documents.policy` the chart puts the two documents into their ConfigMaps unchanged. Helm cannot run sluis's loader, so the
@@ -37,7 +44,7 @@ in front of the issuer: this *is* the thing that authenticates, and a
 proxy would have nowhere to send anyone. And it does not make a second
 copy of what the console adds unless you ask it to: the Secrets that hold it are
 named in
-[docs/reference/configuration.md](../../docs/reference/configuration.md#restoring-from-the-secrets-alone)
+[docs/reference/configuration.md](../../docs/how-to/back-up-and-restore.md)
 (the Slack ones, `<release>-slack-credentials`, `<release>-slack-records` and
 `<release>-slack-catalogue-apps`, are named in the values), and
 `directory.push`, `githubApps.push` and `slackState.push` render an External
@@ -52,13 +59,13 @@ says which OpenBao and how to log in, and `exports.openbao.caBundle` and
 `exports.openbao.token.audience` mount the CA and project the token the login
 presents. On a State adapter this replaces the `push` values, which stay for the
 `legacy` storage and are deprecated. See
-[docs/reference/configuration.md](../../docs/reference/configuration.md#exports-and-the-export-port).
+[docs/reference/configuration.md](../../docs/reference/exports.md).
 `alerts.rules.exportFailing` and `exportStale` and a dashboard row cover it.
 
 `telemetry.otlp.endpoint` sets the OpenTelemetry SDK environment on every pod:
 `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` (`protocol`,
-`http/protobuf` by default), an `OTEL_SERVICE_NAME` (`access-issuer`: the controllers report under the one
-process's name) and every `extraEnv` entry
+`http/protobuf` by default), an `OTEL_SERVICE_NAME` (one name: the controllers report under the process's) and every
+`extraEnv` entry
 (other `OTEL_*` variables only). Empty, nothing is rendered and nothing is
 exported. See [docs/operations/telemetry.md](../../docs/operations/telemetry.md#wiring-it-with-the-chart).
 
@@ -94,7 +101,7 @@ policy
 for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 `<release>-slack-records` at `recordsRemoteKey` (the two keys must differ), with
 `deletionPolicy` fixed at `None`; it needs `config.store: kubernetes`
-([runbook](../../docs/how-to/day-two.md#slack-state)).
+([runbook](../../docs/how-to/back-up-and-restore.md#1-know-what-there-is)).
 
 The pod rolls so that a failed start leaves the old pod running: the default `RollingUpdate`
 keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/readyz`,
@@ -102,10 +109,9 @@ keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/rea
 finished starting. A controller in the process runs in every replica, so `replicaCount` above 1
 needs the tick leases in a State the replicas share: the chart refuses it unless
 `config.ports.adapter` is `dynamodb`
-([why](../../docs/how-to/day-two.md#a-controller-release-that-crash-loops),
-[when a second replica is safe](../../docs/how-to/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)).
+([when a second replica is safe](../../docs/explanation/high-availability.md#the-controllers-in-the-one-process)).
 The controllers read the console as this pod's own ServiceAccount, so the policy's exchange must
-admit that account (`all:access-roster:viewer`), and the audit installation knows one workload.
+admit that account (the policy's `viewer` group), and the audit installation knows one workload.
 
 ```sh
 helm install sluis oci://ghcr.io/truvity/charts/sluis \
@@ -167,29 +173,13 @@ exports:
 ```
 
 The OpenBao policy, the value layout and the per-export `namespace` are in
-[configuration](../../docs/reference/configuration.md#the-openbao-secrets-adapter); to keep tokens
+[configuration](../../docs/reference/openbao-secrets-adapter.md); to keep tokens
 issued by the old file keys valid across the cutover, see `signingKey.verifyOnly` and its
-[cutover note](../../docs/reference/configuration.md#cutting-over-to-kms-wrapped-signing-without-signing-everyone-out).
+[cutover note](../../docs/how-to/cut-over-to-kms-wrapped-signing.md).
 
-## Moving from v1.62 (three Deployments) to one
+## Moving from v1.62 to v1.63
 
 v1.63 runs the GitHub and Slack controllers inside `sluis serve`
-([decision 0037](../../docs/decisions/0037-one-process-everywhere.md)), so the chart renders one
-Deployment, `<release>`, and the `controllerGithub` and `controllerSlack` values are gone. On
-`helm upgrade`:
-
-1. Move each controller's values to `config.controllers.github` / `config.controllers.slack`
-   (`consoleURL`, `interval`, `tokenFile`, `appsDir` or `credentialsDir`, `recordsDir`; present is on).
-   `controllerX.config.{policy,release,log,ports,platform,preset,adapters,audit,probes}` are the one
-   document's own keys now. `controllerX.resources`, `replicas`, `strategy`, `minReadySeconds` and
-   `podDisruptionBudget` go to the top-level `resources`, `replicaCount`, `strategy` and so on.
-2. The `<release>-github-roster` and `<release>-slack-roster` Deployments, ServiceAccounts,
-   ConfigMaps and PodDisruptionBudgets are deleted by the upgrade. The controllers run as the
-   release's own ServiceAccount, which gets the controllers' Role.
-3. **Policy:** `exchange` and the audit installation's `workloadIdentity` map must admit the one
-   ServiceAccount (`system:serviceaccount:<ns>:<release>`) where they admitted the two controller
-   accounts, or the controllers are nobody at the console. Ship that policy change before the upgrade.
-4. `replicaCount` above 1 with a controller needs `config.ports.adapter: dynamodb`; the chart refuses
-   to render otherwise.
-5. Dashboards and alerts that select `service_name` `github-roster` or `slack-roster` select
-   `access-issuer`.
+([decision 0037](../../docs/decisions/0037-one-process-everywhere.md)), so the chart renders one Deployment and the
+`controllerGithub` and `controllerSlack` values are gone. The steps, with what to check and how to roll back:
+[upgrade to v1.63](../../docs/how-to/upgrade/v1.63.md).

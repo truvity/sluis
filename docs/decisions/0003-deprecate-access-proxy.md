@@ -1,6 +1,6 @@
 # 0003 — Deprecate and remove the access-proxy chart
 
-**Status:** Accepted
+**Status:** Accepted; carried out in v1.32.0 (the chart is removed; the recipe for running upstream oauth2-proxy on another gateway lives in [how-to/connect/oauth2-proxy.md](../how-to/connect/oauth2-proxy.md))
 **Date:** 2026-09-25
 
 ## Context
@@ -32,7 +32,7 @@ real for `access-proxy`, but buys less than it appears to: `oauth2-proxy`
 encrypts each session with a key that lives only in the user's cookie, so
 nothing server-side, including a Back-Channel Logout receiver, can ever
 open a session it holds
-([design/sluis.md#telling-the-relying-party-back-channel-logout](../explanation/design.md#telling-the-relying-party-back-channel-logout)).
+([back-channel-logout.md](../explanation/back-channel-logout.md)).
 The one advantage a server-side store would normally give — a sign-out
 that closes every window at once, server to server — is exactly the one
 this store cannot provide, on either shape of gateway OIDC.
@@ -72,7 +72,7 @@ chart already wires it. It is removed inside the 1.x line
 ([0007](0007-breaking-changes-inside-1x.md)) once no such consumer
 remains — a component with zero consumers documented as a design
 decision is the appendix entry
-[design/sluis.md#appendix-what-was-removed-and-why](../explanation/design.md#appendix-what-was-removed-and-why)
+[not-served.md#what-was-removed-and-why](../explanation/not-served.md#what-was-removed-and-why)
 is for.
 
 ## Consequences
@@ -92,7 +92,7 @@ of the gateway alone.
 **Only a console that moves to native OIDC inside the application** — the
 other door above — **can take Back-Channel Logout**, because only it can
 hold a session the issuer's POST has anything to name
-([design/sluis.md#telling-the-relying-party-back-channel-logout](../explanation/design.md#telling-the-relying-party-back-channel-logout)).
+([back-channel-logout.md](../explanation/back-channel-logout.md)).
 Choosing between the two doors is therefore not only about where the
 authorization model lives (per [0001](0001-sessions-and-an-absolute-limit.md));
 it is also the only lever that decides whether a console can ever close
