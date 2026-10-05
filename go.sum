@@ -191,8 +191,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/truvity/audit/sdk v0.6.1 h1:85A+VChOihOVlHbSiSi1l3UrB4mVCUsJwads8G/ZPfM=
 github.com/truvity/audit/sdk v0.6.1/go.mod h1:jZxW78L/6GqoQNQyhBTBxcDaZ3DNjq+p2FcsZKkPdm8=
-github.com/truvity/policy v1.43.1-0.20261004235901-380a101cf243 h1:PoLgFqLOzyklgBWiz/xdlCeDElBg7dlrMKYSyBUjHtk=
-github.com/truvity/policy v1.43.1-0.20261004235901-380a101cf243/go.mod h1:+523XQBHvdrllFogN6wNUutLWGo6cFhiYfgvUuVTavw=
+github.com/truvity/policy v1.44.0 h1:o9R4+0sLPBLboohEqHW4e7JIQLKnYd3I3a6MgA5pYoQ=
+github.com/truvity/policy v1.44.0/go.mod h1:+523XQBHvdrllFogN6wNUutLWGo6cFhiYfgvUuVTavw=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=

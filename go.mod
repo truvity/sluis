@@ -24,7 +24,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/truvity/audit/sdk v0.6.1
-	github.com/truvity/policy v1.43.1-0.20261004235901-380a101cf243
+	github.com/truvity/policy v1.44.0
 	github.com/zitadel/oidc/v3 v3.49.6
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 	go.opentelemetry.io/otel v1.46.0
