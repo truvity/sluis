@@ -232,12 +232,13 @@ prose still to be rewritten is a `baseline` count that only goes down.
 Two gates run before the artifacts exist, and `just release-check vX.Y.Z`
 runs the first locally:
 
-- **The Pulumi library's require.** `deploy/pulumi/go.mod` must require
-  `github.com/truvity/sluis` at the tag being released, or not at all
-  (`hack/check-release-require.sh`; the release workflow's `gate` job). Bump
-  the require, and `go mod tidy` in `deploy/pulumi`, in a pull request before
-  tagging, because the library is tagged at the same commit and a tag cannot
-  be taken back.
+- **The Pulumi library's require.** `deploy/pulumi/go.mod` requires
+  `github.com/truvity/sluis`, and the release workflow tags the library at a
+  child of the release commit whose require is the tag
+  (`hack/pin-pulumi-require.sh`; the `pulumi-tag` job), so nothing is bumped by
+  hand. The `gate` job runs the pin and holds its result to the tag
+  (`hack/check-release-require.sh`), so a `go.mod` the pin cannot handle stops
+  the release before anything is published.
 - **No breaking patch.** Auto-release refuses to cut a patch while the
   CHANGELOG entries after the newest release contain `**Breaking:`
   (`hack/check-no-breaking-patch.sh`; the `guard` job of `auto-release.yaml`).

@@ -1,6 +1,6 @@
 # 0037 — One process everywhere: one Lambda function, one Deployment, one service document
 
-**Status:** Accepted; amends [0036](0036-configuration-is-immutable-per-instance.md) (three documents and three Deployments → one unified process)
+**Status:** Accepted; refined by [0038](0038-estates-render-through-sluis.md); amends [0036](0036-configuration-is-immutable-per-instance.md) (three documents and three Deployments → one unified process)
 **Date:** 2026-10-05
 
 ## Context

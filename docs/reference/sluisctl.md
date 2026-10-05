@@ -26,6 +26,7 @@ sluisctl pg   --address https://openbao.example:8200 -ns staging -- pg_dump orde
 
 sluisctl r2 --service-url https://r2-broker.example.com -- credentials --bucket example-bucket --prefix nix/
 
+sluisctl render --installation installation.yaml --out rendered/   # the service and policy documents
 sluisctl policy render policy/ -o policy.yaml   # the one policy document an installation reads
 ```
 
@@ -443,6 +444,35 @@ UserKnownHostsFile ~/.ssh/known_hosts ~/.ssh/known_hosts.d/sluisctl
 |---|---|
 | `2` | an entry names both or neither of `url`/`openbao`; an entry names no patterns, or a pattern with whitespace, a comma or `#`; `openbao.mount` missing; a CA bundle that cannot be read or holds no certificate |
 | `0` | everything else, including a source that could not be fetched — that is a warning on stderr, not a failed run: see above |
+
+## `render`: an installation in, the two documents out
+
+```sh
+sluisctl render --installation <file> --out <dir> [--check]
+```
+
+An estate states what it knows about an installation once, as an **installation**
+([configuration](configuration.md#the-installation-document):
+`apiVersion: sluis.truvity.github.io/installation/v1`, held to
+`schemas/config/installation.schema.json`), and `render` writes the two documents an
+instance is started with into `<dir>`: `sluis.yaml`, the service document
+(`sluis/v3`), and `policy.yaml`, the policy document (`policy/v2`). It is the function
+the Pulumi library and the Go package `github.com/truvity/sluis/config` call
+([0038](../decisions/0038-estates-render-through-sluis.md)), so every estate renders
+the same way.
+
+The output is deterministic (sorted keys, `apiVersion` first, a fixed layout), derives
+what the shape fixes (the preset, `policy.file`, the public URLs, the adapters the AWS
+resources and the OpenBao stand for, the names layout v3 gives the secrets sluis
+writes) and refuses an installation that disagrees with it, naming the key. Both
+documents are held to the loader the service runs at start, so what `render` writes is
+what the service accepts.
+
+`--check` writes nothing: it compares what would be written with the files in
+`<dir>`, prints a line diff, and exits `1` if there is any (a missing file counts). Run
+it in the estate's CI to hold the committed documents to the installation. Like
+`policy render`, it needs no network, no session and no `HOME`, and it holds no secret.
+A failed render exits `1` with the reason; a bad command line exits `2`.
 
 ## `policy render`: the one policy document
 

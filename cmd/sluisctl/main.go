@@ -153,6 +153,8 @@ func run(args []string) error {
 		return setup(args[1:])
 	case "policy":
 		return policyCommand(args[1:])
+	case "render":
+		return renderCommand(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return nil
@@ -184,6 +186,7 @@ func usage(to *os.File) {
   ssh           known-hosts: trust SSH host CAs before the first connect
   exchange      the raw exchange: a token in, a token for an audience out
 
+  render        an installation in, the service and policy documents out
   policy render the one policy document an installation reads, from its layers
 
 sluisctl's own flags on bao go BEFORE the bao subcommand; bao's own

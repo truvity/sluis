@@ -2,6 +2,21 @@
 
 ### Added
 
+- **The installation document and `sluisctl render`: estates render their documents through sluis**
+  ([0038](docs/decisions/0038-estates-render-through-sluis.md)). An installation
+  (`apiVersion: sluis.truvity.github.io/installation/v1`, `schemas/config/installation.schema.json`) is what an
+  estate knows about one installation: its shape (`lambda`, `kubernetes`, `server`), the AWS resources and the OpenBao it is built
+  on, whom it trusts, its clients and its exports. `sluisctl render --installation <file> --out <dir>` writes the service
+  document (`sluis.yaml`, v3) and the policy document (`policy.yaml`, v2) from it, deterministically, held to the loader
+  the service runs at start; `--check` compares with the files already there and exits 1 on a difference. Documented in
+  [sluisctl](docs/reference/sluisctl.md#render-an-installation-in-the-two-documents-out) and
+  [configuration](docs/reference/configuration.md#the-installation-document).
+- **A public configuration package, `github.com/truvity/sluis/config`**: the service (v3) and policy (v2) document
+  types, `Load` and `Validate` against the authored schemas, `LoadInstallation`, `Render` and `InstallationSchema`.
+  Estates and the Pulumi library use it instead of `internal/config`.
+- **Pulumi library: `LambdaArgs.Installation`**, rendered by the public package. The library completes it with the
+  instance, region, account and function name from its arguments when the installation leaves them out, and refuses
+  one that says another.
 - **`secrets/openbao`: the Secrets port in an OpenBao KV version 2 mount**
   (`adapters.secrets: {adapter: openbao}`), laid out like SSM layout v3: `<root>/private/config/<name>`,
   `<root>/private/credentials/<kind>/<id>/<ref>` and `<root>/export/<path>`. It shares the Export
@@ -31,6 +46,11 @@
 - **Chart: `serviceAccount.awsIdentity`** (`pod-identity`, the default and renders nothing, or `irsa`, which annotates
   the account with `eks.amazonaws.com/role-arn: <serviceAccount.awsRoleArn>`).
 
+### Deprecated
+
+- **`LambdaArgs.Config`, `Policy` and `PolicyPath`** (Pulumi library): write the estate's facts as `LambdaArgs.Installation`.
+  They keep working for one minor, and `NewLambda` logs a warning while one is used.
+
 ### Changed
 
 - **Presets `server`, `k8s-minimal` and `k8s-openbao` are marked unavailable**: each names adapters that are planned
@@ -40,6 +60,12 @@
   version now follows its document's `apiVersion`.
 - **`docs/reference/adapters.md` shows the `invoke` trigger as implemented**, as is the `aws-serverless` and
   `aws-hybrid` presets' trigger: the generator now links every adapter any binary registers.
+- **The Pulumi library imports no `internal/` package, and its `require` of the root module is pinned by the
+  release.** `deploy/pulumi/vX.Y.Z` is now tagged at a child of the release commit whose `go.mod` requires `vX.Y.Z`
+  (`hack/pin-pulumi-require.sh`), so the require is never bumped by hand before a tag and a library tagged against a stale
+  one no longer exists. A test holds the library to no `internal/` import.
+- **Durations are written without their zero units** (`1h`, not `1h0m0s`) by the service document's types and the
+  renderer; both read back to the same span.
 - **Chart: KMS signing renders cleanly.** With `config.signingKey.kmsWrapped` (or `kms`, or `adapters.signing`
   naming one) the chart renders no signing Certificate and mounts no signing Secret, and refuses
   `signingKey.additional` and `existingSecret`; the chart's default `config.signingKey.file` is dropped with

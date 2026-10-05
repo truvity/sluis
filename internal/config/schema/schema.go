@@ -35,8 +35,9 @@ const policy = "https://github.com/truvity/policy/schemas/"
 
 // Names are the documents, as the schema files are named:
 // schemas/config/<name>.schema.json. The first three are the service documents,
-// one per process; `policy` is the one policy document they all name.
-var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "policy"}
+// one per process; `policy` is the one policy document they all name; `installation`
+// is what `sluisctl render` writes both from.
+var Names = []string{"sluis", "serve", "controller-github", "controller-slack", "policy", "installation"}
 
 // Services are the service documents: the ones a process is started with.
 // `sluis` is the one document of the one process (v3): the serve settings and,
@@ -561,6 +562,8 @@ func Schema(name string) ([]byte, bool) {
 		s = controllerSlackSchema()
 	case "policy":
 		s = policySchema()
+	case "installation":
+		s = installationSchema()
 	default:
 		return nil, false
 	}

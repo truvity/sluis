@@ -1,0 +1,96 @@
+# A small installation on AWS Lambda, as the opwerm estate's hive is: one
+# function, DynamoDB state, an S3 bucket, SSM secrets, KMS-wrapped signing,
+# the GitHub controller for one organisation and one export. Every name is a
+# placeholder; no value here is a secret.
+apiVersion: sluis.truvity.github.io/installation/v1
+instance: hive
+shape: lambda
+preset: aws-hybrid
+release: access-issuer
+
+issuer:
+  url: https://access.example.test
+  consoleURL: https://access.example.test/console
+  secureCookies: true
+  groupsScoping: report
+
+log: {level: info}
+lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
+freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
+
+aws:
+  account: "111122223333"
+  region: eu-central-1
+  functionName: sluis-http
+  table: example-sluis
+  bucket: example-sluis-111122223333
+  auditQueueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
+
+signingKey:
+  kmsWrapped:
+    keyId: alias/example-unseal
+  pollInterval: 30s
+  activationDelay: 30s
+
+recovery: {enabled: false}
+login: {directory: true}
+console: {client: access-console}
+oauthClient: {provider: default}
+audit:
+  audience: audit
+  queryURL: https://audit.example.test/sluis
+
+exchange:
+  audience: access-issuer
+  github:
+    owners: [example-org]
+
+apps:
+  github:
+    runnerTiers: [stable]
+
+controllers:
+  github:
+    consoleURL: https://access.example.test/console
+    interval: 15m
+    enabledOrgs: [example-org]
+
+exports:
+  - name: arc-runner-app
+    source: runner-app
+    tier: stable
+    org: example-org
+    path: github-runner-app/stable/example-org
+
+access:
+  groups:
+    all:access-roster:operator:
+      members: [admin@example.test]
+      matchers:
+        - service_account: {namespace: access-issuer, name: access-issuer-recovery}
+    all:access-roster:viewer:
+      matchers: [{email_domain: example.test}]
+    all:audit:security:
+      members: [admin@example.test]
+    hive:k8s:admin:
+      members: [admin@example.test]
+    all:grafana:admin:
+      members: [admin@example.test]
+  lifetimes:
+    default: 4h
+  clients:
+    access-console:
+      kind: public
+      redirects: [https://access.example.test/console/callback]
+      requires: [all:access-roster:viewer]
+    audit:
+      kind: exchange
+      requires: [all:audit:security]
+    grafana:
+      kind: confidential
+      secret: clients/grafana/secret
+      redirects: [https://grafana.example.test/login/generic_oauth]
+      requires: [all:grafana:admin]
+  github:
+    example-org:
+      members: [all:access-roster:viewer]

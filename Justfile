@@ -94,8 +94,12 @@ lint: console
 # create nothing and need no credentials, and the rendered `ports:` block is
 # validated against the schemas in schemas/config, so the library cannot drift
 # from the binaries it configures.
+#
+# It also tests hack/pin-pulumi-require.sh, which the release workflow runs to
+# tag the library at a commit whose require is the release being cut.
 pulumi-test:
     cd deploy/pulumi && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
+    hack/test-pin-pulumi-require.sh
 
 # Run Go vulnerability check. Deliberately not part of `check`: a newly
 # published CVE in a dependency must not turn a PR that never touched it
@@ -129,8 +133,11 @@ acceptance: console
 #
 # The require gate: deploy/pulumi requires github.com/truvity/sluis, and a
 # library tagged vX.Y.Z whose require names another version ships against
-# the wrong root. hack/check-release-require.sh passes when the require
-# names the tag or is gone. The release workflow runs the same script first.
+# the wrong root. The release workflow tags the library at a commit whose
+# require is pinned to the release (hack/pin-pulumi-require.sh), so the
+# require on master is never bumped by hand; this runs the pin and holds its
+# result to the tag with hack/check-release-require.sh, as the workflow's gate
+# does.
 #
 # The release path, as far as it can be exercised without a tag.
 #
@@ -142,7 +149,11 @@ acceptance: console
 release-check tag="": console
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -n "{{tag}}" ]; then ./hack/check-release-require.sh "{{tag}}"; fi
+    if [ -n "{{tag}}" ]; then
+        pinned="$(mktemp)"
+        ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/go.mod > "$pinned"
+        ./hack/check-release-require.sh "{{tag}}" "$pinned"
+    fi
     ./hack/check-archives.py
     goreleaser check
     goreleaser build --snapshot --clean --single-target

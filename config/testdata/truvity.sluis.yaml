@@ -1,0 +1,85 @@
+apiVersion: sluis.truvity.github.io/sluis/v3
+adapters:
+  blobs:
+    adapter: s3
+    settings:
+      bucket: example-sluis-kernel-111122223333
+      region: eu-central-1
+  secrets:
+    adapter: openbao
+    settings:
+      address: https://openbao.example.test
+      auth:
+        method: kubernetes
+        mount: kubernetes
+        role: sluis
+        tokenFile: /var/run/openbao/token
+      caFile: /var/run/access-issuer/openbao-ca/ca.pem
+      namespace: kernel
+      root: sluis
+  state:
+    adapter: dynamodb
+    settings:
+      region: eu-central-1
+      table: example-sluis-kernel
+audit:
+  audience: audit
+  forwardedForTrustedHops: 2
+  queryURL: http://audit-query.audit.svc:8080
+  tokenFile: /var/run/audit/token
+  writer: http://audit.audit.svc:8080
+cluster: kernel
+console:
+  client: access-console
+controllers:
+  github:
+    consoleURL: http://sluis.sluis.svc:8080/console
+    interval: 15m
+  slack:
+    consoleURL: http://sluis.sluis.svc:8080/console
+    interval: 15m
+exchange:
+  audience: sluis
+groupsScoping: enforce
+inCluster: true
+issuerURL: https://access.example.test
+lifetimes:
+  absolute: 24h
+  hold: 4h
+  refresh: 12h
+  session: 12h
+  token: 1h
+log:
+  level: info
+login:
+  directory: false
+oauthClient:
+  provider: default
+policy:
+  file: /var/run/access-issuer/policy/policy.yaml
+preset: k8s-aws
+publicRootURL: https://access.example.test
+publicURL: https://access.example.test/console
+recovery:
+  audience: sluis-recovery
+  enabled: true
+  serviceAccount: sluis-recovery
+release: sluis
+secureCookies: true
+signingKey:
+  kmsWrapped:
+    algorithms:
+      - ES384
+      - RS256
+    keyId: alias/example-sluis-signing
+    region: eu-central-1
+    rotateEvery: 24h
+    stateSecret: issuer/state-secret
+  overlap: 25h
+  verifyOnly:
+    - alg: ES384
+      file: /var/run/access-issuer/verify-keys/0.pem
+      until: "2026-11-01T00:00:00Z"
+valkey:
+  address: valkey-sluis.sluis.svc:6379
+  cluster: true

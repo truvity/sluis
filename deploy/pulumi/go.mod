@@ -125,8 +125,12 @@ require (
 	lukechampine.com/frand v1.4.2 // indirect
 )
 
-// The library renders and validates its documents with the binary's own loader
-// (internal/config), at the same commit: the release tags vX.Y.Z and
-// deploy/pulumi/vX.Y.Z together, so a consumer resolves the require above, and
-// this checkout builds against itself.
+// The library renders and validates its documents with the root module's public
+// config package (github.com/truvity/sluis/config), at the same commit, and
+// imports nothing internal (a test holds it). This checkout builds against the
+// root module beside it, by the replace below. A consumer does not get the
+// replace, so the require above is what they build against: it is whatever it
+// is on master and is never bumped by hand. The release workflow tags
+// deploy/pulumi/vX.Y.Z at a commit whose require is vX.Y.Z
+// (hack/pin-pulumi-require.sh).
 replace github.com/truvity/sluis => ../..

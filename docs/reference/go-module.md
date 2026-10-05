@@ -17,6 +17,25 @@ import (
 )
 ```
 
+## Rendering an installation's documents — `config`
+
+```go
+import "github.com/truvity/sluis/config"
+
+in, err := config.LoadInstallation("installation.yaml")
+service, policy, err := config.Render(in)   // sluis.yaml and policy.yaml, as bytes
+```
+
+The public configuration package: the document types of the service document (v3) and
+the policy document (v2), `Load` and `Validate` against the authored schemas, and the
+[installation](configuration.md#the-installation-document), the typed input an estate
+writes once. `Render` is deterministic and holds both outputs to the loader the service
+runs at start; it is what `sluisctl render` and the Pulumi library
+(`LambdaArgs.Installation`) call, so no estate hand-renders the documents
+([0038](../decisions/0038-estates-render-through-sluis.md)). `config.InstallationSchema()`
+is the authored schema of the installation. A program that is not sluis never imports
+`internal/config`.
+
 ## An MCP server's own side — `identity/resource`
 
 ```go
