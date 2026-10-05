@@ -104,3 +104,26 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis \
   --namespace sluis --create-namespace \
   --set config.issuerURL=https://issuer.example
 ```
+
+## Moving from v1.62 (three Deployments) to one
+
+v1.63 runs the GitHub and Slack controllers inside `sluis serve`
+([decision 0037](../../docs/decisions/0037-one-process-everywhere.md)), so the chart renders one
+Deployment, `<release>`, and the `controllerGithub` and `controllerSlack` values are gone. On
+`helm upgrade`:
+
+1. Move each controller's values to `config.controllers.github` / `config.controllers.slack`
+   (`consoleURL`, `interval`, `tokenFile`, `appsDir` or `credentialsDir`, `recordsDir`; present is on).
+   `controllerX.config.{policy,release,log,ports,platform,preset,adapters,audit,probes}` are the one
+   document's own keys now. `controllerX.resources`, `replicas`, `strategy`, `minReadySeconds` and
+   `podDisruptionBudget` go to the top-level `resources`, `replicaCount`, `strategy` and so on.
+2. The `<release>-github-roster` and `<release>-slack-roster` Deployments, ServiceAccounts,
+   ConfigMaps and PodDisruptionBudgets are deleted by the upgrade. The controllers run as the
+   release's own ServiceAccount, which gets the controllers' Role.
+3. **Policy:** `exchange` and the audit installation's `workloadIdentity` map must admit the one
+   ServiceAccount (`system:serviceaccount:<ns>:<release>`) where they admitted the two controller
+   accounts, or the controllers are nobody at the console. Ship that policy change before the upgrade.
+4. `replicaCount` above 1 with a controller needs `config.ports.adapter: dynamodb`; the chart refuses
+   to render otherwise.
+5. Dashboards and alerts that select `service_name` `github-roster` or `slack-roster` select
+   `access-issuer`.

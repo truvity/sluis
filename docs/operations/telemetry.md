@@ -18,7 +18,7 @@ variables on the pods and the SDK reads them:
 |---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Names a collector for metrics and traces. Unset (and neither signal's own variable below set), nothing is exported and every instrument records into a no-op. |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | The same, for one signal. |
-| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. The service names itself `access-issuer`, `github-roster` or `slack-roster` when `OTEL_SERVICE_NAME` is unset, so a dashboard that selected on those still finds the process. |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The SDK's own. The one process names itself `access-issuer` when `OTEL_SERVICE_NAME` is unset. Since v1.63 the controllers' series carry `access-issuer` too: **a dashboard or alert that selects `service_name` `github-roster` or `slack-roster` must select `access-issuer`** (the controllers' own metric names, and the `kind` and `target` labels, are unchanged). |
 | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | The sampler. **Unset, it is parent based with `always_on`**: a caller's decision wins and every root trace is kept. |
 
 **The sampler default is provisional.** truvity/audit keeps a tenth of root
@@ -43,18 +43,10 @@ telemetry:
     extraEnv: {}                                       # any other OTEL_* variable
 ```
 
-With `endpoint` set, the service and each controller get
+With `endpoint` set, the one pod gets
 `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, an
-`OTEL_SERVICE_NAME` of their own, and the `extraEnv` entries:
-
-| Pod | `OTEL_SERVICE_NAME` |
-|---|---|
-| `serve` | `access-issuer` |
-| `controller github` | `github-roster` |
-| `controller slack` | `slack-roster` |
-
-These are the names the binary uses when the variable is unset, so a dashboard
-or alert that selects on them keeps finding the process. With `endpoint` empty
+`OTEL_SERVICE_NAME` of `access-issuer`, and the `extraEnv` entries. (Before v1.63 the
+controller pods reported as `github-roster` and `slack-roster`; those names are retired.) With `endpoint` empty
 the chart renders nothing and the pods export nothing
 ([policy ADR 0006](https://github.com/truvity/policy/blob/master/docs/decisions/0006-telemetry-is-the-sdk-environment.md)).
 

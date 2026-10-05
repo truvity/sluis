@@ -1,11 +1,11 @@
 # Connect a Slack workspace
 
-The Slack controller, `slack-roster`, makes each Slack workspace's channels
+The Slack controller makes each Slack workspace's channels
 match the policy's `slack` table: a channel is bound to groups, its wanted
 members are those groups' holders, and every pass the controller invites the
 people who belong and, where the channel is `strict`, removes the people who do
-not. It is a second process from the `sluis` chart, like the
-[GitHub controller](github-organisation.md), and has no listener.
+not. Since v1.63 it is a loop inside the one `sluis serve` process, like the
+[GitHub controller](github-organisation.md), and has no listener of its own.
 
 There are three kinds of channel. A **policy channel** is bound in git, to
 internal groups. A **console channel** is an ordinary channel kept as a record
@@ -539,10 +539,10 @@ purposes; this page's App is the roster's own.
 ## Running the controller
 
 ```yaml
-controllerSlack:
-  enabled: true
-  config:
-    consoleURL: http://access-issuer.access.svc:8080/console   # this release's own Service
+config:
+  controllers:
+    slack:
+      consoleURL: http://access-issuer.access.svc:8080/console   # this release's own Service
 policy:
   controllers:
     slack:
@@ -554,8 +554,8 @@ exchange:
       jwksUri: https://oidc.eks.eu-central-1.amazonaws.com/id/EXAMPLE/keys
 ```
 
-The other values are `controllerSlack.config.interval` (the pass interval, default 15m),
-`controllerSlack.resources`. The chart and the controller refuse a policy
+The other value is `config.controllers.slack.interval` (the pass interval, default 15m);
+the pod's `resources` are the release's. The chart and the controller refuse a policy
 whose `controllers.slack.enabledWorkspaces` names a workspace the policy does not declare.
 
 The policy puts its account in the group that reads who holds a group:
@@ -564,23 +564,23 @@ The policy puts its account in the group that reads who holds a group:
 groups:
   all:access-roster:viewer:
     matchers:
-      - service_account: { cluster: prod, namespace: access-issuer, name: access-issuer-slack-roster }
+      - service_account: { cluster: prod, namespace: access-issuer, name: access-issuer }   # the release's own ServiceAccount: the controller runs as it
 ```
 
 The chart refuses to render the controller without an `exchange.clusters` row or
 a console mount. The controller records what it did into the audit trail itself,
 with its own token, when `audit.*` is set; the installation must map the
-account `<release>-slack-roster` to the source `roster`.
+release's account `<release>` to the source `roster` (v1.62's `<release>-slack-roster` is gone).
 
 **Egress.** The controller calls Slack's API at `slack.com:443`. The chart
 cannot open that: a Kubernetes NetworkPolicy cannot name a host, and the chart's
 policy governs the service's ingress only (as for `api.github.com` and the GitHub
 controller). Allow `slack.com:443` for the controller's pods,
-`app.kubernetes.io/name: access-issuer-slack-roster`, in the cluster's egress
-policy. The chart does admit the controller to the service's port, for reading
+`app.kubernetes.io/name: access-issuer`, in the cluster's egress
+policy (the one pod: it is the service's). The chart does admit the controller to the service's port, for reading
 the console's API, when `networkPolicy.enabled`.
 
-**What it reads.** The console's API (with its own ServiceAccount token): who
+**What it reads.** The console's API (with the pod's ServiceAccount token): who
 holds each group (`ListHolders`), who is in each directory group and each
 individually listed address (`ResolveDirectoryGroups`), whether the directory
 vouches for an address (`Explain`) and which domains each directory serves (`ListServedDomains`, a

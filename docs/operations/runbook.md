@@ -115,7 +115,9 @@ non-authoritative answer holds, it never removes.**
 
 ## A controller release that crash-loops
 
-**What happened, 2026-10-04.** The rollout of sluis 1.57.0 on kernel crash-looped
+**Since v1.63 the controllers are not separate pods:** they run inside the one `sluis serve` process, so a controller that cannot start stops the whole process, and a bad release stalls the one Deployment (the rollout below), with the old pods still serving.
+
+**What happened, 2026-10-04 (v1.57, three Deployments).** The rollout of sluis 1.57.0 on kernel crash-looped
 every pod at start. The service (`serve`) kept its old pods, because it runs two
 replicas under `RollingUpdate`, so sign-in stayed up. The GitHub and Slack
 controllers were fixed at one replica with `strategy: Recreate`: their old pods were
@@ -123,10 +125,9 @@ deleted first, so both controllers were down for about 15 minutes, until the fix
 rolled. Nothing was lost (every pass recomputes from the console and the target
 system), but nothing was reconciled for that time either.
 
-**What the chart does now.** Each controller's Deployment rolls with
-`maxUnavailable: 0` and `maxSurge: 1`, with a readiness probe on `/readyz`
-(`probes.address`, default `:7070`), and `minReadySeconds: 10`. The new pod becomes
-Ready only after it has finished starting: the policy loaded, the stores open and
+**What the chart does.** The Deployment rolls (Kubernetes' default `RollingUpdate`) with a
+readiness probe on `/readyz` (`probes.address`, default `:7070`). The new pod becomes
+Ready only after the process has finished starting, each controller included: the policy loaded, the stores open and
 the audit catalogue accepted. A pod that crashes at start never listens, so it is
 never Ready, and the rollout stalls with the old pod still running. The symptom is
 then a Deployment that does not complete, not an outage.
@@ -134,8 +135,8 @@ then a Deployment that does not complete, not an outage.
 **Reading a stalled rollout.**
 
 ```sh
-kubectl -n <ns> rollout status deploy/<release>-github-roster --timeout=120s
-kubectl -n <ns> get pods -l app.kubernetes.io/name=<name>-github-roster
+kubectl -n <ns> rollout status deploy/<release> --timeout=120s
+kubectl -n <ns> get pods -l app.kubernetes.io/name=<name>
 kubectl -n <ns> logs <the new pod> --previous
 ```
 
@@ -160,7 +161,7 @@ alert on for a controller that has stopped; the chart's `AccessRosterTickStale`
 when a controller has never ticked, and after a day of silence, so an alert on a
 controller that is gone for good needs `absent_over_time(...)` beside it.
 
-**More replicas.** With a shared State a controller may run two replicas, so a node
+**More replicas.** With a shared State (`config.ports.adapter: dynamodb`; the chart refuses `replicaCount` above 1 with a controller otherwise) the process may run two replicas, so a node
 loss does not pause reconciling: see
 [high-availability](high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe).
 
@@ -322,7 +323,7 @@ fingerprint would stop it from starting).
 
 **In the window.**
 
-4. **Freeze.** Scale the issuer, the console and both controllers to 0 and wait until the
+4. **Freeze.** Scale the one Deployment (the issuer, the console and the controllers) to 0 and wait until the
    pods are gone. Sign-in is down from here until the switch.
 5. **Run.**
 
@@ -526,8 +527,8 @@ The controller is described in [Connect a Slack
 workspace](../connect/slack-workspace.md).
 
 **Before the first step:** the policy declares the workspace under
-`slack.workspaces.<key>`, the controller's ServiceAccount is in
-`all:access-roster:viewer`, `controllerSlack.enabled` is true, and the console is
+`slack.workspaces.<key>`, the release's ServiceAccount (which the controller runs as) is in
+`all:access-roster:viewer`, `config.controllers.slack` is present, and the console is
 rolled out before the controller (it needs `ListServedDomains`, 1.42.0).
 
 1. Connect and install the workspace, list nothing in `policy.controllers.slack.enabledWorkspaces`,
@@ -743,17 +744,18 @@ deployment's own proxies, read from the right. Count the proxies that
 append: behind an edge that appends the client and a gateway that appends
 the edge's connector, it is 1.
 
-**The GitHub controller and the Slack controller each record for
-themselves**, with their own service account's token, and the installation
-stamps each as those records' observer. All three service accounts
-(`<release>`, `<release>-github-roster`, `<release>-slack-roster`) must be mapped
-to the source `roster` in the installation's `workloadIdentity.workloads`.
+**The controllers record as the one process**, with its service account's token, and the
+installation stamps it as those records' observer. The one service account
+(`<release>`) must be mapped to the source `roster` in the installation's
+`workloadIdentity.workloads`; v1.62's `<release>-github-roster` and
+`<release>-slack-roster` entries are dead and may be removed (on Lambda the one role
+is `<FunctionName>`).
 
 ### Connecting an installation
 
 1. Deploy the installation and give it the deployment document its
    profiles come from; see its deploy guide.
-2. Map this release's service account, and each controller's when it runs,
+2. Map this release's service account (the controllers run as it)
    to the source `roster` in its `workloadIdentity.workloads`, with the
    audience `audit.token.audience` (default `audit`).
 3. Declare a client for the page in the policy — its id is

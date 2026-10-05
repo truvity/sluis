@@ -1,14 +1,14 @@
 # sluis — chart and configuration
 
 How the service is configured: the chart's boundary, its values, the four
-documents (the three service documents and the policy), how a secret is named
+documents (the service document and the policy), how a secret is named
 and delivered, the Kubernetes objects it owns, the roles, and the two things it
 expects the deployment to provide.
 
 **One chart, `charts/sluis`, and one image, for the whole product.** It renders the
 whole of sluis — the directory, the policy, the OpenID provider,
-the login page and the console — and, when enabled, the GitHub
-controller and the Slack controller beside it. It keeps no audit trail of its own: it records
+the login page and the console — and, when `config.controllers` names them, the GitHub
+controller and the Slack controller, in the same process. It keeps no audit trail of its own: it records
 into an installation of [truvity/audit](https://github.com/truvity/audit)
 that the deployment provides, and reads that installation's query service
 for the console's Audit page.
@@ -45,14 +45,13 @@ service writes *itself*, where it is the producer and gets to choose.
 
 | Value | Default | Meaning |
 |---|---|---|
-| `config` | see [the file](#the-configuration-file) | **the serve document**, rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/sluis/config.yaml`, read once at start (a change rolls the pods by their checksum annotation). Validated by `values.schema.json` against the schema the binary uses. It carries `apiVersion: sluis.truvity.github.io/serve/v2`, and says everything about how the process runs (the issuer URL, lifetimes, the store, Valkey, recovery, audit, the signing key's rotation, `secrets`); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate. The values below that look policy-like (`exchange.*`, `githubApps`, `slackApps`, `policy`) are rendered into the policy document, not into this one |
+| `config` | see [the file](#the-service-document-sluisyaml) | **the service document** (`sluis serve`, with its controllers), rendered as it stands into the ConfigMap `<release>-config` and mounted at `/etc/sluis/config.yaml`, read once at start (a change rolls the pods by their checksum annotation). Validated by `values.schema.json` against the schema the binary uses. It carries `apiVersion: sluis.truvity.github.io/sluis/v3`, and says everything about how the process runs (the issuer URL, lifetimes, the store, Valkey, recovery, audit, the signing key's rotation, `secrets`); `issuerURL` is **required** and has no default, because one would be a value nobody chose spread across an estate. The values below that look policy-like (`exchange.*`, `githubApps`, `slackApps`, `policy`) are rendered into the policy document, not into this one |
 | `secrets[]` | `[]` | the secrets the config names, projected as files under `/var/run/sluis/secrets`: `{name, secretName, key}` puts a Secret's key at `<name>`, a secret NAME of the [layout](#secrets) (`valkey/password`, `issuer/state-secret`, `directory/<id>/key`). `config.secrets` must then be `{source: file, root: /var/run/sluis/secrets}`, the default. Each confidential client's Secret is projected as `clients/<id>/secret` without being listed (its key is `policy.clients.<id>.secretKey`, default `client-secret`, and it is left out of the rendered policy document). A secret is never in `config` |
 | `secretEnv[]` | `[]` | for a config whose `secrets.source` is `env`: `{name, secretName, key, optional}` puts a Secret's key in the variable `name`, which must be `SLUIS_SECRET_<NAME>` for the name it delivers (`SLUIS_SECRET_VALKEY_PASSWORD`) |
 | `secretMounts[]` | `[]` | `{secretName, mountPath}`: a Secret mounted read-only as a directory, for a file a document names by path that is not a secret of the layout (a signing key's `file`). Each key is a file |
-| `controllerGithub.config` | see [the file](#the-configuration-file) | the GitHub controller's document (`controller-github/v2`), rendered as it stands into `<release>-github-roster-config` and read once at start; a change to it restarts that controller alone, a policy change all three. `consoleURL` is required, and is this release's own Service |
-| `controllerSlack.config` | see [the file](#the-configuration-file) | the Slack controller's (`controller-slack/v2`), into `<release>-slack-roster-config`, the same way |
-| `replicaCount` | `2` | two replicas need Valkey; one may use the in-memory store. Every replica serves every workspace, including one connected through the console on the other replica: a reader missing locally is opened from the stored credential on first use |
-| `image.repository` / `tag` | `ghcr.io/truvity/sluis/sluis` / app version | the one image: `serve` and both controllers are subcommands of it, each Deployment passing its own arguments |
+| `config.controllers.github`, `config.controllers.slack` | absent (off) | the controllers that run **inside the one process** (v1.63): present is on, `github: {}` takes the defaults, which are the paths the chart mounts. `consoleURL` is required by the chart and is this release's own Service plus `console.mount`; the chart prints it when it is wrong. [The `controllers` section](#controllers-the-github-and-slack-controllers) lists the keys. A change to a controller's section rolls the pod. Refused at render without an `exchange.clusters` row for this cluster or a `console.mount`, because either is a controller that can read nothing. The policy must put the release's ServiceAccount in `all:access-roster:viewer` (`exchange` must admit it); without it every pass fails on the first read. `controllerGithub` and `controllerSlack` are **removed** (v1.63): [the move](#moving-from-v162-three-processes-to-one) |
+| `replicaCount` | `2` | two replicas need Valkey (or `config.ports.adapter: dynamodb`); one may use the in-memory store. With a controller in `config.controllers` the chart refuses more than one unless `config.ports.adapter` is `dynamodb`: the controllers' tick leases must be in a State every replica shares, or every replica acts on every target ([high-availability](../operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)). Every replica serves every workspace, including one connected through the console on the other replica: a reader missing locally is opened from the stored credential on first use |
+| `image.repository` / `tag` | `ghcr.io/truvity/sluis/sluis` / app version | the one image: one Deployment runs `sluis serve`, and the controllers run in that process |
 | `nameOverride` / `fullnameOverride` | `""` / `""` | replace the chart name (the `app.kubernetes.io/name` label and the controllers' selectors) and the release's full name (the prefix of every object, and the value `config.release` must carry). For an installation moving from the access-issuer chart: [see below](#migrating-from-the-access-issuer-chart) |
 | `signingKey.existingSecret` / `.key` | `""` / `tls.key` | a Secret holding a PEM private key -- RSA, or ECDSA on P-256, P-384 or P-521. Empty renders a cert-manager `Certificate` instead. **Never minted by the service**: two replicas with two keys hand out tokens half the fleet cannot verify |
 | `signingKey.certificate.issuerName` / `.issuerKind` | `selfsigned` / `ClusterIssuer` | the cert-manager issuer that produces the key, when no `existingSecret` is named. The certificate is a by-product; only the key is used |
@@ -78,23 +77,17 @@ service writes *itself*, where it is the producer and gets to choose.
 | `route.certificate.privateKey` | `{}` | the key that TLS certificate is issued for: `{algorithm, size, encoding, rotationPolicy}`, cert-manager's own fields. Empty leaves every one to cert-manager's defaults, an RSA 2048 key. Set it when the issuer will only sign one kind of key — a PKI role pinned to an algorithm refuses at issuance, long after the render succeeded, and the listener stays dark with the reason on the `CertificateRequest`. The same combinations as the signing key are refused at render |
 | `route.sharedWith[]` | `[]` | namespaces besides this one allowed to attach an HTTPRoute to this Gateway. A **gateway-level** admission, not a ReferenceGrant: whether a Gateway accepts a route from another namespace is entirely its own `allowedRoutes` |
 | `route.parentRefs[]` | `[]` | parents for the issuer's routes, written out in full (e.g. a platform `ListenerSet` carrying `route.host`). When set the chart renders **no Gateway and no TLS Certificate**: the parent owns the listener and its certificate, and `gatewayClassName`, `certificate` and `sharedWith` have no effect. Write `group` and `kind` out |
-| `policy` | `{}` | the policy document without its `apiVersion`, which the chart writes: [the policy document](#the-policy-document), held by `values.schema.json` to `schemas/config/policy.schema.json`, rendered into `<release>-policy` and mounted where each process's `policy.file` names it (`config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`; the controllers': `/var/run/github-roster/policy/policy.yaml`, `/var/run/slack-roster/policy/policy.yaml`). Render a directory of layers first with `sluisctl policy render` and pass the result here |
+| `policy` | `{}` | the policy document without its `apiVersion`, which the chart writes: [the policy document](#the-policy-document), held by `values.schema.json` to `schemas/config/policy.schema.json`, rendered into `<release>-policy` and mounted where each process's `policy.file` names it (`config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`; the controllers read the process's own policy). Render a directory of layers first with `sluisctl policy render` and pass the result here |
 | `networkPolicy.enabled` | `false` | |
 | `networkPolicy.clients[]` | `[]` | namespaces allowed to reach the service in-cluster: the proxies verifying tokens and the workloads exchanging them |
 | `networkPolicy.gatewayNamespace` | `""` | the gateway's namespace, admitted to the service's port besides `clients`. Empty admits no gateway, so with the policy enabled nothing with a browser reaches it |
 | `serviceAccount.annotations` | `{}` | annotations on the ServiceAccount, which is how a cloud identity reaches this service: an admission webhook (EKS Pod Identity, GKE Workload Identity, the self-hosted `amazon-eks-pod-identity-webhook`) reads one and injects credentials into every pod using the account. Without it a self-hosted installation cannot give the service an AWS identity, and `audit.s3` has nothing to authenticate with; the chart mounts no credential of its own and takes none as a value. On AWS: `eks.amazonaws.com/role-arn: <the role's ARN>` |
-| `controllerGithub.enabled` | `false` | render the GitHub controller beside the service. Refused without an `exchange.clusters` row for this cluster or a `console.mount`, because either is a controller that can read nothing |
-| `controllerSlack.enabled` | `false` | render the Slack controller beside the service. Refused without an `exchange.clusters` row for this cluster or a `console.mount`, for the same reason. The policy must put the controller's ServiceAccount (`<release>-slack-roster`) in `all:access-roster:viewer`; without it every pass fails on the first read. Roll the console before the controller when upgrading from before 1.42.0 (the controller needs `ListServedDomains`) |
-| `controllerGithub.resources`, `controllerSlack.resources` | `{}` | the controller pod's resources |
-| `controllerGithub.replicas`, `controllerSlack.replicas` | `1` | how many controller pods run. Above 1 the chart refuses to render unless that controller's `config.ports.adapter` is `dynamodb`: with any other adapter each pod keeps its tick leases in its own memory, and every replica would act on every target ([high-availability](../operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)) |
-| `controllerGithub.strategy`, `controllerSlack.strategy` | `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1` | the Deployment's rollout. The default starts the new pod first and removes the old one only when it is Ready, so a release that crash-loops leaves the running controller alone ([runbook](../operations/runbook.md#a-controller-release-that-crash-loops)). `type: Recreate` stops the old pod first, and is refused with more than one replica; it renders no `rollingUpdate` |
-| `controllerGithub.minReadySeconds`, `controllerSlack.minReadySeconds` | `10` | how long a new pod must stay Ready before it counts as available |
-| `controllerGithub.podDisruptionBudget`, `controllerSlack.podDisruptionBudget` | `enabled: true`, `minAvailable: 1` | rendered only when `replicas` is above 1 |
+| `resources`, `replicaCount` | as `values.yaml` | the one Deployment's. The controllers' own `resources`, `replicas`, `strategy`, `minReadySeconds` and `podDisruptionBudget` are gone with their Deployments. The Deployment's readiness probe (`/readyz` on `config.probes.address`) is ready only once the whole process, each controller included, has begun, so a release that crash-loops leaves the running pods alone ([runbook](../operations/runbook.md#a-controller-release-that-crash-loops)) |
 | `audit.token.audience` / `.expirationSeconds` | `audit` / `3600` | the projected token presented to the receiver |
 | `exports.openbao.caBundle` | `""` | PEM of the authorities that sign OpenBao's certificate, for the service's [exports](#exports-and-the-export-port): a ConfigMap `<release>-openbao-ca` mounted at `/var/run/access-issuer/openbao-ca/ca.pem`, which `config.ports.export.openbao.caFile` must then be (the chart refuses another path). Empty mounts nothing |
 | `exports.openbao.token.audience` / `.expirationSeconds` | `""` / `3600` | a ServiceAccount token projected at `/var/run/openbao/token` for the `jwt` auth method, which `config.ports.export.openbao.auth.tokenFile` must then be. Empty projects nothing, which is what the `kubernetes` method wants |
 | `alerts.rules.exportFailing` / `.exportStale` | enabled, `warning`: 3 failures in `30m` for `15m`; no copy for `10800`s for `10m` | the two rules over the exports ([telemetry](../operations/telemetry.md#alerts)) |
-| `image.pullPolicy`, `serviceAccount.name`, `resources`, `podAnnotations`, `nodeSelector`, `tolerations`, `controllerGithub.resources` | | passthrough |
+| `image.pullPolicy`, `serviceAccount.name`, `resources`, `podAnnotations`, `nodeSelector`, `tolerations` | | passthrough |
 
 **Two routes, and the second is not tidiness.** A gateway policy attaches
 to an `HTTPRoute`, so the console's path is a separate object: anything
@@ -332,18 +325,25 @@ first line, naming what a restart would lose.
 
 ## The configuration file
 
-An installation is configured by **four documents**, each one YAML file:
-three service documents, one per process (`serve`, `controller-github`,
-`controller-slack`), which say how the process runs, and one **policy document**,
-which says what the installation decides. Each subcommand of `sluis` (`serve`,
-`controller github`, `controller slack`) takes its service document with
-`--config <file>` or, with no `--config`, from the variable `SLUIS_CONFIG`; the
-service document names the policy document with `policy.file`. Those two are the
-only thing that configures a process: `--version` and `--help` are the only other
-flags. `sluis tick github|slack <target>`
-runs one target's tick once and reads the same file as its controller (`controller-github`, `controller-slack`); the target
-comes first: an organisation's login or `github:links` for GitHub, a workspace's key for Slack. Until a shared State exists a tick
-refuses to run (a running controller's lease would not exclude it); with the controller scaled to 0, `--unsafe-local-lease` runs it.
+An installation is configured by **two documents**, each one YAML file: the
+**service document** (`sluis.yaml`, `apiVersion: sluis.truvity.github.io/sluis/v3`),
+which says how the one process runs, and the **policy document**, which says what the
+installation decides. Since v1.63 there is one process everywhere
+([0037](../decisions/0037-one-process-everywhere.md)): `sluis serve` is the issuer, the
+console, the directory hub and, as loops of its own in the same process, the GitHub and
+Slack controllers, each on when the service document's `controllers` section names it.
+`sluis serve` takes its service document with `--config <file>` or, with no
+`--config`, from the variable `SLUIS_CONFIG`; the service document names the policy
+document with `policy.file`. Those two are the only thing that configures the
+process: `--version` and `--help` are the only other flags.
+`sluis tick github|slack <target>` runs one target's tick once and reads the same file
+(the controller's section of it); the target comes first: an organisation's login or
+`github:links` for GitHub, a workspace's key for Slack. Until a shared State exists a tick
+refuses to run (a running controller's lease would not exclude it); with the service scaled to 0, `--unsafe-local-lease` runs it.
+**Deprecated for one release:** `sluis controller github` and `sluis controller slack`
+still run a controller as a process of its own (and say so in the log), reading either
+their own v2 documents or the one v3 document, whose `controllers.<kind>` section they
+then take. They are removed in the next release.
 [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md) is the
 decision, [0036](../decisions/0036-configuration-is-immutable-per-instance.md) the
 rules for how the documents reach an instance, and truvity/policy's
@@ -358,11 +358,12 @@ the rule both follow.
   restart. What stays live is credentials and State: a secret is read when it
   is used or on a short refresh, so rotating one is not a deployment.
 - **Validated before anything starts.** Each document is held to its JSON Schema
-  (`schemas/config/<document>.schema.json`: `serve`, `controller-github`,
-  `controller-slack` or `policy`, embedded in the binary) first. An
+  (`schemas/config/<document>.schema.json`: `sluis` or `policy`, embedded in the
+  binary; the v2 `serve`, `controller-github` and `controller-slack` schemas stay for the
+  documents this release still loads) first. An
   unknown key, a missing required key or a value of the wrong type refuses to
   start and names the path to it. The chart's `values.schema.json` embeds the
-  same schemas under each component's `config` and under `policy`, so the same
+  same schemas under `config` and under `policy`, so the same
   mistake fails `helm install`, and the chart's tests hold what it renders to them.
 - **A secret is named, never written.** A key ending in `Secret` holds a secret's
   NAME (`valkey.passwordSecret: valkey/password`), and `secrets.source` says how a
@@ -387,10 +388,14 @@ is the binary's own behaviour.
 ### Documents and `apiVersion`
 
 Every document carries an `apiVersion` of the form
-`sluis.truvity.github.io/<kind>/v2`, with `<kind>` one of `serve`,
-`controller-github`, `controller-slack` and `policy`. **Absent means v1.** A binary
+`sluis.truvity.github.io/<kind>/<version>`: the service document is `sluis/v3` and the
+policy `policy/v2`. **Absent means v1.** A binary
 reads its documents' version N and N-1, and converts N-1 as it loads it: this
-build reads v2 and v1, so a deployment rolls the binary first and its
+build reads the service document at v3, and the v2 `serve` document (and v1, with no
+`apiVersion`) **as a v3 document with no controllers**, so `sluis serve` on an unchanged
+document behaves exactly as before. (The v2 `controller-github` and `controller-slack`
+documents are read only by the deprecated `sluis controller` subcommands, and `sluis tick`
+and `sluis migrate` read either.) So a deployment rolls the binary first and its
 configuration second. A v1 document is held to the schema it was written against
 (`schemas/config/v1/`, frozen as v1.61 wrote it) and keeps working unchanged:
 what v1 kept in a service document and v2 keeps in the policy document is read
@@ -400,10 +405,13 @@ schema's bare "not a key this service reads" ([Retired keys](#retired-keys)).
 A schema change that cannot be converted is a major step, not a minor one.
 
 ```yaml
-apiVersion: sluis.truvity.github.io/serve/v2
+apiVersion: sluis.truvity.github.io/sluis/v3
 issuerURL: https://sluis.example
 policy: {file: /etc/sluis/policy/policy.yaml}
 secrets: {source: file, root: /var/run/sluis/secrets}
+controllers:                       # optional: absent is no controller
+  github: {consoleURL: "http://sluis.access.svc:8080/console", interval: 15m}
+  slack: {consoleURL: "http://sluis.access.svc:8080/console"}
 ```
 
 Layering exists in exactly one place, rendering the policy
@@ -559,13 +567,13 @@ service document's `policy.file`. On Kubernetes the chart renders it from
 `policy:` in values and the Apps' catalogues; on AWS Lambda it is the policy of
 the configuration layer.
 
-### `serve` (the chart's `config`; `sluis serve`)
+### The service document (`sluis.yaml`)
 
-The issuer, the console and the directory hub, one process.
+The chart's `config`, and what `sluis serve` reads: the issuer, the console and the directory hub, one process, with the GitHub and Slack controllers beside them in the same process. The top-level keys below are the old `serve` document's, unchanged; [`controllers`](#controllers-the-github-and-slack-controllers) is what v3 adds.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `apiVersion` | absent (v1) | `sluis.truvity.github.io/serve/v2`. Absent is v1, which this build converts as it loads it: see [Documents and `apiVersion`](#documents-and-apiversion) |
+| `apiVersion` | absent (v1) | `sluis.truvity.github.io/sluis/v3`. A v2 `serve` document and an absent one (v1) load as v3 with no controllers:  see [Documents and `apiVersion`](#documents-and-apiversion) |
 | `issuerURL` | **required** | baked into every token and every relying party's trust. There is no default, because one would be a value nobody chose spread across an estate. An http or https URL with no credentials |
 | `release` | `sluis` | the name this installation's objects carry (`<release>-github-orgs`, the prefix of its keys in Valkey). **The chart requires it to be the release's full name**, and says what to write |
 | `cluster` | unset | what this cluster is called, which becomes part of a ServiceAccount's subject: `<cluster>:k8s:<namespace>:<name>`. Empty keeps the older unqualified form |
@@ -734,70 +742,75 @@ What the service does, and does not do:
 The metrics, the two alerts and the dashboard row are in
 [telemetry](../operations/telemetry.md#the-exports).
 
-### `controller-github` (the chart's `controllerGithub.config`; `sluis controller github`)
+### `controllers`: the GitHub and Slack controllers
 
-The GitHub controller: it makes each organisation's teams match the policy's
-`github` table. It has no listener but the probes': `/healthz` and `/readyz` on
-`probes.address`. It runs one replica by default, and more only with a shared
-State (see `controllerGithub.replicas`).
+`controllers.github` and `controllers.slack` of the service document each run one
+controller as a loop of its own in `sluis serve`; **a section that is absent is a
+controller that is off**, and an empty one (`github: {}`) takes the defaults. A controller
+holds only what is its own below; the release, the policy, `ports`, `platform`, `preset`,
+`adapters`, `audit`, `log` and `probes` are the process's, which a controller shares, so
+the controllers' `/readyz` is the process's (ready only once each controller has begun),
+a controller that fails to start (a refused audit catalogue, an enabled organisation the
+policy does not bind) stops the process, and a controller waits for the console to
+answer before its first pass. `policy.file` is required when a controller is named.
+The code of a controller runs with the service's permissions and in its pod: that cost is
+accepted ([0037](../decisions/0037-one-process-everywhere.md)).
 
-| Key | Default | Meaning |
-|---|---|---|
-| `apiVersion` | absent (v1) | `sluis.truvity.github.io/controller-github/v2`; absent is v1, converted as it loads |
-| `probes.address` | `:7070` | where `/healthz` (liveness, follows nothing) and `/readyz` answer. Readiness opens once the process has finished starting: the policy loaded, the stores open, the audit catalogue accepted. The chart serves the container's `health` port from it |
-| `policy.file` | **required** | the same [policy document](#the-policy-document) the service reads; its `github` table is the bindings and its `controllers.github.enabledOrgs` is what the controller changes. The chart requires `/var/run/github-roster/policy/policy.yaml` |
-| `consoleURL` | **required** | the console's API, which answers who holds a group. The chart requires this release's own Service plus `console.mount`, and prints it |
-| `release` | `sluis` | the name the service's objects carry, so the controller finds `<release>-github-status`. The chart requires the release's full name |
-| `tokenFile` | `/var/run/secrets/github-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
-| `appsDir` | `/var/run/github-roster/apps` | the mounted `<release>-github-apps` Secret, one file per connected organisation |
-| `recordsDir` | `/var/run/github-roster/records` | the mounted `<release>-github-orgs` ConfigMap: the organisations' records and the console's requests for a pass. With `appsDir` it is looked at every 30 seconds, and a change (an install, a Refresh) runs a pass at once |
-| `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `dynamodb` it reads the console's records there, and the credentials from the Secrets port |
-| `interval` | `15m` | how long between passes. Positive |
-| `console.auth.aws.audience` | unset | on AWS Lambda, the audience the controller requests from `sts:GetWebIdentityToken` for its bearer at the console; it must equal the service's `console.awsAudience`. Unset reads `tokenFile`, as on Kubernetes |
-| `log.level` | `info` | |
-| `audit.writer` / `.tokenFile` | unset | the audit installation; the controller records for itself, as its own workload |
-
-Its account, `<release>-github-roster`, has two permissions, each by
-name: `get`, `update` and `patch` on the ConfigMap
-`<release>-github-status` it reports into, and `get` and `update` on the
-Secret `<release>-github-links` it rewrites as it checks links. The App
-keys and the console's records are volumes, so it holds no permission to read
-any other Secret or ConfigMap, and watching them for a change takes none.
-
-### `controller-slack` (the chart's `controllerSlack.config`; `sluis controller slack`)
-
-The Slack controller: it makes each workspace's channels match the policy's
-`slack` table. It has no listener but the probes', and runs one replica by default:
-a second needs a shared State, because two controllers on process-local leases
-would make every change twice (see `controllerSlack.replicas`).
+What a controller may *change* is the policy document's `controllers.github.enabledOrgs`
+and `controllers.slack.enabledWorkspaces`, as before: each organisation or workspace is a
+dry run until listed.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `apiVersion` | absent (v1) | `sluis.truvity.github.io/controller-slack/v2`; absent is v1, converted as it loads |
-| `probes.address` | `:7070` | as for `controller-github` |
-| `policy.file` | **required** | the same [policy document](#the-policy-document) the service reads; its `slack` and `people` tables are the bindings and its `controllers.slack.enabledWorkspaces` is what the controller changes. The chart requires `/var/run/slack-roster/policy/policy.yaml` |
-| `consoleURL` | **required** | as for `controller-github` |
-| `ports.adapter` | `legacy` | the adapter behind the storage ports, as for `serve`. With `memory` the controller reports into, and reads its records from, its own process: for a local run only. With `dynamodb` it reads the console's records there, and the credentials from the Secrets port |
-| `release` | `sluis` | as for `controller-github`; it finds `<release>-slack-status` |
-| `tokenFile` | `/var/run/secrets/slack-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call |
-| `credentialsDir` | `/var/run/slack-roster/credentials` | the mounted `<release>-slack-credentials` Secret, one file per connected workspace; optional |
-| `recordsDir` | `/var/run/slack-roster/workspaces` | the mounted `<release>-slack-workspaces` ConfigMap: workspace records, Slack Connect records, console channel records, confirmations and pass requests; optional |
-| `interval` | `15m` | the pass interval. Independently, the controller looks at the mounted credentials and records every 30 seconds and passes without waiting for the interval when they change |
-| `console.auth.aws.audience` | unset | as for `controller-github` |
-| `log.level` | `info` | |
-| `audit.writer` / `.tokenFile` | unset | the audit installation; the controller records for itself, as its own workload |
+| `controllers.github.consoleURL`, `controllers.slack.consoleURL` | `publicURL` | the console's API, which answers who holds a group. The chart requires this release's own Service plus `console.mount`, and prints it |
+| `controllers.<kind>.interval` | `15m` | how long between passes. Positive. Independently, a controller looks at the mounted credentials and records every 30 seconds and passes without waiting for the interval when they change |
+| `controllers.<kind>.tokenFile` | `/var/run/secrets/github-roster/token`, `/var/run/secrets/slack-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call (the chart mounts it for the pod's own account) |
+| `controllers.<kind>.console.auth.aws.audience` | unset | on AWS Lambda, the audience the controller requests from `sts:GetWebIdentityToken` for its bearer at the console; it must equal the service's `console.awsAudience`. Unset reads `tokenFile`, as on Kubernetes |
+| `controllers.github.appsDir` | `/var/run/github-roster/apps` | the mounted `<release>-github-apps` Secret, one file per connected organisation. Read only with `ports.adapter: legacy` |
+| `controllers.github.recordsDir` | `/var/run/github-roster/records` | the mounted `<release>-github-orgs` ConfigMap: the organisations' records and the console's requests for a pass. Read only with `ports.adapter: legacy` |
+| `controllers.slack.credentialsDir` | `/var/run/slack-roster/credentials` | the mounted `<release>-slack-credentials` Secret, one file per connected workspace; optional |
+| `controllers.slack.recordsDir` | `/var/run/slack-roster/workspaces` | the mounted `<release>-slack-workspaces` ConfigMap: workspace records, Slack Connect records, console channel records, confirmations and pass requests; optional |
 
-Its account, `<release>-slack-roster`, has one permission, by name: `get`,
-`update` and `patch` on the ConfigMap `<release>-slack-status` it reports into.
-The credentials and records are volumes, so it holds no permission to read any
-Secret or other ConfigMap. See [Connect a Slack
-workspace](../connect/slack-workspace.md).
+(The directory names keep the controllers' old names: they are paths the chart mounts,
+and the chart refuses a `tokenFile`, `appsDir`, `credentialsDir` or `recordsDir` that is
+not where it mounts them.)
+
+On Kubernetes the controllers run as the release's own ServiceAccount, which the chart
+gives, by name, `get`, `update` and `patch` on the ConfigMaps they report into
+(`<release>-github-status`, `<release>-slack-status`) and `get` and `update` on the Secret
+`<release>-github-links` the GitHub controller rewrites as it checks links. The Apps' keys
+and the console's records are volumes, so there is no permission to read any other Secret
+or ConfigMap. The policy's `exchange` must admit that ServiceAccount (the controllers read
+the console as it), and the audit installation's `workloadIdentity` need map the one
+account. More than one replica needs `config.ports.adapter: dynamodb`, and the chart
+refuses it otherwise. See [Connect a GitHub organisation](../connect/github-organisation.md)
+and [Connect a Slack workspace](../connect/slack-workspace.md).
+
+### Moving from v1.62 (three processes to one)
+
+1. **Kubernetes.** Move each controller's values into `config.controllers.github` /
+   `.slack` (present is on; the keys are the table above), fold
+   `controllerX.config.{policy,release,log,ports,platform,preset,adapters,audit,probes}`
+   into the one `config`'s own keys, and delete `controllerGithub` and `controllerSlack`
+   (refused at render if left). Three Deployments become one; the controllers' ServiceAccounts,
+   ConfigMaps (`<release>-github-roster-config`, `<release>-slack-roster-config`) and
+   PodDisruptionBudgets go. [Chart README](../../charts/sluis/README.md#moving-from-v162-three-deployments-to-one).
+2. **Policy.** `exchange` must admit the one ServiceAccount where it admitted
+   `<release>-github-roster` and `<release>-slack-roster`, and the audit installation's
+   `workloadIdentity` map likewise ([runbook](../operations/runbook.md)).
+3. **AWS Lambda.** One function, one role, one document: [AWS Lambda](../integrations/aws-lambda.md#moving-a-v162-installation-to-v163-one-function) and [deployment on AWS](../deployment/aws.md#moving-from-v162-three-functions-to-one). Keep `FunctionName: "<prefix>-http"` to avoid replacing the function, role, log group and API integration.
+4. **Telemetry.** The controllers' series report as `access-issuer`: a dashboard or alert that
+   selects `service_name` `github-roster` or `slack-roster` must select `access-issuer`.
+5. **Not yet.** A v2 `serve` document loads unchanged (no controllers); `sluis controller
+   github|slack` still work, deprecated, for this one release.
 
 ## Migrating from the access-issuer chart
 
 [0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md)
 replaces three binaries, three images and the `access-issuer` chart with **one
-binary, `sluis`, one image and one chart**. This is a breaking change
+binary, `sluis`, one image and one chart**. (This section is the v1.5x history; the `controllerGithub` and
+`controllerSlack` values and the `controller github|slack` commands it names were themselves
+replaced in v1.63 by one process: see [Moving from v1.62](#moving-from-v162-three-processes-to-one).) This is a breaking change
 in one release; nothing is kept as an alias.
 
 | Before | After |
@@ -953,6 +966,11 @@ longer sets them.
 
 ### The controllers
 
+The v1.62 and earlier `controller-github` and `controller-slack` documents' keys, which are
+the `controllers.github` and `controllers.slack` sections of the service document since v1.63
+(the keys other than `consoleURL`, `tokenFile`, `appsDir`, `credentialsDir`, `recordsDir`,
+`interval` and `console` are the service document's own):
+
 | Old variable | `controller-github` | `controller-slack` |
 |---|---|---|
 | `RELEASE_NAME` | `release` | `release` |
@@ -1030,8 +1048,9 @@ document (no `apiVersion`) keeps working with every one of them until it moves.
 | `console.origin`, `console.client` | `config.console.origin`, `config.console.client` (`console.mount` stays: it is the route's) |
 | `signingKey.rotation.*` | `config.signingKey.pollInterval`, `.activationDelay`, `.overlap` |
 | `audit.writer`, `.query`, `.audience`, `.forwardedForTrustedHops` | `config.audit.writer`, `.queryURL`, `.audience`, `.forwardedForTrustedHops` (`audit.token.*` stays: it is the chart's) |
-| `controllerGithub.interval`, `controllerGithub.actsIn` | `controllerGithub.config.interval`, `policy.controllers.github.enabledOrgs` |
-| `controllerSlack.interval`, `controllerSlack.actsIn` | `controllerSlack.config.interval`, `policy.controllers.slack.enabledWorkspaces` |
+| `controllerGithub.interval`, `controllerGithub.actsIn` | `config.controllers.github.interval`, `policy.controllers.github.enabledOrgs` (v1.62's `controllerGithub.config.interval`) |
+| `controllerSlack.interval`, `controllerSlack.actsIn` | `config.controllers.slack.interval`, `policy.controllers.slack.enabledWorkspaces` (v1.62's `controllerSlack.config.interval`) |
+| `controllerGithub.*`, `controllerSlack.*` (v1.62) | removed in v1.63: [`config.controllers`](#controllers-the-github-and-slack-controllers) |
 | `telemetry.otlpEndpoint` | removed: `OTEL_*` is set on the pods by the platform |
 
 The old values are removed, not aliased: an old key is refused at render
@@ -1069,7 +1088,7 @@ from.
 ## The repository
 
 sluis ships from one repository: the `sluis` chart with
-its one image — `serve`, `controller github` and `controller slack` are its subcommands — `sluisctl`, the GitHub Action, the Go module and the TypeScript
+its one image — `serve` runs the controllers; `controller github` and `controller slack` are deprecated subcommands, removed in the next release — `sluisctl`, the GitHub Action, the Go module and the TypeScript
 package, all stamped with one tag. Shared Go packages —
 the backends, the policy engine, the verifiers, the exchange — are
 importable behind interfaces.
