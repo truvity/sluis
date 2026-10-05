@@ -65,36 +65,11 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 
 ---
-# Source: sluis/templates/clusters-configmap.yaml
-# The clusters whose workloads may exchange a ServiceAccount token for one
-# of this issuer's, each verified against the key set that cluster
-# publishes for itself.
-#
-# Nothing here is a secret: a name and two URLs per cluster. That is the
-# whole point — the alternative is a kubeconfig per cluster held by the
-# service whose design is to hold almost no credential.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-clusters
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-data:
-  clusters.yaml: |
-    clusters:
-      - name: "example-cluster"
-        issuer: "https://oidc.eu-example-1.example/id/EXAMPLE"
-        jwksUri: "https://oidc.eu-example-1.example/id/EXAMPLE/keys"
-
----
 # Source: sluis/templates/configmap.yaml
 # What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped. The binary validates it against
-# schemas/config/serve.schema.json at start, and values.schema.json
-# holds the values to the same schema before this renders.
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/serve.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -107,10 +82,9 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/serve/v2
     audit:
       tokenFile: /var/run/audit/token
-    exchange:
-      clustersFile: /var/run/access-issuer/clusters.yaml
     inCluster: true
     issuerURL: https://issuer.example
     lifetimes:
@@ -120,7 +94,8 @@ data:
       token: 1h
     listen:
       address: :8080
-    policyDir: /var/run/access-issuer/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     probes:
       address: :7070
     recovery:
@@ -147,14 +122,16 @@ metadata:
     app.kubernetes.io/component: controller-github
 data:
   # What `sluis controller github --config` reads: `controllerGithub.config`, as the values give
-  # it. The binary validates it against schemas/config/controller-github.schema.json.
+  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-github.schema.json.
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/controller-github/v2
     appsDir: /var/run/github-roster/apps
     audit:
       tokenFile: /var/run/audit/token
     consoleURL: http://sluis.default.svc:8080/console
     interval: 15m
-    policyDir: /var/run/github-roster/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     recordsDir: /var/run/github-roster/records
     tokenFile: /var/run/secrets/github-roster/token
 
@@ -172,21 +149,24 @@ metadata:
     app.kubernetes.io/component: controller-slack
 data:
   # What `sluis controller slack --config` reads: `controllerSlack.config`, as the values give
-  # it. The binary validates it against schemas/config/controller-slack.schema.json.
+  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-slack.schema.json.
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/controller-slack/v2
     audit:
       tokenFile: /var/run/audit/token
     consoleURL: http://sluis.default.svc:8080/console
     credentialsDir: /var/run/slack-roster/credentials
     interval: 15m
-    policyDir: /var/run/slack-roster/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     recordsDir: /var/run/slack-roster/workspaces
     tokenFile: /var/run/secrets/slack-roster/token
 
 ---
 # Source: sluis/templates/policy-configmap.yaml
-# The declared layer of the policy — the same file the hub reads, and the
-# same schema. See docs/reference/policy.md.
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -198,10 +178,12 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 data:
   policy.yaml: |
-    # The version belongs to the chart, not to the values: the loader
-    # refuses a document whose version it does not know, so a policy
-    # written without one is a service that will not start.
-    version: 1
+    apiVersion: sluis.truvity.github.io/policy/v2
+    exchange:
+      clusters:
+      - issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+        jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+        name: example-cluster
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -432,9 +414,11 @@ spec:
         app.kubernetes.io/name: sluis-github-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 7d9c36de48203a8ab483c65a8ef87a28bba5e1583f3cd60cc7b3ecfc9a9682e8
-        # The bindings are read at start, like the service's policy.
-        checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
+        # One checksum per document this process reads: its own, and the
+        # policy. A change to the service's or the other controller's
+        # document does not restart it.
+        checksum/config: 2656869426ec0865da7a4cc89596931567b728927483402e7b59cb87c5d618e1
+        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-github-roster
       securityContext:
@@ -453,7 +437,7 @@ spec:
           args:
             - controller
             - github
-            - --config=/etc/sluis/controller-github.yaml
+            - --config=/etc/sluis/config/config.yaml
           ports:
             - name: health
               containerPort: 7070
@@ -466,11 +450,10 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/controller-github.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
               readOnly: true
             - name: policy
-              mountPath: /var/run/github-roster/policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/github-roster
@@ -551,9 +534,11 @@ spec:
         app.kubernetes.io/name: sluis-slack-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 5058d520ea883fa37eec0328cf541ec9103753ce3373620b44b432d340180427
-        # The bindings are read at start, like the service's policy.
-        checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
+        # One checksum per document this process reads: its own, and the
+        # policy. A change to the service's or the other controller's
+        # document does not restart it.
+        checksum/config: b48bfc5ce7e08886d79a5b153f11f4961e8cbc8d2bdc9faf6e1b6f36891160d6
+        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis-slack-roster
       securityContext:
@@ -572,7 +557,7 @@ spec:
           args:
             - controller
             - slack
-            - --config=/etc/sluis/controller-slack.yaml
+            - --config=/etc/sluis/config/config.yaml
           ports:
             - name: health
               containerPort: 7070
@@ -585,11 +570,10 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/controller-slack.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
               readOnly: true
             - name: policy
-              mountPath: /var/run/slack-roster/policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/slack-roster
@@ -658,14 +642,12 @@ spec:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
       annotations:
-        # A configuration change is a rollout: the file is read at start.
-        checksum/config: 9acd5ee05144b250ffdda2237ddeaa6b6719e90e40be4e4eefaba86ae72dd526
-        # A policy change is a rollout: the file is read at start.
-        checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
-        # A federated cluster is read once at start. A row added without a
-        # rollout is a cluster whose workloads go on being refused, with
-        # nothing to see but an error naming the wrong cause.
-        checksum/clusters: 137423e4d6623f391e68ab91981ae128f045cfe43ac6764f71b2b7b716fc2983
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads, and no other: a change
+        # to a controller's own document does not restart the service.
+        checksum/config: b73271132709ac328ca21b923abc0def2728ad80f386c3b9924c60276d411f52
+        checksum/policy: 9909eca423d3080cb9a8538d9e143b48ef12798afd703ad5562657bc38b316e5
     spec:
       serviceAccountName: sluis
       securityContext:
@@ -686,25 +668,23 @@ spec:
               containerPort: 8080
             - name: health
               containerPort: 7070
-          # The whole of the configuration is the file: `config`, rendered as it
-          # stands. The environment carries only the secrets that file names.
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config.yaml
+            - --config=/etc/sluis/config/config.yaml
           volumeMounts:
+            # Directories, never a subPath: a document is one file in its own
+            # ConfigMap's directory.
             - name: config
-              mountPath: /etc/sluis/config.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
+              readOnly: true
+            - name: policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
-              readOnly: true
-            - name: policy
-              mountPath: /var/run/access-issuer/policy
-              readOnly: true
-            - name: clusters
-              mountPath: /var/run/access-issuer/clusters.yaml
-              subPath: clusters.yaml
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -741,9 +721,6 @@ spec:
         - name: tmp
           emptyDir: {}
         
-        - name: clusters
-          configMap:
-            name: sluis-clusters
 
 ---
 # Source: sluis/templates/signing-key.yaml

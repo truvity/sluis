@@ -5,8 +5,13 @@
 # this render pins.
 config:
   issuerURL: https://access.example
+# The workspaces the Apps are declared for are the policy's: the service
+# refuses an App for a workspace nobody declares.
+policy:
   slack:
-    catalogueFile: /var/run/access-issuer/slack-apps-catalogue.yaml
+    workspaces:
+      acme: {}
+      globex: {}
 slackApps:
   - id: sync
     workspace: acme

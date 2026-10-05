@@ -271,7 +271,7 @@ token minted for one is no proof at the other:
 
 | Door | Audience | Set in |
 |---|---|---|
-| Token exchange (`/token`) | the `audience` of the AWS federation file | `exchange.awsFile` of the `http` config |
+| Token exchange (`/token`) | `exchange.aws.audience` of the policy document | the policy document |
 | The console's API (a controller's bearer) | `console.awsAudience`, default `<issuerURL>/console` | the `http` config |
 
 The controllers request the console audience: `console.auth.aws.audience` in the
@@ -282,8 +282,14 @@ The issuer refuses to start with the same value for both doors.
 # http config
 console:
   awsAudience: https://sluis.example/console   # optional: this is the default
+```
+
+```yaml
+# the policy document
 exchange:
-  awsFile: /var/task/config/aws.yaml           # audience: sluis-exchange, the accounts
+  aws:
+    audience: sluis-exchange
+    accounts: [...]
 ```
 
 ```yaml
@@ -308,7 +314,7 @@ Absent, the controller reads `tokenFile`, as on Kubernetes. Three things must ag
 
    So a controller role can mint a console bearer and nothing for token exchange.
    Only a role that is meant to exchange gets the exchange audience.
-2. **The issuer.** The `http` function's `exchange.awsFile` lists the account
+2. **The issuer.** The policy document's `exchange.aws.accounts` lists the account
    (`issuer` from `aws iam get-outbound-web-identity-federation-info`). The console
    door uses the same accounts with `console.awsAudience`.
 3. **The policy.** The role is entitled to what the policy's `aws` matchers say,

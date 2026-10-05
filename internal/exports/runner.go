@@ -242,7 +242,7 @@ func (r *Runner) once(ctx context.Context, spec Spec, failures int) bool {
 func (r *Runner) watch(ctx context.Context, wakes []chan struct{}) {
 	prefixes := map[string][]int{}
 	for i := range r.Specs {
-		for _, prefix := range r.Specs[i].Prefixes() {
+		for _, prefix := range Prefixes(r.Specs[i]) {
 			prefixes[prefix] = append(prefixes[prefix], i)
 		}
 	}

@@ -149,7 +149,7 @@ RBAC on `serviceaccounts/token` for that one account
 
 **Controllers.** `githubRoster.enabled` and `slackRoster.enabled` are both off by
 default, and a GitHub organisation or Slack workspace they know is a dry run
-until listed in `config.enabledOrgs` / `config.enabledWorkspaces`; see
+until listed in `policy.controllers.github.enabledOrgs` / `policy.controllers.slack.enabledWorkspaces`; see
 [the runbook](runbook.md#enabling-a-slack-workspace).
 
 From there each connection is one guide: a

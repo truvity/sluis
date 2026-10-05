@@ -107,7 +107,7 @@ the same reason every other grant lives here.
    controller* below. Its first pass reports on the GitHub page what it
    WOULD do; read it.
 7. **Enable the organisation** by adding its login to
-   `githubRoster.config.enabledOrgs`. That is a reviewed change, and the next pass acts.
+   `policy.controllers.github.enabledOrgs`. That is a reviewed change, and the next pass acts.
    Remove an organisation from `enabledOrgs` before removing it from the policy: the
    chart refuses to render an `enabledOrgs` entry the policy does not bind.
 
@@ -119,11 +119,14 @@ so the cluster's egress policy must allow it.
 The controller is a second process from the same chart:
 
 ```yaml
-githubRoster:
+controllerGithub:
   enabled: true
   config:
     consoleURL: http://access-issuer.access.svc:8080/console   # this release's own Service
-    enabledOrgs: []     # born disabled: nothing is changed until an organisation is listed
+policy:
+  controllers:
+    github:
+      enabledOrgs: []   # born disabled: nothing is changed until an organisation is listed
 exchange:
   clusters:
     - name: prod        # this cluster: the service verifies the controller's token against its key set

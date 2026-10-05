@@ -46,7 +46,8 @@ const (
 const (
 	// EnvRole is the function's role: http, github or slack. Required.
 	EnvRole = "SLUIS_ROLE"
-	// EnvConfigFile is the configuration file's path in the zip.
+	// EnvConfigFile is the configuration file's path in the zip: the
+	// spelling before SLUIS_CONFIG (config.EnvConfig), read when that is unset.
 	EnvConfigFile = "SLUIS_CONFIG_FILE"
 	// DefaultConfigFile is where the deploy tooling puts it.
 	DefaultConfigFile = "/var/task/config/sluis.yaml"
@@ -67,7 +68,10 @@ type Function struct {
 // Open assembles the role the environment names. getenv is the process's.
 func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
 	role := strings.TrimSpace(getenv(EnvRole))
-	file := strings.TrimSpace(getenv(EnvConfigFile))
+	file := strings.TrimSpace(getenv(config.EnvConfig))
+	if file == "" {
+		file = strings.TrimSpace(getenv(EnvConfigFile))
+	}
 	if file == "" {
 		file = DefaultConfigFile
 	}

@@ -127,70 +127,11 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 
 ---
-# Source: sluis/templates/aws-configmap.yaml
-# The AWS accounts whose IAM roles may exchange their outbound identity
-# federation token for one of this issuer's, each verified against the key
-# set that account's issuer publishes.
-#
-# Nothing here is a secret: an account, a name and a URL per row.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-aws
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-data:
-  aws.yaml: |
-    audience: "https://access.example"
-    maxAge: "3m"
-    accounts:
-      - account: "111122223333"
-        name: "apps"
-        issuer: "https://example-id.tokens.sts.global.api.aws"
-        orgId: "o-example1234"
-        algs:
-          - "ES384"
-      - account: "444455556666"
-        name: "data"
-        issuer: "https://other-id.tokens.sts.global.api.aws"
-        jwksUri: "https://keys.example/jwks.json"
-
----
-# Source: sluis/templates/clusters-configmap.yaml
-# The clusters whose workloads may exchange a ServiceAccount token for one
-# of this issuer's, each verified against the key set that cluster
-# publishes for itself.
-#
-# Nothing here is a secret: a name and two URLs per cluster. That is the
-# whole point — the alternative is a kubeconfig per cluster held by the
-# service whose design is to hold almost no credential.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-clusters
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-data:
-  clusters.yaml: |
-    clusters:
-      - name: "example-cluster"
-        issuer: "https://oidc.eu-example-1.example/id/EXAMPLE"
-        jwksUri: "https://oidc.eu-example-1.example/id/EXAMPLE/keys"
-      - name: "example-edge"
-        issuer: "https://edge.example"
-
----
 # Source: sluis/templates/configmap.yaml
 # What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped. The binary validates it against
-# schemas/config/serve.schema.json at start, and values.schema.json
-# holds the values to the same schema before this renders.
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/serve.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -203,6 +144,7 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/serve/v2
     audit:
       audience: audit
       forwardedForTrustedHops: 1
@@ -214,22 +156,25 @@ data:
     console:
       client: access-console
       origin: https://access.example
+    directory:
+      workspaces:
+      - admin: admin@acme.example
+        backend: google
+        id: C0acme
+        keyFile: /var/run/access-issuer/directory/acme/service-account.json
+        serve:
+        - acme.example
+        syncGroups:
+        - engineering@acme.example
+      - admin: admin@globex.example
+        backend: google
+        keyFile: /var/run/access-issuer/directory/globex/key.json
     exchange:
       audience: access-exchange
-      awsFile: /var/run/access-issuer/aws.yaml
-      clustersFile: /var/run/access-issuer/clusters.yaml
     freshness:
       freshnessWindow: 20m
       probeInterval: 2m
       refreshInterval: 10m
-    github:
-      catalogueFile: /var/run/access-issuer/github-apps-catalogue.yaml
-      owners:
-      - acme
-      - globex
-      runnerTiers:
-      - preview
-      - stable
     inCluster: true
     issuerURL: https://access.example
     lifetimes:
@@ -250,8 +195,8 @@ data:
       secretFile: /var/run/access-issuer/oauth-client/secret
       secretKey: secret
       secretName: sign-in-client
-    overlayFile: /var/run/access-issuer/directory/overlay.yaml
-    policyDir: /var/run/access-issuer/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     probes:
       address: :9090
     publicRootURL: https://access.example
@@ -287,19 +232,17 @@ metadata:
     app.kubernetes.io/component: controller-github
 data:
   # What `sluis controller github --config` reads: `controllerGithub.config`, as the values give
-  # it. The binary validates it against schemas/config/controller-github.schema.json.
+  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-github.schema.json.
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/controller-github/v2
     appsDir: /var/run/github-roster/apps
     audit:
       tokenFile: /var/run/audit/token
       writer: http://audit.access-issuer.svc:8080
-    catalogueFile: /var/run/github-roster/github-apps-catalogue.yaml
     consoleURL: http://sluis.identity.svc:8443/console
-    enabledOrgs:
-    - acme
-    - globex
     interval: 5m
-    policyDir: /var/run/github-roster/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     recordsDir: /var/run/github-roster/records
     tokenFile: /var/run/secrets/github-roster/token
 
@@ -317,89 +260,24 @@ metadata:
     app.kubernetes.io/component: controller-slack
 data:
   # What `sluis controller slack --config` reads: `controllerSlack.config`, as the values give
-  # it. The binary validates it against schemas/config/controller-slack.schema.json.
+  # it, with the apiVersion the chart writes. The binary validates it against schemas/config/controller-slack.schema.json.
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/controller-slack/v2
     audit:
       tokenFile: /var/run/audit/token
     consoleURL: http://sluis.identity.svc:8443/console
     credentialsDir: /var/run/slack-roster/credentials
-    enabledWorkspaces:
-    - acme
-    - globex-eu
     interval: 5m
-    policyDir: /var/run/slack-roster/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     recordsDir: /var/run/slack-roster/workspaces
     tokenFile: /var/run/secrets/slack-roster/token
 
 ---
-# Source: sluis/templates/github-apps-catalogue-configmap.yaml
-# The GitHub Apps this deployment declares, created and installed by an
-# operator from the console. Nothing here is a secret: names, permissions
-# and grants. The keys GitHub hands over are kept by the service, in the
-# Secret <release>-github-catalogue-apps.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-github-apps-catalogue
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-data:
-  catalogue.yaml: |
-    apps:
-    - description: Dependency updates
-      events:
-      - pull_request
-      grants:
-      - group: all:platform:engineer
-        permissions:
-          contents: read
-        repositories:
-        - '*'
-      id: dependency-bot
-      installation: selected
-      name: acme-dependency-bot
-      org: acme
-      permissions:
-        contents: write
-        pull_requests: write
-      public: false
-
----
-# Source: sluis/templates/overlay-configmap.yaml
-# Declared workspaces (the overlay). This service reads the file at start
-# and on change; the credential of each is the named Secret, mounted
-# beside it.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-overlay
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-data:
-  overlay.yaml: |
-    workspaces:
-      - id: "C0acme"
-        backend: "google"
-        admin: "admin@acme.example"
-        keyFile: /var/run/access-issuer/directory/keys/acme-directory-key/service-account.json
-        serve:
-          - "acme.example"
-        syncGroups:
-          - "engineering@acme.example"
-      - backend: "google"
-        admin: "admin@globex.example"
-        keyFile: /var/run/access-issuer/directory/keys/globex-directory-key/key.json
-
----
 # Source: sluis/templates/policy-configmap.yaml
-# The declared layer of the policy — the same file the hub reads, and the
-# same schema. See docs/reference/policy.md.
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -411,10 +289,30 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 data:
   policy.yaml: |
-    # The version belongs to the chart, not to the values: the loader
-    # refuses a document whose version it does not know, so a policy
-    # written without one is a service that will not start.
-    version: 1
+    apiVersion: sluis.truvity.github.io/policy/v2
+    apps:
+      github:
+        catalogue:
+        - description: Dependency updates
+          events:
+          - pull_request
+          grants:
+          - group: all:platform:engineer
+            permissions:
+              contents: read
+            repositories:
+            - '*'
+          id: dependency-bot
+          installation: selected
+          name: acme-dependency-bot
+          org: acme
+          permissions:
+            contents: write
+            pull_requests: write
+          public: false
+        runnerTiers:
+        - preview
+        - stable
     clients:
       access-console:
         kind: confidential
@@ -436,10 +334,49 @@ data:
         requires:
         - all:platform:engineer
         secret: reports-client
-        secretKey: oidc-secret
+    controllers:
+      github:
+        enabledOrgs:
+        - acme
+        - globex
+      slack:
+        enabledWorkspaces:
+        - acme
+        - globex-eu
+    exchange:
+      aws:
+        accounts:
+        - account: "111122223333"
+          algs:
+          - ES384
+          issuer: https://example-id.tokens.sts.global.api.aws
+          name: apps
+          orgId: o-example1234
+        - account: "444455556666"
+          issuer: https://other-id.tokens.sts.global.api.aws
+          jwksUri: https://keys.example/jwks.json
+          name: data
+        audience: https://access.example
+        maxAge: 3m
+      clusters:
+      - issuer: https://oidc.eu-example-1.example/id/EXAMPLE
+        jwksUri: https://oidc.eu-example-1.example/id/EXAMPLE/keys
+        name: example-cluster
+      - issuer: https://edge.example
+        name: example-edge
+      github:
+        owners:
+        - acme
+        - globex
     github:
-      acme: {}
-      globex: {}
+      acme:
+        members:
+        - all:platform:engineer
+      globex:
+        teams:
+          platform:
+            members:
+            - all:platform:engineer
     groups:
       all:access-roster:operator:
         members:
@@ -685,16 +622,11 @@ spec:
         app.kubernetes.io/name: sluis-github-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 5e3a7bb6a3e282ede5cbacc58b4f3005a4aad6780b5cfb5995e76137b73a4047
-        # The bindings are read at start, like the service's policy.
-        checksum/policy: 4334667020a271ed931a79630e4a9cec0fdb653b0d32ca08fa56691032449d0f
-        # The catalogue is read once at start, like the service's own copy
-        # (see deployment.yaml): this controller keeps no App keys and mints
-        # no installation tokens, so it reads the catalogue for one reason
-        # only — the groups its grants name are not reported as unconsumed
-        # — and a changed catalogue should still restart it, the same way a
-        # changed policy does.
-        checksum/github-apps-catalogue: 2376849e83985171bcdc2cf3ce4be8acec036d1fc6184a8c5377edd975d91471
+        # One checksum per document this process reads: its own, and the
+        # policy. A change to the service's or the other controller's
+        # document does not restart it.
+        checksum/config: a4f81b525bc3504854659d1c95dae9639e88bf7f550a74aade382e91b119abbc
+        checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
     spec:
       serviceAccountName: sluis-github-roster
       securityContext:
@@ -713,7 +645,7 @@ spec:
           args:
             - controller
             - github
-            - --config=/etc/sluis/controller-github.yaml
+            - --config=/etc/sluis/config/config.yaml
           ports:
             - name: health
               containerPort: 7070
@@ -726,11 +658,10 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/controller-github.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
               readOnly: true
             - name: policy
-              mountPath: /var/run/github-roster/policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/github-roster
@@ -740,10 +671,6 @@ spec:
               readOnly: true
             - name: records
               mountPath: /var/run/github-roster/records
-              readOnly: true
-            - name: github-apps-catalogue
-              mountPath: /var/run/github-roster/github-apps-catalogue.yaml
-              subPath: catalogue.yaml
               readOnly: true
             
             - name: audit-token
@@ -785,9 +712,6 @@ spec:
           configMap:
             name: sluis-github-orgs
             optional: true
-        - name: github-apps-catalogue
-          configMap:
-            name: sluis-github-apps-catalogue
         
         - name: audit-token
           projected:
@@ -839,9 +763,11 @@ spec:
         app.kubernetes.io/name: sluis-slack-roster
         app.kubernetes.io/instance: sluis
       annotations:
-        checksum/config: 37c02c1e19632258b454f785a414690a73119ee90bbf96f5ef1f6e22e007f85b
-        # The bindings are read at start, like the service's policy.
-        checksum/policy: 4334667020a271ed931a79630e4a9cec0fdb653b0d32ca08fa56691032449d0f
+        # One checksum per document this process reads: its own, and the
+        # policy. A change to the service's or the other controller's
+        # document does not restart it.
+        checksum/config: fa0ae21b2c79a935f7678cc50acf5abcd421cfaf79411031dcafda17d991db18
+        checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
     spec:
       serviceAccountName: sluis-slack-roster
       securityContext:
@@ -860,7 +786,7 @@ spec:
           args:
             - controller
             - slack
-            - --config=/etc/sluis/controller-slack.yaml
+            - --config=/etc/sluis/config/config.yaml
           ports:
             - name: health
               containerPort: 7070
@@ -873,11 +799,10 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/controller-slack.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
               readOnly: true
             - name: policy
-              mountPath: /var/run/slack-roster/policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/slack-roster
@@ -957,23 +882,12 @@ spec:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
       annotations:
-        # A configuration change is a rollout: the file is read at start.
-        checksum/config: 7caa5292a1e95a80b32a8dac6212e99032410c9472902c215d0521736b5815ed
-        # A policy change is a rollout: the file is read at start.
-        checksum/policy: 4334667020a271ed931a79630e4a9cec0fdb653b0d32ca08fa56691032449d0f
-        # A federated cluster is read once at start. A row added without a
-        # rollout is a cluster whose workloads go on being refused, with
-        # nothing to see but an error naming the wrong cause.
-        checksum/clusters: 8c02e0dbcedcbe592c2694d29527c520d01853d867e6b49f9e887ac330f06302
-        # An AWS account is read once at start, for the same reason.
-        checksum/aws: 9d99a11bdb2a10146d76ea52f9c915671a84505041cb24e887ac328af9a4db11
-        # A declared workspace is read once at start, so a workspace added
-        # to the values without a rollout is one an operator can see in
-        # git and nowhere in the running service.
-        checksum/overlay: 4295d5b15dd2ae2dbdfee3957642fb4bdac606b18e07579ed0586d3e6e70546b
-        # The catalogue is read once at start, so an App declared without a
-        # rollout is one the console does not offer.
-        checksum/github-apps-catalogue: 2376849e83985171bcdc2cf3ce4be8acec036d1fc6184a8c5377edd975d91471
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads, and no other: a change
+        # to a controller's own document does not restart the service.
+        checksum/config: 040c70f6f0abd294097d23e7609eb775ea3a9e58e039f58c22888a5218d2ae17
+        checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
         example.com/scrape: "false"
     spec:
       serviceAccountName: issuer
@@ -995,11 +909,12 @@ spec:
               containerPort: 8443
             - name: health
               containerPort: 9090
-          # The whole of the configuration is the file: `config`, rendered as it
-          # stands. The environment carries only the secrets that file names.
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config.yaml
+            - --config=/etc/sluis/config/config.yaml
           env:
             - name: VALKEY_PASSWORD
               valueFrom:
@@ -1007,23 +922,16 @@ spec:
                   name: valkey-password
                   key: secret
           volumeMounts:
+            # Directories, never a subPath: a document is one file in its own
+            # ConfigMap's directory.
             - name: config
-              mountPath: /etc/sluis/config.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
+              readOnly: true
+            - name: policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
-              readOnly: true
-            - name: policy
-              mountPath: /var/run/access-issuer/policy
-              readOnly: true
-            - name: clusters
-              mountPath: /var/run/access-issuer/clusters.yaml
-              subPath: clusters.yaml
-              readOnly: true
-            - name: aws
-              mountPath: /var/run/access-issuer/aws.yaml
-              subPath: aws.yaml
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -1031,25 +939,17 @@ spec:
             - name: audit-token
               mountPath: /var/run/audit
               readOnly: true
-            - name: github-apps-catalogue
-              mountPath: /var/run/access-issuer/github-apps-catalogue.yaml
-              subPath: catalogue.yaml
-              readOnly: true
-            - name: overlay
-              mountPath: /var/run/access-issuer/directory/overlay.yaml
-              subPath: overlay.yaml
-              readOnly: true
-            - name: key-acme-directory-key
-              mountPath: /var/run/access-issuer/directory/keys/acme-directory-key
-              readOnly: true
-            - name: key-globex-directory-key
-              mountPath: /var/run/access-issuer/directory/keys/globex-directory-key
-              readOnly: true
             - name: client-secrets
               mountPath: /var/run/access-issuer/clients
               readOnly: true
             - name: secret-sign-in-client
               mountPath: /var/run/access-issuer/oauth-client
+              readOnly: true
+            - name: secret-acme-directory-key
+              mountPath: /var/run/access-issuer/directory/acme
+              readOnly: true
+            - name: secret-globex-directory-key
+              mountPath: /var/run/access-issuer/directory/globex
               readOnly: true
           livenessProbe:
             httpGet: { path: /healthz, port: health }
@@ -1096,24 +996,6 @@ spec:
                   audience: "audit"
                   expirationSeconds: 1800
                   path: token
-        - name: clusters
-          configMap:
-            name: sluis-clusters
-        - name: aws
-          configMap:
-            name: sluis-aws
-        - name: github-apps-catalogue
-          configMap:
-            name: sluis-github-apps-catalogue
-        - name: overlay
-          configMap:
-            name: sluis-overlay
-        - name: key-acme-directory-key
-          secret:
-            secretName: acme-directory-key
-        - name: key-globex-directory-key
-          secret:
-            secretName: globex-directory-key
         # One file per confidential client, named after the client id, so
         # the service resolves a secret by reading a path and never by
         # holding RBAC to read Secrets -- the same reason the signing key
@@ -1129,11 +1011,17 @@ spec:
               - secret:
                   name: reports-client
                   items:
-                    - key: oidc-secret
+                    - key: client-secret
                       path: reports
         - name: secret-sign-in-client
           secret:
             secretName: sign-in-client
+        - name: secret-acme-directory-key
+          secret:
+            secretName: acme-directory-key
+        - name: secret-globex-directory-key
+          secret:
+            secretName: globex-directory-key
       nodeSelector:
         kubernetes.io/os: linux
       tolerations:

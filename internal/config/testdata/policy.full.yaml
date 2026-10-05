@@ -1,0 +1,113 @@
+# Every key the policy document's schema has, set, and valid: the loader's
+# checks pass, and the type holds each key.
+apiVersion: sluis.truvity.github.io/policy/v2
+vocabulary:
+  scopes:
+    all: {}
+    prod: {sensitive: true}
+  things:
+    access-roster:
+      scopes: [all]
+      roles:
+        operator: [viewer]
+        viewer: []
+    shop:
+      scopes: [prod]
+      roles:
+        deployer: {implies: [], scopes: [prod]}
+groups:
+  all:access-roster:operator:
+    members: [ops@example.com]
+    matchers:
+      - service_account: {cluster: devel, namespace: access-issuer, name: access-issuer-recovery}
+      - github: {repository: example-org/infra, ref: refs/heads/main, workflow_ref: "example-org/infra/.github/workflows/*@refs/heads/main"}
+  all:access-roster:viewer:
+    matchers:
+      - aws: {account: "111122223333", role: sluis-github}
+      - email_domain: example.com
+  prod:shop:deployer:
+    matchers:
+      - email: ada@example.com
+claims:
+  prod:shop:deployer: {team: shop}
+lifetimes:
+  default: 4h
+  prod:shop:deployer: 1h
+resources:
+  https://shop.example:
+    display_name: Shop
+    requires: [prod:shop:deployer]
+    ttl_cap: 30m
+client_documents:
+  origins: [apps.example]
+  requires: [all:access-roster:viewer]
+clients:
+  access-console:
+    kind: public
+    redirects: [https://access.example/console/callback]
+    requires: [all:access-roster:viewer]
+    groups: all
+github:
+  example-org:
+    members: [all:access-roster:viewer]
+    teams:
+      platform: {members: [all:access-roster:operator], maintainers: [all:access-roster:operator]}
+    ignore: [bot@example.com]
+people:
+  ada: [ada@example.com, ada@other.example]
+slack:
+  workspaces:
+    example:
+      channels:
+        ops: {private: true, from: [all:access-roster:operator]}
+exchange:
+  clusters:
+    - {name: devel, issuer: "https://kubernetes.default.svc", jwksUri: "https://devel.example/openid/v1/jwks"}
+  aws:
+    audience: https://access.example
+    maxAge: 5m
+    accounts:
+      - account: "111122223333"
+        name: apps
+        issuer: https://example-id.tokens.sts.global.api.aws
+        jwksUri: https://example-id.tokens.sts.global.api.aws/.well-known/jwks.json
+        orgId: o-example
+        algs: [ES384]
+  github:
+    owners: [example-org]
+apps:
+  github:
+    runnerTiers: [small, large]
+    catalogue:
+      - id: renovate
+        org: example-org
+        name: example-org-renovate
+        description: Dependency updates
+        public: false
+        permissions: {contents: write, pull_requests: write}
+        events: [push]
+        installation: selected
+        grants:
+          - {group: "all:access-roster:operator", repositories: ["*"], permissions: {contents: read}}
+  slack:
+    catalogue:
+      - {id: alerts, workspace: example, name: example-alerts, description: Alerts, botScopes: ["chat:write"]}
+controllers:
+  github: {enabledOrgs: [example-org]}
+  slack: {enabledWorkspaces: [example]}
+exports:
+  - name: slack-app.alerts
+    source: slack-app
+    app: alerts
+    namespace: kernel
+    path: slack-apps/alerts
+    properties: {bot_token: bot_token}
+    interval: 1h
+  - source: runner-app
+    tier: large
+    org: example-org
+    namespace: kernel
+    path: arc/example
+  - source: bundle
+    bundle: github-apps
+    path: sluis-backup/github-apps

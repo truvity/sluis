@@ -30,9 +30,9 @@ metadata:
 ---
 # Source: sluis/templates/configmap.yaml
 # What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped. The binary validates it against
-# schemas/config/serve.schema.json at start, and values.schema.json
-# holds the values to the same schema before this renders.
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/serve.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -45,26 +45,9 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/serve/v2
     audit:
       tokenFile: /var/run/audit/token
-    exports:
-    - app: alerts
-      namespace: kernel
-      path: slack-apps/alerts
-      source: slack-app
-    - namespace: devel
-      org: truvity
-      path: arc/truvity
-      source: runner-app
-      tier: preview
-    - bundle: github-apps
-      namespace: kernel
-      path: sluis-backup/github-apps
-      source: bundle
-    github:
-      runnerTiers:
-      - preview
-      - stable
     inCluster: true
     issuerURL: https://access.example
     lifetimes:
@@ -74,7 +57,8 @@ data:
       token: 1h
     listen:
       address: :8080
-    policyDir: /var/run/access-issuer/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     ports:
       adapter: dynamodb
       dynamodb:
@@ -102,8 +86,6 @@ data:
       activationDelay: 15m
       file: /var/run/access-issuer/signing-key/tls.key
       pollInterval: 30s
-    slack:
-      catalogueFile: /var/run/access-issuer/slack-apps-catalogue.yaml
     store: kubernetes
 
 ---
@@ -128,8 +110,9 @@ data:
 
 ---
 # Source: sluis/templates/policy-configmap.yaml
-# The declared layer of the policy — the same file the hub reads, and the
-# same schema. See docs/reference/policy.md.
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -141,35 +124,36 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 data:
   policy.yaml: |
-    # The version belongs to the chart, not to the values: the loader
-    # refuses a document whose version it does not know, so a policy
-    # written without one is a service that will not start.
-    version: 1
-
----
-# Source: sluis/templates/slack-apps-catalogue-configmap.yaml
-# The Slack Apps this deployment declares, created from the console with a
-# throwaway app configuration token and installed by an owner of the
-# workspace. Nothing here is a secret: ids, workspace keys and scopes. The
-# credentials Slack hands over are kept by the service, in the Secret
-# <release>-slack-catalogue-apps.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sluis-slack-apps-catalogue
-  labels:
-    app.kubernetes.io/name: sluis
-    app.kubernetes.io/instance: sluis
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-data:
-  catalogue.yaml: |
+    apiVersion: sluis.truvity.github.io/policy/v2
     apps:
-    - botScopes:
-      - chat:write
-      - chat:write.public
-      id: alerts
-      workspace: truvity
+      github:
+        runnerTiers:
+        - preview
+        - stable
+      slack:
+        catalogue:
+        - botScopes:
+          - chat:write
+          - chat:write.public
+          id: alerts
+          workspace: truvity
+    exports:
+    - app: alerts
+      namespace: kernel
+      path: slack-apps/alerts
+      source: slack-app
+    - namespace: devel
+      org: truvity
+      path: arc/truvity
+      source: runner-app
+      tier: preview
+    - bundle: github-apps
+      namespace: kernel
+      path: sluis-backup/github-apps
+      source: bundle
+    slack:
+      workspaces:
+        truvity: {}
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -300,12 +284,12 @@ spec:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
       annotations:
-        # A configuration change is a rollout: the file is read at start.
-        checksum/config: 36237107a4b667e813a8cff4fc90eb8d1f52dda9a3b180c432a969540d3b4d29
-        # A policy change is a rollout: the file is read at start.
-        checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
-        # Likewise the Slack catalogue: read once at start.
-        checksum/slack-apps-catalogue: 5c679c0f5008dd5f4487aeb11433ef28feae89720aeab5e6131bd432a56cfadd
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads, and no other: a change
+        # to a controller's own document does not restart the service.
+        checksum/config: 1d8555c0bb57d27292ebbfd264e730621b6e49561661f9c7547b955a95c56192
+        checksum/policy: f17f0038a19a4b72fe2c2ed70d5458fc8a11890925ebd6fbf1b1f539fc8b9354
     spec:
       serviceAccountName: sluis
       securityContext:
@@ -326,21 +310,23 @@ spec:
               containerPort: 8080
             - name: health
               containerPort: 7070
-          # The whole of the configuration is the file: `config`, rendered as it
-          # stands. The environment carries only the secrets that file names.
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config.yaml
+            - --config=/etc/sluis/config/config.yaml
           volumeMounts:
+            # Directories, never a subPath: a document is one file in its own
+            # ConfigMap's directory.
             - name: config
-              mountPath: /etc/sluis/config.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
+              readOnly: true
+            - name: policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
-              readOnly: true
-            - name: policy
-              mountPath: /var/run/access-issuer/policy
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -351,10 +337,6 @@ spec:
               readOnly: true
             - name: openbao-token
               mountPath: /var/run/openbao
-              readOnly: true
-            - name: slack-apps-catalogue
-              mountPath: /var/run/access-issuer/slack-apps-catalogue.yaml
-              subPath: catalogue.yaml
               readOnly: true
           livenessProbe:
             httpGet: { path: /healthz, port: health }
@@ -399,9 +381,6 @@ spec:
                   audience: "sluis"
                   expirationSeconds: 3600
                   path: token
-        - name: slack-apps-catalogue
-          configMap:
-            name: sluis-slack-apps-catalogue
 
 ---
 # Source: sluis/templates/signing-key.yaml

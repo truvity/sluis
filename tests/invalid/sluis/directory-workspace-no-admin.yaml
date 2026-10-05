@@ -1,8 +1,8 @@
 # A declared workspace needs admin.
-# error: at '/directory/workspaces/0': missing property 'admin'
+# error: at '/config/directory/workspaces/0': missing property 'admin'
 config:
   issuerURL: https://issuer.example
-directory:
-  workspaces:
-  - backend: google
-    secretName: acme-key
+  directory:
+    workspaces:
+    - backend: google
+      keyFile: /var/run/keys/acme/key.json

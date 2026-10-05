@@ -16,35 +16,12 @@ spec:
       labels:
         {{- include "sluis.selectorLabels" . | nindent 8 }}
       annotations:
-        # A configuration change is a rollout: the file is read at start.
-        checksum/config: {{ toYaml .Values.config | sha256sum }}
-        # A policy change is a rollout: the file is read at start.
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads, and no other: a change
+        # to a controller's own document does not restart the service.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/policy: {{ include (print $.Template.BasePath "/policy-configmap.yaml") . | sha256sum }}
-        {{- if .Values.exchange.clusters }}
-        # A federated cluster is read once at start. A row added without a
-        # rollout is a cluster whose workloads go on being refused, with
-        # nothing to see but an error naming the wrong cause.
-        checksum/clusters: {{ include (print $.Template.BasePath "/clusters-configmap.yaml") . | sha256sum }}
-        {{- end }}
-        {{- if .Values.exchange.aws.accounts }}
-        # An AWS account is read once at start, for the same reason.
-        checksum/aws: {{ include (print $.Template.BasePath "/aws-configmap.yaml") . | sha256sum }}
-        {{- end }}
-        {{- if .Values.directory.workspaces }}
-        # A declared workspace is read once at start, so a workspace added
-        # to the values without a rollout is one an operator can see in
-        # git and nowhere in the running service.
-        checksum/overlay: {{ include (print $.Template.BasePath "/overlay-configmap.yaml") . | sha256sum }}
-        {{- end }}
-        {{- if .Values.githubApps.catalogue }}
-        # The catalogue is read once at start, so an App declared without a
-        # rollout is one the console does not offer.
-        checksum/github-apps-catalogue: {{ include (print $.Template.BasePath "/github-apps-catalogue-configmap.yaml") . | sha256sum }}
-        {{- end }}
-        {{- if .Values.slackApps }}
-        # Likewise the Slack catalogue: read once at start.
-        checksum/slack-apps-catalogue: {{ include (print $.Template.BasePath "/slack-apps-catalogue-configmap.yaml") . | sha256sum }}
-        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -68,11 +45,12 @@ spec:
               containerPort: {{ include "sluis.port" . }}
             - name: health
               containerPort: {{ include "sluis.healthPort" . }}
-          # The whole of the configuration is the file: `config`, rendered as it
-          # stands. The environment carries only the secrets that file names.
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config.yaml
+            - --config=/etc/sluis/config/config.yaml
           {{- /* Beside the secrets, the SDK variables telemetry.otlp names (ADR 0006). */}}
           {{- $otel := include "sluis.otelEnv" (dict "root" . "service" "access-issuer") }}
           {{- if or .Values.secretEnv $otel }}
@@ -92,9 +70,13 @@ spec:
             {{- end }}
           {{- end }}
           volumeMounts:
+            # Directories, never a subPath: a document is one file in its own
+            # ConfigMap's directory.
             - name: config
-              mountPath: /etc/sluis/config.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
+              readOnly: true
+            - name: policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
@@ -105,49 +87,11 @@ spec:
               mountPath: /var/run/access-issuer/{{ $name }}
               readOnly: true
             {{- end }}
-            - name: policy
-              mountPath: /var/run/access-issuer/policy
-              readOnly: true
-            {{- if .Values.exchange.clusters }}
-            - name: clusters
-              mountPath: /var/run/access-issuer/clusters.yaml
-              subPath: clusters.yaml
-              readOnly: true
-            {{- end }}
-            {{- if .Values.exchange.aws.accounts }}
-            - name: aws
-              mountPath: /var/run/access-issuer/aws.yaml
-              subPath: aws.yaml
-              readOnly: true
-            {{- end }}
             - name: tmp
               mountPath: /tmp
             {{- include "sluis.auditMounts" (dict "root" . "cfg" .Values.config) | nindent 12 }}
             {{- with include "sluis.exportsMounts" . }}
             {{- . | nindent 12 }}
-            {{- end }}
-            {{- if .Values.githubApps.catalogue }}
-            - name: github-apps-catalogue
-              mountPath: /var/run/access-issuer/github-apps-catalogue.yaml
-              subPath: catalogue.yaml
-              readOnly: true
-            {{- end }}
-            {{- if .Values.slackApps }}
-            - name: slack-apps-catalogue
-              mountPath: /var/run/access-issuer/slack-apps-catalogue.yaml
-              subPath: catalogue.yaml
-              readOnly: true
-            {{- end }}
-            {{- if .Values.directory.workspaces }}
-            - name: overlay
-              mountPath: /var/run/access-issuer/directory/overlay.yaml
-              subPath: overlay.yaml
-              readOnly: true
-            {{- range .Values.directory.workspaces }}
-            - name: key-{{ .secretName }}
-              mountPath: /var/run/access-issuer/directory/keys/{{ .secretName }}
-              readOnly: true
-            {{- end }}
             {{- end }}
             {{- if include "sluis.confidentialClients" . }}
             - name: client-secrets
@@ -203,36 +147,6 @@ spec:
         {{- include "sluis.auditVolumes" (dict "root" . "cfg" .Values.config) | nindent 8 }}
         {{- with include "sluis.exportsVolumes" . }}
         {{- . | nindent 8 }}
-        {{- end }}
-        {{- if .Values.exchange.clusters }}
-        - name: clusters
-          configMap:
-            name: {{ include "sluis.fullname" . }}-clusters
-        {{- end }}
-        {{- if .Values.exchange.aws.accounts }}
-        - name: aws
-          configMap:
-            name: {{ include "sluis.fullname" . }}-aws
-        {{- end }}
-        {{- if .Values.githubApps.catalogue }}
-        - name: github-apps-catalogue
-          configMap:
-            name: {{ include "sluis.fullname" . }}-github-apps-catalogue
-        {{- end }}
-        {{- if .Values.slackApps }}
-        - name: slack-apps-catalogue
-          configMap:
-            name: {{ include "sluis.fullname" . }}-slack-apps-catalogue
-        {{- end }}
-        {{- if .Values.directory.workspaces }}
-        - name: overlay
-          configMap:
-            name: {{ include "sluis.fullname" . }}-overlay
-        {{- range .Values.directory.workspaces }}
-        - name: key-{{ .secretName }}
-          secret:
-            secretName: {{ .secretName }}
-        {{- end }}
         {{- end }}
         {{- if include "sluis.confidentialClients" . }}
         # One file per confidential client, named after the client id, so

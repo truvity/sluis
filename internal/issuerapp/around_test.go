@@ -31,10 +31,10 @@ clients:
 `), 0o600); err != nil {
 		t.Fatalf("write the policy: %v", err)
 	}
-	cfg, err := issuerapp.FromConfig(&config.Serve{
-		IssuerURL: "https://issuer.example", PolicyDir: policyDir,
+	cfg, err := issuerapp.FromConfig(withPolicy(t, &config.Serve{
+		IssuerURL: "https://issuer.example", Policy: &config.PolicyRef{File: filepath.Join(policyDir, "policy.yaml")},
 		Listen: &config.Address{Address: ":0"}, Probes: &config.Address{Address: ":0"},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}

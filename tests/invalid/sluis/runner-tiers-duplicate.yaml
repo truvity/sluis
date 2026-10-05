@@ -1,8 +1,10 @@
-# githubRunnerApps.tiers are unique.
-# error: at '/config/github/runnerTiers': items at
+# Runner tiers are unique.
+# error: at '/policy/apps/github/runnerTiers': items at
 config:
   issuerURL: https://issuer.example
-  github:
-    runnerTiers:
-    - stable
-    - stable
+policy:
+  apps:
+    github:
+      runnerTiers:
+      - stable
+      - stable

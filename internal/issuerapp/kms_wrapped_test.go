@@ -102,7 +102,7 @@ func TestKMSWrappedConfigIsValidated(t *testing.T) {
 		"rotate soon": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
 			KeyID: "k", StateSecretFile: "/s", RotateEvery: d("10m")}}, "longer than prepublish"},
 	} {
-		_, err := issuerapp.FromConfig(&config.Serve{IssuerURL: "https://issuer.example", SigningKey: tc.key})
+		_, err := issuerapp.FromConfig(withPolicy(t, &config.Serve{IssuerURL: "https://issuer.example", SigningKey: tc.key}))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: %v, want %q", name, err, tc.want)
 		}

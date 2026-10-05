@@ -685,7 +685,7 @@ limited to one a minute per organisation under the records' version, and
 audited.
 
 Every pass derives everything, for every bound organisation, and changes
-only those listed in `controllerGithub.config.enabledOrgs`: an organisation is born
+only those listed in `policy.controllers.github.enabledOrgs`: an organisation is born
 disabled, and its report is the dry run an operator reads before enabling
 it. Removal is the part that needs one more question than addition.
 Absence from a holders list is never evidence — an unreadable workspace
@@ -875,7 +875,7 @@ manages is never probed.
 invites or removes no guest, removes nobody from a public channel, never
 converts a channel's visibility, never unarchives, never creates a second
 channel under another name, and never removes anyone the directory has not
-vouched for. It acts only in workspaces listed in `controllerSlack.config.enabledWorkspaces`; every
+vouched for. It acts only in workspaces listed in `policy.controllers.slack.enabledWorkspaces`; every
 other workspace is derived and reported.
 
 **A read is whole or it is nothing.** A missing `users:read.email` scope, a

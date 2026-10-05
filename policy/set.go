@@ -324,15 +324,31 @@ func readOne(name string) (Policy, error) {
 	if err != nil {
 		return Policy{}, fmt.Errorf("read %s: %w", name, err)
 	}
-	parse := Parse
-	if IsAccessDocument(data) {
-		parse = ParseAccess
-	}
-	p, err := parse(data)
+	p, err := ParseLayer(data)
 	if err != nil {
 		return Policy{}, fmt.Errorf("%s: %w", name, err)
 	}
 	return p, nil
+}
+
+// ParseLayer reads one declared layer: a policy file, or an access document,
+// which is reshaped into one ([ParseAccess]).
+func ParseLayer(data []byte) (Policy, error) {
+	if IsAccessDocument(data) {
+		return ParseAccess(data)
+	}
+	return Parse(data)
+}
+
+// Merge folds one more layer into p, by the rules a directory of layers is
+// merged by: every table by key, and a key declared twice is an error naming
+// from. It is what a renderer layering a policy out of several sources calls;
+// a process loads the one document a render wrote.
+func (p *Policy) Merge(other Policy, from string) error {
+	if p.Version == 0 {
+		p.Version = 1
+	}
+	return p.mergeLayer(other, from)
 }
 
 // mergeLayer folds one declared file into another. Every table merges by

@@ -54,14 +54,14 @@ clients:
 	}
 	f := &config.Serve{
 		IssuerURL: "https://issuer.example",
-		PolicyDir: policyDir,
+		Policy:    &config.PolicyRef{File: filepath.Join(policyDir, "policy.yaml")},
 		Listen:    &config.Address{Address: ":0"},
 		Probes:    &config.Address{Address: ":0"},
 	}
 	for _, c := range change {
 		c(f)
 	}
-	cfg, err := issuerapp.FromConfig(f)
+	cfg, err := issuerapp.FromConfig(withPolicy(t, f))
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestImpossibleConfigurationIsRefused(t *testing.T) {
 	} {
 		f := &config.Serve{IssuerURL: "https://issuer.example"}
 		tc.change(f)
-		if _, err := issuerapp.FromConfig(f); err == nil {
+		if _, err := issuerapp.FromConfig(withPolicy(t, f)); err == nil {
 			t.Errorf("%s was accepted", tc.name)
 		}
 	}
@@ -240,7 +240,7 @@ func TestImpossibleConfigurationIsRefused(t *testing.T) {
 	// not at load, because there are now two ways to supply it: an
 	// address to dial, or a directory in this process. Neither
 	// is a failure on its own; having neither is.
-	cfg, err := issuerapp.FromConfig(&config.Serve{IssuerURL: "https://issuer.example"})
+	cfg, err := issuerapp.FromConfig(withPolicy(t, &config.Serve{IssuerURL: "https://issuer.example"}))
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -327,10 +327,10 @@ func TestAMissingSigningKeyStopsTheService(t *testing.T) {
 		"a path that is not there": filepath.Join(policyDir, "absent.key"),
 		"a file that is not a key": mustWrite(t, policyDir, "junk.key", "hello"),
 	} {
-		cfg, err := issuerapp.FromConfig(&config.Serve{
-			IssuerURL: "https://issuer.example", PolicyDir: policyDir,
+		cfg, err := issuerapp.FromConfig(withPolicy(t, &config.Serve{
+			IssuerURL: "https://issuer.example", Policy: &config.PolicyRef{File: filepath.Join(policyDir, "policy.yaml")},
 			SigningKey: &config.SigningKey{File: value},
-		})
+		}))
 		if err != nil {
 			t.Fatalf("FromConfig: %v", err)
 		}

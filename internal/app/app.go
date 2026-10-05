@@ -29,7 +29,6 @@ import (
 	"net/url"
 	"os"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -38,7 +37,6 @@ import (
 	"github.com/truvity/sluis/backend"
 	"github.com/truvity/sluis/backend/google"
 	"github.com/truvity/sluis/frontend"
-	"github.com/truvity/sluis/gen/directory/v1/directoryv1connect"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/config"
@@ -68,7 +66,6 @@ import (
 //
 // Built from the service's configuration file (see [FromConfig]).
 type Config struct {
-	apiPort     int
 	consolePort int
 	healthPort  int
 
@@ -86,8 +83,6 @@ type Config struct {
 	recoveryEnabled  bool
 	recoveryAccount  string
 	recoveryAudience string
-	apiAudience      string
-	consumersPath    string
 	loginDirectory   bool
 	adminPassword    string
 	// recoveryFile is where the password is read from instead of
@@ -105,13 +100,16 @@ type Config struct {
 	forwardedIssuer   string
 	signOutURL        string
 	forwardedAudience string
-	policyPath        string
-	overlayPath       string
-	store             string
-	release           string
-	oauthSecretName   string
-	oauthIDKey        string
-	oauthSecretKey    string
+	// policy is the policy document, nil for the built-in policy (or the
+	// demonstration's).
+	policy *config.PolicyDocument
+	// workspaces are the directories the deployment declares.
+	workspaces      []config.DirectoryWorkspace
+	store           string
+	release         string
+	oauthSecretName string
+	oauthIDKey      string
+	oauthSecretKey  string
 	// oauthDeclared is the client declared by file, value or variable: set
 	// off-cluster, where there is no Secret to read it from.
 	oauthDeclared settings.OAuthClient
@@ -127,15 +125,16 @@ type Config struct {
 	holdWindow                   time.Duration
 	logLevel                     slog.Level
 	// githubRunnerTiers are the tiers an operator may create a runner App
-	// for, from github.runnerTiers. Empty keeps none.
+	// for, from the policy's apps.github.runnerTiers. Empty keeps none.
 	githubRunnerTiers []string
-	// githubCatalogue is every GitHub App the deployment declares, from
-	// the file github.catalogueFile names. Empty declares none.
+	// githubCatalogue is every GitHub App the deployment declares, the
+	// policy's apps.github.catalogue. Empty declares none.
 	githubCatalogue *catalogue.Catalogue
-	// slackCatalogue is every Slack App the deployment declares, from the
-	// file slack.catalogueFile names. Empty declares none.
+	// slackCatalogue is every Slack App the deployment declares, the
+	// policy's apps.slack.catalogue. Empty declares none.
 	slackCatalogue *slackcatalogue.Catalogue
-	// exports are the secrets copied out of the service, from `exports`.
+	// exports are the secrets copied out of the service, the policy's
+	// `exports`.
 	exports []exports.Spec
 }
 
@@ -143,17 +142,16 @@ type Config struct {
 // them (it runs the loops and mounts the console on the issuer's listener), so
 // they are not configuration.
 const (
-	defaultAPIPort     = 8080
 	defaultConsolePort = 8081
 	defaultHealthPort  = 7070
 )
 
-// FromConfig builds the hub's settings from the service's configuration file,
-// which the caller has already held to its schema. What a schema cannot say is
-// checked here, before anything starts.
-func FromConfig(f *config.Serve) (Config, error) {
+// FromConfig builds the hub's settings from the service document and the
+// policy document, which the caller has already held to their schemas and
+// checks. p is nil for the built-in policy (or the demonstration's). What a
+// schema cannot say is checked here, before anything starts.
+func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	c := Config{
-		apiPort:       defaultAPIPort,
 		consolePort:   defaultConsolePort,
 		healthPort:    defaultHealthPort,
 		demo:          f.Demo,
@@ -164,10 +162,8 @@ func FromConfig(f *config.Serve) (Config, error) {
 		recoveryEnabled:  true,
 		recoveryAccount:  "directory-roster-recovery",
 		recoveryAudience: "directory-roster-recovery",
-		apiAudience:      "directory-roster",
 		loginDirectory:   true,
-		policyPath:       f.PolicyDir,
-		overlayPath:      f.OverlayFile,
+		policy:           p,
 		store:            orDefault(f.Store, storeMemory),
 		release:          orDefault(f.Release, "sluis"),
 	}
@@ -179,9 +175,8 @@ func FromConfig(f *config.Serve) (Config, error) {
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
 		c.recoveryFile = r.PasswordFile
 	}
-	if a := f.API; a != nil {
-		c.apiAudience = orDefault(a.Audience, c.apiAudience)
-		c.consumersPath = a.ConsumersFile
+	if d := f.Directory; d != nil {
+		c.workspaces = d.Workspaces
 	}
 	if l := f.Login; l != nil {
 		if l.Directory != nil {
@@ -274,35 +269,18 @@ func FromConfig(f *config.Serve) (Config, error) {
 	default:
 		return Config{}, fmt.Errorf("store: %q is neither %q nor %q", c.store, storeMemory, storeKubernetes)
 	}
-	var catalogueFile, slackFile string
-	if g := f.GitHub; g != nil {
-		catalogueFile = g.CatalogueFile
-		for _, tier := range g.RunnerTiers {
-			tier = strings.TrimSpace(tier)
-			switch {
-			case tier == "" || slices.Contains(c.githubRunnerTiers, tier):
-			case !runnerapp.ValidTier(tier):
-				return Config{}, fmt.Errorf("github.runnerTiers: %q is not a tier: lower-case letters, digits and dashes, at most 16", tier)
-			default:
-				c.githubRunnerTiers = append(c.githubRunnerTiers, tier)
-			}
+	for _, tier := range p.RunnerTiers() {
+		if tier = strings.TrimSpace(tier); tier != "" && !slices.Contains(c.githubRunnerTiers, tier) {
+			c.githubRunnerTiers = append(c.githubRunnerTiers, tier)
 		}
 	}
-	if f.Slack != nil {
-		slackFile = f.Slack.CatalogueFile
-	}
-	// A malformed catalogue stops the service: an App created from a wrong
-	// declaration holds the wrong permissions, and nothing here can change
-	// them afterwards.
-	if c.githubCatalogue, err = catalogue.Load(catalogueFile); err != nil {
-		return Config{}, fmt.Errorf("github.catalogueFile: %w", err)
-	}
-	// The same for the Slack catalogue: a wrong scope list creates an App
-	// only a reinstall by the workspace's owner can change.
-	if c.slackCatalogue, err = slackcatalogue.Load(slackFile); err != nil {
-		return Config{}, fmt.Errorf("slack.catalogueFile: %w", err)
-	}
-	if err = c.readExports(f); err != nil {
+	// The catalogues were held to their rules, and to the policy's groups and
+	// workspaces, when the policy document was loaded: an App created from a
+	// wrong declaration holds the wrong permissions, and nothing here can
+	// change them afterwards.
+	c.githubCatalogue = p.GitHubCatalogue()
+	c.slackCatalogue = p.SlackCatalogue()
+	if err = c.readExports(p); err != nil {
 		return Config{}, err
 	}
 	// A demonstration run declares its own tiers and catalogue, unless the
@@ -431,65 +409,6 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger
 	}, nil
 }
 
-// consumers builds the API listener's guard.
-//
-// The listener answers everything the hub knows about every company it
-// serves, so who may call it is not a detail. Outside a cluster there is
-// nothing to verify a token against and the listener is open — a
-// development posture, said out loud at start rather than discovered. In
-// a cluster it admits exactly the ServiceAccounts the deployment names,
-// and a deployment that names none admits nobody, because a hub that
-// answered everyone by default would be one forgotten value away from
-// serving a directory to the whole cluster.
-func consumers(
-	ctx context.Context, cfg Config, kept stores, declared *server.ConsumerFile, log *slog.Logger,
-) *server.Consumers {
-	if kept.reviewToken == nil {
-		log.WarnContext(ctx, "the API listener is unauthenticated: nothing here can verify a "+
-			"ServiceAccount token, so anything that can reach it gets every account and group "+
-			"this hub reads", "port", cfg.apiPort)
-		return nil
-	}
-	// One spelling for who may call: the mounted file. It
-	// replaced a comma-separated environment list, which could name a
-	// consumer and could not describe what that consumer may ask -- and
-	// keeping both would have been one place to add a consumer and
-	// another place to forget to.
-	allowed := make([]string, 0)
-	grants := map[string]*server.Grant{}
-	if declared != nil {
-		for i := range declared.Consumers {
-			consumer := &declared.Consumers[i]
-			subject := access.ServiceAccountSubject(consumer.Namespace, consumer.ServiceAccount)
-			allowed = append(allowed, subject)
-			if grant := consumer.Grant(); grant != nil {
-				grants[subject] = grant
-			}
-		}
-	}
-	if len(allowed) == 0 {
-		log.WarnContext(ctx, "the API listener admits nobody: no consumers are declared", "port", cfg.apiPort)
-	} else {
-		// The scoped ones by name: a grant an operator cannot see at
-		// start is one they have to reconstruct from a ConfigMap when a
-		// consumer says it cannot see something.
-		scoped := make([]string, 0, len(grants))
-		for subject := range grants {
-			scoped = append(scoped, subject)
-		}
-		sort.Strings(scoped)
-		log.InfoContext(ctx, "the API listener admits the declared consumers",
-			"audience", cfg.apiAudience, "consumers", allowed, "scoped", scoped)
-	}
-	return &server.Consumers{
-		Review:   kept.reviewToken,
-		Audience: cfg.apiAudience,
-		Allowed:  allowed,
-		Grants:   grants,
-		Log:      log,
-	}
-}
-
 // githubOrgStore is what the console asks of where organisations are kept.
 type githubOrgStore interface {
 	server.GitHubConnections
@@ -601,11 +520,11 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 	return out, nil
 }
 
-// readExports validates `exports` against what this deployment declares, so
-// that an export naming an App nobody declared stops the service at start
-// rather than copying nothing for ever.
-func (c *Config) readExports(f *config.Serve) error {
-	if len(f.Exports) == 0 {
+// readExports reads the policy's `exports`, already held to what the policy
+// declares, so that an export naming an App nobody declared stops the service
+// at start rather than copying nothing for ever.
+func (c *Config) readExports(p *config.PolicyDocument) error {
+	if p == nil || len(p.Exports) == 0 {
 		return nil
 	}
 	if c.demo {
@@ -613,19 +532,8 @@ func (c *Config) readExports(f *config.Serve) error {
 	}
 	// Where the copies go is `ports.export`, or else the secrets adapter's
 	// `export/` (SSM `/sluis/export/`); start refuses when neither exists.
-	declared := exports.Declared{
-		SlackApps:   []string{},
-		GitHubApps:  []string{},
-		RunnerTiers: append([]string{}, c.githubRunnerTiers...),
-	}
-	for _, a := range c.slackCatalogue.Apps {
-		declared.SlackApps = append(declared.SlackApps, a.ID)
-	}
-	for i := range c.githubCatalogue.Apps {
-		declared.GitHubApps = append(declared.GitHubApps, c.githubCatalogue.Apps[i].ID)
-	}
 	var err error
-	c.exports, err = exports.FromConfig(f.Exports, declared)
+	c.exports, err = exports.FromConfig(p.Exports, p.DeclaredForExports())
 	return err
 }
 
@@ -640,7 +548,6 @@ type App struct {
 	// fatal carries the one error that ends the process from outside a
 	// request: the audit installation refusing the catalogue after the start.
 	fatal   chan error
-	api     http.Handler
 	console http.Handler
 	health  http.Handler
 	ready   health.Dependency
@@ -683,9 +590,6 @@ func (a *App) AuditQuery() (queryURL, audience string) { return a.cfg.auditQuery
 func (a *App) AuditRequests(next http.Handler) http.Handler {
 	return server.AuditRequests(a.cfg.auditForwardedForTrustedHops, next)
 }
-
-// APIHandler is the DirectoryService listener, guarded.
-func (a *App) APIHandler() http.Handler { return a.api }
 
 // ConsoleHandler is the operator listener: services, login, the SPA.
 func (a *App) ConsoleHandler() http.Handler { return a.console }
@@ -795,7 +699,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		directory.UseCredentials(kept.credentials)
 	}
 
-	declared, err := declaredPolicy(cfg.policyPath, cfg.demo)
+	declared, err := declaredPolicy(cfg.policy, cfg.demo)
 	if err != nil {
 		return nil, err
 	}
@@ -815,19 +719,6 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 			"groups", odd,
 			"grant", "<scope>:<thing>:<role>",
 			"identity", "rung:<name>, emp:<slug>")
-	}
-
-	// A grant naming a group the policy does not declare would read as
-	// though somebody may ask for a token, and nobody could.
-	if undeclared := cfg.githubCatalogue.UndeclaredGroups(set.HasGroup); len(undeclared) > 0 {
-		return nil, fmt.Errorf("github.catalogueFile: grants name groups the policy does not declare: %s",
-			strings.Join(undeclared, "; "))
-	}
-
-	// An App declared for a workspace the policy does not name could never
-	// be installed: there is no connected workspace to install it into.
-	if err := cfg.slackCatalogue.CheckWorkspaces(set.SlackWorkspaceDeclared); err != nil {
-		return nil, fmt.Errorf("slack.catalogueFile: %w", err)
 	}
 
 	authorizer := access.NewAuthorizer(set, directory, cfg.holdWindow)
@@ -864,7 +755,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		log.InfoContext(ctx, "the hub's own sign-in is off: the ways in are a gateway that "+
 			"forwards an identity, and recovery. Connecting a directory is unaffected")
 	}
-	adopted, err := adoptDeclared(ctx, directory, cfg.overlayPath, log)
+	adopted, err := adoptDeclared(ctx, directory, cfg.workspaces, log)
 	if err != nil {
 		return nil, err
 	}
@@ -984,17 +875,6 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		UI:                      frontend.FS(),
 	})
 
-	apiMux := http.NewServeMux()
-	apiMux.Handle(directoryv1connect.NewDirectoryServiceHandler(server.NewDirectory(directory)))
-	// Loaded before the listener is built: a malformed grant is a
-	// start-up failure, because a hub that ignored one would run with a
-	// wider grant than the deployment declared.
-	declaredConsumers, err := server.LoadConsumers(cfg.consumersPath)
-	if err != nil {
-		return nil, err
-	}
-	apiHandler := consumers(ctx, cfg, kept, declaredConsumers, log).Middleware(apiMux)
-
 	// Readiness follows the snapshot store; liveness does not. A hub
 	// that cannot read a snapshot cannot answer anything, and saying
 	// ready through that is how a moved Valkey became a half-hour of
@@ -1006,14 +886,13 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	// this is one half of one deployment, and a line naming a service
 	// reads as a second one having started.
 	log.InfoContext(ctx, "the directory is assembled",
-		"api", cfg.apiPort, "console", cfg.consolePort, "health", cfg.healthPort,
+		"console", cfg.consolePort, "health", cfg.healthPort,
 		"demo", cfg.demo, "recovery", recoveryKind(recovery), "public", cfg.publicURL,
 		"signIn", cfg.loginDirectory, "cache", st.Name(), "store", cfg.store,
-		"version", version.String(), "policy", policySource(cfg.policyPath, cfg.demo))
+		"version", version.String(), "policy", policySource(cfg.policy, cfg.demo))
 
 	return &App{
 		fatal:   fatal,
-		api:     apiHandler,
 		console: consoleServer.Handler(),
 		health:  healthMux,
 		ready:   ready,
@@ -1036,7 +915,6 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 // until the context is done.
 func (a *App) Run(ctx context.Context) error {
 	group, gctx := errgroup.WithContext(ctx)
-	group.Go(func() error { return serve(gctx, a.cfg.apiPort, a.api, "api", a.log) })
 	group.Go(func() error { return serve(gctx, a.cfg.consolePort, a.console, "console", a.log) })
 	group.Go(func() error { return serve(gctx, a.cfg.healthPort, a.health, "health", a.log) })
 	group.Go(func() error { return a.RunLoops(gctx) })
@@ -1100,18 +978,24 @@ lifetimes:
   default: 12h
 `
 
-// declaredPolicy reads the deployment's policy. With none, a
-// demonstration run gets one rich enough to watch every mechanic work,
-// and anything else gets the built-in two groups.
-func declaredPolicy(path string, demonstration bool) (policy.Policy, error) {
-	switch {
-	case path != "":
-		return policy.LoadDeclared(path)
-	case demonstration:
-		return policy.Parse([]byte(demo.Policy))
-	default:
-		return policy.Parse([]byte(builtinPolicy))
+// declaredPolicy is the deployment's policy: the policy document's tables.
+// With none, a demonstration run gets one rich enough to watch every mechanic
+// work, and anything else gets the built-in two groups.
+func declaredPolicy(p *config.PolicyDocument, demonstration bool) (policy.Policy, error) {
+	if p != nil {
+		return p.Policy, nil
 	}
+	return FallbackPolicy(demonstration)
+}
+
+// FallbackPolicy is what a service whose document names no policy decides by:
+// the demonstration's policy under `demo`, and the built-in two groups
+// otherwise. The composition root hands it to [config.LoadConfig].
+func FallbackPolicy(demonstration bool) (policy.Policy, error) {
+	if demonstration {
+		return policy.Parse([]byte(demo.Policy))
+	}
+	return policy.Parse([]byte(builtinPolicy))
 }
 
 // adoptDeclared brings up the workspaces the deployment owns.
@@ -1123,15 +1007,15 @@ func declaredPolicy(path string, demonstration bool) (policy.Policy, error) {
 // hub that refuses to start is visible in one place; a hub that quietly
 // serves less than it was configured to is visible nowhere.
 func adoptDeclared(
-	ctx context.Context, directory *hub.Hub, path string, log *slog.Logger,
+	ctx context.Context, directory *hub.Hub, workspaces []config.DirectoryWorkspace, log *slog.Logger,
 ) (map[string]bool, error) {
 	adopted := map[string]bool{}
-	overlay, err := hub.LoadOverlay(path)
-	if err != nil {
-		return nil, err
-	}
-	for i := range overlay.Workspaces {
-		declared := &overlay.Workspaces[i]
+	for i := range workspaces {
+		w := &workspaces[i]
+		declared := &hub.Declared{
+			ID: w.ID, Backend: w.Backend, Admin: w.Admin, KeyFile: w.KeyFile,
+			Serve: w.Serve, SyncGroups: w.SyncGroups,
+		}
 		reader, err := openBackend(ctx, declared)
 		if err != nil {
 			return nil, fmt.Errorf("declared workspace %q: %w", declared.Backend+"/"+declared.Admin, err)
@@ -1303,10 +1187,10 @@ func seedDemo(ctx context.Context, directory *hub.Hub, publicURL string, log *sl
 }
 
 // policySource says where the policy came from, for the startup line.
-func policySource(path string, demonstration bool) string {
+func policySource(p *config.PolicyDocument, demonstration bool) string {
 	switch {
-	case path != "":
-		return path
+	case p != nil:
+		return "declared"
 	case demonstration:
 		return "demonstration"
 	default:

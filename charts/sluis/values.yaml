@@ -242,9 +242,11 @@ config:
   probes:
     # liveness/readiness only.
     address: ":7070"
-  # Where the chart mounts what it renders. Change one and the chart
-  # refuses until the mount agrees.
-  policyDir: /var/run/access-issuer/policy
+  # The policy document the chart renders (`policy`, beside `exchange`,
+  # `githubApps.catalogue` and `slackApps`) and mounts. Change the path and
+  # the chart refuses until the mount agrees.
+  policy:
+    file: /etc/sluis/policy/policy.yaml
   signingKey:
     file: /var/run/access-issuer/signing-key/tls.key
     pollInterval: 30s
@@ -268,13 +270,21 @@ config:
   # Everything else the schema has is unset, which is the binary's default.
   # The commonest, as an example:
   #
-  #   exchange:
-  #     clustersFile: /var/run/access-issuer/clusters.yaml   # with `exchange.clusters`
   #   valkey:
   #     address: valkey.example.svc:6379
   #     passwordEnv: VALKEY_PASSWORD                          # with `secretEnv`
-  #   github:
-  #     owners: [example-org]
+  #   directory:
+  #     workspaces:                                           # each key with `secretMounts`
+  #       - backend: google
+  #         admin: admin@example.com
+  #         keyFile: /var/run/access-issuer/directory/example/key.json
+  #
+  # The chart writes the apiVersion of every document it renders
+  # (sluis.truvity.github.io/serve/v2, .../policy/v2), so
+  # neither `config` nor `policy` carries one. Whose CI tokens are verified
+  # (`policy.exchange.github.owners`), the runner tiers
+  # (`policy.apps.github.runnerTiers`) and the exports (`policy.exports`) are
+  # the policy document's.
 
 # Environment variables the config names, each from a Secret's key. This is
 # the only way a secret reaches the process: `valkey.passwordEnv`,
@@ -305,8 +315,9 @@ telemetry:
     extraEnv: {}
 
 # Secrets mounted read-only as directories, for a file the config names by
-# path: `oauthClient.idFile` and `oauthClient.secretFile`. Each key of the
-# Secret is a file under `mountPath`.
+# path: `oauthClient.idFile`, `oauthClient.secretFile` and a declared
+# workspace's `directory.workspaces[].keyFile`. Each key of the Secret is a
+# file under `mountPath`.
 #
 #   secretMounts:
 #     - secretName: google-oauth-client
@@ -323,7 +334,7 @@ secretMounts: []
 # network call except to the corporate directory. What that buys is not
 # only a hop — it is the end of a class of failure where two services
 # disagreed about the same person.
-directory:
+directory: {}
   # THESE OBJECTS ARE A PROJECTION, NOT A LIVE SOURCE. Writing a new value
   # into one does not rotate anything on a running pod, and nothing here
   # watches them. Which ones need a restart differs, so the rule is per
@@ -363,7 +374,7 @@ directory:
   # A SECOND COPY OF THE WORKSPACE CREDENTIAL, for recovery. Off unless
   # written out. DEPRECATED, with every `push` below: it needs
   # `config.store: kubernetes`. On a State adapter the service copies it
-  # itself, into OpenBao: `config.exports` with `source: bundle` (see `exports`
+  # itself, into OpenBao: `policy.exports` with `source: bundle` (see `exports`
   # below and docs/decisions/0034).
   #
   #   push:
@@ -398,32 +409,10 @@ directory:
   # A per-key mapping would stop matching silently and the copy would go
   # stale while still reporting healthy.
   # (absent by default — the block above is the shape)
-
-  # Declared (overlay) workspaces: how an existing installation moves
-  # (rendered into a file the config names as `overlayFile`: set it to
-  # /var/run/access-issuer/directory/overlay.yaml with this list)
   #
-  # See below:   # without a Connect step. Each names a Secret in this namespace holding
-  # a service-account key with domain-wide delegation and the admin to
-  # impersonate. Domains are discovered from the backend like any other
-  # workspace's. Declared workspaces are read-only in the console and win
-  # on conflict.
-  workspaces: []
-  #  - backend: google
-  #    admin: admin@example.com     # the account the key impersonates
-  #    secretName: example-sa-key   # a Secret in this namespace
-  #    # Which key of that Secret holds the JSON. Defaults to key.json.
-  #    secretKey: key.json
-  #    # id is optional: the credential opens exactly one tenant and that
-  #    # tenant knows its own id, so it is discovered. Supply it and
-  #    # adoption becomes a check — a credential that opens a different
-  #    # tenant is refused rather than quietly reading another company's
-  #    # directory.
-  #    id: C0example
-  #    # serve is optional: which of the tenant's domains this service
-  #    # answers for. Omitted, it serves every domain the tenant owns.
-  #    serve:
-  #      - example.com
+  # The workspaces a deployment declares are the config's
+  # (`config.directory.workspaces`), each key file mounted with
+  # `secretMounts`.
 
 # The key this service signs tokens with.
 #
@@ -505,9 +494,9 @@ exchange:
   # The audience a ServiceAccount token must be minted for is the config's
   # (`config.exchange.audience`; unset is the release name).
   #
-  # Each list below is rendered into a file the config names:
-  # `config.exchange.clustersFile` /var/run/access-issuer/clusters.yaml and
-  # `awsFile` /var/run/access-issuer/aws.yaml.
+  # Each list below is rendered into the policy document's `exchange`
+  # (exchange.clusters, exchange.aws), which every process reads. Write them
+  # here or in `policy.exchange`, not both.
 
   # The clusters whose workloads may exchange, each verified against the
   # key set that cluster publishes for its own ServiceAccount tokens.
@@ -564,17 +553,29 @@ exchange:
     #    orgId: ""                 # optional: require this AWS Organizations id
     #    algs: [ES384, RS256]      # default both; narrow, never widen
 
-# The declared policy: groups, claims, lifetimes, clients. One file,
-# shared with the hub. See docs/reference/policy.md.
+# The policy document (schemas/config/policy.schema.json), without its
+# apiVersion, which the chart writes: the access model's tables (groups,
+# claims, lifetimes, resources, client_documents, clients, github, people,
+# slack, vocabulary; see docs/reference/policy.md) and the decisions beside
+# them: `exchange` (whose tokens the exchange trusts), `apps` (runner tiers
+# and the App catalogues), `controllers` (what each controller may change)
+# and `exports`. The chart adds `exchange.clusters` and `exchange.aws` from
+# `exchange`, and the catalogues from `githubApps.catalogue` and `slackApps`.
+# One ConfigMap, <release>-policy, mounted at /etc/sluis/policy by the service
+# and both controllers: a change rolls all three.
 #
-# A confidential client names the Secret holding its secret:
+# A deployment that layers its policy (a directory of files, an access
+# document) renders it first, `sluisctl policy render <dir>`, and passes the
+# result here.
+#
+# A confidential client names the Secret holding its secret, under the key
+# client-secret:
 #
 #   policy:
 #     clients:
 #       my-console:
 #         kind: confidential
 #         secret: my-console-client   # a Secret in this namespace
-#         secretKey: client-secret    # its key; this is the default
 #         redirects: [https://console.example/oauth2/callback]
 #         requires: [operators]
 #         # What the sign-in page calls it. Optional, and PUBLIC: anyone
@@ -588,37 +589,14 @@ exchange:
 #         # A temporary interop shim for opkssh's own policy parser, which
 #         # splits `oidc:groups:<value>` on EVERY `:` -- see
 #         # docs/decisions/0015-a-per-audience-groups-delimiter-for-opkssh.md.
-#         # Rewrites this client's own `groups` claim from `env:ssh:admin`
-#         # to `env.ssh.admin`; every other client is unaffected.
 #         groups_delimiter: "."
+#     controllers:
+#       github: {enabledOrgs: [example-org]}
 #
 # Each one is projected to a file named after the client id, and the
 # service resolves a secret by reading that path -- never by holding RBAC
-# to read Secrets, which is the same reason the signing key is a file. A
-# client declared confidential whose Secret is missing cannot
-# authenticate, and says so in the log rather than at the token endpoint.
+# to read Secrets, which is the same reason the signing key is a file.
 policy: {}
-
-# The access document, as an alternative to writing `policy` out by hand: the
-# list-shaped sections an installation derives from its access matrix
-# (lifetimes, groups, people, slack, github, vocabulary, clients,
-# clientDocuments, resources) and `overlay`, the rows that are the
-# installation's own. The chart renders both to access.yaml beside the policy;
-# the binaries reshape it into a policy layer when they load it, so a group,
-# client or person is declared once, in `policy` or here, never in both. See
-# docs/reference/policy.md#the-access-document.
-#
-#   access:
-#     lifetimes: {default: 4h}
-#     groups:
-#       - name: env:ssh:admin
-#         emails: [ada@example.com]
-#   overlay:
-#     groups:
-#       all:access-roster:operator:
-#         matchers: [{service_account: {namespace: access-issuer, name: access-issuer-recovery}}]
-access: {}
-overlay: {}
 
 # The issuer's hostname on the gateway. Empty renders no route, which is
 # right for a hub reached by port-forward while it is being tried.
@@ -721,14 +699,13 @@ controllerGithub:
   #
   # `consoleURL` is where the controller reads the console: this release's
   # Service, `http://<full name>.<namespace>.svc:<port><console.mount>`,
-  # which the chart requires and prints when it is wrong. `enabledOrgs` is
-  # the organisations it CHANGES: every other organisation the policy binds
-  # is derived every pass and shown on the GitHub page with what would
-  # happen, and nothing is done to it. An organisation is born disabled, and
-  # enabling one is a reviewed change to this list. Each must be bound by
-  # the policy.
+  # which the chart requires and prints when it is wrong. The organisations it
+  # CHANGES are the policy document's `controllers.github.enabledOrgs`: every
+  # other organisation the policy binds is derived every pass and shown on the
+  # GitHub page with what would happen, and nothing is done to it.
   config:
-    policyDir: /var/run/github-roster/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     tokenFile: /var/run/secrets/github-roster/token
     appsDir: /var/run/github-roster/apps
     recordsDir: /var/run/github-roster/records
@@ -736,7 +713,6 @@ controllerGithub:
     audit:
       tokenFile: /var/run/audit/token
     # consoleURL: http://sluis.access.svc:8080/console
-    # enabledOrgs: []
   resources: {}
   # How many controller pods run. One is the default. More than one is safe
   # ONLY when the tick leases are shared, which needs
@@ -785,13 +761,11 @@ controllerSlack:
   # rendered as it stands (schemas/config/controller-slack.schema.json).
   #
   # `consoleURL` is where the controller reads the console, as for
-  # `controllerGithub`. `enabledWorkspaces` is the workspaces it CHANGES, by the
-  # policy's key: every other workspace the policy declares is derived every
-  # pass and shown on the Slack page with what would happen, and nothing is
-  # done to it. A workspace is born disabled, and enabling one is a reviewed
-  # change to this list. Each must be declared by the policy.
+  # `controllerGithub`. The workspaces it CHANGES are the policy document's
+  # `controllers.slack.enabledWorkspaces`.
   config:
-    policyDir: /var/run/slack-roster/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     tokenFile: /var/run/secrets/slack-roster/token
     credentialsDir: /var/run/slack-roster/credentials
     recordsDir: /var/run/slack-roster/workspaces
@@ -799,7 +773,6 @@ controllerSlack:
     audit:
       tokenFile: /var/run/audit/token
     # consoleURL: http://sluis.access.svc:8080/console
-    # enabledWorkspaces: []
   resources: {}
   # How many controller pods run. One is the default. More than one is safe
   # ONLY when the tick leases are shared, which needs
@@ -832,7 +805,7 @@ controllerSlack:
 # Runner Apps: the GitHub App a self-hosted runner scale set in one tier
 # registers with, one per organisation per tier, created by an operator on
 # the console's GitHub page (Apps). The tiers an operator may create one for
-# are the config's (`config.github.runnerTiers`, e.g. [preview, stable]);
+# are the policy document's (`policy.apps.github.runnerTiers`, e.g. [preview, stable]);
 # empty creates none. The service keeps every App in the Secret
 # `<release>-github-runner-apps`, an installed App as three keys named as
 # gha-runner-scale-set's githubConfigSecret names them --
@@ -845,8 +818,9 @@ controllerSlack:
 # create, then install. The service keeps every App in the Secret
 # `<release>-github-catalogue-apps`, an installed App as
 # `<id>.github_app_id`, `<id>.github_app_installation_id` and
-# `<id>.github_app_private_key` beside `<id>.record.json`. Read once at
-# start; a malformed entry stops the service. Needs
+# `<id>.github_app_private_key` beside `<id>.record.json`. Rendered into the
+# policy document's `apps.github.catalogue` (without `push`); a malformed entry
+# stops the service. Needs
 # `directory.store: kubernetes`. See docs/connect/github-apps-catalogue.md.
 githubApps:
   # Each entry:
@@ -866,7 +840,7 @@ githubApps:
   #       secretStore: {name: example-store, kind: SecretStore}
   #       remoteKey: platform/github-apps/iac
   #
-  # `push` is DEPRECATED (a State adapter uses `config.exports`, source
+  # `push` is DEPRECATED (a State adapter uses `policy.exports`, source
   # `github-app`). It is the one way a credential leaves this service. External
   # Secrets copies exactly the App's three property keys -- the id, the
   # installation id and the private key, never the whole Secret -- to the
@@ -953,8 +927,9 @@ slackState: {}
 # workspace approves in Slack). The service keeps every App in the Secret
 # `<release>-slack-catalogue-apps`: `<id>.client_id`, `<id>.client_secret`,
 # and, once installed, `<id>.slack_bot_token` beside `<id>.record.json`.
-# Read once at start; a malformed entry, or one for a workspace the policy's
-# `slack.workspaces` does not name, stops the service. Needs
+# Rendered into the policy document's `apps.slack.catalogue` (without `push`);
+# a malformed entry, or one for a workspace the policy's `slack.workspaces`
+# does not name, stops the service. Needs
 # `directory.store: kubernetes`. See docs/connect/slack-apps-catalogue.md.
 #
 # Each entry:
@@ -967,7 +942,7 @@ slackState: {}
 #       secretStore: {name: example-store, kind: SecretStore}
 #       remoteKey: platform/slack-apps/sync
 #
-# `push` is DEPRECATED (a State adapter uses `config.exports`, source
+# `push` is DEPRECATED (a State adapter uses `policy.exports`, source
 # `slack-app`). It copies exactly the App's bot token -- one key, never the client
 # secret, never the record -- to the store and path the entry names, for a
 # program that acts in the workspace as the bot and cannot ask the service
@@ -1009,7 +984,7 @@ audit:
 # What the chart mounts for the service's exports: copies of the secrets the
 # console keeps (a Slack App's bot token, the runner Apps, the recovery
 # bundles), made into OpenBao by the service itself, asynchronously and never
-# as a dependency (docs/decisions/0034). WHAT is copied is `config.exports`;
+# as a dependency (docs/decisions/0034). WHAT is copied is `policy.exports`;
 # WHERE, and how the service logs in, is `config.ports.export`. This is the
 # part that is not config: a CA bundle and a projected token, mounted where
 # the config's `caFile` and `auth.tokenFile` must say (the chart refuses

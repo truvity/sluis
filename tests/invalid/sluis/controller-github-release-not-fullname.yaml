@@ -2,8 +2,6 @@
 # error: controllerGithub.config.release must be "sluis"
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
 console:
   mount: /console
 exchange:

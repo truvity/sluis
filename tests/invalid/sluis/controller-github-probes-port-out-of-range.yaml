@@ -2,8 +2,6 @@
 # error: controllerGithub.config.probes.address: the port in ":70000" must be between 1 and 65535
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
 exchange:
   clusters:
     - name: example-cluster

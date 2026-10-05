@@ -30,9 +30,9 @@ metadata:
 ---
 # Source: sluis/templates/configmap.yaml
 # What `sluis serve --config` reads: `config`, as the values give it, with
-# nothing added, renamed or dropped. The binary validates it against
-# schemas/config/serve.schema.json at start, and values.schema.json
-# holds the values to the same schema before this renders.
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/serve.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -45,6 +45,7 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
+    apiVersion: sluis.truvity.github.io/serve/v2
     audit:
       tokenFile: /var/run/audit/token
     inCluster: true
@@ -56,7 +57,8 @@ data:
       token: 1h
     listen:
       address: :8080
-    policyDir: /var/run/access-issuer/policy
+    policy:
+      file: /etc/sluis/policy/policy.yaml
     probes:
       address: :7070
     recovery:
@@ -71,8 +73,9 @@ data:
 
 ---
 # Source: sluis/templates/policy-configmap.yaml
-# The declared layer of the policy — the same file the hub reads, and the
-# same schema. See docs/reference/policy.md.
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -84,10 +87,7 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 data:
   policy.yaml: |
-    # The version belongs to the chart, not to the values: the loader
-    # refuses a document whose version it does not know, so a policy
-    # written without one is a service that will not start.
-    version: 1
+    apiVersion: sluis.truvity.github.io/policy/v2
 
 ---
 # Source: sluis/templates/serviceaccount.yaml
@@ -218,10 +218,12 @@ spec:
         app.kubernetes.io/name: sluis
         app.kubernetes.io/instance: sluis
       annotations:
-        # A configuration change is a rollout: the file is read at start.
-        checksum/config: 86b0f4501e7e36fd0c20c933b81b9ac22335d44fab0ef667ec335dca59c141f4
-        # A policy change is a rollout: the file is read at start.
-        checksum/policy: 8bee7bc36a81deba29b9ff56f3b29ae793ec023e4c72225f85aaa243e5566a92
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads, and no other: a change
+        # to a controller's own document does not restart the service.
+        checksum/config: b73271132709ac328ca21b923abc0def2728ad80f386c3b9924c60276d411f52
+        checksum/policy: d8fee78c7b9f81d2a4c598c3b432515f29384a0f4a1fe3e4ccda3db4f307843b
     spec:
       serviceAccountName: sluis
       securityContext:
@@ -242,21 +244,23 @@ spec:
               containerPort: 8080
             - name: health
               containerPort: 7070
-          # The whole of the configuration is the file: `config`, rendered as it
-          # stands. The environment carries only the secrets that file names.
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config.yaml
+            - --config=/etc/sluis/config/config.yaml
           volumeMounts:
+            # Directories, never a subPath: a document is one file in its own
+            # ConfigMap's directory.
             - name: config
-              mountPath: /etc/sluis/config.yaml
-              subPath: config.yaml
+              mountPath: /etc/sluis/config
+              readOnly: true
+            - name: policy
+              mountPath: /etc/sluis/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
-              readOnly: true
-            - name: policy
-              mountPath: /var/run/access-issuer/policy
               readOnly: true
             - name: tmp
               mountPath: /tmp

@@ -1,6 +1,8 @@
-# A key under github does not know must fail the render, not be ignored.
-# error: at '/config/github': additional properties
+# A key under apps.github does not know must fail the render, not be ignored.
+# error: at '/policy/apps/github': additional properties
 config:
   issuerURL: https://issuer.example
-  github:
-    bogus: 1
+policy:
+  apps:
+    github:
+      bogus: 1

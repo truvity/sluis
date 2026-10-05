@@ -544,9 +544,9 @@ var servedGrantTypes = []string{
 // happen; worse, a reader auditing the issuer sees a flow we deliberately
 // do not serve. Metadata that lies is a defect in a service whose whole
 // job is to be trusted, so it is rewritten on the way out.
-// documentClientsEnabled is read per request rather than captured once:
-// the policy can be reloaded, and a document advertising support that has
-// since been switched off is the same defect this function exists to fix.
+// documentClientsEnabled is read per request rather than captured once, so
+// that discovery always says what the policy this instance decides by says:
+// the policy is immutable for an instance, and a change is a new one.
 func truthfulDiscovery(documentClientsEnabled func() bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != discoveryPath {

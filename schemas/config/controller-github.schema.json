@@ -21,7 +21,7 @@
       "type": "string"
     }
   },
-  "$id": "https://truvity.github.io/sluis/schemas/v1/config/controller-github.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/v2/config/controller-github.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
@@ -166,6 +166,10 @@
       },
       "type": "object"
     },
+    "apiVersion": {
+      "const": "sluis.truvity.github.io/controller-github/v2",
+      "description": "Which version of which document this is. sluis.truvity.github.io/controller-github/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/configuration.md)."
+    },
     "appsDir": {
       "default": "/var/run/github-roster/apps",
       "description": "One file per connected organisation: its App's credentials.",
@@ -187,11 +191,6 @@
         }
       },
       "type": "object"
-    },
-    "catalogueFile": {
-      "description": "The GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. A missing or malformed one is never fatal here.",
-      "minLength": 1,
-      "type": "string"
     },
     "console": {
       "additionalProperties": false,
@@ -225,14 +224,6 @@
     "consoleURL": {
       "$ref": "#/$defs/url",
       "description": "The console's API, which answers who holds a group."
-    },
-    "enabledOrgs": {
-      "description": "The organisations the controller changes. Every other bound organisation is derived and reported, and left alone. Each must be one the policy binds.",
-      "items": {
-        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$",
-        "type": "string"
-      },
-      "type": "array"
     },
     "interval": {
       "$ref": "#/$defs/duration",
@@ -275,10 +266,20 @@
       },
       "type": "object"
     },
-    "policyDir": {
-      "description": "The directory the policy is mounted at: the bindings are the policy's github table.",
-      "minLength": 1,
-      "type": "string"
+    "policy": {
+      "additionalProperties": false,
+      "description": "The policy document: the bindings are its github table, and its `controllers.github` section is what this controller may change.",
+      "properties": {
+        "file": {
+          "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "type": "object"
     },
     "ports": {
       "additionalProperties": false,
@@ -451,7 +452,7 @@
     }
   },
   "required": [
-    "policyDir",
+    "apiVersion",
     "consoleURL"
   ],
   "title": "sluis controller github",

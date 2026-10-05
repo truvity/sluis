@@ -5,8 +5,6 @@
 # render pins.
 config:
   issuerURL: https://access.example
-  github:
-    catalogueFile: /var/run/access-issuer/github-apps-catalogue.yaml
 githubApps:
   catalogue:
     - id: iac

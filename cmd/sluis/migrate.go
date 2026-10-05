@@ -160,7 +160,7 @@ func migrateCmd(out io.Writer, args []string) error {
 
 // openSide reads one configuration and opens its storage.
 func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string) (*kube.Client, error)) (migrate.Side, error) {
-	cfg, err := config.LoadServe(file)
+	cfg, err := config.Load[config.Serve](file)
 	if err != nil {
 		return migrate.Side{}, err
 	}

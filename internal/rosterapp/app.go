@@ -42,9 +42,10 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-// Config is both halves' configuration. Both are built from the one file the
-// service is given, so neither half grows a second way to be configured, and
-// the two cannot read the same key two ways.
+// Config is both halves' configuration. Both are built from the service
+// document the process is given and the one policy document it names, so
+// neither half grows a second way to be configured, and the two cannot read the
+// same key two ways.
 type Config struct {
 	Directory app.Config
 	Issuer    issuerapp.Config
@@ -57,23 +58,33 @@ type Config struct {
 // owns the origin.
 func (c Config) LogLevel() slog.Level { return c.Issuer.LogLevel() }
 
-// Load reads the configuration file, holds it to its schema, and builds both
-// halves' settings from it.
+// Load reads the service document and the policy document it names, holds
+// each to its schema and checks, and builds both halves' settings from them.
+// A document that names no policy decides by the built-in one (the
+// demonstration's under `demo`).
 func Load(file string) (Config, error) {
-	f, err := config.LoadServe(file)
+	svc, err := config.Load[config.Serve](file)
 	if err != nil {
 		return Config{}, err
 	}
-	return FromConfig(f)
+	fallback, err := app.FallbackPolicy(svc.Demo)
+	if err != nil {
+		return Config{}, err
+	}
+	p, err := config.PolicyOf(svc, &fallback)
+	if err != nil {
+		return Config{}, err
+	}
+	return FromConfig(svc, p)
 }
 
-// FromConfig builds both halves' settings from a configuration already read.
-func FromConfig(f *config.Serve) (Config, error) {
-	directory, err := app.FromConfig(f)
+// FromConfig builds both halves' settings from the documents already read.
+func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
+	directory, err := app.FromConfig(f, p)
 	if err != nil {
 		return Config{}, err
 	}
-	issuer, err := issuerapp.FromConfig(f)
+	issuer, err := issuerapp.FromConfig(f, p)
 	if err != nil {
 		return Config{}, err
 	}

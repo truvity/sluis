@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/policy"
 )
 
 // What each ConfigMap is named for: where its config lives in the values, and
@@ -114,8 +113,9 @@ func load(t *testing.T, path string) map[string]any {
 }
 
 // The chart passes `config` through: the ConfigMap it renders for a component
-// holds exactly the block the values gave, with nothing added, renamed or
-// dropped, and that block is a file its binary accepts.
+// holds exactly the block the values gave, with nothing added but the
+// apiVersion the chart writes, renamed or dropped, and that block is a file
+// its binary accepts.
 func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
 	cases, err := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
@@ -166,11 +166,12 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 				if err := yaml.Unmarshal([]byte(data.(string)), &got); err != nil {
 					t.Fatalf("%s: not YAML: %v", name, err)
 				}
-				want, ok := dig(values, c.path...)
+				given, ok := dig(values, c.path...)
 				if !ok {
 					t.Errorf("%s is rendered and the values have no %s", name, strings.Join(c.path, "."))
 					continue
 				}
+				want := merge(map[string]any{"apiVersion": config.APIVersion(c.schema)}, given.(map[string]any))
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("%s is not %s of the values:\n got %v\nwant %v", name, strings.Join(c.path, "."), got, want)
 				}
@@ -217,7 +218,7 @@ func TestEveryShippedExampleConfigurationIsAccepted(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: no config", example)
 		}
-		if err := config.Validate("serve", cfg); err != nil {
+		if err := config.Validate("serve", merge(map[string]any{"apiVersion": config.APIVersion("serve")}, cfg.(map[string]any))); err != nil {
 			t.Errorf("%s: %v", example, err)
 		}
 	}
@@ -226,37 +227,47 @@ func TestEveryShippedExampleConfigurationIsAccepted(t *testing.T) {
 	}
 }
 
-// The access document the chart renders is what the binaries accept: the
-// policy ConfigMap, mounted as a directory, loads through the same loader the
-// service and the controllers call, and the overlay's matcher lands on the
-// group the document declared.
-func TestTheRenderedAccessDocumentLoads(t *testing.T) {
-	var data map[string]any
-	for _, doc := range render(t, filepath.Join("..", "cases", "sluis", "access-document", "values.yaml"), "identity") {
-		if got, ok := dig(doc, "data"); ok && doc["kind"] == "ConfigMap" {
-			if m, isMap := got.(map[string]any); isMap && m["access.yaml"] != nil {
-				data = m
+// The policy document the chart renders is one the binaries accept: every
+// case's policy ConfigMap loads through the loader the service and the
+// controllers call, its checks included, and carries the sections the chart's
+// own values fill.
+func TestTheRenderedPolicyDocumentLoads(t *testing.T) {
+	cases, err := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
+	if err != nil || len(cases) == 0 {
+		t.Fatalf("no cases found: %v", err)
+	}
+	loaded := 0
+	for _, shape := range cases {
+		namespace := "default"
+		if raw, err := os.ReadFile(filepath.Join(filepath.Dir(shape), "namespace")); err == nil {
+			namespace = strings.TrimSpace(string(raw))
+		}
+		for _, doc := range render(t, shape, namespace) {
+			data, ok := dig(doc, "data", "policy.yaml")
+			if !ok || doc["kind"] != "ConfigMap" {
+				continue
+			}
+			file := filepath.Join(t.TempDir(), "policy.yaml")
+			if err := os.WriteFile(file, []byte(data.(string)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			p, err := config.Load[config.PolicyDocument](file)
+			if err != nil {
+				t.Errorf("%s: the rendered policy document does not load: %v", shape, err)
+				continue
+			}
+			loaded++
+			if filepath.Base(filepath.Dir(shape)) == "full" {
+				if len(p.Clusters()) != 2 || len(p.AWS().Accounts) != 2 || len(p.GitHubCatalogue().Apps) != 1 || len(p.EnabledOrgs()) != 2 {
+					t.Errorf("full: the chart's own values are not in the policy document: %+v %+v %+v", p.Exchange, p.Apps, p.Controllers)
+				}
+				if p.AWS().Audience != "https://access.example" {
+					t.Errorf("full: exchange.aws.audience = %q, want the issuer", p.AWS().Audience)
+				}
 			}
 		}
 	}
-	if data == nil {
-		t.Fatal("no ConfigMap carries access.yaml")
-	}
-	dir := t.TempDir()
-	for name, content := range data {
-		text, _ := content.(string)
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	loaded, err := policy.LoadDeclared(dir)
-	if err != nil {
-		t.Fatalf("the rendered policy directory does not load: %v", err)
-	}
-	if m := loaded.Groups["all:access-roster:operator"].Matchers; len(m) != 1 || m[0].ServiceAccount == nil {
-		t.Errorf("the overlay's matcher is not on the group the access document declared: %+v", m)
-	}
-	if _, ok := loaded.Clients["access-console"]; !ok {
-		t.Error("the access document's client was not loaded")
+	if loaded == 0 {
+		t.Error("no case rendered a policy document: the sweep proved nothing")
 	}
 }

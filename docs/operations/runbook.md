@@ -508,7 +508,9 @@ guessing:
 2. Reproduce the failure, and read the line naming that audience and
    subject: `dropped` is exactly the groups the token stopped carrying.
 3. Add whichever of them the relying party actually reads to a `groups:`
-   override on that audience's row, and reload the policy.
+   override on that audience's row, and roll the policy out: a policy
+   change is a new instance (a rollout on Kubernetes, a new configuration
+   layer on Lambda).
 
 ### `/userinfo` is scoped too
 
@@ -528,10 +530,10 @@ workspace](../connect/slack-workspace.md).
 `all:access-roster:viewer`, `controllerSlack.enabled` is true, and the console is
 rolled out before the controller (it needs `ListServedDomains`, 1.42.0).
 
-1. Connect and install the workspace, list nothing in `controllerSlack.config.enabledWorkspaces`,
+1. Connect and install the workspace, list nothing in `policy.controllers.slack.enabledWorkspaces`,
    and let a pass run. The report's `tick.outcome` is `dry-run` and its rows are
    what enabling would do; read the held and retrying rows and the leavers.
-2. Add the workspace's key to `controllerSlack.config.enabledWorkspaces` and roll out. Its changes
+2. Add the workspace's key to `policy.controllers.slack.enabledWorkspaces` and roll out. Its changes
    appear in the audit trail as `roster.slack_*`.
 3. To stop, remove the key. Nothing is undone. That is also the emergency stop.
 
@@ -609,7 +611,7 @@ The controller needs egress to `slack.com:443`, which the chart does not open.
 
 1. The organisation is bound in the policy, **connected** on the GitHub
    page, and the controller runs with the organisation *not* in
-   `controllerGithub.config.enabledOrgs`. The **link App** is created, and the people
+   `policy.controllers.github.enabledOrgs`. The **link App** is created, and the people
    who belong in it have linked their accounts — send them the link page
    the GitHub page shows. Until somebody links, their rows say
    `not linked` and their accounts are left alone.
@@ -619,7 +621,7 @@ The controller needs egress to `slack.com:443`, which the chart does not open.
    held rows: each carries its reason. *Controller* says `waiting on
    links` when the only thing left is people who have not linked — that
    is not in sync, and enabling changes nothing for them.
-3. Add the login to `controllerGithub.config.enabledOrgs` and roll out. The next pass
+3. Add the login to `policy.controllers.github.enabledOrgs` and roll out. The next pass
    acts; its changes appear in the audit trail as `roster.github_member.*`.
 4. To stop acting in it, remove the login again. Nothing is undone: the
    organisation is simply left as it is.

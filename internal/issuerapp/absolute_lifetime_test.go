@@ -32,10 +32,10 @@ func TestAbsoluteLifetimeIsRefused(t *testing.T) {
 		{"shorter than the token lifetime is refused", d(2 * time.Hour), d(time.Hour), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := FromConfig(&config.Serve{
+			_, err := FromConfig(withPolicy(t, &config.Serve{
 				IssuerURL: "https://issuer.example",
 				Lifetimes: &config.Lifetimes{Token: tc.token, Absolute: tc.absolute},
-			})
+			}))
 			if tc.wantError && err == nil {
 				t.Errorf("FromConfig() succeeded, want a refusal")
 			}
@@ -50,7 +50,7 @@ func TestAbsoluteLifetimeIsRefused(t *testing.T) {
 // the default this setting exists to change, and the value every
 // existing deployment gets without touching a chart.
 func TestAbsoluteLifetimeDefaultsToTwentyFourHours(t *testing.T) {
-	cfg, err := FromConfig(&config.Serve{IssuerURL: "https://issuer.example"})
+	cfg, err := FromConfig(withPolicy(t, &config.Serve{IssuerURL: "https://issuer.example"}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestAbsoluteLifetimeDefaultsToTwentyFourHours(t *testing.T) {
 // resource to say read_only: policy cannot know the limit, so the issuer
 // refuses it at start, before it asks for anything else.
 func TestAResourceCapLongerThanTheGlobalLimitNeedsReadOnly(t *testing.T) {
-	cfg, err := FromConfig(&config.Serve{IssuerURL: "https://issuer.example"})
+	cfg, err := FromConfig(withPolicy(t, &config.Serve{IssuerURL: "https://issuer.example"}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

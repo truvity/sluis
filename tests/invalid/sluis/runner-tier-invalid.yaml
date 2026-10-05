@@ -1,7 +1,9 @@
-# A githubRunnerApps tier is a short lowercase name.
-# error: at '/config/github/runnerTiers/0': 'Stable' does not match pattern
+# A runner tier is a short lowercase name.
+# error: at '/policy/apps/github/runnerTiers/0': 'Stable' does not match pattern
 config:
   issuerURL: https://issuer.example
-  github:
-    runnerTiers:
-    - Stable
+policy:
+  apps:
+    github:
+      runnerTiers:
+      - Stable

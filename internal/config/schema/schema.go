@@ -13,15 +13,35 @@ import (
 
 // BaseID is where the schemas are named: the identifier is a name, and nothing
 // fetches it.
-const BaseID = "https://truvity.github.io/sluis/schemas/v1/config/"
+const BaseID = "https://truvity.github.io/sluis/schemas/v2/config/"
 
 // The shared shapes this repository takes from truvity/policy, by the `$id`
 // they carry. The loader resolves them from its embedded copies.
 const policy = "https://github.com/truvity/policy/schemas/"
 
-// Names are the binaries that read a file, as the schema files are named:
-// schemas/config/<name>.schema.json.
-var Names = []string{"serve", "controller-github", "controller-slack"}
+// Names are the documents, as the schema files are named:
+// schemas/config/<name>.schema.json. The first three are the service documents,
+// one per process; `policy` is the one policy document they all name.
+var Names = []string{"serve", "controller-github", "controller-slack", "policy"}
+
+// Services are the service documents: the ones a process is started with.
+var Services = []string{"serve", "controller-github", "controller-slack"}
+
+// Group is the group of the documents' kinds: `apiVersion` is
+// `<Group>/<document>/v<N>` (truvity/policy docs/contracts/config.md, rule 7).
+const Group = "sluis.truvity.github.io"
+
+// apiVersion is the `apiVersion` every v2 document carries.
+func apiVersion(name string) m {
+	return m{"const": Group + "/" + name + "/v2", "description": "Which version of which document this is. " + Group + "/" + name + "/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/configuration.md)."}
+}
+
+// policyRef is `policy`: the policy document a process decides by.
+func policyRef(description string) m {
+	return obj(description, m{
+		"file": str("The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance."),
+	}, "file")
+}
 
 type m = map[string]any
 
@@ -185,6 +205,7 @@ func envField(description string) m {
 
 func serveSchema() m {
 	props := m{
+		"apiVersion":    apiVersion("serve"),
 		"issuerURL":     m{"$ref": "#/$defs/url", "description": "The issuer: baked into every token and every relying party's trust, so there is no default. No trailing slash is kept."},
 		"release":       strDefault("The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name.", "sluis"),
 		"cluster":       str("Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject."),
@@ -200,8 +221,8 @@ func serveSchema() m {
 		"platform":         platformSchema(),
 		"preset":           presetSchema(),
 		"adapters":         adaptersSchema(),
-		"policyDir":        str("The directory the policy is mounted at. Unset is the built-in two groups, or the demonstration policy under `demo`."),
-		"overlayFile":      str("The file of declared workspaces, mounted."),
+		"policy":           policyRef("The policy document this service decides by. Unset is the built-in two groups, or the demonstration policy under `demo`."),
+		"directory":        directorySchema(),
 		"publicURL":        m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."},
 		"publicRootURL":    m{"$ref": "#/$defs/url", "description": "The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`."},
 		"secureCookies":    boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL."),
@@ -220,20 +241,14 @@ func serveSchema() m {
 			"freshnessWindow": duration("How old a snapshot may be and still be answered from.", "30m"),
 			"probeInterval":   duration("How often the directory is probed.", "5m"),
 		}),
-		"exchange": obj("What the token exchange verifies workloads against.", m{
-			"audience":     str("The audience a workload token must be minted for. Defaults to `release`, so two issuers in one cluster cannot accept each other's proofs."),
-			"clustersFile": str("The file naming the federated clusters, each by its published key set. Read once at start."),
-			"awsFile":      str("The file naming the AWS accounts, each by its published key set. Read once at start."),
+		"exchange": obj("How the token exchange verifies workloads. Whom it trusts (the clusters, the AWS accounts, the GitHub owners) is the policy document's `exchange`.", m{
+			"audience": str("The audience a workload token must be minted for. Defaults to `release`, so two issuers in one cluster cannot accept each other's proofs."),
 		}),
 		"recovery": obj("The sign-in that needs no directory: in a cluster, a token for a ServiceAccount proven against the API server; anywhere else, a password. Unset is off for the issuer and, for the hub, on.", m{
 			"enabled":        boolean("Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable."),
 			"serviceAccount": str("The ServiceAccount whose token signs in."),
 			"audience":       str("The audience its token must carry."),
 			"passwordFile":   str("Outside a cluster: the file the recovery password is read from, once, at start (the hub keeps only an Argon2id digest of it). Unset takes `adminPasswordEnv`, or generates one and prints it. `enabled: false` leaves the file untouched and refuses the sign-in, so turning it back on needs no new password."),
-		}),
-		"api": obj("The directory API's guard.", m{
-			"audience":      strDefault("The audience a consumer's token must carry.", "directory-roster"),
-			"consumersFile": str("The file naming the ServiceAccounts that may call it. None named admits nobody in a cluster."),
 		}),
 		"login": obj("How a person signs in to the console.", m{
 			"directory":  boolDefault("Sign in with the corporate directory.", true),
@@ -293,15 +308,6 @@ func serveSchema() m {
 			"tls":         boolean("Speak TLS to the server."),
 			"cluster":     boolDefault("Speak the cluster protocol. A plain single server needs it off.", true),
 		}),
-		"github": obj("What the service knows of GitHub.", m{
-			"owners":        list("The organisations whose repositories' CI tokens are verified. None names none: an empty list would admit every repository there is.", str("An organisation.")),
-			"runnerTiers":   m{"type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once."},
-			"catalogueFile": str("The file declaring every GitHub App. A malformed one stops the service."),
-		}),
-		"slack": obj("What the service knows of Slack.", m{
-			"catalogueFile": str("The file declaring every Slack App. A malformed one stops the service."),
-		}),
-		"exports": exportsSchema(),
 		"audit": obj("The audit installation this service records to. Unset keeps the trail in the log only.", m{
 			"writer":                  url("The installation's receiver."),
 			"tokenFile":               str("This workload's projected service-account token, presented on every call."),
@@ -312,7 +318,7 @@ func serveSchema() m {
 	}
 	return document("serve", "sluis serve",
 		"The configuration of `sluis serve`: the issuer, the console and the directory hub, one process."+secretsNote,
-		props, []string{"issuerURL"}, []string{"duration", "url", "envName"},
+		props, []string{"apiVersion", "issuerURL"}, []string{"duration", "url", "envName"},
 		m{
 			"allOf": []any{
 				m{"if": m{"required": []string{"valkey"}}, "then": m{"properties": m{"valkey": m{"required": []string{"address"}}}}},
@@ -413,9 +419,11 @@ func portsBlobSchema() m {
 }
 
 func rosterProps(kind, mountDefault, recordsDefault string) m {
+	kindName := "controller-" + kind
 	return m{
+		"apiVersion": apiVersion(kindName),
 		"release":    strDefault("The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.", "sluis"),
-		"policyDir":  str("The directory the policy is mounted at: the bindings are the policy's " + kind + " table."),
+		"policy":     policyRef("The policy document: the bindings are its " + kind + " table, and its `controllers." + kind + "` section is what this controller may change."),
 		"consoleURL": url("The console's API, which answers who holds a group."),
 		"tokenFile":  strDefault("This pod's projected ServiceAccount token, presented to the console and read afresh on every call.", mountDefault),
 		"console": obj("How the controller proves itself to the console, when the pod's `tokenFile` is not the way.", m{
@@ -443,20 +451,17 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 func controllerGitHubSchema() m {
 	props := rosterProps("github", "/var/run/secrets/github-roster/token", "/var/run/github-roster/records")
 	props["appsDir"] = strDefault("One file per connected organisation: its App's credentials.", "/var/run/github-roster/apps")
-	props["catalogueFile"] = str("The GitHub App catalogue, read only so the warning about an internal group nothing consumes does not name a group a grant consumes. A missing or malformed one is never fatal here.")
-	props["enabledOrgs"] = list("The organisations the controller changes. Every other bound organisation is derived and reported, and left alone. Each must be one the policy binds.", m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"})
 	return document("controller-github", "sluis controller github",
 		"The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table."+secretsNote,
-		props, []string{"policyDir", "consoleURL"}, []string{"duration", "url"}, nil)
+		props, []string{"apiVersion", "consoleURL"}, []string{"duration", "url"}, nil)
 }
 
 func controllerSlackSchema() m {
 	props := rosterProps("slack", "/var/run/secrets/slack-roster/token", "/var/run/slack-roster/workspaces")
 	props["credentialsDir"] = strDefault("One file per connected workspace: the app's credentials and its bot token.", "/var/run/slack-roster/credentials")
-	props["enabledWorkspaces"] = list("The workspaces the controller changes, by the policy's key. Each must be one the policy declares.", m{"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"})
 	return document("controller-slack", "sluis controller slack",
 		"The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table."+secretsNote,
-		props, []string{"policyDir", "consoleURL"}, []string{"duration", "url"}, nil)
+		props, []string{"apiVersion", "consoleURL"}, []string{"duration", "url"}, nil)
 }
 
 // Schema returns one binary's schema, written as the committed file is.
@@ -469,6 +474,8 @@ func Schema(name string) ([]byte, bool) {
 		s = controllerGitHubSchema()
 	case "controller-slack":
 		s = controllerSlackSchema()
+	case "policy":
+		s = policySchema()
 	default:
 		return nil, false
 	}

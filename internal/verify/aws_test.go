@@ -11,8 +11,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -488,71 +486,20 @@ func TestAnExplicitKeySetLocationIsHonoured(t *testing.T) {
 	}
 }
 
-func writeAWSFile(t *testing.T, body string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "aws.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
-func TestLoadAWSFederation(t *testing.T) {
+// The verifiers carry each row and the federation's audience and age. The rows'
+// rules are the policy document's (internal/config), checked when it is loaded.
+func TestAWSFederationVerifiers(t *testing.T) {
 	t.Parallel()
-
-	good := `
-audience: https://access.example.com
-maxAge: 2m
-accounts:
-  - account: "111122223333"
-    name: apps
-    issuer: https://abc123-def456-ghi789-jkl012.tokens.sts.global.api.aws
-    orgId: o-abc1234567
-    algs: [ES384]
-  - account: "444455556666"
-    name: data
-    issuer: https://zzz.tokens.sts.global.api.aws/
-    jwksUri: https://keys.example.com/jwks.json
-`
-	f, err := verify.LoadAWSFederation(writeAWSFile(t, good))
-	if err != nil {
-		t.Fatal(err)
-	}
+	f := verify.AWSFederation{Audience: "https://access.example.com", MaxAge: 2 * time.Minute, Accounts: []verify.AWSAccountRow{
+		{Account: "111122223333", Name: "apps", Issuer: "https://abc.tokens.sts.global.api.aws", OrgID: "o-abc1234567", Algs: []string{"ES384"}},
+		{Account: "444455556666", Name: "data", Issuer: "https://zzz.tokens.sts.global.api.aws", JWKSURI: "https://keys.example.com/jwks.json"},
+	}}
 	vs := f.Verifiers(nil)
 	if len(vs) != 2 || vs[0].MaxAge != 2*time.Minute || vs[0].Audience != "https://access.example.com" ||
-		vs[0].OrgID != "o-abc1234567" || len(vs[0].Algs) != 1 ||
-		vs[1].Issuer != "https://zzz.tokens.sts.global.api.aws" {
+		vs[0].OrgID != "o-abc1234567" || len(vs[0].Algs) != 1 || vs[1].JWKSURI != "https://keys.example.com/jwks.json" {
 		t.Fatalf("verifiers = %+v", vs)
 	}
-
-	if f, err = verify.LoadAWSFederation(""); err != nil || len(f.Accounts) != 0 {
-		t.Fatalf("no file: %v %v", f, err)
-	}
-	if f, err = verify.LoadAWSFederation(writeAWSFile(t, "")); err != nil || len(f.Accounts) != 0 {
-		t.Fatalf("empty file: %v %v", f, err)
-	}
-
-	row := func(extra string) string {
-		return "audience: a\naccounts:\n  - account: \"111122223333\"\n    name: apps\n    issuer: https://x.example\n" + extra
-	}
-	for name, body := range map[string]string{
-		"no audience":       "accounts:\n  - {account: \"111122223333\", name: a, issuer: \"https://x.example\"}\n",
-		"short account":     strings.Replace(row(""), "111122223333", "1234", 1),
-		"http issuer":       strings.Replace(row(""), "https://x", "http://x", 1),
-		"no name":           strings.Replace(row(""), "name: apps", "name: \"\"", 1),
-		"bad alg":           row("    algs: [ES256]\n"),
-		"unknown key":       row("    orgid: o-1\n"),
-		"maxAge too long":   "maxAge: 2h\n" + row(""),
-		"duplicate account": row("") + "  - {account: \"111122223333\", name: b, issuer: \"https://y.example\"}\n",
-		"duplicate issuer":  row("") + "  - {account: \"444455556666\", name: b, issuer: \"https://x.example/\"}\n",
-		"duplicate name":    row("") + "  - {account: \"444455556666\", name: apps, issuer: \"https://y.example\"}\n",
-		"http jwksUri":      row("    jwksUri: http://x.example/k\n"),
-	} {
-		if _, err := verify.LoadAWSFederation(writeAWSFile(t, body)); err == nil {
-			t.Errorf("%s: loaded, want a start-up failure", name)
-		}
-	}
-	if _, err := verify.LoadAWSFederation(filepath.Join(t.TempDir(), "missing.yaml")); err == nil {
-		t.Error("a missing file loaded")
+	if names := f.Names(); len(names) != 2 || names[0] != "apps (111122223333)" {
+		t.Errorf("names = %v", names)
 	}
 }

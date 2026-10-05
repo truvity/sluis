@@ -2,8 +2,6 @@
 # error: strategy
 config:
   issuerURL: https://issuer.example
-  exchange:
-    clustersFile: /var/run/access-issuer/clusters.yaml
 exchange:
   clusters:
     - name: example-cluster
