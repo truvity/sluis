@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/sluis
+    eks.amazonaws.com/role-arn: arn:example:iam::acct:role/sluis
 
 ---
 # Source: sluis/templates/serviceaccount.yaml

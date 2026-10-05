@@ -16,4 +16,4 @@ secrets:
     key: signing-state
 serviceAccount:
   awsIdentity: irsa
-  awsRoleArn: arn:aws:iam::123456789012:role/sluis
+  awsRoleArn: arn:example:iam::acct:role/sluis
