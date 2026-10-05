@@ -37,6 +37,7 @@ import (
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/server"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/policy"
@@ -75,7 +76,17 @@ func Load(file string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return FromConfig(svc, p)
+	cfg, err := FromConfig(svc, p)
+	if err != nil {
+		return Config{}, err
+	}
+	// The secrets the document names are read through one source, opened
+	// here and handed to both halves with the storage ports. Opening connects
+	// to nothing: a secret is read when it is used.
+	if cfg.Stores.Secrets, err = secrets.Open(context.Background(), svc); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 // FromConfig builds both halves' settings from the documents already read.

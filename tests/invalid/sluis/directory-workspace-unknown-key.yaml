@@ -6,6 +6,6 @@ config:
     workspaces:
     - backend: google
       admin: admin@acme.example
-      keyFile: /var/run/keys/acme/key.json
+      keySecret: directory/acme/key
       domains:
       - acme.example

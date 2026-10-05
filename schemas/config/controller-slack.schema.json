@@ -24,7 +24,7 @@
   "$id": "https://truvity.github.io/sluis/schemas/v2/config/controller-slack.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+  "description": "The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
   "properties": {
     "adapters": {
       "additionalProperties": false,

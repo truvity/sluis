@@ -245,9 +245,9 @@ func directorySchema() m {
 			"id":         str("The backend's tenant id. Optional: given, the adoption checks it."),
 			"backend":    m{"enum": []string{"google"}, "description": "The implementation that reads it."},
 			"admin":      str("The account the credential impersonates."),
-			"keyFile":    str("Where the service-account key is mounted."),
+			"keySecret":  secretField("The secret the service-account key is: `directory/<id>/key`."),
 			"serve":      strList("Narrows the tenant to these domains. Empty serves every domain discovered."),
 			"syncGroups": strList("Narrows the tenant to these groups. Empty keeps every group in the served domains."),
-		}, "backend", "admin", "keyFile")),
+		}, "backend", "admin", "keySecret")),
 	})
 }

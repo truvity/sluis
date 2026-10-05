@@ -32,7 +32,7 @@ config:
     workspaces:
       - backend: google
         admin: admin@acme.example
-        keyFile: /var/run/access-issuer/directory/acme/service-account.json
+        keySecret: directory/C0acme/key
         id: C0acme
         serve:
           - acme.example
@@ -40,11 +40,10 @@ config:
           - engineering@acme.example
       - backend: google
         admin: admin@globex.example
-        keyFile: /var/run/access-issuer/directory/globex/key.json
+        keySecret: directory/globex/key
   publicURL: https://access.example/console
   publicRootURL: https://access.example
   secureCookies: true
-  clientSecretsDir: /var/run/access-issuer/clients
   lifetimes:
     token: 30m
     refresh: 6h
@@ -66,8 +65,6 @@ config:
     origin: https://access.example
     client: access-console
   oauthClient:
-    idFile: /var/run/access-issuer/oauth-client/id
-    secretFile: /var/run/access-issuer/oauth-client/secret
     secretName: sign-in-client
     idKey: id
     secretKey: secret
@@ -77,7 +74,7 @@ config:
     activationDelay: 15m
   valkey:
     address: valkey.example.svc:6379
-    passwordEnv: VALKEY_PASSWORD
+    passwordSecret: valkey/password
     tls: true
     cluster: true
   audit:
@@ -89,19 +86,25 @@ config:
     audience: audit
     forwardedForTrustedHops: 1
 
-# What the config names, from Secrets: the variable a `...Env` key names, and
-# the directory a `...File` key names.
-secretEnv:
-  - name: VALKEY_PASSWORD
+# What the config names, from Secrets: each secret a `...Secret` key names,
+# projected as a file, and a directory for a `...File` key.
+secrets:
+  - name: valkey/password
     secretName: valkey-password
     key: secret
+  - name: directory/C0acme/key
+    secretName: acme-directory-key
+    key: service-account.json
+  - name: directory/globex/key
+    secretName: globex-directory-key
+    key: key.json
+secretEnv:
+  - name: SLUIS_EXTRA
+    secretName: extra
+    key: value
 secretMounts:
   - secretName: sign-in-client
     mountPath: /var/run/access-issuer/oauth-client
-  - secretName: acme-directory-key
-    mountPath: /var/run/access-issuer/directory/acme
-  - secretName: globex-directory-key
-    mountPath: /var/run/access-issuer/directory/globex
 
 signingKey:
   existingSecret: ""

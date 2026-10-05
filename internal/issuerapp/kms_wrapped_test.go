@@ -27,7 +27,7 @@ func wrappedSecret(t *testing.T) string {
 
 func wrappedConfig(t *testing.T, k *config.SigningKeyKMSWrapped) func(*config.Serve) {
 	t.Helper()
-	k.StateSecretFile = wrappedSecret(t)
+	k.StateSecret = asName(wrappedSecret(t))
 	return func(f *config.Serve) { f.SigningKey = &config.SigningKey{KMSWrapped: k} }
 }
 
@@ -91,16 +91,16 @@ func TestKMSWrappedConfigIsValidated(t *testing.T) {
 		key  *config.SigningKey
 		want string
 	}{
-		"with a file": {&config.SigningKey{File: "/k", KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s"}}, "exclusive"},
-		"with kms": {&config.SigningKey{KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecretFile: "/s"},
-			KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s"}}, "exclusive"},
-		"no key":    {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{StateSecretFile: "/s"}}, "keyId"},
-		"no secret": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k"}}, "stateSecretFile"},
+		"with a file": {&config.SigningKey{File: "/k", KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecret: "s"}}, "exclusive"},
+		"with kms": {&config.SigningKey{KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecret: "s"},
+			KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecret: "s"}}, "exclusive"},
+		"no key":    {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{StateSecret: "s"}}, "keyId"},
+		"no secret": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k"}}, "stateSecret"},
 		"eddsa": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
-			KeyID: "k", StateSecretFile: "/s", Algorithms: []string{"EdDSA"}}}, "EdDSA is not supported"},
-		"short retain": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecretFile: "/s", Retain: d("30m")}}, "retain"},
+			KeyID: "k", StateSecret: "s", Algorithms: []string{"EdDSA"}}}, "EdDSA is not supported"},
+		"short retain": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "k", StateSecret: "s", Retain: d("30m")}}, "retain"},
 		"rotate soon": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
-			KeyID: "k", StateSecretFile: "/s", RotateEvery: d("10m")}}, "longer than prepublish"},
+			KeyID: "k", StateSecret: "s", RotateEvery: d("10m")}}, "longer than prepublish"},
 	} {
 		_, err := issuerapp.FromConfig(withPolicy(t, &config.Serve{IssuerURL: "https://issuer.example", SigningKey: tc.key}))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -116,8 +116,8 @@ func TestKMSWrappedFromTheSigningAdapter(t *testing.T) {
 	secret := wrappedSecret(t)
 	fake := kmsfake.New()
 	plan := port.Table{port.ConcernSigning: {Adapter: "kms-wrapped", Settings: port.Settings{
-		"keyId": "alias/sluis-wrapped", "stateSecretFile": secret, "algorithms": []any{"RS256"}}}}
-	app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, KMSWrapped: fake, Stores: &store.Stores{Plan: plan}})
+		"keyId": "alias/sluis-wrapped", "stateSecret": asName(secret), "algorithms": []any{"RS256"}}}}
+	app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, KMSWrapped: fake, Stores: &store.Stores{Plan: plan, Secrets: testSecrets}})
 	if keys := keysOf(t, app); len(keys) != 1 || keys[0].Alg != "RS256" {
 		t.Fatalf("keys = %+v", keys)
 	}

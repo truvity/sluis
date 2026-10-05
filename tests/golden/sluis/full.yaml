@@ -151,7 +151,6 @@ data:
       queryURL: http://audit-query.access-issuer.svc:8080
       tokenFile: /var/run/audit/token
       writer: http://audit.access-issuer.svc:8080
-    clientSecretsDir: /var/run/access-issuer/clients
     cluster: example-cluster
     console:
       client: access-console
@@ -161,14 +160,14 @@ data:
       - admin: admin@acme.example
         backend: google
         id: C0acme
-        keyFile: /var/run/access-issuer/directory/acme/service-account.json
+        keySecret: directory/C0acme/key
         serve:
         - acme.example
         syncGroups:
         - engineering@acme.example
       - admin: admin@globex.example
         backend: google
-        keyFile: /var/run/access-issuer/directory/globex/key.json
+        keySecret: directory/globex/key
     exchange:
       audience: access-exchange
     freshness:
@@ -190,9 +189,7 @@ data:
     login:
       directory: false
     oauthClient:
-      idFile: /var/run/access-issuer/oauth-client/id
       idKey: id
-      secretFile: /var/run/access-issuer/oauth-client/secret
       secretKey: secret
       secretName: sign-in-client
     policy:
@@ -206,6 +203,9 @@ data:
       enabled: true
       serviceAccount: break-glass
     release: sluis
+    secrets:
+      root: /var/run/sluis/secrets
+      source: file
     secureCookies: true
     signingKey:
       activationDelay: 15m
@@ -215,7 +215,7 @@ data:
     valkey:
       address: valkey.example.svc:6379
       cluster: true
-      passwordEnv: VALKEY_PASSWORD
+      passwordSecret: valkey/password
       tls: true
 
 ---
@@ -888,7 +888,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads, and no other: a change
         # to a controller's own document does not restart the service.
-        checksum/config: 2e3a9886137ab14f1c456db1800fea54ed976b90f721f0acb209360253406a24
+        checksum/config: 7d6a7c4faf1cb81c4c98583eb291fb88dd06e739ad207067ed4ad5d8e6330eeb
         checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
         example.com/scrape: "false"
     spec:
@@ -918,11 +918,11 @@ spec:
             - serve
             - --config=/etc/sluis/config.yaml
           env:
-            - name: VALKEY_PASSWORD
+            - name: SLUIS_EXTRA
               valueFrom:
                 secretKeyRef:
-                  name: valkey-password
-                  key: secret
+                  name: extra
+                  key: value
           volumeMounts:
             # Read once, at start: a subPath is enough, since a change replaces
             # the pod (checksum/*). The policy keeps its directory.
@@ -942,17 +942,13 @@ spec:
             - name: audit-token
               mountPath: /var/run/audit
               readOnly: true
-            - name: client-secrets
-              mountPath: /var/run/access-issuer/clients
+            # A directory, not a subPath: a secret is read on every use, so a
+            # rotated Secret reaches the running process.
+            - name: secrets
+              mountPath: /var/run/sluis/secrets
               readOnly: true
             - name: secret-sign-in-client
               mountPath: /var/run/access-issuer/oauth-client
-              readOnly: true
-            - name: secret-acme-directory-key
-              mountPath: /var/run/access-issuer/directory/acme
-              readOnly: true
-            - name: secret-globex-directory-key
-              mountPath: /var/run/access-issuer/directory/globex
               readOnly: true
           livenessProbe:
             httpGet: { path: /healthz, port: health }
@@ -999,32 +995,42 @@ spec:
                   audience: "audit"
                   expirationSeconds: 1800
                   path: token
-        # One file per confidential client, named after the client id, so
-        # the service resolves a secret by reading a path and never by
-        # holding RBAC to read Secrets -- the same reason the signing key
-        # is a file.
-        - name: client-secrets
+        # Every secret the config names, as the file <root>/<name>, so the
+        # service resolves a secret by reading a path and never by holding
+        # RBAC to read Secrets -- the same reason the signing key is a file.
+        # A confidential client's is clients/<client-id>/secret, from the
+        # Secret its policy entry names.
+        - name: secrets
           projected:
             sources:
+              - secret:
+                  name: valkey-password
+                  items:
+                    - key: secret
+                      path: valkey/password
+              - secret:
+                  name: acme-directory-key
+                  items:
+                    - key: service-account.json
+                      path: directory/C0acme/key
+              - secret:
+                  name: globex-directory-key
+                  items:
+                    - key: key.json
+                      path: directory/globex/key
               - secret:
                   name: access-console-client
                   items:
                     - key: client-secret
-                      path: access-console
+                      path: clients/access-console/secret
               - secret:
                   name: reports-client
                   items:
                     - key: client-secret
-                      path: reports
+                      path: clients/reports/secret
         - name: secret-sign-in-client
           secret:
             secretName: sign-in-client
-        - name: secret-acme-directory-key
-          secret:
-            secretName: acme-directory-key
-        - name: secret-globex-directory-key
-          secret:
-            secretName: globex-directory-key
       nodeSelector:
         kubernetes.io/os: linux
       tolerations:

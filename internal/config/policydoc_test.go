@@ -322,7 +322,7 @@ func TestAV1ServeDocumentConvertsWithItsFiles(t *testing.T) {
 	gh := writeIn(t, dir, "gh.yaml", "apps:\n  - {id: renovate, org: example-org, permissions: {contents: read}, "+
 		"grants: [{group: 'all:access-roster:operator', repositories: ['*'], permissions: {contents: read}}]}\n")
 	sl := writeIn(t, dir, "slack.yaml", "apps:\n  - {id: alerts, workspace: example, botScopes: ['chat:write']}\n")
-	overlay := writeIn(t, dir, "overlay.yaml", "workspaces:\n  - {backend: google, admin: a@example.com, keyFile: /k}\n")
+	overlay := writeIn(t, dir, "overlay.yaml", "workspaces:\n  - {backend: google, admin: a@example.com, keySecret: directory/acme/key}\n")
 	serve := writeIn(t, dir, "serve.yaml", "issuerURL: https://access.example\n"+
 		"policyDir: "+policyDir+"\noverlayFile: "+overlay+"\n"+
 		"exchange: {audience: sluis, clustersFile: "+clusters+", awsFile: "+aws+"}\n"+
@@ -336,7 +336,7 @@ func TestAV1ServeDocumentConvertsWithItsFiles(t *testing.T) {
 	}
 	s, p := c.Service, c.Policy
 	if s.APIVersion != config.APIVersion("serve") || s.Exchange.Audience != "sluis" ||
-		len(s.Directory.Workspaces) != 1 || s.Directory.Workspaces[0].KeyFile != "/k" {
+		len(s.Directory.Workspaces) != 1 || s.Directory.Workspaces[0].KeySecret != "directory/declared-0/key" {
 		t.Errorf("the service document: %+v", s)
 	}
 	if len(p.Policy.Groups) != 2 || p.Clusters()[0].Name != "devel" || p.AWS().MaxAge.D().String() != "5m0s" ||
@@ -486,17 +486,63 @@ func TestTheClusterRowsAreHeldToTheirRules(t *testing.T) {
 // and a misspelt key is refused rather than declaring nothing.
 func TestADeclaredWorkspaceIsHeldToItsShape(t *testing.T) {
 	head := "apiVersion: sluis.truvity.github.io/serve/v2\nissuerURL: https://a.example\ndirectory:\n  workspaces:\n"
-	if _, err := config.Load[config.Serve](write(t, head+"    - {backend: google, admin: a@b.c, keyFile: /k, id: C0, serve: [b.c]}\n")); err != nil {
+	whole := head + "    - {backend: google, admin: a@b.c, keySecret: directory/acme/key, id: C0, serve: [b.c]}\n"
+	if _, err := config.Load[config.Serve](write(t, whole)); err != nil {
 		t.Errorf("a whole declaration was refused: %v", err)
 	}
 	for name, ws := range map[string]string{
-		"no backend":  "{admin: a@b.c, keyFile: /k}",
-		"no admin":    "{backend: google, keyFile: /k}",
+		"no backend":  "{admin: a@b.c, keySecret: directory/acme/key}",
+		"no admin":    "{backend: google, keySecret: directory/acme/key}",
 		"no key":      "{backend: google, admin: a@b.c}",
-		"unknown key": "{backend: google, adminEmail: a@b.c, admin: a@b.c, keyFile: /k}",
+		"unknown key": "{backend: google, adminEmail: a@b.c, admin: a@b.c, keySecret: directory/acme/key}",
 	} {
 		if _, err := config.Load[config.Serve](write(t, head+"    - "+ws+"\n")); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+}
+
+// A v1 serve document's secrets, named by a variable or a file, get the names
+// v2 gives them, and the converted document remembers where v1 said each was.
+func TestAV1ServeDocumentsSecretsAreNamedAndLocated(t *testing.T) {
+	dir := t.TempDir()
+	overlay := writeIn(t, dir, "overlay.yaml", "workspaces:\n  - {id: C0acme, backend: google, admin: a@example.com, keyFile: /keys/acme.json}\n")
+	serve := writeIn(t, dir, "serve.yaml", "issuerURL: https://access.example\n"+
+		"overlayFile: "+overlay+"\n"+
+		"valkey: {address: 'v:6379', passwordEnv: OLD_VALKEY}\n"+
+		"oauthClient: {idFile: /oauth/id, secretEnv: OLD_OAUTH}\n"+
+		"adminPasswordEnv: OLD_ADMIN\n"+
+		"clientSecretsDir: /clients\n"+
+		"signingKey: {kms: {keys: [alias/a], stateSecretFile: /state}}\n")
+	s, err := config.Load[config.Serve](serve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Valkey.PasswordSecret != "valkey/password" || s.OAuthClient.Provider != "default" ||
+		s.Recovery.PasswordSecret != "recovery/password" || s.SigningKey.KMS.StateSecret != "issuer/state-secret" ||
+		s.Directory.Workspaces[0].KeySecret != "directory/C0acme/key" {
+		t.Errorf("the names: %+v %+v %+v %+v", s.Valkey, s.OAuthClient, s.Recovery, s.SigningKey.KMS)
+	}
+	locations, clientDir := s.LegacySecrets()
+	want := map[string]config.SecretLocation{
+		"valkey/password":                        {Env: "OLD_VALKEY"},
+		"providers/google/default/client-id":     {File: "/oauth/id"},
+		"providers/google/default/client-secret": {Env: "OLD_OAUTH"},
+		"recovery/password":                      {Env: "OLD_ADMIN"},
+		"issuer/state-secret":                    {File: "/state"},
+		"directory/C0acme/key":                   {File: "/keys/acme.json"},
+	}
+	if !reflect.DeepEqual(locations, want) || clientDir != "/clients" || !s.Converted() {
+		t.Errorf("the locations: %+v %q", locations, clientDir)
+	}
+}
+
+func TestTheRetiredLambdaVariablesAreRefused(t *testing.T) {
+	err := config.RefuseRetired("serve", []string{"SLUIS_SECRET_FILES=[]", "OAUTH=ssm:/sluis/private/config/oauth/client-secret"})
+	if err == nil || !strings.Contains(err.Error(), "SLUIS_SECRET_FILES") || !strings.Contains(err.Error(), "OAUTH (now") {
+		t.Errorf("%v", err)
+	}
+	if err := config.RefuseRetired("controller-github", []string{"SLUIS_CONFIG_FILE=/var/task/config/github.yaml"}); err == nil {
+		t.Error("SLUIS_CONFIG_FILE was accepted")
 	}
 }

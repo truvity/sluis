@@ -30,7 +30,27 @@ type legacyPolicy struct {
 	enabledOrgs         []string
 	enabledWorkspaces   []string
 	exports             []Export
+
+	// secrets is where each secret v1 named by a variable or a file is, by
+	// the name v2 gives it; clientDir is v1's clientSecretsDir.
+	secrets   map[string]SecretLocation
+	clientDir string
 }
+
+// SecretLocation is where a converted v1 document said one secret was: a
+// variable or a file.
+type SecretLocation struct {
+	Env  string
+	File string
+}
+
+// The names v2 gives the secrets v1 named by a variable or a file.
+const (
+	secretValkeyPassword   = "valkey/password"
+	secretRecoveryPassword = "recovery/password"
+	secretStateSecret      = "issuer/state-secret"
+	legacyProvider         = "default"
+)
 
 // convertV1 turns a v1 service document, already held to its v1 schema, into
 // the v2 shape in place, and returns what moved to the policy document.
@@ -53,8 +73,10 @@ func convertV1(name string, doc map[string]any) (*legacyPolicy, error) {
 		return out
 	}
 	l.policyDir = str(pop(doc, "policyDir"))
+	l.secrets = map[string]SecretLocation{}
 	switch name {
 	case "serve":
+		convertV1Secrets(doc, l)
 		overlay := str(pop(doc, "overlayFile"))
 		// The directory API listener is not served by sluis serve: its guard
 		// configured nothing that runs.
@@ -82,6 +104,17 @@ func convertV1(name string, doc map[string]any) (*legacyPolicy, error) {
 		if err != nil {
 			return nil, err
 		}
+		for i, w := range workspaces {
+			ws, _ := w.(map[string]any)
+			key := str(pop(ws, "keyFile"))
+			seg := str(ws["id"])
+			if seg == "" {
+				seg = fmt.Sprintf("declared-%d", i)
+			}
+			name := "directory/" + seg + "/key"
+			ws["keySecret"] = name
+			l.secrets[name] = SecretLocation{File: key}
+		}
 		if len(workspaces) > 0 {
 			doc["directory"] = map[string]any{"workspaces": workspaces}
 		}
@@ -92,6 +125,83 @@ func convertV1(name string, doc map[string]any) (*legacyPolicy, error) {
 		l.enabledWorkspaces = strs(pop(doc, "enabledWorkspaces"))
 	}
 	return l, nil
+}
+
+// convertV1Secrets moves every secret a v1 serve document named by a variable
+// or a file to the name v2 gives it, and remembers where v1 said it was.
+func convertV1Secrets(doc map[string]any, l *legacyPolicy) {
+	str := func(v any) string { s, _ := v.(string); return s }
+	if v, ok := doc["valkey"].(map[string]any); ok {
+		if env := str(v["passwordEnv"]); env != "" {
+			delete(v, "passwordEnv")
+			v["passwordSecret"] = secretValkeyPassword
+			l.secrets[secretValkeyPassword] = SecretLocation{Env: env}
+		}
+	}
+	if o, ok := doc["oauthClient"].(map[string]any); ok {
+		idFile, secretFile, secretEnv := str(o["idFile"]), str(o["secretFile"]), str(o["secretEnv"])
+		delete(o, "idFile")
+		delete(o, "secretFile")
+		delete(o, "secretEnv")
+		if idFile != "" || secretFile != "" || secretEnv != "" {
+			o["provider"] = legacyProvider
+		}
+		if idFile != "" {
+			l.secrets["providers/google/"+legacyProvider+"/client-id"] = SecretLocation{File: idFile}
+		}
+		switch {
+		case secretFile != "":
+			l.secrets["providers/google/"+legacyProvider+"/client-secret"] = SecretLocation{File: secretFile}
+		case secretEnv != "":
+			l.secrets["providers/google/"+legacyProvider+"/client-secret"] = SecretLocation{Env: secretEnv}
+		}
+	}
+	adminEnv := str(doc["adminPasswordEnv"])
+	delete(doc, "adminPasswordEnv")
+	r, _ := doc["recovery"].(map[string]any)
+	passwordFile := ""
+	if r != nil {
+		passwordFile = str(r["passwordFile"])
+		delete(r, "passwordFile")
+	}
+	if passwordFile != "" || adminEnv != "" {
+		if r == nil {
+			r = map[string]any{}
+			doc["recovery"] = r
+		}
+		r["passwordSecret"] = secretRecoveryPassword
+		if passwordFile != "" {
+			l.secrets[secretRecoveryPassword] = SecretLocation{File: passwordFile}
+		} else {
+			l.secrets[secretRecoveryPassword] = SecretLocation{Env: adminEnv}
+		}
+	}
+	if k, ok := doc["signingKey"].(map[string]any); ok {
+		for _, key := range []string{"kms", "kmsWrapped"} {
+			if b, ok := k[key].(map[string]any); ok {
+				if file := str(b["stateSecretFile"]); file != "" {
+					delete(b, "stateSecretFile")
+					b["stateSecret"] = secretStateSecret
+					l.secrets[secretStateSecret] = SecretLocation{File: file}
+				}
+			}
+		}
+	}
+	if a, ok := doc["adapters"].(map[string]any); ok {
+		if signing, ok := a["signing"].(map[string]any); ok {
+			if settings, ok := signing["settings"].(map[string]any); ok {
+				if file := str(settings["stateSecretFile"]); file != "" {
+					delete(settings, "stateSecretFile")
+					settings["stateSecret"] = secretStateSecret
+					l.secrets[secretStateSecret] = SecretLocation{File: file}
+				}
+			}
+		}
+	}
+	if dir := str(doc["clientSecretsDir"]); dir != "" {
+		delete(doc, "clientSecretsDir")
+		l.clientDir = dir
+	}
 }
 
 // readOverlay reads a v1 overlay file's workspaces in the v2 `directory`

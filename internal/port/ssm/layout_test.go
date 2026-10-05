@@ -34,7 +34,7 @@ func names(f *fakeAPI) []string {
 }
 
 // Layout v2: the credentials of the domain stores are parameters under
-// `/sluis/private/credentials/<kind>/<id>/<ref>`.
+// `/sluis/<instance>/private/credentials/<kind>/<id>/<ref>`.
 func TestACredentialIsAParameterUnderTheCredentialsPrefix(t *testing.T) {
 	ctx := context.Background()
 	f := newFake()
@@ -60,10 +60,10 @@ func TestACredentialIsAParameterUnderTheCredentialsPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []*regexp.Regexp{
-		regexp.MustCompile(`^/sluis/private/credentials/directory/google/C01ipl6j0/[0-9a-f]{24}$`),
-		regexp.MustCompile(`^/sluis/private/credentials/slack-workspace/acme/[0-9a-f]{24}$`),
-		regexp.MustCompile(`^/sluis/private/credentials/slack-app/alerts/[0-9a-f]{24}$`),
-		regexp.MustCompile(`^/sluis/private/credentials/console/session-key$`),
+		regexp.MustCompile(`^/sluis/test/private/credentials/directory/google/C01ipl6j0/[0-9a-f]{24}$`),
+		regexp.MustCompile(`^/sluis/test/private/credentials/slack-workspace/acme/[0-9a-f]{24}$`),
+		regexp.MustCompile(`^/sluis/test/private/credentials/slack-app/alerts/[0-9a-f]{24}$`),
+		regexp.MustCompile(`^/sluis/test/private/credentials/console/session-key$`),
 	}
 	got := names(f)
 	if len(got) != len(want) {
@@ -76,7 +76,7 @@ func TestACredentialIsAParameterUnderTheCredentialsPrefix(t *testing.T) {
 	}
 }
 
-// An exports pass over the ssm Secrets adapter writes `/sluis/export/<name>`,
+// An exports pass over the ssm Secrets adapter writes `/sluis/<instance>/export/<name>`,
 // one JSON object of the properties.
 func TestAnExportsPassWritesTheExportPrefix(t *testing.T) {
 	ctx := context.Background()
@@ -111,7 +111,7 @@ func TestAnExportsPassWritesTheExportPrefix(t *testing.T) {
 	if err := json.Unmarshal(got.Value, &props); err != nil || props["bot_token"] != "xoxb-BOT" || len(props) != 1 {
 		t.Fatalf("the export = %s (%v)", got.Value, err)
 	}
-	if want := []string{"/sluis/export/slack-app-alerts"}; !slices.Equal(names(f), want) {
+	if want := []string{"/sluis/test/export/slack-app-alerts"}; !slices.Equal(names(f), want) {
 		t.Errorf("parameters = %v, want %v", names(f), want)
 	}
 	// A second pass makes no new version.

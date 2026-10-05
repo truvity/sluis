@@ -5,7 +5,10 @@ bin/
 ts/node_modules/
 # `go build ./cmd/<name>` drops the binary here, named for the command.
 /acceptance
+/sluis
+/sluis-lambda
 /sluisctl
+/resource-proxy
 # ko / goreleaser output.
 /dist/
 !frontend/dist/

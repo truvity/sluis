@@ -1,0 +1,82 @@
+package migrate_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	"github.com/truvity/sluis/internal/migrate"
+)
+
+type layoutSSM struct{ params map[string]string }
+
+func (f *layoutSSM) GetParametersByPath(
+	_ context.Context, in *awsssm.GetParametersByPathInput, _ ...func(*awsssm.Options),
+) (*awsssm.GetParametersByPathOutput, error) {
+	out := &awsssm.GetParametersByPathOutput{}
+	for n, v := range f.params {
+		if strings.HasPrefix(n, aws.ToString(in.Path)+"/") {
+			out.Parameters = append(out.Parameters, types.Parameter{Name: aws.String(n), Value: aws.String(v)})
+		}
+	}
+	return out, nil
+}
+
+func (f *layoutSSM) PutParameter(_ context.Context, in *awsssm.PutParameterInput, _ ...func(*awsssm.Options)) (*awsssm.PutParameterOutput, error) {
+	f.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
+	return &awsssm.PutParameterOutput{}, nil
+}
+
+func TestTheConfigurationSecretsMoveToLayoutV3(t *testing.T) {
+	f := &layoutSSM{params: map[string]string{
+		"/sluis/private/config/oauth/client-id":       "id",
+		"/sluis/private/config/oauth/client-secret":   "secret",
+		"/sluis/private/config/clients/console":       "client",
+		"/sluis/private/config/issuer/state-secret":   "seed",
+		"/sluis/private/config/recovery/password":     "pw",
+		"/sluis/private/credentials/github-org/a/key": "a credential, the ports' to move",
+	}}
+	ctx := context.Background()
+	o := migrate.SSMLayoutOptions{From: "/sluis", To: "/sluis/hive", DryRun: true}
+	r, err := migrate.MoveSSMLayout(ctx, f, o)
+	if err != nil || len(r.Copied) != 5 || len(f.params) != 6 {
+		t.Fatalf("dry run: %+v %v (%d params)", r, err, len(f.params))
+	}
+	o.DryRun = false
+	if _, err = migrate.MoveSSMLayout(ctx, f, o); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"/sluis/hive/private/config/providers/google/default/client-id":     "id",
+		"/sluis/hive/private/config/providers/google/default/client-secret": "secret",
+		"/sluis/hive/private/config/clients/console/secret":                 "client",
+		"/sluis/hive/private/config/issuer/state-secret":                    "seed",
+		"/sluis/hive/private/config/recovery/password":                      "pw",
+	} {
+		if f.params[name] != want {
+			t.Errorf("%s = %q, want %q", name, f.params[name], want)
+		}
+	}
+	if _, ok := f.params["/sluis/hive/private/credentials/github-org/a/key"]; ok {
+		t.Error("a credential was copied: it is the ports' to move")
+	}
+	r, err = migrate.MoveSSMLayout(ctx, f, o)
+	if err != nil || len(r.Unchanged) != 5 || len(r.Copied) != 0 {
+		t.Errorf("a second run: %+v %v", r, err)
+	}
+	f.params["/sluis/hive/private/config/recovery/password"] = "changed"
+	if _, err = migrate.MoveSSMLayout(ctx, f, o); err == nil || !strings.Contains(err.Error(), "recovery/password") {
+		t.Errorf("a different value was overwritten without --overwrite: %v", err)
+	}
+	if strings.Contains(err.Error(), "changed") || strings.Contains(err.Error(), "pw") {
+		t.Errorf("the refusal quotes a value: %v", err)
+	}
+	o.Overwrite = true
+	if _, err = migrate.MoveSSMLayout(ctx, f, o); err != nil || f.params["/sluis/hive/private/config/recovery/password"] != "pw" {
+		t.Errorf("--overwrite: %v", err)
+	}
+}

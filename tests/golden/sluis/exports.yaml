@@ -82,6 +82,9 @@ data:
       audience: access-issuer-recovery
       enabled: true
       serviceAccount: access-issuer-recovery
+    secrets:
+      root: /var/run/sluis/secrets
+      source: file
     signingKey:
       activationDelay: 15m
       file: /var/run/access-issuer/signing-key/tls.key
@@ -288,7 +291,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads, and no other: a change
         # to a controller's own document does not restart the service.
-        checksum/config: 26f6eb04eb314805b4847258e4060cebb87452b1969a87eaae5daa7c1529449e
+        checksum/config: d676a70bb30971998b3cb87c93e8a1d1c92db03cb65742105c578c77c424b10b
         checksum/policy: f17f0038a19a4b72fe2c2ed70d5458fc8a11890925ebd6fbf1b1f539fc8b9354
     spec:
       serviceAccountName: sluis

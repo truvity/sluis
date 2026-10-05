@@ -41,16 +41,14 @@ const (
 	RoleSlack  = "slack"
 )
 
-// The environment of a function (and EnvSecretFiles, in ssm.go). Everything else is the configuration file's,
-// or OpenTelemetry's own OTEL_* variables, or the platform's.
+// The environment of a function. Everything else is the configuration
+// documents', OpenTelemetry's own OTEL_* variables, or the platform's: SLUIS_CONFIG
+// (config.EnvConfig) names the service document, in the configuration layer
+// mounted at /opt/sluis, and the secrets it names are read from SSM by the
+// `secrets` source it declares.
 const (
 	// EnvRole is the function's role: http, github or slack. Required.
 	EnvRole = "SLUIS_ROLE"
-	// EnvConfigFile is the configuration file's path in the zip: the
-	// spelling before SLUIS_CONFIG (config.EnvConfig), read when that is unset.
-	EnvConfigFile = "SLUIS_CONFIG_FILE"
-	// DefaultConfigFile is where the deploy tooling puts it.
-	DefaultConfigFile = "/var/task/config/sluis.yaml"
 )
 
 // Function is a role, assembled at cold start and ready to be invoked.
@@ -69,24 +67,13 @@ type Function struct {
 func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
 	role := strings.TrimSpace(getenv(EnvRole))
 	file := strings.TrimSpace(getenv(config.EnvConfig))
-	if file == "" {
-		file = strings.TrimSpace(getenv(EnvConfigFile))
-	}
-	if file == "" {
-		file = DefaultConfigFile
-	}
 	if role != RoleHTTP && role != RoleGitHub && role != RoleSlack {
 		return nil, fmt.Errorf("%s is %q: it is %q, %q or %q", EnvRole, role, RoleHTTP, RoleGitHub, RoleSlack)
 	}
-	// Secrets first: loading the configuration reads the ones it names.
-	if _, err := ResolveEnv(ctx, os.Environ(), os.Setenv, OpenSSM); err != nil {
-		return nil, err
+	if file == "" {
+		return nil, fmt.Errorf("%s is unset: it names the service document, /opt/sluis/<role>.yaml in the configuration layer", config.EnvConfig)
 	}
 	schema := map[string]string{RoleHTTP: "serve", RoleGitHub: "controller-github", RoleSlack: "controller-slack"}[role]
-	// Secret files: every `*File` setting then reads them as on Kubernetes.
-	if _, err := WriteSecretFiles(ctx, getenv(EnvSecretFiles), OpenSSM); err != nil {
-		return nil, err
-	}
 	// A retired variable that is still set is a deployment that believes it is
 	// configuring something.
 	if err := config.RefuseRetired(schema, os.Environ()); err != nil {
@@ -133,9 +120,9 @@ func forceFlush(ctx context.Context) {
 }
 
 func openHTTP(ctx context.Context, file string) (*Function, error) {
-	// The KMS signer's state secret (signingKey.kms.stateSecretFile, sluis#281) is
-	// a secret file like any other: SLUIS_SECRET_FILES writes it from
-	// /sluis/private/config/issuer/state-secret, and the configuration names its path.
+	// The KMS signer's state secret (signingKey.kms.stateSecret) is a secret
+	// like any other: the document names it, and its `secrets` source (ssm)
+	// reads /sluis/<instance>/private/config/issuer/state-secret.
 	cfg, err := rosterapp.Load(file)
 	if err != nil {
 		return nil, err

@@ -957,6 +957,34 @@
     "secretEnv": {
       "$ref": "#/definitions/secretEnv"
     },
+    "secrets": {
+      "type": "array",
+      "description": "The secrets the config names, each one key of a Secret projected as the file <config.secrets.root>/<name>.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "secretName",
+          "key"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+            "description": "The secret's name, as the config gives it: valkey/password."
+          },
+          "secretName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "secretMounts": {
       "$ref": "#/definitions/secretMounts"
     },

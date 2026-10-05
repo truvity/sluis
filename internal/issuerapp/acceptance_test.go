@@ -22,6 +22,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // Each of these assembles a whole issuer from the configuration the chart
@@ -64,6 +65,9 @@ clients:
 	cfg, err := issuerapp.FromConfig(withPolicy(t, f))
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
+	}
+	if deps.Stores == nil {
+		deps.Stores = &store.Stores{Secrets: testSecrets}
 	}
 	app, err := issuerapp.New(context.Background(), cfg,
 		deps, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -221,12 +225,6 @@ func TestImpossibleConfigurationIsRefused(t *testing.T) {
 		{"a log level that is not one", func(f *config.Serve) { f.Log = &config.Log{Level: "chatty"} }},
 		{"activation delay less than poll interval", func(f *config.Serve) {
 			f.SigningKey = &config.SigningKey{PollInterval: d(30 * time.Second), ActivationDelay: d(10 * time.Second)}
-		}},
-		{"a valkey password variable that is not set", func(f *config.Serve) {
-			f.Valkey = &config.Valkey{Address: "valkey:6379", PasswordEnv: "ACCESS_TEST_NOT_SET"}
-		}},
-		{"an OAuth secret variable that is not set", func(f *config.Serve) {
-			f.OAuthClient = &config.OAuthClient{ID: "id", SecretEnv: "ACCESS_TEST_NOT_SET"}
 		}},
 	} {
 		f := &config.Serve{IssuerURL: "https://issuer.example"}

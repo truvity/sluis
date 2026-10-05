@@ -22,6 +22,7 @@ import (
 	"github.com/truvity/sluis/internal/port/s3blob"
 	"github.com/truvity/sluis/internal/port/secretsexport"
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
+	"github.com/truvity/sluis/internal/secrets"
 )
 
 // The adapters `ports.adapter` names.
@@ -70,6 +71,16 @@ type Config struct {
 	DynamoDB dynamoport.Config
 	// Export is the Export port's adapter; nil is none.
 	Export *config.PortsExport
+
+	// Secrets delivers the secrets the document names (the Valkey password):
+	// the composition root sets it after FromServe. Nil delivers none.
+	Secrets secrets.Source
+	// SecretsRoot is the serve document's `secrets.root` when its source is
+	// ssm: the root the `ssm` Secrets adapter takes.
+	SecretsRoot string
+	// Converted is a document converted from v1: an `ssm` secrets adapter
+	// that names no root keeps v1's layout, /sluis.
+	Converted bool
 
 	// secrets is the secrets adapter the plan chose, nil when nothing chose one.
 	secrets *port.Choice
@@ -183,6 +194,11 @@ func FromServe(f *config.Serve) (Config, error) {
 		DynamoDB: dynamoOf(f.Ports),
 		Export:   exportConfigOf(f.Ports),
 		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", f.SigningKey),
+
+		Converted: f.Converted(),
+	}
+	if s := f.Secrets; s != nil && s.Source == "ssm" {
+		c.SecretsRoot = s.Root
 	}
 	var err error
 	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
@@ -215,7 +231,8 @@ func FromRoster(f *config.Roster) Config {
 	c := Config{
 		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
 		Blob: blobOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
-		sel: selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", nil),
+		sel:       selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", nil),
+		Converted: f.Converted(),
 	}
 	if c.Adapter == AdapterMemory {
 		c.Kube = KubeNone
@@ -278,6 +295,9 @@ type Stores struct {
 	// Plan is the resolved adapter per concern, for the packages that wire a
 	// concern this package does not.
 	Plan port.Table
+	// Secrets delivers the secrets the document names, by name: what the
+	// composition root put in Config.Secrets. Nil delivers none.
+	Secrets secrets.Source
 	// Shared is true when the state is one every replica sees: a Valkey.
 	Shared bool
 	// Usable is whether the State, Index and snapshot Blob ports work at all:
@@ -357,6 +377,7 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 		return st, err
 	}
 	st.Plan = plan
+	st.Secrets = cfg.Secrets
 	if err = st.applyTrigger(ctx, log); err != nil {
 		st.Close()
 		return nil, err

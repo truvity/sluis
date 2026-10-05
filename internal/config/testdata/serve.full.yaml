@@ -16,20 +16,19 @@ directory:
     - id: C0example
       backend: google
       admin: admin@example.com
-      keyFile: /var/run/access-issuer/directory/keys/google/key.json
+      keySecret: directory/C0example/key
       serve: [example.com]
       syncGroups: [all@example.com]
 publicURL: https://access.example/console
 publicRootURL: https://access.example
 secureCookies: true
 groupsScoping: enforce
-clientSecretsDir: /var/run/access-issuer/clients
-adminPasswordEnv: ACCESS_ADMIN_PASSWORD
+secrets: {source: ssm, root: /sluis/example, region: eu-west-1, endpoint: "http://localhost:4566", refresh: 5m}
 lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
 freshness: {refreshInterval: 15m, freshnessWindow: 30m, probeInterval: 5m}
 exchange:
   audience: access-issuer
-recovery: {enabled: true, serviceAccount: access-issuer-recovery, audience: access-issuer-recovery}
+recovery: {enabled: true, serviceAccount: access-issuer-recovery, audience: access-issuer-recovery, passwordSecret: recovery/password}
 login:
   directory: true
   signOutURL: https://access.example/logout
@@ -37,9 +36,7 @@ login:
 console: {origin: https://access.example, client: console, awsAudience: https://access.example/console}
 oauthClient:
   id: client-id
-  idFile: /var/run/access-issuer/oauth-client/client-id
-  secretFile: /var/run/access-issuer/oauth-client/client-secret
-  secretEnv: ACCESS_OAUTH_CLIENT_SECRET
+  provider: default
   secretName: google-oauth
   idKey: client-id
   secretKey: client-secret
@@ -49,7 +46,7 @@ signingKey:
   pollInterval: 30s
   activationDelay: 15m
   overlap: 2h
-valkey: {address: "valkey:6379", passwordEnv: VALKEY_PASSWORD, tls: true, cluster: false}
+valkey: {address: "valkey:6379", passwordSecret: valkey/password, tls: true, cluster: false}
 audit:
   writer: http://audit.access-issuer.svc:8080
   tokenFile: /var/run/audit/token

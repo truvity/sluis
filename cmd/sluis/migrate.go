@@ -15,6 +15,7 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/kube"
 	"github.com/truvity/sluis/internal/migrate"
+	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/version"
 )
@@ -112,6 +113,9 @@ func parseMigrate(args []string, out io.Writer) (migrateFlags, bool, error) {
 
 // migrateCmd is `sluis migrate`.
 func migrateCmd(out io.Writer, args []string) error {
+	if len(args) > 0 && args[0] == "ssm-layout" {
+		return migrateSSMLayout(out, args[1:])
+	}
 	f, done, err := parseMigrate(args, out)
 	if err != nil || done {
 		return err
@@ -166,6 +170,9 @@ func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string
 	}
 	sc, err := store.FromServe(cfg)
 	if err != nil {
+		return migrate.Side{}, err
+	}
+	if sc.Secrets, err = secrets.Open(ctx, cfg); err != nil {
 		return migrate.Side{}, err
 	}
 	sc.KubeClient = kc

@@ -80,7 +80,12 @@ sluis.checks: everything the service's config must agree with.
 {{- if ne (join "," ($signing.additionalFiles | default list)) $additional -}}
 {{- fail (printf "config.signingKey.additionalFiles must be [%s], one file per signingKey.additional entry in the order they are declared (got [%s])" $additional (join ", " ($signing.additionalFiles | default list))) -}}
 {{- end -}}
-{{- include "sluis.expectPath" (dict "key" "config.clientSecretsDir" "got" $c.clientSecretsDir "want" "/var/run/access-issuer/clients" "source" "policy.clients[].secret" "present" (not (empty (include "sluis.confidentialClients" .)))) -}}
+{{- if include "sluis.secretFiles" . -}}
+{{- $secrets := dig "secrets" dict $c -}}
+{{- if or (ne ($secrets.source | default "env") "file") (ne ($secrets.root | default "") "/var/run/sluis/secrets") -}}
+{{- fail (printf "config.secrets must be {source: file, root: /var/run/sluis/secrets}, where the chart projects `secrets` and each confidential client's Secret (got source %q, root %q)" ($secrets.source | default "env") ($secrets.root | default "")) -}}
+{{- end -}}
+{{- end -}}
 {{- include "sluis.expectAudit" (dict "key" "config.audit.tokenFile" "cfg" $c) -}}
 {{- $openbao := dig "ports" "export" "openbao" dict $c -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.caFile" "got" $openbao.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}

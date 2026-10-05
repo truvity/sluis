@@ -4,9 +4,4 @@ config:
   issuerURL: https://issuer.example
   oauthClient:
     secretName: sign-in-client
-    idFile: /var/run/access-issuer/oauth-client/client-id
-    secretFile: /var/run/access-issuer/oauth-client/client-secret
     idKey: ''
-secretMounts:
-- secretName: sign-in-client
-  mountPath: /var/run/access-issuer/oauth-client

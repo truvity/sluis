@@ -1,7 +1,10 @@
 package issuerapp_test
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/truvity/sluis/internal/secrets"
 
 	"github.com/truvity/sluis/internal/config"
 )
@@ -16,3 +19,10 @@ func withPolicy(t *testing.T, f *config.Serve) (*config.Serve, *config.PolicyDoc
 	}
 	return f, p
 }
+
+// asName is a temporary file as a secret's name, under the root testSecrets
+// reads from: the tests write each secret to a file of its own.
+func asName(path string) string { return strings.TrimPrefix(path, "/") }
+
+// testSecrets is the source the tests' issuers read their secrets from.
+var testSecrets = secrets.File{Root: "/"}

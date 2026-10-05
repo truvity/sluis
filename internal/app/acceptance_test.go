@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/truvity/sluis/internal/secrets"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 
 	"github.com/truvity/sluis/internal/access"
@@ -23,14 +24,13 @@ import (
 func issuerFile(t *testing.T, change ...func(*config.Serve)) *config.Serve {
 	t.Helper()
 	// The recovery password is a declared secret: the file names the variable.
-	t.Setenv("ACCESS_TEST_ADMIN_PASSWORD", "recover-me")
+	t.Setenv("SLUIS_SECRET_RECOVERY_PASSWORD", "recover-me")
 	enabled := true
 	f := &config.Serve{
-		IssuerURL:        "https://issuer.example",
-		Demo:             true,
-		Store:            "memory",
-		AdminPasswordEnv: "ACCESS_TEST_ADMIN_PASSWORD",
-		Recovery:         &config.Recovery{Enabled: &enabled},
+		IssuerURL: "https://issuer.example",
+		Demo:      true,
+		Store:     "memory",
+		Recovery:  &config.Recovery{Enabled: &enabled, PasswordSecret: "recovery/password"},
 	}
 	for _, c := range change {
 		c(f)
@@ -45,6 +45,7 @@ func openStores(t *testing.T, f *config.Serve) *store.Stores {
 	if err != nil {
 		t.Fatalf("store.FromServe: %v", err)
 	}
+	sc.Secrets = secrets.Env{}
 	st, err := store.Open(context.Background(), sc, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
@@ -263,7 +264,6 @@ func TestImpossibleConfigurationIsRefused(t *testing.T) {
 	}{
 		{"an unknown store", func(f *config.Serve) { f.Store = "postgres" }},
 		{"a log level that is not one", func(f *config.Serve) { f.Log = &config.Log{Level: "chatty"} }},
-		{"a recovery password variable that is not set", func(f *config.Serve) { f.AdminPasswordEnv = "ACCESS_TEST_NOT_SET" }},
 	} {
 		if _, err := app.FromConfig(issuerFile(t, tc.change), nil); err == nil {
 			t.Errorf("%s was accepted", tc.name)

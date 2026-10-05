@@ -147,7 +147,7 @@ func TestTheSecretsConcernIsWiredFromThePlan(t *testing.T) {
 }
 
 func TestAnSsmSettingNobodyKnowsIsRefusedAtStart(t *testing.T) {
-	cfg := Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: selection{
+	cfg := Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/test", sel: selection{
 		Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "ssm", Settings: map[string]any{"rooot": "/x"}}}}}
 	c, _, err := cfg.plan(context.Background(), quiet)
 	if err == nil {
@@ -161,13 +161,13 @@ func TestAnSsmSettingNobodyKnowsIsRefusedAtStart(t *testing.T) {
 // `signingKey.kms` is the legacy spelling of the kms signing adapter, and a
 // `signingKey.file` beside a preset that picks kms still means file.
 func TestSigningKeyIsTheLegacyMappingOfTheSigningAdapter(t *testing.T) {
-	kms := &config.SigningKeyKMS{Keys: []string{"alias/a"}, StateSecretFile: "/s"}
+	kms := &config.SigningKeyKMS{Keys: []string{"alias/a"}, StateSecret: "/s"}
 	_, table, err := Config{Adapter: AdapterLegacy, Kube: KubeNone,
 		sel: selection{SigningKMS: kms}}.plan(context.Background(), quiet)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if table.Name(port.ConcernSigning) != "kms" || table[port.ConcernSigning].Settings["stateSecretFile"] != "/s" {
+	if table.Name(port.ConcernSigning) != "kms" || table[port.ConcernSigning].Settings["stateSecret"] != "/s" {
 		t.Fatalf("got %+v", table[port.ConcernSigning])
 	}
 
@@ -188,7 +188,7 @@ func TestSigningKeyIsTheLegacyMappingOfTheSigningAdapter(t *testing.T) {
 // always been, in `signingKey.kms`, and does not hide them.
 func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
 	ctx := context.Background()
-	kms := &config.SigningKeyKMS{Keys: []string{"alias/a"}, StateSecretFile: "/s"}
+	kms := &config.SigningKeyKMS{Keys: []string{"alias/a"}, StateSecret: "/s"}
 	_, table, err := Config{Adapter: AdapterLegacy, sel: selection{
 		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms"}},
 	}}.plan(ctx, quiet)
@@ -196,12 +196,12 @@ func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := table[port.ConcernSigning]
-	if got.Adapter != "kms" || got.Settings["stateSecretFile"] != "/s" || got.Source != port.SourceOverride {
+	if got.Adapter != "kms" || got.Settings["stateSecret"] != "/s" || got.Source != port.SourceOverride {
 		t.Errorf("a bare kms adapter lost signingKey.kms: %+v", got)
 	}
 
 	// The wrapped adapter, too.
-	wrapped := &config.SigningKeyKMSWrapped{KeyID: "alias/w", StateSecretFile: "/s"}
+	wrapped := &config.SigningKeyKMSWrapped{KeyID: "alias/w", StateSecret: "/s"}
 	_, table, err = Config{Adapter: AdapterLegacy, sel: selection{
 		SigningWrapped: wrapped, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms-wrapped"}},
 	}}.plan(ctx, quiet)
@@ -215,9 +215,9 @@ func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
 	// Settings of its own win whole; another adapter's block is not borrowed.
 	_, table, _ = Config{Adapter: AdapterLegacy, sel: selection{
 		SigningKMS: kms, Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms",
-			Settings: map[string]any{"keys": []any{"alias/b"}, "stateSecretFile": "/other"}}},
+			Settings: map[string]any{"keys": []any{"alias/b"}, "stateSecret": "other"}}},
 	}}.plan(ctx, quiet)
-	if got := table[port.ConcernSigning]; got.Settings["stateSecretFile"] != "/other" {
+	if got := table[port.ConcernSigning]; got.Settings["stateSecret"] != "other" {
 		t.Errorf("the override's own settings were replaced: %+v", got)
 	}
 	_, table, _ = Config{Adapter: AdapterLegacy, sel: selection{
@@ -230,11 +230,42 @@ func TestABareSigningAdapterKeepsTheSigningKeySettings(t *testing.T) {
 
 func TestKMSWrappedSettingsInTwoPlacesAreRefused(t *testing.T) {
 	_, _, err := Config{Adapter: AdapterLegacy, sel: selection{
-		SigningWrapped: &config.SigningKeyKMSWrapped{KeyID: "alias/w", StateSecretFile: "/s"},
+		SigningWrapped: &config.SigningKeyKMSWrapped{KeyID: "alias/w", StateSecret: "/s"},
 		Adapters: map[string]config.AdapterChoice{"signing": {Adapter: "kms-wrapped",
-			Settings: map[string]any{"keyId": "alias/x", "stateSecretFile": "/s"}}},
+			Settings: map[string]any{"keyId": "alias/x", "stateSecret": "s"}}},
 	}}.plan(context.Background(), quiet)
 	if err == nil || !strings.Contains(err.Error(), "both set") {
 		t.Errorf("settings in two places: %v", err)
+	}
+}
+
+// The ssm adapter's root is the serve document's secrets.root: named again it
+// must be the same, and a document that names neither is refused.
+func TestTheSSMRootIsTheDocumentsSecretsRoot(t *testing.T) {
+	ssm := func(settings map[string]any) selection {
+		return selection{Adapters: map[string]config.AdapterChoice{"secrets": {Adapter: "ssm", Settings: settings}}}
+	}
+	ctx := context.Background()
+	for name, tc := range map[string]struct {
+		cfg  Config
+		want string
+	}{
+		"the document's root": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/hive", sel: ssm(nil)}, ""},
+		"the same root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/hive", sel: ssm(map[string]any{"root": "/sluis/hive"})}, ""},
+		"another root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/hive",
+			sel: ssm(map[string]any{"root": "/sluis/kernel"})}, "one root"},
+		"no root at all":        {Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: ssm(nil)}, "no root"},
+		"a converted v1 config": {Config{Adapter: AdapterLegacy, Kube: KubeNone, Converted: true, sel: ssm(nil)}, ""},
+	} {
+		c, _, err := tc.cfg.plan(ctx, quiet)
+		if err == nil {
+			_, err = c.compose(ctx, port.Set{}, quiet)
+		}
+		switch {
+		case tc.want == "" && err != nil:
+			t.Errorf("%s: %v", name, err)
+		case tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+			t.Errorf("%s: %v, want %q", name, err, tc.want)
+		}
 	}
 }

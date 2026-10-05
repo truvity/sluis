@@ -111,6 +111,16 @@ var retiredSlackRoster = map[string]string{
 	"ENABLED_WORKSPACES": "enabledWorkspaces",
 }
 
+// retiredLambda are the variables a function was configured with before the
+// configuration layer and the `secrets` source, retired for every binary: a
+// function that still sets one is deployed by an older Pulumi library.
+var retiredLambda = map[string]string{
+	"SLUIS_CONFIG_FILE": "SLUIS_CONFIG, which names the service document (on Lambda, /opt/sluis/<role>.yaml in the configuration layer): " +
+		"deploy with the v1.62 Pulumi library",
+	"SLUIS_SECRET_FILES": "the document's `secrets` source (ssm, root /sluis/<instance>) and the names its keys give " +
+		"(`signingKey.kms.stateSecret`, `recovery.passwordSecret`, ...): deploy with the v1.62 Pulumi library",
+}
+
 // Retired returns, for one binary, every retired variable and what replaces it.
 // The documentation's migration table is this, and a test holds them together.
 func Retired(binary string) map[string]string {
@@ -120,6 +130,7 @@ func Retired(binary string) map[string]string {
 			out[k] = v
 		}
 	}
+	add(retiredLambda)
 	switch binary {
 	case "serve":
 		add(retiredIssuer)
@@ -152,6 +163,13 @@ func RefuseRetired(binary string, environ []string) error {
 		if _, ok := retired[name]; ok && value != "" {
 			found = append(found, name)
 		}
+		// A variable whose value is `ssm:<path>` was filled from SSM at cold
+		// start; the `secrets` source reads SSM itself now, by name.
+		if strings.HasPrefix(value, "ssm:/") {
+			retired[name] = "a secret the document names (`...Secret`), read by its `secrets` source (ssm): the `ssm:` mapping is retired; " +
+				"deploy with the v1.62 Pulumi library"
+			found = append(found, name)
+		}
 	}
 	if len(found) == 0 {
 		return nil
@@ -179,13 +197,22 @@ var retiredKeys = map[string]map[string]string{
 	"serve": {
 		"policyDir": "the policy is one rendered document now: name it with policy.file " +
 			"(`sluisctl policy render <dir>` writes it from the directory policyDir named)",
-		"overlayFile":           "the declared workspaces are directory.workspaces in this document",
-		"api":                   "removed: sluis serve serves no directory API listener, so its guard configured nothing",
-		"github":                "moved to the policy document: exchange.github.owners, apps.github.runnerTiers and apps.github.catalogue",
-		"slack":                 "moved to the policy document: apps.slack.catalogue",
-		"exports":               "moved to the policy document: exports",
-		"exchange.clustersFile": "moved to the policy document: exchange.clusters, the rows themselves",
-		"exchange.awsFile":      "moved to the policy document: exchange.aws, the rows themselves",
+		"overlayFile":                           "the declared workspaces are directory.workspaces in this document",
+		"api":                                   "removed: sluis serve serves no directory API listener, so its guard configured nothing",
+		"github":                                "moved to the policy document: exchange.github.owners, apps.github.runnerTiers and apps.github.catalogue",
+		"slack":                                 "moved to the policy document: apps.slack.catalogue",
+		"exports":                               "moved to the policy document: exports",
+		"exchange.clustersFile":                 "moved to the policy document: exchange.clusters, the rows themselves",
+		"exchange.awsFile":                      "moved to the policy document: exchange.aws, the rows themselves",
+		"valkey.passwordEnv":                    "valkey.passwordSecret, the secret's name (valkey/password), delivered by `secrets`",
+		"oauthClient.idFile":                    "oauthClient.provider: the client's secrets are providers/google/<provider>/client-id and client-secret",
+		"oauthClient.secretFile":                "oauthClient.provider: the client's secrets are providers/google/<provider>/client-id and client-secret",
+		"oauthClient.secretEnv":                 "oauthClient.provider: the client's secrets are providers/google/<provider>/client-id and client-secret",
+		"adminPasswordEnv":                      "recovery.passwordSecret, the secret's name (recovery/password), delivered by `secrets`",
+		"recovery.passwordFile":                 "recovery.passwordSecret, the secret's name (recovery/password), delivered by `secrets`",
+		"clientSecretsDir":                      "nothing: a confidential client's secret is clients/<client-id>/secret, delivered by `secrets`",
+		"signingKey.kms.stateSecretFile":        "signingKey.kms.stateSecret, the secret's name (issuer/state-secret)",
+		"signingKey.kmsWrapped.stateSecretFile": "signingKey.kmsWrapped.stateSecret, the secret's name (issuer/state-secret)",
 	},
 	"controller-github": {
 		"policyDir":     "the policy is one rendered document now: name it with policy.file",

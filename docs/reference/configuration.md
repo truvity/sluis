@@ -769,6 +769,17 @@ longer sets them.
 | `AUDIT_WRITER_URL`, `AUDIT_TOKEN_FILE` | `audit.writer`, `audit.tokenFile` | `audit.writer`, `audit.tokenFile` |
 | `LOG_LEVEL` | `log.level` | `log.level` |
 
+### The function's environment (AWS Lambda)
+
+Retired for every role in v1.62.0, with the configuration layer and the
+`secrets` source:
+
+| Old variable | Now |
+|---|---|
+| `SLUIS_CONFIG_FILE` | `SLUIS_CONFIG`, which names the service document: `/opt/sluis/<role>.yaml` in the configuration layer |
+| `SLUIS_SECRET_FILES` | the document's `secrets` source (`ssm`, root `/sluis/<instance>`) and the names its keys give: `signingKey.kms.stateSecret`, `recovery.passwordSecret` |
+| any variable set to `ssm:<path>` | the same: a secret is named in the document and read by its `secrets` source |
+
 ### The chart's values
 
 | Old value | Now |

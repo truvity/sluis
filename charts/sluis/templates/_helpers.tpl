@@ -177,6 +177,10 @@ Non-empty when any declared client carries a secret, which is what decides
 whether the client-secrets volume is rendered at all. A deployment whose
 clients are all public or exchange-only mounts nothing.
 */}}
+{{- define "sluis.secretFiles" -}}
+{{- if or .Values.secrets (include "sluis.confidentialClients" .) }}yes{{ end }}
+{{- end }}
+
 {{- define "sluis.confidentialClients" -}}
 {{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) }}
 {{- if $client.secret }}yes{{ end }}

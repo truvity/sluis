@@ -134,6 +134,22 @@ func PolicyOf[S Service](svc *S, fallback *policy.Policy) (*PolicyDocument, erro
 	return nil, nil //nolint:nilnil // no policy declared and none to fall back on
 }
 
+// LegacySecrets is, for a document converted from v1, where v1 said each
+// secret it names was (by the name v2 gives it), and v1's clientSecretsDir.
+// Both are empty for a v2 document.
+func (s *Serve) LegacySecrets() (map[string]SecretLocation, string) {
+	if s.legacy == nil {
+		return nil, ""
+	}
+	return s.legacy.secrets, s.legacy.clientDir
+}
+
+// Converted reports whether the document was v1, converted as it was loaded.
+func (s *Serve) Converted() bool { return s.legacy != nil }
+
+// Converted reports whether the document was v1, converted as it was loaded.
+func (r *Roster) Converted() bool { return r.legacy != nil }
+
 // read is a document as validation sees it: YAML, normalised through JSON.
 // The versioned loader reads the file itself; this is the look the loader
 // takes first, for the keys v2 retired.

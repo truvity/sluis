@@ -102,6 +102,9 @@ data:
       audience: access-issuer-recovery
       enabled: true
       serviceAccount: access-issuer-recovery
+    secrets:
+      root: /var/run/sluis/secrets
+      source: file
     signingKey:
       activationDelay: 15m
       file: /var/run/access-issuer/signing-key/tls.key
@@ -109,7 +112,7 @@ data:
     store: kubernetes
     valkey:
       address: valkey.example.svc:6379
-      passwordEnv: VALKEY_PASSWORD
+      passwordSecret: valkey/password
 
 ---
 # Source: sluis/templates/controller-github.yaml
@@ -677,7 +680,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads, and no other: a change
         # to a controller's own document does not restart the service.
-        checksum/config: c19e037c8ab1046847da05079a7c0cd02e30081303fe1547782827859f3453c5
+        checksum/config: a2c1d702968fee42adeada0a0957c8358ac78ba28926d5e3030bcac914d007f3
         checksum/policy: 241defb3c3550c3b9afd50727bfa121ecd26ec83afc0db1bd00589e889d7924f
     spec:
       serviceAccountName: sluis
@@ -706,11 +709,6 @@ spec:
             - serve
             - --config=/etc/sluis/config.yaml
           env:
-            - name: VALKEY_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: valkey
-                  key: password
             
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://gateway.observability.svc:4318"
@@ -738,6 +736,11 @@ spec:
             - name: tmp
               mountPath: /tmp
             
+            # A directory, not a subPath: a secret is read on every use, so a
+            # rotated Secret reaches the running process.
+            - name: secrets
+              mountPath: /var/run/sluis/secrets
+              readOnly: true
           livenessProbe:
             httpGet: { path: /healthz, port: health }
           readinessProbe:
@@ -770,6 +773,19 @@ spec:
         - name: tmp
           emptyDir: {}
         
+        # Every secret the config names, as the file <root>/<name>, so the
+        # service resolves a secret by reading a path and never by holding
+        # RBAC to read Secrets -- the same reason the signing key is a file.
+        # A confidential client's is clients/<client-id>/secret, from the
+        # Secret its policy entry names.
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: valkey
+                  items:
+                    - key: password
+                      path: valkey/password
 
 ---
 # Source: sluis/templates/signing-key.yaml
