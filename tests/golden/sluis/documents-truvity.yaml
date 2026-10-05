@@ -1,0 +1,938 @@
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The account a recovery token is minted for. Deliberately bound to
+# NOTHING: it needs no permissions, because the token is a proof of
+# identity and not a way to act. Granting `create` on
+# `serviceaccounts/token` for this account is how an installation says who
+# may recover, and that grant is the whole of the access control.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sluis-recovery
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: sluis/templates/configmap.yaml
+# What `sluis serve --config` reads: `config`, as the values give it, with
+# nothing added, renamed or dropped but the apiVersion the chart writes. The
+# binary validates it against schemas/config/sluis.schema.json at start, and
+# values.schema.json holds the values to the same schema before this renders.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-config
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: serve
+data:
+  config.yaml: |
+    apiVersion: sluis.truvity.github.io/sluis/v3
+    adapters:
+      blobs:
+        adapter: s3
+        settings:
+          bucket: example-sluis-kernel-111122223333
+          region: eu-central-1
+      secrets:
+        adapter: openbao
+        settings:
+          address: https://openbao.example.test
+          auth:
+            method: kubernetes
+            mount: kubernetes
+            role: sluis
+            tokenFile: /var/run/openbao/token
+          caFile: /var/run/access-issuer/openbao-ca/ca.pem
+          namespace: kernel
+          root: sluis
+      state:
+        adapter: dynamodb
+        settings:
+          region: eu-central-1
+          table: example-sluis-kernel
+    audit:
+      audience: audit
+      forwardedForTrustedHops: 2
+      queryURL: http://audit-query.audit.svc:8080
+      tokenFile: /var/run/audit/token
+      writer: http://audit.audit.svc:8080
+    cluster: kernel
+    console:
+      client: access-console
+    controllers:
+      github:
+        consoleURL: http://sluis.sluis.svc:8080/console
+        interval: 15m
+      slack:
+        consoleURL: http://sluis.sluis.svc:8080/console
+        interval: 15m
+    exchange:
+      audience: sluis
+    groupsScoping: enforce
+    inCluster: true
+    issuerURL: https://access.example.test
+    lifetimes:
+      absolute: 24h
+      hold: 4h
+      refresh: 12h
+      session: 12h
+      token: 1h
+    log:
+      level: info
+    login:
+      directory: false
+    oauthClient:
+      provider: default
+    policy:
+      file: /var/run/access-issuer/policy/policy.yaml
+    preset: k8s-aws
+    publicRootURL: https://access.example.test
+    publicURL: https://access.example.test/console
+    recovery:
+      audience: sluis-recovery
+      enabled: true
+      serviceAccount: sluis-recovery
+    release: sluis
+    secureCookies: true
+    signingKey:
+      kmsWrapped:
+        algorithms:
+          - ES384
+          - RS256
+        keyId: alias/example-sluis-signing
+        region: eu-central-1
+        rotateEvery: 24h
+        stateSecret: issuer/state-secret
+      overlap: 25h
+      verifyOnly:
+        - alg: ES384
+          file: /var/run/access-issuer/verify-keys/0.pem
+          until: "2026-11-01T00:00:00Z"
+    valkey:
+      address: valkey-sluis.sluis.svc:6379
+      cluster: true
+
+---
+# Source: sluis/templates/openbao-ca-configmap.yaml
+# The authorities that sign OpenBao's certificate, for the service's exports
+# (docs/decisions/0034). A certificate, never a secret: it is mounted where
+# config.ports.export.openbao.caFile says.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-openbao-ca
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  ca.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIBexample
+    -----END CERTIFICATE-----
+
+---
+# Source: sluis/templates/policy-configmap.yaml
+# The policy document (schemas/config/policy.schema.json): what every process
+# of this installation decides by, read once at start. Mounted as a directory
+# by the service and both controllers, so a change rolls all three.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-policy
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  policy.yaml: |
+    apiVersion: sluis.truvity.github.io/policy/v2
+    groups:
+      all:access-roster:operator:
+        members:
+          - admin@example.test
+      all:access-roster:viewer:
+        matchers:
+          - email_domain: example.test
+      all:argocd:admin:
+        members:
+          - admin@example.test
+      all:audit:security:
+        members:
+          - admin@example.test
+      all:aws:admin:
+        members:
+          - admin@example.test
+      all:ci:runner:
+        matchers:
+          - github:
+              owner: example-org
+              ref: refs/heads/main
+          - github:
+              owner: example-forms
+              ref: refs/heads/main
+      all:docs:reader:
+        members:
+          - admin@example.test
+      all:github:reader:
+        members:
+          - admin@example.test
+      all:grafana:admin:
+        members:
+          - admin@example.test
+      all:headlamp:admin:
+        members:
+          - admin@example.test
+      all:k8s:admin:
+        members:
+          - admin@example.test
+      all:kargo:admin:
+        members:
+          - admin@example.test
+      all:linear:reader:
+        members:
+          - admin@example.test
+      all:outline:member:
+        members:
+          - admin@example.test
+      all:registry:admin:
+        members:
+          - admin@example.test
+      all:ssh:operator:
+        members:
+          - admin@example.test
+      all:vmauth:viewer:
+        members:
+          - admin@example.test
+    lifetimes:
+      default: 4h0m0s
+    clients:
+      access-console:
+        kind: public
+        redirects:
+          - https://access.example.test/console/callback
+        requires:
+          - all:access-roster:viewer
+      argocd:
+        kind: confidential
+        secret: clients/argocd/secret
+        redirects:
+          - https://argocd.example.test/callback
+        requires:
+          - all:argocd:admin
+        signing_alg: RS256
+      audit:
+        kind: exchange
+        requires:
+          - all:audit:security
+      aws-cli:
+        kind: public
+        redirects:
+          - http://localhost:8015/callback
+        requires:
+          - all:aws:admin
+      ci-github:
+        kind: exchange
+        requires:
+          - all:ci:runner
+      ci-gitlab:
+        kind: exchange
+        requires:
+          - all:ci:runner
+      grafana:
+        kind: confidential
+        secret: clients/grafana/secret
+        redirects:
+          - https://grafana.example.test/callback
+        requires:
+          - all:grafana:admin
+      harbor:
+        kind: confidential
+        secret: clients/harbor/secret
+        redirects:
+          - https://harbor.example.test/callback
+        requires:
+          - all:registry:admin
+      headlamp:
+        kind: confidential
+        secret: clients/headlamp/secret
+        redirects:
+          - https://headlamp.example.test/callback
+        requires:
+          - all:headlamp:admin
+      k8s-kernel:
+        kind: exchange
+        requires:
+          - all:k8s:admin
+      kargo:
+        kind: confidential
+        secret: clients/kargo/secret
+        redirects:
+          - https://kargo.example.test/callback
+        requires:
+          - all:kargo:admin
+        signing_alg: RS256
+      kargo-cli:
+        kind: public
+        redirects:
+          - http://localhost:8013/callback
+        requires:
+          - all:kargo:admin
+        signing_alg: RS256
+      mcp-docs:
+        kind: public
+        redirects:
+          - http://localhost:8018/callback
+        requires:
+          - all:docs:reader
+      mcp-github:
+        kind: public
+        redirects:
+          - http://localhost:8019/callback
+        requires:
+          - all:github:reader
+      mcp-linear:
+        kind: public
+        redirects:
+          - http://localhost:8019/callback
+        requires:
+          - all:linear:reader
+      opkssh:
+        kind: public
+        redirects:
+          - http://localhost:8014/callback
+        requires:
+          - all:ssh:operator
+        signing_alg: RS256
+      outline:
+        kind: confidential
+        secret: clients/outline/secret
+        redirects:
+          - https://outline.example.test/callback
+        requires:
+          - all:outline:member
+      sluisctl:
+        kind: public
+        redirects:
+          - http://localhost:8017/callback
+        requires:
+          - all:access-roster:viewer
+      vmauth:
+        kind: confidential
+        secret: clients/vmauth/secret
+        redirects:
+          - https://vmauth.example.test/callback
+        requires:
+          - all:vmauth:viewer
+      zot-cli:
+        kind: public
+        redirects:
+          - http://localhost:8016/callback
+        requires:
+          - all:registry:admin
+    github:
+      example-forms:
+        members:
+          - all:access-roster:viewer
+      example-org:
+        members:
+          - all:access-roster:viewer
+    slack:
+      workspaces:
+        example:
+          channels:
+            ops:
+              private: true
+              from:
+                - all:access-roster:operator
+    exchange:
+      clusters:
+        - name: kernel
+          issuer: https://kubernetes.default.svc
+        - name: devel
+          issuer: https://oidc.devel.example.test
+          jwksUri: https://oidc.devel.example.test/keys
+        - name: stage
+          issuer: https://oidc.stage.example.test
+        - name: prod
+          issuer: https://oidc.prod.example.test
+      aws:
+        audience: https://access.example.test
+        maxAge: 5m
+        accounts:
+          - account: "111122223333"
+            name: kernel
+            issuer: https://sts-issuer.example.test
+      github:
+        owners:
+          - example-forms
+          - example-org
+    apps:
+      github:
+        runnerTiers:
+          - canary
+          - large
+          - stable
+        catalogue:
+          - id: release
+            org: example-org
+            permissions:
+              contents: write
+              pull_requests: read
+            grants:
+              - group: all:ci:runner
+                repositories:
+                  - infra-*
+                permissions:
+                  contents: write
+      slack:
+        catalogue:
+          - id: alerts
+            workspace: example
+            botScopes:
+              - chat:write
+          - id: deadman
+            workspace: example
+            botScopes:
+              - chat:write
+    controllers:
+      github:
+        enabledOrgs:
+          - example-forms
+          - example-org
+      slack:
+        enabledWorkspaces:
+          - example
+    exports:
+      - name: arc-runner-stable
+        source: runner-app
+        tier: stable
+        org: example-org
+        path: github-runner-app/stable/example-org
+      - name: arc-runner-large
+        source: runner-app
+        tier: large
+        org: example-org
+        path: github-runner-app/large/example-org
+      - name: arc-runner-canary
+        source: runner-app
+        tier: canary
+        org: example-forms
+        path: github-runner-app/canary/example-forms
+      - name: release-app
+        source: github-app
+        app: release
+        path: github-apps/release
+      - name: slack-alerts
+        source: slack-app
+        app: alerts
+        path: slack-apps/alerts
+      - name: slack-deadman
+        source: slack-app
+        app: deadman
+        namespace: devel
+        path: slack-apps/deadman
+      - name: backup-github-apps
+        source: bundle
+        bundle: github-apps
+        path: sluis-backup/github-apps
+      - name: backup-slack-credentials
+        source: bundle
+        bundle: slack-credentials
+        path: sluis-backup/slack-credentials
+
+---
+# Source: sluis/templates/verify-keys.yaml
+# PUBLIC keys the service publishes in its JWKS and never signs with: the keys of
+# an earlier signer, kept so tokens it issued verify until they expire. A
+# ConfigMap, because a public key is not a secret. Mounted at
+# /var/run/access-issuer/verify-keys, where config.signingKey.verifyOnly[].file
+# says.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sluis-verify-keys
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  0.pem: |
+    -----BEGIN PUBLIC KEY-----
+    MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAElZnSplCULdNRmGOQlKazRp+FgiMdzJCo
+    f9UFd57KOtMRtBLEZZLBER31njHUIT0ANb6gmGJlj1iAMQHHyc5o6aH7/tb0uPSC
+    6gshO6QnM6JEn6253dKP3R+Jsnosykra
+    -----END PUBLIC KEY-----
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+# The one cluster-scoped permission this service ever needs, and the one
+# thing left that asks the API server anything: creating TokenReviews, so
+# that recovery can check a token proving cluster access. It reads
+# nothing.
+#
+# Workloads used to need it too. They do not any more: a
+# ServiceAccount token is verified against the key set its own cluster
+# publishes, so this service holds no access to any cluster including its
+# own. Recovery keeps it because on the day everything else is broken it
+# should depend on nothing but the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sluis-sluis-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+
+---
+# Source: sluis/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sluis-sluis-tokenreview
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sluis-sluis-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: sluis
+    namespace: sluis
+
+---
+# Source: sluis/templates/controllers.yaml
+# What the controllers in this process may do to the cluster, bound to the
+# service's own account (there is one account and one pod). Update, by name,
+# the ConfigMaps they report into, and the one Secret people's linked GitHub
+# accounts are kept in: each link's token pair rotates every time it is renewed,
+# and the renewed pair has to be written back. The service creates those
+# objects -- `create` cannot be narrowed to a name -- so this grants no create,
+# and in particular no ConfigMap that would read to the service as a workspace
+# record. The Secrets with the Apps' keys and the ConfigMaps with the console's
+# records are mounted volumes, so no other Secret or ConfigMap is readable, and
+# watching them for a change (an install, a Refresh) needs no permission either.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sluis-controllers
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      - "sluis-github-status"
+      - "sluis-slack-status"
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["sluis-github-links"]
+    verbs: ["get", "update"]
+
+---
+# Source: sluis/templates/controllers.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sluis-controllers
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sluis-controllers
+subjects:
+  - kind: ServiceAccount
+    name: sluis
+    namespace: sluis
+
+---
+# Source: sluis/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+  ports:
+    - name: issuer
+      port: 8080
+      targetPort: issuer
+
+---
+# Source: sluis/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sluis
+      app.kubernetes.io/instance: sluis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sluis
+        app.kubernetes.io/instance: sluis
+      annotations:
+        # Configuration and policy are immutable for an instance: each document
+        # is read once, at start, so a change to either is a rollout. One
+        # checksum per document this process reads: the service document (the
+        # controllers' sections are in it) and the policy.
+        checksum/config: 4a608d70d98c0be6f79be0fea3836e993d51ebe7cd71b7858eede72c9ea19d88
+        checksum/policy: 6ef3bf7c7c9916d796fb2a015196d9f682f10b1e046a663e8c831416d870218e
+        checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
+    spec:
+      serviceAccountName: sluis
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: serve
+          image: "ghcr.io/truvity/sluis/sluis:0.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: issuer
+              containerPort: 8080
+            - name: health
+              containerPort: 7070
+          # The whole of the configuration is the service document, `config`
+          # rendered as it stands, and the policy document it names. The
+          # environment carries only the secrets the document names.
+          args:
+            - serve
+            - --config=/etc/sluis/config.yaml
+          volumeMounts:
+            # Read once, at start: a subPath is enough, since a change replaces
+            # the pod (checksum/*). The policy keeps its directory.
+            - name: config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: policy
+              mountPath: /var/run/access-issuer/policy
+              readOnly: true
+            - name: verify-keys
+              mountPath: /var/run/access-issuer/verify-keys
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            
+            - name: audit-token
+              mountPath: /var/run/audit
+              readOnly: true
+            # The GitHub controller's: the token the console verifies for it, the
+            # Apps' credentials and the console's records.
+            - name: github-token
+              mountPath: /var/run/secrets/github-roster
+              readOnly: true
+            - name: github-apps
+              mountPath: /var/run/github-roster/apps
+              readOnly: true
+            - name: github-records
+              mountPath: /var/run/github-roster/records
+              readOnly: true
+            # The Slack controller's, likewise.
+            - name: slack-token
+              mountPath: /var/run/secrets/slack-roster
+              readOnly: true
+            - name: slack-credentials
+              mountPath: /var/run/slack-roster/credentials
+              readOnly: true
+            - name: slack-workspaces
+              mountPath: /var/run/slack-roster/workspaces
+              readOnly: true
+            
+            - name: openbao-ca
+              mountPath: /var/run/access-issuer/openbao-ca
+              readOnly: true
+            - name: openbao-token
+              mountPath: /var/run/openbao
+              readOnly: true
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+          readinessProbe:
+            # Readiness follows the shared store; liveness deliberately
+            # does not. A replica that cannot reach it leaves the
+            # rotation, and the gateway answers fast instead of hanging;
+            # nothing is restarted, so one blip cannot restart the fleet.
+            #
+            # timeoutSeconds exceeds the service's own 2s check so the
+            # answer is the reason ("the session store does not answer:
+            # i/o timeout") rather than the kubelet's timeout. Three
+            # failures at ten seconds is thirty seconds of trouble before
+            # a replica leaves, which a reconnect comfortably beats.
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: sluis-config
+        - name: verify-keys
+          configMap:
+            name: sluis-verify-keys
+        - name: policy
+          configMap:
+            name: sluis-policy
+        # The root filesystem is read-only, and the directory backends
+        # want somewhere to write.
+        - name: tmp
+          emptyDir: {}
+        
+        - name: audit-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "audit"
+                  expirationSeconds: 3600
+                  path: token
+        # The token the console verifies, for the audience it accepts a
+        # workload's token for. Rotated by the kubelet; the controller reads
+        # the file on every call.
+        - name: github-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sluis
+                  expirationSeconds: 3600
+                  path: token
+        # One file per connected organisation. Optional: before anything is
+        # connected there may be nothing, and the controller reports each
+        # bound organisation as not connected rather than failing to start.
+        - name: github-apps
+          secret:
+            secretName: sluis-github-apps
+            optional: true
+        # The console's records beside them: each organisation's record, the
+        # operators' confirmations and their requests for a pass now. Optional
+        # for the same reason.
+        - name: github-records
+          configMap:
+            name: sluis-github-orgs
+            optional: true
+        - name: slack-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sluis
+                  expirationSeconds: 3600
+                  path: token
+        # One file per connected workspace: the app's credentials and its bot
+        # token. Optional: before anything is connected there may be nothing.
+        - name: slack-credentials
+          secret:
+            secretName: sluis-slack-credentials
+            optional: true
+        # The console's records beside them: each workspace's record, the
+        # shared channels' definitions and the operators' confirmations.
+        - name: slack-workspaces
+          configMap:
+            name: sluis-slack-workspaces
+            optional: true
+        
+        - name: openbao-ca
+          configMap:
+            name: sluis-openbao-ca
+        - name: openbao-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "openbao-kernel"
+                  expirationSeconds: 3600
+                  path: token
+
+---
+# Source: sluis/templates/httproute.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sluis-tls
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: sluis-tls
+  dnsNames:
+    - "access.example.test"
+  issuerRef:
+    name: "internal-ca"
+    kind: "ClusterIssuer"
+    group: cert-manager.io
+
+---
+# Source: sluis/templates/httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  gatewayClassName: "internal"
+  listeners:
+    - name: issuer
+      protocol: HTTPS
+      port: 443
+      hostname: "access.example.test"
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: sluis-tls
+
+---
+# Source: sluis/templates/httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sluis
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: sluis
+      sectionName: issuer
+  hostnames:
+    - "access.example.test"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: sluis
+          port: 8080
+          weight: 1
+
+---
+# Source: sluis/templates/httproute.yaml
+# The console's own route, and the reason it is a SEPARATE object rather
+# than another rule above: a gateway policy attaches to an HTTPRoute, so
+# anything put in front of the console would otherwise also sit in front
+# of /token, /keys and discovery. Every relying party in the estate would
+# be asked to sign in to fetch a key set.
+#
+# It renders whether or not anything attaches to it. An empty route costs
+# a few lines of YAML; discovering at cutover that there is nothing to
+# attach to costs an evening, and the alternative in that moment —
+# attaching to the catch-all — is the outage described above.
+#
+# The path is NOT rewritten. The merged service strips the prefix
+# itself, so a gateway that stripped it too would hand the console a path
+# it never serves.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sluis-console
+  labels:
+    app.kubernetes.io/name: sluis
+    app.kubernetes.io/instance: sluis
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: sluis
+      sectionName: issuer
+  hostnames:
+    - "access.example.test"
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: "/console"
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: "/console/"
+            statusCode: 302
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/console/"
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: sluis
+          port: 8080
+          weight: 1

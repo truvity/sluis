@@ -132,6 +132,12 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 			}
 			values := merge(defaults, load(t, shape))
 
+			// A release given the rendered documents is held by documents_test.go:
+			// its ConfigMaps are those documents, not the values' `config`.
+			if doc, _ := dig(values, "documents", "service"); doc != nil && doc != "" {
+				return
+			}
+
 			// `renders: alerts` and `renders: dashboards` release no service:
 			// their cases are held by alerts_test.go, and what matters here is
 			// that none of them renders a configuration.
@@ -319,6 +325,15 @@ func TestTheControllersRunInTheOneDeployment(t *testing.T) {
 			mounted[name] = mount["mountPath"].(string)
 		}
 		controllers, _ := dig(values, "config", "controllers")
+		if doc, _ := dig(values, "documents", "service"); doc != nil && doc != "" {
+			// The release is given the rendered service document: the controllers
+			// it names are the ones that run.
+			var parsed map[string]any
+			if err := yaml.Unmarshal([]byte(doc.(string)), &parsed); err != nil {
+				t.Fatalf("%s: documents.service: %v", shape, err)
+			}
+			controllers = parsed["controllers"]
+		}
 		on, _ := controllers.(map[string]any)
 		for kind, want := range map[string][]string{
 			"github": {"github-token", "github-apps", "github-records"},

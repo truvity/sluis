@@ -1,3 +1,4 @@
+{{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "app" -}}
 {{- if .Values.exports.openbao.caBundle }}
 # The authorities that sign OpenBao's certificate, for the service's exports

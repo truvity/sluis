@@ -2,6 +2,14 @@
 
 ### Added
 
+- **Chart: `documents.service` and `documents.policy`**, the rendered documents of one installation
+  (`sluisctl render`). The chart puts them into their ConfigMaps unchanged, holds them to what it mounts (release name,
+  `policy.file`, public URLs, audit token, verify-only keys, the controllers' console URL) without rewriting them, and
+  keeps only the deployment-level values. A secret an `openbao` or `ssm` secrets adapter delivers is not projected from a
+  Kubernetes Secret in this mode. Helm cannot run the loader, so the chart also refuses an `http://` OpenBao address and a
+  credential-looking key in adapter settings; the chart README says documents must come from `sluisctl render` (and
+  `--check` in CI). A Truvity-shaped case (k8s-aws, OpenBao, KMS-wrapped, 20 clients, both controllers) is
+  rendered from the installation's documents and held byte for byte.
 - **The installation document and `sluisctl render`: estates render their documents through sluis**
   ([0038](docs/decisions/0038-estates-render-through-sluis.md)). An installation
   (`apiVersion: sluis.truvity.github.io/installation/v1`, `schemas/config/installation.schema.json`) is what an
@@ -48,6 +56,9 @@
 
 ### Deprecated
 
+- **Chart: the values-mode** (`config`, `policy`, `exchange.clusters`, `exchange.aws`, `githubApps.catalogue` and
+  `slackApps` rendering the two documents) keeps working for one minor and is then removed; NOTES.txt says so while it is
+  used. Render the documents with `sluisctl render` and pass them as `documents.service` and `documents.policy`.
 - **`LambdaArgs.Config`, `Policy` and `PolicyPath`** (Pulumi library): write the estate's facts as `LambdaArgs.Installation`.
   They keep working for one minor, and `NewLambda` logs a warning while one is used.
 

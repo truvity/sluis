@@ -232,8 +232,15 @@ clients are all public or exchange-only mounts nothing.
 {{- end }}
 
 {{- define "sluis.confidentialClients" -}}
+{{- /*
+  With documents (`documents.service`), a secret is delivered as the document's
+  secrets adapter says: an `openbao` or `ssm` adapter reads a client's secret by
+  its NAME from the store, so there is no Kubernetes Secret to project.
+*/ -}}
+{{- if not (and (include "sluis.documentsMode" .) (has (dig "adapters" "secrets" "adapter" "" .Values.config) (list "openbao" "ssm"))) -}}
 {{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) }}
 {{- if $client.secret }}yes{{ end }}
+{{- end }}
 {{- end }}
 {{- end }}
 
@@ -543,3 +550,103 @@ endpoint (sluis.validateTelemetry).
 {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+sluis.documentsMode: non-empty when the release is given the rendered documents
+(`documents.service` and `documents.policy`, from `sluisctl render`) instead of
+`config` and `policy`. Then the two documents are the ConfigMaps' content, byte
+for byte, and the chart only holds them to what it mounts.
+*/}}
+{{- define "sluis.documentsMode" -}}
+{{- if or .Values.documents.service .Values.documents.policy }}yes{{ end -}}
+{{- end }}
+
+{{/*
+sluis.prepare: every template file starts with it. In documents mode it makes
+`.Values.config` and `.Values.policy` BE the two documents (parsed, and never
+written back: the ConfigMaps carry the strings as given), so that every check
+and every mount decision below reads the document the service will read, and
+not a default of the values around it. The exchange's clusters are read from the
+policy document for the same reason. Idempotent: the first call does it, and a
+marker says so. Refuses what would be said twice: `policy`, `exchange.clusters`
+and `exchange.aws.accounts` beside the documents. `config` is never read.
+*/}}
+{{- define "sluis.prepare" -}}
+{{- if and (include "sluis.documentsMode" .) (not (hasKey .Values "documentsPrepared")) -}}
+{{- if not (and .Values.documents.service .Values.documents.policy) -}}
+{{- fail "documents.service and documents.policy go together: the rendered service document and the rendered policy document of one installation (sluisctl render)" -}}
+{{- end -}}
+{{- if or .Values.policy .Values.exchange.clusters .Values.exchange.aws.accounts -}}
+{{- fail "documents.service and documents.policy are set, and so are policy, exchange.clusters or exchange.aws.accounts: the documents hold them, say each once (the chart's `config` is not read in this mode)" -}}
+{{- end -}}
+{{- $service := fromYaml .Values.documents.service -}}
+{{- $policy := fromYaml .Values.documents.policy -}}
+{{- if hasKey $service "Error" -}}
+{{- fail (printf "documents.service is not YAML: %s" $service.Error) -}}
+{{- end -}}
+{{- if hasKey $policy "Error" -}}
+{{- fail (printf "documents.policy is not YAML: %s" $policy.Error) -}}
+{{- end -}}
+{{- if ne ($service.apiVersion | default "") "sluis.truvity.github.io/sluis/v3" -}}
+{{- fail (printf "documents.service must be the service document, apiVersion sluis.truvity.github.io/sluis/v3 (got %q): render it with sluisctl render" ($service.apiVersion | default "")) -}}
+{{- end -}}
+{{- if ne ($policy.apiVersion | default "") "sluis.truvity.github.io/policy/v2" -}}
+{{- fail (printf "documents.policy must be the policy document, apiVersion sluis.truvity.github.io/policy/v2 (got %q): render it with sluisctl render" ($policy.apiVersion | default "")) -}}
+{{- end -}}
+{{- include "sluis.documentGuards" $service -}}
+{{- $_ := set .Values "config" $service -}}
+{{- $_ := set .Values "policy" $policy -}}
+{{- $_ := set .Values.exchange "clusters" (dig "exchange" "clusters" list $policy) -}}
+{{- $_ := set .Values "documentsPrepared" true -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+sluis.credentialKeys: the paths of the keys under a value that would hold a
+credential's value: a key naming a token, password, secret or key material that
+is not a NAME (`...Secret`) or a path (`...File`). Takes (dict "v" <value> "at"
+<path>); returns one path per line.
+*/}}
+{{- define "sluis.credentialKeys" -}}
+{{- $at := .at -}}
+{{- if kindIs "map" .v -}}
+{{- range $k, $x := .v -}}
+{{- $lower := lower $k -}}
+{{- if not (or (hasSuffix "file" $lower) (hasSuffix "secret" $lower)) -}}
+{{- range $w := list "token" "password" "passwd" "secret" "credential" "privatekey" "apikey" "accesskey" -}}
+{{- if contains $w $lower }}{{ printf "%s.%s" $at $k }}
+{{ end -}}
+{{- end -}}
+{{- end -}}
+{{ include "sluis.credentialKeys" (dict "v" $x "at" (printf "%s.%s" $at $k)) -}}
+{{- end -}}
+{{- else if kindIs "slice" .v -}}
+{{- range $i, $x := .v -}}
+{{ include "sluis.credentialKeys" (dict "v" $x "at" (printf "%s[%d]" $at $i)) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+sluis.documentGuards: what the chart can still refuse in a rendered document
+Helm cannot run the loader, so a hand-edited document is held to the two rules a
+reviewer would not see: an OpenBao is reached over https only (a login token
+crosses the connection), and no adapter setting carries a credential's value.
+Takes the parsed service document.
+*/}}
+{{- define "sluis.documentGuards" -}}
+{{- range $concern, $choice := (dig "adapters" dict .) -}}
+{{- $settings := $choice.settings | default dict -}}
+{{- if and (eq ($choice.adapter | default "") "openbao") (not (hasPrefix "https://" ($settings.address | default ""))) -}}
+{{- fail (printf "documents.service: adapters.%s.settings.address must be an https URL: a login token crosses this connection (documents come from `sluisctl render`, which refuses it)" $concern) -}}
+{{- end -}}
+{{- $bad := trim (include "sluis.credentialKeys" (dict "v" $settings "at" (printf "adapters.%s.settings" $concern))) -}}
+{{- if $bad -}}
+{{- fail (printf "documents.service: %s names a credential: a document carries the NAME of a secret (...Secret) or a file (...File), never a value (documents come from `sluisctl render`, which refuses it)" ($bad | replace "\n" ", ")) -}}
+{{- end -}}
+{{- end -}}
+{{- $ports := dig "ports" "export" "openbao" dict . -}}
+{{- if and $ports.address (not (hasPrefix "https://" $ports.address)) -}}
+{{- fail "documents.service: ports.export.openbao.address must be an https URL: a login token crosses this connection" -}}
+{{- end -}}
+{{- end }}

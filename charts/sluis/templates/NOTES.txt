@@ -1,0 +1,16 @@
+{{- include "sluis.prepare" . -}}
+{{- if and (eq .Values.renders "app") (not (include "sluis.documentsMode" .)) }}
+
+DEPRECATED: this release is configured through the `config` and `policy` values
+(and `exchange`, `githubApps.catalogue`, `slackApps`), which the chart renders
+into the service document and the policy document. That mode is removed after
+the next minor. Render the two documents with `sluisctl render` from an
+installation, and pass them as they are:
+
+  --set-file documents.service=rendered/sluis.yaml
+  --set-file documents.policy=rendered/policy.yaml
+
+The chart then keeps only the deployment-level values (replicas, service
+account, mounts, probes, routes, alerts) and does not rewrite the documents.
+See docs/reference/sluisctl.md (render) and docs/decisions/0038-estates-render-through-sluis.md.
+{{- end }}

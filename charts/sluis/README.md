@@ -21,6 +21,14 @@ What the chart includes, what it expects and every value are documented in
 `values.schema.json` is strict at the top level: an unknown key fails the
 render.
 
+**Rendered documents are trusted, so they must come from `sluisctl render`.** With `documents.service` and
+`documents.policy` the chart puts the two documents into their ConfigMaps unchanged. Helm cannot run sluis's loader, so the
+chart does not re-validate them: it holds them to what it mounts and refuses an `http://` OpenBao address and an adapter
+setting that names a credential (the two things a hand edit would put in that a reviewer misses), and the service's own
+loader checks the rest at start, after the rollout. An estate therefore renders with `sluisctl render` (never by hand),
+commits the output, and runs `sluisctl render --check` in CI so that a committed document is always what the installation
+renders to ([ADR 0038](../../docs/decisions/0038-estates-render-through-sluis.md)).
+
 Three things it will not do for you. It does not create the signing key
 — cert-manager issues one, or external-secrets delivers one, because a
 service that mints its own credential is an exception to how every other

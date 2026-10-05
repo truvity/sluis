@@ -169,6 +169,21 @@
         }
       }
     },
+    "documents": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The rendered documents of one installation (`sluisctl render`), each as the string the file holds. The chart puts them into their ConfigMaps unchanged and holds them to what it mounts; it does not rewrite them. Set both or neither. With them, `config`, `policy`, `exchange.clusters` and `exchange.aws.accounts` are not used.",
+      "properties": {
+        "service": {
+          "type": "string",
+          "description": "The service document (`sluis.yaml`, apiVersion sluis.truvity.github.io/sluis/v3)."
+        },
+        "policy": {
+          "type": "string",
+          "description": "The policy document (`policy.yaml`, apiVersion sluis.truvity.github.io/policy/v2)."
+        }
+      }
+    },
     "exchange": {
       "type": "object",
       "additionalProperties": false,

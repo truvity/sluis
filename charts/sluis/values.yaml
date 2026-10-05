@@ -636,6 +636,32 @@ exchange:
     #    orgId: ""                 # optional: require this AWS Organizations id
     #    algs: [ES384, RS256]      # default both; narrow, never widen
 
+# The rendered documents (`sluisctl render --installation <file> --out <dir>`,
+# docs/reference/sluisctl.md): the service document (`sluis.yaml`, apiVersion
+# sluis.truvity.github.io/sluis/v3) and the policy document (`policy.yaml`,
+# .../policy/v2) of one installation, as strings. The chart puts each into its
+# ConfigMap UNCHANGED and keeps only what is deployment-level (replicas, the
+# service account, mounts, probes, routes, alerts). It does not rewrite them: it
+# holds them to what it mounts (a path where the chart mounts something, the
+# release's full name, the public URLs the route's), and refuses one that
+# disagrees, naming the key to change in the INSTALLATION and render again.
+#
+#   helm upgrade sluis charts/sluis \
+#     --set-file documents.service=rendered/sluis.yaml \
+#     --set-file documents.policy=rendered/policy.yaml
+#
+# Set both or neither. With them, `config`, `policy`, `exchange.clusters` and
+# `exchange.aws.accounts` are not used (`policy` and the two exchange lists are
+# refused, so nothing is said twice). `githubApps` and `slackApps` keep only
+# their `push` instructions to External Secrets.
+#
+# DEPRECATED: the values-mode, `config` and `policy` and the values that fill
+# the policy's sections (`exchange`, `githubApps.catalogue`, `slackApps`), still
+# works for one minor and is then removed. NOTES.txt says so while it is used.
+documents:
+  service: ""
+  policy: ""
+
 # The policy document (schemas/config/policy.schema.json), without its
 # apiVersion, which the chart writes: the access model's tables (groups,
 # claims, lifetimes, resources, client_documents, clients, github, people,

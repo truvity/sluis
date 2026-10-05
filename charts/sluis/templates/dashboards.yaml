@@ -1,3 +1,4 @@
+{{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "dashboards" }}
 {{- /*
 Dashboards-only mode: the Grafana dashboard ConfigMaps and nothing else, for

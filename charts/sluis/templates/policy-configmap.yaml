@@ -1,3 +1,4 @@
+{{- include "sluis.prepare" . -}}
 {{- if eq .Values.renders "app" -}}
 # The policy document (schemas/config/policy.schema.json): what every process
 # of this installation decides by, read once at start. Mounted as a directory
@@ -10,5 +11,9 @@ metadata:
     {{- include "sluis.labels" . | nindent 4 }}
 data:
   policy.yaml: |
+    {{- if include "sluis.documentsMode" . }}
+    {{- .Values.documents.policy | trimSuffix "\n" | nindent 4 }}
+    {{- else }}
     {{- include "sluis.policyDocument" . | nindent 4 }}
+    {{- end }}
 {{ end -}}
