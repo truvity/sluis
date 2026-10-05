@@ -115,7 +115,11 @@ jobs:
           (cd ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
           # The repository's version is the tag; package.json carries none.
           npm version "${TAG#v}" --no-git-tag-version --allow-same-version
-          npm publish
+          # npm refuses a pre-release (vX.Y.Z-rc.N) without a dist-tag; it goes
+          # to `next`, so `latest` stays the last release.
+          dist=latest
+          case "$TAG" in *-*) dist=next ;; esac
+          npm publish --tag "$dist"
           # The package was @truvity/access-roster before the rename to sluis.
           # GitHub Packages cannot `npm deprecate`, so for one or two releases
           # the SAME build is published under the old name too, its description
@@ -124,7 +128,7 @@ jobs:
           # when the old name is retired (docs/decisions/0035-renamed-to-sluis.md).
           npm pkg set name="@truvity/access-roster" \
             description="DEPRECATED: renamed to @truvity/sluis, the same code under its new name. Install @truvity/sluis."
-          npm publish
+          npm publish --tag "$dist"
 
   # A Go module in a subdirectory is released by a tag that carries the
   # directory: `deploy/pulumi/vX.Y.Z` is how
