@@ -180,8 +180,8 @@ func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 		return h.refreshDirectory(ctx)
 	}
 	if kind != KindExports {
-		return nil, fmt.Errorf("the event's kind is %q: the http function takes API Gateway events and {\"kind\":%q} or {\"kind\":%q}",
-			oneLine(kind), KindExports, KindRefresh)
+		return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q|%q}",
+			oneLine(kind), KindTick, KindRun, KindExports, KindRefresh)
 	}
 	if h.exports == nil {
 		return nil, errors.New("this function owns no exports")
@@ -224,4 +224,30 @@ func (h *HTTP) refreshDirectory(ctx context.Context) (any, error) {
 		return nil, fmt.Errorf("%d of %d workspaces could not be refreshed", res.Failed, res.Workspaces)
 	}
 	return res, nil
+}
+
+// controller runs one pass of the event's target under the controller of its
+// kind. The kind of a target is the policy's to say (a GitHub organisation's
+// login and a Slack workspace's key are not told apart by their spelling), so a
+// target nobody declares has no controller: for a run-now, which any caller may
+// send, that ends cleanly; for a schedule, which names its target itself, it is
+// a failure the schedule sees.
+func (h *HTTP) controller(ctx context.Context, payload json.RawMessage) (any, error) {
+	event, err := ParseEvent(payload)
+	if err != nil {
+		return nil, err
+	}
+	kind := ""
+	if h.kindOf != nil {
+		kind = h.kindOf(event.Target)
+	}
+	c := h.controllers[kind]
+	if c == nil {
+		if event.Kind == KindRun {
+			h.log.InfoContext(ctx, "a run-now for a target no controller of this function runs", "target", oneLine(event.Target))
+			return Result{Kind: event.Kind, Target: event.Target, Outcome: OutcomeUnknown}, nil
+		}
+		return nil, fmt.Errorf("the target %q is declared by no controller this function runs", oneLine(event.Target))
+	}
+	return c.Handle(ctx, payload)
 }

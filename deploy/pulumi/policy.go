@@ -182,7 +182,7 @@ func keyringWriteDenial(tableArn string) statement {
 
 // wrappedKeyPolicy is the key policy of the symmetric key the library creates. The account's IAM policies govern it (the root statement every key
 // has), and everything that can open a wrapped signing key is pinned to the
-// signing roles (signingRoleArns: the http function's role, and the Kubernetes
+// signing roles (signingRoleArns: the function's role, and the Kubernetes
 // serve role when one signs too):
 //
 //   - SluisSigningContextReserved denies EVERY principal that is not a signing
@@ -332,66 +332,52 @@ func parameterArnsUnder(region, account string, prefixes ...string) []string {
 	return out
 }
 
-// functionPolicyIn is what one function's role is rendered from.
+// functionPolicyIn is what the function's role is rendered from.
 type functionPolicyIn struct {
-	role               string
 	region, account    string
 	bucketArn          string
 	tableArn, tableKey string
 	queueArn           string
 	signingKeyArns     []string
 	wrappedKeyArn      string
-	webIdentity        bool
 	webIdentityAud     string
 	parameterKeyArn    string
 	instance           string
-	// exports is whether this function runs the exports: only it reads what
-	// it wrote under export/ (a copy that is already there writes nothing).
+	// exports is whether the function runs the exports: only then does it read
+	// what it wrote under export/ (a copy that is already there writes nothing).
 	exports            bool
 	logGroupArn        string
 	invokeFunctionArns []string
 }
 
-// privateStatements is a function's grant on /sluis/<instance>/private,
-// narrowed to what the function does there.
+// privateStatements is the function's grant on /sluis/<instance>/private,
+// narrowed to what it does there:
 //
-//   - every function reads and writes credentials/* (the credentials of its
-//     records), and nothing else of private/;
-//   - http alone reads config/* (the secrets its document names: the recovery
-//     password, the state secret, the OAuth client, the declared clients and
-//     workspaces), and never writes it: config/* is the operator's and the
-//     stack's;
-//   - the controllers are denied config/* outright: an explicit Deny, which
-//     wins over any Allow, keeps a leaked controller role from reading,
-//     replacing or deleting it.
+//   - it reads and writes credentials/* (the credentials of its records), and
+//     nothing else of private/ that it may write;
+//   - it reads config/* (the secrets its document names: the recovery password,
+//     the state secret, the OAuth client, the declared clients and workspaces),
+//     and never writes it: config/* is the operator's and the stack's.
 func privateStatements(in functionPolicyIn) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
-	st := []statement{{
+	return []statement{{
 		"Sid":      sidPrivate,
 		"Effect":   "Allow",
 		"Action":   all,
 		"Resource": parameterArns(in.region, in.account, CredentialsParameterPrefix(in.instance)),
-	}}
-	if in.role == RoleHTTP {
-		return append(st, statement{
-			"Sid":      sidPrivate + "Config",
-			"Effect":   "Allow",
-			"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-			"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix(in.instance)),
-		})
-	}
-	return append(st, statement{
-		"Sid":      sidPrivate + "NotConfig",
-		"Effect":   "Deny",
-		"Action":   all,
+	}, {
+		"Sid":      sidPrivate + "Config",
+		"Effect":   "Allow",
+		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
 		"Resource": parameterArns(in.region, in.account, ConfigParameterPrefix(in.instance)),
-	})
+	}}
 }
 
-// functionPolicy is the role of one function. All three get the storage, the
-// table, their secrets and the exports, the audit queue and their own logs; the
-// signing key and the right to run another function's pass are the http
-// function's alone.
+// functionPolicy is the function's role: the storage, the table, its secrets and
+// the exports, the audit queue and its own logs; the signing key; the right to
+// run a pass by invoking itself; and the outbound web identity token the
+// controllers read the console with. There is one role, so the controllers' code
+// has all of it.
 func functionPolicy(in functionPolicyIn) (string, error) {
 	st := []statement{{
 		"Sid":      sidLogs,
@@ -412,10 +398,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Action":   exportActions,
 		"Resource": parameterArns(in.region, in.account, ExportParameterPrefix(in.instance)),
 	})
-	keyPrefixes := []string{CredentialsParameterPrefix(in.instance), ExportParameterPrefix(in.instance)}
-	if in.role == RoleHTTP {
-		keyPrefixes = append(keyPrefixes, ConfigParameterPrefix(in.instance))
-	}
+	keyPrefixes := []string{CredentialsParameterPrefix(in.instance), ExportParameterPrefix(in.instance), ConfigParameterPrefix(in.instance)}
 	st = append(st, parameterKeyStatements(in.parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
 		parameterArnsUnder(in.region, in.account, keyPrefixes...))...)
 	st = append(st, statement{
@@ -424,30 +407,22 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Action":   sqsSendMessage,
 		"Resource": in.queueArn,
 	})
-	if in.role == RoleHTTP {
-		if len(in.signingKeyArns) > 0 {
-			st = append(st, signingStatement(in.signingKeyArns))
-		}
-		if in.wrappedKeyArn != "" {
-			st = append(st, wrappedSigningStatement(in.wrappedKeyArn))
-		}
-		st = append(st, statement{
-			"Sid":      sidInvoke,
-			"Effect":   "Allow",
-			"Action":   lambdaInvokeFunction,
-			"Resource": in.invokeFunctionArns,
-		})
+	if len(in.signingKeyArns) > 0 {
+		st = append(st, signingStatement(in.signingKeyArns))
 	}
-	if in.role != RoleHTTP {
-		st = append(st, keyringWriteDenial(in.tableArn))
+	if in.wrappedKeyArn != "" {
+		st = append(st, wrappedSigningStatement(in.wrappedKeyArn))
 	}
-	if in.webIdentity && in.role != RoleHTTP {
-		st = append(st, webIdentityStatement(in.webIdentityAud))
-	}
+	st = append(st, statement{
+		"Sid":      sidInvoke,
+		"Effect":   "Allow",
+		"Action":   lambdaInvokeFunction,
+		"Resource": in.invokeFunctionArns,
+	}, webIdentityStatement(in.webIdentityAud))
 	return document(st)
 }
 
-// webIdentityStatement lets a controller ask STS for its role's outbound web
+// webIdentityStatement lets the controllers ask STS for the role's outbound web
 // identity token, which is how it authenticates to the console. The action
 // takes no resource, so the statement is on "*" (the one such grant here). With
 // an audience the request must carry it and no other: the key is multi-valued

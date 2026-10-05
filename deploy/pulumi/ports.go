@@ -39,8 +39,7 @@ type PortsArgs struct {
 }
 
 // RenderPorts renders the `ports:` block as a map: the value under the `ports`
-// key of the configuration file of `serve` and of both controllers, which share
-// it (schemas/config/*.schema.json).
+// key of the service document, which the controllers it runs share (schemas/config/*.schema.json).
 //
 //	ports:
 //	  adapter: dynamodb

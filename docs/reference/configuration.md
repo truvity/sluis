@@ -978,8 +978,9 @@ Pulumi library to deploy with, because the binary and the library move together
 
 | Old variable | Now |
 |---|---|
-| `SLUIS_CONFIG_FILE` | `SLUIS_CONFIG`, which names the service document: `/opt/sluis/<role>.yaml` in the configuration layer |
+| `SLUIS_CONFIG_FILE` | `SLUIS_CONFIG`, which names the service document: `/opt/sluis/sluis.yaml` in the configuration layer |
 | `SLUIS_SECRET_FILES` | the document's `secrets` source (`ssm`, root `/sluis/<instance>`) and the names its keys give: `signingKey.kms.stateSecret`, `recovery.passwordSecret` |
+| `SLUIS_ROLE` | nothing: there is one function, which serves the issuer and the console and runs the controllers' passes (deploy with the v1.63 Pulumi library) |
 | any variable set to `ssm:<path>` | the same: a secret is named in the document and read by its `secrets` source |
 
 ### Retired keys
