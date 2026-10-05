@@ -1,6 +1,8 @@
 // Package rosterapp assembles the whole of sluis as ONE process:
 // the directory connectors, the snapshot and its refresher, the policy,
-// the OpenID provider, the login page and the console.
+// the OpenID provider, the login page and the console and, when the service
+// document names them (`controllers`), the GitHub and Slack controllers, which
+// run their loops beside them and answer to the same probes.
 //
 // It exists because the split into two services stopped earning its keep.
 // The hub was built as a directory of record that several
@@ -31,6 +33,7 @@ import (
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/exports"
+	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/hublocal"
@@ -39,6 +42,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/server"
+	slackapp "github.com/truvity/sluis/internal/slackroster/app"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/policy"
 )
@@ -52,6 +56,12 @@ type Config struct {
 	Issuer    issuerapp.Config
 	// Stores says which adapter backs the storage ports and how to reach it.
 	Stores store.Config
+	// GitHub and Slack are the controllers the document runs beside the
+	// service (`controllers.github`, `controllers.slack`); nil is off. A
+	// function that runs a controller one pass per invocation takes them and
+	// clears them before [New], which would run their loops.
+	GitHub *githubapp.Config
+	Slack  *slackapp.Config
 }
 
 // LogLevel is the level the process should log at. It is the issuer's,
@@ -64,7 +74,7 @@ func (c Config) LogLevel() slog.Level { return c.Issuer.LogLevel() }
 // A document that names no policy decides by the built-in one (the
 // demonstration's under `demo`).
 func Load(file string) (Config, error) {
-	svc, err := config.Load[config.Serve](file)
+	svc, err := config.Load[config.Sluis](file)
 	if err != nil {
 		return Config{}, err
 	}
@@ -76,8 +86,11 @@ func Load(file string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	cfg, err := FromConfig(svc, p)
+	cfg, err := FromConfig(&svc.Serve, p)
 	if err != nil {
+		return Config{}, err
+	}
+	if cfg.GitHub, cfg.Slack, err = controllersOf(svc, p); err != nil {
 		return Config{}, err
 	}
 	// The secrets the document names are read through one source, opened
@@ -91,10 +104,39 @@ func Load(file string) (Config, error) {
 			}
 		}
 	}
-	if cfg.Stores.Secrets, err = secrets.Open(context.Background(), svc, clients...); err != nil {
+	if cfg.Stores.Secrets, err = secrets.Open(context.Background(), &svc.Serve, clients...); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// controllersOf builds the settings of the controllers the document names.
+// They decide by the policy the document names, never by the built-in one: a
+// controller that acts on a policy nobody wrote is not one to start.
+func controllersOf(svc *config.Sluis, p *config.PolicyDocument) (*githubapp.Config, *slackapp.Config, error) {
+	if svc.Controllers == nil {
+		return nil, nil, nil
+	}
+	if svc.Policy == nil || svc.Policy.File == "" {
+		return nil, nil, errors.New("controllers: the controllers act on the policy document, so `policy.file` is required")
+	}
+	var gh *githubapp.Config
+	var sl *slackapp.Config
+	if svc.Controllers.GitHub != nil {
+		c, err := githubapp.FromService(svc, p)
+		if err != nil {
+			return nil, nil, fmt.Errorf("controllers.github: %w", err)
+		}
+		gh = &c
+	}
+	if svc.Controllers.Slack != nil {
+		c, err := slackapp.FromService(svc, p)
+		if err != nil {
+			return nil, nil, fmt.Errorf("controllers.slack: %w", err)
+		}
+		sl = &c
+	}
+	return gh, sl, nil
 }
 
 // FromConfig builds both halves' settings from the documents already read.
@@ -123,6 +165,13 @@ type App struct {
 	// exports copies secrets out of the service, out of band; nil when the
 	// deployment declares none.
 	exports *exports.Runner
+	// github and slack are the controllers that run beside the service; nil
+	// when the document names none.
+	github *githubapp.App
+	slack  *slackapp.App
+	// consoles are where the controllers read the console, which is this very
+	// process: a controller starts its passes once its console answers.
+	consoles map[string]string
 }
 
 // Handler is everything served on the public port: the OpenID surface
@@ -181,10 +230,25 @@ func (a *App) FlushAudit(ctx context.Context) error {
 
 // Close releases what New opened.
 func (a *App) Close() {
+	a.closeControllers()
 	if a.directory != nil {
 		a.directory.Close()
 	}
 	a.stores.Close()
+}
+
+func (a *App) closeControllers() {
+	closeEmitter := func(err error) {
+		if err != nil {
+			a.log.Warn("the audit emitter could not be closed cleanly; what its queue held is dropped", "error", err)
+		}
+	}
+	if a.github != nil {
+		closeEmitter(a.github.Close())
+	}
+	if a.slack != nil {
+		closeEmitter(a.slack.Close())
+	}
 }
 
 // New assembles the service. The directory half is built first: the
@@ -204,6 +268,29 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		stores.Close()
 		return nil, err
 	}
+	// From here a failure closes what is open through the App itself.
+	a := &App{directory: directory, stores: stores, log: log, consoles: map[string]string{}}
+	// The controllers are assembled before the issuer, whose readiness is
+	// theirs too: a controller that failed to start (a refused audit
+	// catalogue, an enabled organisation the policy does not bind) is a
+	// process that does not start, as it is when the controller runs apart.
+	var controllerReady []health.Dependency
+	if cfg.GitHub != nil {
+		if a.github, err = githubapp.New(ctx, *cfg.GitHub, log); err != nil {
+			a.Close()
+			return nil, fmt.Errorf("controllers.github: %w", err)
+		}
+		a.consoles["github"] = cfg.GitHub.ConsoleURL()
+		controllerReady = append(controllerReady, a.github.Readiness())
+	}
+	if cfg.Slack != nil {
+		if a.slack, err = slackapp.New(ctx, *cfg.Slack, log); err != nil {
+			a.Close()
+			return nil, fmt.Errorf("controllers.slack: %w", err)
+		}
+		a.consoles["slack"] = cfg.Slack.ConsoleURL()
+		controllerReady = append(controllerReady, a.slack.Readiness())
+	}
 	// Freshness stays the hub's own decision, which is why no maximum age
 	// is passed: a login that forced a live read on every sign-in would
 	// turn one corporate directory's slowness into everybody's.
@@ -211,7 +298,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		Stores:    stores,
 		Directory: hublocal.New(directory.Hub(), 0),
 		Console:   directory.ConsoleHandler(),
-		Ready:     []health.Dependency{directory.Readiness()},
+		Ready:     append([]health.Dependency{directory.Readiness()}, controllerReady...),
 		// The SAME policy, loaded once. Both halves read policyDir, so
 		// they would ordinarily agree — but their fallbacks differ, and
 		// two halves that can disagree about the policy is the class of
@@ -254,8 +341,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	deps.GitHubApps = &apps
 	assembled, err := issuerapp.New(ctx, cfg.Issuer, deps, log)
 	if err != nil {
-		directory.Close()
-		stores.Close()
+		a.Close()
 		return nil, err
 	}
 	// The console's Audit page reads the audit installation's query
@@ -265,8 +351,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	if queryURL, audience := directory.AuditQuery(); queryURL != "" {
 		target, err := url.Parse(queryURL)
 		if err != nil || target.Scheme == "" || target.Host == "" {
-			directory.Close()
-			stores.Close()
+			a.Close()
 			return nil, fmt.Errorf("sluis: audit.queryURL %q is not a URL", queryURL)
 		}
 		directory.ConsoleServer().UseAuditQuery(&server.AuditQuery{
@@ -276,13 +361,13 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	}
 	copies, err := openExports(cfg, stores, directory, log)
 	if err != nil {
-		directory.Close()
-		stores.Close()
+		a.Close()
 		return nil, err
 	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
-		"call except to the corporate directory")
-	return &App{directory: directory, issuer: assembled, stores: stores, log: log, exports: copies}, nil
+		"call except to the corporate directory", "controllers", len(a.consoles))
+	a.issuer, a.exports = assembled, copies
+	return a, nil
 }
 
 // Run serves the listeners and drives the directory's loops until the
@@ -295,6 +380,19 @@ func (a *App) Run(ctx context.Context) error {
 		// Run returns nil whatever the store does: an export never ends the
 		// service, and ends with it.
 		group.Go(func() error { return a.exports.Run(gctx) })
+	}
+	// The controllers' loops end with the service, and a controller that fails
+	// ends it: the one process is as healthy as its parts. Each waits for the
+	// console, which is this process, to answer before its first pass.
+	if a.github != nil {
+		group.Go(func() error {
+			return a.github.RunLoop(gctx, func(ctx context.Context) { awaitConsole(ctx, a.log, "github", a.consoles["github"]) })
+		})
+	}
+	if a.slack != nil {
+		group.Go(func() error {
+			return a.slack.RunLoop(gctx, func(ctx context.Context) { awaitConsole(ctx, a.log, "slack", a.consoles["slack"]) })
+		})
 	}
 	if err := group.Wait(); err != nil {
 		return fmt.Errorf("sluis: %w", err)

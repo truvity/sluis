@@ -18,8 +18,8 @@ spec:
       annotations:
         # Configuration and policy are immutable for an instance: each document
         # is read once, at start, so a change to either is a rollout. One
-        # checksum per document this process reads, and no other: a change
-        # to a controller's own document does not restart the service.
+        # checksum per document this process reads: the service document (the
+        # controllers' sections are in it) and the policy.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/policy: {{ include (print $.Template.BasePath "/policy-configmap.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
@@ -51,6 +51,7 @@ spec:
           args:
             - serve
             - --config=/etc/sluis/config.yaml
+          {{- /* The one process reports as access-issuer: the controllers' series are its own. */}}
           {{- /* Beside the secrets, the SDK variables telemetry.otlp names (ADR 0006). */}}
           {{- $otel := include "sluis.otelEnv" (dict "root" . "service" "access-issuer") }}
           {{- if or .Values.secretEnv $otel }}
@@ -91,6 +92,31 @@ spec:
             - name: tmp
               mountPath: /tmp
             {{- include "sluis.auditMounts" (dict "root" . "cfg" .Values.config) | nindent 12 }}
+            {{- if include "sluis.controllerOn" (dict "root" . "kind" "github") }}
+            # The GitHub controller's: the token the console verifies for it, the
+            # Apps' credentials and the console's records.
+            - name: github-token
+              mountPath: /var/run/secrets/github-roster
+              readOnly: true
+            - name: github-apps
+              mountPath: /var/run/github-roster/apps
+              readOnly: true
+            - name: github-records
+              mountPath: /var/run/github-roster/records
+              readOnly: true
+            {{- end }}
+            {{- if include "sluis.controllerOn" (dict "root" . "kind" "slack") }}
+            # The Slack controller's, likewise.
+            - name: slack-token
+              mountPath: /var/run/secrets/slack-roster
+              readOnly: true
+            - name: slack-credentials
+              mountPath: /var/run/slack-roster/credentials
+              readOnly: true
+            - name: slack-workspaces
+              mountPath: /var/run/slack-roster/workspaces
+              readOnly: true
+            {{- end }}
             {{- with include "sluis.exportsMounts" . }}
             {{- . | nindent 12 }}
             {{- end }}
@@ -148,6 +174,53 @@ spec:
         - name: tmp
           emptyDir: {}
         {{- include "sluis.auditVolumes" (dict "root" . "cfg" .Values.config) | nindent 8 }}
+        {{- if include "sluis.controllerOn" (dict "root" . "kind" "github") }}
+        # The token the console verifies, for the audience it accepts a
+        # workload's token for. Rotated by the kubelet; the controller reads
+        # the file on every call.
+        - name: github-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ include "sluis.exchangeAudience" . }}
+                  expirationSeconds: 3600
+                  path: token
+        # One file per connected organisation. Optional: before anything is
+        # connected there may be nothing, and the controller reports each
+        # bound organisation as not connected rather than failing to start.
+        - name: github-apps
+          secret:
+            secretName: {{ include "sluis.fullname" . }}-github-apps
+            optional: true
+        # The console's records beside them: each organisation's record, the
+        # operators' confirmations and their requests for a pass now. Optional
+        # for the same reason.
+        - name: github-records
+          configMap:
+            name: {{ include "sluis.fullname" . }}-github-orgs
+            optional: true
+        {{- end }}
+        {{- if include "sluis.controllerOn" (dict "root" . "kind" "slack") }}
+        - name: slack-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ include "sluis.exchangeAudience" . }}
+                  expirationSeconds: 3600
+                  path: token
+        # One file per connected workspace: the app's credentials and its bot
+        # token. Optional: before anything is connected there may be nothing.
+        - name: slack-credentials
+          secret:
+            secretName: {{ include "sluis.fullname" . }}-slack-credentials
+            optional: true
+        # The console's records beside them: each workspace's record, the
+        # shared channels' definitions and the operators' confirmations.
+        - name: slack-workspaces
+          configMap:
+            name: {{ include "sluis.fullname" . }}-slack-workspaces
+            optional: true
+        {{- end }}
         {{- with include "sluis.exportsVolumes" . }}
         {{- . | nindent 8 }}
         {{- end }}

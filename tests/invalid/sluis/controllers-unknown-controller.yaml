@@ -1,0 +1,13 @@
+# Only github and slack are controllers.
+# error: at '/config/controllers': additional properties 'gitlab' not allowed
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    gitlab: {}
+console:
+  mount: /console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example

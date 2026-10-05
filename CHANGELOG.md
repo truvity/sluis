@@ -1,5 +1,90 @@
 ## Unreleased
 
+### Changed
+
+- **Breaking: one process everywhere.** `sluis serve` is the whole of sluis:
+  the issuer, the console, the directory hub and, beside them, the GitHub and
+  Slack controllers, each in a loop of its own in the same process. There is no
+  separate controller process to deploy: on Kubernetes it is ONE Deployment
+  (the chart no longer renders the two controller Deployments), and on AWS
+  Lambda it is ONE function (below, in the Pulumi library's entry). The cost is
+  accepted: a controller's code runs with the service's permissions and in its
+  pod, and a controller that cannot start stops the process.
+- **The one service document, `apiVersion: sluis.truvity.github.io/sluis/v3`**
+  (`schemas/config/sluis.schema.json`, `sluis serve --config` / `SLUIS_CONFIG`).
+  Every key of the v2 `serve` document stays where it was, at the top level,
+  and `controllers` is what it adds: `controllers.github` and
+  `controllers.slack`, each optional, an absent one being a controller that is
+  off. A controller's section holds only what is its own: `consoleURL` (unset is
+  `publicURL`), `tokenFile`, `console.auth.aws.audience`, `recordsDir`,
+  `appsDir` (GitHub) or `credentialsDir` (Slack) and `interval`. The release,
+  the policy, `ports`, `platform`, `preset`, `adapters`, `audit`, `log` and
+  `probes` are the process's own, and a controller shares them. `policy.file`
+  is required when a controller is named.
+  ```yaml
+  apiVersion: sluis.truvity.github.io/sluis/v3
+  issuerURL: https://access.example
+  publicURL: https://access.example/console
+  policy: {file: /etc/sluis/policy.yaml}
+  secrets: {source: ssm, root: /sluis/example}
+  ports: {adapter: dynamodb, dynamodb: {table: sluis}}
+  audit: {tokenFile: /var/run/audit/token}
+  controllers:
+    github: {consoleURL: "http://sluis.access.svc:8080/console", interval: 15m}
+    slack: {consoleURL: "http://sluis.access.svc:8080/console"}
+  ```
+- **N-1.** The binary still loads the v2 `serve` document (and v1, with no
+  apiVersion) as this document with no controllers, so `sluis serve` on an
+  unchanged document behaves as before. For one release `sluis controller
+  github|slack` still run a controller as a process of its own (deprecated, and
+  said so in the log), reading either their own v2 documents or the one v3
+  document, whose `controllers.<kind>` section they then take; `sluis tick
+  github|slack` and `sluis migrate` read either. They are removed in the next
+  release.
+- **Telemetry.** The one process reports as `access-issuer`: the controllers'
+  series no longer carry `github-roster` or `slack-roster` as their service
+  name. A dashboard or an alert that selects on those names must stop.
+- **Readiness is the whole process.** `/readyz` of the one process is ready
+  only once each controller it runs has begun, and a controller that fails to
+  start (a refused audit catalogue, an enabled organisation the policy does not
+  bind) stops the process, as it stopped the controller before. A controller
+  waits for the console, which is its own process, to answer before its first
+  pass.
+
+### Chart
+
+- **Breaking: one Deployment.** `controllerGithub` and `controllerSlack` are
+  gone, with the Deployments, ServiceAccounts, ConfigMaps
+  (`<release>-github-roster-config`, `<release>-slack-roster-config`) and
+  PodDisruptionBudgets they rendered. The controllers are
+  `config.controllers.github` and `config.controllers.slack` of the one
+  service document, and run in the Deployment `<release>`, as its
+  ServiceAccount: that account gets the controllers' Role (update, by name, the
+  status ConfigMaps and the GitHub links Secret), the token, Apps, credentials
+  and records volumes of the controllers named, and an ingress rule that lets the
+  pods reach the console through the release's own Service. Policy: `exchange`
+  must admit that ServiceAccount (the controllers read the console as it),
+  where it admitted `<release>-github-roster` and `<release>-slack-roster`, and
+  the audit installation's `workloadIdentity` need map one account.
+- **Refused at render:** a controller in `replicaCount` above 1 unless
+  `config.ports.adapter` is `dynamodb` (the controllers' tick leases must be in
+  a State every replica shares, or every replica acts on every target); a
+  controller without `exchange.clusters`, `console.mount` or the console's own
+  Service as `consoleURL`; `tokenFile`, `appsDir`, `credentialsDir` or
+  `recordsDir` that is not where the chart mounts it.
+- The service document the chart renders is `sluis/v3`; the checksum
+  annotations are two (`checksum/config`, `checksum/policy`) and a change to a
+  controller's section rolls the pod.
+
+#### Removed (chart values)
+
+| Value | Replacement |
+|---|---|
+| `controllerGithub.enabled`, `controllerGithub.config` | `config.controllers.github` (present is on): `consoleURL`, `interval`, `tokenFile`, `appsDir`, `recordsDir` |
+| `controllerSlack.enabled`, `controllerSlack.config` | `config.controllers.slack` (present is on): `consoleURL`, `interval`, `tokenFile`, `credentialsDir`, `recordsDir` |
+| `controllerGithub.config.{policy,release,log,ports,platform,preset,adapters,audit,probes}` and the same for Slack | the service document's own keys, which the controllers share |
+| `controller{Github,Slack}.{replicas,strategy,minReadySeconds,podDisruptionBudget,resources}` | `replicaCount`, `resources` (the one Deployment's) |
+
 ## v1.62.0
 
 Configuration is immutable per instance (ADR 0036): four versioned documents (`serve`, `controller-github`, `controller-slack`, and one canonical `policy`) with `apiVersion` v2, secrets by name from a declared source, SSM layout v3 under `/sluis/<instance>`, and on Lambda the release zip deployed unchanged with the configuration as a layer. Binary 1.62 and the Pulumi library 1.62 deploy together.

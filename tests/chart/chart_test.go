@@ -19,13 +19,14 @@ import (
 
 // What each ConfigMap is named for: where its config lives in the values, and
 // which schema its binary validates it against.
+//
+// There is one: the one process's service document, controllers' sections
+// included.
 var components = map[string]struct {
 	path   []string
 	schema string
 }{
-	"serve":             {[]string{"config"}, "serve"},
-	"controller-github": {[]string{"controllerGithub", "config"}, "controller-github"},
-	"controller-slack":  {[]string{"controllerSlack", "config"}, "controller-slack"},
+	"serve": {[]string{"config"}, "sluis"},
 }
 
 func helm(t *testing.T) string {
@@ -180,16 +181,9 @@ func TestTheRenderedConfigurationIsTheValuesConfiguration(t *testing.T) {
 				}
 			}
 
-			// The other way: a controller the values enable must reach a
-			// ConfigMap, and the service always does. One that is switched off
-			// renders nothing, and that is not a drop.
-			for component, c := range components {
-				on := component == "serve"
-				if !on {
-					parent, _ := dig(values, c.path[0], "enabled")
-					on = parent == true
-				}
-				if on && !rendered[component] {
+			// The other way: the service document always reaches a ConfigMap.
+			for component := range components {
+				if !rendered[component] {
 					t.Errorf("%s is configured and the chart rendered no ConfigMap for it", component)
 				}
 			}
@@ -218,7 +212,7 @@ func TestEveryShippedExampleConfigurationIsAccepted(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: no config", example)
 		}
-		if err := config.Validate("serve", merge(map[string]any{"apiVersion": config.APIVersion("serve")}, cfg.(map[string]any))); err != nil {
+		if err := config.Validate("sluis", merge(map[string]any{"apiVersion": config.APIVersion("sluis")}, cfg.(map[string]any))); err != nil {
 			t.Errorf("%s: %v", example, err)
 		}
 	}
@@ -269,5 +263,81 @@ func TestTheRenderedPolicyDocumentLoads(t *testing.T) {
 	}
 	if loaded == 0 {
 		t.Error("no case rendered a policy document: the sweep proved nothing")
+	}
+}
+
+// The controllers are not Deployments of their own: whatever the values name,
+// the chart renders ONE Deployment, running `sluis serve`, and every volume it
+// mounts is one it defines. A controller the document names has its token, its
+// credentials and its records mounted where the binary's defaults look, and one
+// it does not name has none of them.
+func TestTheControllersRunInTheOneDeployment(t *testing.T) {
+	cases, _ := filepath.Glob(filepath.Join("..", "cases", "sluis", "*", "values.yaml"))
+	defaults := load(t, filepath.Join("..", "..", "charts", "sluis", "values.yaml"))
+	checked := map[string]bool{}
+	for _, shape := range cases {
+		values := merge(defaults, load(t, shape))
+		if mode, _ := values["renders"].(string); mode != "app" {
+			continue
+		}
+		namespace := "default"
+		if raw, err := os.ReadFile(filepath.Join(filepath.Dir(shape), "namespace")); err == nil {
+			namespace = strings.TrimSpace(string(raw))
+		}
+		var deployments []map[string]any
+		for _, doc := range render(t, shape, namespace) {
+			if doc["kind"] == "Deployment" {
+				deployments = append(deployments, doc)
+			}
+		}
+		if len(deployments) != 1 {
+			t.Errorf("%s: %d Deployments, want one", shape, len(deployments))
+			continue
+		}
+		spec, _ := dig(deployments[0], "spec", "template", "spec")
+		pod, _ := spec.(map[string]any)
+		containers, _ := pod["containers"].([]any)
+		if len(containers) != 1 {
+			t.Errorf("%s: %d containers, want one", shape, len(containers))
+			continue
+		}
+		container := containers[0].(map[string]any)
+		if args, _ := container["args"].([]any); len(args) == 0 || args[0] != "serve" {
+			t.Errorf("%s: the container runs %v, want `serve`", shape, args)
+		}
+		volumes := map[string]bool{}
+		for _, v := range pod["volumes"].([]any) {
+			volumes[v.(map[string]any)["name"].(string)] = true
+		}
+		mounted := map[string]string{}
+		for _, m := range container["volumeMounts"].([]any) {
+			mount := m.(map[string]any)
+			name := mount["name"].(string)
+			if !volumes[name] {
+				t.Errorf("%s: the container mounts %s, which the pod does not define", shape, name)
+			}
+			mounted[name] = mount["mountPath"].(string)
+		}
+		controllers, _ := dig(values, "config", "controllers")
+		on, _ := controllers.(map[string]any)
+		for kind, want := range map[string][]string{
+			"github": {"github-token", "github-apps", "github-records"},
+			"slack":  {"slack-token", "slack-credentials", "slack-workspaces"},
+		} {
+			_, named := on[kind]
+			for _, name := range want {
+				if _, has := mounted[name]; has != named {
+					t.Errorf("%s: controllers.%s named is %v and %s mounted is %v", shape, kind, named, name, has)
+				}
+			}
+			if named {
+				checked[kind] = true
+			}
+		}
+	}
+	for _, kind := range []string{"github", "slack"} {
+		if !checked[kind] {
+			t.Errorf("no case runs the %s controller: the sweep proved nothing", kind)
+		}
 	}
 }

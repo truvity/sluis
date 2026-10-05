@@ -1,0 +1,21 @@
+# controllers.slack.enabledWorkspaces names a workspace the inline policy does not declare.
+# error: policy.controllers.slack.enabledWorkspaces names "old", which policy.slack.workspaces does not declare
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    slack:
+      consoleURL: http://sluis.default.svc:8080/console
+console:
+  mount: /console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example
+policy:
+  slack:
+    workspaces:
+      acme: {}
+  controllers:
+    slack:
+      enabledWorkspaces: [acme, old]

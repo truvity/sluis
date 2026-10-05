@@ -2,13 +2,13 @@
 
 Deploys the whole of sluis: the directory reader, the policy,
 the OpenID provider, the login page, the console and the audit trail in
-one process, and, with `controllerGithub.enabled` and `controllerSlack.enabled`, the
-GitHub and Slack controllers beside it. The chart runs one image, `ghcr.io/truvity/sluis/sluis`,
-as three Deployments: `sluis serve`, `sluis controller github` and
-`sluis controller slack`. Each controller has no listener, and is a dry run for every organisation or
+one process, and, when `config.controllers.github` and `config.controllers.slack` name them, the
+GitHub and Slack controllers, each in a loop of its own in that same process. The chart runs one
+image, `ghcr.io/truvity/sluis/sluis`, as ONE Deployment: `sluis serve`. A controller has no
+listener of its own, and is a dry run for every organisation or
 workspace until it is listed in `policy.controllers.github.enabledOrgs` or `policy.controllers.slack.enabledWorkspaces`.
-Each component is configured by one file, its `config` value, rendered as it
-stands and validated against the schema its binary uses; a secret is named in it
+The process is configured by one service document, the `config` value, rendered as it
+stands and validated against the schema the binary uses (`schemas/config/sluis.schema.json`); a secret is named in it
 and reaches a pod as a file the chart projects from `secrets` (or, for
 `secrets.source: env`, through `secretEnv`). See [docs/reference/configuration.md](../../docs/reference/configuration.md).
 Published to `ghcr.io/truvity/charts/sluis` on every
@@ -49,8 +49,8 @@ presents. On a State adapter this replaces the `push` values, which stay for the
 
 `telemetry.otlp.endpoint` sets the OpenTelemetry SDK environment on every pod:
 `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` (`protocol`,
-`http/protobuf` by default), an `OTEL_SERVICE_NAME` per component
-(`access-issuer`, `github-roster`, `slack-roster`) and every `extraEnv` entry
+`http/protobuf` by default), an `OTEL_SERVICE_NAME` (`access-issuer`: the controllers report under the one
+process's name) and every `extraEnv` entry
 (other `OTEL_*` variables only). Empty, nothing is rendered and nothing is
 exported. See [docs/operations/telemetry.md](../../docs/operations/telemetry.md#wiring-it-with-the-chart).
 
@@ -77,10 +77,9 @@ stored), an owner of the workspace installs it, and the bot token is kept in
 secret store
 ([guide](../../docs/connect/slack-apps-catalogue.md)).
 
-`controllerSlack` renders the Slack controller (`enabled`, `resources`, the rollout
-(`replicas`, `strategy`, `minReadySeconds`, `podDisruptionBudget`) and the
-controller's `config`: `interval`; the workspaces it changes are `policy.controllers.slack.enabledWorkspaces`): it needs `exchange.clusters` to name this cluster and
-`console.mount` to be set, and egress to `slack.com:443` from the fleet's own
+`config.controllers.slack` runs the Slack controller in the process (`consoleURL`, `interval`; the
+workspaces it changes are `policy.controllers.slack.enabledWorkspaces`): it needs `exchange.clusters`
+to name this cluster and `console.mount` to be set, and egress to `slack.com:443` from the fleet's own
 policy
 ([guide](../../docs/connect/slack-workspace.md#running-the-controller)).
 `slackState.push` is a recovery copy of the Slack state: two `PushSecret`s, one
@@ -89,17 +88,16 @@ for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 `deletionPolicy` fixed at `None`; it needs `config.store: kubernetes`
 ([runbook](../../docs/operations/runbook.md#slack-state)).
 
-Each controller rolls so that a failed start leaves the old pod running: `strategy`
-defaults to `RollingUpdate` with `maxUnavailable: 0` and `maxSurge: 1`, the pod has a
-readiness probe on `/readyz` (`config.probes.address`, default `:7070`) that opens
-once the process has finished starting, and `minReadySeconds` defaults to 10.
-`replicas` defaults to 1, and above 1 needs the tick leases in a State the replicas
-share: the chart refuses it unless `config.ports.adapter` is `dynamodb`,
-and then renders a `PodDisruptionBudget` (`podDisruptionBudget.minAvailable`,
-default 1). `strategy.type: Recreate` stops the old pod first, as the chart did before
-2026-10-04
+The pod rolls so that a failed start leaves the old pod running: the default `RollingUpdate`
+keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/readyz`,
+`config.probes.address`, default `:7070`) means the whole process, the controllers included,
+finished starting. A controller in the process runs in every replica, so `replicaCount` above 1
+needs the tick leases in a State the replicas share: the chart refuses it unless
+`config.ports.adapter` is `dynamodb`
 ([why](../../docs/operations/runbook.md#a-controller-release-that-crash-loops),
 [when a second replica is safe](../../docs/operations/high-availability.md#the-controllers-how-they-roll-and-when-a-second-replica-is-safe)).
+The controllers read the console as this pod's own ServiceAccount, so the policy's exchange must
+admit that account (`all:access-roster:viewer`), and the audit installation knows one workload.
 
 ```sh
 helm install sluis oci://ghcr.io/truvity/charts/sluis \

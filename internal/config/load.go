@@ -43,12 +43,12 @@ func Validate(name string, doc any) error {
 
 // Document is what [Load] reads: a service document or the policy document.
 type Document interface {
-	Serve | ControllerGitHub | ControllerSlack | PolicyDocument
+	Sluis | Serve | ControllerGitHub | ControllerSlack | PolicyDocument
 }
 
 // Service is a service document: what a process is started with.
 type Service interface {
-	Serve | ControllerGitHub | ControllerSlack
+	Sluis | Serve | ControllerGitHub | ControllerSlack
 }
 
 // Load reads one document from a file, holds it to its schema and decodes it,
@@ -66,6 +66,8 @@ func Load[T Document](file string) (*T, error) {
 	switch v := any(&out).(type) {
 	case *PolicyDocument:
 		err = loadPolicyDocument(file, v)
+	case *Sluis:
+		err = loadSluis(file, v)
 	case *Serve:
 		err = loadService(file, "serve", v, func(l *legacyPolicy) { v.legacy = l })
 	case *ControllerGitHub:
@@ -112,6 +114,8 @@ func PolicyOf[S Service](svc *S, fallback *policy.Policy) (*PolicyDocument, erro
 	var ref *PolicyRef
 	var legacy *legacyPolicy
 	switch v := any(svc).(type) {
+	case *Sluis:
+		ref, legacy = v.Policy, v.legacy
 	case *Serve:
 		ref, legacy = v.Policy, v.legacy
 	case *ControllerGitHub:
@@ -132,6 +136,32 @@ func PolicyOf[S Service](svc *S, fallback *policy.Policy) (*PolicyDocument, erro
 		return p, nil
 	}
 	return nil, nil //nolint:nilnil // no policy declared and none to fall back on
+}
+
+// IsSluis reports whether the file is the one service document (v3), by its
+// apiVersion alone. A file that cannot be read is not: the loader reports it.
+func IsSluis(file string) bool {
+	doc, err := read(file)
+	return err == nil && doc != nil && doc[policyconfig.APIVersionKey] == APIVersion("sluis")
+}
+
+// loadSluis reads the one service document. A document of this build's version
+// (`sluis/v3`) is validated against schemas/config/sluis.schema.json and decoded
+// as it stands. Anything else is the v2 `serve` document, or a v1 one, which
+// loads as it always did and runs no controllers: a deployment moves its
+// documents on its own schedule.
+func loadSluis(file string, into *Sluis) error {
+	doc, err := read(file)
+	if err != nil {
+		return err
+	}
+	if doc != nil && doc[policyconfig.APIVersionKey] == APIVersion("sluis") {
+		kind := policyconfig.Kind{Name: Group + "/sluis", Version: 3, Schema: schemaFor("sluis")}
+		return policyconfig.LoadKind(file, kind, into)
+	}
+	// Anything that says it is a different kind of document is the loader's to
+	// refuse, naming the key: a controller document is not a service document.
+	return loadService(file, "serve", &into.Serve, func(l *legacyPolicy) { into.legacy = l })
 }
 
 // LegacySecrets is, for a document converted from v1, where v1 said each
@@ -281,6 +311,11 @@ const EnvConfig = "SLUIS_CONFIG"
 // `sluis.truvity.github.io/<document>/v<N>`.
 const Group = "sluis.truvity.github.io"
 
-// APIVersion is the apiVersion this build writes for one document: `serve`,
-// `controller-github`, `controller-slack` or `policy`.
-func APIVersion(document string) string { return Group + "/" + document + "/v2" }
+// APIVersion is the apiVersion this build writes for one document: `sluis` (v3),
+// or `serve`, `controller-github`, `controller-slack` or `policy` (v2).
+func APIVersion(document string) string {
+	if document == "sluis" {
+		return Group + "/sluis/v3"
+	}
+	return Group + "/" + document + "/v2"
+}

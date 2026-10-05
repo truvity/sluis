@@ -4,7 +4,7 @@
 # memory drops the Role, config.recovery.enabled false drops recovery -- this case
 # keeps the side that renders more, and the other side is its own case
 # (`headless`, `listenerset`).
-replicaCount: 3
+replicaCount: 1
 
 image:
   repository: registry.example/sluis/sluis
@@ -55,6 +55,15 @@ config:
     probeInterval: 2m
   exchange:
     audience: access-exchange
+  # The controllers that run in the one process. The paths and the release are
+  # the service's own; a controller holds only what is its own.
+  controllers:
+    github:
+      consoleURL: http://sluis.identity.svc:8443/console
+      interval: 5m
+    slack:
+      consoleURL: http://sluis.identity.svc:8443/console
+      interval: 5m
   recovery:
     enabled: true
     serviceAccount: break-glass
@@ -226,34 +235,6 @@ networkPolicy:
 
 serviceAccount:
   name: issuer
-
-controllerGithub:
-  enabled: true
-  config:
-    policy:
-      file: /var/run/github-roster/policy/policy.yaml
-    tokenFile: /var/run/secrets/github-roster/token
-    appsDir: /var/run/github-roster/apps
-    recordsDir: /var/run/github-roster/records
-    consoleURL: http://sluis.identity.svc:8443/console
-    interval: 5m
-    audit:
-      writer: http://audit.access-issuer.svc:8080
-      tokenFile: /var/run/audit/token
-  resources:
-    requests:
-      cpu: 10m
-      memory: 32Mi
-
-controllerSlack:
-  enabled: true
-  config:
-    consoleURL: http://sluis.identity.svc:8443/console
-    interval: 5m
-  resources:
-    requests:
-      cpu: 10m
-      memory: 32Mi
 
 githubApps:
   catalogue:

@@ -1,7 +1,7 @@
 {{- if eq .Values.renders "app" -}}
 # What `sluis serve --config` reads: `config`, as the values give it, with
 # nothing added, renamed or dropped but the apiVersion the chart writes. The
-# binary validates it against schemas/config/serve.schema.json at start, and
+# binary validates it against schemas/config/sluis.schema.json at start, and
 # values.schema.json holds the values to the same schema before this renders.
 apiVersion: v1
 kind: ConfigMap
@@ -12,5 +12,5 @@ metadata:
     app.kubernetes.io/component: serve
 data:
   config.yaml: |
-    {{- include "sluis.document" (dict "kind" "serve" "doc" .Values.config) | nindent 4 }}
+    {{- include "sluis.document" (dict "kind" "sluis" "doc" .Values.config) | nindent 4 }}
 {{ end -}}

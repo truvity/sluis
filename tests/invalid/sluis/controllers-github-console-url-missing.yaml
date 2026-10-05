@@ -1,0 +1,13 @@
+# A controller reads this release's console, and the config says where.
+# error: config.controllers.github.consoleURL is required
+replicaCount: 1
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    github: {}
+console:
+  mount: /console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example

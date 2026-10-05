@@ -3,954 +3,6 @@
   "_comment": "Nothing is required here that the template already refuses to render without. The schema catches typos and wrong types; `required` in the template catches an unset value, with a sentence saying why it matters. Each component's `config` is generated into this file from the schema its binary validates against (`just config-schemas`); the rest is written in internal/config/schema/values.base.json.",
   "additionalProperties": false,
   "definitions": {
-    "config-controller-github": {
-      "additionalProperties": false,
-      "description": "The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
-      "properties": {
-        "adapters": {
-          "additionalProperties": false,
-          "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
-          "properties": {
-            "audit": {
-              "additionalProperties": false,
-              "description": "The adapter for the audit sink, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "blobs": {
-              "additionalProperties": false,
-              "description": "The adapter for blobs, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "schedule": {
-              "additionalProperties": false,
-              "description": "The adapter for the schedule of passes, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "secrets": {
-              "additionalProperties": false,
-              "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "signing": {
-              "additionalProperties": false,
-              "description": "The adapter for token signing, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "state": {
-              "additionalProperties": false,
-              "description": "The adapter for state, sessions included, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "trigger": {
-              "additionalProperties": false,
-              "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "appsDir": {
-          "default": "/var/run/github-roster/apps",
-          "description": "One file per connected organisation: its App's credentials.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "audit": {
-          "additionalProperties": false,
-          "description": "The audit installation the controller records to, as its own workload. Unset only logs what it did.",
-          "properties": {
-            "tokenFile": {
-              "description": "This workload's projected service-account token.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "writer": {
-              "$ref": "#/definitions/config-controller-github.url",
-              "description": "The installation's receiver."
-            }
-          },
-          "type": "object"
-        },
-        "console": {
-          "additionalProperties": false,
-          "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
-          "properties": {
-            "auth": {
-              "additionalProperties": false,
-              "description": "The proof. Absent, `tokenFile`.",
-              "properties": {
-                "aws": {
-                  "additionalProperties": false,
-                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
-                  "properties": {
-                    "audience": {
-                      "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "audience"
-                  ],
-                  "type": "object"
-                }
-              },
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "consoleURL": {
-          "$ref": "#/definitions/config-controller-github.url",
-          "description": "The console's API, which answers who holds a group."
-        },
-        "interval": {
-          "$ref": "#/definitions/config-controller-github.duration",
-          "default": "15m",
-          "description": "How long between passes. Positive."
-        },
-        "log": {
-          "additionalProperties": false,
-          "description": "Structured logging. One level for the whole service: per-package levels are deliberately not part of the contract.",
-          "properties": {
-            "level": {
-              "default": "info",
-              "description": "The lowest level that is written.",
-              "enum": [
-                "debug",
-                "info",
-                "warn",
-                "error"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "platform": {
-          "additionalProperties": false,
-          "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
-          "properties": {
-            "aws": {
-              "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
-              "type": "boolean"
-            },
-            "kubernetes": {
-              "description": "A Kubernetes cluster is available.",
-              "type": "boolean"
-            },
-            "openbao": {
-              "description": "An OpenBao is available.",
-              "type": "boolean"
-            },
-            "replicas": {
-              "default": 1,
-              "description": "How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).",
-              "minimum": 1,
-              "type": "integer"
-            },
-            "runtime": {
-              "description": "Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.",
-              "enum": [
-                "kubernetes",
-                "lambda",
-                "process"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "policy": {
-          "additionalProperties": false,
-          "description": "The policy document: the bindings are its github table, and its `controllers.github` section is what this controller may change.",
-          "properties": {
-            "file": {
-              "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "file"
-          ],
-          "type": "object"
-        },
-        "ports": {
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "adapter": {
-                    "const": "dynamodb"
-                  }
-                },
-                "required": [
-                  "adapter"
-                ]
-              },
-              "then": {
-                "required": [
-                  "dynamodb"
-                ]
-              }
-            }
-          ],
-          "description": "The adapters behind the storage ports (docs/design/ports.md).",
-          "properties": {
-            "adapter": {
-              "default": "legacy",
-              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
-              "enum": [
-                "legacy",
-                "memory",
-                "dynamodb"
-              ]
-            },
-            "blob": {
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "adapter": {
-                        "const": "s3"
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "s3"
-                    ]
-                  }
-                }
-              ],
-              "description": "Replaces the Blob port (status reports, directory snapshots) with an adapter of its own, whatever `ports.adapter` is. Absent, the Blob is `ports.adapter`'s.",
-              "properties": {
-                "adapter": {
-                  "description": "`s3` keeps the blobs in an S3 bucket.",
-                  "enum": [
-                    "s3"
-                  ]
-                },
-                "s3": {
-                  "additionalProperties": false,
-                  "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
-                  "properties": {
-                    "bucket": {
-                      "description": "The bucket. It must exist, with public access blocked.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "endpoint": {
-                      "$ref": "#/definitions/config-controller-github.url",
-                      "description": "Overrides the S3 address: LocalStack or an S3-compatible store."
-                    },
-                    "kmsKey": {
-                      "description": "A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "pathStyle": {
-                      "description": "Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need.",
-                      "type": "boolean"
-                    },
-                    "prefix": {
-                      "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "region": {
-                      "description": "The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "bucket"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "dynamodb": {
-              "additionalProperties": false,
-              "description": "The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
-              "properties": {
-                "create": {
-                  "default": false,
-                  "description": "Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it.",
-                  "type": "boolean"
-                },
-                "endpoint": {
-                  "$ref": "#/definitions/config-controller-github.url",
-                  "description": "Overrides the DynamoDB address: LocalStack or DynamoDB Local."
-                },
-                "region": {
-                  "description": "The table's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "table": {
-                  "description": "The table's name.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "table"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "preset": {
-          "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
-          "enum": [
-            "server",
-            "k8s-minimal",
-            "k8s-openbao",
-            "aws-serverless",
-            "aws-hybrid",
-            "aws-eks"
-          ]
-        },
-        "probes": {
-          "additionalProperties": false,
-          "default": {
-            "address": ":7070"
-          },
-          "description": "The health listener. Separate from the service's own traffic, so that readiness is answerable when the service's listener is saturated, and so that a probe is not reachable from outside.",
-          "properties": {
-            "address": {
-              "description": "host:port for /health/live and /health/ready.",
-              "pattern": "^[^\\s]*:[0-9]{1,5}$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "address"
-          ],
-          "type": "object"
-        },
-        "recordsDir": {
-          "default": "/var/run/github-roster/records",
-          "description": "The console's records, mounted.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "release": {
-          "default": "sluis",
-          "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "tokenFile": {
-          "default": "/var/run/secrets/github-roster/token",
-          "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "title": "sluis controller github",
-      "type": "object"
-    },
-    "config-controller-github.duration": {
-      "description": "A Go duration: 30s, 2m, 168h.",
-      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
-      "type": "string"
-    },
-    "config-controller-github.url": {
-      "allOf": [
-        {
-          "pattern": "^https?://\\S+$"
-        },
-        {
-          "not": {
-            "pattern": "^https?://[^/?#\\s]*@"
-          }
-        }
-      ],
-      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
-      "minLength": 1,
-      "type": "string"
-    },
-    "config-controller-slack": {
-      "additionalProperties": false,
-      "description": "The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
-      "properties": {
-        "adapters": {
-          "additionalProperties": false,
-          "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
-          "properties": {
-            "audit": {
-              "additionalProperties": false,
-              "description": "The adapter for the audit sink, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "blobs": {
-              "additionalProperties": false,
-              "description": "The adapter for blobs, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "schedule": {
-              "additionalProperties": false,
-              "description": "The adapter for the schedule of passes, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "secrets": {
-              "additionalProperties": false,
-              "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "signing": {
-              "additionalProperties": false,
-              "description": "The adapter for token signing, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "state": {
-              "additionalProperties": false,
-              "description": "The adapter for state, sessions included, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "trigger": {
-              "additionalProperties": false,
-              "description": "The adapter for the \"run a pass now\" trigger, replacing the preset's.",
-              "properties": {
-                "adapter": {
-                  "description": "The adapter's name, as the compatibility matrix lists it.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "settings": {
-                  "description": "The adapter's own settings (an object; the adapter refuses a key it does not know).",
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "audit": {
-          "additionalProperties": false,
-          "description": "The audit installation the controller records to, as its own workload. Unset only logs what it did.",
-          "properties": {
-            "tokenFile": {
-              "description": "This workload's projected service-account token.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "writer": {
-              "$ref": "#/definitions/config-controller-slack.url",
-              "description": "The installation's receiver."
-            }
-          },
-          "type": "object"
-        },
-        "console": {
-          "additionalProperties": false,
-          "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
-          "properties": {
-            "auth": {
-              "additionalProperties": false,
-              "description": "The proof. Absent, `tokenFile`.",
-              "properties": {
-                "aws": {
-                  "additionalProperties": false,
-                  "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
-                  "properties": {
-                    "audience": {
-                      "description": "The audience requested from STS. It must equal the issuer's `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of its AWS federation file.",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "audience"
-                  ],
-                  "type": "object"
-                }
-              },
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "consoleURL": {
-          "$ref": "#/definitions/config-controller-slack.url",
-          "description": "The console's API, which answers who holds a group."
-        },
-        "credentialsDir": {
-          "default": "/var/run/slack-roster/credentials",
-          "description": "One file per connected workspace: the app's credentials and its bot token.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "interval": {
-          "$ref": "#/definitions/config-controller-slack.duration",
-          "default": "15m",
-          "description": "How long between passes. Positive."
-        },
-        "log": {
-          "additionalProperties": false,
-          "description": "Structured logging. One level for the whole service: per-package levels are deliberately not part of the contract.",
-          "properties": {
-            "level": {
-              "default": "info",
-              "description": "The lowest level that is written.",
-              "enum": [
-                "debug",
-                "info",
-                "warn",
-                "error"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "platform": {
-          "additionalProperties": false,
-          "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
-          "properties": {
-            "aws": {
-              "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
-              "type": "boolean"
-            },
-            "kubernetes": {
-              "description": "A Kubernetes cluster is available.",
-              "type": "boolean"
-            },
-            "openbao": {
-              "description": "An OpenBao is available.",
-              "type": "boolean"
-            },
-            "replicas": {
-              "default": 1,
-              "description": "How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`).",
-              "minimum": 1,
-              "type": "integer"
-            },
-            "runtime": {
-              "description": "Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`.",
-              "enum": [
-                "kubernetes",
-                "lambda",
-                "process"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "policy": {
-          "additionalProperties": false,
-          "description": "The policy document: the bindings are its slack table, and its `controllers.slack` section is what this controller may change.",
-          "properties": {
-            "file": {
-              "description": "The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance.",
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "file"
-          ],
-          "type": "object"
-        },
-        "ports": {
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "adapter": {
-                    "const": "dynamodb"
-                  }
-                },
-                "required": [
-                  "adapter"
-                ]
-              },
-              "then": {
-                "required": [
-                  "dynamodb"
-                ]
-              }
-            }
-          ],
-          "description": "The adapters behind the storage ports (docs/design/ports.md).",
-          "properties": {
-            "adapter": {
-              "default": "legacy",
-              "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
-              "enum": [
-                "legacy",
-                "memory",
-                "dynamodb"
-              ]
-            },
-            "blob": {
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "adapter": {
-                        "const": "s3"
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "s3"
-                    ]
-                  }
-                }
-              ],
-              "description": "Replaces the Blob port (status reports, directory snapshots) with an adapter of its own, whatever `ports.adapter` is. Absent, the Blob is `ports.adapter`'s.",
-              "properties": {
-                "adapter": {
-                  "description": "`s3` keeps the blobs in an S3 bucket.",
-                  "enum": [
-                    "s3"
-                  ]
-                },
-                "s3": {
-                  "additionalProperties": false,
-                  "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
-                  "properties": {
-                    "bucket": {
-                      "description": "The bucket. It must exist, with public access blocked.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "endpoint": {
-                      "$ref": "#/definitions/config-controller-slack.url",
-                      "description": "Overrides the S3 address: LocalStack or an S3-compatible store."
-                    },
-                    "kmsKey": {
-                      "description": "A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "pathStyle": {
-                      "description": "Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need.",
-                      "type": "boolean"
-                    },
-                    "prefix": {
-                      "description": "A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "region": {
-                      "description": "The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "bucket"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
-            },
-            "dynamodb": {
-              "additionalProperties": false,
-              "description": "The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
-              "properties": {
-                "create": {
-                  "default": false,
-                  "description": "Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it.",
-                  "type": "boolean"
-                },
-                "endpoint": {
-                  "$ref": "#/definitions/config-controller-slack.url",
-                  "description": "Overrides the DynamoDB address: LocalStack or DynamoDB Local."
-                },
-                "region": {
-                  "description": "The table's region. Absent, the SDK's own resolution (`AWS_REGION`).",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "table": {
-                  "description": "The table's name.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "table"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "preset": {
-          "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
-          "enum": [
-            "server",
-            "k8s-minimal",
-            "k8s-openbao",
-            "aws-serverless",
-            "aws-hybrid",
-            "aws-eks"
-          ]
-        },
-        "probes": {
-          "additionalProperties": false,
-          "default": {
-            "address": ":7070"
-          },
-          "description": "The health listener. Separate from the service's own traffic, so that readiness is answerable when the service's listener is saturated, and so that a probe is not reachable from outside.",
-          "properties": {
-            "address": {
-              "description": "host:port for /health/live and /health/ready.",
-              "pattern": "^[^\\s]*:[0-9]{1,5}$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "address"
-          ],
-          "type": "object"
-        },
-        "recordsDir": {
-          "default": "/var/run/slack-roster/workspaces",
-          "description": "The console's records, mounted.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "release": {
-          "default": "sluis",
-          "description": "The name the installation's objects carry. It must be the release's full name: the controller reads the report and the records the service writes under it.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "tokenFile": {
-          "default": "/var/run/secrets/slack-roster/token",
-          "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "title": "sluis controller slack",
-      "type": "object"
-    },
-    "config-controller-slack.duration": {
-      "description": "A Go duration: 30s, 2m, 168h.",
-      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
-      "type": "string"
-    },
-    "config-controller-slack.url": {
-      "allOf": [
-        {
-          "pattern": "^https?://\\S+$"
-        },
-        {
-          "not": {
-            "pattern": "^https?://[^/?#\\s]*@"
-          }
-        }
-      ],
-      "description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
-      "minLength": 1,
-      "type": "string"
-    },
     "config-policy": {
       "additionalProperties": false,
       "description": "The policy document: what an installation decides, read by every process of it. The access model's tables (docs/reference/policy.md) and beside them whom the exchange trusts, what an operator may make, what each controller may change and what is copied out. Rendered by `sluisctl policy render` from layers; a process reads exactly one. Nothing here is a secret.",
@@ -2044,7 +1096,7 @@
       "minLength": 1,
       "type": "string"
     },
-    "config-serve": {
+    "config-sluis": {
       "additionalProperties": false,
       "allOf": [
         {
@@ -2064,7 +1116,7 @@
           }
         }
       ],
-      "description": "The configuration of `sluis serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
+      "description": "The configuration of `sluis serve`, the one process of sluis: the issuer, the console and the directory hub and, under `controllers`, the GitHub and Slack controllers. On Kubernetes it is one Deployment; on AWS Lambda it is one function. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
       "properties": {
         "adapters": {
           "additionalProperties": false,
@@ -2227,7 +1279,7 @@
               "type": "integer"
             },
             "queryURL": {
-              "$ref": "#/definitions/config-serve.url",
+              "$ref": "#/definitions/config-sluis.url",
               "description": "The query service, for the console's Audit page. Its own setting: it needs no `writer`, so the page works with the `sqs` and `log` sinks. A path prefix (`https://audit.example/sluis`) is kept and the procedure path appended."
             },
             "tokenFile": {
@@ -2236,7 +1288,7 @@
               "type": "string"
             },
             "writer": {
-              "$ref": "#/definitions/config-serve.url",
+              "$ref": "#/definitions/config-sluis.url",
               "description": "The installation's receiver."
             }
           },
@@ -2265,6 +1317,139 @@
               "description": "The console's origin, when it is not the issuer's.",
               "minLength": 1,
               "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "controllers": {
+          "additionalProperties": false,
+          "description": "The controllers this process runs beside the issuer and the console, each in its own loop. A controller that is absent is off. Which organisations and workspaces a running controller may CHANGE is the policy document's `controllers.<kind>.enabledOrgs` and `enabledWorkspaces`, as before. A controller reads the console's API as a workload, so the policy's exchange must admit its proof (a ServiceAccount token on Kubernetes, the function role's web identity token on Lambda).",
+          "properties": {
+            "github": {
+              "additionalProperties": false,
+              "description": "The GitHub controller: makes each GitHub organisation's teams match the policy's github table.",
+              "properties": {
+                "appsDir": {
+                  "default": "/var/run/github-roster/apps",
+                  "description": "One file per connected organisation: its App's credentials. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "console": {
+                  "additionalProperties": false,
+                  "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "The proof. Absent, `tokenFile`.",
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                          "properties": {
+                            "audience": {
+                              "description": "The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file.",
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "audience"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "consoleURL": {
+                  "$ref": "#/definitions/config-sluis.url",
+                  "description": "The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes."
+                },
+                "interval": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "15m",
+                  "description": "How long between passes. Positive."
+                },
+                "recordsDir": {
+                  "default": "/var/run/github-roster/records",
+                  "description": "The console's records, mounted. Read only with `ports.adapter: legacy`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "default": "/var/run/secrets/github-roster/token",
+                  "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "slack": {
+              "additionalProperties": false,
+              "description": "The Slack controller: makes each Slack workspace's user groups match the policy's slack table.",
+              "properties": {
+                "console": {
+                  "additionalProperties": false,
+                  "description": "How the controller proves itself to the console, when the pod's `tokenFile` is not the way.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "The proof. Absent, `tokenFile`.",
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "description": "The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role.",
+                          "properties": {
+                            "audience": {
+                              "description": "The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file.",
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "audience"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "consoleURL": {
+                  "$ref": "#/definitions/config-sluis.url",
+                  "description": "The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes."
+                },
+                "credentialsDir": {
+                  "default": "/var/run/slack-roster/credentials",
+                  "description": "One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "interval": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "15m",
+                  "description": "How long between passes. Positive."
+                },
+                "recordsDir": {
+                  "default": "/var/run/slack-roster/workspaces",
+                  "description": "The console's records, mounted. Read only with `ports.adapter: legacy`.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "default": "/var/run/secrets/slack-roster/token",
+                  "description": "This pod's projected ServiceAccount token, presented to the console and read afresh on every call.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
             }
           },
           "type": "object"
@@ -2300,7 +1485,7 @@
                     "type": "string"
                   },
                   "keySecret": {
-                    "$ref": "#/definitions/config-serve.secretName",
+                    "$ref": "#/definitions/config-sluis.secretName",
                     "description": "The secret the service-account key is: `directory/<id>/key`."
                   },
                   "serve": {
@@ -2349,17 +1534,17 @@
           "description": "How the directory's snapshot is kept current.",
           "properties": {
             "freshnessWindow": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "30m",
               "description": "How old a snapshot may be and still be answered from."
             },
             "probeInterval": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "5m",
               "description": "How often the directory is probed."
             },
             "refreshInterval": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "15m",
               "description": "How often a snapshot is refreshed."
             }
@@ -2380,7 +1565,7 @@
           "type": "boolean"
         },
         "issuerURL": {
-          "$ref": "#/definitions/config-serve.url",
+          "$ref": "#/definitions/config-sluis.url",
           "description": "The issuer: baked into every token and every relying party's trust, so there is no default. No trailing slash is kept."
         },
         "lifetimes": {
@@ -2388,27 +1573,27 @@
           "description": "How long what the issuer hands out lives.",
           "properties": {
             "absolute": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "24h",
               "description": "A session, at most. Positive, and at least `token`: a session has to end SOMETIME after sign-in, and an access token cannot outlive the session that grants it."
             },
             "hold": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "4h",
               "description": "How long a removal is held before it takes effect."
             },
             "refresh": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "12h",
               "description": "A refresh token."
             },
             "session": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "12h",
               "description": "The console's own session cookie, capped at `absolute`."
             },
             "token": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "1h",
               "description": "An access token."
             }
@@ -2637,7 +1822,7 @@
                       "type": "string"
                     },
                     "endpoint": {
-                      "$ref": "#/definitions/config-serve.url",
+                      "$ref": "#/definitions/config-sluis.url",
                       "description": "Overrides the S3 address: LocalStack or an S3-compatible store."
                     },
                     "kmsKey": {
@@ -2681,7 +1866,7 @@
                   "type": "boolean"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/config-serve.url",
+                  "$ref": "#/definitions/config-sluis.url",
                   "description": "Overrides the DynamoDB address: LocalStack or DynamoDB Local."
                 },
                 "region": {
@@ -2754,7 +1939,7 @@
                   "description": "The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency.",
                   "properties": {
                     "address": {
-                      "$ref": "#/definitions/config-serve.url",
+                      "$ref": "#/definitions/config-sluis.url",
                       "description": "The server, with no path: `https://openbao.example`."
                     },
                     "auth": {
@@ -2852,11 +2037,11 @@
           "type": "object"
         },
         "publicRootURL": {
-          "$ref": "#/definitions/config-serve.url",
+          "$ref": "#/definitions/config-sluis.url",
           "description": "The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`."
         },
         "publicURL": {
-          "$ref": "#/definitions/config-serve.url",
+          "$ref": "#/definitions/config-sluis.url",
           "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."
         },
         "recovery": {
@@ -2873,7 +2058,7 @@
               "type": "boolean"
             },
             "passwordSecret": {
-              "$ref": "#/definitions/config-serve.secretName",
+              "$ref": "#/definitions/config-sluis.secretName",
               "description": "Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."
             },
             "serviceAccount": {
@@ -2914,11 +2099,11 @@
           "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
           "properties": {
             "endpoint": {
-              "$ref": "#/definitions/config-serve.url",
+              "$ref": "#/definitions/config-sluis.url",
               "description": "`ssm`: overrides the SSM address, for LocalStack."
             },
             "refresh": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "5m",
               "description": "`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it."
             },
@@ -2978,7 +2163,7 @@
           },
           "properties": {
             "activationDelay": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "15m",
               "description": "How long a newly published key waits before a replica signs with it. At least `pollInterval`."
             },
@@ -3047,7 +2232,7 @@
                   "type": "string"
                 },
                 "stateSecret": {
-                  "$ref": "#/definitions/config-serve.secretName",
+                  "$ref": "#/definitions/config-sluis.secretName",
                   "description": "The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."
                 }
               },
@@ -3079,7 +2264,7 @@
                   "type": "string"
                 },
                 "prepublish": {
-                  "$ref": "#/definitions/config-serve.duration",
+                  "$ref": "#/definitions/config-sluis.duration",
                   "default": "15m",
                   "description": "How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`."
                 },
@@ -3089,16 +2274,16 @@
                   "type": "string"
                 },
                 "retain": {
-                  "$ref": "#/definitions/config-serve.duration",
+                  "$ref": "#/definitions/config-sluis.duration",
                   "description": "How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`."
                 },
                 "rotateEvery": {
-                  "$ref": "#/definitions/config-serve.duration",
+                  "$ref": "#/definitions/config-sluis.duration",
                   "default": "24h",
                   "description": "How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h."
                 },
                 "stateSecret": {
-                  "$ref": "#/definitions/config-serve.secretName",
+                  "$ref": "#/definitions/config-sluis.secretName",
                   "description": "The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."
                 }
               },
@@ -3109,11 +2294,11 @@
               "type": "object"
             },
             "overlap": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "description": "How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew."
             },
             "pollInterval": {
-              "$ref": "#/definitions/config-serve.duration",
+              "$ref": "#/definitions/config-sluis.duration",
               "default": "30s",
               "description": "How often the files are re-read."
             }
@@ -3152,7 +2337,7 @@
               "type": "boolean"
             },
             "passwordSecret": {
-              "$ref": "#/definitions/config-serve.secretName",
+              "$ref": "#/definitions/config-sluis.secretName",
               "description": "The secret the password is (`valkey/password`). Unset connects with none."
             },
             "tls": {
@@ -3163,20 +2348,20 @@
           "type": "object"
         }
       },
-      "title": "sluis serve",
+      "title": "sluis",
       "type": "object"
     },
-    "config-serve.duration": {
+    "config-sluis.duration": {
       "description": "A Go duration: 30s, 2m, 168h.",
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
       "type": "string"
     },
-    "config-serve.secretName": {
+    "config-sluis.secretName": {
       "description": "The NAME of a secret, delivered as `secrets.source` says: `valkey/password`, `issuer/state-secret`. A value is never in the document.",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
       "type": "string"
     },
-    "config-serve.url": {
+    "config-sluis.url": {
       "allOf": [
         {
           "pattern": "^https?://\\S+$"
@@ -3751,8 +2936,8 @@
       "type": "object"
     },
     "config": {
-      "$ref": "#/definitions/config-serve",
-      "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is serve's: schemas/config/serve.schema.json."
+      "$ref": "#/definitions/config-sluis",
+      "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is sluis's: schemas/config/sluis.schema.json."
     },
     "console": {
       "additionalProperties": false,
@@ -3761,168 +2946,6 @@
         "mount": {
           "description": "Where the console is mounted on this issuer's origin, e.g. /console. Empty serves no console.",
           "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "controllerGithub": {
-      "additionalProperties": false,
-      "description": "The GitHub controller (`sluis controller github`): a second process beside the service that makes each organisation's teams match the policy's github table. It runs the chart's one image.",
-      "properties": {
-        "config": {
-          "$ref": "#/definitions/config-controller-github",
-          "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is controller-github's: schemas/config/controller-github.schema.json."
-        },
-        "enabled": {
-          "description": "Render the controller. Needs exchange.clusters to name this cluster and console.mount to be set.",
-          "type": "boolean"
-        },
-        "minReadySeconds": {
-          "description": "Seconds a new pod must stay Ready before it counts as available. Default 10.",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "podDisruptionBudget": {
-          "additionalProperties": false,
-          "description": "Rendered only when replicas is above 1.",
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "minAvailable": {
-              "minimum": 0,
-              "pattern": "^[0-9]+%$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "replicas": {
-          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `dynamodb`. The chart refuses it otherwise. Default 1.",
-          "minimum": 1,
-          "type": "integer"
-        },
-        "resources": {
-          "type": "object"
-        },
-        "strategy": {
-          "additionalProperties": false,
-          "description": "The Deployment's rollout. Default RollingUpdate with maxUnavailable 0 and maxSurge 1: the new pod must be Ready before the old one goes.",
-          "properties": {
-            "rollingUpdate": {
-              "additionalProperties": false,
-              "properties": {
-                "maxSurge": {
-                  "minimum": 0,
-                  "pattern": "^[0-9]+%$",
-                  "type": [
-                    "integer",
-                    "string"
-                  ]
-                },
-                "maxUnavailable": {
-                  "minimum": 0,
-                  "pattern": "^[0-9]+%$",
-                  "type": [
-                    "integer",
-                    "string"
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            "type": {
-              "enum": [
-                "RollingUpdate",
-                "Recreate"
-              ]
-            }
-          },
-          "type": "object"
-        }
-      },
-      "type": "object"
-    },
-    "controllerSlack": {
-      "additionalProperties": false,
-      "description": "The Slack controller (`sluis controller slack`): a second process beside the service that makes each workspace's channels match the policy's slack table. It runs the chart's one image.",
-      "properties": {
-        "config": {
-          "$ref": "#/definitions/config-controller-slack",
-          "description": "Rendered as it stands, with the apiVersion the chart writes, into a ConfigMap mounted as the directory holding the file the binary reads with --config. Its schema is controller-slack's: schemas/config/controller-slack.schema.json."
-        },
-        "enabled": {
-          "description": "Render the controller. Needs exchange.clusters to name this cluster and console.mount to be set.",
-          "type": "boolean"
-        },
-        "minReadySeconds": {
-          "description": "Seconds a new pod must stay Ready before it counts as available. Default 10.",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "podDisruptionBudget": {
-          "additionalProperties": false,
-          "description": "Rendered only when replicas is above 1.",
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "minAvailable": {
-              "minimum": 0,
-              "pattern": "^[0-9]+%$",
-              "type": [
-                "integer",
-                "string"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "replicas": {
-          "description": "How many controller pods run. More than one needs the tick leases in a shared State: `config.ports.adapter` of `dynamodb`. The chart refuses it otherwise. Default 1.",
-          "minimum": 1,
-          "type": "integer"
-        },
-        "resources": {
-          "type": "object"
-        },
-        "strategy": {
-          "additionalProperties": false,
-          "description": "The Deployment's rollout. Default RollingUpdate with maxUnavailable 0 and maxSurge 1: the new pod must be Ready before the old one goes.",
-          "properties": {
-            "rollingUpdate": {
-              "additionalProperties": false,
-              "properties": {
-                "maxSurge": {
-                  "minimum": 0,
-                  "pattern": "^[0-9]+%$",
-                  "type": [
-                    "integer",
-                    "string"
-                  ]
-                },
-                "maxUnavailable": {
-                  "minimum": 0,
-                  "pattern": "^[0-9]+%$",
-                  "type": [
-                    "integer",
-                    "string"
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            "type": {
-              "enum": [
-                "RollingUpdate",
-                "Recreate"
-              ]
-            }
-          },
-          "type": "object"
         }
       },
       "type": "object"

@@ -1,0 +1,14 @@
+# Controllers in a Deployment of more than one replica on the legacy adapter: each pod keeps its leases in its own memory (template fail).
+# error: replicaCount is 2 and config.controllers runs a controller in every replica, which needs the tick leases in a State every replica shares
+replicaCount: 2
+config:
+  issuerURL: https://issuer.example
+  controllers:
+    github:
+      consoleURL: http://sluis.default.svc:8080/console
+console:
+  mount: /console
+exchange:
+  clusters:
+  - issuer: https://oidc.example
+    name: example

@@ -132,7 +132,7 @@ func Retired(binary string) map[string]string {
 	}
 	add(retiredLambda)
 	switch binary {
-	case "serve":
+	case "serve", "sluis":
 		add(retiredIssuer)
 		// The service's own spelling of what the controllers share.
 		out["POLICY_DIR"] = "policyDir"
