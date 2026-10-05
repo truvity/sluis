@@ -63,6 +63,41 @@ Takes (dict "key" "config.audit.tokenFile" "cfg" <the component's config>).
 {{- end -}}
 
 {{/*
+sluis.verifyOnlyKeys: what signingKey.verifyOnly[].pem may hold. Only public
+keys are published, and the value is rendered into a ConfigMap, so a private key
+here would be readable by anyone who reads ConfigMaps: it is refused at render,
+before anything is applied. A PEM may hold only PUBLIC KEY and CERTIFICATE
+blocks and nothing containing "PRIVATE"; a JWK ({...}) may carry no private
+member (d, p, q, dp, dq, qi, k). The binary refuses the same at start.
+*/}}
+{{- define "sluis.verifyOnlyKeys" -}}
+{{- range $i, $k := .Values.signingKey.verifyOnly -}}
+{{- $pem := $k.pem | trim -}}
+{{- if regexMatch "(?i)private" $pem -}}
+{{- fail (printf "signingKey.verifyOnly[%d] mentions a private key: only public keys are published, and a ConfigMap is no place for a private one (if one was ever rendered into a ConfigMap, rotate that key)" $i) -}}
+{{- end -}}
+{{- if hasPrefix "{" $pem -}}
+{{- $jwk := fromJson $pem -}}
+{{- range $m := list "d" "p" "q" "dp" "dq" "qi" "k" -}}
+{{- if hasKey $jwk $m -}}
+{{- fail (printf "signingKey.verifyOnly[%d] is a JWK with a private member %q: publish the public key only" $i $m) -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- $labels := regexFindAll "-----BEGIN [A-Z0-9 ]+-----" $pem -1 -}}
+{{- if not $labels -}}
+{{- fail (printf "signingKey.verifyOnly[%d] is neither a PEM public key or certificate nor a JWK" $i) -}}
+{{- end -}}
+{{- range $labels -}}
+{{- if not (has . (list "-----BEGIN PUBLIC KEY-----" "-----BEGIN CERTIFICATE-----")) -}}
+{{- fail (printf "signingKey.verifyOnly[%d] holds a %s block: only PUBLIC KEY and CERTIFICATE are accepted" $i . ) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 sluis.checks: everything the service's config must agree with.
 */}}
 {{- define "sluis.checks" -}}
@@ -101,11 +136,7 @@ sluis.checks: everything the service's config must agree with.
 {{- range $i, $entry := $verifyOnly -}}
 {{- include "sluis.expectPath" (dict "key" (printf "config.signingKey.verifyOnly[%d].file" $i) "got" $entry.file "want" (printf "/var/run/access-issuer/verify-keys/%d.pem" $i) "source" "signingKey.verifyOnly" "present" true) -}}
 {{- end -}}
-{{- range $i, $k := .Values.signingKey.verifyOnly -}}
-{{- if contains "PRIVATE KEY" $k.pem -}}
-{{- fail (printf "signingKey.verifyOnly[%d] holds a private key: only public keys are published, and a ConfigMap is no place for a private one" $i) -}}
-{{- end -}}
-{{- end -}}
+{{- include "sluis.verifyOnlyKeys" . -}}
 {{- $additional := include "sluis.additionalSigningKeyFiles" . -}}
 {{- if ne (join "," ($signing.additionalFiles | default list)) $additional -}}
 {{- fail (printf "config.signingKey.additionalFiles must be [%s], one file per signingKey.additional entry in the order they are declared (got [%s])" $additional (join ", " ($signing.additionalFiles | default list))) -}}

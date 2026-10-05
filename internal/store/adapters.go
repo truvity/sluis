@@ -156,6 +156,7 @@ func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table,
 	case sel.Platform != nil:
 		answers := *sel.Platform
 		env.Answers, env.Runtime, env.Replicas = &answers, answers.RuntimeOf(), answers.Replicas
+		env.PlatformStated = true
 	case sel.Preset != "":
 		answers := sel.Preset.Answers()
 		env.Answers, env.Runtime = &answers, answers.Runtime

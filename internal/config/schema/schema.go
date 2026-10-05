@@ -324,8 +324,8 @@ func serveSchema() m {
 					"file":  str("A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key."),
 					"kid":   str("The `kid` the old tokens carry. Unset is the RFC 7638 thumbprint of the key, which is what a file signer derived for it."),
 					"alg":   m{"enum": []string{"ES256", "ES384", "ES512", "RS256"}, "description": "The key's algorithm. Unset follows the key."},
-					"until": m{"type": "string", "format": "date-time", "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache."},
-				}, "file")),
+					"until": m{"type": "string", "format": "date-time", "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache. Required: an overlap has an end."},
+				}, "file", "until")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),
 			"activationDelay": duration("How long a newly published key waits before a replica signs with it. At least `pollInterval`.", "15m"),
 			"overlap":         duration("How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew.", ""),
@@ -418,7 +418,7 @@ func portsExportSchema() m {
 	s := obj("The store the copies of `exports` are written to (docs/decisions/0034). Absent, nothing is copied out of the service, and `exports` must be empty.", m{
 		"adapter": enum("`openbao` writes to a KV version 2 mount of an OpenBao. `memory` keeps the copies in this process and is for a test or the demonstration.", "", "openbao", "memory"),
 		"openbao": obj("The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency.", m{
-			"address":   url("The server, with no path: `https://openbao.example`."),
+			"address":   m{"type": "string", "pattern": `^https://[^\s/?#@]+/?$`, "description": "The server, https only and with no path: `https://openbao.example`. A token and a login JWT cross this connection."},
 			"caFile":    str("A PEM bundle of the authorities that sign the server's certificate, in place of the system's."),
 			"mount":     strDefault("The KV version 2 mount.", "kv"),
 			"namespace": str("The OpenBao namespace an export that names none is written to."),

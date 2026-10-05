@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -107,6 +108,16 @@ func CheckExport(target ExportTarget, properties map[string]string, mode ExportM
 		return fmt.Errorf("%w: export mode %d", ErrUnsupported, mode)
 	}
 	return CheckExportPath(target.Path)
+}
+
+var namespaceRegexp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}$`)
+
+// CheckNamespace refuses what is not an OpenBao namespace.
+func CheckNamespace(ns string) error {
+	if !namespaceRegexp.MatchString(ns) {
+		return fmt.Errorf("%w: %q is not an OpenBao namespace", ErrUnsupported, ns)
+	}
+	return nil
 }
 
 // CheckExportPath refuses a path that is empty, begins or ends with a slash,

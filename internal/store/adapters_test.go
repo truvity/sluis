@@ -306,3 +306,18 @@ func TestTheK8sAWSPresetIsBuiltAndAWSEKSIsItsAlias(t *testing.T) {
 		t.Errorf("k8s-aws with openbao secrets: %v", err)
 	}
 }
+
+// A statement that there is no OpenBao is not overridden by naming the adapter.
+func TestAStatedPlatformWithoutOpenBaoRefusesTheOpenBaoAdapter(t *testing.T) {
+	over := map[string]config.AdapterChoice{"secrets": {Adapter: "openbao"}}
+	_, _, err := Config{sel: selection{
+		Platform: &config.Platform{AWS: true, Kubernetes: true, OpenBao: false, Runtime: "kubernetes"}, Preset: "k8s-aws", Adapters: over,
+	}}.plan(context.Background(), quiet)
+	if err == nil || !strings.Contains(err.Error(), "platform.openbao is false") {
+		t.Fatalf("platform openbao false + openbao adapter: %v", err)
+	}
+	_, _, err = Config{sel: selection{Preset: "k8s-aws", Adapters: over}}.plan(context.Background(), quiet)
+	if err != nil && strings.Contains(err.Error(), "platform.openbao") {
+		t.Fatalf("a preset alone refused the explicit adapter: %v", err)
+	}
+}

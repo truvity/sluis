@@ -280,6 +280,10 @@ type Env struct {
 	Runtime Runtime
 	// Replicas is how many replicas share the state; 0 is one.
 	Replicas int
+	// PlatformStated is true when the answers are a `platform` block the
+	// configuration wrote, not a preset's: then an `openbao: false` in it is a
+	// statement, and an adapter that needs OpenBao is refused against it.
+	PlatformStated bool
 }
 
 // Validate refuses a table that cannot run: an adapter that is unknown or only
@@ -316,7 +320,7 @@ func (r *Registry) Validate(t Table, env Env) error {
 			}
 			// An adapter named on purpose is the statement that there is an
 			// OpenBao to use: a preset's answers (k8s-aws) do not ask for one.
-			if d.Requires.OpenBao && !a.OpenBao && ch.Source != SourceOverride {
+			if d.Requires.OpenBao && !a.OpenBao && (ch.Source != SourceOverride || env.PlatformStated) {
 				fail(c, "needs OpenBao, and platform.openbao is false")
 			}
 		}

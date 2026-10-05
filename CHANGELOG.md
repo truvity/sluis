@@ -14,14 +14,17 @@
   themselves, one KV field each, readable by a consumer's External Secrets as it reads a copy made by
   `ports.export: openbao`. The policy it needs is in
   [configuration](docs/reference/configuration.md#the-openbao-secrets-adapter). Settings: `address`, `caFile`,
-  `mount`, `namespace`, `root`, `auth{method, mount, role, tokenFile}`.
+  `mount`, `namespace`, `root`, `auth{method, mount, role, tokenFile}`. The OpenBao client accepts https only, never
+  follows a redirect, puts a 403 down to the token only when it is older than 30s, and a `Put` under a
+  `cas_required` mount is a refusal that names it, not a conflict.
 - **Preset `k8s-aws`**: DynamoDB state, SSM secrets (OpenBao with `adapters.secrets`), S3 blobs, kms-wrapped
   signing, the DynamoDB trigger, the ticker and the `connect` audit sink. Every adapter it names is built, so it
   starts; naming `adapters.secrets: openbao` needs no `platform.openbao`.
 - **`signingKey.verifyOnly`: public keys published and never signed with**, each with an optional `kid` (default:
   the RFC 7638 thumbprint, the file signer's derivation), `alg` and `until`, so tokens issued by the old file keys
   keep verifying across the cutover to `kmsWrapped`. A private key stops the start. The chart mounts them from a
-  ConfigMap (`signingKey.verifyOnly[].pem`).
+  ConfigMap (`signingKey.verifyOnly[].pem`). `until` is required; the chart refuses private material at render
+  (PEM blocks other than PUBLIC KEY and CERTIFICATE, anything containing "private", a JWK with a private member).
 - **Chart: `serviceAccount.awsIdentity`** (`pod-identity`, the default and renders nothing, or `irsa`, which annotates
   the account with `eks.amazonaws.com/role-arn: <serviceAccount.awsRoleArn>`).
 

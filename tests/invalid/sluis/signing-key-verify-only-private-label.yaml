@@ -1,5 +1,5 @@
-# Only public keys are published.
-# error: signingKey.verifyOnly[0] mentions a private key
+# A PEM block that is not a public key or certificate is refused, whatever its label.
+# error: only PUBLIC KEY and CERTIFICATE are accepted
 config:
   issuerURL: https://issuer.example
   signingKey:
@@ -8,6 +8,6 @@ config:
 signingKey:
   verifyOnly:
     - pem: |
-        -----BEGIN PRIVATE KEY-----
+        -----BEGIN EC PARAMETERS-----
         MIIBexample
-        -----END PRIVATE KEY-----
+        -----END EC PARAMETERS-----

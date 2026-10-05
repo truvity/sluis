@@ -509,7 +509,7 @@ adapters:
 
 | Setting | Meaning |
 |---|---|
-| `address` | the OpenBao, `https://host[:port]`, no path |
+| `address` | the OpenBao, `https://host[:port]`, no path. **https only**: a token and a login JWT cross the connection, and a redirect is never followed |
 | `caFile` | PEM authorities the server's certificate is verified against, instead of the system's. TLS verification is always on: there is no insecure flag |
 | `namespace` | the OpenBao namespace the secrets live in; empty is the root namespace |
 | `mount` | the KV version 2 mount; `kv` |
@@ -557,7 +557,7 @@ exports:
     path: github-runner-app/preview/truvity   # kv/sluis/export/github-runner-app/preview/truvity in devel
 ```
 
-The role must exist in that namespace too, with the policy below there. The
+A `403` is put down to the token (and costs one new login) only when the token is older than 30 seconds; a fresh token's `403` is the policy's. After an empty listing or a delete of an absent key the adapter asks the server whether the mount exists, and fails loudly with the mount and namespace if it does not (a wrong `mount` or `namespace` otherwise reads as "nothing there"). The role must exist in that namespace too, with the policy below there. The
 `ssm` adapter has no namespaces and refuses such an entry.
 
 **The policy** (least privilege; with root `sluis`, mount `kv`, in the
@@ -570,6 +570,12 @@ path "kv/metadata/sluis/private/credentials/*" { capabilities = ["list", "delete
 # the exports: written, never read by sluis for any other purpose
 path "kv/data/sluis/export/*"     { capabilities = ["create", "read", "update"] }
 path "kv/metadata/sluis/export/*" { capabilities = ["list", "delete"] }
+# List("") (every secret) lists the two directories themselves; List of a
+# prefix under credentials/ or export/ needs only the lines above
+path "kv/metadata/sluis/private" { capabilities = ["list"] }
+path "kv/metadata/sluis/private/" { capabilities = ["list"] }
+path "kv/metadata/sluis/export"  { capabilities = ["list"] }
+path "kv/metadata/sluis/export/" { capabilities = ["list"] }
 # only if configuration secrets are read from OpenBao
 path "kv/data/sluis/private/config/*" { capabilities = ["read"] }
 ```
@@ -752,7 +758,7 @@ The chart's `config`, and what `sluis serve` reads: the issuer, the console and 
 | `signingKey.kms.region` | the SDK's own | the keys' region |
 | `signingKey.kmsWrapped` | unset | sign with key pairs **KMS generates and wraps under one symmetric key** (the `kms-wrapped` adapter; the AWS Lambda presets' default), rotated automatically; exclusive with `file` and `kms`. The private key is decrypted into process memory to sign, so a leaked signing role can forge offline for as long as the keys are published, and write access to the State's key ring is part of the trust boundary (a `kms` key is non-extractable); the key policy must reserve the signing context to the signing roles (mandatory on a shared key). Fields: `keyId` (the symmetric key, an id, ARN or alias; required), `stateSecret` (as for `kms`; required), `region`, `algorithms` (`ES384`, `RS256`; default both, the first is the default; EdDSA is not supported yet), `rotateEvery` (24h; longer than `prepublish`, at most 168h), `prepublish` (default `activationDelay`: how long a new key is published before it signs), `retain` (default `overlap`, i.e. `lifetimes.token` plus a skew margin; never less). Needs `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the key with the encryption context `purpose=sluis-signing`. See [Signing on AWS](../deployment/aws.md#signing-on-aws) |
 | `signingKey.kms.stateSecret` | required with `kms` | the NAME of the sign-in state secret, `issuer/state-secret`: base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
-| `signingKey.verifyOnly[]` | unset | **public** keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire ([cutover](#cutting-over-to-kms-wrapped-signing-without-signing-everyone-out)). Each entry: `file` (a PEM public key, `RSA PUBLIC KEY` or certificate, or a JWK; required), `kid` (the `kid` the old tokens carry; unset is the key's RFC 7638 thumbprint, which is what a file signer derived, so it is right for a key a file signer used), `alg` (unset follows the key; `ES256`, `ES384`, `ES512`, `RS256`) and `until` (an RFC 3339 instant after which the key is not published; unset publishes it for good and logs a warning). A **private key stops the start**, in any encoding, and the error names the entry and none of the content. The issuer also verifies its own old tokens with them (`id_token_hint`). Works beside any signing source |
+| `signingKey.verifyOnly[]` | unset | **public** keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire ([cutover](#cutting-over-to-kms-wrapped-signing-without-signing-everyone-out)). Each entry: `file` (a PEM public key, `RSA PUBLIC KEY` or certificate, or a JWK; required), `kid` (the `kid` the old tokens carry; unset is the key's RFC 7638 thumbprint, which is what a file signer derived, so it is right for a key a file signer used), `alg` (unset follows the key; `ES256`, `ES384`, `ES512`, `RS256`) and `until` (**required**, an RFC 3339 instant after which the key is not published: an overlap has an end). A **private key stops the start**, in any encoding, and the error names the entry and none of the content. The chart refuses it at render too, before any ConfigMap is applied: a PEM may hold only `PUBLIC KEY` and `CERTIFICATE` blocks, nothing containing "private", and a JWK no private member (`d`, `p`, `q`, `dp`, `dq`, `qi`, `k`). **A private key that ever reached a rendered ConfigMap (a values file, a Helm release, git) must be treated as leaked and rotated.** The issuer also verifies its own old tokens with them (`id_token_hint`). Works beside any signing source |
 | `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
 | `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file (or each KMS key's public half) is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
 | `valkey.address` | unset | host:port of the shared store, with no credentials; unset keeps sessions and snapshots in memory, which is one replica only |

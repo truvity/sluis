@@ -3,8 +3,11 @@ package openbao_test
 import (
 	"bytes"
 	"context"
+	"encoding/pem"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -16,10 +19,10 @@ import (
 
 func secretsAdapter(t *testing.T, f *fake, root string) *openbao.Secrets {
 	t.Helper()
-	srv := newServer(t, f)
+	addr, client := newServer(t, f)
 	s, err := openbao.NewSecrets(openbao.SecretsConfig{
 		Config: openbao.Config{
-			Address: srv, Namespace: "kernel",
+			Client: client, Address: addr, Namespace: "kernel",
 			Auth: openbao.Auth{
 				Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "sluis-writer",
 				Token: func(context.Context) (string, error) { return "a-jwt", nil },
@@ -239,4 +242,85 @@ func TestTheSecretsExportHonoursAnEntrysNamespace(t *testing.T) {
 	if got, _ = f.read("devel", "sluis/export/github-runner-app/preview/truvity"); len(got) != 3 {
 		t.Errorf("after a patch: %v", got)
 	}
+}
+
+func TestPutUnderACasRequiredMountIsARefusalNotAConflict(t *testing.T) {
+	f := newFake()
+	f.casRequired = true
+	s := secretsAdapter(t, f, "sluis")
+	_, err := s.Put(context.Background(), "credentials/a", []byte("x"))
+	if err == nil || errors.Is(err, port.ErrConflict) || !strings.Contains(err.Error(), "cas_required") {
+		t.Fatalf("Put: %v, want a refusal naming cas_required", err)
+	}
+	// A conditional write that loses is still a conflict.
+	f.casRequired = false
+	v, _ := s.Put(context.Background(), "credentials/a", []byte("1"))
+	_, _ = s.Put(context.Background(), "credentials/a", []byte("2"))
+	if _, err = s.PutIfVersion(context.Background(), "credentials/a", []byte("3"), v); !errors.Is(err, port.ErrConflict) {
+		t.Errorf("PutIfVersion: %v", err)
+	}
+}
+
+func TestAWrongMountOrNamespaceIsLoudOnListAndDelete(t *testing.T) {
+	f := newFake()
+	f.noMount = true
+	s := secretsAdapter(t, f, "sluis")
+	ctx := context.Background()
+	if _, err := s.List(ctx, ""); err == nil || !strings.Contains(err.Error(), "no mount") {
+		t.Errorf("List on a missing mount: %v", err)
+	}
+	if err := s.Delete(ctx, "credentials/a"); err == nil || !strings.Contains(err.Error(), "no mount") {
+		t.Errorf("Delete on a missing mount: %v", err)
+	}
+	// On a real mount an empty listing and an absent delete are what they read as.
+	g := newFake()
+	t2 := secretsAdapter(t, g, "sluis")
+	if got, err := t2.List(ctx, ""); err != nil || len(got) != 0 {
+		t.Errorf("empty list: %v %v", got, err)
+	}
+	if err := t2.Delete(ctx, "credentials/a"); err != nil {
+		t.Errorf("absent delete: %v", err)
+	}
+}
+
+func TestANamespaceIsChecked(t *testing.T) {
+	s := secretsAdapter(t, newFake(), "sluis")
+	for _, ns := range []string{"", "a b", "../x", "-x"} {
+		if _, err := s.In(ns); err == nil {
+			t.Errorf("namespace %q accepted", ns)
+		}
+	}
+}
+
+func TestARedirectIsNotFollowed(t *testing.T) {
+	var hits int
+	other := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+	defer other.Close()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/steal", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	pool := srv.Certificate()
+	pemFile := t.TempDir() + "/ca.pem"
+	pemBytes := append(pemEncode(srv.Certificate().Raw), pemEncode(pool.Raw)...)
+	if err := os.WriteFile(pemFile, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := openbao.NewSecrets(openbao.SecretsConfig{Root: "sluis", Config: openbao.Config{
+		Address: srv.URL, CAFile: pemFile,
+		Auth: openbao.Auth{Method: openbao.MethodJWT, Role: "r", Token: func(context.Context) (string, error) { return "jwt", nil }},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Get(context.Background(), "credentials/a"); err == nil {
+		t.Error("a redirected login succeeded")
+	}
+	if hits != 0 {
+		t.Errorf("the redirect was followed %d times", hits)
+	}
+}
+
+func pemEncode(der []byte) []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
