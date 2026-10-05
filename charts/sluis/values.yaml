@@ -765,7 +765,7 @@ serviceAccount:
   # for service accounts) annotates the account with the role's ARN, `awsRoleArn`,
   # which it then requires.
   awsIdentity: pod-identity
-  # awsRoleArn: arn:aws:iam::123456789012:role/sluis
+  # awsRoleArn: arn:example:iam::acct:role/sluis
 
 # Runner Apps: the GitHub App a self-hosted runner scale set in one tier
 # registers with, one per organisation per tier, created by an operator on

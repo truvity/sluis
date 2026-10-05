@@ -371,7 +371,7 @@
         },
         "awsRoleArn": {
           "type": "string",
-          "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$",
+          "minLength": 1,
           "description": "The role's ARN, for `awsIdentity: irsa`."
         }
       }

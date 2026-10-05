@@ -116,7 +116,7 @@ func TestAWSIdentity(t *testing.T) {
 		}
 		return nil
 	}
-	if got := annotation(caseValues("k8s-aws-kms-irsa")); got != "arn:aws:iam::123456789012:role/sluis" {
+	if got := annotation(caseValues("k8s-aws-kms-irsa")); got != "arn:example:iam::acct:role/sluis" {
 		t.Errorf("irsa: role-arn %v", got)
 	}
 	if got := annotation(caseValues("k8s-aws-kms-openbao")); got != nil {
