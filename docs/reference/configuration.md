@@ -609,7 +609,7 @@ digits and dashes.
 
 The IAM boundary follows the tree. A function that only runs a controller needs
 `private/credentials` and `export` and never `private/config`; the one that signs
-tokens reads `private/config` as well ([AWS Lambda](../integrations/aws-lambda.md#iam-one-role-per-function)).
+tokens reads `private/config` as well ([AWS Lambda](../integrations/aws-lambda.md#iam-one-role)).
 The paths in [storage layout](storage-layout.md) are v2's; v3 puts the instance
 between `/sluis` and `private`.
 

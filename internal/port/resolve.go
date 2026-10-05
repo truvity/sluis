@@ -149,6 +149,32 @@ var awsLambda = map[Concern]string{
 	ConcernTrigger: "invoke", ConcernSchedule: "eventbridge", ConcernAudit: "sqs",
 }
 
+// presetUnavailable marks the presets that name an adapter which is not built:
+// the reason is what start says. A preset leaves this map when every adapter it
+// names is registered, and TestPresetsNameOnlyImplementedAdapters fails on a
+// preset that is in neither state, in either direction. The docs say so
+// (docs/reference/adapters.md).
+var presetUnavailable = map[Preset]string{
+	PresetServer:     "its state, secrets, blobs, signing and trigger adapters (postgres, store, generated, http) are planned and not built",
+	PresetK8sMinimal: "its state, secrets, blobs and trigger adapters (kubernetes, off, watch) are planned and not built",
+	PresetK8sOpenBao: "its state, blobs, signing and trigger adapters (kubernetes, off, transit, watch) are planned and not built",
+}
+
+// Unavailable is why a preset cannot be used yet, empty for one that can. A
+// deprecated name answers as the preset it stands for.
+func (p Preset) Unavailable() string { return presetUnavailable[p.Canonical()] }
+
+// BuiltPresets lists the presets that can be used now.
+func BuiltPresets() []Preset {
+	var out []Preset
+	for _, p := range Presets {
+		if p.Unavailable() == "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // PresetTable returns the adapter names a preset gives, by concern.
 func PresetTable(p Preset) map[Concern]string {
 	out := map[Concern]string{}
@@ -266,6 +292,25 @@ func Resolve(sel Selection) (Table, error) {
 	for _, c := range Concerns {
 		if _, ok := t[c]; !ok {
 			return nil, fmt.Errorf("no adapter for %s: the selection names none", c)
+		}
+	}
+	// A preset NAMED in the configuration that names adapters which are not
+	// built is refused here, in words that name the preset, unless the
+	// configuration replaced every such adapter itself. (A preset only derived
+	// from `platform` is left to Validate, which names each planned adapter and
+	// reports every other problem of the table with it.)
+	if why := preset.Unavailable(); why != "" && src == SourcePreset {
+		var left []string
+		for _, c := range Concerns {
+			n := presetTable[preset][c]
+			if d, ok := Default.Lookup(c, n); (!ok || d.Status != StatusImplemented) && t[c].Adapter == n {
+				left = append(left, string(c)+"="+n)
+			}
+		}
+		if len(left) > 0 {
+			return nil, fmt.Errorf("preset %q is unavailable: %s (planned, not built: %s). "+
+				"Name built adapters under `adapters` to replace them, or use a preset that is built (%v)",
+				preset, why, strings.Join(left, ", "), BuiltPresets())
 		}
 	}
 	return t, nil

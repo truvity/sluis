@@ -30,7 +30,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Before anything is built or published: refuse a tag the Pulumi library
+  # disagrees with. deploy/pulumi requires github.com/truvity/sluis, and the
+  # library is tagged at this same commit; a require at another version ships
+  # a library built against the wrong root, and a published tag cannot be taken
+  # back. No require (the library no longer imports the root) passes.
+  # `just release-check <tag>` runs the same script locally.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: deploy/pulumi requires this release or nothing
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ./hack/check-release-require.sh "$TAG"
+
   release:
+    needs: gate
     permissions:
       contents: write
       packages: write

@@ -11,9 +11,17 @@ import (
 
 	"github.com/truvity/sluis/internal/port"
 
-	// The store package imports every adapter the process can run, so each
-	// has registered itself by the time Render reads the registry.
+	// The store package imports every adapter the long-running process can
+	// run, so each has registered itself by the time Render reads the
+	// registry.
 	_ "github.com/truvity/sluis/internal/store"
+
+	// Adapters that only another binary imports. The matrix must see every
+	// adapter ANY binary registers, or it marks a built one as planned (the
+	// invoke trigger is imported by cmd/sluis-lambda alone, and the matrix
+	// said "on request" for it). TestEveryRegisteringPackageIsInTheMatrix
+	// fails when a package that registers an adapter is missing from here.
+	_ "github.com/truvity/sluis/internal/port/invoke"
 )
 
 // File is where the generated matrix lives, relative to the repository root.
@@ -96,8 +104,25 @@ presets and the platform fit together, see
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString("\n### Availability\n\nA preset that names an adapter which is not built is **unavailable**: " +
+		"start refuses it with a message naming the preset, unless `adapters` replaces every planned adapter it names. " +
+		"Unavailable now:\n\n")
+	for _, p := range port.Presets {
+		if why := p.Unavailable(); why != "" {
+			fmt.Fprintf(&b, "- `%s`: %s.\n", p, why)
+		}
+	}
+	fmt.Fprintf(&b, "\nAvailable: %s.\n", presetList(port.BuiltPresets()))
 	b.WriteString("\n`aws-eks` is the deprecated name of `k8s-aws`: it resolves to it, and start warns.\n\n")
 	return b.String()
+}
+
+func presetList(ps []port.Preset) string {
+	var out []string
+	for _, p := range ps {
+		out = append(out, "`"+string(p)+"`")
+	}
+	return strings.Join(out, ", ")
 }
 
 func mark(on bool, yesText string) string {

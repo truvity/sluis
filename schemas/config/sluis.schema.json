@@ -26,7 +26,7 @@
       "type": "string"
     }
   },
-  "$id": "https://truvity.github.io/sluis/schemas/v2/config/sluis.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/v3/config/sluis.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [

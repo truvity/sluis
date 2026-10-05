@@ -58,7 +58,7 @@ substance. For a map of every page in the repository, not just these, see
   [connect/slack-workspace.md](connect/slack-workspace.md#confirming-a-breaker-from-the-console)
   — the two removal breakers (a channel, the workspace), the fingerprint an
   operator confirms, and its 24-hour lapse
-- [connect/slack-workspace.md](connect/slack-workspace.md#dry-run-until-actsin)
+- [connect/slack-workspace.md](connect/slack-workspace.md#dry-run-until-enabledworkspaces)
   — every workspace is a dry run until the chart lists it; removing it from the
   list is the emergency stop
 - [connect/slack-workspace.md](connect/slack-workspace.md#modes) — `extend` adds

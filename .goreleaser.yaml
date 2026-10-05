@@ -165,6 +165,41 @@ archives:
     files: ["none*"]
     name_template: "sluis-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
+  # The two documents' contracts, as release assets of their own. Meta
+  # archives: no binary in them, so they are one file per release and not one
+  # per platform, and they are checksummed with the rest (checksums.txt).
+  #
+  # The schemas of the documents an installation writes (the service, policy
+  # and, when it exists, installation documents): schemas/config/*.schema.json,
+  # flat. TestReleaseBundlesAreComplete holds the glob to the schema list.
+  - id: config-schemas
+    meta: true
+    formats: [tar.gz]
+    name_template: "sluis-config-schemas_{{ .Version }}"
+    files:
+      - src: schemas/config/*.schema.json
+        strip_parent: true
+
+  # What the audit installation needs to accept sluis's events: the
+  # catalogue and EVERY schema it references, side by side. The audit writer
+  # refuses to start when a schema the catalogue names is missing (hive's was
+  # down for a day on exactly that), so the test holds this glob to the
+  # catalogue: nothing missing, nothing extra.
+  - id: audit-catalogue
+    meta: true
+    formats: [tar.gz]
+    name_template: "sluis-audit-catalogue_{{ .Version }}"
+    files:
+      - src: internal/audit/catalogue/roster.yaml
+        strip_parent: true
+      - src: internal/audit/catalogue/*.json
+        strip_parent: true
+
+checksum:
+  name_template: checksums.txt
+  # Every archive above, the two bundles included.
+  algorithm: sha256
+
 kos:
   # base_import_paths appends the cmd directory's basename, so with the
   # caller's ko-docker-repo ghcr.io/truvity/sluis the published
