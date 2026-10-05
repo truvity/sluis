@@ -69,6 +69,12 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 				return nil, err
 			}
 		}
+		if !a.AllowEndpoints {
+			if at := endpointIn(doc, ""); at != "" {
+				return nil, fmt.Errorf("sluispulumi: LambdaArgs.%s names an endpoint (%s): the functions reach AWS at its own "+
+					"endpoints; AllowEndpoints is for a test against LocalStack", d.field, at)
+			}
+		}
 		raw, err := yaml.Marshal(doc)
 		if err != nil {
 			return nil, err
@@ -113,6 +119,12 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 			return fmt.Errorf("sluispulumi: LambdaArgs.Config has recovery.enabled: %v and Recovery.Enabled is %v", v, *a.Recovery.Enabled)
 		}
 		recovery["enabled"] = *a.Recovery.Enabled
+	}
+	if signing, ok := doc["signingKey"].(map[string]any); ok && a.WrappedSigning != nil {
+		if _, remote := signing["kms"]; remote {
+			return errors.New("sluispulumi: LambdaArgs.Config names signingKey.kms and WrappedSigning is set: " +
+				"the library declares no asymmetric key with wrapped signing; name signingKey.kmsWrapped")
+		}
 	}
 	if signing, ok := doc["signingKey"].(map[string]any); ok {
 		for _, k := range []string{"kms", "kmsWrapped"} {
@@ -225,6 +237,39 @@ func own(m map[string]any, where, key, value string) error {
 func SSMRoot(instance string) string { return "/sluis/" + instance }
 
 var instancePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
+
+// validInstance is an instance name: lower-case letters, digits and dashes, and
+// never `private` or `export`, which would nest its tree under another's (or
+// under layout v2's /sluis/private and /sluis/export).
+func validInstance(s string) bool {
+	return instancePattern.MatchString(s) && s != "private" && s != "export"
+}
+
+// endpointIn is the path of the first `endpoint` key under v, or "".
+func endpointIn(v any, at string) string {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, x := range t {
+			p := k
+			if at != "" {
+				p = at + "." + k
+			}
+			if s, ok := x.(string); k == "endpoint" && ok && s != "" {
+				return p
+			}
+			if found := endpointIn(x, p); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for i, x := range t {
+			if found := endpointIn(x, fmt.Sprintf("%s[%d]", at, i)); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
 
 // MinPackageVersion is the oldest release this library deploys: the first that
 // reads its configuration from the layer (SLUIS_CONFIG) and its secrets from

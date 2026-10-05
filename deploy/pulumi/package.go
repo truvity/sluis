@@ -28,13 +28,14 @@ func DocumentPath(name string) string { return LayerRoot + "/" + name + ".yaml" 
 
 const maxPackageBytes = 100 << 20
 
-// loadPackage reads the released zip, from a path or an https URL, and returns
-// its entries by path with the bytes of each. It checks the digest when one is
-// given, refuses a zip with a path that leaves the package root, and requires
-// `bootstrap` at the root.
-// loadPackage reads the release zip, holds it to the SHA-256 it must have, checks
-// it is a function package, and returns a local copy of it, byte for byte: the
-// function's code is the release, never a zip rebuilt here.
+// loadPackage reads the release zip, from a path or an https URL, holds it to
+// the SHA-256 it must have, checks it is a function package (`bootstrap` at its
+// root, no entry outside it), and returns a copy of exactly the bytes it held to
+// the digest: a file of its own, named by the digest, in a directory of its own
+// (0700, the file 0600). The function's code is that copy, never the caller's
+// path, which could change between the check and the upload, and never a zip
+// rebuilt here. The directory is not removed: the engine reads the file after
+// this returns.
 func loadPackage(src, sha string) (string, error) {
 	raw, err := fetchPackage(src)
 	if err != nil {
@@ -46,9 +47,6 @@ func loadPackage(src, sha string) (string, error) {
 	}
 	if _, err = readZip(raw); err != nil {
 		return "", err
-	}
-	if !strings.Contains(src, "://") {
-		return src, nil
 	}
 	dir, err := os.MkdirTemp("", "sluis-package-")
 	if err != nil {
@@ -135,15 +133,3 @@ func readZip(raw []byte) (map[string]zipEntry, error) {
 	}
 	return out, nil
 }
-
-// buildArchive is the function package: every entry of the released zip, then
-// the estate's configuration at config/sluis.yaml and the catalogue files at
-// config/<name>. The added files are part of the package, so a change to any of
-// them changes the archive's hash and redeploys the functions on the next
-// `pulumi up`: a configuration change reaches the functions deliberately, as a
-// deploy.
-//
-// The entries are written under a directory of the system's temporary files
-// that Pulumi reads when it registers the function (a Pulumi asset is a path or a
-// string, and a string loses the executable bit `bootstrap` needs); the
-// directory is not removed, because the engine reads it after this returns.
