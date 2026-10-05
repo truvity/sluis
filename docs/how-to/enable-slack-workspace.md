@@ -65,5 +65,5 @@ also the emergency stop.
 
 ## Afterwards
 
-- Watch the tick series for the workspace ([telemetry](../operations/telemetry.md)) and the first breaker, if any.
+- Watch the tick series for the workspace ([telemetry](../reference/telemetry.md)) and the first breaker, if any.
 - Tell the workspace's owner that membership now follows the policy.

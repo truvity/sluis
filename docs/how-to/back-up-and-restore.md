@@ -63,7 +63,7 @@ With `ports.adapter` other than `legacy` there are no such Secrets: the credenti
 service copies the five bundles into OpenBao itself, entry for entry, with `exports` of `source: bundle`
 ([exports](../reference/exports.md)). The copy is made at start, within seconds of a
 change and every hour. A failed one is the alert `AccessRosterExportFailing`
-([telemetry](../operations/telemetry.md#accessrosterexportfailing)). To restore from one, read the key (`bao kv get`,
+([telemetry](../reference/telemetry.md#accessrosterexportfailing)). To restore from one, read the key (`bao kv get`,
 [0013](../decisions/0013-openbao-access-through-the-bao-cli.md)), write each entry of its JSON object back as a key of
 the Secret of that name, and proceed as step 3. The service does not read an export back: the Secrets port is the source
 of truth, and a lost Secrets store is what the copy is for.

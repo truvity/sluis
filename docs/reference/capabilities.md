@@ -86,13 +86,13 @@ is the part of the runtime that is built; the Lambda runtime itself is not.
 | The chart sets the `OTEL_*` environment on every pod from `telemetry.otlp` (endpoint, protocol, a service name per component, extra `OTEL_*`); unset renders nothing | 🧪 | — |
 | Platform logs over OTLP (observability's otlp-lambda layer) | — | ✅ |
 | Traces: HTTP and Connect spans, a span per tick and per port call, the trace continued into the console (trace context across queues waits for the queues) | 🧪 | 📄 |
-| Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; exports; rate limits ([operations/telemetry.md](../operations/telemetry.md)) | 🧪 | 📄 |
+| Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; exports; rate limits ([reference/telemetry.md](telemetry.md)) | 🧪 | 📄 |
 | Chart modes `renders: alerts` and `renders: dashboards`: twelve rules, unit-tested with `vmalert-tool`, and a dashboard held to `dashboardlint` | 🧪 | — |
 | No personal data in a span: an allowlist exporter, tested by planting markers; no person or group in a label | 🧪 | 📄 |
 
 Telemetry is configured by the OpenTelemetry environment variables and nothing
 else ([0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md)); the
 signals, the alerts and how to install them are in
-[operations/telemetry.md](../operations/telemetry.md). On
+[reference/telemetry.md](telemetry.md). On
 Lambda observability's otlp-lambda layer sends it with the function role's identity
 ([integrations/aws-lambda.md](lambda.md)).

@@ -200,7 +200,7 @@ type ConsoleDeps struct {
 	// tick runs soon (docs/decisions/0029). With the legacy adapter the
 	// trigger is in this process, and the controllers are other processes: the
 	// notification reaches nobody there, and the controller notices the same
-	// write through the records it mounts (see docs/design/ports.md). Nil
+	// write through the records it mounts (see docs/explanation/ports.md). Nil
 	// notifies nobody.
 	Trigger port.Trigger
 }

@@ -40,7 +40,7 @@ import (
 // through YAML and, eventually, a comma-joined display list must never
 // need escaping to carry); and any ASCII letter, digit or `-` -- exactly
 // [A-Za-z0-9-], what every scope, thing and role this codebase's own
-// vocabulary examples are built from (docs/taxonomy.md) -- because a
+// vocabulary examples are built from (docs/reference/taxonomy.md) -- because a
 // delimiter drawn from the same alphabet a name is written in is exactly
 // the classic separator-collision mistake this check exists to catch.
 // `.` is the documented example: not part of that alphabet, and not used
@@ -66,7 +66,7 @@ func validGroupsDelimiter(delimiter string) error {
 		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-':
 			return fmt.Errorf(
 				"groups_delimiter %q contains %q, which a scope, thing or role name may itself be built from "+
-					"(see docs/taxonomy.md); a delimiter drawn from the same alphabet as a group name could make "+
+					"(see docs/reference/taxonomy.md); a delimiter drawn from the same alphabet as a group name could make "+
 					"two different names collide once rewritten", delimiter, string(r))
 		}
 	}

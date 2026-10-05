@@ -74,7 +74,7 @@ type KubernetesIdentityArgs struct {
 	// only, for the parameters under its own prefixes. Optional.
 	ParameterKeyArn string
 	// State is the DynamoDB table of the State port. Nil when State is not in
-	// DynamoDB (it is on NATS), and the roles then carry no DynamoDB grant.
+	// DynamoDB (it is in ConfigMaps or memory), and the roles then carry no DynamoDB grant.
 	State *StateGrant
 }
 

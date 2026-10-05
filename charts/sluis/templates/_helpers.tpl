@@ -512,7 +512,7 @@ old configuration tries to activate it, with a message pointing to the
 migration.
 */}}
 {{- define "sluis.validateSecretManagers" -}}
-{{- if .Values.secretManagers }}{{ fail "secretManagers was removed in v1.30.0: delete this key from your values. To sign in to OpenBAO, use its own OIDC login (see docs/connect/openbao.md)." }}{{ end -}}
+{{- if .Values.secretManagers }}{{ fail "secretManagers was removed in v1.30.0: delete this key from your values. To sign in to OpenBAO, use its own OIDC login (see docs/how-to/connect/openbao.md)." }}{{ end -}}
 {{- end -}}
 
 {{- /* Alert mode. A rule's labels: the routing labels the caller sets for every

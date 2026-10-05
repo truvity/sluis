@@ -12,7 +12,7 @@ import (
 
 // Concern is one thing an installation needs from its platform and an adapter
 // provides: where state lives, where secrets live, and so on. The adapter is
-// chosen by name, per concern (docs/design/ports.md, "Adapters").
+// chosen by name, per concern (docs/explanation/ports.md, "Adapters").
 type Concern string
 
 // The concerns. State includes sessions (keys under `ses.`, with a lifetime);

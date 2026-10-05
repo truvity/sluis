@@ -90,4 +90,4 @@ adopted, and a key that has retired stays retired while it is listed (remove it 
 ## Afterwards
 
 - Watch `access_issuer.kms_signatures{result="throttled"}`: it says the quota is being hit. Request a raise before it is.
-- Raise an alert on `result="error"` ([telemetry](../operations/telemetry.md#alerts)).
+- Raise an alert on `result="error"` ([telemetry](../reference/telemetry.md#alerts)).

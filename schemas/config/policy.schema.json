@@ -39,7 +39,7 @@
           "description": "GitHub Apps.",
           "properties": {
             "catalogue": {
-              "description": "Every GitHub App the installation declares (docs/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+              "description": "Every GitHub App the installation declares (docs/how-to/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
               "items": {
                 "additionalProperties": false,
                 "description": "One App: created under `org` from the console, and installed there.",
@@ -165,7 +165,7 @@
           "description": "Slack Apps.",
           "properties": {
             "catalogue": {
-              "description": "Every Slack App the installation declares (docs/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
+              "description": "Every Slack App the installation declares (docs/how-to/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
               "items": {
                 "additionalProperties": false,
                 "description": "One Slack App, created and installed from the console.",

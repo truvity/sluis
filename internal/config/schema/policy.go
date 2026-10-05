@@ -195,10 +195,10 @@ func policyAppsSchema() m {
 	return obj("What an operator may make on the console.", m{
 		"github": obj("GitHub Apps.", m{
 			"runnerTiers": m{"type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once."},
-			"catalogue":   list("Every GitHub App the installation declares (docs/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", catalogueAppSchema()),
+			"catalogue":   list("Every GitHub App the installation declares (docs/how-to/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", catalogueAppSchema()),
 		}),
 		"slack": obj("Slack Apps.", m{
-			"catalogue": list("Every Slack App the installation declares (docs/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.", slackAppSchema()),
+			"catalogue": list("Every Slack App the installation declares (docs/how-to/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.", slackAppSchema()),
 		}),
 	})
 }

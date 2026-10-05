@@ -29,9 +29,9 @@ before:
     - just console
 
 builds:
-  # One binary, three jobs: `serve` is the service (issuer, console and hub),
-  # `controller github` and `controller slack` are the two controllers, and
-  # `migrate` is reserved for 0031. One image, one archive entry, one
+  # One binary: `serve` is the service (issuer, console and hub, with the
+  # GitHub and Slack controllers in-process since v1.63), and `migrate` is
+  # 0031's State copy. One image, one archive entry, one
   # version: a service and a controller from two releases cannot run
   # together by accident.
   - id: sluis
@@ -268,7 +268,7 @@ release:
 
     The Lambda zip `sluis-lambda_{{ .Version }}_linux_arm64.zip` holds `bootstrap`, the one
     binary the issuer and both controllers run as on AWS Lambda
-    (`docs/integrations/aws-lambda.md`). The telemetry layer is
+    (`docs/reference/lambda.md`). The telemetry layer is
     `otlp-lambda-layer_<version>_linux_<arch>.zip` from `truvity/observability`;
     sluis ships none.
 

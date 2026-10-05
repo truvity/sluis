@@ -108,5 +108,5 @@ exports:
 - **OpenBao policy.** The role needs `read`, `create`, `update` and `patch` on
   `kv/data/<prefix>/*` in each namespace it writes to. Never `list` or `delete`.
 
-The metrics, the two alerts and the dashboard row are in [telemetry](../operations/telemetry.md#the-exports). The
+The metrics, the two alerts and the dashboard row are in [telemetry](telemetry.md#the-exports). The
 chart's `exports.openbao.*` values mount the CA and the token: [chart values](chart-values.md).

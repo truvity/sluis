@@ -6,7 +6,7 @@
 # than no check: it reads as "conformance passes". The suite is now run
 # by a person, as a whole, at each major and minor release — all three
 # profiles, including the manual steps a person has to sign off — and
-# docs/operations/conformance.md is the procedure.
+# docs/how-to/run-conformance.md is the procedure.
 #
 # WHY IT STAYS AT ALL. Config reads the discovery document and the key
 # set and checks them against the specification. It needs no client, no

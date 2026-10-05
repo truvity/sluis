@@ -68,7 +68,7 @@ spec:
 (readiness, follows the State; `timeoutSeconds: 3`, `failureThreshold: 3`, `periodSeconds: 10`, so a replica leaves
 rotation within about thirty seconds of real trouble).
 **Verify** each pod's log says `keeping state in DynamoDB`, and `access_roster.leases.contended` is non-zero while
-`AccessRosterLeaseLost` stays quiet ([telemetry](../operations/telemetry.md)).
+`AccessRosterLeaseLost` stays quiet ([telemetry](../reference/telemetry.md)).
 **Rollback**: set `replicaCount: 1` and roll out.
 
 ### 4. One tick by hand

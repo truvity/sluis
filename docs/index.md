@@ -47,7 +47,7 @@ The pages follow what the reader is doing. Pick the column that matches.
   [Pulumi library](reference/pulumi-library.md), [storage layout](reference/storage-layout.md)
 - Tools: [sluisctl](reference/sluisctl.md), [contracts](reference/contracts.md),
   [Go module](reference/go-module.md), [TypeScript](reference/typescript.md),
-  [audit actions](reference/audit-actions.md), [telemetry and alerts](operations/telemetry.md)
+  [audit actions](reference/audit-actions.md), [telemetry and alerts](reference/telemetry.md)
 
 ## Explanation
 

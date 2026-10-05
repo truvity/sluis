@@ -8,7 +8,7 @@
 //
 // The issuer verifies the token against the account's published key set, with
 // the same verifier token exchange uses, and the policy's `aws` matchers decide
-// what the role may do (docs/integrations/aws-lambda.md).
+// what the role may do (docs/reference/lambda.md).
 package consoleauth
 
 import (

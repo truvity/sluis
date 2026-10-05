@@ -81,78 +81,169 @@ GitHub and Slack controllers beside them under [`controllers`](#controllers-the-
 
 <!-- generated: config-keys -->
 
-| Key | Default | Meaning |
-|---|---|---|
-| `apiVersion` | absent (v1) | `sluis.truvity.github.io/sluis/v3`. A v2 `serve` document and an absent one (v1) load as v3 with no controllers:  see [Documents and `apiVersion`](#documents-and-apiversion) |
-| `issuerURL` | **required** | baked into every token and every relying party's trust. There is no default, because one would be a value nobody chose spread across an estate. An http or https URL with no credentials |
-| `release` | `sluis` | the name this installation's objects carry (`<release>-github-orgs`, the prefix of its keys in a shared store). **The chart requires it to be the release's full name**, and says what to write |
-| `cluster` | unset | what this cluster is called, which becomes part of a ServiceAccount's subject: `<cluster>:k8s:<namespace>:<name>`. Empty keeps the older unqualified form |
-| `secrets.source` | `env` | how every secret NAME this document gives is delivered: `env`, `file` or `ssm`. See [secrets](secrets.md) |
-| `secrets.root` | required with `file` and `ssm` | `file`: the directory the names are files under (the chart: `/var/run/sluis/secrets`). `ssm`: the installation's root, `/sluis/<instance>`: its configuration secrets are read from `<root>/private/config/`, so two installations share an account by their roots ([SSM layout v3](secrets.md#ssm-layout-v3)) |
-| `secrets.region` / `.endpoint` / `.refresh` | the SDK's / AWS / `5m` | `ssm` only: the parameters' region; a LocalStack address; how long before every parameter under the prefix is read again, so a rotation reaches a running instance |
-| `store` | `memory` (the chart: `kubernetes`) | where connected workspaces and their credentials are kept. `memory` makes a restart a fresh installation, which is right for a laptop and nothing else |
-| `ports.adapter` | `legacy` | the adapter behind the storage ports ([ports](../explanation/ports.md)): `legacy` keeps state where it has always been kept (the namespace's ConfigMaps and Secrets, and Valkey when `valkey.address` is set); `dynamodb` keeps the same in one DynamoDB table shared by every replica ([design/ports.md](port-adapters.md#the-dynamodb-adapter)); `memory` keeps all of it in the process, so a restart loses every login in progress, and is refused with `store: kubernetes` or `valkey.address`. With `dynamodb` or `memory` the domain records too (directory workspaces and their credentials, GitHub organisations and Apps, people's links, the Slack records) are kept in that State, their credentials in the Secrets port (`memory` has its own), and the controllers read them there instead of from mounted files ([design/ports.md](../explanation/store.md)); a secrets adapter is then required, and the start is refused naming it without one. Another value, and the removed `ports.sealer`, are refused |
-| `ports.blob.adapter` | (the Blob of `ports.adapter`) | `s3` replaces the Blob port (status reports, directory snapshots) with an S3 bucket, whatever `ports.adapter` is; `ports.blob.s3` is then required |
-| `platform`, `preset`, `adapters` | absent | choose the adapters by name, per concern ([design/ports.md](../explanation/ports.md#adapters-presets-and-the-platform)). `platform: {aws, kubernetes, openbao, runtime, replicas}` answers the preset decision tree; `preset` is one of `aws-serverless`, `aws-hybrid`, `k8s-aws` (`aws-eks` is its deprecated name and logs a warning); `server`, `k8s-minimal` and `k8s-openbao` are unavailable, and loading one fails naming the adapters that are not built ([adapters](adapters.md#presets)); `adapters.<concern>: {adapter, settings}` (concerns: `state`, `secrets`, `blobs`, `signing`, `trigger`, `schedule`, `audit`) overrides one concern. Resolution: explicit override, then the preset, then the preset the answers derive. All absent, the `ports` keys decide as before. Start is refused for an adapter that needs an answer that is false, cannot run on the runtime, is `memory` with `replicas` above 1, or is planned and not built; the table is logged once and exported as `sluis_adapter_info{concern,adapter}` |
-| `ports.blob.s3.bucket` | (required) | the bucket, which must exist with public access blocked |
-| `ports.blob.s3.prefix` | (none) | a key prefix inside the bucket: objects are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>` |
-| `ports.blob.s3.region` | the SDK's (`AWS_REGION`) | the bucket's region |
-| `ports.blob.s3.kmsKey` | (the bucket's default encryption) | a KMS key id, ARN or alias: every write asks for SSE-KMS under it |
-| `ports.blob.s3.endpoint`, `ports.blob.s3.pathStyle` | (AWS) | LocalStack or an S3-compatible store: its address, and path-style addressing |
-| `ports.dynamodb.table` | **required with `dynamodb`** | the table: a string partition key `pk`, a string sort key `sk` and TTL on `expires` ([design/ports.md](port-adapters.md#the-dynamodb-adapter)) |
-| `ports.dynamodb.region` / `.endpoint` | the SDK's (`AWS_REGION`) / AWS | the table's region; LocalStack's or DynamoDB Local's address. Credentials are the platform's (Pod Identity, IRSA, a Lambda role) and are never configured |
-| `ports.dynamodb.create` | `false` | make the table at start when it is not there (on-demand, TTL on `expires`), for a test or a development installation. Off binds to the table the infrastructure code made; the role needs `dynamodb:GetItem`, `PutItem`, `DeleteItem`, `Query` and `DescribeTable` on it, and `Scan` for `migrate` |
-| `ports.export.adapter` | unset: nothing is copied out | the adapter behind the Export port ([design/ports.md](ports.md#export)): `openbao` writes to a KV version 2 mount of an OpenBao; `memory` keeps the copies in the process, for a test. The policy document's `exports` need one. See [exports](exports.md) |
-| `ports.export.openbao.address` | **required with `openbao`** | the OpenBao server, `https://openbao.example`, with no path or credentials. Nothing is contacted at start |
-| `ports.export.openbao.caFile` / `.mount` / `.namespace` | system authorities / `kv` / unset | a PEM bundle for the server's certificate in place of the system's; the KV version 2 mount; the OpenBao namespace an export that names none is written to |
-| `ports.export.openbao.auth.method` | **required with `openbao`** | `kubernetes` (the Kubernetes auth method, with the pod's ServiceAccount token) or `jwt` (the JWT/OIDC method, with a token read from `tokenFile`). Both log in with `POST auth/<mount>/login {role, jwt}`, inside each namespace written to |
-| `ports.export.openbao.auth.mount` / `.role` / `.tokenFile` | the method's name / **required** / the pod's ServiceAccount token for `kubernetes`, **required** for `jwt` | the auth mount path in each namespace; the role the login asks for; and where the JWT is read from, afresh on every login (a projected ServiceAccount token, or on AWS the web identity token of outbound federation) |
-| `listen.address` | `:8080` | everything a browser and a relying party reach: discovery, the key set, the flows, the login page, and the console under `console.mount`. The chart takes the Service's and the routes' port from it, and refuses one outside 1-65535 |
-| `probes.address` | `:7070` | `/healthz`, `/readyz` |
-| `log.level` | `info` | `debug`, `info`, `warn`, `error` |
-| `policy.file` | built-in two groups | the one [policy document](policy-document.md) the service decides by, read once at start: the file `sluisctl policy render` writes. The chart requires `/var/run/access-issuer/policy/policy.yaml`. Unset, the built-in two groups (or the demonstration policy under `demo`) |
-| `directory.workspaces[]` | unset | the workspaces the deployment declares, which the service adopts at start: see [declared workspaces](declared-workspaces.md). Each names its key by `keySecret` |
-| `publicURL`, `publicRootURL` | `http://localhost:8081`, `publicURL` | where a browser reaches the console (with its mount) and the origin root, where the admin-consent callback stays. With `route.host` and `console.mount` set the chart requires `https://<host><mount>` and `https://<host>` |
-| `secureCookies` | follows the scheme of `issuerURL` | mark session cookies Secure. The chart refuses `false` on a route served over TLS |
-| `groupsScoping` | `report` | how far this installation has moved toward per-audience `groups` scoping ([policy.md#groups-in-a-token-scoping](policy.md#groups-in-a-token-scoping)): `off` computes and logs nothing -- quote it (`"off"`), or YAML reads the bare word as a boolean -- `report` logs what would be dropped without changing a token, `enforce` narrows the claim |
-| `demo` | `false` | two tenants held in memory, which need no credential and no network |
-| `allowInsecure` | `false` | accept a plain-http issuer URL, for a local run |
-| `inCluster` | `false` | recovery proves access to the cluster the pod runs in. Required with `recovery.enabled` |
-| `lifetimes.token` / `.refresh` / `.hold` | `1h` / `12h` / `4h` | how long a token lives, how long a refresh lives (the sliding window: a session idle longer than this ends, whatever its absolute limit, so a resource's seven-day `absolute_cap` needs `refresh` raised to match; it is also how long a browser sign-in lasts), and how long a signed-in identity keeps its last granted role while the directory cannot vouch. Caps: the policy may ask for shorter |
-| `lifetimes.absolute` | `24h` | the global timeout: no per-client session, and no access or ID token, outlives `auth_time` by more than this, no matter how often it is refreshed. Refused when zero, negative, or shorter than `lifetimes.token`: at render, and at start. A resource in the policy may carry its own `absolute_cap`, longer than this only when it says `read_only: true` and never beyond `168h` ([policy.md](policy-clients.md#absolute-session-of-a-read-only-resource)); the shortest cap among a chain's resources applies, and a chain that touches any other resource falls back to this value |
-| `lifetimes.session` | `12h` | how long the console's own session lasts, capped at `lifetimes.absolute` |
-| `freshness.refreshInterval` / `.freshnessWindow` / `.probeInterval` | `15m` / `30m` / `5m` | how often the refresher takes a new snapshot per workspace, how old a snapshot may be before its domains stop being authoritative, and how often a credential is probed and the domain list re-read |
-| `exchange.audience` | `release` | the audience a workload's ServiceAccount token must be minted for. Without one, every mounted token in every federated cluster would be a proof. The controllers' projected tokens are minted for it. The federated clusters and AWS accounts are not here: they are the policy document's `exchange.clusters` and `exchange.aws`, rows and not files |
-| `recovery.enabled` | unset: off for the issuer, on for the hub | the way in for the day the ordinary one is broken. It stores nothing: a short-lived ServiceAccount token proving access to the API server, so the authority is the cluster's own RBAC. **The only thing left that asks the cluster anything.** The chart's default is `true` |
-| `recovery.passwordSecret` | unset | the NAME of the recovery password, `recovery/password`, for a hub outside a cluster: delivered by `secrets`, read once at start (it keeps an Argon2id digest, compared in constant time; ten refused attempts a minute pause it for a minute per process). Unset generates one and prints it. With `recovery.enabled: false` the secret is left alone and the sign-in is refused with a message, so turning recovery back on needs no new password. The Pulumi library's Lambda shape generates it at `/sluis/<instance>/private/config/recovery/password`: [Recovery on Lambda](../how-to/recover-on-lambda.md). Every attempt, refused ones included, is the audit event `roster.recovery.signed_in` |
-| `recovery.serviceAccount` / `.audience` | the chart: `access-issuer-recovery` for both | the account recovery proves access as, which the chart creates and binds to nobody, and the audience its token must be minted for. Granting `create` on `serviceaccounts/token` for the account is how an installation says who may recover |
-| `login.directory` | `true` | whether the console offers a sign-in of its own, under `<mount>/login`. With `console.client` set it is a second door |
-| `login.signOutURL`, `login.forwarded.*` | unset | where sign-out sends the browser, and a sign-in an authenticating proxy has already done |
-| `console.client` | unset | the declared client the console signs people in as. Somebody with no session is sent to `/authorize`, signs in at the issuer's page, and comes back with the issuer's session set |
-| `console.origin` | unset | the one **other** origin allowed to call `SessionService` from a browser. Obsolete on one origin, which is the shipped shape |
-| `console.awsAudience` | `<issuerURL>/console` | the audience an AWS role's web identity token must be minted for to be a bearer at the console. Its own, distinct from the policy document's `exchange.aws.audience`, so a token for one door is no proof at the other; the issuer refuses to start with the same value for both ([AWS Lambda](lambda.md#two-audiences-two-doors)) |
-| `oauthClient.*` | unset | the client registered once with the directory backend, for sign-in and admin consent. `provider` names its two secrets, `providers/google/<provider>/client-id` and `client-secret`; the id may instead be `id`, which is not a secret. `secretName`, `idKey` and `secretKey` name the Kubernetes Secret the console shows as declared. With none, nobody can sign in and this installation issues tokens to machines only, which is a real posture and is said at start |
-| `signingKey.file` | unset: a key generated for the process | the primary signing key, provisioned and never minted here. The chart requires `/var/run/access-issuer/signing-key/<signingKey.key>` |
-| `signingKey.kms.keys[]` | unset | sign with **AWS KMS** instead of a file: `ECC_NIST_P384` / `SIGN_VERIFY` keys as ids, ARNs or aliases (e.g. `alias/sluis-signing`), oldest first, **the last one signs**. Exclusive with `signingKey.file` (both is refused at load). The private key never leaves KMS: each token is a `kms:Sign` of the SHA-384 of the JWS signing input (`MessageType: DIGEST`, `ECDSA_SHA_384`), the DER signature is converted to raw `r\|\|s`, and the algorithm is ES384. The `kid` is the RFC 7638 thumbprint of the public key, the same as a file holding that key would have. A key of another spec or usage stops the start. **Rotate by appending** a key: it is published at once and signs only after `activationDelay`, the earlier one stays published for `overlap`, exactly as for files; the list is re-read every `pollInterval`, which also notices an alias moved to another key. Never insert a key before one already seen. `signingKey.additionalFiles` still works beside it for other algorithms |
-| `signingKey.kms.additional[]` | unset | every OTHER algorithm signed at once, `{alg: RS256, keys: [...]}`: `RSA_2048`, `RSA_3072` or `RSA_4096` `SIGN_VERIFY` keys, oldest first, the last signing, for the relying parties that need RS256 (Kargo, EKS's OIDC provider; a client or resource pins it with `signing_alg: RS256`). Each token is `kms:Sign` with `RSASSA_PKCS1_V1_5_SHA_256` over a SHA-256 digest, verified against the public half before it is returned. The kid is the RFC 7638 thumbprint. Each algorithm is its own ring with the rotation rules above; an RS256 key here and one in `additionalFiles` clash and stop the start |
-| `signingKey.kms.region` | the SDK's own | the keys' region |
-| `signingKey.kmsWrapped` | unset | sign with key pairs **KMS generates and wraps under one symmetric key** (the `kms-wrapped` adapter; the AWS Lambda presets' default), rotated automatically; exclusive with `file` and `kms`. The private key is decrypted into process memory to sign, so a leaked signing role can forge offline for as long as the keys are published, and write access to the State's key ring is part of the trust boundary (a `kms` key is non-extractable); the key policy must reserve the signing context to the signing roles (mandatory on a shared key). Fields: `keyId` (the symmetric key, an id, ARN or alias; required), `stateSecret` (as for `kms`; required), `region`, `algorithms` (`ES384`, `RS256`; default both, the first is the default; EdDSA is not supported yet), `rotateEvery` (24h; longer than `prepublish`, at most 168h), `prepublish` (default `activationDelay`: how long a new key is published before it signs), `retain` (default `overlap`, i.e. `lifetimes.token` plus a skew margin; never less). Needs `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the key with the encryption context `purpose=sluis-signing`. See [Signing on AWS](aws-signing-key.md) |
-| `signingKey.kms.stateSecret` | required with `kms` | the NAME of the sign-in state secret, `issuer/state-secret`: base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
-| `signingKey.verifyOnly[]` | unset | **public** keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire ([cut over to kms-wrapped signing](../how-to/cut-over-to-kms-wrapped-signing.md)). Each entry: `file` (a PEM public key, `RSA PUBLIC KEY` or certificate, or a JWK; required), `kid` (the `kid` the old tokens carry; unset is the key's RFC 7638 thumbprint, which is what a file signer derived, so it is right for a key a file signer used), `alg` (unset follows the key; `ES256`, `ES384`, `ES512`, `RS256`) and `until` (**required**, an RFC 3339 instant after which the key is not published: an overlap has an end). A **private key stops the start**, in any encoding, and the error names the entry and none of the content. The chart refuses it at render too, before any ConfigMap is applied: a PEM may hold only `PUBLIC KEY` and `CERTIFICATE` blocks, nothing containing "private", and a JWK no private member (`d`, `p`, `q`, `dp`, `dq`, `qi`, `k`). **A private key that ever reached a rendered ConfigMap (a values file, a Helm release, git) must be treated as leaked and rotated.** The issuer also verifies its own old tokens with them (`id_token_hint`). Works beside any signing source |
-| `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
-| `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file (or each KMS key's public half) is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
-| `valkey.address` | unset | host:port of the shared store, with no credentials; unset keeps sessions and snapshots in memory, which is one replica only under `ports.adapter: legacy`; `ports.adapter: dynamodb` shares State between replicas with no Valkey |
-| `valkey.passwordSecret` | unset | the NAME of the password secret, `valkey/password`, delivered by `secrets` |
-| `valkey.tls` | `false` | speak TLS to the server |
-| `valkey.cluster` | `true` (the chart's guidance: `false`) | speak the cluster protocol. **Leave it off for a single-node Valkey:** with one shard it makes the client learn node addresses from `CLUSTER SLOTS` and talk to those, bypassing the Service -- the one mechanism whose job is to survive a pod moving. Turn it on when the store has three shards with a replica each (see [provide a Valkey](../how-to/provide-a-valkey.md)) |
-| `audit.writer` | unset | the audit installation's receiver: one address, which takes the records and answers the catalogue's registration on the same port. Set, the service and the controller record into it, each with its own projected token; unset, nothing is kept beyond the log line every record also is |
-| `adapters.audit` | derived | `connect` (the default when `audit.writer` is set), `log`, or `sqs` with `settings: {queueURL, region, endpoint, timeout}`; see [the `sqs` adapter](port-adapters.md#the-sqs-adapter). `sqs` needs no `audit.writer` or token, registers no catalogue (it travels in the writer Lambda's package) and needs `sqs:SendMessage` on the queue |
-| `audit.tokenFile` | the chart: `/var/run/audit/token` | the projected token presented to the receiver; the chart requires that path when `audit.writer` is set |
-| `audit.queryURL` | unset | the installation's query service, for the console's Audit page; unset shows no page. Its own setting: it needs no `audit.writer`, so the page works with every audit sink (`connect`, `log`, `sqs`). The browser never calls it: the console forwards the page's calls server-side, with a token minted for the person, so the query host needs no CORS. A path prefix is kept and the procedure path appended: `https://audit.example.org/sluis` is called as `https://audit.example.org/sluis/audit.v1.QueryService/Search` |
-| `audit.audience` | `audit` | the policy client whose audience the Audit page's tokens carry. The policy must declare it, requiring the groups that may read the trail |
-| `audit.forwardedForTrustedHops` | `0` | how many of the deployment's own proxies append to `X-Forwarded-For` in front of the service. A record's client address is the entry just left of them, read from the right; the left end is whatever a caller sent, so it is never taken on its own. `0` records the peer |
+Source: `schemas/config/sluis.schema.json`. Generated by `just docs-generate`; keys are listed with their parents first.
 
-
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `adapters` | object | — | Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md. |
+| `adapters.audit` | object | — | The adapter for the audit sink, replacing the preset's. |
+| `adapters.audit.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.audit.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `adapters.blobs` | object | — | The adapter for blobs, replacing the preset's. |
+| `adapters.blobs.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.blobs.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `adapters.schedule` | object | — | The adapter for the schedule of passes, replacing the preset's. |
+| `adapters.schedule.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.schedule.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `adapters.secrets` | object | — | The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's. |
+| `adapters.secrets.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.secrets.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `adapters.signing` | object | — | The adapter for token signing, replacing the preset's. |
+| `adapters.signing.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.signing.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `adapters.state` | object | — | The adapter for state, sessions included, replacing the preset's. |
+| `adapters.state.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.state.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `adapters.trigger` | object | — | The adapter for the "run a pass now" trigger, replacing the preset's. |
+| `adapters.trigger.adapter` | string | **required** | The adapter's name, as the compatibility matrix lists it. |
+| `adapters.trigger.settings` | object | — | The adapter's own settings (an object; the adapter refuses a key it does not know). |
+| `allowInsecure` | boolean | — | Accept a plain-http issuer URL, for a local run. |
+| `apiVersion` | any | **required** | Which version of which document this is. sluis.truvity.github.io/sluis/v3 is the one service document: the process that serves the issuer and the console and, under `controllers`, runs the GitHub and Slack controllers. A binary still reads the v2 `serve` document (and v1, which has no apiVersion) as this document with no controllers (docs/reference/configuration.md). |
+| `audit` | object | — | The audit installation this service records to. Unset keeps the trail in the log only. |
+| `audit.audience` | string | `"audit"` | The client whose audience the Audit page's tokens carry. |
+| `audit.forwardedForTrustedHops` | integer | `0` | How many of the deployment's own proxies append to X-Forwarded-For; zero records the peer. |
+| `audit.queryURL` | string | — | The query service, for the console's Audit page. Its own setting: it needs no `writer`, so the page works with the `sqs` and `log` sinks. A path prefix (`https://audit.example/sluis`) is kept and the procedure path appended. |
+| `audit.tokenFile` | string | — | This workload's projected service-account token, presented on every call. |
+| `audit.writer` | string | — | The installation's receiver. |
+| `cluster` | string | — | Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject. |
+| `console` | object | — | Where the console is published, for the sign-in that starts there. |
+| `console.awsAudience` | string | — | The audience an AWS role's web identity token must be minted for to be a bearer at the console (a Lambda controller). Its own, distinct from the AWS federation file's, so a token for token exchange is no proof here and the reverse. Default `<issuerURL>/console`. |
+| `console.client` | string | — | The client id the console signs in as. |
+| `console.origin` | string | — | The console's origin, when it is not the issuer's. |
+| `demo` | boolean | — | Two tenants held in memory, which need no credential and no network. |
+| `directory` | object | — | The corporate directories this deployment declares: each adopted at start (the console connects the others). Unset declares none. |
+| `directory.workspaces` | array | — | The declared workspaces. One that cannot be adopted stops the service. |
+| `directory.workspaces[].admin` | string | **required** | The account the credential impersonates. |
+| `directory.workspaces[].backend` | one of google | **required** | The implementation that reads it. |
+| `directory.workspaces[].id` | string | — | The backend's tenant id. Optional: given, the adoption checks it. |
+| `directory.workspaces[].keySecret` | string | **required** | The secret the service-account key is: `directory/<id>/key`. |
+| `directory.workspaces[].serve` | array | — | Narrows the tenant to these domains. Empty serves every domain discovered. |
+| `directory.workspaces[].syncGroups` | array | — | Narrows the tenant to these groups. Empty keeps every group in the served domains. |
+| `exchange` | object | — | How the token exchange verifies workloads. Whom it trusts (the clusters, the AWS accounts, the GitHub owners) is the policy document's `exchange`. |
+| `exchange.audience` | string | — | The audience a workload token must be minted for. Defaults to `release`, so two issuers in one cluster cannot accept each other's proofs. |
+| `freshness` | object | — | How the directory's snapshot is kept current. |
+| `freshness.freshnessWindow` | string | `"30m"` | How old a snapshot may be and still be answered from. |
+| `freshness.probeInterval` | string | `"5m"` | How often the directory is probed. |
+| `freshness.refreshInterval` | string | `"15m"` | How often a snapshot is refreshed. |
+| `groupsScoping` | one of off, report, enforce | `"report"` | How far this installation has moved toward per-audience `groups` scoping: `off`, `report` or `enforce`. |
+| `inCluster` | boolean | — | Prove recovery against the cluster the pod runs in. Set by a deployment that turns recovery on. |
+| `issuerURL` | string | **required** | The issuer: baked into every token and every relying party's trust, so there is no default. No trailing slash is kept. |
+| `lifetimes` | object | — | How long what the issuer hands out lives. |
+| `lifetimes.absolute` | string | `"24h"` | A session, at most. Positive, and at least `token`: a session has to end SOMETIME after sign-in, and an access token cannot outlive the session that grants it. |
+| `lifetimes.hold` | string | `"4h"` | How long a removal is held before it takes effect. |
+| `lifetimes.refresh` | string | `"12h"` | A refresh token. |
+| `lifetimes.session` | string | `"12h"` | The console's own session cookie, capped at `absolute`. |
+| `lifetimes.token` | string | `"1h"` | An access token. |
+| `listen` | fragment: listen.json | `{"address":":8080"}` |  |
+| `log` | fragment: log.json | — |  |
+| `login` | object | — | How a person signs in to the console. |
+| `login.directory` | boolean | `true` | Sign in with the corporate directory. |
+| `login.forwarded` | object | — | A sign-in an authenticating proxy has already done. |
+| `login.forwarded.audience` | string | — | The audience its token carries. |
+| `login.forwarded.emailHeader` | string | — | The header that carries the signed-in address. |
+| `login.forwarded.issuer` | string | — | The proxy's issuer. |
+| `login.signOutURL` | string | — | Where sign-out sends the browser. |
+| `oauthClient` | object | — | The OAuth client registered once with the directory backend: it drives both admin consent and operator sign-in. |
+| `oauthClient.id` | string | — | The client id, for a local run. Not a secret. |
+| `oauthClient.idKey` | string | — | The key of the id in that Secret. |
+| `oauthClient.provider` | string | — | Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it. One segment of a secret's name. |
+| `oauthClient.secretKey` | string | — | The key of the secret in that Secret. |
+| `oauthClient.secretName` | string | — | The Kubernetes Secret the client is declared in, which the console shows and cannot change. |
+| `platform` | object | — | What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform. |
+| `platform.aws` | boolean | — | AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge. |
+| `platform.kubernetes` | boolean | — | A Kubernetes cluster is available. |
+| `platform.openbao` | boolean | — | An OpenBao is available. |
+| `platform.replicas` | integer | `1` | How many replicas share this installation's state. Above 1 start refuses an adapter that keeps its data in the process (`memory`). |
+| `platform.runtime` | one of kubernetes, lambda, process | — | Where sluis itself runs. Absent: `kubernetes` with a cluster, else `lambda` on AWS, else `process`. |
+| `policy` | object | — | The policy document this service decides by. Unset is the built-in two groups, or the demonstration policy under `demo`. |
+| `policy.file` | string | **required** | The policy document: the one canonical file `sluisctl policy render` writes (schemas/config/policy.schema.json). Read once, at start: a change is a new instance. |
+| `ports` | object | — | The adapters behind the storage ports (docs/explanation/ports.md). |
+| `ports.adapter` | one of legacy, memory, dynamodb | `"legacy"` | `legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`. `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own. |
+| `ports.blob` | object | — | Replaces the Blob port (status reports, directory snapshots) with an adapter of its own, whatever `ports.adapter` is. Absent, the Blob is `ports.adapter`'s. |
+| `ports.blob.adapter` | one of s3 | **required** | `s3` keeps the blobs in an S3 bucket. |
+| `ports.blob.s3` | object | — | Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here. |
+| `ports.blob.s3.bucket` | string | **required** | The bucket. It must exist, with public access blocked. |
+| `ports.blob.s3.endpoint` | string | — | Overrides the S3 address: LocalStack or an S3-compatible store. |
+| `ports.blob.s3.kmsKey` | string | — | A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies. |
+| `ports.blob.s3.pathStyle` | boolean | — | Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need. |
+| `ports.blob.s3.prefix` | string | — | A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`. |
+| `ports.blob.s3.region` | string | — | The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`). |
+| `ports.dynamodb` | object | — | The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here. |
+| `ports.dynamodb.create` | boolean | `false` | Create the table (on-demand, TTL on `expires`) at start when it is not there, for a test or a development installation. Off, the table must exist: production uses the one the infrastructure code made, and the role needs `dynamodb:DescribeTable` on it. |
+| `ports.dynamodb.endpoint` | string | — | Overrides the DynamoDB address: LocalStack or DynamoDB Local. |
+| `ports.dynamodb.region` | string | — | The table's region. Absent, the SDK's own resolution (`AWS_REGION`). |
+| `ports.dynamodb.table` | string | **required** | The table's name. |
+| `ports.export` | object | — | The store the copies of `exports` are written to (docs/decisions/0034). Absent, nothing is copied out of the service, and `exports` must be empty. |
+| `ports.export.adapter` | one of openbao, memory | **required** | `openbao` writes to a KV version 2 mount of an OpenBao. `memory` keeps the copies in this process and is for a test or the demonstration. |
+| `ports.export.openbao` | object | — | The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency. |
+| `ports.export.openbao.address` | string | **required** | The server, https only and with no path: `https://openbao.example`. A token and a login JWT cross this connection. |
+| `ports.export.openbao.auth` | object | **required** | How the service logs in, inside each namespace it writes to. The `kubernetes` and `jwt` methods take the same request (`auth/<mount>/login` with a role and a JWT) and differ in the mount they default to and where the JWT comes from. |
+| `ports.export.openbao.auth.method` | one of kubernetes, jwt | **required** | `kubernetes`: the Kubernetes auth method, with this pod's ServiceAccount token. `jwt`: the JWT/OIDC method, with a token the platform projects (a ServiceAccount token of another audience, or, on AWS Lambda, the web identity token of outbound federation) from `tokenFile`. |
+| `ports.export.openbao.auth.mount` | string | — | The auth method's mount path in each namespace. Absent, the method's name. |
+| `ports.export.openbao.auth.role` | string | **required** | The role the login asks for. It must be bound to this workload's identity and carry a policy that reads, creates, updates and patches only the paths `exports` names. |
+| `ports.export.openbao.auth.tokenFile` | string | — | Where the JWT is read from, afresh on every login. Absent with `kubernetes`, the pod's ServiceAccount token; required with `jwt`. |
+| `ports.export.openbao.caFile` | string | — | A PEM bundle of the authorities that sign the server's certificate, in place of the system's. |
+| `ports.export.openbao.mount` | string | `"kv"` | The KV version 2 mount. |
+| `ports.export.openbao.namespace` | string | — | The OpenBao namespace an export that names none is written to. |
+| `preset` | one of server, k8s-minimal, k8s-openbao, aws-serverless, aws-hybrid, k8s-aws, aws-eks | — | The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `k8s-aws` (sluis as a pod on Kubernetes with AWS storage: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao with `adapters.secrets`). `aws-eks` is the deprecated name of `k8s-aws`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns. |
+| `probes` | fragment: probes.json | `{"address":":7070"}` |  |
+| `publicRootURL` | string | — | The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`. |
+| `publicURL` | string | — | Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081. |
+| `recovery` | object | — | The sign-in that needs no directory: in a cluster, a token for a ServiceAccount proven against the API server; anywhere else, a password. Unset is off for the issuer and, for the hub, on. |
+| `recovery.audience` | string | — | The audience its token must carry. |
+| `recovery.enabled` | boolean | — | Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable. |
+| `recovery.passwordSecret` | string | — | Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password. |
+| `recovery.serviceAccount` | string | — | The ServiceAccount whose token signs in. |
+| `release` | string | `"sluis"` | The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name. |
+| `secrets` | object | — | How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`. |
+| `secrets.endpoint` | string | — | `ssm`: overrides the SSM address, for LocalStack. |
+| `secrets.refresh` | string | `"5m"` | `ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it. |
+| `secrets.region` | string | — | `ssm`: the region. Unset follows the AWS SDK's own resolution. |
+| `secrets.root` | string | — | `file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>. |
+| `secrets.source` | one of env, file, ssm | `"env"` | `env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/private/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (layout v3, root /sluis/<instance>). |
+| `secureCookies` | boolean | — | Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL. |
+| `signingKey` | object | — | The issuer's signing keys: provisioned, never minted here. |
+| `signingKey.activationDelay` | string | `"15m"` | How long a newly published key waits before a replica signs with it. At least `pollInterval`. |
+| `signingKey.additionalFiles` | array | — | Every OTHER algorithm this installation signs with at once, one file per algorithm. |
+| `signingKey.file` | string | — | The primary key. Unset generates one for this process, which a local run may do and nothing else should. Exclusive with `kms`. |
+| `signingKey.kms` | object | — | Sign with AWS KMS keys instead of a file: the private key never leaves KMS. Exclusive with `file`. |
+| `signingKey.kms.additional` | array | — | Every OTHER algorithm this installation signs with at once, each on its own rotation track, as `signingKey.additionalFiles` does for files. RS256 is the one that exists: for relying parties that need it (Kargo, EKS's OIDC provider). |
+| `signingKey.kms.additional[].alg` | one of RS256 | **required** | The algorithm. |
+| `signingKey.kms.additional[].keys` | array | **required** | RSA_2048, RSA_3072 or RSA_4096 SIGN_VERIFY keys, oldest first, the last signing; same rotation rules as `keys`. |
+| `signingKey.kms.keys` | array | **required** | ECC_NIST_P384 SIGN_VERIFY keys, as ids, ARNs or aliases, oldest first. The LAST signs; the earlier ones stay published until `overlap` after the next one activates. Rotation appends a key. The role needs kms:Sign and kms:GetPublicKey on each. |
+| `signingKey.kms.region` | string | — | The keys' region. Unset follows the AWS SDK's own resolution. |
+| `signingKey.kms.stateSecret` | string | **required** | The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from. |
+| `signingKey.kmsWrapped` | object | — | Sign with key pairs AWS KMS generates and wraps under ONE symmetric key (the `kms-wrapped` adapter): a new pair per algorithm every `rotateEvery`, published before it signs and kept after it is replaced. The private key is decrypted into process memory to sign. Exclusive with `file` and `kms`. |
+| `signingKey.kmsWrapped.algorithms` | array | — | The algorithms signed with, the first the installation default. Unset is ES384 and RS256. EdDSA is not supported yet. |
+| `signingKey.kmsWrapped.keyId` | string | **required** | The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing. |
+| `signingKey.kmsWrapped.prepublish` | string | `"15m"` | How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`. |
+| `signingKey.kmsWrapped.region` | string | — | The key's region. Unset follows the AWS SDK's own resolution. |
+| `signingKey.kmsWrapped.retain` | string | — | How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`. |
+| `signingKey.kmsWrapped.rotateEvery` | string | `"24h"` | How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h. |
+| `signingKey.kmsWrapped.stateSecret` | string | **required** | The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it. |
+| `signingKey.overlap` | string | — | How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew. |
+| `signingKey.pollInterval` | string | `"30s"` | How often the files are re-read. |
+| `signingKey.verifyOnly` | array | — | PUBLIC keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire: the overlap of a cutover from file keys to `kmsWrapped`. Each is dropped from the JWKS at its `until`. A private key stops the start. |
+| `signingKey.verifyOnly[].alg` | one of ES256, ES384, ES512, RS256 | — | The key's algorithm. Unset follows the key. |
+| `signingKey.verifyOnly[].file` | string | **required** | A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key. |
+| `signingKey.verifyOnly[].kid` | string | — | The `kid` the old tokens carry. Unset is the RFC 7638 thumbprint of the key, which is what a file signer derived for it. |
+| `signingKey.verifyOnly[].until` | string (date-time) | **required** | An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache. Required: an overlap has an end. |
+| `store` | one of memory, kubernetes | `"memory"` | Where what an operator connected is kept: `memory` keeps nothing (a restart is a fresh installation), `kubernetes` keeps it in this namespace. |
+| `valkey` | object | — | The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica. |
+| `valkey.address` | string | — | host:port, with no credentials. |
+| `valkey.cluster` | boolean | `true` | Speak the cluster protocol. A plain single server needs it off. |
+| `valkey.passwordSecret` | string | — | The secret the password is (`valkey/password`). Unset connects with none. |
+| `valkey.tls` | boolean | — | Speak TLS to the server. |
 <!-- /generated -->
 
 ### `controllers`: the GitHub and Slack controllers
@@ -175,17 +266,31 @@ dry run until listed.
 
 <!-- generated: config-keys-controllers -->
 
-| Key | Default | Meaning |
-|---|---|---|
-| `controllers.github.consoleURL`, `controllers.slack.consoleURL` | `publicURL` | the console's API, which answers who holds a group. The chart requires this release's own Service plus `console.mount`, and prints it |
-| `controllers.<kind>.interval` | `15m` | how long between passes. Positive. Independently, a controller looks at the mounted credentials and records every 30 seconds and passes without waiting for the interval when they change |
-| `controllers.<kind>.tokenFile` | `/var/run/secrets/github-roster/token`, `/var/run/secrets/slack-roster/token` | the projected ServiceAccount token, for `exchange.audience`, read on every call (the chart mounts it for the pod's own account) |
-| `controllers.<kind>.console.auth.aws.audience` | unset | on AWS Lambda, the audience the controller requests from `sts:GetWebIdentityToken` for its bearer at the console; it must equal the service's `console.awsAudience`. Unset reads `tokenFile`, as on Kubernetes |
-| `controllers.github.appsDir` | `/var/run/github-roster/apps` | the mounted `<release>-github-apps` Secret, one file per connected organisation. Read only with `ports.adapter: legacy` |
-| `controllers.github.recordsDir` | `/var/run/github-roster/records` | the mounted `<release>-github-orgs` ConfigMap: the organisations' records and the console's requests for a pass. Read only with `ports.adapter: legacy` |
-| `controllers.slack.credentialsDir` | `/var/run/slack-roster/credentials` | the mounted `<release>-slack-credentials` Secret, one file per connected workspace; optional |
-| `controllers.slack.recordsDir` | `/var/run/slack-roster/workspaces` | the mounted `<release>-slack-workspaces` ConfigMap: workspace records, Slack Connect records, console channel records, confirmations and pass requests; optional |
+Source: `schemas/config/sluis.schema.json`. Generated by `just docs-generate`; keys are listed with their parents first.
 
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `controllers` | object | — | The controllers this process runs beside the issuer and the console, each in its own loop. A controller that is absent is off. Which organisations and workspaces a running controller may CHANGE is the policy document's `controllers.<kind>.enabledOrgs` and `enabledWorkspaces`, as before. A controller reads the console's API as a workload, so the policy's exchange must admit its proof (a ServiceAccount token on Kubernetes, the function role's web identity token on Lambda). |
+| `controllers.github` | object | — | The GitHub controller: makes each GitHub organisation's teams match the policy's github table. |
+| `controllers.github.appsDir` | string | `"/var/run/github-roster/apps"` | One file per connected organisation: its App's credentials. Read only with `ports.adapter: legacy`; with another adapter they are on the State port. |
+| `controllers.github.console` | object | — | How the controller proves itself to the console, when the pod's `tokenFile` is not the way. |
+| `controllers.github.console.auth` | object | — | The proof. Absent, `tokenFile`. |
+| `controllers.github.console.auth.aws` | object | — | The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role. |
+| `controllers.github.console.auth.aws.audience` | string | **required** | The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file. |
+| `controllers.github.consoleURL` | string | — | The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes. |
+| `controllers.github.interval` | string | `"15m"` | How long between passes. Positive. |
+| `controllers.github.recordsDir` | string | `"/var/run/github-roster/records"` | The console's records, mounted. Read only with `ports.adapter: legacy`. |
+| `controllers.github.tokenFile` | string | `"/var/run/secrets/github-roster/token"` | This pod's projected ServiceAccount token, presented to the console and read afresh on every call. |
+| `controllers.slack` | object | — | The Slack controller: makes each Slack workspace's user groups match the policy's slack table. |
+| `controllers.slack.console` | object | — | How the controller proves itself to the console, when the pod's `tokenFile` is not the way. |
+| `controllers.slack.console.auth` | object | — | The proof. Absent, `tokenFile`. |
+| `controllers.slack.console.auth.aws` | object | — | The function role's AWS outbound web identity token (`sts:GetWebIdentityToken`), re-minted every four minutes. The console's issuer must federate the account, and its policy must declare an `aws` matcher for the role. |
+| `controllers.slack.console.auth.aws.audience` | string | **required** | The audience requested from STS. It must equal `console.awsAudience` (default `<issuerURL>/console`), NOT the audience of the issuer's AWS federation file. |
+| `controllers.slack.consoleURL` | string | — | The console's API, which answers who holds a group. Unset is `publicURL`. On Kubernetes it is this release's own Service, which the chart writes. |
+| `controllers.slack.credentialsDir` | string | `"/var/run/slack-roster/credentials"` | One file per connected workspace: the app's credentials and its bot token. Read only with `ports.adapter: legacy`; with another adapter they are on the State port. |
+| `controllers.slack.interval` | string | `"15m"` | How long between passes. Positive. |
+| `controllers.slack.recordsDir` | string | `"/var/run/slack-roster/workspaces"` | The console's records, mounted. Read only with `ports.adapter: legacy`. |
+| `controllers.slack.tokenFile` | string | `"/var/run/secrets/slack-roster/token"` | This pod's projected ServiceAccount token, presented to the console and read afresh on every call. |
 <!-- /generated -->
 
 (The directory names keep the controllers' old names: they are paths the chart mounts,

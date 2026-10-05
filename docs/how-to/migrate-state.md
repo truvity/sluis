@@ -159,7 +159,7 @@ back.
 **Expect** the log says `keeping state in DynamoDB` and the domain records in the state port, credentials in Secrets.
 **Verify** the console shows the same workspaces, organisations and Slack workspaces; with `--with-sessions`, a person
 signed in before the window is still signed in and a refresh token from before it refreshes; the controllers tick
-(`access_roster.ticks`, [telemetry](../operations/telemetry.md)).
+(`access_roster.ticks`, [telemetry](../reference/telemetry.md)).
 **Rollback**: see [Rollback](#rollback).
 
 ## Rollback

@@ -28,7 +28,7 @@
   "properties": {
     "adapters": {
       "additionalProperties": false,
-      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.",
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.",
       "properties": {
         "audit": {
           "additionalProperties": false,
@@ -248,7 +248,7 @@
     },
     "platform": {
       "additionalProperties": false,
-      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
       "properties": {
         "aws": {
           "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
@@ -305,7 +305,7 @@
           }
         }
       ],
-      "description": "The adapters behind the storage ports (docs/design/ports.md).",
+      "description": "The adapters behind the storage ports (docs/explanation/ports.md).",
       "properties": {
         "adapter": {
           "default": "legacy",

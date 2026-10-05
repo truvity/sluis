@@ -413,7 +413,7 @@ func controllerProps(tokenDefault, recordsDefault, dirKey, dirDescription, dirDe
 // portsSchema is the `ports` section both kinds of file share. Only the
 // service copies secrets out of itself, so only its file may name an Export.
 func portsSchema(export bool) m {
-	o := obj("The adapters behind the storage ports (docs/design/ports.md).", m{
+	o := obj("The adapters behind the storage ports (docs/explanation/ports.md).", m{
 		"adapter": enum("`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.", "legacy",
 			"legacy", "memory", "dynamodb"),
 		"blob":     portsBlobSchema(),
@@ -583,7 +583,7 @@ func encode(v any) []byte {
 
 // platformSchema is `platform`: the answers that pick a preset.
 func platformSchema() m {
-	return obj("What this installation has to build on. The answers pick a preset (the decision tree in docs/design/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.", m{
+	return obj("What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.", m{
 		"aws":        boolean("AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge."),
 		"kubernetes": boolean("A Kubernetes cluster is available."),
 		"openbao":    boolean("An OpenBao is available."),
@@ -606,7 +606,7 @@ func adaptersSchema() m {
 			"settings": m{"type": "object", "description": "The adapter's own settings (an object; the adapter refuses a key it does not know)."},
 		}, "adapter")
 	}
-	return obj("Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/design/ports.md.", m{
+	return obj("Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.", m{
 		"state":    choice("state, sessions included"),
 		"secrets":  choice("secrets (dynamic secrets, exports under `export/`)"),
 		"blobs":    choice("blobs"),

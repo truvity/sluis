@@ -3,9 +3,8 @@ name: sluis
 description: >-
   sluis in one chart and one image: the token service (`serve`),
   which verifies proofs produced elsewhere, applies the shared policy and
-  issues tokens, and the GitHub and Slack controllers (`controller github`,
-  `controller slack`). It authenticates nobody itself and holds no user
-  records. See docs/explanation/design.md.
+  issues tokens, and runs the GitHub and Slack controllers in the same
+  process. It authenticates nobody itself and holds no user records. See docs/explanation/design.md.
 type: application
 # Placeholder. The git tag is the sole version authority — the release
 # workflow stamps `--version`/`--app-version` from it at package time.

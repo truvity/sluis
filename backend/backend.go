@@ -9,7 +9,7 @@
 // Google Workspace is the first implementation. A second backend
 // (Microsoft Entra) implements this same interface, and nothing above this
 // package knows which one it is talking to — see
-// docs/development/extending.md.
+// docs/how-to/extend.md.
 package backend
 
 import (

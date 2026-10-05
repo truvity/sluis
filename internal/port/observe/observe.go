@@ -1,7 +1,7 @@
 // Package observe wraps the storage ports so that each call is timed, counted
 // by how it ended, and traced.
 //
-// It is a decorator, not an adapter (docs/design/ports.md): it holds no
+// It is a decorator, not an adapter (docs/explanation/ports.md): it holds no
 // business rule and changes no behaviour, and it is applied once, where the
 // adapter is chosen (internal/store), so that every caller, the issuer's
 // sessions and the controllers' leases and reports alike, is measured at the

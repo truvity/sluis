@@ -1,7 +1,7 @@
 # Audit actions
 
 Every action sluis records, from the catalogue [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
-(version 1.7.0, 62 actions). All are kept under the `security` profile in the installation's tenant `@platform`.
+(the version and the number of actions are in the table below). All are kept under the `security` profile in the installation's tenant `@platform`.
 Delivery `async` goes on a bounded queue in the process; `block` is recorded before the action completes and refuses
 it when it cannot be. Why the trail is shaped this way: [audit](../explanation/audit.md).
 
@@ -10,6 +10,9 @@ Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Targ
 `directory_group`, `directory_user`.
 
 <!-- generated: audit-actions -->
+
+Catalogue version 1.7.0, 62 actions.
+
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
 | `roster.person.signed_in` | authentication | client | async | A person signed in to a client, or was refused. |

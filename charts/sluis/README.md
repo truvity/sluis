@@ -67,7 +67,7 @@ presents. On a State adapter this replaces the `push` values, which stay for the
 `http/protobuf` by default), an `OTEL_SERVICE_NAME` (one name: the controllers report under the process's) and every
 `extraEnv` entry
 (other `OTEL_*` variables only). Empty, nothing is rendered and nothing is
-exported. See [docs/operations/telemetry.md](../../docs/operations/telemetry.md#wiring-it-with-the-chart).
+exported. See [docs/reference/telemetry.md](../../docs/reference/telemetry.md#wiring-it-with-the-chart).
 
 Without `audit.s3.bucket` the audit trail stays in one replica's memory,
 which is not a record; the service says so at start. A bucket needs an

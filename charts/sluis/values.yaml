@@ -39,11 +39,11 @@ fullnameOverride: ""
 # Not to be confused with `route` (the Gateway API route), `exchange.clusters`
 # (workloads' home clusters) or `config.controllers` (which controllers run):
 # this chooses which of three kinds of object this release is. The signals the rules and the dashboard read, and the install, are in
-# docs/operations/telemetry.md.
+# docs/reference/telemetry.md.
 renders: app
 
 # Alert rules, rendered only with `renders: alerts`. Every threshold and the
-# reason for it is in docs/operations/telemetry.md and in the rule's comment in
+# reason for it is in docs/reference/telemetry.md and in the rule's comment in
 # templates/alerts.yaml. The series are what the service and the controllers
 # publish over OTLP (OTEL_EXPORTER_OTLP_ENDPOINT on the pods), named as the
 # metrics gateway names them.
@@ -74,7 +74,7 @@ alerts:
   selector: ""
   # Where an alert's runbook entry is. The alert's name, lower-cased, is the
   # anchor. Empty renders no link.
-  runbookBaseUrl: https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md
+  runbookBaseUrl: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md
   rules:
     noSigningKey:
       enabled: true
@@ -363,7 +363,7 @@ secretEnv: []
 # gets OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL and an
 # OTEL_SERVICE_NAME of `access-issuer` (the one process's name: the controllers
 # report under it), then each `extraEnv` entry. Unset, nothing is
-# rendered and the pods export nothing. How to wire it: docs/operations/telemetry.md.
+# rendered and the pods export nothing. How to wire it: docs/reference/telemetry.md.
 telemetry:
   otlp:
     # The collector or metrics gateway, an http(s) URL, e.g.
@@ -812,7 +812,7 @@ serviceAccount:
 # `<id>.github_app_private_key` beside `<id>.record.json`. Rendered into the
 # policy document's `apps.github.catalogue` (without `push`); a malformed entry
 # stops the service. Needs
-# `directory.store: kubernetes`. See docs/connect/github-apps-catalogue.md.
+# `directory.store: kubernetes`. See docs/how-to/connect/github-apps-catalogue.md.
 githubApps:
   # Each entry:
   #   - id: renovate               # [a-z0-9-], at most 32, unique; never changes
@@ -839,7 +839,7 @@ githubApps:
   # issuer at the moment it runs: an infrastructure-as-code apply,
   # typically. Off unless an entry carries it, and what it writes is a
   # REAL credential: a second durable copy of the App's key, to be rotated
-  # as one. See docs/connect/infrastructure-as-code.md.
+  # as one. See docs/how-to/connect/infrastructure-as-code.md.
   #
   # A default set an estate can copy -- dependency updates split public
   # from private, a bot that approves and tags, and one App for the
@@ -908,7 +908,7 @@ githubApps:
 # keys must differ; `deletionPolicy` is fixed at `None`, because the case
 # this exists for is the Secret going away. What lands in the store IS the
 # credential of every workspace: name a store the installation already
-# trusts with material of that weight. See docs/operations/runbook.md.
+# trusts with material of that weight. See docs/how-to/back-up-and-restore.md.
 # (absent by default -- the block above is the shape)
 slackState: {}
 
@@ -921,7 +921,7 @@ slackState: {}
 # Rendered into the policy document's `apps.slack.catalogue` (without `push`);
 # a malformed entry, or one for a workspace the policy's `slack.workspaces`
 # does not name, stops the service. Needs
-# `directory.store: kubernetes`. See docs/connect/slack-apps-catalogue.md.
+# `directory.store: kubernetes`. See docs/how-to/connect/slack-apps-catalogue.md.
 #
 # Each entry:
 #   - id: sync                  # [a-z0-9-], at most 32, unique; never changes

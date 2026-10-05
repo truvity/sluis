@@ -72,9 +72,9 @@ turns a stall into an outage.
 ### 3. Alert on a controller that stopped
 
 **Run** alert on `access_roster.tick.last_success_timestamp` (per `kind`, `target`); the chart's `AccessRosterTickStale`
-([AccessRosterTickStale](../operations/telemetry.md#accessrostertickstale)) ages it. The series is **absent** when a controller has
+([AccessRosterTickStale](../reference/telemetry.md#accessrostertickstale)) ages it. The series is **absent** when a controller has
 never ticked and after a day of silence, so an alert on a controller gone for good needs `absent_over_time(...)` beside
-it. The series are in [telemetry](../operations/telemetry.md#the-controllers-and-the-rails).
+it. The series are in [telemetry](../reference/telemetry.md#the-controllers-and-the-rails).
 **Expect** the alert to fire within the stale window of a controller stopping.
 **Verify** stop a controller in a test installation and see it fire.
 **Rollback**: remove the alert rule.

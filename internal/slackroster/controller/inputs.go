@@ -22,7 +22,7 @@ const sharedTTL = 5 * time.Minute
 
 // sharedInputs is the cache of [Controller.inputs], held in memory. A
 // State-backed cache, keyed by the policy digest and shared by every runner,
-// is docs/design/ports.md's `cache.<digest>.<name>`; the legacy adapter has no
+// is docs/explanation/ports.md's `cache.<digest>.<name>`; the legacy adapter has no
 // such key (B3).
 type sharedInputs struct {
 	mu  sync.Mutex
