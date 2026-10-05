@@ -27,7 +27,7 @@ config:
   log:
     level: debug
   policy:
-    file: /etc/sluis/policy/policy.yaml
+    file: /var/run/access-issuer/policy/policy.yaml
   directory:
     workspaces:
       - backend: google
@@ -227,7 +227,7 @@ controllerGithub:
   enabled: true
   config:
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/github-roster/policy/policy.yaml
     tokenFile: /var/run/secrets/github-roster/token
     appsDir: /var/run/github-roster/apps
     recordsDir: /var/run/github-roster/records

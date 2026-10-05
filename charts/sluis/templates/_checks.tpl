@@ -73,7 +73,7 @@ sluis.checks: everything the service's config must agree with.
 {{- $_ := include "sluis.port" . -}}
 {{- $_ := include "sluis.healthPort" . -}}
 {{- include "sluis.expectRelease" (dict "key" "config.release" "root" . "got" $c.release) -}}
-{{- include "sluis.expectPath" (dict "key" "config.policy.file" "got" (dig "policy" "file" "" $c) "want" "/etc/sluis/policy/policy.yaml" "source" "policy" "present" true) -}}
+{{- include "sluis.expectPath" (dict "key" "config.policy.file" "got" (dig "policy" "file" "" $c) "want" "/var/run/access-issuer/policy/policy.yaml" "source" "policy" "present" true) -}}
 {{- $signing := dig "signingKey" dict $c -}}
 {{- include "sluis.expectPath" (dict "key" "config.signingKey.file" "got" $signing.file "want" (printf "/var/run/access-issuer/signing-key/%s" .Values.signingKey.key) "source" "signingKey.key" "present" true) -}}
 {{- $additional := include "sluis.additionalSigningKeyFiles" . -}}
@@ -151,7 +151,7 @@ sluis.rosterChecks: what a controller's config must agree with. Takes
 {{- fail (printf "%s.config.consoleURL must be %s, the console this release serves (got %q)" .name $want $c.consoleURL) -}}
 {{- end -}}
 {{- include "sluis.expectRelease" (dict "key" (printf "%s.config.release" .name) "root" $root "got" $c.release) -}}
-{{- include "sluis.expectPath" (dict "key" (printf "%s.config.policy.file" .name) "got" (dig "policy" "file" "" $c) "want" "/etc/sluis/policy/policy.yaml" "source" "policy" "present" true) -}}
+{{- include "sluis.expectPath" (dict "key" (printf "%s.config.policy.file" .name) "got" (dig "policy" "file" "" $c) "want" (printf "/var/run/%s/policy/policy.yaml" $dir) "source" "policy" "present" true) -}}
 {{- include "sluis.expectPath" (dict "key" (printf "%s.config.tokenFile" .name) "got" $c.tokenFile "want" (printf "/var/run/secrets/%s/token" $dir) "source" "the projected ServiceAccount token" "present" true) -}}
 {{- include "sluis.expectAudit" (dict "key" (printf "%s.config.audit.tokenFile" .name) "cfg" $c) -}}
 {{- end -}}

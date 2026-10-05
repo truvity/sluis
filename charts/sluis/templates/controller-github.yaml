@@ -133,7 +133,7 @@ spec:
           args:
             - controller
             - github
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/controller-github.yaml
           {{- include "sluis.controllerProbes" (dict "name" "controllerGithub" "cfg" $cfg) | nindent 10 }}
           {{- with include "sluis.otelEnv" (dict "root" . "service" "github-roster") }}
           env:
@@ -141,10 +141,11 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/controller-github.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/github-roster/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/github-roster

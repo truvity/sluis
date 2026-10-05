@@ -196,7 +196,7 @@ data:
       secretKey: secret
       secretName: sign-in-client
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/access-issuer/policy/policy.yaml
     probes:
       address: :9090
     publicRootURL: https://access.example
@@ -242,7 +242,7 @@ data:
     consoleURL: http://sluis.identity.svc:8443/console
     interval: 5m
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/github-roster/policy/policy.yaml
     recordsDir: /var/run/github-roster/records
     tokenFile: /var/run/secrets/github-roster/token
 
@@ -269,7 +269,7 @@ data:
     credentialsDir: /var/run/slack-roster/credentials
     interval: 5m
     policy:
-      file: /etc/sluis/policy/policy.yaml
+      file: /var/run/slack-roster/policy/policy.yaml
     recordsDir: /var/run/slack-roster/workspaces
     tokenFile: /var/run/secrets/slack-roster/token
 
@@ -625,7 +625,7 @@ spec:
         # One checksum per document this process reads: its own, and the
         # policy. A change to the service's or the other controller's
         # document does not restart it.
-        checksum/config: a4f81b525bc3504854659d1c95dae9639e88bf7f550a74aade382e91b119abbc
+        checksum/config: 1430c7d6ba0607e3e22e67873fe6dac7f5a0662b67752da5472b78d823ab9693
         checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
     spec:
       serviceAccountName: sluis-github-roster
@@ -645,7 +645,7 @@ spec:
           args:
             - controller
             - github
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/controller-github.yaml
           ports:
             - name: health
               containerPort: 7070
@@ -658,10 +658,11 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/controller-github.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/github-roster/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/github-roster
@@ -766,7 +767,7 @@ spec:
         # One checksum per document this process reads: its own, and the
         # policy. A change to the service's or the other controller's
         # document does not restart it.
-        checksum/config: fa0ae21b2c79a935f7678cc50acf5abcd421cfaf79411031dcafda17d991db18
+        checksum/config: dd318cbcb3c6859f99bb31b10f1308cb7f078e0a6893df61e17f191613beeca2
         checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
     spec:
       serviceAccountName: sluis-slack-roster
@@ -786,7 +787,7 @@ spec:
           args:
             - controller
             - slack
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/controller-slack.yaml
           ports:
             - name: health
               containerPort: 7070
@@ -799,10 +800,11 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/controller-slack.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/slack-roster/policy
               readOnly: true
             - name: token
               mountPath: /var/run/secrets/slack-roster
@@ -886,7 +888,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads, and no other: a change
         # to a controller's own document does not restart the service.
-        checksum/config: 040c70f6f0abd294097d23e7609eb775ea3a9e58e039f58c22888a5218d2ae17
+        checksum/config: 2e3a9886137ab14f1c456db1800fea54ed976b90f721f0acb209360253406a24
         checksum/policy: 271a7354dcbf9b192a831177ce3df1c573b2140a01b1dd43592be78af812ef00
         example.com/scrape: "false"
     spec:
@@ -914,7 +916,7 @@ spec:
           # environment carries only the secrets the document names.
           args:
             - serve
-            - --config=/etc/sluis/config/config.yaml
+            - --config=/etc/sluis/config.yaml
           env:
             - name: VALKEY_PASSWORD
               valueFrom:
@@ -922,13 +924,14 @@ spec:
                   name: valkey-password
                   key: secret
           volumeMounts:
-            # Directories, never a subPath: a document is one file in its own
-            # ConfigMap's directory.
+            # Read once, at start: a subPath is enough, since a change replaces
+            # the pod (checksum/*). The policy keeps its directory.
             - name: config
-              mountPath: /etc/sluis/config
+              mountPath: /etc/sluis/config.yaml
+              subPath: config.yaml
               readOnly: true
             - name: policy
-              mountPath: /etc/sluis/policy
+              mountPath: /var/run/access-issuer/policy
               readOnly: true
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key

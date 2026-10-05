@@ -1,5 +1,5 @@
 # The chart mounts the policy document at one path, and the controller's config must name it.
-# error: controllerGithub.config.policy.file must be /etc/sluis/policy/policy.yaml
+# error: controllerGithub.config.policy.file must be /var/run/github-roster/policy/policy.yaml
 config:
   issuerURL: https://issuer.example
 console:
