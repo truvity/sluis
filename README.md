@@ -35,7 +35,6 @@ repository.
 | Artifact | Published at | For | |
 |---|---|---|---|
 | `sluis` chart and image | `oci://ghcr.io/truvity/charts/sluis`, `ghcr.io/truvity/sluis/sluis` | the installation, once. One binary, one process, one image, one chart: `serve` (the directory, the policy, the OpenID provider, the login page, the console and the audit trail) and, as loops inside it, the GitHub controller (keeps every connected GitHub organisation's teams as the policy says, reporting to the console) and the Slack controller (the same for Slack channels; a dry run until a workspace is in `policy.controllers.slack.enabledWorkspaces`), named in `config.controllers`. The chart runs ONE Deployment; on AWS Lambda it is one function ([0037](docs/decisions/0037-one-process-everywhere.md)). Replaces the `access-issuer` chart and the `access-issuer`, `github-roster` and `slack-roster` images: [the migration](docs/reference/configuration.md#migrating-from-the-access-issuer-chart) | shipped |
-| `access-proxy` chart | removed in v1.32.0 | the chart was Envoy Gateway's external authorization backend; gateway-native OIDC replaces it there. For a gateway that is not Envoy Gateway, run upstream oauth2-proxy yourself — see [docs/design/access-proxy.md](docs/design/access-proxy.md), [ADR 0003](docs/decisions/0003-deprecate-access-proxy.md). Versions already published stay available. | removed |
 | Go module | `github.com/truvity/sluis` | services and consoles in Go: verify a bearer, read the caller's groups | shipped |
 | TypeScript package | `@truvity/sluis` on GitHub Packages | console UIs: `useIdentity()` over `/.access/whoami`; Node services: verify a bearer | shipped |
 | `sluisctl` | the release's archives, and a Nix flake on every release | people on laptops and CI jobs: one sign-in, then kubeconfigs, AWS credentials, a token for any audience, and short-lived certificates a secret manager mints | shipped |
@@ -50,8 +49,7 @@ and a corporate directory in Google Workspace, that wants one issuer for
 its clusters, cloud accounts, consoles and CI instead of an identity
 product. Envoy Gateway gets you gateway-native OIDC, the default now for a
 console with no authorization model of its own. For a gateway that is not
-Envoy Gateway, run upstream oauth2-proxy yourself (removed from this
-repository in v1.32.0; see docs/design/access-proxy.md). A Valkey (for
+Envoy Gateway, run upstream oauth2-proxy yourself. A Valkey (for
 more than one replica), an audit installation (for a trail that is a
 record) and OpenBAO (for certificates) are optional. **None of those is
 installed here**: the charts point at them. Nor is the signing key minted
@@ -186,16 +184,8 @@ defaults instead to **gateway-native OIDC**: an Envoy Gateway
 `SecurityPolicy` with `oidc:` against a declared client, gated by that
 client's `requires`, with no OIDC code in the console
 ([which door](docs/decisions/0001-sessions-and-an-absolute-limit.md)).
-`access-proxy` — upstream oauth2-proxy in a chart, and Envoy Gateway's
-external authorization backend, so it worked nowhere else — was removed in
-v1.32.0: gateway-native OIDC replaces it on Envoy Gateway. On any other
-gateway, run upstream oauth2-proxy yourself, with a declared confidential
-client row of this issuer; it is not a chart of ours. Its
-server-side session store was never a reason to prefer it either way —
-oauth2-proxy encrypts each session with a key only the browser's cookie
-holds, so nothing server-side, Back-Channel Logout included, can end one
-([why](docs/design/access-proxy.md),
-[ADR 0003](docs/decisions/0003-deprecate-access-proxy.md)). The GitHub
+On a gateway that is not Envoy Gateway, run upstream oauth2-proxy
+yourself, with a declared confidential client row of this issuer. The GitHub
 controller and the Slack controller are second processes from the same chart,
 asking the issuer who holds which group and acting on GitHub with an App, or on
 Slack with a bot, that an owner created from the console; each acts only in the
