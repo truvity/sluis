@@ -490,6 +490,8 @@ spec:
         runAsNonRoot: true
         # The projected secrets are mode 0440: readable by this group, whatever
         # user the image runs as.
+        runAsUser: 65532
+        runAsGroup: 65532
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
@@ -665,20 +667,20 @@ spec:
             defaultMode: 0440
             sources:
               - secret:
-                  name: valkey-password
+                  name: "valkey-password"
                   items:
-                    - key: secret
-                      path: valkey/password
+                    - key: "secret"
+                      path: "valkey/password"
               - secret:
-                  name: acme-directory-key
+                  name: "acme-directory-key"
                   items:
-                    - key: service-account.json
-                      path: directory/C0acme/key
+                    - key: "service-account.json"
+                      path: "directory/C0acme/key"
               - secret:
-                  name: globex-directory-key
+                  name: "globex-directory-key"
                   items:
-                    - key: key.json
-                      path: directory/globex/key
+                    - key: "key.json"
+                      path: "directory/globex/key"
               - secret:
                   name: access-console-client
                   items:
