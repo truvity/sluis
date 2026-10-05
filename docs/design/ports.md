@@ -66,22 +66,28 @@ AWS?        no  -> Kubernetes?   no  -> server
                                                   no  -> k8s-minimal
             yes -> Kubernetes?   no  -> aws-serverless
                                  yes -> sluis on Lambda?  yes -> aws-hybrid
-                                                          no  -> aws-eks
+                                                          no  -> k8s-aws
 ```
 
 The answers are the `platform` block (`aws`, `kubernetes`, `openbao`, `runtime`,
 `replicas`); `preset` names one outright. A **modifier** overrides one concern
 (sessions to Valkey, say, is `adapters.state: {adapter: valkey}`).
 
-| Concern | `server` | `k8s-minimal` | `k8s-openbao` | `aws-serverless`, `aws-hybrid` | `aws-eks` |
+| Concern | `server` | `k8s-minimal` | `k8s-openbao` | `aws-serverless`, `aws-hybrid` | `k8s-aws` |
 |---|---|---|---|---|---|
 | state | postgres | kubernetes | kubernetes | dynamodb | dynamodb |
-| secrets | store | kubernetes | openbao | ssm | ssm |
+| secrets | store | kubernetes | openbao | ssm | ssm (or openbao) |
 | blobs | postgres | off | off | s3 | s3 |
-| signing | generated | file | transit | kms | kms |
-| trigger | http | watch | watch | invoke | watch |
+| signing | generated | file | transit | kms-wrapped | kms-wrapped |
+| trigger | http | watch | watch | invoke | dynamodb |
 | schedule | ticker | ticker | ticker | eventbridge | ticker |
-| audit | log | log | log | sqs | sqs |
+| audit | log | log | log | sqs | connect |
+
+`k8s-aws` (sluis as a pod on Kubernetes with AWS storage) is built end to end:
+every adapter it names exists. Its secrets are SSM, and `adapters.secrets:
+{adapter: openbao, settings: {...}}` replaces them with OpenBao, which needs no
+`platform.openbao` answer (naming the adapter is the answer). `aws-eks` is its
+deprecated name: it resolves to it, and start logs a warning.
 
 ### Resolution
 
@@ -136,10 +142,21 @@ chose (a preset, the platform answers or `adapters.secrets`) is built from its
 settings and is `Set.Secrets`. With nothing chosen (the `ports` keys alone, which
 is every deployment before the presets) there is no Secrets port, as before.
 
+### The OpenBao adapter
+
+`internal/port/openbao` (`adapters.secrets.adapter: openbao`) keeps each secret as
+a KV version 2 secret in an OpenBao mount, laid out as SSM is (layout v3, see
+[configuration](../reference/configuration.md#the-openbao-secrets-adapter)). It
+shares the client of the Export adapter: the same login (`jwt` or `kubernetes`,
+the token file read again at every login), the same per-namespace token and the
+same TLS-verified connection. Compare-and-swap is KV's own `cas`, atomic on the
+server, which SSM's is not. It also implements `port.NamespacedSecrets`, so an
+export entry's `namespace` is honoured on the default destination.
+
 ### The SSM adapter
 
 `internal/port/ssm` (`adapters.secrets.adapter: ssm`, or the `aws-hybrid`,
-`aws-serverless` and `aws-eks` presets) keeps each secret as a SecureString
+`aws-serverless` and `k8s-aws` presets) keeps each secret as a SecureString
 parameter in AWS SSM Parameter Store. It needs AWS and runs on kubernetes and
 lambda.
 
@@ -450,7 +467,7 @@ legacy `audit.writer`, unchanged), `log` (the log line only) or `sqs`.
 
 ### The `sqs` adapter
 
-Settings (`adapters.audit.settings`, or the preset's `aws-eks`, `aws-hybrid` and
+Settings (`adapters.audit.settings`, or the preset's `k8s-aws`, `aws-hybrid` and
 `aws-serverless` with a queue named there):
 
 | Key | Meaning |

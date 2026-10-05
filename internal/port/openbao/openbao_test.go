@@ -69,12 +69,40 @@ func (f *fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "kv/data/"):
 		key += strings.TrimPrefix(path, "kv/data/")
 		f.data(w, r, key)
+	case strings.HasPrefix(path, "kv/metadata/") && r.Method == http.MethodGet && r.URL.Query().Get("list") == "true":
+		f.list(w, key+strings.TrimPrefix(path, "kv/metadata/"))
 	case strings.HasPrefix(path, "kv/metadata/") && r.Method == http.MethodDelete:
 		delete(f.secrets, key+strings.TrimPrefix(path, "kv/metadata/"))
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		reply(w, http.StatusNotFound, map[string]any{"errors": []string{}})
 	}
+}
+
+// list answers a KV list of the directory prefix (which ends in a slash): the
+// keys directly under it, a directory with a trailing slash.
+func (f *fake) list(w http.ResponseWriter, prefix string) {
+	seen := map[string]bool{}
+	for k := range f.secrets {
+		rest, ok := strings.CutPrefix(k, prefix)
+		if !ok {
+			continue
+		}
+		if dir, _, nested := strings.Cut(rest, "/"); nested {
+			seen[dir+"/"] = true
+		} else {
+			seen[rest] = true
+		}
+	}
+	if len(seen) == 0 {
+		reply(w, http.StatusNotFound, map[string]any{"errors": []string{}})
+		return
+	}
+	keys := []string{}
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	reply(w, http.StatusOK, map[string]any{"data": map[string]any{"keys": keys}})
 }
 
 func (f *fake) login(w http.ResponseWriter, r *http.Request, ns, path string) {
@@ -97,7 +125,10 @@ func (f *fake) login(w http.ResponseWriter, r *http.Request, ns, path string) {
 }
 
 func (f *fake) data(w http.ResponseWriter, r *http.Request, key string) {
-	var body struct{ Data map[string]string }
+	var body struct {
+		Data    map[string]string
+		Options struct{ Cas *uint64 }
+	}
 	raw, _ := io.ReadAll(r.Body)
 	_ = json.Unmarshal(raw, &body)
 	cur := f.secrets[key]
@@ -112,6 +143,10 @@ func (f *fake) data(w http.ResponseWriter, r *http.Request, key string) {
 		versions := 0
 		if cur != nil {
 			versions = cur.versions
+		}
+		if body.Options.Cas != nil && *body.Options.Cas != uint64(versions) {
+			reply(w, http.StatusBadRequest, map[string]any{"errors": []string{"check-and-set parameter did not match the current version"}})
+			return
 		}
 		f.secrets[key] = &secret{data: body.Data, versions: versions + 1}
 		reply(w, http.StatusOK, map[string]any{"data": map[string]any{"version": versions + 1}})
@@ -171,12 +206,17 @@ func (f *fake) versions(ns, path string) int {
 	return 0
 }
 
-func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Store {
+func newServer(t *testing.T, f *fake) string {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Store {
+	t.Helper()
 	cfg := openbao.Config{
-		Address:   srv.URL,
+		Address:   newServer(t, f),
 		Namespace: "kernel",
 		Auth: openbao.Auth{
 			Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "sluis-writer",

@@ -33,7 +33,7 @@ presets and the platform fit together, see
 | `kubernetes` | 💤 on request | — | needs | — | ✅ | — | — | Dynamic secrets and exports as Kubernetes Secrets the service writes. |
 | `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Kubernetes Secrets the service writes; kept until the kernel cutover. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
-| `openbao` | 💤 on request | — | — | needs | ✅ | ✅ | ✅ | Dynamic secrets and exports in an OpenBao KV mount. |
+| `openbao` | ✅ implemented | — | — | needs | ✅ | ✅ | ✅ | Dynamic secrets and exports as KV version 2 secrets in an OpenBao mount, laid out like SSM (layout v3); logs in with a ServiceAccount or web identity JWT. |
 | `ssm` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Dynamic secrets and exports as SecureString parameters in AWS SSM Parameter Store. |
 | `store` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | Secrets in the service's own encrypted store, for a platform with no secret store. |
 
@@ -86,13 +86,15 @@ presets and the platform fit together, see
 
 The adapter each preset names per concern. 💤 on request marks an adapter that is not built, so that preset is not usable until it is.
 
-| Concern | `server` | `k8s-minimal` | `k8s-openbao` | `aws-serverless` | `aws-hybrid` | `aws-eks` |
+| Concern | `server` | `k8s-minimal` | `k8s-openbao` | `aws-serverless` | `aws-hybrid` | `k8s-aws` |
 |---|---|---|---|---|---|---|
 | state | `postgres` 💤 | `kubernetes` 💤 | `kubernetes` 💤 | `dynamodb` | `dynamodb` | `dynamodb` |
-| secrets | `store` 💤 | `kubernetes` 💤 | `openbao` 💤 | `ssm` | `ssm` | `ssm` |
+| secrets | `store` 💤 | `kubernetes` 💤 | `openbao` | `ssm` | `ssm` | `ssm` |
 | blobs | `postgres` 💤 | `off` 💤 | `off` 💤 | `s3` | `s3` | `s3` |
-| signing | `generated` 💤 | `file` | `transit` 💤 | `kms-wrapped` | `kms-wrapped` | `kms` |
-| trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `watch` 💤 |
+| signing | `generated` 💤 | `file` | `transit` 💤 | `kms-wrapped` | `kms-wrapped` | `kms-wrapped` |
+| trigger | `http` 💤 | `watch` 💤 | `watch` 💤 | `invoke` 💤 | `invoke` 💤 | `dynamodb` |
 | schedule | `ticker` | `ticker` | `ticker` | `eventbridge` | `eventbridge` | `ticker` |
-| audit | `log` | `log` | `log` | `sqs` | `sqs` | `sqs` |
+| audit | `log` | `log` | `log` | `sqs` | `sqs` | `connect` |
+
+`aws-eks` is the deprecated name of `k8s-aws`: it resolves to it, and start warns.
 

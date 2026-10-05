@@ -93,6 +93,24 @@
             }
           }
         },
+        "verifyOnly": {
+          "type": "array",
+          "description": "PUBLIC keys the chart mounts from a ConfigMap (they are not secret), one file each at /var/run/access-issuer/verify-keys/<index>.pem, for `config.signingKey.verifyOnly[<index>].file`: published in the JWKS and never signed with. A private key is refused.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pem"
+            ],
+            "properties": {
+              "pem": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A PEM public key, a certificate, or a JWK."
+              }
+            }
+          }
+        },
         "additional": {
           "type": "array",
           "items": {
@@ -345,6 +363,16 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "awsIdentity": {
+          "type": "string",
+          "enum": ["pod-identity", "irsa"],
+          "description": "How the pod gets its AWS role. `pod-identity` (EKS Pod Identity) renders nothing: the association is made outside the chart. `irsa` annotates the account with `eks.amazonaws.com/role-arn: <awsRoleArn>`, which it requires."
+        },
+        "awsRoleArn": {
+          "type": "string",
+          "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$",
+          "description": "The role's ARN, for `awsIdentity: irsa`."
         }
       }
     },
@@ -576,7 +604,7 @@
           "properties": {
             "caBundle": {
               "type": "string",
-              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.ports.export.openbao.caFile` must then be. Empty mounts nothing, and the system's authorities are trusted."
+              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.ports.export.openbao.caFile` and `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted."
             },
             "token": {
               "type": "object",
@@ -584,7 +612,7 @@
               "properties": {
                 "audience": {
                   "type": "string",
-                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.ports.export.openbao.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token."
+                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.ports.export.openbao.auth.tokenFile` and `config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token."
                 },
                 "expirationSeconds": {
                   "type": "integer",

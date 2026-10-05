@@ -1,0 +1,8 @@
+# KMS signing and a key file are exclusive; the default path is dropped with a null.
+# error: at '/config/signingKey': 'not' failed
+config:
+  issuerURL: https://issuer.example
+  signingKey:
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      stateSecret: signing/state

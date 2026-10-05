@@ -71,8 +71,22 @@ spec:
             {{- include "sluis.runbook" (dict "root" $ "alert" "AccessRosterNoSigningKeyPublished") | nindent 12 }}
         {{- end }}
         {{- if $r.signingKeyRotationStalled.enabled }}
+        {{- /*
+          The threshold: what the rule says, else derived from how the keys rotate.
+          kms-wrapped generates a key pair every `rotateEvery` (24h by default), so
+          a healthy active key is at most that old, plus the prepublish delay and a
+          late pass: rotateEvery + 2h. Otherwise the keys are cert-manager's
+          (350 days, below). The release must carry the same config.signingKey as
+          the service's for the derivation, or set maxAgeSeconds.
+        */ -}}
+        {{- $maxAge := $r.signingKeyRotationStalled.maxAgeSeconds -}}
+        {{- if not $maxAge -}}
+        {{- $wrapped := include "sluis.wrappedRotateSeconds" $ | int64 -}}
+        {{- $maxAge = ternary (add $wrapped 7200) 30240000 (gt $wrapped 0) -}}
+        {{- end }}
         # The age of the active key is the time since the first replica saw it become
-        # active. cert-manager replaces the certificate `renewBefore` ahead of its end
+        # active. With kms-wrapped signing a new key pair is made every `rotateEvery`
+        # and the threshold is that plus two hours. cert-manager replaces the certificate `renewBefore` ahead of its end
         # (default 720h before 8760h), so a healthy key is at most about 335 days old and
         # `maxAgeSeconds` allows two weeks more. A key that is older has not been
         # replaced: the Certificate is not renewing, or the issuer is not picking the new
@@ -80,17 +94,19 @@ spec:
         # newest timestamp across replicas is used, so a lagging replica does not fire it.
         - alert: AccessRosterSigningKeyRotationStalled
           expr: >-
-            time() - max by ({{ $c }}, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{ {{- $w -}} }) > {{ $r.signingKeyRotationStalled.maxAgeSeconds | int64 }}
+            time() - max by ({{ $c }}, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{ {{- $w -}} }) > {{ $maxAge | int64 }}
           for: {{ $r.signingKeyRotationStalled.for }}
           labels:
             {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.signingKeyRotationStalled) | nindent 12 }}
           annotations:
             summary: 'The {{ "{{ $labels.algorithm }}" }} signing key in {{ "{{ $labels.namespace }}" }} has been active for {{ "{{ $value | humanizeDuration }}" }}'
             description: >-
-              The active signing key is older than {{ $r.signingKeyRotationStalled.maxAgeSeconds | int64 }}s
-              and has not rotated. Check the cert-manager Certificate for the key
+              The active signing key is older than {{ $maxAge | int64 }}s
+              and has not rotated. With cert-manager keys, check the Certificate for the key
               (kubectl describe certificate), its issuer, and whether the issuer's
-              signingKey.pollInterval is reading the mounted file.
+              signingKey.pollInterval is reading the mounted file. With kms-wrapped keys,
+              check the issuer's log for why it cannot generate or wrap a key pair (the
+              pod's AWS role, the KMS key's policy).
             {{- include "sluis.runbook" (dict "root" $ "alert" "AccessRosterSigningKeyRotationStalled") | nindent 12 }}
         {{- end }}
         {{- if $r.issuer5xx.enabled }}

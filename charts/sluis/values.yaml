@@ -84,13 +84,19 @@ alerts:
     signingKeyRotationStalled:
       enabled: true
       severity: warning
-      # 350 days. The default certificate lives 8760h (365d) and cert-manager
-      # replaces it 720h (30d) before the end, so a healthy key is at most
-      # about 335 days old; 350 tolerates two weeks of a late renewal and
-      # fires while the old key still has days to run. Set it to
-      # (duration - renewBefore) + 14d if you changed either, or disable the
-      # rule when `signingKey.existingSecret` is rotated by hand.
-      maxAgeSeconds: 30240000
+      # The age, in seconds, past which the active key has not rotated. Unset,
+      # it follows how the keys rotate:
+      #  - kms-wrapped signing (`config.signingKey.kmsWrapped`, or
+      #    `adapters.signing`) makes a key pair every `rotateEvery` (24h by
+      #    default), so the threshold is that plus two hours: 26h for 24h. An
+      #    alerts-only release needs the same `config.signingKey` for this;
+      #  - otherwise 350 days. The default certificate lives 8760h (365d) and
+      #    cert-manager replaces it 720h (30d) before the end, so a healthy key
+      #    is at most about 335 days old; 350 tolerates two weeks of a late
+      #    renewal and fires while the old key still has days to run. Set it to
+      #    (duration - renewBefore) + 14d if you changed either, or disable the
+      #    rule when `signingKey.existingSecret` is rotated by hand.
+      # maxAgeSeconds: 30240000
       for: 1h
       labels: {}
     issuer5xx:
@@ -259,6 +265,19 @@ config:
   # the chart refuses until the mount agrees.
   policy:
     file: /var/run/access-issuer/policy/policy.yaml
+  # `file` is where the chart mounts the cert-manager key. With KMS signing
+  # there is no file, and the chart refuses one: drop the default with a null
+  # and name the keys,
+  #
+  #   signingKey:
+  #     file: null
+  #     kmsWrapped:
+  #       keyId: alias/sluis-signing
+  #       region: eu-west-1
+  #       stateSecret: signing/state   # a name in `secrets`
+  #       rotateEvery: 24h
+  #
+  # and the chart then renders no Certificate and mounts no signing Secret.
   signingKey:
     file: /var/run/access-issuer/signing-key/tls.key
     pollInterval: 30s
@@ -465,7 +484,10 @@ directory: {}
 #
 # Either let cert-manager issue one (the default: it generates in the
 # cluster, rotates on its own schedule, and the key never leaves), or
-# point `existingSecret` at one external-secrets delivers.
+# point `existingSecret` at one external-secrets delivers. Or have AWS KMS
+# hold the keys (`config.signingKey.kmsWrapped`): then none of this applies, the
+# chart renders no Certificate and mounts no key, and the chart refuses the
+# values below that are for a key it would mount.
 signingKey:
   # Name a Secret that already holds the key, and no Certificate is
   # rendered. It must carry a PEM private key under `key`: RSA, or ECDSA
@@ -516,6 +538,27 @@ signingKey:
   # Empty is every deployment before this existed: one key, the default
   # above, signing everything.
   additional: []
+  # PUBLIC keys published in the JWKS and never signed with, so the tokens an
+  # earlier signer issued keep verifying until they expire: the overlap of a
+  # cutover from cert-manager file keys to `config.signingKey.kmsWrapped`. Each is
+  # mounted from a ConfigMap (a public key is not a secret) at
+  # /var/run/access-issuer/verify-keys/<index>.pem, and the config says it, with
+  # the `kid` the old tokens carry (unset: the key's RFC 7638 thumbprint, which
+  # is what a file signer derived), its `alg` and the `until` after which it is no
+  # longer published:
+  #
+  #   config:
+  #     signingKey:
+  #       verifyOnly:
+  #         - {file: /var/run/access-issuer/verify-keys/0.pem, until: "2026-11-05T00:00:00Z"}
+  #         - {file: /var/run/access-issuer/verify-keys/1.pem, until: "2026-11-05T00:00:00Z"}
+  #   signingKey:
+  #     verifyOnly:
+  #       - pem: |        # the old ES384 public key
+  #       - pem: |        # the old RS256 public key
+  #
+  # A private key stops the start (and the render).
+  verifyOnly: []
   # - algorithm: RSA
   #   size: 2048
   #   # PKCS1 or PKCS8; RS256 verifies either way.
@@ -714,12 +757,15 @@ serviceAccount:
   # identity: an admission webhook (EKS Pod Identity, GKE Workload
   # Identity, or the self-hosted amazon-eks-pod-identity-webhook) reads an
   # annotation here and injects the credentials into every pod that uses
-  # the account. Nothing in this service needs a cloud identity today: the
-  # audit trail is the installation's to write, not this service's.
-  #
-  #   annotations:
-  #     eks.amazonaws.com/role-arn: <the role's ARN>
+  # the account.
   annotations: {}
+  # How the pod gets its AWS role, for the AWS adapters (DynamoDB, S3, KMS, SSM).
+  # `pod-identity` (EKS Pod Identity) renders nothing here: the association of
+  # this ServiceAccount to the role is made outside the chart. `irsa` (IAM roles
+  # for service accounts) annotates the account with the role's ARN, `awsRoleArn`,
+  # which it then requires.
+  awsIdentity: pod-identity
+  # awsRoleArn: arn:aws:iam::123456789012:role/sluis
 
 # Runner Apps: the GitHub App a self-hosted runner scale set in one tier
 # registers with, one per organisation per tier, created by an operator on

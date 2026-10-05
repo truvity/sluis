@@ -100,6 +100,8 @@ type Config struct {
 	// kmsWrapped, when set, replaces signingKeyFile: key pairs KMS generates
 	// and wraps under one symmetric key (the `kms-wrapped` adapter).
 	kmsWrapped *config.SigningKeyKMSWrapped
+	// verifyOnly are public keys published and never signed with.
+	verifyOnly []config.SigningKeyVerifyOnly
 
 	tokenLifetime    time.Duration
 	refreshLifetime  time.Duration
@@ -259,6 +261,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		c.keyOverlap = c.tokenLifetime + issuer.KeyOverlapSkew
 	}
 	c.keyPollInterval = dur(k.PollInterval, issuer.DefaultKeyPollInterval)
+	c.verifyOnly = k.VerifyOnly
 	// The activation delay must be longer than the poll interval so that a
 	// newly published key has at least one complete poll cycle to be seen
 	// and re-read before any replica signs with it.
@@ -581,6 +584,11 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
+	verifyOnlyKeys, err := loadVerifyOnly(cfg.verifyOnly, log)
+	if err != nil {
+		return nil, err
+	}
+	storage.UseVerifyOnly(verifyOnlyKeys, nil)
 	// So the storage's own log lines -- a reused authorization code, the
 	// groups-scoping report -- carry this deployment's level and
 	// attributes rather than depending on [slog.SetDefault] alone.
@@ -1637,4 +1645,40 @@ func awsFederationOf(a config.AWSFederation) verify.AWSFederation {
 		})
 	}
 	return out
+}
+
+// loadVerifyOnly reads the public keys `signingKey.verifyOnly` names. A file that
+// is unreadable, not a public key (a private key included) or not for the
+// algorithm it says stops the start, naming the entry and never the content.
+func loadVerifyOnly(entries []config.SigningKeyVerifyOnly, log *slog.Logger) ([]issuer.VerifyOnlyKey, error) {
+	var out []issuer.VerifyOnlyKey
+	ids := map[string]bool{}
+	for i, e := range entries {
+		raw, err := os.ReadFile(e.File) //nolint:gosec // the path is the deployment's configuration
+		if err != nil {
+			return nil, fmt.Errorf("signingKey.verifyOnly[%d]: read %s: %w", i, e.File, err)
+		}
+		var until time.Time
+		if e.Until != "" {
+			if until, err = time.Parse(time.RFC3339, e.Until); err != nil {
+				return nil, fmt.Errorf("signingKey.verifyOnly[%d].until: %q is not an RFC 3339 time", i, e.Until)
+			}
+		}
+		key, err := issuer.ParseVerifyOnlyKey(raw, e.KeyID, e.Alg, until)
+		if err != nil {
+			return nil, fmt.Errorf("signingKey.verifyOnly[%d] (%s): %w", i, e.File, err)
+		}
+		if ids[key.ID] {
+			return nil, fmt.Errorf("signingKey.verifyOnly[%d]: kid %q is named twice", i, key.ID)
+		}
+		ids[key.ID] = true
+		if key.Until.IsZero() {
+			log.Warn("a verify-only signing key has no `until`, so it is published for good: set one once the tokens it signed have expired",
+				"kid", key.ID, "algorithm", string(key.Alg))
+		} else if !time.Now().Before(key.Until) {
+			log.Warn("a verify-only signing key is past its `until` and is not published", "kid", key.ID)
+		}
+		out = append(out, key)
+	}
+	return out, nil
 }

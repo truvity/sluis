@@ -105,6 +105,64 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis \
   --set config.issuerURL=https://issuer.example
 ```
 
+## Kubernetes on EKS: AWS storage, KMS-wrapped signing, OpenBao secrets
+
+The `k8s-aws` preset (the former `aws-eks`) is DynamoDB state, S3 blobs, KMS-wrapped signing and an
+in-process ticker; the secrets are SSM, or OpenBao as here. The inputs (the signing state secret, a
+client's secret) arrive as files, so `secrets.source` stays `file`; the openbao adapter holds what
+sluis writes and the exports. OpenBao scopes by namespace, so the root is `sluis` in the
+installation's own namespace (`kv/sluis/private/credentials/...`, `kv/sluis/export/...`).
+With KMS signing the chart renders no Certificate and mounts no signing Secret; the chart's default
+`config.signingKey.file` is dropped with a `null`. The pod's AWS role comes from EKS Pod Identity
+(nothing to render) or, with `serviceAccount.awsIdentity: irsa`, from the annotation of `awsRoleArn`.
+
+```yaml
+config:
+  issuerURL: https://access.example
+  preset: k8s-aws
+  signingKey:
+    file: null                      # no key file: KMS holds the keys
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      region: eu-west-1
+      stateSecret: issuer/state-secret      # a name in `secrets` below
+      rotateEvery: 24h              # the rotation alert fires at 26h
+  ports:
+    dynamodb: {table: sluis, region: eu-west-1}
+    blob: {adapter: s3, s3: {bucket: sluis-blobs, region: eu-west-1}}
+  adapters:
+    secrets:
+      adapter: openbao
+      settings:
+        address: https://openbao.example
+        caFile: /var/run/access-issuer/openbao-ca/ca.pem     # exports.openbao.caBundle
+        namespace: kernel
+        mount: kv
+        root: sluis
+        auth:
+          method: jwt
+          mount: jwt-kernel
+          role: sluis
+          tokenFile: /var/run/openbao/token                  # exports.openbao.token.audience
+  audit: {writer: https://audit.example:8443}
+secrets:
+  - {name: issuer/state-secret, secretName: sluis-inputs, key: state-secret}
+serviceAccount:
+  awsIdentity: pod-identity          # or irsa, with awsRoleArn
+exports:
+  openbao:
+    caBundle: |
+      -----BEGIN CERTIFICATE-----
+      ...
+      -----END CERTIFICATE-----
+    token: {audience: openbao-kernel}   # a ServiceAccount token projected for the jwt login
+```
+
+The OpenBao policy, the value layout and the per-export `namespace` are in
+[configuration](../../docs/reference/configuration.md#the-openbao-secrets-adapter); to keep tokens
+issued by the old file keys valid across the cutover, see `signingKey.verifyOnly` and its
+[cutover note](../../docs/reference/configuration.md#cutting-over-to-kms-wrapped-signing-without-signing-everyone-out).
+
 ## Moving from v1.62 (three Deployments) to one
 
 v1.63 runs the GitHub and Slack controllers inside `sluis serve`

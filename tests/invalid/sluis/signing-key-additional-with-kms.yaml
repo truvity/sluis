@@ -1,0 +1,14 @@
+# File keys cert-manager issues have no place beside KMS keys.
+# error: signingKey.additional names file keys cert-manager issues, and signing is KMS
+config:
+  issuerURL: https://issuer.example
+  signingKey:
+    file: null
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      stateSecret: signing/state
+signingKey:
+  additional:
+    - algorithm: RSA
+      size: 2048
+      encoding: PKCS1

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -183,6 +184,10 @@ type Storage struct {
 	verify  Verifier
 	keys    *KeyRings
 	secrets func(clientID string) (string, bool)
+	// verifyOnly are public keys published beside the rings' (UseVerifyOnly),
+	// and now is the clock that ends them.
+	verifyOnly []VerifyOnlyKey
+	now        func() time.Time
 	// log is for the few things here worth saying out loud. Nothing in
 	// this file logged until a reused authorization code needed to be —
 	// which is either a broken client or a stolen code, and both are
@@ -359,6 +364,7 @@ func NewStorage(
 		state:         state,
 		documents:     newDocumentClients(iss.Policy().ClientDocuments()),
 		scopingReport: newGroupsScopingReporter(),
+		now:           time.Now,
 	}, nil
 }
 
@@ -518,14 +524,22 @@ func (s *Storage) signingAlgorithmFor(id string) jose.SignatureAlgorithm {
 // one that reads `aud` for a client with no `signing_alg` still has to
 // accept whatever the installation default is.
 func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorithm, error) {
-	return s.keys.Algorithms(), nil
+	algs := s.keys.Algorithms()
+	for _, k := range s.verifyOnlyKeys(s.keys.Published()) {
+		if !slices.Contains(algs, k.Algorithm()) {
+			algs = append(algs, k.Algorithm())
+		}
+	}
+	slices.Sort(algs)
+	return algs, nil
 }
 
 // KeySet implements [op.AuthStorage]: every key currently published, by
 // every configured algorithm, signing or retiring — see [KeyRings.Published].
 func (s *Storage) KeySet(ctx context.Context) ([]op.Key, error) {
 	s.keys.Maintain(ctx)
-	return s.keys.Published(), nil
+	published := s.keys.Published()
+	return append(published, s.verifyOnlyKeys(published)...), nil
 }
 
 // Health implements [op.Storage].

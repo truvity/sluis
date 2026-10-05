@@ -1,5 +1,51 @@
 ## Unreleased
 
+### Added
+
+- **`secrets/openbao`: the Secrets port in an OpenBao KV version 2 mount**
+  (`adapters.secrets: {adapter: openbao}`), laid out like SSM layout v3: `<root>/private/config/<name>`,
+  `<root>/private/credentials/<kind>/<id>/<ref>` and `<root>/export/<path>`. It shares the Export
+  adapter's client (the `jwt` or `kubernetes` login, the token file read again at every login, a token per
+  namespace, TLS always verified against `caFile` or the system CAs). Compare-and-swap is KV's
+  `cas`, atomic on the server. The root is configurable: `sluis` inside an installation's own OpenBao namespace
+  (recommended), or `sluis/<instance>`; `private` and `export` are reserved. An export in the default destination
+  (`ports.export` unset) honours an entry's `namespace`: the adapter writes the same `export/<path>` in that
+  namespace, so a preview runner App can land in `devel`. An export of properties is stored as the properties
+  themselves, one KV field each, readable by a consumer's External Secrets as it reads a copy made by
+  `ports.export: openbao`. The policy it needs is in
+  [configuration](docs/reference/configuration.md#the-openbao-secrets-adapter). Settings: `address`, `caFile`,
+  `mount`, `namespace`, `root`, `auth{method, mount, role, tokenFile}`.
+- **Preset `k8s-aws`**: DynamoDB state, SSM secrets (OpenBao with `adapters.secrets`), S3 blobs, kms-wrapped
+  signing, the DynamoDB trigger, the ticker and the `connect` audit sink. Every adapter it names is built, so it
+  starts; naming `adapters.secrets: openbao` needs no `platform.openbao`.
+- **`signingKey.verifyOnly`: public keys published and never signed with**, each with an optional `kid` (default:
+  the RFC 7638 thumbprint, the file signer's derivation), `alg` and `until`, so tokens issued by the old file keys
+  keep verifying across the cutover to `kmsWrapped`. A private key stops the start. The chart mounts them from a
+  ConfigMap (`signingKey.verifyOnly[].pem`).
+- **Chart: `serviceAccount.awsIdentity`** (`pod-identity`, the default and renders nothing, or `irsa`, which annotates
+  the account with `eks.amazonaws.com/role-arn: <serviceAccount.awsRoleArn>`).
+
+### Changed
+
+- **Chart: KMS signing renders cleanly.** With `config.signingKey.kmsWrapped` (or `kms`, or `adapters.signing`
+  naming one) the chart renders no signing Certificate and mounts no signing Secret, and refuses
+  `signingKey.additional` and `existingSecret`; the chart's default `config.signingKey.file` is dropped with
+  `file: null`.
+- **Chart: `adapters.secrets: openbao` composes with `config.secrets.source: file`.** The chart checks
+  `adapters.secrets.settings.caFile` and `.auth.tokenFile` against the `exports.openbao.caBundle` and
+  `exports.openbao.token.audience` it mounts, one bundle and one audience for the export and the secrets login.
+- **Chart: `signingKeyRotationStalled` follows the rotation.** Unset, `maxAgeSeconds` is `rotateEvery` plus two hours
+  with kms-wrapped signing (26h for 24h), and 350 days otherwise, as before. An alerts-only release needs the same
+  `config.signingKey`, or sets the value.
+- **Chart: the replica check understands presets**: `k8s-aws` and the other AWS presets, and `adapters.state`,
+  keep state in DynamoDB.
+- An explicit adapter that needs OpenBao is no longer refused for a preset's `platform.openbao: false`.
+
+### Deprecated
+
+- **Preset `aws-eks`** is the deprecated name of `k8s-aws` (it never started: it named the unbuilt trigger `watch`).
+  It resolves to `k8s-aws` and start logs a warning.
+
 ## v1.63.0
 
 One process everywhere (ADR 0037): on AWS Lambda one function and one role, on Kubernetes one Deployment and one Pod Identity role, configured by one service document `sluis.yaml` (`apiVersion` v3, with `controllers.github` and `controllers.slack`) plus the canonical `policy.yaml`. No data migration from 1.62; binary 1.63 and the Pulumi library 1.63 deploy together.

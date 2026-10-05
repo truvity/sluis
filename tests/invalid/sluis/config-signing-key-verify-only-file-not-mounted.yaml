@@ -1,0 +1,13 @@
+# The config says where the chart mounts each key.
+# error: config.signingKey.verifyOnly[0].file must be /var/run/access-issuer/verify-keys/0.pem
+config:
+  issuerURL: https://issuer.example
+  signingKey:
+    verifyOnly:
+      - file: /etc/old.pem
+signingKey:
+  verifyOnly:
+    - pem: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBexample
+        -----END PUBLIC KEY-----

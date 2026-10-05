@@ -109,6 +109,9 @@ func (c Config) legacyTable() port.Table {
 // wires, and announces the table. It returns the Config the adapters are then
 // opened with.
 func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table, error) {
+	if w := port.Preset(c.sel.Preset).Deprecated(); w != "" {
+		log.WarnContext(ctx, w)
+	}
 	sel := port.Selection{Legacy: c.legacyTable(), Preset: port.Preset(c.sel.Preset)}
 	if p := c.sel.Platform; p != nil {
 		sel.Platform = &port.Platform{AWS: p.AWS, Kubernetes: p.Kubernetes, OpenBao: p.OpenBao, Runtime: port.Runtime(p.Runtime), Replicas: p.Replicas}

@@ -11,6 +11,10 @@
 //
 //	{"botToken":"xoxb-…","signingSecret":"…"}
 //
+// An export entry's `namespace` is honoured by a Secrets adapter that has
+// namespaces ([port.NamespacedSecrets], the openbao one) and refused by one that
+// has none (ssm).
+//
 // A consumer's External Secrets Operator reads a property with
 // `remoteRef: {key: /sluis/export/<path>, property: botToken}`. A replace writes
 // exactly the properties; a patch reads the object, sets the given properties
@@ -40,18 +44,30 @@ func New(secrets port.Secrets) *Export { return &Export{secrets: secrets} }
 // Path is the Secrets path of an export target.
 func Path(target port.ExportTarget) string { return port.ExportPrefix + target.Path }
 
-func (e *Export) path(target port.ExportTarget, check func() error) (string, error) {
+// path checks the target and says where it is written: the Secrets path, and
+// the Secrets to write it with. An export entry's `namespace` is the store's
+// namespace: an adapter that has them (openbao) writes the same `export/<path>`
+// of the same installation in that namespace; one that has none refuses it.
+func (e *Export) path(target port.ExportTarget, check func() error) (string, port.Secrets, error) {
 	if err := check(); err != nil {
-		return "", err
+		return "", nil, err
 	}
+	secrets := e.secrets
 	if target.Namespace != "" {
-		return "", fmt.Errorf("%w: the secrets export has no namespaces (%q)", port.ErrUnsupported, target.Namespace)
+		ns, ok := e.secrets.(port.NamespacedSecrets)
+		if !ok {
+			return "", nil, fmt.Errorf("%w: the secrets adapter has no namespaces (%q): use ports.export.openbao or the openbao secrets adapter", port.ErrUnsupported, target.Namespace)
+		}
+		var err error
+		if secrets, err = ns.In(target.Namespace); err != nil {
+			return "", nil, err
+		}
 	}
 	p := Path(target)
 	if err := port.CheckSecretPath(p); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return p, nil
+	return p, secrets, nil
 }
 
 // Encode is the value of an export: the properties as one JSON object.
@@ -65,11 +81,11 @@ func Encode(properties map[string]string) []byte {
 
 // Put implements [port.Export].
 func (e *Export) Put(ctx context.Context, target port.ExportTarget, properties map[string]string, mode port.ExportMode) error {
-	p, err := e.path(target, func() error { return port.CheckExport(target, properties, mode) })
+	p, secrets, err := e.path(target, func() error { return port.CheckExport(target, properties, mode) })
 	if err != nil {
 		return err
 	}
-	cur, err := e.secrets.Get(ctx, p)
+	cur, err := secrets.Get(ctx, p)
 	found := err == nil
 	if err != nil && !errors.Is(err, port.ErrNotFound) {
 		return err
@@ -86,15 +102,15 @@ func (e *Export) Put(ctx context.Context, target port.ExportTarget, properties m
 	if found && bytes.Equal(cur.Value, value) {
 		return nil
 	}
-	_, err = e.secrets.Put(ctx, p, value)
+	_, err = secrets.Put(ctx, p, value)
 	return err
 }
 
 // Delete implements [port.Export].
 func (e *Export) Delete(ctx context.Context, target port.ExportTarget) error {
-	p, err := e.path(target, func() error { return port.CheckExportPath(target.Path) })
+	p, secrets, err := e.path(target, func() error { return port.CheckExportPath(target.Path) })
 	if err != nil {
 		return err
 	}
-	return e.secrets.Delete(ctx, p)
+	return secrets.Delete(ctx, p)
 }

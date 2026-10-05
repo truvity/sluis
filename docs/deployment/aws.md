@@ -409,7 +409,7 @@ symmetric key instead (below). The roles carry a permissions boundary when
 ### Signing on AWS
 
 The aws-serverless and aws-hybrid presets sign tokens with the `kms-wrapped`
-adapter; `kms` (remote signing) stays selectable, and aws-eks keeps it.
+adapter, and so does `k8s-aws`; `kms` (remote signing) stays selectable.
 
 | | `kms` (remote) | `kms-wrapped` |
 |---|---|---|

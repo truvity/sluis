@@ -1,0 +1,19 @@
+# KMS-wrapped signing through the adapters form, with IRSA: the account carries
+# the role's ARN.
+config:
+  issuerURL: https://access.example
+  signingKey:
+    file: null
+  adapters:
+    signing:
+      adapter: kms-wrapped
+      settings:
+        keyId: alias/sluis-signing
+        stateSecret: signing/state
+secrets:
+  - name: signing/state
+    secretName: sluis-inputs
+    key: signing-state
+serviceAccount:
+  awsIdentity: irsa
+  awsRoleArn: arn:aws:iam::123456789012:role/sluis

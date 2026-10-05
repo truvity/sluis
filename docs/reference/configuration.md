@@ -455,6 +455,130 @@ looked for; a value is never in an error or a log line. On Kubernetes the usual
 source is `file`, the chart projecting each Secret key a `secrets` entry names;
 on AWS Lambda it is `ssm`, from the layout below.
 
+### Cutting over to kms-wrapped signing without signing everyone out
+
+Tokens signed by the cert-manager file keys (say ES384 and RS256) carry the `kid`
+of those keys. When the installation moves to `signingKey.kmsWrapped`, the old
+keys leave the JWKS with the file mounts, and every token they signed stops
+verifying. To avoid that, keep the old PUBLIC keys published for a bounded
+overlap:
+
+1. Extract the public keys from the live Secrets, and never the private ones:
+   `kubectl get secret sluis-signing-key -o jsonpath='{.data.tls\.key}' | base64 -d | openssl pkey -pubout`
+   (the same for the additional RSA key).
+2. Put them in the chart as `signingKey.verifyOnly[].pem` and name them in the config as
+   `config.signingKey.verifyOnly[]` (`file: /var/run/access-issuer/verify-keys/<i>.pem`,
+   `until:`), with `signingKey.file: null` and `signingKey.kmsWrapped` as in the
+   [chart README](https://github.com/truvity/sluis/blob/master/charts/sluis/README.md). They are mounted from a ConfigMap.
+3. Set `until` to the last expiry of a token the old keys signed (`lifetimes.refresh`
+   or `lifetimes.absolute`, whichever is longer, counted from the cutover), plus the
+   verifiers' cache time. After it the keys are not published; remove the entries at
+   leisure.
+
+The `kid` need not be stated: it is the RFC 7638 thumbprint of the public key, the
+derivation the file signer used, so the published `kid` is the one the old tokens
+carry. Confirm with the JWKS (the discovery document's `jwks_uri`) before the cutover and after: the old `kid`s
+must be present in both.
+
+### The OpenBao Secrets adapter
+
+`adapters.secrets: {adapter: openbao}` keeps the Secrets port (the credentials
+sluis writes and reads back, and the exports) in an OpenBao KV version 2 mount,
+in the layout of [SSM v3](#ssm-layout-v3). It needs no `platform.openbao`
+answer. The configuration secrets can stay where they are (`secrets.source:
+file`, the chart projecting them), so the two are independent: the source
+*delivers the inputs*, the adapter *holds what sluis writes*.
+
+```yaml
+secrets: {source: file, root: /var/run/sluis/secrets}
+adapters:
+  secrets:
+    adapter: openbao
+    settings:
+      address: https://openbao.example        # https, no path
+      caFile: /var/run/access-issuer/openbao-ca/ca.pem   # the CA the server is verified against
+      namespace: kernel                       # the OpenBao namespace
+      mount: kv                               # the KV v2 mount (default kv)
+      root: sluis                             # see below
+      auth:
+        method: jwt                           # jwt | kubernetes
+        mount: jwt-kernel                     # the auth mount (default: the method's name)
+        role: sluis
+        tokenFile: /var/run/openbao/token     # a projected ServiceAccount token, read again at every login
+```
+
+| Setting | Meaning |
+|---|---|
+| `address` | the OpenBao, `https://host[:port]`, no path |
+| `caFile` | PEM authorities the server's certificate is verified against, instead of the system's. TLS verification is always on: there is no insecure flag |
+| `namespace` | the OpenBao namespace the secrets live in; empty is the root namespace |
+| `mount` | the KV version 2 mount; `kv` |
+| `root` | required, no default: the installation's key hierarchy under the mount |
+| `auth.method`, `.mount`, `.role` | the login: `POST auth/<mount>/login {role, jwt}`; the token it returns is kept until 80% of its lease has passed, per namespace |
+| `auth.tokenFile` | the JWT; `jwt` requires it, `kubernetes` defaults to the pod's own token |
+
+**The root.** OpenBao namespaces already separate installations, so **the
+recommendation is root `sluis` in the installation's own namespace**:
+namespace `kernel`, mount `kv`, and
+
+```text
+kv/sluis/private/config/<name>                       what an operator seeds (read only if used)
+kv/sluis/private/credentials/<kind>/<id>/<ref>       what sluis writes and reads back
+kv/sluis/export/<path>                               what sluis copies out, for consumers
+```
+
+`sluis/<instance>` is the option for an OpenBao without a namespace per
+installation (`kv/sluis/kernel/export/...`). For SSM, which has no namespaces,
+the root is `/sluis/<instance>`. Either way `private` and `export` are reserved:
+a root with such a segment is refused at start. `secrets.root` is not used by
+this adapter (with `source: file` it is a directory).
+
+**Values.** A secret is one KV key with one field, `value` (text) or `value_b64`
+(bytes that are not UTF-8), so `bao kv put kv/sluis/private/config/<name>
+value=...` seeds one. An export of properties (the JSON object the secrets
+export writes) is stored as the **properties themselves**, one field each, so a
+consumer's External Secrets reads `property: botToken` of the key exactly as it
+does a copy made by `ports.export: openbao`; `Get` puts the object back together.
+`PutIfVersion` is KV's check-and-set, atomic on the server. The mount must not
+set `cas_required`, or unconditional writes are refused. A value is never
+logged, and an error names the operation, the path and the status only.
+
+**An export in another namespace.** An export entry's `namespace` is honoured
+on the default destination (`ports.export` unset): the same `export/<path>` of
+the same installation is written in that namespace, over the same connection,
+with a login of its own there. A preview runner App can thus land in `devel`:
+
+```yaml
+exports:
+  - source: runner-app
+    tier: preview
+    org: truvity
+    namespace: devel
+    path: github-runner-app/preview/truvity   # kv/sluis/export/github-runner-app/preview/truvity in devel
+```
+
+The role must exist in that namespace too, with the policy below there. The
+`ssm` adapter has no namespaces and refuses such an entry.
+
+**The policy** (least privilege; with root `sluis`, mount `kv`, in the
+namespace, and again in every namespace an export names):
+
+```hcl
+# what sluis writes and reads back
+path "kv/data/sluis/private/credentials/*"     { capabilities = ["create", "read", "update"] }
+path "kv/metadata/sluis/private/credentials/*" { capabilities = ["list", "delete"] }
+# the exports: written, never read by sluis for any other purpose
+path "kv/data/sluis/export/*"     { capabilities = ["create", "read", "update"] }
+path "kv/metadata/sluis/export/*" { capabilities = ["list", "delete"] }
+# only if configuration secrets are read from OpenBao
+path "kv/data/sluis/private/config/*" { capabilities = ["read"] }
+```
+
+`read` on the export keys is the idempotence check (an identical write makes no
+new version); `delete` and `list` on the metadata are for `Delete` and `List`,
+and may be left out when nothing deletes or lists. Consumers get `read` on
+`kv/data/sluis/export/*` and nothing else.
+
 ### SSM layout v3
 
 An installation has **one root**, `secrets.root`, which is `/sluis/<instance>`
@@ -583,7 +707,7 @@ The chart's `config`, and what `sluis serve` reads: the issuer, the console and 
 | `store` | `memory` (the chart: `kubernetes`) | where connected workspaces and their credentials are kept. `memory` makes a restart a fresh installation, which is right for a laptop and nothing else |
 | `ports.adapter` | `legacy` | the adapter behind the storage ports ([design/ports.md](../design/ports.md)): `legacy` keeps state where it has always been kept (the namespace's ConfigMaps and Secrets, and Valkey when `valkey.address` is set); `dynamodb` keeps the same in one DynamoDB table shared by every replica ([design/ports.md](../design/ports.md#the-dynamodb-adapter)); `memory` keeps all of it in the process, so a restart loses every login in progress, and is refused with `store: kubernetes` or `valkey.address`. With `dynamodb` or `memory` the domain records too (directory workspaces and their credentials, GitHub organisations and Apps, people's links, the Slack records) are kept in that State, their credentials in the Secrets port (`memory` has its own), and the controllers read them there instead of from mounted files ([design/ports.md](../design/ports.md#the-domain-stores)); a secrets adapter is then required, and the start is refused naming it without one. The `nats` adapter and `ports.sealer` were removed: a file that names either is refused |
 | `ports.blob.adapter` | (the Blob of `ports.adapter`) | `s3` replaces the Blob port (status reports, directory snapshots) with an S3 bucket, whatever `ports.adapter` is; `ports.blob.s3` is then required |
-| `platform`, `preset`, `adapters` | absent | choose the adapters by name, per concern ([design/ports.md](../design/ports.md#adapters-presets-and-the-platform)). `platform: {aws, kubernetes, openbao, runtime, replicas}` answers the preset decision tree; `preset` is one of `server`, `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid`, `aws-eks`; `adapters.<concern>: {adapter, settings}` (concerns: `state`, `secrets`, `blobs`, `signing`, `trigger`, `schedule`, `audit`) overrides one concern. Resolution: explicit override, then the preset, then the preset the answers derive. All absent, the `ports` keys decide as before. Start is refused for an adapter that needs an answer that is false, cannot run on the runtime, is `memory` with `replicas` above 1, or is planned and not built; the table is logged once and exported as `sluis_adapter_info{concern,adapter}` |
+| `platform`, `preset`, `adapters` | absent | choose the adapters by name, per concern ([design/ports.md](../design/ports.md#adapters-presets-and-the-platform)). `platform: {aws, kubernetes, openbao, runtime, replicas}` answers the preset decision tree; `preset` is one of `server`, `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid`, `k8s-aws` (`aws-eks` is its deprecated name and logs a warning); `adapters.<concern>: {adapter, settings}` (concerns: `state`, `secrets`, `blobs`, `signing`, `trigger`, `schedule`, `audit`) overrides one concern. Resolution: explicit override, then the preset, then the preset the answers derive. All absent, the `ports` keys decide as before. Start is refused for an adapter that needs an answer that is false, cannot run on the runtime, is `memory` with `replicas` above 1, or is planned and not built; the table is logged once and exported as `sluis_adapter_info{concern,adapter}` |
 | `ports.blob.s3.bucket` | (required) | the bucket, which must exist with public access blocked |
 | `ports.blob.s3.prefix` | (none) | a key prefix inside the bucket: objects are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>` |
 | `ports.blob.s3.region` | the SDK's (`AWS_REGION`) | the bucket's region |
@@ -628,6 +752,7 @@ The chart's `config`, and what `sluis serve` reads: the issuer, the console and 
 | `signingKey.kms.region` | the SDK's own | the keys' region |
 | `signingKey.kmsWrapped` | unset | sign with key pairs **KMS generates and wraps under one symmetric key** (the `kms-wrapped` adapter; the AWS Lambda presets' default), rotated automatically; exclusive with `file` and `kms`. The private key is decrypted into process memory to sign, so a leaked signing role can forge offline for as long as the keys are published, and write access to the State's key ring is part of the trust boundary (a `kms` key is non-extractable); the key policy must reserve the signing context to the signing roles (mandatory on a shared key). Fields: `keyId` (the symmetric key, an id, ARN or alias; required), `stateSecret` (as for `kms`; required), `region`, `algorithms` (`ES384`, `RS256`; default both, the first is the default; EdDSA is not supported yet), `rotateEvery` (24h; longer than `prepublish`, at most 168h), `prepublish` (default `activationDelay`: how long a new key is published before it signs), `retain` (default `overlap`, i.e. `lifetimes.token` plus a skew margin; never less). Needs `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` on the key with the encryption context `purpose=sluis-signing`. See [Signing on AWS](../deployment/aws.md#signing-on-aws) |
 | `signingKey.kms.stateSecret` | required with `kms` | the NAME of the sign-in state secret, `issuer/state-secret`: base64 or hex of at least 32 random bytes (`openssl rand -base64 32`; one trailing newline is trimmed, a placeholder is refused), identical in every replica (a short fingerprint is kept in the shared state and a replica that differs refuses to start), that the sign-in state is derived from (a file key derives it from its private bytes; a KMS key has none). Not rotated with the signing key |
+| `signingKey.verifyOnly[]` | unset | **public** keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire ([cutover](#cutting-over-to-kms-wrapped-signing-without-signing-everyone-out)). Each entry: `file` (a PEM public key, `RSA PUBLIC KEY` or certificate, or a JWK; required), `kid` (the `kid` the old tokens carry; unset is the key's RFC 7638 thumbprint, which is what a file signer derived, so it is right for a key a file signer used), `alg` (unset follows the key; `ES256`, `ES384`, `ES512`, `RS256`) and `until` (an RFC 3339 instant after which the key is not published; unset publishes it for good and logs a warning). A **private key stops the start**, in any encoding, and the error names the entry and none of the content. The issuer also verifies its own old tokens with them (`id_token_hint`). Works beside any signing source |
 | `signingKey.additionalFiles[]` | unset | one file per `signingKey.additional` entry, in the order they are declared; the chart requires exactly that list |
 | `signingKey.pollInterval` / `.activationDelay` / `.overlap` | `30s` / `15m` / `lifetimes.token` + 5m | live rotation, with no restart: how often the mounted file (or each KMS key's public half) is re-read, how long a newly seen key is published before this replica signs with it (longer than the longest JWKS cache among the verifiers, plus the slowest kubelet projection; refused below `pollInterval`), and how long a superseded key stays published (it must cover `lifetimes.token`) |
 | `valkey.address` | unset | host:port of the shared store, with no credentials; unset keeps sessions and snapshots in memory, which is one replica only |

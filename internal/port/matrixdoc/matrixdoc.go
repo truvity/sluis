@@ -96,7 +96,7 @@ presets and the platform fit together, see
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\n")
+	b.WriteString("\n`aws-eks` is the deprecated name of `k8s-aws`: it resolves to it, and start warns.\n\n")
 	return b.String()
 }
 

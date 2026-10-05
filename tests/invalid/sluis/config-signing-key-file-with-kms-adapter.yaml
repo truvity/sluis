@@ -1,0 +1,10 @@
+# The adapters form of KMS signing is as exclusive with the chart's default key file.
+# error: config.signingKey.file is "/var/run/access-issuer/signing-key/tls.key" and signing is KMS
+config:
+  issuerURL: https://issuer.example
+  adapters:
+    signing:
+      adapter: kms-wrapped
+      settings:
+        keyId: alias/sluis-signing
+        stateSecret: signing/state

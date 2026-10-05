@@ -13,7 +13,7 @@ AWS? ── no ──► Kubernetes? ── no ──► server
  │                                      └ no ─► k8s-minimal
  └─ yes ─► Kubernetes? ── no ──► aws-serverless
                └─ yes ─► sluis on Lambda? ── yes ─► aws-hybrid
-                                            └ no ─► aws-eks
+                                            └ no ─► k8s-aws
 ```
 
 The answers are the `platform` block of the serve configuration (`aws`,
@@ -43,7 +43,7 @@ code.
 | Preset | For |
 |---|---|
 | `aws-hybrid` | AWS and Kubernetes, with sluis itself on Lambda. **The implemented, maintained path.** |
-| `aws-eks` | AWS and Kubernetes, with sluis as a pod on EKS |
+| `k8s-aws` | AWS and Kubernetes, with sluis as a pod on EKS: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao. (`aws-eks` is its deprecated name) |
 | `aws-serverless` | AWS with no Kubernetes: Lambda only |
 | `k8s-openbao` | Kubernetes with OpenBao, off AWS |
 | `k8s-minimal` | Kubernetes alone, off AWS |

@@ -26,9 +26,7 @@ spec:
             min by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_keys_published{namespace="sluis"}) < 1
           for: 5m
           labels:
-            k8s_cluster_name: example
             severity: critical
-            team: platform
           annotations:
             summary: 'The access-roster issuer in {{ $labels.namespace }} publishes no {{ $labels.algorithm }} signing key'
             description: >-
@@ -48,16 +46,14 @@ spec:
         # newest timestamp across replicas is used, so a lagging replica does not fire it.
         - alert: AccessRosterSigningKeyRotationStalled
           expr: >-
-            time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 30240000
+            time() - max by (k8s_cluster_name, namespace, algorithm) (access_issuer_signing_key_active_since_timestamp_seconds{namespace="sluis"}) > 50400
           for: 1h
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'The {{ $labels.algorithm }} signing key in {{ $labels.namespace }} has been active for {{ $value | humanizeDuration }}'
             description: >-
-              The active signing key is older than 30240000s
+              The active signing key is older than 50400s
               and has not rotated. With cert-manager keys, check the Certificate for the key
               (kubectl describe certificate), its issuer, and whether the issuer's
               signingKey.pollInterval is reading the mounted file. With kms-wrapped keys,
@@ -81,9 +77,7 @@ spec:
             sum by (k8s_cluster_name, namespace) (increase(access_issuer_http_requests_total{namespace="sluis",status_class="5xx"}[10m])) >= 5
           for: 10m
           labels:
-            k8s_cluster_name: example
             severity: critical
-            team: platform
           annotations:
             summary: 'The access-roster issuer in {{ $labels.namespace }} answers {{ $value | humanizePercentage }} of requests with a 5xx'
             description: >-
@@ -103,9 +97,7 @@ spec:
             histogram_quantile(0.99, sum by (k8s_cluster_name, namespace, le) (rate(access_issuer_http_request_duration_seconds_bucket{namespace="sluis",route="token"}[10m]))) > 2
           for: 15m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'The access-roster token endpoint in {{ $labels.namespace }} has a p99 of {{ $value | humanizeDuration }}'
             description: >-
@@ -124,9 +116,7 @@ spec:
             sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3
           for: 0m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'The {{ $labels.kind }} of {{ $labels.target }} has failed {{ $value | printf "%.0f" }} times'
             description: >-
@@ -147,9 +137,7 @@ spec:
             time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600
           for: 10m
           labels:
-            k8s_cluster_name: example
             severity: critical
-            team: platform
           annotations:
             summary: 'No successful {{ $labels.kind }} of {{ $labels.target }} for {{ $value | humanizeDuration }}'
             description: >-
@@ -168,9 +156,7 @@ spec:
             sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3
           for: 0m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'Tick leases of {{ $labels.kind }} in {{ $labels.namespace }} were lost {{ $value | printf "%.0f" }} times'
             description: >-
@@ -191,9 +177,7 @@ spec:
             min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100
           for: 30m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'GitHub rate limit ({{ $labels.resource }}) is down to {{ $value | printf "%.0f" }} requests'
             description: >-
@@ -212,9 +196,7 @@ spec:
             max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0
           for: 30m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'GitHub organisation {{ $labels.org }} is {{ $value | printf "%.0f" }} seat(s) short'
             description: >-
@@ -239,9 +221,7 @@ spec:
             sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable|error"}[5m])) >= 5
           for: 10m
           labels:
-            k8s_cluster_name: example
             severity: critical
-            team: platform
           annotations:
             summary: 'The {{ $labels.port }} store of access-roster in {{ $labels.namespace }} is failing {{ $value | humanizePercentage }} of calls'
             description: >-
@@ -262,9 +242,7 @@ spec:
             sum by (k8s_cluster_name, namespace, export) (increase(access_roster_export_attempts_total{namespace="sluis",outcome="failed"}[30m])) >= 3
           for: 15m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'The export {{ $labels.export }} of access-roster in {{ $labels.namespace }} has failed {{ $value | printf "%.0f" }} times'
             description: >-
@@ -287,9 +265,7 @@ spec:
             time() - max by (k8s_cluster_name, namespace, export) (last_over_time(access_roster_export_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 10800
           for: 10m
           labels:
-            k8s_cluster_name: example
             severity: warning
-            team: platform
           annotations:
             summary: 'No successful copy of {{ $labels.export }} for {{ $value | humanizeDuration }}'
             description: >-
