@@ -16,6 +16,26 @@ Two kinds of check live here and nowhere else:
 */}}
 
 {{/*
+sluis.secretNameFields: every field under a value whose key ends in `Secret`
+(a secret's NAME, never its value) and holds a non-empty string, one
+`<path>=<name>` per line. Takes (dict "v" <value> "at" <path>).
+*/}}
+{{- define "sluis.secretNameFields" -}}
+{{- $at := .at -}}
+{{- if kindIs "map" .v -}}
+{{- range $k, $x := .v -}}
+{{- if and (hasSuffix "secret" (lower $k)) (kindIs "string" $x) $x }}{{ printf "%s.%s=%s" $at $k $x }}
+{{ end -}}
+{{ include "sluis.secretNameFields" (dict "v" $x "at" (printf "%s.%s" $at $k)) -}}
+{{- end -}}
+{{- else if kindIs "slice" .v -}}
+{{- range $i, $x := .v -}}
+{{ include "sluis.secretNameFields" (dict "v" $x "at" (printf "%s[%d]" $at $i)) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 sluis.expectPath: a config key names a file or directory the chart
 mounts. Takes (dict "key" "config.policy.file" "got" <the config's
 value> "want" <where the chart mounts it> "source" "policy"
@@ -146,12 +166,28 @@ sluis.checks: everything the service's config must agree with.
 {{- if or (ne ($secrets.source | default "env") "file") (ne ($secrets.root | default "") "/var/run/sluis/secrets") -}}
 {{- fail (printf "config.secrets must be {source: file, root: /var/run/sluis/secrets}, where the chart projects `secrets` and each confidential client's Secret (got source %q, root %q)" ($secrets.source | default "env") ($secrets.root | default "")) -}}
 {{- end -}}
-{{- if include "sluis.documentsMode" . -}}
 {{- $declared := dict -}}
-{{- range .Values.secrets -}}{{- $_ := set $declared .name true -}}{{- end -}}
+{{- range .Values.secrets -}}
+{{- if hasKey $declared .name -}}
+{{- fail (printf "secrets: the name %q is declared twice: one Kubernetes Secret key per name, or the projection would list the same file twice" .name) -}}
+{{- end -}}
+{{- $_ := set $declared .name true -}}
+{{- end -}}
+{{- if include "sluis.documentsMode" . -}}
+{{- $names := dict -}}
 {{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) -}}
-{{- if and $client.secret (not (hasKey $declared $client.secret)) -}}
-{{- fail (printf "policy client %q names the secret %q and `secrets` does not declare it: with secrets.source file the chart projects each name from the Kubernetes Secret declared in `secrets` ({name: %s, secretName: <Secret>, key: <key>})" $id $client.secret $client.secret) -}}
+{{- if $client.secret -}}{{- $_ := set $names $client.secret (printf "policy client %q" $id) -}}{{- end -}}
+{{- end -}}
+{{- with (dig "oauthClient" "provider" "" $c) -}}
+{{- $_ := set $names (printf "providers/google/%s/client-id" .) "config.oauthClient.provider (the Google OAuth client)" -}}
+{{- $_ := set $names (printf "providers/google/%s/client-secret" .) "config.oauthClient.provider (the Google OAuth client)" -}}
+{{- end -}}
+{{- range $line := splitList "\n" (include "sluis.secretNameFields" (dict "v" $c "at" "config")) -}}
+{{- if $line -}}{{- $kv := splitn "=" 2 $line -}}{{- $_ := set $names $kv._1 $kv._0 -}}{{- end -}}
+{{- end -}}
+{{- range $name, $by := $names -}}
+{{- if not (hasKey $declared $name) -}}
+{{- fail (printf "%s names the secret %q and `secrets` does not declare it: with secrets.source file the chart projects each name from the Kubernetes Secret declared in `secrets` ({name: %s, secretName: <Secret>, key: <key>})" $by $name $name) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

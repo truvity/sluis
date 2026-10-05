@@ -644,6 +644,8 @@ spec:
         runAsNonRoot: true
         # The projected secrets are mode 0440: readable by this group, whatever
         # user the image runs as.
+        runAsUser: 65532
+        runAsGroup: 65532
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
@@ -822,55 +824,55 @@ spec:
             defaultMode: 0440
             sources:
               - secret:
-                  name: sluis-client-argocd
+                  name: "sluis-client-argocd"
                   items:
-                    - key: client-secret
-                      path: clients/argocd/secret
+                    - key: "client-secret"
+                      path: "clients/argocd/secret"
               - secret:
-                  name: sluis-client-grafana
+                  name: "sluis-client-grafana"
                   items:
-                    - key: client-secret
-                      path: clients/grafana/secret
+                    - key: "client-secret"
+                      path: "clients/grafana/secret"
               - secret:
-                  name: sluis-client-harbor
+                  name: "sluis-client-harbor"
                   items:
-                    - key: client-secret
-                      path: clients/harbor/secret
+                    - key: "client-secret"
+                      path: "clients/harbor/secret"
               - secret:
-                  name: sluis-client-headlamp
+                  name: "sluis-client-headlamp"
                   items:
-                    - key: client-secret
-                      path: clients/headlamp/secret
+                    - key: "client-secret"
+                      path: "clients/headlamp/secret"
               - secret:
-                  name: sluis-client-kargo
+                  name: "sluis-client-kargo"
                   items:
-                    - key: client-secret
-                      path: clients/kargo/secret
+                    - key: "client-secret"
+                      path: "clients/kargo/secret"
               - secret:
-                  name: sluis-client-outline
+                  name: "sluis-client-outline"
                   items:
-                    - key: client-secret
-                      path: clients/outline/secret
+                    - key: "client-secret"
+                      path: "clients/outline/secret"
               - secret:
-                  name: sluis-client-vmauth
+                  name: "sluis-client-vmauth"
                   items:
-                    - key: client-secret
-                      path: clients/vmauth/secret
+                    - key: "client-secret"
+                      path: "clients/vmauth/secret"
               - secret:
-                  name: sluis-google
+                  name: "sluis-google"
                   items:
-                    - key: client-id
-                      path: providers/google/default/client-id
+                    - key: "client-id"
+                      path: "providers/google/default/client-id"
               - secret:
-                  name: sluis-google
+                  name: "sluis-google"
                   items:
-                    - key: client-secret
-                      path: providers/google/default/client-secret
+                    - key: "client-secret"
+                      path: "providers/google/default/client-secret"
               - secret:
-                  name: sluis-inputs
+                  name: "sluis-inputs"
                   items:
-                    - key: state-secret
-                      path: issuer/state-secret
+                    - key: "state-secret"
+                      path: "issuer/state-secret"
 
 ---
 # Source: sluis/templates/httproute.yaml

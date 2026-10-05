@@ -298,6 +298,8 @@ spec:
         runAsNonRoot: true
         # The projected secrets are mode 0440: readable by this group, whatever
         # user the image runs as.
+        runAsUser: 65532
+        runAsGroup: 65532
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
@@ -460,10 +462,10 @@ spec:
             defaultMode: 0440
             sources:
               - secret:
-                  name: valkey
+                  name: "valkey"
                   items:
-                    - key: password
-                      path: valkey/password
+                    - key: "password"
+                      path: "valkey/password"
 
 ---
 # Source: sluis/templates/signing-key.yaml

@@ -50,6 +50,12 @@ secrets:
   - {name: issuer/state-secret, secretName: sluis-inputs, key: state-secret}
 ```
 
+The chart refuses a name that the documents use (a policy client's `secret`, the Google OAuth client of
+`oauthClient.provider`, and every `...Secret` field of the service document, such as `stateSecret` or `passwordSecret`)
+and `secrets` does not declare, and a name declared twice. The pod runs as 65532:65532 with `fsGroup: 65532` whenever secret
+files are projected, so they stay readable at mode 0440; `fsGroup` also makes the pod's other projected volumes
+(ServiceAccount tokens, mode 0640) group-readable.
+
 With `secrets.source: ssm` or `openbao` the inputs are read from the store by name and `secrets` projects nothing.
 
 Three things it will not do for you. It does not create the signing key
