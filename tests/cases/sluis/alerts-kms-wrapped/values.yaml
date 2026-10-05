@@ -1,0 +1,12 @@
+# Alert-only release for a kms-wrapped installation: the rotation-stalled
+# threshold follows the rotation interval (12h + 2h = 50400s), not 350 days.
+renders: alerts
+config:
+  signingKey:
+    file: null
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      stateSecret: signing/state
+      rotateEvery: 12h
+alerts:
+  namespace: sluis

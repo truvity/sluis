@@ -9,7 +9,9 @@ import (
 	_ "github.com/truvity/sluis/internal/port/dynamodb" // register
 	_ "github.com/truvity/sluis/internal/port/legacy"   // register
 	_ "github.com/truvity/sluis/internal/port/memory"   // register
+	_ "github.com/truvity/sluis/internal/port/openbao"  // register
 	_ "github.com/truvity/sluis/internal/port/s3blob"   // register
+	_ "github.com/truvity/sluis/internal/port/ssm"      // register
 )
 
 // fake is a registry holding the adapters the aws-hybrid preset names, as
@@ -47,7 +49,7 @@ func TestThePresetTreeFollowsTheFourQuestions(t *testing.T) {
 		"kubernetes+openbao": {port.Platform{Kubernetes: true, OpenBao: true}, port.PresetK8sOpenBao},
 		"aws":                {port.Platform{AWS: true}, port.PresetAWSServerless},
 		"aws+k8s on lambda":  {port.Platform{AWS: true, Kubernetes: true, Runtime: port.RuntimeLambda}, port.PresetAWSHybrid},
-		"aws+k8s on k8s":     {port.Platform{AWS: true, Kubernetes: true}, port.PresetAWSEKS},
+		"aws+k8s on k8s":     {port.Platform{AWS: true, Kubernetes: true}, port.PresetK8sAWS},
 		"openbao alone":      {port.Platform{OpenBao: true}, port.PresetServer},
 	} {
 		if got := port.PresetFor(tc.p); got != tc.want {
@@ -81,8 +83,8 @@ func TestOverrideBeatsPresetBeatsDerivedBeatsLegacy(t *testing.T) {
 	if got.Name(port.ConcernState) != "dynamodb" || got[port.ConcernState].Source != port.SourceDerived {
 		t.Fatalf("platform: %v", got)
 	}
-	got, _ = port.Resolve(port.Selection{Legacy: legacy, Platform: plat, Preset: port.PresetAWSEKS})
-	if got.Name(port.ConcernTrigger) != "watch" || got[port.ConcernTrigger].Source != port.SourcePreset {
+	got, _ = port.Resolve(port.Selection{Legacy: legacy, Platform: plat, Preset: port.PresetK8sAWS})
+	if got.Name(port.ConcernTrigger) != "dynamodb" || got[port.ConcernTrigger].Source != port.SourcePreset {
 		t.Fatalf("preset beats the derived one: %v", got)
 	}
 	got, _ = port.Resolve(port.Selection{Legacy: legacy, Preset: port.PresetAWSHybrid, LegacySet: []port.Concern{port.ConcernState}})
@@ -180,7 +182,7 @@ func TestTheMatrixHoldsRegisteredAndPlannedAdapters(t *testing.T) {
 	}
 	for key, want := range map[string]port.Status{
 		"state/legacy": port.StatusImplemented, "state/dynamodb": port.StatusImplemented, "state/postgres": port.StatusOnRequest,
-		"secrets/memory": port.StatusImplemented, "secrets/openbao": port.StatusOnRequest, "blobs/s3": port.StatusImplemented,
+		"secrets/memory": port.StatusImplemented, "secrets/openbao": port.StatusImplemented, "blobs/s3": port.StatusImplemented,
 		"signing/file": port.StatusImplemented, "signing/transit": port.StatusOnRequest, "trigger/watch": port.StatusOnRequest,
 		"schedule/ticker": port.StatusImplemented, "audit/connect": port.StatusImplemented,
 	} {
@@ -230,8 +232,8 @@ func TestTheAWSLambdaPresetsSignWithWrappedKeys(t *testing.T) {
 			t.Errorf("%s signs with %q", p, got)
 		}
 	}
-	if got := port.PresetTable(port.PresetAWSEKS)[port.ConcernSigning]; got != "kms" {
-		t.Errorf("aws-eks signs with %q: it keeps remote signing", got)
+	if got := port.PresetTable(port.PresetK8sAWS)[port.ConcernSigning]; got != "kms-wrapped" {
+		t.Errorf("k8s-aws signs with %q", got)
 	}
 	d, ok := port.Default.Lookup(port.ConcernSigning, "kms-wrapped")
 	if !ok || d.Factory == nil || !d.Requires.AWS {

@@ -40,6 +40,48 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Non-empty when the config signs with AWS KMS (`signingKey.kmsWrapped` or
+`signingKey.kms`, or `adapters.signing` naming one of them): the keys are made
+and held by KMS, so there is no key file to mount and nothing for cert-manager
+to issue. Then the chart renders no signing Certificate and mounts no signing
+Secret, and `config.signingKey.file` must be unset.
+*/}}
+{{- define "sluis.remoteSigning" -}}
+{{- $s := dig "signingKey" dict .Values.config -}}
+{{- if or $s.kmsWrapped $s.kms (has (dig "adapters" "signing" "adapter" "" .Values.config) (list "kms" "kms-wrapped")) }}yes{{ end -}}
+{{- end }}
+
+{{/*
+The state adapter the config chooses: `adapters.state`, else `ports.adapter`,
+else the one a preset names (the AWS ones keep state in DynamoDB), else the
+legacy default. Only what the chart needs to know: whether the leases are shared.
+*/}}
+{{- define "sluis.stateAdapter" -}}
+{{- $c := .Values.config -}}
+{{- $preset := dig "preset" "" $c -}}
+{{- $fromPreset := ternary "dynamodb" "" (has $preset (list "k8s-aws" "aws-eks" "aws-serverless" "aws-hybrid")) -}}
+{{- dig "adapters" "state" "adapter" "" $c | default (dig "ports" "adapter" "" $c) | default $fromPreset | default "legacy" -}}
+{{- end }}
+
+{{/*
+How often the kms-wrapped adapter generates a key pair, in seconds: the
+config's `signingKey.kmsWrapped.rotateEvery`, or `adapters.signing.settings`'s,
+or the adapter's default (24h). Zero when signing is not kms-wrapped.
+*/}}
+{{- define "sluis.wrappedRotateSeconds" -}}
+{{- $c := .Values.config -}}
+{{- $wrapped := dig "signingKey" "kmsWrapped" dict $c -}}
+{{- $viaAdapter := eq (dig "adapters" "signing" "adapter" "" $c) "kms-wrapped" -}}
+{{- if or $wrapped $viaAdapter -}}
+{{- $every := $wrapped.rotateEvery | default (dig "adapters" "signing" "settings" "rotateEvery" "" $c) | default "24h" -}}
+{{- if not (regexMatch "^[0-9]+(s|m|h)$" $every) -}}
+{{- fail (printf "the kms-wrapped rotateEvery %q is not one number and one unit (s, m or h), which the chart cannot read: write it so (24h), or set alerts.rules.signingKeyRotationStalled.maxAgeSeconds yourself" $every) -}}
+{{- end -}}
+{{- div (include "sluis.simpleDurationNanos" $every | int64) 1000000000 -}}
+{{- else -}}0{{- end -}}
+{{- end }}
+
+{{/*
 The Secret the signing key is read from: one external-secrets delivered,
 or the one cert-manager issues for this release.
 */}}

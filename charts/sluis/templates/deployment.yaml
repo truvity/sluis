@@ -22,6 +22,9 @@ spec:
         # controllers' sections are in it) and the policy.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/policy: {{ include (print $.Template.BasePath "/policy-configmap.yaml") . | sha256sum }}
+        {{- if .Values.signingKey.verifyOnly }}
+        checksum/verify-keys: {{ include (print $.Template.BasePath "/verify-keys.yaml") . | sha256sum }}
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -80,6 +83,7 @@ spec:
             - name: policy
               mountPath: /var/run/access-issuer/policy
               readOnly: true
+            {{- if not (include "sluis.remoteSigning" .) }}
             - name: signing-key
               mountPath: /var/run/access-issuer/signing-key
               readOnly: true
@@ -87,6 +91,12 @@ spec:
             {{- $name := include "sluis.additionalSigningKeyName" . }}
             - name: {{ $name }}
               mountPath: /var/run/access-issuer/{{ $name }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.signingKey.verifyOnly }}
+            - name: verify-keys
+              mountPath: /var/run/access-issuer/verify-keys
               readOnly: true
             {{- end }}
             - name: tmp
@@ -157,6 +167,7 @@ spec:
         - name: config
           configMap:
             name: {{ include "sluis.fullname" . }}-config
+        {{- if not (include "sluis.remoteSigning" .) }}
         - name: signing-key
           secret:
             secretName: {{ include "sluis.signingKeySecret" . }}
@@ -165,6 +176,12 @@ spec:
         - name: {{ $name }}
           secret:
             secretName: {{ include "sluis.fullname" $ }}-{{ $name }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.signingKey.verifyOnly }}
+        - name: verify-keys
+          configMap:
+            name: {{ include "sluis.fullname" . }}-verify-keys
         {{- end }}
         - name: policy
           configMap:

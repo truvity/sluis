@@ -29,14 +29,37 @@ const (
 	PresetK8sOpenBao    Preset = "k8s-openbao"
 	PresetAWSServerless Preset = "aws-serverless"
 	PresetAWSHybrid     Preset = "aws-hybrid"
-	PresetAWSEKS        Preset = "aws-eks"
+	// PresetK8sAWS is sluis as a pod on Kubernetes with AWS storage: DynamoDB,
+	// S3, KMS. The secrets are SSM unless `adapters.secrets` names another.
+	PresetK8sAWS Preset = "k8s-aws"
+	// PresetAWSEKS is the former name of [PresetK8sAWS]: deprecated, resolved
+	// as it. It never started (it named the trigger `watch`, which is not built),
+	// so no running installation changes by the alias.
+	PresetAWSEKS Preset = "aws-eks"
 )
 
-// Presets lists them.
-var Presets = []Preset{PresetServer, PresetK8sMinimal, PresetK8sOpenBao, PresetAWSServerless, PresetAWSHybrid, PresetAWSEKS}
+// Presets lists them: the current names, not the deprecated alias.
+var Presets = []Preset{PresetServer, PresetK8sMinimal, PresetK8sOpenBao, PresetAWSServerless, PresetAWSHybrid, PresetK8sAWS}
 
-// Valid reports whether p is one of [Presets].
-func (p Preset) Valid() bool { return slices.Contains(Presets, p) }
+// Valid reports whether p is one of [Presets], or a deprecated name of one.
+func (p Preset) Valid() bool { return slices.Contains(Presets, p) || p == PresetAWSEKS }
+
+// Canonical is the preset a deprecated name stands for, and p itself otherwise.
+func (p Preset) Canonical() Preset {
+	if p == PresetAWSEKS {
+		return PresetK8sAWS
+	}
+	return p
+}
+
+// Deprecated is the warning for a preset that has been renamed, empty for one
+// that has not.
+func (p Preset) Deprecated() string {
+	if p == PresetAWSEKS {
+		return fmt.Sprintf("preset %q is deprecated: it is now %q (the adapters are the same as written there)", p, PresetK8sAWS)
+	}
+	return ""
+}
 
 // RuntimeOf is the runtime the answers imply when none is stated.
 func (p Platform) RuntimeOf() Runtime {
@@ -56,7 +79,7 @@ func (p Platform) RuntimeOf() Runtime {
 //	AWS? no  -> Kubernetes? no -> server
 //	                        yes -> OpenBao? yes -> k8s-openbao, no -> k8s-minimal
 //	AWS? yes -> Kubernetes? no -> aws-serverless
-//	                        yes -> sluis on Lambda? yes -> aws-hybrid, no -> aws-eks
+//	                        yes -> sluis on Lambda? yes -> aws-hybrid, no -> k8s-aws
 func PresetFor(p Platform) Preset {
 	switch {
 	case !p.AWS && !p.Kubernetes:
@@ -70,13 +93,13 @@ func PresetFor(p Platform) Preset {
 	case p.RuntimeOf() == RuntimeLambda:
 		return PresetAWSHybrid
 	}
-	return PresetAWSEKS
+	return PresetK8sAWS
 }
 
 // Answers are the platform answers a preset stands for, for a configuration
 // that names a preset and no `platform` block.
 func (p Preset) Answers() Platform {
-	switch p {
+	switch p.Canonical() {
 	case PresetK8sMinimal:
 		return Platform{Kubernetes: true, Runtime: RuntimeKubernetes}
 	case PresetK8sOpenBao:
@@ -85,7 +108,7 @@ func (p Preset) Answers() Platform {
 		return Platform{AWS: true, Runtime: RuntimeLambda}
 	case PresetAWSHybrid:
 		return Platform{AWS: true, Kubernetes: true, Runtime: RuntimeLambda}
-	case PresetAWSEKS:
+	case PresetK8sAWS:
 		return Platform{AWS: true, Kubernetes: true, Runtime: RuntimeKubernetes}
 	}
 	return Platform{Runtime: RuntimeProcess}
@@ -109,9 +132,11 @@ var presetTable = map[Preset]map[Concern]string{
 	},
 	PresetAWSServerless: awsLambda,
 	PresetAWSHybrid:     awsLambda,
-	PresetAWSEKS: {
-		ConcernState: "dynamodb", ConcernSecrets: "ssm", ConcernBlobs: "s3", ConcernSigning: "kms",
-		ConcernTrigger: "watch", ConcernSchedule: "ticker", ConcernAudit: "sqs",
+	// k8s-aws: every adapter is built. Remote signing (`kms`) and an SQS audit
+	// stay selectable through `adapters`; the secrets are overridable to openbao.
+	PresetK8sAWS: {
+		ConcernState: "dynamodb", ConcernSecrets: "ssm", ConcernBlobs: "s3", ConcernSigning: "kms-wrapped",
+		ConcernTrigger: "dynamodb", ConcernSchedule: "ticker", ConcernAudit: "connect",
 	},
 }
 
@@ -127,7 +152,7 @@ var awsLambda = map[Concern]string{
 // PresetTable returns the adapter names a preset gives, by concern.
 func PresetTable(p Preset) map[Concern]string {
 	out := map[Concern]string{}
-	for c, n := range presetTable[p] {
+	for c, n := range presetTable[p.Canonical()] {
 		out[c] = n
 	}
 	return out
@@ -209,7 +234,7 @@ func Resolve(sel Selection) (Table, error) {
 		if !sel.Preset.Valid() {
 			return nil, fmt.Errorf("preset: %q is none of %v", sel.Preset, Presets)
 		}
-		preset, src = sel.Preset, SourcePreset
+		preset, src = sel.Preset.Canonical(), SourcePreset
 	case sel.Platform != nil:
 		preset, src = PresetFor(*sel.Platform), SourceDerived
 	}
@@ -289,7 +314,9 @@ func (r *Registry) Validate(t Table, env Env) error {
 			if d.Requires.Kubernetes && !a.Kubernetes {
 				fail(c, "needs Kubernetes, and platform.kubernetes is false")
 			}
-			if d.Requires.OpenBao && !a.OpenBao {
+			// An adapter named on purpose is the statement that there is an
+			// OpenBao to use: a preset's answers (k8s-aws) do not ask for one.
+			if d.Requires.OpenBao && !a.OpenBao && ch.Source != SourceOverride {
 				fail(c, "needs OpenBao, and platform.openbao is false")
 			}
 		}

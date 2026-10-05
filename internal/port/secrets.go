@@ -49,6 +49,17 @@ type Secrets interface {
 	List(ctx context.Context, prefix string) ([]string, error)
 }
 
+// NamespacedSecrets is a Secrets that can be seen from another namespace of
+// its store: an OpenBao namespace. The export of a secret into a namespace of
+// its own (an export entry's `namespace`) asks for it; an adapter that is not
+// namespaced (ssm) does not have it, and such an export is refused.
+type NamespacedSecrets interface {
+	Secrets
+	// In returns the same installation's Secrets in the namespace. The
+	// connection and the credentials are shared.
+	In(namespace string) (Secrets, error)
+}
+
 // CheckSecretPath refuses a path that is empty, begins or ends with a slash,
 // holds an empty or relative segment or a character outside letters, digits,
 // `.`, `_` and `-`.

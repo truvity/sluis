@@ -76,7 +76,36 @@ sluis.checks: everything the service's config must agree with.
 {{- include "sluis.expectRelease" (dict "key" "config.release" "root" . "got" $c.release) -}}
 {{- include "sluis.expectPath" (dict "key" "config.policy.file" "got" (dig "policy" "file" "" $c) "want" "/var/run/access-issuer/policy/policy.yaml" "source" "policy" "present" true) -}}
 {{- $signing := dig "signingKey" dict $c -}}
+{{- if include "sluis.remoteSigning" . -}}
+{{- /*
+  KMS signing: the keys are KMS's, and the chart mounts no key file. The default
+  `config.signingKey.file` is the chart's own mount, so the values drop it with
+  a null, which Helm reads as "delete the default".
+*/ -}}
+{{- if $signing.file -}}
+{{- fail (printf "config.signingKey.file is %q and signing is KMS (config.signingKey.kmsWrapped, kms or adapters.signing): the chart mounts no key file then, and the two are exclusive. Write `signingKey: {file: null, kmsWrapped: {...}}` under config to drop the chart's default path" $signing.file) -}}
+{{- end -}}
+{{- if .Values.signingKey.additional -}}
+{{- fail "signingKey.additional names file keys cert-manager issues, and signing is KMS (config.signingKey.kmsWrapped, kms or adapters.signing), whose keys and algorithms are KMS's: remove signingKey.additional" -}}
+{{- end -}}
+{{- if .Values.signingKey.existingSecret -}}
+{{- fail "signingKey.existingSecret names a key file to mount, and signing is KMS (config.signingKey.kmsWrapped, kms or adapters.signing): the chart mounts none, remove signingKey.existingSecret" -}}
+{{- end -}}
+{{- else -}}
 {{- include "sluis.expectPath" (dict "key" "config.signingKey.file" "got" $signing.file "want" (printf "/var/run/access-issuer/signing-key/%s" .Values.signingKey.key) "source" "signingKey.key" "present" true) -}}
+{{- end -}}
+{{- $verifyOnly := dig "verifyOnly" list $signing -}}
+{{- if ne (len $verifyOnly) (len .Values.signingKey.verifyOnly) -}}
+{{- fail (printf "config.signingKey.verifyOnly names %d keys and signingKey.verifyOnly holds %d: one entry each, in the same order" (len $verifyOnly) (len .Values.signingKey.verifyOnly)) -}}
+{{- end -}}
+{{- range $i, $entry := $verifyOnly -}}
+{{- include "sluis.expectPath" (dict "key" (printf "config.signingKey.verifyOnly[%d].file" $i) "got" $entry.file "want" (printf "/var/run/access-issuer/verify-keys/%d.pem" $i) "source" "signingKey.verifyOnly" "present" true) -}}
+{{- end -}}
+{{- range $i, $k := .Values.signingKey.verifyOnly -}}
+{{- if contains "PRIVATE KEY" $k.pem -}}
+{{- fail (printf "signingKey.verifyOnly[%d] holds a private key: only public keys are published, and a ConfigMap is no place for a private one" $i) -}}
+{{- end -}}
+{{- end -}}
 {{- $additional := include "sluis.additionalSigningKeyFiles" . -}}
 {{- if ne (join "," ($signing.additionalFiles | default list)) $additional -}}
 {{- fail (printf "config.signingKey.additionalFiles must be [%s], one file per signingKey.additional entry in the order they are declared (got [%s])" $additional (join ", " ($signing.additionalFiles | default list))) -}}
@@ -89,9 +118,23 @@ sluis.checks: everything the service's config must agree with.
 {{- end -}}
 {{- include "sluis.expectAudit" (dict "key" "config.audit.tokenFile" "cfg" $c) -}}
 {{- include "sluis.controllersChecks" . -}}
+{{- /*
+  The OpenBao Secrets adapter (adapters.secrets: openbao) logs in with the same
+  projected token and trusts the same CA bundle as the export adapter: one
+  bundle, one audience. The settings say where the chart mounts them.
+*/ -}}
+{{- $secretsOpenbao := eq (dig "adapters" "secrets" "adapter" "" $c) "openbao" -}}
+{{- if $secretsOpenbao -}}
+{{- $set := dig "adapters" "secrets" "settings" dict $c -}}
+{{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.caFile" "got" $set.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
+{{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $set) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
+{{- end -}}
 {{- $openbao := dig "ports" "export" "openbao" dict $c -}}
+{{- /* The mounted CA and token are the export adapter's and the secrets adapter's alike: either may be the one that names them. */ -}}
+{{- if or $openbao (not $secretsOpenbao) -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.caFile" "got" $openbao.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
 {{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $openbao) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
+{{- end -}}
 {{- if and (dig "exports" list .Values.policy) (not (dig "ports" "export" "adapter" "" $c)) (not (dig "adapters" "secrets" "adapter" "" $c)) -}}
 {{- fail "policy.exports names secrets to copy and config.ports.export names nowhere to copy them to: set config.ports.export (adapter: openbao, and its address and auth), or remove policy.exports" -}}
 {{- end -}}
@@ -205,9 +248,9 @@ that reads as a failure). Only `ports.adapter: dynamodb` shares them.
 {{- include "sluis.controllerChecks" (dict "root" $root "kind" $kind "dir" $dir) -}}
 {{- end -}}
 {{- end -}}
-{{- $adapter := dig "ports" "adapter" "legacy" $root.Values.config -}}
+{{- $adapter := include "sluis.stateAdapter" $root -}}
 {{- if and $any (gt (int $root.Values.replicaCount) 1) (not (has $adapter (list "dynamodb"))) -}}
-{{- fail (printf "replicaCount is %d and config.controllers runs a controller in every replica, which needs the tick leases in a State every replica shares: set config.ports.adapter to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicaCount at 1 otherwise" (int $root.Values.replicaCount) $adapter) -}}
+{{- fail (printf "replicaCount is %d and config.controllers runs a controller in every replica, which needs the tick leases in a State every replica shares: set config.ports.adapter (or adapters.state, or preset k8s-aws) to dynamodb (it is %q, which keeps the leases in each pod's own memory, so every replica would act on every target and make each change twice). Keep replicaCount at 1 otherwise" (int $root.Values.replicaCount) $adapter) -}}
 {{- end -}}
 {{- end -}}
 

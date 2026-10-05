@@ -784,13 +784,14 @@
       "type": "object"
     },
     "preset": {
-      "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
+      "description": "The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `k8s-aws` (sluis as a pod on Kubernetes with AWS storage: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao with `adapters.secrets`). `aws-eks` is the deprecated name of `k8s-aws`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.",
       "enum": [
         "server",
         "k8s-minimal",
         "k8s-openbao",
         "aws-serverless",
         "aws-hybrid",
+        "k8s-aws",
         "aws-eks"
       ]
     },
@@ -1065,6 +1066,44 @@
           "$ref": "#/$defs/duration",
           "default": "30s",
           "description": "How often the files are re-read."
+        },
+        "verifyOnly": {
+          "description": "PUBLIC keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire: the overlap of a cutover from file keys to `kmsWrapped`. Each is dropped from the JWKS at its `until`. A private key stops the start.",
+          "items": {
+            "additionalProperties": false,
+            "description": "One public key.",
+            "properties": {
+              "alg": {
+                "description": "The key's algorithm. Unset follows the key.",
+                "enum": [
+                  "ES256",
+                  "ES384",
+                  "ES512",
+                  "RS256"
+                ]
+              },
+              "file": {
+                "description": "A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "kid": {
+                "description": "The `kid` the old tokens carry. Unset is the RFC 7638 thumbprint of the key, which is what a file signer derived for it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "until": {
+                "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache.",
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "file"
+            ],
+            "type": "object"
+          },
+          "type": "array"
         }
       },
       "type": "object"

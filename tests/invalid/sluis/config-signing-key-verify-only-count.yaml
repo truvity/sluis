@@ -1,0 +1,7 @@
+# One config entry per mounted key.
+# error: config.signingKey.verifyOnly names 1 keys and signingKey.verifyOnly holds 0
+config:
+  issuerURL: https://issuer.example
+  signingKey:
+    verifyOnly:
+      - file: /var/run/access-issuer/verify-keys/0.pem

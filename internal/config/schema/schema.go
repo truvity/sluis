@@ -319,6 +319,13 @@ func serveSchema() m {
 				"retain":      duration("How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`.", ""),
 			}, "keyId", "stateSecret"),
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
+			"verifyOnly": list("PUBLIC keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire: the overlap of a cutover from file keys to `kmsWrapped`. Each is dropped from the JWKS at its `until`. A private key stops the start.",
+				obj("One public key.", m{
+					"file":  str("A PEM public key (`PUBLIC KEY`, `RSA PUBLIC KEY`, or a certificate) or a JWK file. Never a private key."),
+					"kid":   str("The `kid` the old tokens carry. Unset is the RFC 7638 thumbprint of the key, which is what a file signer derived for it."),
+					"alg":   m{"enum": []string{"ES256", "ES384", "ES512", "RS256"}, "description": "The key's algorithm. Unset follows the key."},
+					"until": m{"type": "string", "format": "date-time", "description": "An RFC 3339 instant after which the key is no longer published: the old tokens' last expiry, plus the verifiers' cache."},
+				}, "file")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),
 			"activationDelay": duration("How long a newly published key waits before a replica signs with it. At least `pollInterval`.", "15m"),
 			"overlap":         duration("How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew.", ""),
@@ -570,8 +577,8 @@ func platformSchema() m {
 
 // presetSchema is `preset`.
 func presetSchema() m {
-	return enum("The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `aws-eks`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.", "",
-		"server", "k8s-minimal", "k8s-openbao", "aws-serverless", "aws-hybrid", "aws-eks")
+	return enum("The adapters of a whole platform, one per concern: `server` (no AWS, no Kubernetes), `k8s-minimal`, `k8s-openbao`, `aws-serverless`, `aws-hybrid` (sluis on Lambda, a cluster for the workloads), `k8s-aws` (sluis as a pod on Kubernetes with AWS storage: DynamoDB, S3, KMS-wrapped signing; SSM secrets, or OpenBao with `adapters.secrets`). `aws-eks` is the deprecated name of `k8s-aws`. Absent, the preset the `platform` answers lead to; with neither, the `ports` keys decide. `adapters` and the `ports` keys override single concerns.", "",
+		"server", "k8s-minimal", "k8s-openbao", "aws-serverless", "aws-hybrid", "k8s-aws", "aws-eks")
 }
 
 // adaptersSchema is `adapters`: the per-concern overrides.

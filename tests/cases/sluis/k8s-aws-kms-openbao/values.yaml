@@ -1,0 +1,78 @@
+# Truvity's kernel shape: sluis as a pod on EKS with AWS storage (DynamoDB, S3),
+# KMS-wrapped token signing and OpenBao as the Secrets port. The inputs arrive
+# as files (External Secrets), so `secrets.source` stays `file`; the openbao
+# adapter holds the credentials sluis writes and the exports. No Certificate is
+# rendered and no signing Secret is mounted.
+replicaCount: 2
+config:
+  issuerURL: https://access.example
+  preset: k8s-aws
+  signingKey:
+    file: null
+    kmsWrapped:
+      keyId: alias/sluis-signing
+      region: eu-west-1
+      stateSecret: signing/state
+      rotateEvery: 24h
+    # The cutover from cert-manager file keys: the old public key stays in the
+    # JWKS until the tokens it signed have expired.
+    verifyOnly:
+      - file: /var/run/access-issuer/verify-keys/0.pem
+        until: "2026-11-05T00:00:00Z"
+  ports:
+    dynamodb:
+      table: sluis
+      region: eu-west-1
+    blob:
+      adapter: s3
+      s3:
+        bucket: sluis-blobs
+        region: eu-west-1
+  adapters:
+    secrets:
+      adapter: openbao
+      settings:
+        address: https://openbao.kernel.truvity.private
+        caFile: /var/run/access-issuer/openbao-ca/ca.pem
+        namespace: kernel
+        mount: kv
+        root: sluis
+        auth:
+          method: jwt
+          mount: jwt-kernel
+          role: sluis
+          tokenFile: /var/run/openbao/token
+  audit:
+    writer: https://audit.example:8443
+secrets:
+  - name: signing/state
+    secretName: sluis-inputs
+    key: signing-state
+policy:
+  apps:
+    github:
+      runnerTiers: [preview, stable]
+  exports:
+    - source: runner-app
+      tier: preview
+      org: truvity
+      namespace: devel
+      path: github-runner-app/preview/truvity
+serviceAccount:
+  awsIdentity: pod-identity
+exports:
+  openbao:
+    caBundle: |
+      -----BEGIN CERTIFICATE-----
+      MIIBexample
+      -----END CERTIFICATE-----
+    token:
+      audience: openbao-kernel
+signingKey:
+  verifyOnly:
+    - pem: |
+        -----BEGIN PUBLIC KEY-----
+        MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAElZnSplCULdNRmGOQlKazRp+FgiMdzJCo
+        f9UFd57KOtMRtBLEZZLBER31njHUIT0ANb6gmGJlj1iAMQHHyc5o6aH7/tb0uPSC
+        6gshO6QnM6JEn6253dKP3R+Jsnosykra
+        -----END PUBLIC KEY-----

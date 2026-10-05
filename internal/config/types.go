@@ -143,6 +143,23 @@ type (
 		// KMSWrapped signs with key pairs KMS generates and wraps under one
 		// symmetric key, rotated automatically. Exclusive with File and KMS.
 		KMSWrapped *SigningKeyKMSWrapped `json:"kmsWrapped,omitempty"`
+		// VerifyOnly are public keys published in the JWKS and never signed
+		// with, for a bounded overlap (a cutover from file keys to KMS ones).
+		VerifyOnly []SigningKeyVerifyOnly `json:"verifyOnly,omitempty"`
+	}
+
+	// SigningKeyVerifyOnly is one public key published and never signed with.
+	SigningKeyVerifyOnly struct {
+		// File is a PEM public key (or a certificate's) or a JWK. A private key
+		// is refused at start.
+		File string `json:"file"`
+		// KeyID is the `kid` the old tokens carry. Unset is the RFC 7638
+		// thumbprint, which is what a file signer derived for the key.
+		KeyID string `json:"kid,omitempty"`
+		// Alg is the key's algorithm. Unset follows the key.
+		Alg string `json:"alg,omitempty"`
+		// Until is an RFC 3339 instant after which the key is not published.
+		Until string `json:"until,omitempty"`
 	}
 
 	// SigningKeyKMSWrapped is the `kms-wrapped` signing adapter's settings: one

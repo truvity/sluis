@@ -269,3 +269,40 @@ func TestTheSSMRootIsTheDocumentsSecretsRoot(t *testing.T) {
 		}
 	}
 }
+
+// k8s-aws names only adapters that are built, so it starts; aws-eks is the same
+// preset under its old name, with a warning.
+func TestTheK8sAWSPresetIsBuiltAndAWSEKSIsItsAlias(t *testing.T) {
+	want := map[port.Concern]string{
+		port.ConcernState: "dynamodb", port.ConcernSecrets: "ssm", port.ConcernBlobs: "s3", port.ConcernSigning: "kms-wrapped",
+		port.ConcernTrigger: "dynamodb", port.ConcernSchedule: "ticker", port.ConcernAudit: "connect",
+	}
+	for c, name := range want {
+		if got := port.PresetTable(port.PresetK8sAWS)[c]; got != name {
+			t.Errorf("k8s-aws %s = %q, want %q", c, got, name)
+		}
+		if got := port.PresetTable(port.PresetAWSEKS)[c]; got != name {
+			t.Errorf("aws-eks %s = %q, want %q", c, got, name)
+		}
+	}
+	table, err := port.Resolve(port.Selection{Preset: port.PresetAWSEKS})
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers := port.PresetAWSEKS.Answers()
+	if err := port.Default.Validate(table, port.Env{Answers: &answers, Runtime: port.RuntimeKubernetes}); err != nil {
+		t.Errorf("the preset does not start: %v", err)
+	}
+	if port.PresetAWSEKS.Deprecated() == "" || port.PresetK8sAWS.Deprecated() != "" {
+		t.Error("only aws-eks is deprecated")
+	}
+	if !port.PresetAWSEKS.Valid() {
+		t.Error("aws-eks is still accepted")
+	}
+	// Naming openbao for the secrets is enough: the preset's answers do not say openbao.
+	table, _ = port.Resolve(port.Selection{Preset: port.PresetK8sAWS, Overrides: map[port.Concern]port.Override{
+		port.ConcernSecrets: {Adapter: "openbao"}}})
+	if err := port.Default.Validate(table, port.Env{Answers: &answers, Runtime: port.RuntimeKubernetes}); err != nil {
+		t.Errorf("k8s-aws with openbao secrets: %v", err)
+	}
+}

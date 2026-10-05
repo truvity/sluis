@@ -1,0 +1,18 @@
+{{- if and (eq .Values.renders "app") .Values.signingKey.verifyOnly -}}
+# PUBLIC keys the service publishes in its JWKS and never signs with: the keys of
+# an earlier signer, kept so tokens it issued verify until they expire. A
+# ConfigMap, because a public key is not a secret. Mounted at
+# /var/run/access-issuer/verify-keys, where config.signingKey.verifyOnly[].file
+# says.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sluis.fullname" . }}-verify-keys
+  labels:
+    {{- include "sluis.labels" . | nindent 4 }}
+data:
+  {{- range $i, $k := .Values.signingKey.verifyOnly }}
+  {{ $i }}.pem: |
+    {{- $k.pem | trim | nindent 4 }}
+  {{- end }}
+{{ end -}}
