@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.66.0
+
 ### Fixed
 
 - **Chart: documents mode projects the input secrets by `secrets.source`, not by the credentials adapter.** With `adapters.secrets: openbao` (or `ssm`) the chart skipped every input file, so an installation that reads its inputs (client secrets, the Google OAuth client, the signing state secret) as files from Kubernetes Secrets, and keeps credentials and exports in OpenBao, had none of them mounted. Now `secrets.source: file` projects the Secrets declared in `secrets` at `<root>/<name>` (mode 0440, read-only, pod `fsGroup` set), whatever the adapter; `ssm` or `openbao` as the input source projects nothing. In documents mode a policy client's `secret` is the secret's name, so each `clients/<id>/secret` is declared in `secrets` (`{name, secretName, key}`) and the chart refuses a confidential client whose name has no entry. The refusal covers every input name the documents use (the Google OAuth client, `...Secret` fields such as `stateSecret` and `passwordSecret`), a name declared twice is refused, the projected `secretName`, `key` and `name` are quoted, and the pod runs as 65532:65532 with `fsGroup` 65532. The #323 guards are unchanged. Values mode keeps its value shapes; its projected volume is also mode 0440 now.
