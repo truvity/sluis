@@ -19,6 +19,9 @@ import (
 
 func newSecrets(t *testing.T, f *fakeAPI, cfg ssm.Config) *ssm.Secrets {
 	t.Helper()
+	if cfg.Root == "" {
+		cfg.Root = "/sluis/test"
+	}
 	s, err := ssm.NewWithAPI(f, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -36,11 +39,11 @@ func TestLayout(t *testing.T) {
 	s := newSecrets(t, f, ssm.Config{})
 	ctx := context.Background()
 	for p, want := range map[string]string{
-		"app/token":             "/sluis/private/app/token",
-		"export/slack/alerts":   "/sluis/export/slack/alerts",
-		"exports/slack":         "/sluis/private/exports/slack",
-		"export":                "/sluis/private/export",
-		"private/export/nested": "/sluis/private/private/export/nested",
+		"app/token":             "/sluis/test/private/app/token",
+		"export/slack/alerts":   "/sluis/test/export/slack/alerts",
+		"exports/slack":         "/sluis/test/private/exports/slack",
+		"export":                "/sluis/test/private/export",
+		"private/export/nested": "/sluis/test/private/private/export/nested",
 	} {
 		if _, err := s.Put(ctx, p, []byte("x")); err != nil {
 			t.Fatal(err)
@@ -63,6 +66,12 @@ func TestACustomRoot(t *testing.T) {
 	}
 	if _, ok := f.params["/acme/sluis/export/a"]; !ok {
 		t.Fatalf("parameters: %v", keys(f))
+	}
+	for _, root := range []string{"sluis", "/sluis/", "/a b"} {
+		_ = root
+	}
+	if _, err := ssm.NewWithAPI(f, ssm.Config{}); err == nil {
+		t.Error("no root was accepted: layout v3 has no default")
 	}
 	for _, root := range []string{"sluis", "/sluis/", "/a b"} {
 		if _, err := ssm.NewWithAPI(f, ssm.Config{Root: root}); err == nil {
@@ -102,10 +111,10 @@ func TestTiers(t *testing.T) {
 	if _, err := s.Put(ctx, "big", bytes.Repeat([]byte("x"), 4097)); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.params["/sluis/private/small"].tier; got != types.ParameterTierStandard {
+	if got := f.params["/sluis/test/private/small"].tier; got != types.ParameterTierStandard {
 		t.Errorf("a 4 KiB value is tier %s", got)
 	}
-	if got := f.params["/sluis/private/big"].tier; got != types.ParameterTierAdvanced {
+	if got := f.params["/sluis/test/private/big"].tier; got != types.ParameterTierAdvanced {
 		t.Errorf("a 4 KiB + 1 value is tier %s", got)
 	}
 	for _, in := range f.puts {
@@ -134,10 +143,10 @@ func TestTextIsStoredAsIsAndBinaryIsMarked(t *testing.T) {
 			t.Errorf("%s: read %q (%v), want %q", path, got.Value, err, in)
 		}
 	}
-	if v := f.params["/sluis/export/pem"].value; v != pem {
+	if v := f.params["/sluis/test/export/pem"].value; v != pem {
 		t.Errorf("a text export is stored as %q, which a consumer cannot read as it is", v)
 	}
-	if v := f.params["/sluis/export/bin"].value; !strings.HasPrefix(v, "sluis-b64:") {
+	if v := f.params["/sluis/test/export/bin"].value; !strings.HasPrefix(v, "sluis-b64:") {
 		t.Errorf("a binary value is stored as %q", v)
 	}
 }
@@ -216,7 +225,7 @@ func (f failing) GetParameter(context.Context, *awsssm.GetParameterInput, ...fun
 }
 
 func TestAnAWSFailureIsUnavailableNotAbsent(t *testing.T) {
-	s, err := ssm.NewWithAPI(failing{newFake(), errors.New("AccessDeniedException")}, ssm.Config{})
+	s, err := ssm.NewWithAPI(failing{newFake(), errors.New("AccessDeniedException")}, ssm.Config{Root: "/sluis/test"})
 	if err != nil {
 		t.Fatal(err)
 	}

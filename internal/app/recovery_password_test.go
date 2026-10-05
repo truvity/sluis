@@ -8,22 +8,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/truvity/sluis/internal/secrets"
 )
 
-// Outside a cluster the password comes from recovery.passwordFile when it is
-// named: a platform keeps it in its secret store and writes it there, so it
-// is the same one across restarts rather than one generated per start.
-func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
+// Outside a cluster the password is the secret recovery.passwordSecret names
+// when it names one: a platform keeps it in its secret store, so it is the same
+// one across restarts rather than one generated per start.
+func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	dir := t.TempDir()
 
-	file := filepath.Join(dir, "password")
+	src := secrets.File{Root: dir}
+	file := filepath.Join(dir, "recovery", "password")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(file, []byte("a-long-generated-password\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	recovery, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryFile: file}, stores{}, log)
+	recovery, err := openRecovery(ctx, Config{recoveryEnabled: true, recoveryPassword: "recovery/password"}, stores{}, src, log)
 	if err != nil || recovery == nil {
 		t.Fatalf("openRecovery = %v, %v", recovery, err)
 	}
@@ -39,7 +45,7 @@ func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
 
 	// Turned off keeps the file and builds nothing; turning it on again is
 	// the same file, no new password.
-	off, err := openRecovery(ctx, Config{recoveryEnabled: false, recoveryFile: file}, stores{}, log)
+	off, err := openRecovery(ctx, Config{recoveryEnabled: false, recoveryPassword: "recovery/password"}, stores{}, src, log)
 	if err != nil || off != nil {
 		t.Errorf("recovery turned off = %v, %v, want none", off, err)
 	}
@@ -47,16 +53,15 @@ func TestTheRecoveryPasswordIsReadFromItsFile(t *testing.T) {
 		t.Errorf("turning recovery off touched the password file: %v", err)
 	}
 
-	empty := filepath.Join(dir, "empty")
-	if err = os.WriteFile(empty, []byte(" \n"), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(dir, "recovery", "empty"), []byte(" \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryFile: empty}, stores{}, log); err == nil ||
-		!strings.Contains(err.Error(), "recovery.passwordFile") {
-		t.Errorf("an empty password file = %v, want a refusal naming the key", err)
+	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryPassword: "recovery/empty"}, stores{}, src, log); err == nil ||
+		!strings.Contains(err.Error(), "recovery.passwordSecret") {
+		t.Errorf("an empty password = %v, want a refusal naming the key", err)
 	}
-	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryFile: filepath.Join(dir, "absent")}, stores{}, log); err == nil {
-		t.Error("a missing password file was not refused")
+	if _, err = openRecovery(ctx, Config{recoveryEnabled: true, recoveryPassword: "recovery/absent"}, stores{}, src, log); err == nil {
+		t.Error("a missing password was not refused")
 	}
 }
 
@@ -68,7 +73,7 @@ func TestOnLambdaAMissingPasswordFailsClosedWithoutPrintingOne(t *testing.T) {
 	var logs strings.Builder
 	log := slog.New(slog.NewTextHandler(&logs, nil))
 
-	recovery, err := openRecovery(context.Background(), Config{recoveryEnabled: true}, stores{}, log)
+	recovery, err := openRecovery(context.Background(), Config{recoveryEnabled: true}, stores{}, nil, log)
 	if err != nil || recovery != nil {
 		t.Fatalf("openRecovery = %v, %v, want no recovery and no error", recovery, err)
 	}

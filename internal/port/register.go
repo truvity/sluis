@@ -7,11 +7,11 @@ import (
 
 // KMSSigning is the kms signing adapter's settings, the same as
 // `signingKey.kms`: the keys, oldest first with the last signing, the region,
-// and the file the sign-in state is derived from.
+// and the secret the sign-in state is derived from.
 type KMSSigning struct {
-	Keys            []string `json:"keys"`
-	Region          string   `json:"region,omitempty"`
-	StateSecretFile string   `json:"stateSecretFile"`
+	Keys        []string `json:"keys"`
+	Region      string   `json:"region,omitempty"`
+	StateSecret string   `json:"stateSecret"`
 	// Additional is the keys of every other algorithm (RS256).
 	Additional []KMSSigningAlg `json:"additional,omitempty"`
 }
@@ -26,13 +26,13 @@ type KMSSigningAlg struct {
 // `signingKey.kmsWrapped`. The durations are Go duration strings; an empty one
 // takes the default.
 type KMSWrappedSigning struct {
-	KeyID           string   `json:"keyId"`
-	Region          string   `json:"region,omitempty"`
-	StateSecretFile string   `json:"stateSecretFile"`
-	Algorithms      []string `json:"algorithms,omitempty"`
-	RotateEvery     string   `json:"rotateEvery,omitempty"`
-	Prepublish      string   `json:"prepublish,omitempty"`
-	Retain          string   `json:"retain,omitempty"`
+	KeyID       string   `json:"keyId"`
+	Region      string   `json:"region,omitempty"`
+	StateSecret string   `json:"stateSecret"`
+	Algorithms  []string `json:"algorithms,omitempty"`
+	RotateEvery string   `json:"rotateEvery,omitempty"`
+	Prepublish  string   `json:"prepublish,omitempty"`
+	Retain      string   `json:"retain,omitempty"`
 }
 
 // The adapters of the concerns whose wiring is the process's own: the
@@ -60,8 +60,8 @@ func init() {
 			if err := s.Decode(&k); err != nil {
 				return nil, err
 			}
-			if len(k.Keys) == 0 || k.StateSecretFile == "" {
-				return nil, errors.New("the kms adapter needs keys and stateSecretFile (set `signingKey.kms` or `adapters.signing.settings`)")
+			if len(k.Keys) == 0 || k.StateSecret == "" {
+				return nil, errors.New("the kms adapter needs keys and stateSecret (set `signingKey.kms` or `adapters.signing.settings`)")
 			}
 			return &k, nil
 		},
@@ -77,8 +77,8 @@ func init() {
 			if err := s.Decode(&k); err != nil {
 				return nil, err
 			}
-			if k.KeyID == "" || k.StateSecretFile == "" {
-				return nil, errors.New("the kms-wrapped adapter needs keyId and stateSecretFile (set `signingKey.kmsWrapped` or `adapters.signing.settings`)")
+			if k.KeyID == "" || k.StateSecret == "" {
+				return nil, errors.New("the kms-wrapped adapter needs keyId and stateSecret (set `signingKey.kmsWrapped` or `adapters.signing.settings`)")
 			}
 			return &k, nil
 		},

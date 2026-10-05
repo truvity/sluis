@@ -149,11 +149,10 @@ func sharedDefs() map[string]m {
 			},
 			"description": "An http or https URL with a host and no credentials: a password in a URL is a secret in the file, and a secret is named, never carried.",
 		},
-		"envName": {
+		"secretName": {
 			"type":        "string",
-			"minLength":   1,
-			"not":         m{"pattern": `^[0-9]|[^A-Za-z0-9_]`},
-			"description": "The NAME of an environment variable: letters, digits and underscores. A value is refused.",
+			"pattern":     `^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$`,
+			"description": "The NAME of a secret, delivered as `secrets.source` says: `valkey/password`, `issuer/state-secret`. A value is never in the document.",
 		},
 	}
 }
@@ -197,10 +196,25 @@ func document(name, title, description string, props m, required []string, uses 
 	return s
 }
 
-const secretsNote = " Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration."
+const secretsNote = " Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration."
 
-func envField(description string) m {
-	return m{"$ref": "#/$defs/envName", "description": description}
+func secretField(description string) m {
+	return m{"$ref": "#/$defs/secretName", "description": description}
+}
+
+// secretsSchema is `secrets`: how the names the document gives are delivered.
+func secretsSchema() m {
+	s := obj("How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.", m{
+		"source":   enum("`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/private/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (layout v3, root /sluis/<instance>).", "env", "env", "file", "ssm"),
+		"root":     str("`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>."),
+		"region":   str("`ssm`: the region. Unset follows the AWS SDK's own resolution."),
+		"endpoint": url("`ssm`: overrides the SSM address, for LocalStack."),
+		"refresh":  duration("`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it.", "5m"),
+	}, "source")
+	s["allOf"] = []any{
+		m{"if": m{"properties": m{"source": m{"enum": []string{"file", "ssm"}}}}, "then": m{"required": []string{"root"}}},
+	}
+	return s
 }
 
 func serveSchema() m {
@@ -217,18 +231,17 @@ func serveSchema() m {
 		"log":           logLevel(),
 		"store": enum("Where what an operator connected is kept: `memory` keeps nothing (a restart is a fresh installation), `kubernetes` keeps it in this namespace.", "memory",
 			"memory", "kubernetes"),
-		"ports":            portsSchema(true),
-		"platform":         platformSchema(),
-		"preset":           presetSchema(),
-		"adapters":         adaptersSchema(),
-		"policy":           policyRef("The policy document this service decides by. Unset is the built-in two groups, or the demonstration policy under `demo`."),
-		"directory":        directorySchema(),
-		"publicURL":        m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."},
-		"publicRootURL":    m{"$ref": "#/$defs/url", "description": "The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`."},
-		"secureCookies":    boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL."),
-		"groupsScoping":    enum("How far this installation has moved toward per-audience `groups` scoping: `off`, `report` or `enforce`.", "report", "off", "report", "enforce"),
-		"clientSecretsDir": str("A directory holding one file per confidential client, named after the client id, each the client's secret. Read per call, so a rotated Secret takes effect without a restart."),
-		"adminPasswordEnv": envField("The NAME of the variable holding the hub's recovery password, for a run outside a cluster. Unset generates one and prints it once."),
+		"ports":         portsSchema(true),
+		"platform":      platformSchema(),
+		"preset":        presetSchema(),
+		"adapters":      adaptersSchema(),
+		"policy":        policyRef("The policy document this service decides by. Unset is the built-in two groups, or the demonstration policy under `demo`."),
+		"directory":     directorySchema(),
+		"publicURL":     m{"$ref": "#/$defs/url", "description": "Where a browser reaches the console, including its mount. The admin-consent redirect URI and the values the setup steps show are built from it. Default http://localhost:8081."},
+		"publicRootURL": m{"$ref": "#/$defs/url", "description": "The host's root, never carrying the console's mount: the bootstrap surface stays there. Unset follows `publicURL`."},
+		"secureCookies": boolean("Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL."),
+		"groupsScoping": enum("How far this installation has moved toward per-audience `groups` scoping: `off`, `report` or `enforce`.", "report", "off", "report", "enforce"),
+		"secrets":       secretsSchema(),
 		"lifetimes": obj("How long what the issuer hands out lives.", m{
 			"token":    duration("An access token.", "1h"),
 			"refresh":  duration("A refresh token.", "12h"),
@@ -248,7 +261,7 @@ func serveSchema() m {
 			"enabled":        boolean("Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable."),
 			"serviceAccount": str("The ServiceAccount whose token signs in."),
 			"audience":       str("The audience its token must carry."),
-			"passwordFile":   str("Outside a cluster: the file the recovery password is read from, once, at start (the hub keeps only an Argon2id digest of it). Unset takes `adminPasswordEnv`, or generates one and prints it. `enabled: false` leaves the file untouched and refuses the sign-in, so turning it back on needs no new password."),
+			"passwordSecret": secretField("Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."),
 		}),
 		"login": obj("How a person signs in to the console.", m{
 			"directory":  boolDefault("Sign in with the corporate directory.", true),
@@ -266,9 +279,7 @@ func serveSchema() m {
 		}),
 		"oauthClient": obj("The OAuth client registered once with the directory backend: it drives both admin consent and operator sign-in.", m{
 			"id":         str("The client id, for a local run. Not a secret."),
-			"idFile":     str("A file holding the client id."),
-			"secretFile": str("A file holding the client secret."),
-			"secretEnv":  envField("The NAME of the variable holding the client secret, for a local run."),
+			"provider":   str("Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it."),
 			"secretName": str("The Kubernetes Secret the client is declared in, which the console shows and cannot change."),
 			"idKey":      str("The key of the id in that Secret."),
 			"secretKey":  str("The key of the secret in that Secret."),
@@ -284,29 +295,29 @@ func serveSchema() m {
 						"keys": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
 							"description": "RSA_2048, RSA_3072 or RSA_4096 SIGN_VERIFY keys, oldest first, the last signing; same rotation rules as `keys`."},
 					}, "alg", "keys")),
-				"region":          str("The keys' region. Unset follows the AWS SDK's own resolution."),
-				"stateSecretFile": str("A file holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
-			}, "keys", "stateSecretFile"),
+				"region":      str("The keys' region. Unset follows the AWS SDK's own resolution."),
+				"stateSecret": secretField("The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
+			}, "keys", "stateSecret"),
 			"kmsWrapped": obj("Sign with key pairs AWS KMS generates and wraps under ONE symmetric key (the `kms-wrapped` adapter): a new pair per algorithm every `rotateEvery`, published before it signs and kept after it is replaced. The private key is decrypted into process memory to sign. Exclusive with `file` and `kms`.", m{
-				"keyId":           str("The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing."),
-				"region":          str("The key's region. Unset follows the AWS SDK's own resolution."),
-				"stateSecretFile": str("A file holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."),
+				"keyId":       str("The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing."),
+				"region":      str("The key's region. Unset follows the AWS SDK's own resolution."),
+				"stateSecret": secretField("The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."),
 				"algorithms": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"enum": []string{"ES384", "RS256"}},
 					"description": "The algorithms signed with, the first the installation default. Unset is ES384 and RS256. EdDSA is not supported yet."},
 				"rotateEvery": duration("How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h.", "24h"),
 				"prepublish":  duration("How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`.", "15m"),
 				"retain":      duration("How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`.", ""),
-			}, "keyId", "stateSecretFile"),
+			}, "keyId", "stateSecret"),
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
 			"pollInterval":    duration("How often the files are re-read.", "30s"),
 			"activationDelay": duration("How long a newly published key waits before a replica signs with it. At least `pollInterval`.", "15m"),
 			"overlap":         duration("How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew.", ""),
 		}), "file", "kms", "kmsWrapped"),
 		"valkey": obj("The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.", m{
-			"address":     m{"type": "string", "allOf": []any{m{"pattern": `^[^\s/]+:[0-9]{1,5}$`}, m{"not": m{"pattern": "@"}}}, "description": "host:port, with no credentials."},
-			"passwordEnv": envField("The NAME of the variable holding the password."),
-			"tls":         boolean("Speak TLS to the server."),
-			"cluster":     boolDefault("Speak the cluster protocol. A plain single server needs it off.", true),
+			"address":        m{"type": "string", "allOf": []any{m{"pattern": `^[^\s/]+:[0-9]{1,5}$`}, m{"not": m{"pattern": "@"}}}, "description": "host:port, with no credentials."},
+			"passwordSecret": secretField("The secret the password is (`valkey/password`). Unset connects with none."),
+			"tls":            boolean("Speak TLS to the server."),
+			"cluster":        boolDefault("Speak the cluster protocol. A plain single server needs it off.", true),
 		}),
 		"audit": obj("The audit installation this service records to. Unset keeps the trail in the log only.", m{
 			"writer":                  url("The installation's receiver."),
@@ -318,7 +329,7 @@ func serveSchema() m {
 	}
 	return document("serve", "sluis serve",
 		"The configuration of `sluis serve`: the issuer, the console and the directory hub, one process."+secretsNote,
-		props, []string{"apiVersion", "issuerURL"}, []string{"duration", "url", "envName"},
+		props, []string{"apiVersion", "issuerURL"}, []string{"duration", "url", "secretName"},
 		m{
 			"allOf": []any{
 				m{"if": m{"required": []string{"valkey"}}, "then": m{"properties": m{"valkey": m{"required": []string{"address"}}}}},

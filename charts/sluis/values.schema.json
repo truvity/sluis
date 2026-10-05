@@ -5,7 +5,7 @@
   "definitions": {
     "config-controller-github": {
       "additionalProperties": false,
-      "description": "The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+      "description": "The configuration of `sluis controller github`: the controller that makes each GitHub organisation's teams match the policy's github table. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
       "properties": {
         "adapters": {
           "additionalProperties": false,
@@ -479,7 +479,7 @@
     },
     "config-controller-slack": {
       "additionalProperties": false,
-      "description": "The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+      "description": "The configuration of `sluis controller slack`: the controller that makes each Slack workspace's user groups match the policy's slack table. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
       "properties": {
         "adapters": {
           "additionalProperties": false,
@@ -2059,7 +2059,7 @@
           }
         }
       ],
-      "description": "The configuration of `sluis serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Env holds the NAME of the environment variable that holds the secret, and a field ending in ...File holds a path. Telemetry is the OTEL_* environment, not configuration.",
+      "description": "The configuration of `sluis serve`: the issuer, the console and the directory hub, one process. Secrets are never in this file: a field ending in ...Secret holds the NAME of a secret, which `secrets` says how to deliver, and a field ending in ...File holds a path (a credential the platform mounts and rotates). Telemetry is the OTEL_* environment, not configuration.",
       "properties": {
         "adapters": {
           "additionalProperties": false,
@@ -2201,10 +2201,6 @@
           },
           "type": "object"
         },
-        "adminPasswordEnv": {
-          "$ref": "#/definitions/config-serve.envName",
-          "description": "The NAME of the variable holding the hub's recovery password, for a run outside a cluster. Unset generates one and prints it once."
-        },
         "allowInsecure": {
           "description": "Accept a plain-http issuer URL, for a local run.",
           "type": "boolean"
@@ -2240,11 +2236,6 @@
             }
           },
           "type": "object"
-        },
-        "clientSecretsDir": {
-          "description": "A directory holding one file per confidential client, named after the client id, each the client's secret. Read per call, so a rotated Secret takes effect without a restart.",
-          "minLength": 1,
-          "type": "string"
         },
         "cluster": {
           "description": "Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject.",
@@ -2303,10 +2294,9 @@
                     "minLength": 1,
                     "type": "string"
                   },
-                  "keyFile": {
-                    "description": "Where the service-account key is mounted.",
-                    "minLength": 1,
-                    "type": "string"
+                  "keySecret": {
+                    "$ref": "#/definitions/config-serve.secretName",
+                    "description": "The secret the service-account key is: `directory/<id>/key`."
                   },
                   "serve": {
                     "description": "Narrows the tenant to these domains. Empty serves every domain discovered.",
@@ -2328,7 +2318,7 @@
                 "required": [
                   "backend",
                   "admin",
-                  "keyFile"
+                  "keySecret"
                 ],
                 "type": "object"
               },
@@ -2503,22 +2493,13 @@
               "minLength": 1,
               "type": "string"
             },
-            "idFile": {
-              "description": "A file holding the client id.",
-              "minLength": 1,
-              "type": "string"
-            },
             "idKey": {
               "description": "The key of the id in that Secret.",
               "minLength": 1,
               "type": "string"
             },
-            "secretEnv": {
-              "$ref": "#/definitions/config-serve.envName",
-              "description": "The NAME of the variable holding the client secret, for a local run."
-            },
-            "secretFile": {
-              "description": "A file holding the client secret.",
+            "provider": {
+              "description": "Names the client's secrets: providers/google/<provider>/client-secret, and providers/google/<provider>/client-id unless `id` gives it.",
               "minLength": 1,
               "type": "string"
             },
@@ -2886,10 +2867,9 @@
               "description": "Turn recovery on. Needs `inCluster`, `serviceAccount` and `audience` to be usable.",
               "type": "boolean"
             },
-            "passwordFile": {
-              "description": "Outside a cluster: the file the recovery password is read from, once, at start (the hub keeps only an Argon2id digest of it). Unset takes `adminPasswordEnv`, or generates one and prints it. `enabled: false` leaves the file untouched and refuses the sign-in, so turning it back on needs no new password.",
-              "minLength": 1,
-              "type": "string"
+            "passwordSecret": {
+              "$ref": "#/definitions/config-serve.secretName",
+              "description": "Outside a cluster: the secret the recovery password is (`recovery/password`), read at start (the hub keeps only an Argon2id digest of it). Unset generates one and prints it, except on a function, where recovery is then off. `enabled: false` leaves it untouched and refuses the sign-in, so turning it back on needs no new password."
             },
             "serviceAccount": {
               "description": "The ServiceAccount whose token signs in.",
@@ -2904,6 +2884,63 @@
           "description": "The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name.",
           "minLength": 1,
           "type": "string"
+        },
+        "secrets": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "file",
+                      "ssm"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "root"
+                ]
+              }
+            }
+          ],
+          "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
+          "properties": {
+            "endpoint": {
+              "$ref": "#/definitions/config-serve.url",
+              "description": "`ssm`: overrides the SSM address, for LocalStack."
+            },
+            "refresh": {
+              "$ref": "#/definitions/config-serve.duration",
+              "default": "5m",
+              "description": "`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it."
+            },
+            "region": {
+              "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "source": {
+              "default": "env",
+              "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/private/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (layout v3, root /sluis/<instance>).",
+              "enum": [
+                "env",
+                "file",
+                "ssm"
+              ]
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "type": "object"
         },
         "secureCookies": {
           "description": "Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL.",
@@ -3004,15 +3041,14 @@
                   "minLength": 1,
                   "type": "string"
                 },
-                "stateSecretFile": {
-                  "description": "A file holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from.",
-                  "minLength": 1,
-                  "type": "string"
+                "stateSecret": {
+                  "$ref": "#/definitions/config-serve.secretName",
+                  "description": "The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."
                 }
               },
               "required": [
                 "keys",
-                "stateSecretFile"
+                "stateSecret"
               ],
               "type": "object"
             },
@@ -3056,15 +3092,14 @@
                   "default": "24h",
                   "description": "How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h."
                 },
-                "stateSecretFile": {
-                  "description": "A file holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it.",
-                  "minLength": 1,
-                  "type": "string"
+                "stateSecret": {
+                  "$ref": "#/definitions/config-serve.secretName",
+                  "description": "The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."
                 }
               },
               "required": [
                 "keyId",
-                "stateSecretFile"
+                "stateSecret"
               ],
               "type": "object"
             },
@@ -3111,9 +3146,9 @@
               "description": "Speak the cluster protocol. A plain single server needs it off.",
               "type": "boolean"
             },
-            "passwordEnv": {
-              "$ref": "#/definitions/config-serve.envName",
-              "description": "The NAME of the variable holding the password."
+            "passwordSecret": {
+              "$ref": "#/definitions/config-serve.secretName",
+              "description": "The secret the password is (`valkey/password`). Unset connects with none."
             },
             "tls": {
               "description": "Speak TLS to the server.",
@@ -3131,12 +3166,9 @@
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
       "type": "string"
     },
-    "config-serve.envName": {
-      "description": "The NAME of an environment variable: letters, digits and underscores. A value is refused.",
-      "minLength": 1,
-      "not": {
-        "pattern": "^[0-9]|[^A-Za-z0-9_]"
-      },
+    "config-serve.secretName": {
+      "description": "The NAME of a secret, delivered as `secrets.source` says: `valkey/password`, `issuer/state-secret`. A value is never in the document.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
       "type": "string"
     },
     "config-serve.url": {
@@ -4431,6 +4463,34 @@
     },
     "secretMounts": {
       "$ref": "#/definitions/secretMounts"
+    },
+    "secrets": {
+      "description": "The secrets the config names, each one key of a Secret projected as the file <config.secrets.root>/<name>.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "The secret's name, as the config gives it: valkey/password.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "secretName": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "secretName",
+          "key"
+        ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "serviceAccount": {
       "additionalProperties": false,

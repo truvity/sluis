@@ -216,8 +216,11 @@ image:
 # config names those files by path, and the chart refuses a path that is not
 # where it mounts them.
 #
-# Secrets are never here. A key ending in `Env` names an environment
-# variable, and `secretEnv` (below) puts a Secret's key in it.
+# Secrets are never here. A key ending in `Secret` names a secret
+# (`valkey/password`), which `secrets` (below) delivers as a file under
+# `config.secrets.root`, and a confidential client's is
+# `clients/<client-id>/secret`, projected from the Secret its policy entry
+# names.
 #
 # `issuerURL` is baked into every token this service signs and into every
 # relying party's trust, so it must be stable for the life of the
@@ -242,6 +245,12 @@ config:
   probes:
     # liveness/readiness only.
     address: ":7070"
+  # How the secrets the config names are delivered: as files the chart
+  # projects (`secrets` below, and each confidential client's Secret), read on
+  # every use, so a rotated Secret takes effect without a restart.
+  secrets:
+    source: file
+    root: /var/run/sluis/secrets
   # The policy document the chart renders (`policy`, beside `exchange`,
   # `githubApps.catalogue` and `slackApps`) and mounts. Change the path and
   # the chart refuses until the mount agrees.
@@ -272,12 +281,12 @@ config:
   #
   #   valkey:
   #     address: valkey.example.svc:6379
-  #     passwordEnv: VALKEY_PASSWORD                          # with `secretEnv`
+  #     passwordSecret: valkey/password                       # with `secrets`
   #   directory:
-  #     workspaces:                                           # each key with `secretMounts`
+  #     workspaces:                                           # each key with `secrets`
   #       - backend: google
   #         admin: admin@example.com
-  #         keyFile: /var/run/access-issuer/directory/example/key.json
+  #         keySecret: directory/example/key
   #
   # The chart writes the apiVersion of every document it renders
   # (sluis.truvity.github.io/serve/v2, .../policy/v2), so
@@ -286,13 +295,24 @@ config:
   # (`policy.apps.github.runnerTiers`) and the exports (`policy.exports`) are
   # the policy document's.
 
-# Environment variables the config names, each from a Secret's key. This is
-# the only way a secret reaches the process: `valkey.passwordEnv`,
-# `oauthClient.secretEnv` and `adminPasswordEnv` name the variable, and a
-# secret is never in `config`.
+# The secrets the config names, each one key of a Secret projected as the
+# file <config.secrets.root>/<name>: `valkey.passwordSecret`,
+# `oauthClient.provider`'s providers/google/<provider>/client-id and
+# client-secret, `recovery.passwordSecret`, `signingKey.kms.stateSecret`, a
+# declared workspace's `keySecret`. A confidential client's secret is
+# projected from the Secret its policy entry names, without an entry here.
+#
+#   secrets:
+#     - name: valkey/password
+#       secretName: valkey
+#       key: password
+secrets: []
+
+# Environment variables from Secrets' keys, for a config whose
+# `secrets.source` is `env` (SLUIS_SECRET_<NAME>).
 #
 #   secretEnv:
-#     - name: VALKEY_PASSWORD
+#     - name: SLUIS_SECRET_VALKEY_PASSWORD
 #       secretName: valkey
 #       key: password
 secretEnv: []
@@ -315,9 +335,7 @@ telemetry:
     extraEnv: {}
 
 # Secrets mounted read-only as directories, for a file the config names by
-# path: `oauthClient.idFile`, `oauthClient.secretFile` and a declared
-# workspace's `directory.workspaces[].keyFile`. Each key of the Secret is a
-# file under `mountPath`.
+# path. Each key of the Secret is a file under `mountPath`.
 #
 #   secretMounts:
 #     - secretName: google-oauth-client

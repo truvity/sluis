@@ -94,9 +94,11 @@ spec:
             {{- with include "sluis.exportsMounts" . }}
             {{- . | nindent 12 }}
             {{- end }}
-            {{- if include "sluis.confidentialClients" . }}
-            - name: client-secrets
-              mountPath: /var/run/access-issuer/clients
+            {{- if include "sluis.secretFiles" . }}
+            # A directory, not a subPath: a secret is read on every use, so a
+            # rotated Secret reaches the running process.
+            - name: secrets
+              mountPath: /var/run/sluis/secrets
               readOnly: true
             {{- end }}
             {{- range .Values.secretMounts }}
@@ -149,21 +151,29 @@ spec:
         {{- with include "sluis.exportsVolumes" . }}
         {{- . | nindent 8 }}
         {{- end }}
-        {{- if include "sluis.confidentialClients" . }}
-        # One file per confidential client, named after the client id, so
-        # the service resolves a secret by reading a path and never by
-        # holding RBAC to read Secrets -- the same reason the signing key
-        # is a file.
-        - name: client-secrets
+        {{- if include "sluis.secretFiles" . }}
+        # Every secret the config names, as the file <root>/<name>, so the
+        # service resolves a secret by reading a path and never by holding
+        # RBAC to read Secrets -- the same reason the signing key is a file.
+        # A confidential client's is clients/<client-id>/secret, from the
+        # Secret its policy entry names.
+        - name: secrets
           projected:
             sources:
+              {{- range .Values.secrets }}
+              - secret:
+                  name: {{ .secretName }}
+                  items:
+                    - key: {{ .key }}
+                      path: {{ .name }}
+              {{- end }}
               {{- range $id, $client := (include "sluis.declaredClients" . | fromYaml) }}
               {{- if $client.secret }}
               - secret:
                   name: {{ $client.secret }}
                   items:
-                    - key: {{ $client.secretKey | default "client-secret" }}
-                      path: {{ $id }}
+                    - key: client-secret
+                      path: clients/{{ $id }}/secret
               {{- end }}
               {{- end }}
         {{- end }}

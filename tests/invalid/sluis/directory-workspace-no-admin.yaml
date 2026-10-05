@@ -5,4 +5,4 @@ config:
   directory:
     workspaces:
     - backend: google
-      keyFile: /var/run/keys/acme/key.json
+      keySecret: directory/acme/key

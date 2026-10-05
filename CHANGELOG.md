@@ -34,6 +34,46 @@
   render <dir>` and name it in each document's `policy.file`; until then a v1
   document keeps working unchanged.
 
+- **Breaking: a service document names its secrets; `secrets.source` delivers
+  them.** A key ending in `Secret` holds a secret's NAME, from the layout of
+  docs/decisions/0036: `valkey.passwordSecret` (`valkey/password`),
+  `recovery.passwordSecret` (`recovery/password`),
+  `signingKey.kms.stateSecret` and `signingKey.kmsWrapped.stateSecret`
+  (`issuer/state-secret`), a declared workspace's `keySecret`
+  (`directory/<id>/key`), and `oauthClient.provider`, whose two halves are
+  `providers/google/<provider>/client-id` and `client-secret`; a confidential
+  client's secret is `clients/<client-id>/secret`. `secrets: {source: env |
+  file | ssm, root}` says how a name is delivered: `env` reads
+  `SLUIS_SECRET_<NAME>`, `file` reads `<root>/<name>` on every use, `ssm` reads
+  every parameter under `<root>/private/config/` at once (decrypted, paged)
+  and again after `refresh` (5m). Retired, each refused in a v2 document with
+  where it went: `valkey.passwordEnv`, `oauthClient.idFile`, `.secretFile`,
+  `.secretEnv`, `adminPasswordEnv`, `recovery.passwordFile`,
+  `clientSecretsDir`, `signingKey.kms.stateSecretFile`,
+  `signingKey.kmsWrapped.stateSecretFile` (the `kms` and `kms-wrapped`
+  adapters' setting is `stateSecret` too) and `directory.workspaces[].keyFile`.
+  A v1 document keeps reading each secret where it named it.
+- **Breaking: SSM layout v3; an installation has one root, `secrets.root`
+  (`/sluis/<instance>`).** The `ssm` Secrets adapter takes it from the serve
+  document's `secrets.root` (`source: ssm`); naming another root under
+  `adapters.secrets.settings` is refused, and with neither the start is
+  refused. Two installations share an account by their roots:
+  `<root>/private/config/...` (what an operator seeds),
+  `<root>/private/credentials/...`, `<root>/export/...`. A v1 document that
+  names no root keeps `/sluis` (layout v2) until it moves. **First:** copy the
+  configuration secrets with `sluis migrate ssm-layout --to-root
+  /sluis/<instance>` (it renames `oauth/client-id`/`client-secret` to
+  `providers/google/default/...` and `clients/<id>` to `clients/<id>/secret`),
+  then the credentials with `sluis migrate --from <config on /sluis> --to
+  <config on /sluis/<instance>>`; the exports are written again by the next
+  exports pass.
+- **Breaking: on Lambda, `SLUIS_CONFIG` names the document; `SLUIS_CONFIG_FILE`,
+  `SLUIS_SECRET_FILES` and the `ssm:<path>` variables are retired** and refused
+  at start, naming the v1.62 Pulumi library to deploy with: a function the
+  v1.61 library deployed does not start on this binary, so the binary and the
+  library move together. The secrets are read by the document's `secrets`
+  source.
+
 ### Added
 
 - **`sluisctl policy render <file or directory> [-o <file>]`.** The one place
@@ -55,14 +95,29 @@
   gone: `exchange.clusters`, `exchange.aws`, `githubApps.catalogue` and
   `slackApps` are rendered into the policy document. `policy` is the policy
   document without its apiVersion (the chart writes it, and the values schema
-  holds it to the policy schema); `access` and `overlay` are removed (render an
-  access document first, `sluisctl policy render`, and pass the result as
-  `policy`); `directory.workspaces` is removed (declare them in
-  `config.directory.workspaces` and mount each key with `secretMounts`); a
-  confidential client's `secretKey` is removed (the key is `client-secret`).
+  holds it to the policy schema).
+  The secrets the config names are projected as files under
+  `/var/run/sluis/secrets` from the new `secrets` value (`{name, secretName,
+  key}`) and each confidential client's Secret (`clients/<id>/secret`), and
+  `config.secrets` must be `{source: file, root: /var/run/sluis/secrets}`
+  (the default); the `client-secrets` volume and `config.clientSecretsDir`
+  are gone. `secretEnv` stays, for `secrets.source: env`.
   `config.policy.file` must be `/var/run/access-issuer/policy/policy.yaml`
   (the controllers': `/var/run/github-roster/policy/policy.yaml`,
   `/var/run/slack-roster/policy/policy.yaml`).
+### Removed (chart values)
+
+| Value | Replacement |
+|---|---|
+| `access`, `overlay` | render the access document first, `sluisctl policy render <dir>`, and pass the result as `policy` |
+| `directory.workspaces` (`backend`, `admin`, `secretName`, `secretKey`, `id`, `serve`, `syncGroups`) | `config.directory.workspaces` (`backend`, `admin`, `id`, `serve`, `syncGroups`, `keySecret: directory/<id>/key`), the key projected with a `secrets` entry `{name: directory/<id>/key, secretName, key}` |
+| `policy.clients.<id>.secretKey` | none: the chart projects the key `client-secret` of the Secret `policy.clients.<id>.secret` names, as `clients/<id>/secret` |
+| `config.clientSecretsDir` | none: `config.secrets` (`{source: file, root: /var/run/sluis/secrets}`, the default) |
+| `config.exchange.clustersFile`, `.awsFile` | `exchange.clusters`, `exchange.aws` (rendered into the policy document), or `policy.exchange` |
+| `config.github.*`, `config.slack.catalogueFile`, `config.exports` | `policy.exchange.github.owners`, `policy.apps.github.runnerTiers`, `githubApps.catalogue` / `slackApps` (or `policy.apps`), `policy.exports` |
+| `controllerGithub.config.enabledOrgs`, `.catalogueFile`; `controllerSlack.config.enabledWorkspaces` | `policy.controllers.github.enabledOrgs`; the catalogue is the policy's; `policy.controllers.slack.enabledWorkspaces` |
+| `config.policyDir`, each controller's `config.policyDir` | `config.policy.file` (`/var/run/access-issuer/policy/policy.yaml`; the controllers' under `/var/run/github-roster/policy`, `/var/run/slack-roster/policy`) |
+
 ## v1.61.2
 
 Released automatically as a patch: last-known groups of identities are now kept in the shared State, fixing identity refusals after a cold start on Lambda or during a rollout when the directory cannot be vouched for.

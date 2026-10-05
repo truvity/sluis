@@ -19,7 +19,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -38,6 +37,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/verify"
@@ -63,13 +63,16 @@ type Config struct {
 	oauthClientID     string
 	oauthClientSecret string
 	secureCookies     bool
-	oauthSecretFile   string
-	oauthIDFile       string
-	recoveryEnabled   bool
-	recoveryAccount   string
-	cluster           string
-	recoveryAudience  string
-	clientSecretsDir  string
+	// oauthProvider names the OAuth client's secrets:
+	// providers/google/<provider>/client-id and .../client-secret.
+	oauthProvider    string
+	recoveryEnabled  bool
+	recoveryAccount  string
+	cluster          string
+	recoveryAudience string
+	// secrets delivers every secret this document names, by name: the
+	// stores' source, set at New.
+	secrets secrets.Source
 	// clusters and aws are whom the token exchange trusts: the policy
 	// document's exchange.clusters and exchange.aws.
 	clusters []config.FederatedCluster
@@ -88,12 +91,12 @@ type Config struct {
 	// chart's `signingKey.additional`.
 	additionalSigningKeyFiles []string
 	// kmsKeys, when set, replace signingKeyFile: AWS KMS keys, oldest
-	// first, the last signing. kmsStateSecretFile is what the sign-in state
+	// first, the last signing. kmsStateSecret names what the sign-in state
 	// derives from, since a KMS key has no private bytes of its own.
-	kmsKeys            []string
-	kmsAdditional      []config.SigningKeyKMSAlg
-	kmsRegion          string
-	kmsStateSecretFile string
+	kmsKeys        []string
+	kmsAdditional  []config.SigningKeyKMSAlg
+	kmsRegion      string
+	kmsStateSecret string
 	// kmsWrapped, when set, replaces signingKeyFile: key pairs KMS generates
 	// and wraps under one symmetric key (the `kms-wrapped` adapter).
 	kmsWrapped *config.SigningKeyKMSWrapped
@@ -134,12 +137,11 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		healthPort: listenOr(f.Probes, ":7070"),
 		issuerURL:  strings.TrimSuffix(f.IssuerURL, "/"),
 
-		allowInsecure:    f.AllowInsecure,
-		policy:           p,
-		inCluster:        f.InCluster,
-		release:          orDefault(f.Release, "sluis"),
-		consoleOrigin:    "",
-		clientSecretsDir: f.ClientSecretsDir,
+		allowInsecure: f.AllowInsecure,
+		policy:        p,
+		inCluster:     f.InCluster,
+		release:       orDefault(f.Release, "sluis"),
+		consoleOrigin: "",
 		// Names this cluster in a ServiceAccount's subject. A pod cannot
 		// discover it, and the same namespace and name exist on every
 		// cluster, so an installation that leaves it empty keeps the older
@@ -165,13 +167,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	var err error
 	if o := f.OAuthClient; o != nil {
 		c.oauthClientID = o.ID
-		c.oauthIDFile = o.IDFile
-		c.oauthSecretFile = o.SecretFile
-		if o.SecretEnv != "" {
-			if c.oauthClientSecret, err = config.Secret(o.SecretEnv); err != nil {
-				return Config{}, fmt.Errorf("oauthClient.secretEnv: %w", err)
-			}
-		}
+		c.oauthProvider = o.Provider
 	}
 	// What the storage ports need is read from the same file by [store.FromServe]
 	// at start; read here too so a bad value (an unset password variable)
@@ -186,13 +182,13 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 				return Config{}, errors.New("signingKey.file and signingKey.kms are exclusive: " +
 					"a key is a file or a KMS key, not both")
 			}
-			if len(k.KMS.Keys) == 0 || k.KMS.StateSecretFile == "" {
-				return Config{}, errors.New("signingKey.kms needs keys and stateSecretFile")
+			if len(k.KMS.Keys) == 0 || k.KMS.StateSecret == "" {
+				return Config{}, errors.New("signingKey.kms needs keys and stateSecret")
 			}
 			c.kmsKeys = k.KMS.Keys
 			c.kmsAdditional = k.KMS.Additional
 			c.kmsRegion = k.KMS.Region
-			c.kmsStateSecretFile = k.KMS.StateSecretFile
+			c.kmsStateSecret = k.KMS.StateSecret
 		}
 		if k.KMSWrapped != nil {
 			if k.File != "" || k.KMS != nil {
@@ -507,6 +503,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if stores == nil {
 		stores = &store.Stores{}
 	}
+	cfg.secrets = stores.Secrets
 	shared := openState(ctx, stores, log)
 
 	core := issuer.New(issuer.Config{
@@ -573,7 +570,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// Each KMS algorithm's newest key is its ring's primary, beside any files
 	// (a file and a KMS key for the same algorithm clash, as two files do).
 	additionalKeys = append(additionalKeys, kmsMore...)
-	if err = readClient(&cfg); err != nil {
+	if err = readClient(ctx, &cfg); err != nil {
 		return nil, err
 	}
 	verifiers, clusters, err := openVerifiers(ctx, cfg, log)
@@ -815,24 +812,24 @@ func (a *App) Run(ctx context.Context) error {
 // Secret takes effect when the kubelet refreshes the mount instead of
 // needing a restart.
 func clientSecrets(cfg Config, log *slog.Logger) func(string) (string, bool) {
-	if cfg.clientSecretsDir == "" {
+	if cfg.secrets == nil {
 		return nil
 	}
 	return func(clientID string) (string, bool) {
-		// A client id is a path SEGMENT here. One containing a separator
-		// would read a file the deployment never mounted, so it is
-		// refused rather than cleaned: there is no reading of "../" that
-		// the author could have meant.
-		if clientID == "" || strings.ContainsAny(clientID, `/\`) || clientID == "." || clientID == ".." {
+		// A client id is a segment of the secret's name. One that is not a
+		// name the source can hold would read a secret nobody declared, so it
+		// is refused rather than cleaned.
+		name := secrets.ClientSecret(clientID)
+		if clientID == "" || strings.ContainsAny(clientID, `/\`) || secrets.Check(name) != nil {
 			return "", false
 		}
-		raw, err := os.ReadFile(filepath.Join(cfg.clientSecretsDir, clientID)) //nolint:gosec // the id is checked above and the directory is deployment configuration
+		value, err := cfg.secrets.Get(context.Background(), name)
 		if err != nil {
 			log.Warn("a declared client's secret could not be read; that client cannot authenticate",
-				"client", clientID, "error", err)
+				"client", clientID, "secret", cfg.secrets.Describe(name), "error", err)
 			return "", false
 		}
-		return strings.TrimSpace(string(raw)), true
+		return value, true
 	}
 }
 
@@ -1053,36 +1050,46 @@ func nonEmpty(paths []string) []string {
 	return out
 }
 
-// readClient takes the OAuth client from the files a Secret is mounted
-// at, for the same reason the signing key comes from one: a credential in
-// an environment variable is a credential in every process listing and
-// every crash dump. The variables stay for a local run.
-//
-// The ID comes from the same Secret as the secret, rather than from a
-// chart value, so that both halves of one credential travel together and
-// the hub and this service read it the same way. It is not itself a
-// secret -- every browser sent to the provider carries it -- but a client
-// whose halves are configured in two places is a client that can be half
-// rotated.
-func readClient(cfg *Config) error {
-	for _, from := range []struct {
-		path string
-		into *string
-		what string
-	}{
-		{cfg.oauthIDFile, &cfg.oauthClientID, "id"},
-		{cfg.oauthSecretFile, &cfg.oauthClientSecret, "secret"},
-	} {
-		if from.path == "" {
-			continue
+// readClient takes the OAuth client from the secrets the document names, by
+// its provider: providers/google/<provider>/client-id (unless `id` gives it,
+// which is not a secret: every browser sent to the provider carries it) and
+// providers/google/<provider>/client-secret. Both halves come from one place,
+// so the hub and this service read the client the same way and a client is
+// never half rotated.
+func readClient(ctx context.Context, cfg *Config) error {
+	if cfg.oauthProvider == "" {
+		return nil
+	}
+	if cfg.secrets == nil {
+		return errors.New("oauthClient.provider: no secrets source is configured")
+	}
+	var err error
+	if cfg.oauthClientID == "" {
+		if cfg.oauthClientID, err = cfg.secrets.Get(ctx, secrets.ProviderClientID(cfg.oauthProvider)); err != nil {
+			return fmt.Errorf("read the OAuth client id: %w", err)
 		}
-		raw, err := os.ReadFile(from.path) //nolint:gosec // the path is deployment configuration
-		if err != nil {
-			return fmt.Errorf("read the OAuth client %s: %w", from.what, err)
-		}
-		*from.into = strings.TrimSpace(string(raw))
+	}
+	if cfg.oauthClientSecret, err = cfg.secrets.Get(ctx, secrets.ProviderClientSecret(cfg.oauthProvider)); err != nil {
+		return fmt.Errorf("read the OAuth client secret: %w", err)
 	}
 	return nil
+}
+
+// readStateSecret reads the sign-in state's secret the document names, and
+// parses it.
+func readStateSecret(ctx context.Context, cfg Config, name, key string) ([]byte, error) {
+	if cfg.secrets == nil {
+		return nil, fmt.Errorf("%s: no secrets source is configured", key)
+	}
+	raw, err := cfg.secrets.Get(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", key, err)
+	}
+	seed, err := parseStateSecret([]byte(raw))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", key, err)
+	}
+	return seed, nil
 }
 
 // openState decides where a login in progress lives.
@@ -1240,13 +1247,9 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 func kmsSigningKeys(
 	ctx context.Context, cfg Config, api issuer.KMSAPI, log *slog.Logger,
 ) (refs []*issuer.KMSKeyRefs, earlier []*issuer.SigningKey, primary *issuer.SigningKey, more []*issuer.SigningKey, err error) {
-	raw, err := os.ReadFile(cfg.kmsStateSecretFile) //nolint:gosec // the path is deployment configuration
+	seed, err := readStateSecret(ctx, cfg, cfg.kmsStateSecret, "signingKey.kms.stateSecret")
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("read signingKey.kms.stateSecretFile: %w", err)
-	}
-	seed, err := parseStateSecret(raw)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("signingKey.kms.stateSecretFile: %w", err)
+		return nil, nil, nil, nil, err
 	}
 	if api == nil {
 		var loaders []func(*awsconfig.LoadOptions) error
@@ -1397,7 +1400,7 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 			return errors.New("the signing adapter is kms and signingKey.kmsWrapped is set: a key is a KMS key or a KMS-wrapped key pair, not both")
 		}
 		if len(cfg.kmsKeys) == 0 && k != nil {
-			cfg.kmsKeys, cfg.kmsRegion, cfg.kmsStateSecretFile = k.Keys, k.Region, k.StateSecretFile
+			cfg.kmsKeys, cfg.kmsRegion, cfg.kmsStateSecret = k.Keys, k.Region, k.StateSecret
 			for _, a := range k.Additional {
 				cfg.kmsAdditional = append(cfg.kmsAdditional, config.SigningKeyKMSAlg{Alg: a.Alg, Keys: a.Keys})
 			}
@@ -1415,7 +1418,7 @@ func applySigningPlan(ctx context.Context, cfg *Config, plan port.Table) error {
 
 // wrappedFromPort is the adapter's settings as the file's `signingKey.kmsWrapped`.
 func wrappedFromPort(k *port.KMSWrappedSigning) (*config.SigningKeyKMSWrapped, error) {
-	out := &config.SigningKeyKMSWrapped{KeyID: k.KeyID, Region: k.Region, StateSecretFile: k.StateSecretFile, Algorithms: k.Algorithms}
+	out := &config.SigningKeyKMSWrapped{KeyID: k.KeyID, Region: k.Region, StateSecret: k.StateSecret, Algorithms: k.Algorithms}
 	for name, v := range map[string]struct {
 		in  string
 		out **config.Duration
@@ -1451,8 +1454,8 @@ func (c Config) wrappedConfig() (issuer.WrappedConfig, error) {
 		Retain:      dur(k.Retain, c.keyOverlap),
 		Interval:    c.keyPollInterval,
 	}
-	if k.StateSecretFile == "" {
-		return out, errors.New("signingKey.kmsWrapped.stateSecretFile is required")
+	if k.StateSecret == "" {
+		return out, errors.New("signingKey.kmsWrapped.stateSecret is required")
 	}
 	algs := k.Algorithms
 	if len(algs) == 0 {
@@ -1478,13 +1481,9 @@ func wrappedSigningKeys(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	raw, err := os.ReadFile(cfg.kmsWrapped.StateSecretFile) //nolint:gosec // the path is deployment configuration
+	seed, err := readStateSecret(ctx, cfg, cfg.kmsWrapped.StateSecret, "signingKey.kmsWrapped.stateSecret")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("read signingKey.kmsWrapped.stateSecretFile: %w", err)
-	}
-	seed, err := parseStateSecret(raw)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("signingKey.kmsWrapped.stateSecretFile: %w", err)
+		return nil, nil, nil, err
 	}
 	if err = checkStateSecret(ctx, state, seed); err != nil {
 		return nil, nil, nil, err
@@ -1581,7 +1580,7 @@ func checkStateSecret(ctx context.Context, state issuer.State, seed []byte) erro
 		return fmt.Errorf("read the state secret's fingerprint: %w", err)
 	}
 	if !hmac.Equal(stored, fingerprint) {
-		return errors.New("signingKey.kms.stateSecretFile differs from the secret other replicas use " +
+		return errors.New("signingKey.kms.stateSecret differs from the secret other replicas use " +
 			"(fingerprint mismatch): every replica needs the same file. To rotate it deliberately, " +
 			"delete the shared state key " + key)
 	}

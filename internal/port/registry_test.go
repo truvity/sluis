@@ -240,11 +240,11 @@ func TestTheAWSLambdaPresetsSignWithWrappedKeys(t *testing.T) {
 	if _, err := d.Factory(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "signingKey.kmsWrapped") {
 		t.Errorf("no settings: %v", err)
 	}
-	built, err := d.Factory(context.Background(), port.Settings{"keyId": "alias/k", "stateSecretFile": "/s", "rotateEvery": "12h"})
+	built, err := d.Factory(context.Background(), port.Settings{"keyId": "alias/k", "stateSecret": "s", "rotateEvery": "12h"})
 	if k, _ := built.(*port.KMSWrappedSigning); err != nil || k == nil || k.KeyID != "alias/k" || k.RotateEvery != "12h" {
 		t.Errorf("%+v %v", built, err)
 	}
-	if _, err := d.Factory(context.Background(), port.Settings{"keyId": "k", "stateSecretFile": "/s", "typo": "x"}); err == nil {
+	if _, err := d.Factory(context.Background(), port.Settings{"keyId": "k", "stateSecret": "s", "typo": "x"}); err == nil {
 		t.Error("an unknown setting was accepted")
 	}
 }

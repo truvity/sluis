@@ -73,6 +73,7 @@ Commands:
   tick github <target>  one GitHub tick, once: an organisation's login, or github:links for the link check
   tick slack <target>   one Slack tick, once: a workspace's key
   migrate               copy the State from one storage to another: --from <config> --to <config>
+  migrate ssm-layout    copy the configuration secrets in SSM from layout v2 to v3: --to-root /sluis/<instance>
 
 Each command but migrate takes --config <file> and nothing else but --version and --help (a tick also
 takes its target, first); migrate takes --from and --to, each a configuration file, and its own flags

@@ -9,7 +9,9 @@
 // # Layout
 //
 // A port path `p` is the parameter `<root>/private/<p>`, except a path under
-// `export/`, which is `<root>/export/<rest>`. The root defaults to `/sluis`.
+// `export/`, which is `<root>/export/<rest>`. The root is the installation's,
+// `/sluis/<instance>` (layout v3, docs/decisions/0036), and has no default:
+// two installations share an account by their roots.
 // The split lets a consumer's External Secrets Operator be granted
 // `<root>/export/*` and nothing else: the service's own secrets are under
 // `<root>/private/`, which no consumer reads.
@@ -69,9 +71,6 @@ import (
 	"github.com/truvity/sluis/internal/port"
 )
 
-// DefaultRoot is the parameter hierarchy the adapter lives under.
-const DefaultRoot = "/sluis"
-
 const (
 	privateDir = "private"
 	exportDir  = "export"
@@ -86,8 +85,8 @@ const (
 
 // Config is where the parameters live.
 type Config struct {
-	// Root is the parameter hierarchy, `/sluis` by default: a leading slash,
-	// no trailing one.
+	// Root is the installation's parameter hierarchy, `/sluis/<instance>`:
+	// a leading slash, no trailing one. Required.
 	Root string
 	// KMSKeyID, when set, is the id, ARN or alias of the customer-managed key
 	// the SecureStrings are encrypted with. Empty is the AWS-managed key.
@@ -149,7 +148,7 @@ func NewWithAPI(api API, cfg Config) (*Secrets, error) {
 // rootOf normalises and checks the root.
 func rootOf(root string) (string, error) {
 	if root == "" {
-		return DefaultRoot, nil
+		return "", errors.New("ssm: root is required: the installation's /sluis/<instance> (layout v3)")
 	}
 	if !strings.HasPrefix(root, "/") || strings.HasSuffix(root, "/") {
 		return "", fmt.Errorf("ssm: root %q must begin with a slash and not end with one", root)

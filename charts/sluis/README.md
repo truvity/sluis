@@ -8,8 +8,9 @@ as three Deployments: `sluis serve`, `sluis controller github` and
 `sluis controller slack`. Each controller has no listener, and is a dry run for every organisation or
 workspace until it is listed in `policy.controllers.github.enabledOrgs` or `policy.controllers.slack.enabledWorkspaces`.
 Each component is configured by one file, its `config` value, rendered as it
-stands and validated against the schema its binary uses; secrets reach a pod only
-through `secretEnv`. See [docs/reference/configuration.md](../../docs/reference/configuration.md).
+stands and validated against the schema its binary uses; a secret is named in it
+and reaches a pod as a file the chart projects from `secrets` (or, for
+`secrets.source: env`, through `secretEnv`). See [docs/reference/configuration.md](../../docs/reference/configuration.md).
 Published to `ghcr.io/truvity/charts/sluis` on every
 `v*` tag of the repository; the tag is the chart's version.
 

@@ -74,7 +74,7 @@ func (c Config) legacyTable() port.Table {
 	if k := c.sel.SigningKMS; k != nil && !c.sel.SigningFile {
 		// What `signingKey.kms` has always meant, as settings. Marshalling a
 		// struct of strings cannot fail.
-		legacy := port.KMSSigning{Keys: k.Keys, Region: k.Region, StateSecretFile: k.StateSecretFile}
+		legacy := port.KMSSigning{Keys: k.Keys, Region: k.Region, StateSecret: k.StateSecret}
 		for _, a := range k.Additional {
 			legacy.Additional = append(legacy.Additional, port.KMSSigningAlg{Alg: a.Alg, Keys: a.Keys})
 		}
@@ -84,7 +84,7 @@ func (c Config) legacyTable() port.Table {
 		t[port.ConcernSigning] = port.Choice{Adapter: "kms", Settings: settings}
 	}
 	if k := c.sel.SigningWrapped; k != nil && !c.sel.SigningFile {
-		legacy := port.KMSWrappedSigning{KeyID: k.KeyID, Region: k.Region, StateSecretFile: k.StateSecretFile, Algorithms: k.Algorithms}
+		legacy := port.KMSWrappedSigning{KeyID: k.KeyID, Region: k.Region, StateSecret: k.StateSecret, Algorithms: k.Algorithms}
 		if k.RotateEvery != nil {
 			legacy.RotateEvery = k.RotateEvery.D().String()
 		}
@@ -224,6 +224,35 @@ func (c Config) apply(t port.Table) (Config, error) {
 	return c, nil
 }
 
+// ssmLayoutV2Root is the SSM root of layout v2, which a document converted
+// from v1 keeps when it names none.
+const ssmLayoutV2Root = "/sluis"
+
+// ssmRoot is the ssm Secrets adapter's settings with its root: the serve
+// document's `secrets.root` when its source is ssm, which is the one root of an
+// installation (/sluis/<instance>, layout v3). The adapter may name it again,
+// and naming another is refused: one installation, one root. A document
+// converted from v1 that names neither keeps /sluis (layout v2) until it moves.
+func (c Config) ssmRoot(settings port.Settings) (port.Settings, error) {
+	named, _ := settings["root"].(string)
+	want := c.SecretsRoot
+	switch {
+	case want != "" && named != "" && named != want:
+		return nil, fmt.Errorf("adapters.secrets: the ssm adapter's root %q is not secrets.root %q: an installation has one root", named, want)
+	case named != "":
+		return settings, nil
+	case want == "" && c.Converted:
+		want = ssmLayoutV2Root
+	case want == "":
+		return nil, errors.New("adapters.secrets: the ssm adapter has no root: set secrets: {source: ssm, root: /sluis/<instance>}")
+	}
+	out := port.Settings{"root": want}
+	for k, v := range settings {
+		out[k] = v
+	}
+	return out, nil
+}
+
 // secretsOf builds the Secrets port the plan chose, nil when none was chosen.
 func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if c.secrets == nil {
@@ -233,7 +262,14 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if !ok || d.Factory == nil {
 		return nil, fmt.Errorf("adapters: secrets adapter %q is registered but this build does not serve with it yet", c.secrets.Adapter)
 	}
-	built, err := d.Factory(ctx, c.secrets.Settings)
+	settings := c.secrets.Settings
+	if c.secrets.Adapter == "ssm" {
+		var err error
+		if settings, err = c.ssmRoot(settings); err != nil {
+			return nil, err
+		}
+	}
+	built, err := d.Factory(ctx, settings)
 	if err != nil {
 		return nil, fmt.Errorf("adapters.secrets: %w", err)
 	}

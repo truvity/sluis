@@ -2,8 +2,8 @@ package hub
 
 // Declared is one workspace the deployment owns, as the service document's
 // `directory.workspaces` states it. It is deliberately thin: an id the
-// deployment may know, a backend, an admin to act as, and where the
-// credential is mounted.
+// deployment may know, a backend, an admin to act as, and the
+// credential.
 // Everything else — the domains, the tenant's own id — is discovered,
 // because a value maintained by hand is a value that drifts.
 type Declared struct {
@@ -16,8 +16,9 @@ type Declared struct {
 	Backend string `yaml:"backend"`
 	// Admin is the account the credential impersonates.
 	Admin string `yaml:"admin"`
-	// KeyFile is where the service-account key is mounted.
-	KeyFile string `yaml:"keyFile"`
+	// Key is the service-account key, as the secret the declaration names
+	// delivered it.
+	Key []byte `yaml:"-"`
 	// Serve narrows the tenant to a subset of its domains. Optional:
 	// empty serves every domain discovery returns. A domain named here
 	// that the tenant does not own routes nothing and is reported as

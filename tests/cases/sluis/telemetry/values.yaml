@@ -1,6 +1,6 @@
 # Telemetry wired (ADR 0006): every pod of the app gets the SDK environment,
-# a service name of its own, and the extra OTEL_* entries; secretEnv still
-# renders beside it on the service.
+# a service name of its own, and the extra OTEL_* entries; the secrets volume
+# still renders beside it on the service.
 exchange:
   clusters:
     - name: example
@@ -10,9 +10,9 @@ config:
   issuerURL: https://issuer.example
   valkey:
     address: valkey.example.svc:6379
-    passwordEnv: VALKEY_PASSWORD
-secretEnv:
-  - name: VALKEY_PASSWORD
+    passwordSecret: valkey/password
+secrets:
+  - name: valkey/password
     secretName: valkey
     key: password
 controllerGithub:

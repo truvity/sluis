@@ -25,6 +25,7 @@ import (
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/store"
 )
 
 // kmsFake holds several keys by id: *ecdsa.PrivateKey (P-384) or *rsa.PrivateKey (3072).
@@ -74,7 +75,7 @@ func kmsConfigWith(t *testing.T, content string, keys ...string) func(*config.Se
 		t.Fatal(err)
 	}
 	return func(f *config.Serve) {
-		f.SigningKey = &config.SigningKey{KMS: &config.SigningKeyKMS{Keys: keys, StateSecretFile: secret}}
+		f.SigningKey = &config.SigningKey{KMS: &config.SigningKeyKMS{Keys: keys, StateSecret: asName(secret)}}
 	}
 }
 
@@ -104,7 +105,7 @@ func TestKMSKeysArePublishedFromTheList(t *testing.T) {
 func TestKMSAndFileAreExclusive(t *testing.T) {
 	t.Parallel()
 	f := &config.Serve{IssuerURL: "https://issuer.example",
-		SigningKey: &config.SigningKey{File: "/k", KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecretFile: "/s"}}}
+		SigningKey: &config.SigningKey{File: "/k", KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecret: "s"}}}
 	if _, err := issuerapp.FromConfig(withPolicy(t, f)); err == nil || !strings.Contains(err.Error(), "exclusive") {
 		t.Fatalf("got %v", err)
 	}
@@ -124,13 +125,13 @@ func TestAPlaceholderStateSecretIsRefused(t *testing.T) {
 			Policy: &config.PolicyRef{File: filepath.Join(policyDir, "policy.yaml")},
 			Listen: &config.Address{Address: ":0"}, Probes: &config.Address{Address: ":0"},
 			SigningKey: &config.SigningKey{KMS: &config.SigningKeyKMS{Keys: []string{"a"},
-				StateSecretFile: writeTemp(t, content)}}}))
+				StateSecret: asName(writeTemp(t, content))}}}))
 		if err != nil {
 			t.Fatal(err)
 		}
 		_, err = issuerapp.New(context.Background(), cfg,
-			issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"a": a}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-		if err == nil || !strings.Contains(err.Error(), "stateSecretFile") {
+			issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"a": a}, Stores: &store.Stores{Secrets: testSecrets}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if err == nil || !strings.Contains(err.Error(), "stateSecret") {
 			t.Errorf("%s: got %v", name, err)
 		}
 	}
@@ -191,7 +192,7 @@ func TestKMSRS256AndAnRS256FileClash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = issuerapp.New(context.Background(), cfg, issuerapp.Deps{Directory: nobody{},
+	_, err = issuerapp.New(context.Background(), cfg, issuerapp.Deps{Directory: nobody{}, Stores: &store.Stores{Secrets: testSecrets},
 		KMS: kmsFake{"alias/es": a, "alias/rs": r}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err == nil || !strings.Contains(err.Error(), "RS256") {
 		t.Fatalf("got %v", err)

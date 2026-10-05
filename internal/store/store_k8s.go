@@ -8,6 +8,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -26,6 +27,9 @@ type Backend = legacy.Backend
 type k8sConfig struct {
 	// Valkey is where the shared cache is; an empty address is none.
 	Valkey valkey.Config
+	// ValkeyPasswordSecret names its password, resolved through Secrets when
+	// the Valkey is opened. Empty is none.
+	ValkeyPasswordSecret string
 	// KubeClient, when set, opens the namespace's objects in place of the
 	// pod's own ServiceAccount: an operator's tool that runs from a
 	// workstation (sluis migrate) names a kubeconfig this way.
@@ -33,10 +37,11 @@ type k8sConfig struct {
 }
 
 func (c *Config) fromServeK8s(f *config.Serve) error {
-	var err error
 	c.Valkey = valkeyOf(f.Release, f.Valkey)
-	c.Valkey.Password, err = secretOf(f.Valkey)
-	return err
+	if f.Valkey != nil {
+		c.ValkeyPasswordSecret = f.Valkey.PasswordSecret
+	}
+	return nil
 }
 
 // kubeBackend opens the namespace's objects as far as the configuration needs.
@@ -84,13 +89,17 @@ func valkeyOf(release string, v *config.Valkey) valkey.Config {
 	return c
 }
 
-func secretOf(v *config.Valkey) (string, error) {
-	if v == nil || v.PasswordEnv == "" {
+// valkeyPassword resolves the password the document names, when it names one.
+func valkeyPassword(ctx context.Context, cfg Config) (string, error) {
+	if cfg.ValkeyPasswordSecret == "" {
 		return "", nil
 	}
-	password, err := config.Secret(v.PasswordEnv)
+	if cfg.Secrets == nil {
+		return "", errors.New("valkey.passwordSecret: no secrets source is configured")
+	}
+	password, err := cfg.Secrets.Get(ctx, cfg.ValkeyPasswordSecret)
 	if err != nil {
-		return "", fmt.Errorf("valkey.passwordEnv: %w", err)
+		return "", fmt.Errorf("valkey.passwordSecret: %w", err)
 	}
 	return password, nil
 }
@@ -113,6 +122,11 @@ func openLegacy(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, err
 	}
 
 	if cfg.Valkey.Address != "" {
+		password, err := valkeyPassword(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Valkey.Password = password
 		shared, err := valkey.OpenState(ctx, cfg.Valkey)
 		if err != nil {
 			return nil, err

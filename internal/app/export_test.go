@@ -47,6 +47,11 @@ type KeptForTest struct {
 // OpenStoresForTest runs the one switch between the kube-backed domain stores
 // and the port-backed ones.
 func OpenStoresForTest(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (KeptForTest, error) {
+	declared, err := declaredOAuthClient(ctx, cfg.oauthClient, st.Secrets)
+	if err != nil {
+		return KeptForTest{}, err
+	}
+	cfg.oauthDeclared = declared
 	kept, err := openStores(ctx, cfg, st, log)
 	if err != nil {
 		return KeptForTest{}, err

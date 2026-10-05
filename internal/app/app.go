@@ -22,7 +22,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -53,6 +52,7 @@ import (
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
+	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/server"
 	"github.com/truvity/sluis/internal/settings"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
@@ -84,11 +84,10 @@ type Config struct {
 	recoveryAccount  string
 	recoveryAudience string
 	loginDirectory   bool
-	adminPassword    string
-	// recoveryFile is where the password is read from instead of
+	// recoveryPassword names the recovery password's secret, read instead of
 	// being generated, outside a cluster.
-	recoveryFile    string
-	sessionLifetime time.Duration
+	recoveryPassword string
+	sessionLifetime  time.Duration
 	// absoluteLifetime caps the console's own session the same way it caps
 	// a per-client one in the issuer: read from the SAME key
 	// the issuer's config reads (lifetimes.absolute), because the
@@ -113,6 +112,9 @@ type Config struct {
 	// oauthDeclared is the client declared by file, value or variable: set
 	// off-cluster, where there is no Secret to read it from.
 	oauthDeclared settings.OAuthClient
+	// oauthClient is the client the document declares, read at New through
+	// the secrets source.
+	oauthClient *config.OAuthClient
 	// audit is the audit installation this service connects to, if any.
 	audit audit.Config
 	// auditQuery is its query service, for the console's Audit page, and
@@ -173,7 +175,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		}
 		c.recoveryAccount = orDefault(r.ServiceAccount, c.recoveryAccount)
 		c.recoveryAudience = orDefault(r.Audience, c.recoveryAudience)
-		c.recoveryFile = r.PasswordFile
+		c.recoveryPassword = r.PasswordSecret
 	}
 	if d := f.Directory; d != nil {
 		c.workspaces = d.Workspaces
@@ -190,18 +192,11 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		}
 	}
 	var err error
-	if f.AdminPasswordEnv != "" {
-		if c.adminPassword, err = config.Secret(f.AdminPasswordEnv); err != nil {
-			return Config{}, fmt.Errorf("adminPasswordEnv: %w", err)
-		}
-	}
 	if o := f.OAuthClient; o != nil {
 		c.oauthSecretName = o.SecretName
 		c.oauthIDKey = o.IDKey
 		c.oauthSecretKey = o.SecretKey
-		if c.oauthDeclared, err = declaredOAuthClient(o); err != nil {
-			return Config{}, fmt.Errorf("oauthClient: %w", err)
-		}
+		c.oauthClient = o
 	}
 	// The instance is the pod, which is its hostname in a cluster: it names
 	// this replica on every audit record.
@@ -352,37 +347,32 @@ func openSnapshots(ctx context.Context, st *store.Stores, log *slog.Logger) hub.
 // in an etcd backup, and an audit trail that names who recovered rather
 // than "admin". Anywhere else there is nothing to prove access to, so a
 // password is what is left: the one recovery.passwordFile holds (a platform
-// puts it there, e.g. from a secret store), or adminPasswordEnv's, or one
-// generated and printed once.
-func openRecovery(ctx context.Context, cfg Config, kept stores, log *slog.Logger) (server.Recovery, error) {
+// delivers as the secret recovery.passwordSecret names), or one generated and
+// printed once.
+func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Source, log *slog.Logger) (server.Recovery, error) {
 	if !cfg.recoveryEnabled {
 		log.InfoContext(ctx, "no recovery sign-in: this hub can only be entered through the directory")
 		return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
 	}
 	if kept.reviewToken == nil {
-		password := cfg.adminPassword
-		if cfg.recoveryFile != "" {
-			raw, err := os.ReadFile(cfg.recoveryFile)
-			if err != nil {
-				// The path is left out of the error: it travels to a log, and a
-				// name that says "password" is where a reader looks for one.
-				var pathErr *fs.PathError
-				if errors.As(err, &pathErr) {
-					err = pathErr.Err
-				}
-				return nil, fmt.Errorf("recovery.passwordFile could not be read: %w", err)
+		password := ""
+		if cfg.recoveryPassword != "" {
+			if src == nil {
+				return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
 			}
-			if password = strings.TrimSpace(string(raw)); password == "" {
-				return nil, errors.New("recovery.passwordFile is empty")
+			var err error
+			if password, err = src.Get(ctx, cfg.recoveryPassword); err != nil {
+				return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
 			}
-			log.InfoContext(ctx, "recovery sign-in is by the secret file the configuration names")
+			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names",
+				"secret", src.Describe(cfg.recoveryPassword))
 		}
 		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
 			// from its own log, and print it there. Fail closed instead: no recovery,
 			// and no secret in any line.
 			log.ErrorContext(ctx, "recovery sign-in is enabled but no password is configured on this "+
-				"function (recovery.passwordFile or adminPasswordEnv): recovery is NOT available. "+
+				"function (recovery.passwordSecret): recovery is NOT available. "+
 				"Set the password, or set recovery.enabled: false to silence this")
 			return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
 		}
@@ -661,6 +651,11 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	if log == nil {
 		log = slog.Default()
 	}
+	oauthDeclared, err := declaredOAuthClient(ctx, cfg.oauthClient, st.Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("oauthClient: %w", err)
+	}
+	cfg.oauthDeclared = oauthDeclared
 	kept, err := openStores(ctx, cfg, st, log)
 	if err != nil {
 		return nil, err
@@ -729,7 +724,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		return nil, err
 	}
 
-	recovery, err := openRecovery(ctx, cfg, kept, log)
+	recovery, err := openRecovery(ctx, cfg, kept, st.Secrets, log)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +750,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 		log.InfoContext(ctx, "the hub's own sign-in is off: the ways in are a gateway that "+
 			"forwards an identity, and recovery. Connecting a directory is unaffected")
 	}
-	adopted, err := adoptDeclared(ctx, directory, cfg.workspaces, log)
+	adopted, err := adoptDeclared(ctx, directory, cfg.workspaces, st.Secrets, log)
 	if err != nil {
 		return nil, err
 	}
@@ -1007,13 +1002,20 @@ func FallbackPolicy(demonstration bool) (policy.Policy, error) {
 // hub that refuses to start is visible in one place; a hub that quietly
 // serves less than it was configured to is visible nowhere.
 func adoptDeclared(
-	ctx context.Context, directory *hub.Hub, workspaces []config.DirectoryWorkspace, log *slog.Logger,
+	ctx context.Context, directory *hub.Hub, workspaces []config.DirectoryWorkspace, src secrets.Source, log *slog.Logger,
 ) (map[string]bool, error) {
 	adopted := map[string]bool{}
 	for i := range workspaces {
 		w := &workspaces[i]
+		if src == nil {
+			return nil, fmt.Errorf("declared workspace %q: no secrets source is configured", w.Backend+"/"+w.Admin)
+		}
+		key, err := src.Get(ctx, w.KeySecret)
+		if err != nil {
+			return nil, fmt.Errorf("declared workspace %q: keySecret: %w", w.Backend+"/"+w.Admin, err)
+		}
 		declared := &hub.Declared{
-			ID: w.ID, Backend: w.Backend, Admin: w.Admin, KeyFile: w.KeyFile,
+			ID: w.ID, Backend: w.Backend, Admin: w.Admin, Key: []byte(key),
 			Serve: w.Serve, SyncGroups: w.SyncGroups,
 		}
 		reader, err := openBackend(ctx, declared)
@@ -1145,11 +1147,7 @@ func openStored(
 // discover it from a console with nothing in it.
 var backendOpeners = map[string]func(ctx context.Context, d *hub.Declared) (backend.Backend, error){
 	"google": func(ctx context.Context, d *hub.Declared) (backend.Backend, error) {
-		key, err := os.ReadFile(d.KeyFile) //nolint:gosec // the path is deployment configuration, not input
-		if err != nil {
-			return nil, fmt.Errorf("read the service-account key: %w", err)
-		}
-		return google.Open(ctx, key, d.Admin)
+		return google.Open(ctx, d.Key, d.Admin)
 	},
 }
 

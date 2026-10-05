@@ -87,9 +87,9 @@ type (
 		Enabled        *bool  `json:"enabled,omitempty"`
 		ServiceAccount string `json:"serviceAccount,omitempty"`
 		Audience       string `json:"audience,omitempty"`
-		// PasswordFile is the recovery password, for a hub that is not in a
-		// cluster: the file it is read from, once, at start.
-		PasswordFile string `json:"passwordFile,omitempty"`
+		// PasswordSecret names the recovery password, for a hub that is not
+		// in a cluster: `recovery/password` in the layout.
+		PasswordSecret string `json:"passwordSecret,omitempty"`
 	}
 
 	// Forwarded is a sign-in an authenticating proxy in front of the console
@@ -121,10 +121,11 @@ type (
 	// OAuthClient is the client registered once with the directory backend.
 	// Its secret is a file or a declared variable, never a value.
 	OAuthClient struct {
-		ID         string `json:"id,omitempty"`
-		IDFile     string `json:"idFile,omitempty"`
-		SecretFile string `json:"secretFile,omitempty"`
-		SecretEnv  string `json:"secretEnv,omitempty"`
+		ID string `json:"id,omitempty"`
+		// Provider names the client's two secrets,
+		// providers/google/<provider>/client-id and .../client-secret. The
+		// id may instead be ID, which is not a secret.
+		Provider   string `json:"provider,omitempty"`
 		SecretName string `json:"secretName,omitempty"`
 		IDKey      string `json:"idKey,omitempty"`
 		SecretKey  string `json:"secretKey,omitempty"`
@@ -150,8 +151,8 @@ type (
 		// KeyID is the symmetric application key: an id, an ARN or an alias.
 		KeyID  string `json:"keyId"`
 		Region string `json:"region,omitempty"`
-		// StateSecretFile is the sign-in state's secret, as for `kms`.
-		StateSecretFile string `json:"stateSecretFile,omitempty"`
+		// StateSecret names the sign-in state's secret, as for `kms`.
+		StateSecret string `json:"stateSecret,omitempty"`
 		// Algorithms are ES384 and/or RS256, the first the default. Unset is
 		// ES384 and RS256.
 		Algorithms []string `json:"algorithms,omitempty"`
@@ -167,9 +168,9 @@ type (
 
 	// SigningKeyKMS is the AWS KMS source of the primary signing key.
 	SigningKeyKMS struct {
-		Keys            []string `json:"keys,omitempty"`
-		Region          string   `json:"region,omitempty"`
-		StateSecretFile string   `json:"stateSecretFile,omitempty"`
+		Keys        []string `json:"keys,omitempty"`
+		Region      string   `json:"region,omitempty"`
+		StateSecret string   `json:"stateSecret,omitempty"`
 		// Additional is every OTHER algorithm signed at once, each on its own
 		// ordered key list, beside Keys (ES384).
 		Additional []SigningKeyKMSAlg `json:"additional,omitempty"`
@@ -183,10 +184,10 @@ type (
 
 	// Valkey is the shared store for logins in progress and snapshots.
 	Valkey struct {
-		Address     string `json:"address,omitempty"`
-		PasswordEnv string `json:"passwordEnv,omitempty"`
-		TLS         bool   `json:"tls,omitempty"`
-		Cluster     *bool  `json:"cluster,omitempty"`
+		Address        string `json:"address,omitempty"`
+		PasswordSecret string `json:"passwordSecret,omitempty"`
+		TLS            bool   `json:"tls,omitempty"`
+		Cluster        *bool  `json:"cluster,omitempty"`
 	}
 
 	// PortsExport names the adapter behind the Export port.
@@ -275,6 +276,18 @@ type (
 		PathStyle bool   `json:"pathStyle,omitempty"`
 	}
 
+	// Secrets is how the secrets a document names are delivered: `env`
+	// (SLUIS_SECRET_<NAME>), `file` (<root>/<name>, read on every use) or
+	// `ssm` (<root>/private/config/<name>, read at once and again after
+	// `refresh`). See internal/secrets.
+	Secrets struct {
+		Source   string    `json:"source"`
+		Root     string    `json:"root,omitempty"`
+		Region   string    `json:"region,omitempty"`
+		Endpoint string    `json:"endpoint,omitempty"`
+		Refresh  *Duration `json:"refresh,omitempty"`
+	}
+
 	// PolicyRef names the one policy document a process decides by: the
 	// canonical document `sluisctl policy render` writes. It is read once, at
 	// start; a change is a new instance.
@@ -296,7 +309,7 @@ type (
 		ID         string   `json:"id,omitempty"`
 		Backend    string   `json:"backend"`
 		Admin      string   `json:"admin"`
-		KeyFile    string   `json:"keyFile"`
+		KeySecret  string   `json:"keySecret"`
 		Serve      []string `json:"serve,omitempty"`
 		SyncGroups []string `json:"syncGroups,omitempty"`
 	}
@@ -368,8 +381,8 @@ type Serve struct {
 	SecureCookies *bool      `json:"secureCookies,omitempty"`
 	GroupsScoping string     `json:"groupsScoping,omitempty"`
 
-	ClientSecretsDir string `json:"clientSecretsDir,omitempty"`
-	AdminPasswordEnv string `json:"adminPasswordEnv,omitempty"`
+	// Secrets says how the secrets this document names are delivered.
+	Secrets *Secrets `json:"secrets,omitempty"`
 
 	Lifetimes   *Lifetimes   `json:"lifetimes,omitempty"`
 	Freshness   *Freshness   `json:"freshness,omitempty"`
