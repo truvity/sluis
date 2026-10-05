@@ -248,6 +248,9 @@ release:
   github:
     owner: truvity
     name: sluis
+  # vX.Y.Z-rc.N is a pre-release on GitHub (never "Latest"); the pulumi-tag
+  # job and the gates run on it exactly as on a release.
+  prerelease: auto
   header: |
     ## sluis {{ .Tag }}
 
