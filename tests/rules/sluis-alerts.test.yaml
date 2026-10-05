@@ -88,9 +88,11 @@ tests:
               summary: 'The ES384 signing key in sluis has been active for 2h 0m 0s'
               description: >-
                 The active signing key is older than 3600s
-                and has not rotated. Check the cert-manager Certificate for the key
+                and has not rotated. With cert-manager keys, check the Certificate for the key
                 (kubectl describe certificate), its issuer, and whether the issuer's
-                signingKey.pollInterval is reading the mounted file.
+                signingKey.pollInterval is reading the mounted file. With kms-wrapped keys,
+                check the issuer's log for why it cannot generate or wrap a key pair (the
+                pod's AWS role, the KMS key's policy).
               runbook_url: https://github.com/truvity/sluis/blob/master/docs/operations/telemetry.md#accessrostersigningkeyrotationstalled
 
   - name: a key activated just now, and one still under the limit, do not fire
