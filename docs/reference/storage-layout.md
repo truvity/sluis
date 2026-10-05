@@ -1,7 +1,10 @@
 # Storage layout
 
 Where sluis keeps what it keeps, on the adapters of the AWS platform (`dynamodb`,
-`ssm`, `s3`). This is **layout v2**; the **legacy** adapter (ConfigMaps, Secrets,
+`ssm`, `s3`). This is **layout v3**: one root per installation, `/sluis/<instance>`
+([0036](../decisions/0036-configuration-is-immutable-per-instance.md)), so two
+installations share an account. The storage layout of the records themselves (kind
+and id) is v2's, unchanged; v3 moves the SSM paths. The **legacy** adapter (ConfigMaps, Secrets,
 Valkey) is unchanged and keeps its own names until a deployment leaves it.
 
 The rule is one sentence: **a record has a kind (a readable noun) and an id**.
@@ -14,26 +17,37 @@ DynamoDB adapter and the domain stores share; the service's own *logical* keys
 
 ## SSM (the `ssm` Secrets adapter)
 
-The IAM boundary is the first level: `/sluis/private/*` is sluis's alone,
-`/sluis/export/*` is what consumers' External Secrets Operator reads. A port path
-`p` is `/sluis/private/<p>`, except `export/<name>`, which is `/sluis/export/<name>`.
-Inside `private` there are exactly two kinds of parameter.
+The root is the installation's, `<root>` = `/sluis/<instance>` (the serve document's
+`secrets.root`; hive: `/sluis/hive`, Truvity's: `/sluis/kernel`). An instance may not
+be named `private` or `export`. The IAM boundary is the first level:
+`<root>/private/*` is sluis's alone, `<root>/export/*` is what consumers' External
+Secrets Operator reads. A port path `p` is `<root>/private/<p>`, except
+`export/<name>`, which is `<root>/export/<name>`. Inside `private` there are exactly
+two kinds of parameter: `config/`, the secrets a document **names** (an operator
+seeds them, sluis reads them), and `credentials/`, which sluis writes.
 
 | SSM path | What it is | Who writes it |
 |---|---|---|
-| `/sluis/private/config/oauth/client-id`, `client-secret` | the Google OAuth client of the directory | an operator seeds it; sluis reads it |
-| `/sluis/private/config/clients/<oidc-client-id>` | the secret of a client of the issuer | an operator seeds it |
-| `/sluis/private/config/issuer/state-secret` | the issuer's sign-in state secret (32 random bytes, base64) | `deploy/pulumi` generates it (`StateSecretParameterName`) |
-| `/sluis/private/credentials/console/session-key` | the key the console signs its sessions with | sluis (one stable item) |
-| `/sluis/private/credentials/directory/<provider>/<workspace-id>/<ref>` | an identity directory's credential (`directory/google/<workspace-id>`; later `directory/entra/<tenant-id>`) | sluis |
-| `/sluis/private/credentials/github-org/<org>/<ref>` | an organisation's App key | sluis |
-| `/sluis/private/credentials/github-app/link/<ref>` | the link App's client secret | sluis |
-| `/sluis/private/credentials/github-app/<app-id>/<ref>` | a catalogue GitHub App's key | sluis |
-| `/sluis/private/credentials/github-link/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |
-| `/sluis/private/credentials/github-runner-app/<tier>/<org>/<ref>` | a runner App's key | sluis |
-| `/sluis/private/credentials/slack-workspace/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
-| `/sluis/private/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret and bot token | sluis |
-| `/sluis/export/<export-name>` | a copy for a consumer: see [Exports](#exports) | sluis |
+| `<root>/private/config/providers/google/<provider>/client-id`, `client-secret` | the Google OAuth client of the directory (`oauthClient.provider`) | an operator seeds it; sluis reads it |
+| `<root>/private/config/clients/<oidc-client-id>/secret` | the secret of a confidential client of the issuer | an operator seeds it |
+| `<root>/private/config/issuer/state-secret` | the issuer's sign-in state secret (32 random bytes, base64) | `deploy/pulumi` generates it (`StateSecretParameterName(instance)`) |
+| `<root>/private/config/recovery/password` | the recovery password | `deploy/pulumi` generates it |
+| `<root>/private/config/directory/<id>/key` | a declared workspace's service-account key | an operator seeds it |
+| `<root>/private/config/valkey/password` | the shared store's password | an operator seeds it |
+| `<root>/private/credentials/console/session-key` | the key the console signs its sessions with | sluis (one stable item) |
+| `<root>/private/credentials/directory/<provider>/<workspace-id>/<ref>` | an identity directory's credential (`directory/google/<workspace-id>`; later `directory/entra/<tenant-id>`) | sluis |
+| `<root>/private/credentials/github-org/<org>/<ref>` | an organisation's App key | sluis |
+| `<root>/private/credentials/github-app/link/<ref>` | the link App's client secret | sluis |
+| `<root>/private/credentials/github-app/<app-id>/<ref>` | a catalogue GitHub App's key | sluis |
+| `<root>/private/credentials/github-link/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |
+| `<root>/private/credentials/github-runner-app/<tier>/<org>/<ref>` | a runner App's key | sluis |
+| `<root>/private/credentials/slack-workspace/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
+| `<root>/private/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret and bot token | sluis |
+| `<root>/export/<export-name>` | a copy for a consumer: see [Exports](#exports) | sluis |
+
+The names under `config/` are the ones the documents give
+([configuration](configuration.md#secrets)); the http function reads them by path
+through the serve document's `secrets` source.
 
 **Identity directories.** `directory/<provider>/` is the rule for every identity
 directory: the provider is the record's `backend` (`google` today), a segment below
@@ -48,18 +62,22 @@ overwrites the new pair). The console's session key is the one stable item with 
 ref. An id segment that a secret path cannot hold (a `~`, an empty one, one that
 begins `u-`) is written `u-` and its bytes in hex.
 
-**What a deployment must change from the old layout**
+**What a deployment must change from the old layouts**
 
-| Was | Is |
+| Was (v2, one root `/sluis`) | Is (v3, `/sluis/<instance>`) |
 |---|---|
-| `/sluis/private/oauth/client-id`, `client-secret` | `/sluis/private/config/oauth/client-id`, `client-secret` |
-| `/sluis/private/clients/<id>` | `/sluis/private/config/clients/<id>` |
-| `/sluis/private/issuer/state-secret` | `/sluis/private/config/issuer/state-secret` |
-| `/sluis/private/private/...` (written by sluis) | `/sluis/private/credentials/...`, rewritten by `sluis migrate` |
+| `/sluis/private/config/oauth/client-id`, `client-secret` | `<root>/private/config/providers/google/default/client-id`, `client-secret` |
+| `/sluis/private/config/clients/<id>` | `<root>/private/config/clients/<id>/secret` |
+| `/sluis/private/config/issuer/state-secret`, `recovery/password` | the same names under `<root>/private/config/` |
+| `/sluis/private/credentials/...` | `<root>/private/credentials/...`, copied by `sluis migrate` |
+| `/sluis/export/<path>` | `<root>/export/<path>`, written again by the next exports pass |
 
-So every `<NAME>=ssm:/sluis/private/oauth/...` environment mapping and every
-`SLUIS_SECRET_FILES` entry that names one of these moves to the `config/` name.
-IAM does not change: all of it is under `/sluis/private/*`.
+`sluis migrate ssm-layout --to-root /sluis/<instance>` copies the first three rows
+and deletes nothing; `sluis migrate` moves the credentials
+([configuration](configuration.md#ssm-layout-v3)). The v1.60 layout's own move
+(`/sluis/private/oauth/...` to `config/`) is older still: the `<NAME>=ssm:` environment mappings and
+`SLUIS_SECRET_FILES` entries it named are gone, replaced by the documents' secret names.
+IAM follows the root: every grant is under `/sluis/<instance>/`.
 
 ## DynamoDB (the `dynamodb` State, Index and Trigger adapter)
 
@@ -115,7 +133,7 @@ or `~7E`).
 **Old to new.** What a record was called before (the logical key, which is also
 what the legacy adapter keeps) and what it is now, for every kind:
 
-| Logical key (unchanged) | v2 `pk` / `sk` | v2 credential path under `/sluis/private/` |
+| Logical key (unchanged) | v2 `pk` / `sk` | credential path under `<root>/private/` |
 |---|---|---|
 | `ws.dir.<provider>.<id>` (was `ws.dir.<id>`) | `directory` / `<provider>/<id>` | `credentials/directory/<provider>/<id>/<ref>` |
 | `gh.org.<org>` | `github-org` / `<org>` | `credentials/github-org/<org>/<ref>` |
@@ -160,13 +178,13 @@ moving them, and a report would otherwise be rewritten for no reason.
 An export is a copy of a secret for a program that cannot ask sluis. With a Secrets
 adapter configured and `ports.export` unset, an export writes through the **Secrets
 port** at `export/<path>`, which the `ssm` adapter keeps at
-`/sluis/export/<path>`. (`ports.export: openbao` keeps working for the Kubernetes
+`<root>/export/<path>`. (`ports.export: openbao` keeps working for the Kubernetes
 path, and writes to OpenBao as before.) The `<path>` is the export's `path` in
 the `exports` list: **it is the name a consumer reads, and a consumer contract.**
 Keep it stable.
 
 **Value format.** One JSON object per export, text values only, so that ESO's SSM
-provider extracts a property with `remoteRef: {key: /sluis/export/<path>, property: <name>}`:
+provider extracts a property with `remoteRef: {key: /sluis/<instance>/export/<path>, property: <name>}`:
 
 ```json
 {"bot_token":"xoxb-..."}

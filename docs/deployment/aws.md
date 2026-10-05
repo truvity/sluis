@@ -224,18 +224,20 @@ library. What gitops does at the switch:
 
 ## Lambda
 
-`NewLambda` is the Lambda shape: **three functions from one zip**, a role each,
+`NewLambda` is the Lambda shape: **three functions from one zip, with the configuration in a layer**, a role each,
 the HTTP API in front of one of them, the token-signing key, and a schedule per
 controller target.
 
 ```go
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
-	Package:        "dist/sluis-lambda_1.58.0_linux_arm64.zip", // or an https URL
-	Config:         sluisYAML,   // config/sluis.yaml: the http function's `serve` file
-	GitHubConfig:   githubYAML,  // config/github.yaml
-	SlackConfig:    slackYAML,   // config/slack.yaml
-	CataloguePaths: []string{"catalogues/github-apps.yaml"},
+	Instance:       "kernel",    // the SSM root /sluis/kernel (layout v3)
+	Package:        "dist/sluis-lambda_1.62.0_linux_arm64.zip", // or an https URL
+	PackageSHA256:  "<the release's digest, pinned here>",
+	Config:         sluisYAML,   // /opt/sluis/http.yaml: the http function's `serve` document
+	GitHubConfig:   githubYAML,  // /opt/sluis/github.yaml
+	SlackConfig:    slackYAML,   // /opt/sluis/slack.yaml
+	PolicyPath:     "policy/",   // rendered into /opt/sluis/policy.yaml (or Policy: a document)
 	Storage:        store.Grant(),
 	State:          state.Grant(),
 	AuditQueueArn:  audit.QueueArn,
@@ -253,40 +255,56 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 
 `sluis-http`, `sluis-github` and `sluis-slack` (`FunctionNamePrefix`, default
 `sluis`) are one `bootstrap` on `provided.al2023`, arm64, **in no VPC**. The role
-a function plays is its environment: `SLUIS_ROLE` is `http`, `github` or `slack`,
-and `SLUIS_CONFIG_FILE` is its own file: `/var/task/config/sluis.yaml` (http),
-`/var/task/config/github.yaml` or `/var/task/config/slack.yaml`. `Env` and each
-function's `Env` add to these; the library owns those two.
+a function plays is its environment, and the environment is only this:
+`SLUIS_ROLE` is `http`, `github` or `slack`; `SLUIS_CONFIG` is its own document,
+`/opt/sluis/http.yaml`, `/opt/sluis/github.yaml` or `/opt/sluis/slack.yaml`; and
+the telemetry layer's `OTEL_*`.
 
 **The package** is the released `sluis-lambda_<version>_linux_arm64.zip` (with
 `bootstrap` at its root), read from a path or an https URL when the stack is
-evaluated, and `PackageSHA256` pins it. The library adds the three configuration files, `Config`, `GitHubConfig` and
-`SlackConfig`, at `config/sluis.yaml`, `config/github.yaml` and
-`config/slack.yaml`, and each catalogue at `config/<name>` (`Catalogues` by name,
-`CataloguePaths` by file, merged under their base names; a name in both with other
-content, an empty file and a name that is a path are refused before anything is
-created). The added files are part of the package: **a change to the
-configuration or to a catalogue changes the package and redeploys the three
-functions on the next `pulumi up`**, deliberately and never silently. The file is
-not a secret: secrets are SSM parameters, below.
+evaluated, and **deployed byte for byte**: `PackageSHA256` is required and checked,
+and the library adds nothing to the zip. A URL is fetched once and kept under its
+digest; a local file is copied to a temporary file first, so what is checked is what
+is deployed. **Take the digest from a reviewed pin in the stack's source, never from a
+file fetched at deploy time beside the zip**: a digest that arrives with the zip
+proves nothing about it. The package must be of the library's own minor or newer
+(1.62 or later), or it is refused: an older binary cannot read the layer.
+
+**The configuration** is one immutable `aws.lambda.LayerVersion`, `<prefix>-config`,
+mounted last at `/opt/sluis`: the three service documents (`Config`, `GitHubConfig`,
+`SlackConfig`, v2) and the policy (`Policy`, a document, or `PolicyPath`, a file or
+directory rendered by sluis's own renderer). Each is held to sluis's own loader before
+anything is published, and the library writes what is its own into them (the
+`apiVersion`, `policy.file`, and in the http document `secrets`, `recovery.*` and the
+state secret's name); a document that disagrees is refused, naming the key. **A change
+to a document publishes a new layer version and updates the three functions**, never
+silently. The documents are not a secret: secrets are SSM parameters, named by the
+documents and read by path, below. Because the layer is retained (`SkipDestroy`, so a
+rollback is re-pointing a function), a secret pasted into a document would persist in
+every layer version and in Pulumi state; if one was, rotate it and remove the versions
+with `aws lambda delete-layer-version`. Documents may not name an `endpoint`
+(`secrets.endpoint`, `ports.dynamodb.endpoint`, ...), because the function would read
+its secrets and State from wherever it points, unless `AllowEndpoints` is set for a
+test against LocalStack. See [AWS Lambda](../integrations/aws-lambda.md#configuration-is-a-layer).
 
 ### Inputs (`LambdaArgs`)
 
 | Field | Default | Meaning |
 |---|---|---|
 | `Region`, `AccountID` | required | Name the SSM parameters and the other functions in the roles' policies. |
-| `Package`, `PackageSHA256` | required, none | The released zip; its expected digest. |
-| `Config`, `GitHubConfig`, `SlackConfig` | required | The three configuration files (`serve`, `controller-github`, `controller-slack`). The http file's `adapters.trigger.settings` must name the controllers, `github: <prefix>-github` and `slack: <prefix>-slack`: the functions take no environment variable for it. |
-| `Catalogues`, `CataloguePaths` | none | Catalogue files at `config/<name>`. |
+| `Instance` | required | The installation's name (`hive`, `kernel`): lower-case letters, digits and dashes, never `private` or `export`. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account. |
+| `Package`, `PackageSHA256`, `PackageVersion` | required, required, from the file name | The released zip, deployed unchanged; its SHA-256 (a reviewed pin); the release it is, when its name does not say. |
+| `Config`, `GitHubConfig`, `SlackConfig` | required | The three service documents (`serve`, `controller-github`, `controller-slack`, v2), in the configuration layer. The http document's `adapters.trigger.settings` must name the controllers, `github: <prefix>-github` and `slack: <prefix>-slack`: the functions take no environment variable for it. |
+| `Policy`, `PolicyPath` | exactly one | The policy document, or a file or directory of layers rendered by sluis's renderer (`sluisctl policy render`); the layer holds it at `/opt/sluis/policy.yaml`. The GitHub and Slack catalogues are in it (`apps.github.catalogue`, `apps.slack.catalogue`). |
+| `AllowEndpoints` | false | Lets the documents name a service `endpoint`, for a LocalStack test. Off, one is refused. |
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
 | `AuditQueueArn` | required | The audit stack's ingest queue. |
 | `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use. Absent, the AWS-managed key, which needs no grant. Present, each role may use it through SSM only. |
 | `SigningKeyAlias` | `alias/sluis-signing` | The ES384 signing key's alias. |
 | `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
-| `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([Signing on AWS](#signing-on-aws)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`), `KeepRemoteSigningKeys` (also create the two asymmetric keys and their grant). Set, the two asymmetric keys are not created unless kept. |
+| `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([Signing on AWS](#signing-on-aws)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](#iam-one-role-per-function). |
 | `FunctionNamePrefix` | `sluis` | `<prefix>-http`, `-github`, `-slack`, and `<prefix>-scheduler`. |
-| `HTTP`, `GitHub`, `Slack` | 512 MB; 30 s for http, 300 s for a controller | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`, `Env`. |
-| `Env` | none | On all three functions. |
+| `HTTP`, `GitHub`, `Slack` | 512 MB; 30 s for http, 300 s for a controller | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`. |
 | `LogRetentionDays` | 30 | Each function's log group. |
 | `PermissionsBoundaryArn` | none | The boundary of every role. |
 | `API.DomainName`, `API.CertificateArn` | required | The custom domain and the ACM certificate for it, in the region (the caller supplies it, for example a Cloudflare Origin CA certificate imported to ACM). |
@@ -297,8 +315,7 @@ not a secret: secrets are SSM parameters, below.
 | `Exports.Function`, `Exports.Rate`, `Exports.Disabled` | `http`, `rate(15 minutes)`, false | The exports schedule: which function owns the exports (`http`, so `<prefix>-http`, `github` or `slack`) and how often it is invoked with `{"kind":"exports"}`. |
 | `DirectoryRefresh.Rate`, `DirectoryRefresh.Disabled` | `rate(15 minutes)`, false | The directory refresh schedule: how often the http function is invoked with `{"kind":"refresh"}` to take a new snapshot of every connected directory, under the refresh lease. Lambda has no refresh loop; a request that finds a snapshot due refreshes it too. |
 | `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the github and slack roles may ask STS for. |
-| `HTTP.SecretFiles` (and `GitHub`, `Slack`) | none | SSM parameters written to files under `/tmp/` at cold start, as `SLUIS_SECRET_FILES`. The http function always lists the issuer's state secret at `/tmp/sluis/state-secret`. |
-| `Telemetry.LayerArn`, `Telemetry.Env` | nil: no layer | The observability `otlp-lambda` layer and its `OTEL_*` settings. Optional, so an estate whose collector is not ready leaves it out. `OTEL_SERVICE_NAME` is the function's name unless given. |
+| `Telemetry.LayerArn`, `Telemetry.Env` | nil: no layer | The observability `otlp-lambda` layer and its settings: `Telemetry.Env` holds `OTEL_*`, the layer's own (`ACCESS_ROSTER_*`, `OPENTELEMETRY_*`) and `AWS_LAMBDA_EXEC_WRAPPER`, and nothing else (never `SLUIS_*`, `LD_*` or another `AWS_*`). Optional, so an estate whose collector is not ready leaves it out. `OTEL_SERVICE_NAME` is the function's name unless given. |
 | `Tags` | none | On everything that takes tags. |
 
 ### Outputs
@@ -314,6 +331,7 @@ not a secret: secrets are SSM parameters, below.
 | `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
 | `TruststoreBucketName`, `TruststoreURI` | The client-CA bundle. |
 | `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
+| `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
 | `ExportReadPolicyJSON` | The policy document a consumer's External Secrets Operator role attaches (below). |
 
@@ -351,13 +369,12 @@ it.
 
 ### The environment the app reads
 
-Per function the library sets `SLUIS_ROLE`, `SLUIS_CONFIG_FILE` (that function's
-own file) and `SLUIS_SECRET_FILES`, a JSON array of `{"parameter","path"}` with
-paths under `/tmp/` (SSM parameters under `/sluis/private/` or `/sluis/export/`
-written to files at cold start; the http function's list always has the state
-secret). `Env` adds the rest, including `<NAME>=ssm:/sluis/private/...` mappings
-and `OTEL_*`. The library owns `SLUIS_SECRET_FILES` and refuses it in `Env`. The
-http file names the controllers in `adapters.trigger.settings` (`github:
+Per function the library sets `SLUIS_ROLE`, `SLUIS_CONFIG` (that function's own
+document in the layer) and, from `Telemetry.Env`, the `OTEL_*` of the telemetry layer.
+That is all: the v1.61 library's `Env`, `FunctionArgs.Env`, `SLUIS_SECRET_FILES` and
+`<NAME>=ssm:` mappings are gone, and the binary refuses them. A secret is named in a
+document and read by its `secrets` source (`ssm`, root `/sluis/<instance>`). The http
+document names the controllers in `adapters.trigger.settings` (`github:
 <prefix>-github`, `slack: <prefix>-slack`).
 
 ### IAM: one role per function
@@ -370,11 +387,12 @@ granted on `*`.
 | Logs: `logs:CreateLogStream`, `logs:PutLogEvents` on its own log group | yes | yes | yes |
 | S3: `GetObject`, `PutObject`, `DeleteObject` on the bucket's objects; `ListBucket` on the bucket | yes | yes | yes |
 | DynamoDB: `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table (and its key, through DynamoDB only) | yes | yes | yes |
-| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` under `/sluis/private/*` | yes | yes | yes |
-| SSM: `PutParameter`, `DeleteParameter` under `/sluis/export/*` | yes | yes | yes |
-| `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only (with the key) | yes | yes | yes |
+| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` under `/sluis/<instance>/private/credentials/*` | yes | yes | yes |
+| SSM: the same under `/sluis/<instance>/export/*` (only the function that runs the exports reads it) | yes | yes | yes |
+| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath` under `/sluis/<instance>/private/config/*`: the secrets its document names, never written | yes | **denied** | **denied** |
+| `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only, and only for the parameters under the role's own prefixes (with the key) | yes | yes | yes |
 | `sqs:SendMessage` on the audit ingest queue | yes | yes | yes |
-| `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not created with `WrappedSigning`) | **yes** | no | no |
+| `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not declared with `WrappedSigning`) | **yes** | no | no |
 | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` on the symmetric key, with the conditions in [Signing on AWS](#signing-on-aws) (`WrappedSigning`) | **yes** | no | no |
 | `lambda:InvokeFunction` on the github and slack functions ("run a pass now") | **yes** | no | no |
 | `sts:GetWebIdentityToken` (on `*`: the action takes no resource; with `WebIdentityAudience`, only for that audience), so a controller authenticates to the console with its role's outbound token | no | **yes** | **yes** |
@@ -598,12 +616,16 @@ vmalert (or a PrometheusRule), with the cluster label of your store:
   verifier that cached the JWKS before it rejects the new `kid` for up to its
   cache lifetime).
 
-**Moving a stack from remote signing:** set `WrappedSigning` with
-`KeepRemoteSigningKeys: true` (the two asymmetric keys are protected and cannot
-be dropped from the program in one step), switch the configuration
-(`signingKey.kmsWrapped`), and drop the flag once nothing signs remotely.
+**Moving a stack from remote signing** (`kms` to `kmsWrapped`) is a step of its own,
+at low traffic: the switch drops the old key ids from the JWKS at once, so a token they
+signed and that is still in flight (up to `lifetimes.token`, plus a relying party's JWKS
+cache) can fail to verify. Record both key ids first, `pulumi state delete` the two keys
+(`<name>-signing-key`, `<name>-signing-key-rs256`) and their aliases, apply with
+`WrappedSigning`, then `aws kms disable-key` them and schedule their deletion only
+after the token lifetime and the JWKS cache have passed. The full sequence and the
+rollback are in [AWS Lambda](../integrations/aws-lambda.md#retiring-the-asymmetric-signing-keys).
 
-**Configuration** (the http function's file; `preset: aws-hybrid` or
+**Configuration** (the http document; `preset: aws-hybrid` or
 `aws-serverless` makes `kms-wrapped` the signing adapter, and `signingKey.kmsWrapped`
 supplies its settings):
 
@@ -612,15 +634,15 @@ preset: aws-hybrid
 signingKey:
   kmsWrapped:
     keyId: alias/sluis-signing-wrapped   # or the shared key's ARN
-    stateSecretFile: /tmp/sluis/state-secret
+    stateSecret: issuer/state-secret
     # algorithms: [ES384, RS256]         # the first is the default
     # rotateEvery: 24h
     # prepublish: 15m
     # retain: 65m
 ```
 
-`stateSecretFile` is as for `signingKey.kms`: the sign-in state is derived from
-it, not from a key that is replaced daily. The adapter can also be named in
+`stateSecret` is as for `signingKey.kms` (a secret NAME, which the library writes
+for the function): the sign-in state is derived from it, not from a key that is replaced daily. The adapter can also be named in
 `adapters.signing` (`adapter: kms-wrapped`), with the same settings under
 `settings:`.
 
@@ -629,24 +651,26 @@ it, not from a key that is replaced daily. The adapter can also be named in
 With KMS signing the issuer still needs a secret to HMAC-sign OAuth flow state.
 The library generates it: a `random.RandomBytes` of 32 bytes (no keepers, so an
 apply never rotates it), stored base64 as the SecureString
-`/sluis/private/config/issuer/state-secret` (under `ParameterKeyArn` when set), secret
+`/sluis/<instance>/private/config/issuer/state-secret` (under `ParameterKeyArn` when set), secret
 in state and in `pulumi up`'s output. `StateSecretParameter` is its name. Only
-`sluis-http` needs it, and it already reads `/sluis/private/*`; the function's
-`Env` maps it with `<NAME>=ssm:/sluis/private/config/issuer/state-secret`. Rotating it
+`sluis-http` needs it: its document names it (`stateSecret: issuer/state-secret`) and its
+`secrets` source reads it. Rotating it
 is `pulumi up --replace` on the `RandomBytes` resource, which signs everyone's
 in-flight sign-in out.
 
-The recovery sign-in has its own parameter, `/sluis/private/config/recovery/password`, generated by the library: see [Recovery on Lambda](../operations/recovery-on-lambda.md).
+The recovery sign-in has its own parameter, `/sluis/<instance>/private/config/recovery/password`, generated by the library: see [Recovery on Lambda](../operations/recovery-on-lambda.md).
 
 ### SSM layout
 
-`/sluis/private/...` is sluis's alone: its own secrets, and what it writes at
-run time. `/sluis/export/...` is for consumers. `ExportReadPolicyJSON` (and
-`ExportReadPolicy(region, account, parameterKeyArn)`, which renders the same
+`/sluis/<instance>/private/...` is sluis's alone: `config/` holds the secrets the
+documents name (an operator seeds some, the library generates the state secret and
+the recovery password), `credentials/` what it writes at run time.
+`/sluis/<instance>/export/...` is for consumers. `ExportReadPolicyJSON` (and
+`ExportReadPolicy(region, account, instance, parameterKeyArn)`, which renders the same
 document) grants `ssm:GetParameter`, `GetParameters` and `GetParametersByPath` on
-`/sluis/export/*` and, with a customer-managed key, `kms:Decrypt` on it through
+`/sluis/<instance>/export/*` and, with a customer-managed key, `kms:Decrypt` on it through
 SSM; attach it to a consumer's External Secrets Operator role. It grants nothing
-under `/sluis/private`.
+under `/sluis/<instance>/private`. The layout is in [storage layout](../reference/storage-layout.md#ssm-the-ssm-secrets-adapter).
 
 ## Releasing
 
