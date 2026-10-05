@@ -406,16 +406,60 @@ new documents will look for them:
    from a document whose Secrets adapter names `/sluis` to one whose names
    `/sluis/<instance>` ([migrate](../operations/migrate.md)). The exports are
    written again by the next exports pass.
-3. **Unprotect the old asymmetric signing keys**, when the installation signs with
-   `WrappedSigning`. The library no longer declares the two asymmetric keys, and
-   they are protected in the stack, so removing them is refused until
-   `pulumi state unprotect` has been run on `<name>-signing-key` and
-   `<name>-signing-key-rs256`. The apply then schedules their deletion, with
-   KMS's 30 days of grace. Do it only when no verifier needs a token they signed.
-4. **Apply** the 1.62 library with the release zip, its `PackageSHA256`, `Instance`
-   and the documents.
+3. **Retire the old asymmetric signing keys, as a step of its own** (only when the
+   installation signs remotely and moves to `WrappedSigning`). See
+   [below](#retiring-the-asymmetric-signing-keys): it is not part of this apply.
+4. **Apply** the 1.62 library with the release zip, its `PackageSHA256` (a reviewed pin
+   in the stack's source, never fetched at deploy time beside the zip), `Instance` and
+   the documents. Keep the signing keys as they are in this apply.
 5. **Delete the v2 parameters** under `/sluis/private` and `/sluis/export` once the
    installation runs on v3.
+
+### Retiring the asymmetric signing keys
+
+Switching from remote signing (`signingKey.kms`, two asymmetric keys) to
+`kmsWrapped` **drops the old key ids from the JWKS at once**: a token they signed
+and that is still in flight (for up to `lifetimes.token`, plus a relying party's
+JWKS cache) can fail to verify. Do it as its own step, at low traffic, and not in
+the apply that moves to 1.62. With `WrappedSigning` the library no longer declares
+the two asymmetric keys (a `Config` naming `signingKey.kms` beside it is refused),
+and they are protected in the stack, so removing them takes a decision:
+
+1. **Record both key ids**: `pulumi stack output`, or `aws kms describe-key` on the
+   aliases. You need them to roll back.
+2. **Prefer `pulumi state delete`** on `<name>-signing-key` and
+   `<name>-signing-key-rs256` (and their aliases), then apply with `WrappedSigning`.
+   The keys stay in AWS untouched.
+3. **`aws kms disable-key`** each old key by hand. Only after the token lifetime and
+   the longest JWKS cache among the verifiers have passed, **`aws kms
+   schedule-key-deletion`** (30 days of grace at least).
+4. **Rollback**, while the keys exist: `aws kms cancel-key-deletion`, `aws kms
+   enable-key`, then `pulumi import` the keys and aliases and apply without
+   `WrappedSigning`.
+
+The alternative is `pulumi state unprotect` on the two keys and an apply, which
+schedules their deletion at once with the 30-day window: simpler, but the keys are
+disabled by the deletion schedule and not by you, so there is no step at which to
+stop and look. Prefer the first.
+
+## Security notes
+
+- **`PackageSHA256` is a pin, not a download.** It must come from a reviewed value in
+  the stack's source. A digest fetched at deploy time next to the zip is checked
+  against the same hand that could have replaced the zip. A local `Package` is
+  copied to a temporary file before it is hashed and deployed, so what is checked is
+  what runs.
+- **The configuration layer is retained**, so that a rollback is re-pointing a
+  function (`SkipDestroy`). A secret pasted into a document would persist in every
+  layer version and in Pulumi state, and a function can read its own layer. The
+  documents name secrets and hold none. If one got in, rotate it and delete the
+  layer versions that hold it with `aws lambda delete-layer-version`.
+- **The library refuses what would redirect the function's reads.** A document that
+  names any `endpoint` (`secrets.endpoint`, `ports.dynamodb.endpoint`, ...) is refused
+  unless `AllowEndpoints` is set for a LocalStack test: a forged endpoint serves forged
+  secrets and State. `Telemetry.Env` takes `OTEL_*`, the telemetry layer's own
+  (`ACCESS_ROSTER_*`, `OPENTELEMETRY_*`) and `AWS_LAMBDA_EXEC_WRAPPER`, and nothing else,
+  so the environment cannot carry `SLUIS_*`, `LD_*` or another `AWS_*` variable.
 
 ## Cold start, and what is not here
 

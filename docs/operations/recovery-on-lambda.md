@@ -13,34 +13,35 @@ reads it:
 
 - a `random.RandomPassword`, 40 letters and digits with no look-alikes (`0 O 1 l I`
   are swapped for other letters), with no keepers, so an apply never rotates it;
-- stored as the SSM SecureString `/sluis/private/config/recovery/password` (under
-  `ParameterKeyArn` when set), secret in state and in `pulumi up`'s output;
-- listed in the http function's `SLUIS_SECRET_FILES`, so that at cold start it is
-  written to `/tmp/sluis/recovery-password`, and named as `recovery.passwordFile` in
-  the http function's configuration (the library adds that key to `Config`; a
-  `recovery.passwordFile` of your own is refused);
+- stored as the SSM SecureString `/sluis/<instance>/private/config/recovery/password`
+  (under `ParameterKeyArn` when set; `<instance>` is the library's `Instance`), secret
+  in state and in `pulumi up`'s output;
+- named in the http function's document as `recovery.passwordSecret: recovery/password`
+  (the library writes that key and `recovery.enabled`; a different value of your own
+  is refused), and delivered by the document's `secrets` source (`ssm`, root
+  `/sluis/<instance>`), which reads it from the parameter at cold start and again every
+  five minutes. No file is written and no environment variable carries it;
 - exported by name only: the `RecoveryPasswordParameter` output holds
-  `/sluis/private/config/recovery/password`, never the value.
+  `/sluis/<instance>/private/config/recovery/password`, never the value.
 
 The github and slack functions are not given it, and their roles cannot read it:
-the library's policy denies them `ssm:Get*`, `Put` and `Delete` on everything under
-`/sluis/private/config/` (the recovery password, the state secret, the OAuth client
-and the declared clients), which is the http function's. A controller's own secret
-files therefore live outside `config/`, e.g. `/sluis/private/github/...`. The http
-role reads all of `/sluis/private/` but writes only `/sluis/private/credentials/`
-(and `/sluis/export/`): it never writes `config/`.
+the library's policy gives them an explicit Deny on `ssm:Get*`, `Put` and `Delete`
+under `/sluis/<instance>/private/config/` (the recovery password, the state secret, the
+OAuth client and the declared clients), which is the http function's. The http role
+reads `private/config/` and `private/credentials/` but writes only `private/credentials/`
+(and `export/`): it never writes `config/`.
 
 ## Reading it
 
 ```sh
 aws ssm get-parameter --with-decryption \
-  --name /sluis/private/config/recovery/password \
+  --name /sluis/<instance>/private/config/recovery/password \
   --query Parameter.Value --output text
 ```
 
-Reading it needs `ssm:GetParameter` on `/sluis/private/config/*` (and `kms:Decrypt`
+Reading it needs `ssm:GetParameter` on `/sluis/<instance>/private/config/*` (and `kms:Decrypt`
 on `ParameterKeyArn` when one is set), which is the stack's operators and not the
-Lambda roles' business (the http role may read it, to write the file at cold start;
+Lambda roles' business (the http role may read it, for its `secrets` source;
 the controllers' roles may not). The password is read from a terminal and not pasted into a
 ticket or a chat.
 
@@ -65,7 +66,7 @@ minute per instance with a count, so a loop of requests cannot flood the trail; 
 real check, right or wrong, is recorded.
 
 On Lambda the password is never generated: with recovery on and no
-`recovery.passwordFile` (or `adminPasswordEnv`) the service logs an ERROR and builds no
+`recovery.passwordSecret` the service logs an ERROR and builds no
 recovery, rather than printing a password into the function's log.
 
 After ten refused attempts within a minute a function instance answers 429 for the
@@ -102,10 +103,10 @@ digests in constant time.
 
 ## Outside the library
 
-`recovery.passwordFile` ([configuration](../reference/configuration.md)) is the
-service's own key: for any installation that is not in a cluster, the file the
-password is read from at start. Unset, the service takes `adminPasswordEnv`, or
-generates one and prints it once.
+`recovery.passwordSecret` ([configuration](../reference/configuration.md#secrets)) is the
+service's own key: for any installation that is not in a cluster, the NAME
+(`recovery/password`) of the password, delivered by the document's `secrets` source
+and read at start. Unset, the service generates one and prints it once.
 
 ## Hardening
 

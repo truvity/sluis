@@ -143,7 +143,7 @@ is every deployment before the presets) there is no Secrets port, as before.
 parameter in AWS SSM Parameter Store. It needs AWS and runs on kubernetes and
 lambda.
 
-**Settings:** `root` (default `/sluis`), `kmsKeyId` (a customer-managed key id, ARN
+**Settings:** `root` (the installation's, `/sluis/<instance>`: layout v3; a serve document's `secrets.root` supplies it and naming another here is refused; a v1 document that names none keeps `/sluis`), `kmsKeyId` (a customer-managed key id, ARN
 or alias; unset is the AWS-managed `alias/aws/ssm`), `region`, `endpoint`
 (LocalStack).
 
@@ -182,18 +182,20 @@ package pins the documented outcome.
     "ssm:PutParameter", "ssm:DeleteParameter"
   ],
   "Resource": [
-    "<the SSM parameter ARNs of /sluis/private/*>",
-    "<the SSM parameter ARNs of /sluis/export/*>"
+    "<the SSM parameter ARNs of /sluis/<instance>/private/credentials/*>",
+    "<the SSM parameter ARNs of /sluis/<instance>/export/*>"
   ]
 }
 ```
 
 (`GetParametersByPath` on the hierarchy itself is authorised by the `/*` resource
-of each tree; a listing from the root asks for both `private` and `export`.) With
+of each tree. The function that serves the console adds read-only `GetParameter`,
+`GetParameters` and `GetParametersByPath` on `/sluis/<instance>/private/config/*`, the
+secrets its document names; a controller is denied that tree.) With
 `kmsKeyId` set, add `kms:Decrypt` and `kms:Encrypt` on that key; the AWS-managed
 key needs nothing beyond the parameter permissions. **Consumers' ESO must read ONLY
-`/sluis/export/*`** (`ssm:GetParameter` and `ssm:GetParametersByPath` there, and
-`kms:Decrypt` if a customer key is set), never `/sluis/private/*`.
+`/sluis/<instance>/export/*`** (`ssm:GetParameter` and `ssm:GetParametersByPath` there, and
+`kms:Decrypt` if a customer key is set), never `/sluis/<instance>/private/*`.
 
 ## State
 
