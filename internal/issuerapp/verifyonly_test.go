@@ -53,7 +53,8 @@ func TestVerifyOnlyKeysLoadAtStartAndAPrivateKeyStopsIt(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "signingKey.verifyOnly[0]") || strings.Contains(err.Error(), "BEGIN") {
 		t.Errorf("the refusal: %v", err)
 	}
-	if _, err = loadVerifyOnly([]config.SigningKeyVerifyOnly{{File: pub, Until: "2026-12-01T00:00:00Z"}, {File: pub, Until: "2026-12-01T00:00:00Z"}}, log); err == nil {
+	twice := config.SigningKeyVerifyOnly{File: pub, Until: "2026-12-01T00:00:00Z"}
+	if _, err = loadVerifyOnly([]config.SigningKeyVerifyOnly{twice, twice}, log); err == nil {
 		t.Error("the same kid twice was accepted")
 	}
 }
