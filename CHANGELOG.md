@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.64.0-rc.1
+
+The release candidate of v1.64.0: its notes are v1.64.0's, below. Cut to exercise the release workflow's library-tag job before the final tag; its npm package was not published (npm refuses a pre-release without `--tag`).
+
 ## v1.64.0
 
 Documents mode, `sluisctl render` and the installation document, the OpenBao Secrets adapter, `k8s-aws`, verify-only signing keys. Presets `server`, `k8s-minimal` and `k8s-openbao` are refused, and the chart's values mode is deprecated: see [upgrade to v1.64](docs/how-to/upgrade/v1.64.md).
@@ -99,10 +103,6 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
 
 - **Preset `aws-eks`** is the deprecated name of `k8s-aws` (it never started: it named the unbuilt trigger `watch`).
   It resolves to `k8s-aws` and start logs a warning.
-
-## v1.64.0-rc.1
-
-The release candidate of v1.64.0, the same changes as above; cut to exercise the release workflow's library-tag job before the final tag. Its npm package was not published (npm refuses a pre-release without `--tag`).
 
 ## v1.63.0
 
