@@ -52,9 +52,10 @@ func checkGeneratedSecrets(ids []string, st *store.Stores) error {
 	// at once (ssm's conditional write is a read and then a write), so a
 	// generated secret needs a shared State: it fails closed rather than
 	// risk two replicas serving different secrets.
-	// The memory adapter keeps the secrets in this process too, so there is no
-	// second replica to exclude.
-	if _, shared := st.LeaseState(); !shared && st.Adapter != store.AdapterMemory {
+	// Exempt only when the SECRETS are in this process too (the memory
+	// adapter), so there is no second replica to exclude; a process-local
+	// State beside shared secrets (ssm, openbao) is not.
+	if _, shared := st.LeaseState(); !shared && st.Plan.Name(port.ConcernSecrets) != store.AdapterMemory {
 		return fmt.Errorf("client %q has `secret: {generate: true}` and the State is not shared between replicas, "+
 			"so a rotation cannot be serialised: configure a shared State (adapters.state) "+
 			"or name the secret with `secret: <name>`", ids[0])
