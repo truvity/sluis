@@ -87,7 +87,7 @@ func TestAGeneratedClientIsRefusedWithNoSecretsAdapter(t *testing.T) {
 // this process only it would not keep a second replica off, so start is refused.
 func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
 	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
-`, "adapters:\n  secrets: {adapter: memory}\n")
+`, "adapters:\n  secrets: {adapter: ssm, settings: {root: /sluis/test}}\n")
 	if err == nil {
 		app.Close()
 		t.Fatal("started with a State that is only this process's")
