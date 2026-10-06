@@ -96,3 +96,18 @@ func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
 		t.Errorf("refusal = %v", err)
 	}
 }
+
+// Memory secrets are this process's too, so a State that is not shared has no
+// second replica to exclude: the roster starts, and the pass finds the record.
+func TestAGeneratedClientStartsWithMemorySecretsBesideANonSharedState(t *testing.T) {
+	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+`, "adapters:\n  secrets: {adapter: memory}\n")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(app.Close)
+	res := app.ReconcileClientSecrets(context.Background())
+	if len(res.Outcomes) != 1 || res.Outcomes["grafana"] != clientcreds.OutcomeExisting {
+		t.Errorf("res = %+v", res)
+	}
+}
