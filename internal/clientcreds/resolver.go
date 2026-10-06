@@ -65,6 +65,8 @@ type cached struct {
 	until time.Time
 	// good is when the record was last read successfully.
 	good time.Time
+	// unavailable: the last read failed and nothing recent could be served.
+	unavailable bool
 }
 
 // UseGenerated tells the Resolver which clients are generated, from the policy
@@ -158,6 +160,9 @@ func (r *Resolver) record(ctx context.Context, clientID string) (*Record, record
 	c, ok := r.cache[clientID]
 	r.mu.Unlock()
 	if ok && now.Before(c.until) {
+		if c.unavailable {
+			return nil, recordUnavailable
+		}
 		return c.rec, stateOf(c.rec)
 	}
 	got, err := r.store.Get(ctx, Path(clientID))
@@ -191,12 +196,16 @@ func stateOf(rec *Record) recordState {
 // stale answers a failed read: the last good record while it is recent enough,
 // otherwise nothing. The failure is retried soon, not on every request.
 func (r *Resolver) stale(clientID string, c cached, ok bool, now time.Time) (*Record, recordState) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if !ok || now.Sub(c.good) > StaleFor {
+		// Unavailable is cached too, so a record that stays unreadable costs
+		// one read per retry window, not one per request. It still never
+		// falls to the input.
+		r.cache[clientID] = cached{until: now.Add(retryAfterFailure), good: c.good, unavailable: true}
 		return nil, recordUnavailable
 	}
-	r.mu.Lock()
 	c.until = now.Add(retryAfterFailure)
 	r.cache[clientID] = c
-	r.mu.Unlock()
 	return c.rec, stateOf(c.rec)
 }
