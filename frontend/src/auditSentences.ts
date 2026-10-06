@@ -44,6 +44,12 @@ export const roster: Sentences = {
         "en": "{actor} deleted the stored secret of client {targets_0_id}"
       }
     },
+    "roster.client.secret.denied": {
+      "summary": "A signed-in caller was refused when managing the secret of a generated client.",
+      "message": {
+        "en": "{actor} was refused {data_action} on a client secret: {outcome_reason}"
+      }
+    },
     "roster.client.secret.orphaned": {
       "summary": "A stored client secret was found with no generated client of that id in the policy.",
       "message": {

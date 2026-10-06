@@ -125,7 +125,13 @@ func reconcileOne(ctx context.Context, id string, store port.Secrets, input Inpu
 	got, err := store.Get(ctx, path)
 	switch {
 	case err == nil:
-		if rec, derr := DecodeRecord(got.Value); derr == nil && !rec.Orphaned.IsZero() {
+		rec, derr := DecodeRecord(got.Value)
+		if derr != nil {
+			// A record nobody can read is not a record in place: reported,
+			// never replaced, and the client is not served from the input.
+			return OutcomeFailed, fmt.Errorf("the stored record is unreadable: %w", derr)
+		}
+		if !rec.Orphaned.IsZero() {
 			return restore(ctx, id, store, lock)
 		}
 		return OutcomeExisting, nil

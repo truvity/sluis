@@ -18,6 +18,7 @@ type metrics struct {
 	rotations  metric.Int64Counter
 	purges     metric.Int64Counter
 	orphans    metric.Int64Counter
+	refused    metric.Int64Counter
 }
 
 func newInstruments() metrics {
@@ -34,7 +35,9 @@ func newInstruments() metrics {
 		metric.WithDescription("Orphaned client secret records purged by a person, by outcome: ok, still_declared, no_record, busy or failed."))
 	orphans, _ := meter.Int64Counter("sluis.client_secret.orphans",
 		metric.WithDescription("Client secret records newly found with no generated client in the policy, each counted once."))
-	return metrics{reconciled, auth, rotations, purges, orphans}
+	refused, _ := meter.Int64Counter("sluis.client_secret.admin_refused",
+		metric.WithDescription("Requests to the client secret admin endpoint refused before they acted, by reason: unauthenticated, forbidden or wrong_audience."))
+	return metrics{reconciled, auth, rotations, purges, orphans, refused}
 }
 
 // CountAuth counts one confidential client authentication by the slot that
@@ -57,3 +60,10 @@ func countPurge(ctx context.Context, outcome string) {
 }
 
 func countOrphan(ctx context.Context) { instruments.orphans.Add(ctx, 1) }
+
+// CountAdminRefused counts one refused request to the admin endpoint, by
+// reason. No client id and no identity: an unauthenticated caller must not
+// mint a series.
+func CountAdminRefused(ctx context.Context, reason string) {
+	instruments.refused.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
+}

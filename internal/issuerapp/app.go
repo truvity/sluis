@@ -601,6 +601,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		input = cfg.secrets
 	}
 	creds := clientcreds.NewResolver(stores.Ports.Secrets, input, log)
+	// Only a generated client's record is consulted; the policy in force says
+	// which, so a client returned to a named input secret is served by it.
+	creds.UseGenerated(func(id string) bool {
+		c, ok := set.Client(id)
+		return ok && c.SecretGenerated()
+	})
 	secretsAdmin, leases := newClientSecretManager(set, stores, creds, deps.ClientSecretChanged, log)
 	if stores.Ports.Secrets != nil {
 		core.UseClientSecrets(secretsAdmin)
