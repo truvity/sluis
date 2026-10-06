@@ -261,6 +261,7 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `FunctionNamePrefix` | The function, its role, policy and log group. **A v1.62 installation sets `<prefix>-http` here**, which keeps its function, role, log group and API integration in place: see [Upgrade to v1.63](../how-to/upgrade/v1.63.md). |
 | `Function` | 512 MB; 300 s | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`. (`HTTP`, `GitHub` and `Slack` are gone since v1.63.) |
 | `LogRetentionDays` | 30 | The function's log group. |
+| `AccessLogs` | nil (off) | An `AccessLogsArgs`: `RetentionDays` (default 7). Set, the library declares a log group `/aws/apigateway/<FunctionName>` and the `$default` stage's access log settings. Each request writes one JSON line with exactly `requestTime`, `requestId`, `httpMethod`, `path`, `status`, `responseLatency` and `integrationLatency` (the format is `AccessLogFormat`). The query string is never logged, because OAuth authorization codes and `state` travel in it; no header, source address, user agent or identity field is logged either. An HTTP API needs no account-level CloudWatch role (that is a REST API setting), so this adds no IAM resource; the principal that applies the stack needs API Gateway's log-delivery permissions (`logs:CreateLogDelivery`, `logs:PutResourcePolicy` and the related describe and update actions), and API Gateway adds the log group's resource policy itself. |
 | `PermissionsBoundaryArn` | none | The boundary of the role and the scheduler's. |
 | `API.DomainName`, `API.CertificateArn` | required | The custom domain and the ACM certificate for it, in the region (the caller supplies it, for example a Cloudflare Origin CA certificate imported to ACM). |
 | `API.TruststorePEM`, `API.TruststoreBucketName` | required | The client-CA bundle for mutual TLS, and the bucket the library uploads it to. |
@@ -287,6 +288,7 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `WrappedSigningKeyArn`, `WrappedSigningKeyAlias` | The symmetric key of `WrappedSigning` (`KeyArn` when given; the alias is empty then, and without `WrappedSigning`). |
 | `FunctionArn`, `FunctionName` | The function (replace `HTTP|GitHub|SlackFunctionArn` and the names). |
 | `RoleArn`, `RoleName` | Its role (replace `HTTP|GitHub|SlackRoleArn` and the names). |
+| `AccessLogGroupName` | The API access log group (empty without `AccessLogs`). |
 | `APIID`, `APIURL` | The HTTP API and its default endpoint (it answers only with `KeepDefaultEndpoint`). |
 | `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
 | `TruststoreBucketName`, `TruststoreURI` | The client-CA bundle. |

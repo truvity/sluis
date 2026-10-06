@@ -173,6 +173,8 @@ type LambdaArgs struct {
 
 	// LogRetentionDays is the log group's retention. Default 30.
 	LogRetentionDays int
+	// AccessLogs turns on the API Gateway access log. Default (nil): off.
+	AccessLogs *AccessLogsArgs
 	// PermissionsBoundaryArn is the boundary of every role. Default none.
 	PermissionsBoundaryArn string
 
@@ -264,6 +266,23 @@ type DirectoryRefreshArgs struct {
 // DefaultDirectoryRefreshSchedule is the directory refresh's tick when
 // DirectoryRefreshArgs.Rate is empty: the hub's refresh interval.
 const DefaultDirectoryRefreshSchedule = "rate(15 minutes)"
+
+// AccessLogFormat is the one line the API's access log writes: when, the
+// method, the path (never the query string, which carries OAuth codes and
+// state), the status and the two latencies. No header, address, user agent or
+// identity field is in it.
+const AccessLogFormat = `{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLatency":"$context.responseLatency","integrationLatency":"$context.integrationLatency"}`
+
+// AccessLogsArgs turns on the HTTP API's access log. API Gateway needs no
+// account-level CloudWatch role for an HTTP API (that is REST APIs only), so
+// this declares a log group and the stage setting and no IAM resource. The
+// principal that deploys the stack needs the log-delivery permissions API
+// Gateway documents (logs:CreateLogDelivery, logs:PutResourcePolicy and
+// friends); API Gateway adds the log group's resource policy itself.
+type AccessLogsArgs struct {
+	// RetentionDays is the access log group's retention. Default 7.
+	RetentionDays int
+}
 
 // FunctionArgs tunes the function.
 type FunctionArgs struct {
@@ -363,6 +382,8 @@ type Lambda struct {
 	// only with API.KeepDefaultEndpoint).
 	APIID  pulumi.StringOutput
 	APIURL pulumi.StringOutput
+	// AccessLogGroupName is the API access log group (empty when AccessLogs is nil).
+	AccessLogGroupName pulumi.StringOutput
 	// DomainTarget and DomainHostedZoneID are what DNS for the custom domain
 	// points at (a CNAME, or an alias record).
 	DomainTarget       pulumi.StringOutput
@@ -490,6 +511,16 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	if out.LogRetentionDays == 0 {
 		out.LogRetentionDays = 30
+	}
+	if out.AccessLogs != nil {
+		al := *out.AccessLogs
+		if al.RetentionDays < 0 {
+			return out, fmt.Errorf("sluispulumi: LambdaArgs.AccessLogs.RetentionDays %d is negative", al.RetentionDays)
+		}
+		if al.RetentionDays == 0 {
+			al.RetentionDays = 7
+		}
+		out.AccessLogs = &al
 	}
 	if out.Function.MemoryMB == 0 {
 		out.Function.MemoryMB = 512
@@ -754,7 +785,20 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 
 	// ---- the API
-	api, domain, truststore, err := newAPI(ctx, name, &a, fn, tags, child)
+	var accessLogs *cloudwatch.LogGroup
+	out.AccessLogGroupName = pulumi.String("").ToStringOutput()
+	if a.AccessLogs != nil {
+		accessLogs, err = cloudwatch.NewLogGroup(ctx, name+"-api-access", &cloudwatch.LogGroupArgs{
+			Name:            pulumi.String("/aws/apigateway/" + fnName),
+			RetentionInDays: pulumi.Int(a.AccessLogs.RetentionDays),
+			Tags:            tags,
+		}, child)
+		if err != nil {
+			return nil, fmt.Errorf("sluis access log group: %w", err)
+		}
+		out.AccessLogGroupName = accessLogs.Name
+	}
+	api, domain, truststore, err := newAPI(ctx, name, &a, fn, accessLogs, tags, child)
 	if err != nil {
 		return nil, err
 	}
@@ -855,7 +899,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
 		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "roleArn": out.RoleArn, "roleName": out.RoleName,
-		"apiId": out.APIID, "apiUrl": out.APIURL,
+		"apiId": out.APIID, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
@@ -942,7 +986,7 @@ const truststoreKey = "truststore/client-ca.pem"
 
 // newAPI is the HTTP API, its integration with the function, the custom
 // domain with mutual TLS and the truststore in its own bucket.
-func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, tags pulumi.StringMapInput,
+func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, accessLogs *cloudwatch.LogGroup, tags pulumi.StringMapInput,
 	opts ...pulumi.ResourceOption) (*apigatewayv2.Api, *apigatewayv2.DomainName, *s3.Bucket, error) {
 	bucket, err := s3.NewBucket(ctx, name+"-truststore", &s3.BucketArgs{
 		Bucket: pulumi.String(a.API.TruststoreBucketName), Tags: tags,
@@ -1026,9 +1070,16 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 	}, opts...); err != nil {
 		return nil, nil, nil, err
 	}
-	stage, err := apigatewayv2.NewStage(ctx, name+"-api-stage", &apigatewayv2.StageArgs{
+	stageArgs := &apigatewayv2.StageArgs{
 		ApiId: api.ID(), Name: pulumi.String("$default"), AutoDeploy: pulumi.Bool(true), Tags: tags,
-	}, opts...)
+	}
+	if accessLogs != nil {
+		stageArgs.AccessLogSettings = &apigatewayv2.StageAccessLogSettingsArgs{
+			DestinationArn: accessLogs.Arn,
+			Format:         pulumi.String(AccessLogFormat),
+		}
+	}
+	stage, err := apigatewayv2.NewStage(ctx, name+"-api-stage", stageArgs, opts...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
