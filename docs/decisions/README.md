@@ -59,6 +59,7 @@ is not edited.
 | [0036](0036-configuration-is-immutable-per-instance.md) | Configuration and policy are immutable per instance; credentials and State are read live | Accepted; amended by [0037](0037-one-process-everywhere.md); refined by [0038](0038-estates-render-through-sluis.md); follows up [0007](0007-breaking-changes-inside-1x.md) (the deferred deprecation window), refines [0032](0032-one-configuration-file-one-binary-one-chart.md), amends [0028](0028-nothing-writes-configmaps-or-secrets.md) and [0031](0031-a-generic-migration-tool.md) only where they name SSM paths or configuration documents |
 | [0037](0037-one-process-everywhere.md) | One process everywhere: one Lambda function, one Deployment, one service document | Accepted; refined by [0038](0038-estates-render-through-sluis.md); amends [0036](0036-configuration-is-immutable-per-instance.md) (three documents and three Deployments → one unified process) |
 | [0038](0038-estates-render-through-sluis.md) | Estates render their documents through sluis | Accepted; refines [0036](0036-configuration-is-immutable-per-instance.md) (who writes the documents an instance is started with) and [0037](0037-one-process-everywhere.md) (one service document, one policy document) |
+| [0039](0039-the-issuer-generates-confidential-client-secrets.md) | The issuer generates confidential client secrets | Accepted; extends [0038](0038-estates-render-through-sluis.md) (what an estate declares for a client) and refines the client table of the policy document |
 <!-- /generated -->
 
 ## Template
