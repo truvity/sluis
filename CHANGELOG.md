@@ -1,5 +1,4 @@
 ## Unreleased
-
 ### Changed
 
 - **A refresh_token grant makes 4 State writes and 3 reads (was 14 and 8), and asks the directory once (was 4); an authorization_code grant makes 9 writes and 3 reads (was 13 and 5).** One resolution per request, the snapshot decoded once per blob version, the last-known groups rewritten only when they change or the stored time is an eighth of the hold window old (a hold can now end up to that much early, never late), the access-token record written once, the refresh token and its session read once and the spent token marked in its own pointer (`spent:<successor>`, written only over the revision read, so a concurrent refresh becomes a replay and a revocation during a refresh is not undone), and the index and sign-in-client sets added to only when a membership would lapse. Behaviour is otherwise unchanged; `issuer:session-rotated:` is still read for one release.
