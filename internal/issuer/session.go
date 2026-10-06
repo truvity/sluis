@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -179,10 +181,13 @@ func sessionTokenKey(token string) string {
 	return "issuer:session-token:" + hex.EncodeToString(sum[:])
 }
 
-// sessionRotatedKey records what a spent refresh token became, for
-// [refreshGrace] after it was spent. Hashed like the token key it shadows,
-// for the same reason: an index that can be read must not be an index that
-// can be replayed.
+// sessionRotatedKey is where the version before this one recorded what a
+// spent refresh token became, for [refreshGrace] after it was spent. A
+// rotation now records that in the spent token's own pointer (see
+// [spentPrefix]); this key is still READ, on the path a spent or unknown
+// token takes, so that a token rotated by the previous version during a
+// rollout is still answered inside its grace window. It can go one
+// release after this one.
 func sessionRotatedKey(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return "issuer:session-rotated:" + hex.EncodeToString(sum[:])
@@ -207,6 +212,24 @@ func capEnd(now, authTime time.Time, refresh, absolute time.Duration) time.Time 
 		return limit
 	}
 	return end
+}
+
+// spentPrefix marks a token pointer whose token has been spent: the value
+// is the prefix and then the successor the spending refresh produced,
+// kept for [refreshGrace].
+//
+// It is the spent token's own key rather than one beside it because a
+// rotation has to do two things to that token at once -- stop it naming
+// the session, and say what it became -- and doing both in one write is
+// one write fewer on every refresh. The successor is a bearer secret held
+// in plain for those seconds, exactly as the separate key held it; a
+// value that names no session id can never be read as one.
+const spentPrefix = "spent:"
+
+// successorOf reads a token pointer's value: the successor, and true, for
+// a spent token.
+func successorOf(raw []byte) (string, bool) {
+	return strings.CutPrefix(string(raw), spentPrefix)
 }
 
 // refreshGrace is how long a refresh token that has just been rotated
@@ -285,35 +308,119 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 	return session, nil
 }
 
+// presented is a refresh token as one refresh found it: the session it
+// names, and the revisions of what was read, so that the rotation that
+// follows writes over exactly that and reads none of it again.
+type presented struct {
+	token   string
+	session Session
+	// successor is set when the token was spent moments ago and this is a
+	// replay of the refresh that spent it, inside the grace window: the
+	// token that refresh produced, which is the answer.
+	successor string
+	// pointer and record are the revisions of the token's pointer and of
+	// the session record as read, "" from a State that keeps none.
+	pointer, record string
+}
+
+// present resolves a refresh token for a refresh: to its live session, or
+// -- for a token rotated within [refreshGrace] -- to the successor that
+// rotation produced. Its answer is what [Sessions.rotate] acts on, so a
+// refresh reads the token and the session once.
+func (s *Sessions) present(ctx context.Context, token string) (presented, bool, error) {
+	raw, pointer, found, err := getVersion(ctx, s.state, sessionTokenKey(token))
+	if err != nil {
+		return presented{}, false, err
+	}
+
+	if !found {
+		// Spent by the version before this one, which recorded the
+		// successor under a key of its own.
+		raw, found, err = s.state.Get(ctx, sessionRotatedKey(token))
+		if err != nil || !found {
+			return presented{}, false, err
+		}
+
+		return s.replayedTo(ctx, token, string(raw))
+	}
+
+	if successor, spent := successorOf(raw); spent {
+		return s.replayedTo(ctx, token, successor)
+	}
+
+	session, record, live, err := s.byIDVersion(ctx, string(raw))
+	if err != nil || !live {
+		return presented{}, false, err
+	}
+
+	return presented{token: token, session: session, pointer: pointer, record: record}, true, nil
+}
+
+// replayedTo answers a token that was rotated moments ago with the
+// successor that rotation produced, so the loser of a race ends up
+// holding exactly what the winner holds.
+//
+// A browser does not refresh once. A page that opens with several calls
+// at once, behind a gateway that refreshes PER REQUEST rather than per
+// session, presents one spent token several times within the same second
+// -- and across replicas, so no in-process lock would see it. Refusing
+// those is refusing the legitimate holder: the gateway treats the
+// refusal as a dead session and sends the person back to sign in,
+// intermittently and for no reason they can see.
+//
+// The window is deliberately short and does not mint anything. Outside
+// it, reuse is refused exactly as before, which is the detection this
+// rotation exists for; inside it, the replay is answered with the one
+// credential already in flight rather than a second one.
+//
+// The successor must still resolve to a live session. It may not: the
+// session can have been ended, or refreshed again, between the rotation
+// and this replay -- and an ended session must not be handed back a
+// working credential.
+func (s *Sessions) replayedTo(ctx context.Context, token, successor string) (presented, bool, error) {
+	session, live, err := s.ByToken(ctx, successor)
+	if err != nil || !live {
+		return presented{}, false, err
+	}
+
+	return presented{token: token, session: session, successor: successor}, true, nil
+}
+
 // Refreshed moves a session onto a new token, which is what a refresh
 // does: the old token is spent and must stop working, and the session it
 // belongs to carries on with its identity, its client and its history.
 // It reports whether the old token named a live session.
+//
+// A replay of a refresh that has just happened is handed the SAME
+// successor the winner got, not a second live credential; any other spent
+// token is refused.
 func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Session, string, bool, error) {
-	session, found, err := s.ByToken(ctx, oldToken)
-	if err != nil {
+	p, found, err := s.present(ctx, oldToken)
+	if err != nil || !found {
 		return Session{}, "", false, err
 	}
 
-	// The token is spent. Either this is the replay of a refresh that has
-	// just happened -- in which case the caller is handed the SAME
-	// successor the winner got, not a second live credential -- or it is
-	// a reuse worth refusing.
-	if !found {
-		return s.replayed(ctx, oldToken)
+	return s.rotate(ctx, p, newToken)
+}
+
+// rotate is [Sessions.Refreshed] for a token [Sessions.present] has
+// already resolved: three writes, each over what was read or new.
+//
+//  1. The new token's pointer. First, so that by the time anything says
+//     what the old token became, what it became already resolves.
+//  2. The old token's pointer, replaced by the mark of a spent token and
+//     its successor -- only if it is still what was read. If another
+//     refresh spent it first this one is a replay and gets that one's
+//     successor; if it was revoked or has expired, this one is refused.
+//  3. The session record, with its new end -- only if it is still what
+//     was read. A session ended while this refresh ran stays ended; the
+//     refresh is refused rather than writing the record back.
+func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Session, string, bool, error) {
+	if p.successor != "" {
+		return p.session, p.successor, true, nil
 	}
 
-	if err = s.state.Delete(ctx, sessionTokenKey(oldToken)); err != nil {
-		return Session{}, "", false, err
-	}
-
-	// What the spent token became, for the grace window. Written before
-	// the new token is, so a replay can never find a successor that is
-	// not yet resolvable.
-	if err = s.state.Set(ctx, sessionRotatedKey(oldToken), []byte(newToken), refreshGrace); err != nil {
-		return Session{}, "", false, err
-	}
-
+	session := p.session
 	now := s.now()
 	session.LastRefreshed = now
 	// Capped exactly as at open: a sliding refresher plateaus at
@@ -322,21 +429,65 @@ func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Se
 	session.ExpiresAt = capEnd(now, session.AuthTime, s.lifetime, s.absoluteOf(session.Resource))
 
 	// The policy may have withdrawn the extension this chain was opened
-	// under. The token is already spent; the chain ends here, as it would
-	// at any other limit, rather than being written back already expired.
+	// under. The token is spent and the chain ends here, as it would at
+	// any other limit, rather than being written back already expired.
 	if !session.ExpiresAt.After(now) {
-		if err = s.deleteSession(ctx, session); err != nil {
+		if err := s.state.Delete(ctx, sessionTokenKey(p.token)); err != nil {
+			return Session{}, "", false, err
+		}
+
+		if err := s.deleteSession(ctx, session); err != nil {
 			return Session{}, "", false, err
 		}
 
 		return Session{}, "", false, nil
 	}
 
-	if err = s.put(ctx, session); err != nil {
+	if err := s.state.Set(ctx, sessionTokenKey(newToken), []byte(session.ID), s.lifetime); err != nil {
 		return Session{}, "", false, err
 	}
 
-	if err = s.state.Set(ctx, sessionTokenKey(newToken), []byte(session.ID), s.lifetime); err != nil {
+	err := replace(ctx, s.state, sessionTokenKey(p.token), []byte(spentPrefix+newToken), refreshGrace, p.pointer)
+	if errors.Is(err, errMoved) || errors.Is(err, errGone) {
+		// Lost: the new token was never handed out, so its pointer goes.
+		s.discard(ctx, newToken)
+
+		if errors.Is(err, errGone) {
+			return Session{}, "", false, nil
+		}
+
+		// Another refresh of this same token got there first. This is
+		// its replay, and the answer is its successor.
+		again, found, err := s.present(ctx, p.token)
+		if err != nil || !found || again.successor == "" {
+			return Session{}, "", false, err
+		}
+
+		return again.session, again.successor, true, nil
+	}
+
+	if err != nil {
+		return Session{}, "", false, err
+	}
+
+	raw, err := json.Marshal(session)
+	if err != nil {
+		return Session{}, "", false, fmt.Errorf("issuer: encode session %s: %w", session.ID, err)
+	}
+
+	switch err = replace(ctx, s.state, sessionKey(session.ID), raw, s.lifetime, p.record); {
+	case errors.Is(err, errGone):
+		// Ended while this refresh ran. It stays ended.
+		s.discard(ctx, newToken)
+
+		return Session{}, "", false, nil
+	case errors.Is(err, errMoved):
+		// Written by something else since it was read, and still there:
+		// the record carries on with this refresh's end, as it always did.
+		err = s.put(ctx, session)
+	}
+
+	if err != nil {
 		return Session{}, "", false, err
 	}
 
@@ -352,72 +503,41 @@ func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Se
 	return session, newToken, true, nil
 }
 
-// replayed answers a refresh presented with a token that was rotated
-// moments ago: it returns the successor that rotation produced, so the
-// loser of a race ends up holding exactly what the winner holds.
-//
-// A browser does not refresh once. A page that opens with several calls
-// at once, behind a gateway that refreshes PER REQUEST rather than per
-// session, presents one spent token several times within the same second
-// -- and across replicas, so no in-process lock would see it. Refusing
-// those is refusing the legitimate holder: the gateway treats the
-// refusal as a dead session and sends the person back to sign in,
-// intermittently and for no reason they can see.
-//
-// The window is deliberately short and does not mint anything. Outside
-// it, reuse is refused exactly as before, which is the detection this
-// rotation exists for; inside it, the replay is answered with the one
-// credential already in flight rather than a second one.
-func (s *Sessions) replayed(ctx context.Context, oldToken string) (Session, string, bool, error) {
-	raw, found, err := s.state.Get(ctx, sessionRotatedKey(oldToken))
-	if err != nil || !found {
-		return Session{}, "", false, err
+// discard removes the pointer of a token a rotation minted and then did
+// not hand out. Best effort: the token was never disclosed, so a pointer
+// left behind grants nothing to anyone, and it expires on its own.
+func (s *Sessions) discard(ctx context.Context, token string) {
+	if err := s.state.Delete(ctx, sessionTokenKey(token)); err != nil {
+		slog.WarnContext(ctx, "the issuer could not remove an unused refresh token's pointer", "error", err)
 	}
-
-	successor := string(raw)
-
-	// The successor must still resolve to a live session. It may not: the
-	// session can have been ended, or refreshed again, between the
-	// rotation and this replay -- and an ended session must not be handed
-	// back a working credential.
-	session, live, err := s.ByToken(ctx, successor)
-	if err != nil || !live {
-		return Session{}, "", false, err
-	}
-
-	return session, successor, true, nil
 }
 
 // ByRefreshToken resolves a refresh token to its session, including one
 // that was rotated within the grace window.
 //
-// The refresh endpoint reads the token TWICE: the library resolves it to
-// a request before it asks for new tokens, so a replay that [Refreshed]
-// would have answered is refused before [Refreshed] ever runs. Both
-// readings have to see the same window or the grace is unreachable --
-// which is exactly the shape the first attempt at this had, visible as
-// the refusal changing from "not live" to `invalid_refresh_token` and
-// the failures carrying on unchanged.
+// The library reads the token before it asks for new tokens, so a replay
+// that [Sessions.Refreshed] would have answered must resolve here too or
+// it is refused before the rotation ever runs.
 //
 // Only the refresh path uses this. [ByToken] stays exact, because the
 // other callers -- revocation, listing -- are asking whether this token
 // is the live one, which is a different question.
 func (s *Sessions) ByRefreshToken(ctx context.Context, token string) (Session, bool, error) {
-	session, ok, err := s.ByToken(ctx, token)
-	if err != nil || ok {
-		return session, ok, err
-	}
+	p, ok, err := s.present(ctx, token)
 
-	session, _, ok, err = s.replayed(ctx, token)
-
-	return session, ok, err
+	return p.session, ok, err
 }
 
-// ByToken resolves a refresh token to its session.
+// ByToken resolves a live refresh token to its session. A spent one,
+// inside its grace window or not, names none.
 func (s *Sessions) ByToken(ctx context.Context, token string) (Session, bool, error) {
 	raw, found, err := s.state.Get(ctx, sessionTokenKey(token))
 	if err != nil || !found {
 		return Session{}, false, err
+	}
+
+	if _, spent := successorOf(raw); spent {
+		return Session{}, false, nil
 	}
 
 	return s.byID(ctx, string(raw))
@@ -564,6 +684,12 @@ func (s *Sessions) RevokeToken(ctx context.Context, token string) (bool, error) 
 		return false, err
 	}
 
+	// A spent token holds no session of its own; what it became is
+	// revoked through the session, as it always was.
+	if _, spent := successorOf(raw); spent {
+		return false, nil
+	}
+
 	if err = s.state.Delete(ctx, sessionTokenKey(token)); err != nil {
 		return false, err
 	}
@@ -659,16 +785,27 @@ func (s *Sessions) ByID(ctx context.Context, id string) (Session, bool, error) {
 // byID reads one record. An expired record is absent, which is what makes
 // the TTL the whole of expiry.
 func (s *Sessions) byID(ctx context.Context, id string) (Session, bool, error) {
-	session, err := getJSON[Session](ctx, s.state, sessionKey(id))
-	if err != nil || session == nil {
-		return Session{}, false, err
+	session, _, live, err := s.byIDVersion(ctx, id)
+	return session, live, err
+}
+
+// byIDVersion is [Sessions.byID] with the revision of the record read.
+func (s *Sessions) byIDVersion(ctx context.Context, id string) (Session, string, bool, error) {
+	raw, version, found, err := getVersion(ctx, s.state, sessionKey(id))
+	if err != nil || !found {
+		return Session{}, "", false, err
+	}
+
+	var session Session
+	if err = json.Unmarshal(raw, &session); err != nil {
+		return Session{}, "", false, fmt.Errorf("issuer: %s is not readable: %w", sessionKey(id), err)
 	}
 
 	if !session.Live(s.now()) {
-		return Session{}, false, nil
+		return Session{}, "", false, nil
 	}
 
-	return *session, true, nil
+	return session, version, true, nil
 }
 
 // put writes a record, refusing one that is already expired.
@@ -709,6 +846,10 @@ func (s *Sessions) endedByAbsoluteLimit(ctx context.Context, token string) (Sess
 	raw, found, err := s.state.Get(ctx, sessionTokenKey(token))
 	if err != nil || !found {
 		return Session{}, false, err
+	}
+
+	if _, spent := successorOf(raw); spent {
+		return Session{}, false, nil
 	}
 
 	session, err := getJSON[Session](ctx, s.state, sessionKey(string(raw)))

@@ -16,7 +16,10 @@ type portState struct {
 	index port.Index
 }
 
-var _ State = portState{}
+var (
+	_ State          = portState{}
+	_ versionedState = portState{}
+)
 
 // NewPortState returns the issuer's [State] over the ports. A value is
 // written with a lifetime always, as the Valkey-backed store refused one
@@ -63,4 +66,28 @@ func (p portState) Remove(ctx context.Context, key, member string) error {
 
 func (p portState) Members(ctx context.Context, key string) ([]string, error) {
 	return p.index.Members(ctx, key)
+}
+
+// GetVersion implements [versionedState].
+func (p portState) GetVersion(ctx context.Context, key string) ([]byte, string, bool, error) {
+	record, err := p.state.Get(ctx, key)
+	if errors.Is(err, port.ErrNotFound) {
+		return nil, "", false, nil
+	}
+	if err != nil {
+		return nil, "", false, err
+	}
+	return record.Value, string(record.Revision), true, nil
+}
+
+// Replace implements [versionedState]: an Update at the revision read.
+func (p portState) Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error {
+	_, err := p.state.Update(ctx, key, value, ttl, port.Revision(version))
+	switch {
+	case errors.Is(err, port.ErrConflict):
+		return errMoved
+	case errors.Is(err, port.ErrNotFound):
+		return errGone
+	}
+	return err
 }
