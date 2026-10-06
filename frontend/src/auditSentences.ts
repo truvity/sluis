@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "locales": [
     "en"
   ],
@@ -24,6 +24,36 @@ export const roster: Sentences = {
       "summary": "A catalogued GitHub App was installed.",
       "message": {
         "en": "{actor} installed GitHub App {targets_0_id} on {targets_1_id}"
+      }
+    },
+    "roster.client.secret.adopted": {
+      "summary": "An existing secret of a generated client was taken as its stored secret, unchanged.",
+      "message": {
+        "en": "the existing secret of client {targets_0_id} was adopted"
+      }
+    },
+    "roster.client.secret.created": {
+      "summary": "The secret of a generated client was made.",
+      "message": {
+        "en": "the secret of client {targets_0_id} was generated"
+      }
+    },
+    "roster.client.secret.deleted": {
+      "summary": "The stored secret of a client no longer in the policy was deleted.",
+      "message": {
+        "en": "{actor} deleted the stored secret of client {targets_0_id}"
+      }
+    },
+    "roster.client.secret.orphaned": {
+      "summary": "A stored client secret was found with no generated client of that id in the policy.",
+      "message": {
+        "en": "the stored secret of client {targets_0_id} has no generated client in the policy"
+      }
+    },
+    "roster.client.secret.rotated": {
+      "summary": "The secret of a generated client was replaced, the old one staying valid for an overlap.",
+      "message": {
+        "en": "{actor} rotated the secret of client {targets_0_id}"
       }
     },
     "roster.github_app.created": {
