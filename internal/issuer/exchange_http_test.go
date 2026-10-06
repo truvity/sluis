@@ -721,7 +721,7 @@ groups:
 
 	// The policy refuses to carry a secret for this kind, which is why
 	// asking for one can never be satisfied.
-	if client.Secret != "" {
-		t.Errorf("an exchange client carries a secret %q; it should not be able to", client.Secret)
+	if !client.Secret.IsZero() {
+		t.Errorf("an exchange client carries a secret %q; it should not be able to", client.SecretName())
 	}
 }

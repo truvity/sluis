@@ -262,7 +262,7 @@ func clientProto(view *policy.ClientView) *directoryrosterv1.PolicyClient {
 		Kind:      view.Kind,
 		Requires:  view.Requires,
 		Redirects: view.Redirects,
-		Secret:    view.Secret,
+		Secret:    view.SecretName(),
 	}
 	if view.TTLCap > 0 {
 		out.TtlCap = durationpb.New(view.TTLCap.Duration())

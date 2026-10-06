@@ -1,5 +1,11 @@
 ## Unreleased
 
+## v1.66.0
+
+### Added
+
+- **Confidential clients can let the issuer generate their secret.** A policy client's `secret` is now one of two shapes: a string, the name of an input (`clients/<id>/secret`, unchanged), or the object `{generate: true}`. With the object form the issuer makes a 32-byte random secret (base64url, no padding) the first time it runs and keeps it with its credentials, at `credentials/oidc-client/<id>/secret`, as one record that also has room for a previous secret and the time until which it is accepted. The write is create-only, so replicas and Lambda invocations that start together agree on one value, and an existing record is never overwritten. When the input `clients/<id>/secret` exists at that moment it is adopted, so a client that already uses it keeps working. The token endpoint reads the record first and the input second, for every client, so a first deploy never refuses a valid client before the secret exists; the record is cached for 30 seconds. The check compares both the current and the previous secret on every request, in constant time. Generation is refused (at start-up) when the secrets adapter cannot create a secret only if absent, which is the `legacy` adapter's, and for a public or exchange client; `generate: false` is refused. A failure for one client is logged and counted (`sluis.client_secret.reconcile`, `sluis.client_secret.auth`) and does not stop the issuer; it is retried every five minutes on a server and on the directory refresh schedule on Lambda. An older binary refuses the object form, so roll every replica before writing it. The export of a generated secret and a rotation command follow.
+
 ## v1.65.1
 
 ### Fixed

@@ -111,7 +111,7 @@ func TestScopeGroupsOverrideThings(t *testing.T) {
 		Clients: map[string]policy.Client{
 			"console": {
 				Kind:     policy.KindConfidential,
-				Secret:   "console-oidc",
+				Secret:   policy.ClientSecret{Name: "console-oidc"},
 				Requires: []string{"devel:grafana:viewer"},
 				Groups:   policy.GroupsOverride{Things: []string{"shop"}},
 			},

@@ -496,9 +496,12 @@ type Client struct {
 	// the application is for. Optional, and public in exactly the way
 	// DisplayName is.
 	Description string `yaml:"description,omitempty"`
-	// Secret names a Secret in the issuer's namespace, for a confidential
-	// client. The secret itself is never in this file.
-	Secret string `yaml:"secret,omitempty"`
+	// Secret is how a confidential client gets its secret: a name, which
+	// the installation delivers as an input (`clients/<id>/secret`), or
+	// `{generate: true}`, which has the issuer make one and keep it with
+	// its credentials. The secret itself is never in this file. See
+	// [ClientSecret].
+	Secret ClientSecret `yaml:"secret,omitempty" json:"secret,omitempty"`
 	// Redirects are the allowed redirect URIs.
 	Redirects []string `yaml:"redirects,omitempty"`
 	// SignedOut are the allowed landing pages after an RP-initiated
@@ -962,6 +965,14 @@ func ValidAWSAccount(s string) bool {
 	return true
 }
 
+// SecretName is the name an installation delivers this client's secret
+// under, or "" when the client has none or the issuer generates it.
+func (c Client) SecretName() string { return c.Secret.Name }
+
+// SecretGenerated reports that the issuer makes this client's secret itself
+// (`secret: {generate: true}`) rather than being handed one.
+func (c Client) SecretGenerated() bool { return c.Secret.Generate }
+
 func (c Client) validate(id string, p Policy) error {
 	if err := displayText("display_name", c.DisplayName, MaxDisplayName); err != nil {
 		return fmt.Errorf("client %q: %w", id, err)
@@ -976,8 +987,11 @@ func (c Client) validate(id string, p Policy) error {
 	default:
 		return fmt.Errorf("client %q: kind %q is not public, confidential or exchange", id, c.Kind)
 	}
-	if c.Kind == KindConfidential && c.Secret == "" {
-		return fmt.Errorf("client %q is confidential and names no secret", id)
+	if c.Kind == KindConfidential && c.Secret.IsZero() {
+		return fmt.Errorf("client %q is confidential and names no secret: name one, or write `secret: {generate: true}` to have the issuer make it", id)
+	}
+	if c.Kind != KindConfidential && c.Secret.Generate {
+		return fmt.Errorf("client %q is %s and holds no secret: only a confidential client may have the issuer generate one", id, c.Kind)
 	}
 	if c.Kind == KindExchange && len(c.Redirects) > 0 {
 		return fmt.Errorf("client %q is an exchange target and needs no redirects", id)
