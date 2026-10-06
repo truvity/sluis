@@ -51,20 +51,21 @@ func parseClientsFlags(name string, args []string, withOverlap bool) (clientsFla
 	if withOverlap {
 		flags.StringVar(&overlap, "overlap", "", "how long the replaced secret stays valid (default 24h, at most 168h; 0 cuts it at once)")
 	}
-	// The id may come before the flags: `rotate <id> --overlap 24h`.
-	var rest []string
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		out.id, rest = args[0], args[1:]
-	} else {
-		rest = args
-	}
-	if err := flags.Parse(rest); err != nil {
-		return clientsFlags{}, usageError{err}
-	}
-	if out.id == "" && flags.NArg() > 0 {
-		out.id = flags.Arg(0)
-	} else if flags.NArg() > 0 {
-		return clientsFlags{}, badUsage("clients %s takes one client id", name)
+	// The id and the flags come in either order: `rotate <id> --overlap 24h`
+	// and `rotate --overlap 24h <id>`. Flags are parsed again after each
+	// positional argument, so none after the id is dropped.
+	rest := args
+	for {
+		if err := flags.Parse(rest); err != nil {
+			return clientsFlags{}, usageError{err}
+		}
+		if flags.NArg() == 0 {
+			break
+		}
+		if out.id != "" {
+			return clientsFlags{}, badUsage("clients %s takes one client id, not %q as well", name, flags.Arg(0))
+		}
+		out.id, rest = flags.Arg(0), flags.Args()[1:]
 	}
 	if strings.TrimSpace(out.id) == "" {
 		return clientsFlags{}, badUsage("clients %s needs the client id", name)
