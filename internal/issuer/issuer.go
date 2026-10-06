@@ -142,6 +142,8 @@ type Issuer struct {
 	sessions *Sessions
 	sso      *SSO
 	audit    audit.Recorder
+	// clientSecrets is what the operator endpoint manages; nil mounts nothing.
+	clientSecrets ClientSecretAdmin
 	// githubApps are the catalogue Apps installation tokens are minted
 	// for. Nil refuses every such request.
 	githubApps *GitHubApps

@@ -347,6 +347,20 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		apps.Store = store
 	}
 	deps.GitHubApps = &apps
+	// A rotation copies the new secret out at once, when the deployment
+	// exports it. The runner is built after the issuer, so the hook reads it
+	// when it is called; it does not block the request that rotated.
+	var copies *exports.Runner
+	deps.ClientSecretChanged = func(ctx context.Context, clientID string) {
+		if copies == nil {
+			return
+		}
+		go func() {
+			bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+			defer cancel()
+			copies.RefreshClient(bounded, clientID)
+		}()
+	}
 	assembled, err := issuerapp.New(ctx, cfg.Issuer, deps, log)
 	if err != nil {
 		a.Close()
@@ -367,7 +381,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Token: auditToken(assembled, audience),
 		})
 	}
-	copies, err := openExports(cfg, stores, directory, log)
+	copies, err = openExports(cfg, stores, directory, log)
 	if err != nil {
 		a.Close()
 		return nil, err
