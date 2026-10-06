@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **Pulumi library: opt-in API Gateway access logs (path and status only).** `LambdaArgs.AccessLogs` (off by default) declares a log group `/aws/apigateway/<FunctionName>` (`RetentionDays`, default 7) and the stage's access log settings, for an installation where MCP clients refresh every few minutes and the request pattern is worth seeing. The line holds the request time, id, method, path, status and the two latencies; the query string (OAuth codes and state), headers, source address and identity are never logged. An HTTP API needs no account-level CloudWatch role, so no IAM resource is added. New output `AccessLogGroupName`.
+
 ## v1.65.1
 
 ### Fixed

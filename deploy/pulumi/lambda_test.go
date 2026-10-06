@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -145,6 +146,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("functionName", l.FunctionName)
 		collect("roleArn", l.RoleArn)
 		collect("apiUrl", l.APIURL)
+		collect("accessLogGroupName", l.AccessLogGroupName)
 		collect("domainTarget", l.DomainTarget)
 		collect("domainHostedZoneID", l.DomainHostedZoneID)
 		collect("truststoreUri", l.TruststoreURI)
@@ -547,6 +549,65 @@ func TestTheDefaultEndpointStaysOnlyWhenAsked(t *testing.T) {
 	rec, _ := mustLambda(t, estate{keepDefaultEndpoint: true})
 	if prop(rec.one(t, "aws:apigatewayv2/api:Api", "kernel-api"), "disableExecuteApiEndpoint").BoolValue() {
 		t.Error("KeepDefaultEndpoint did not keep it")
+	}
+}
+
+const stageType = "aws:apigatewayv2/stage:Stage"
+
+func TestAccessLogsAreOffUnlessAsked(t *testing.T) {
+	rec, _ := mustLambda(t, estate{})
+	if rec.has("aws:cloudwatch/logGroup:LogGroup", "kernel-api-access") {
+		t.Error("an access log group exists without AccessLogs")
+	}
+	if !prop(rec.one(t, stageType, "kernel-api-stage"), "accessLogSettings").IsNull() {
+		t.Error("the stage logs without AccessLogs")
+	}
+}
+
+func TestAccessLogsLogPathAndStatusOnly(t *testing.T) {
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.AccessLogs = &arp.AccessLogsArgs{} }})
+	lg := rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "kernel-api-access")
+	if got := prop(lg, "retentionInDays").NumberValue(); got != 7 {
+		t.Errorf("retention = %v, want 7", got)
+	}
+	if got := prop(lg, "name").StringValue(); got != "/aws/apigateway/sluis" {
+		t.Errorf("log group name = %q", got)
+	}
+	set := prop(rec.one(t, stageType, "kernel-api-stage"), "accessLogSettings")
+	if set.IsNull() {
+		t.Fatal("the stage has no access log settings")
+	}
+	format := set.ObjectValue()["format"].StringValue()
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(format), &parsed); err != nil {
+		t.Fatalf("format is not JSON: %v", err)
+	}
+	want := []string{"requestTime", "requestId", "httpMethod", "path", "status", "responseLatency", "integrationLatency"}
+	if len(parsed) != len(want) {
+		t.Errorf("format has %d fields, want %v", len(parsed), want)
+	}
+	for _, k := range want {
+		if parsed[k] == "" {
+			t.Errorf("format lacks %s", k)
+		}
+	}
+	for _, bad := range []string{"querystring", "$request.querystring", "$context.identity", "header", "routeKey", "sourceIp", "userAgent"} {
+		if strings.Contains(strings.ToLower(format), strings.ToLower(bad)) {
+			t.Errorf("format contains %q: %s", bad, format)
+		}
+	}
+	if strings.Contains(format, "$context.path") && strings.Contains(format, "?") {
+		t.Errorf("format carries a query separator: %s", format)
+	}
+}
+
+func TestAccessLogsRetentionIsConfigurableAndValidated(t *testing.T) {
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.AccessLogs = &arp.AccessLogsArgs{RetentionDays: 3} }})
+	if got := prop(rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "kernel-api-access"), "retentionInDays").NumberValue(); got != 3 {
+		t.Errorf("retention = %v, want 3", got)
+	}
+	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.AccessLogs = &arp.AccessLogsArgs{RetentionDays: -1} }}); err == nil {
+		t.Error("a negative retention was accepted")
 	}
 }
 
