@@ -37,11 +37,14 @@ type Budget struct {
 // adapter, the DynamoDB fake and LocalStack: authorization_code 13 writes, 5
 // reads, 3 resolutions; refresh_token 14 writes, 8 reads, 4 resolutions,
 // first refresh and steady state alike. After it, the same on all three:
-// authorization_code 9 writes, 3 reads, 1 resolution; refresh_token 4
-// writes, 3 reads, 1 resolution.
+// authorization_code 9 writes, 4 reads, 1 resolution; refresh_token 4
+// writes, 4 reads, 1 resolution. One read of each is the revision of the
+// last-known groups, read so that their write is skipped only while the
+// record is still this process's own: an eventually consistent read of no
+// value, half a read unit on DynamoDB (port.RevisionPeeker).
 var Budgets = []Budget{
 	{
-		Grant: "authorization_code", MaxWrites: 9, MaxReads: 3, Resolutions: 1,
+		Grant: "authorization_code", MaxWrites: 9, MaxReads: 4, Resolutions: 1,
 		drive: func(t *testing.T, h *Harness) Counts {
 			code := h.SignIn()
 			if code == "" {
@@ -56,7 +59,7 @@ var Budgets = []Budget{
 		},
 	},
 	{
-		Grant: "refresh_token", MaxWrites: 4, MaxReads: 3, Resolutions: 1,
+		Grant: "refresh_token", MaxWrites: 4, MaxReads: 4, Resolutions: 1,
 		drive: func(t *testing.T, h *Harness) Counts {
 			first := h.Grant()
 			var next Tokens
@@ -71,7 +74,7 @@ var Budgets = []Budget{
 		// The second refresh of a chain, which is every refresh after the
 		// first for a client that keeps running: nothing about it may cost
 		// more than the first.
-		Grant: "refresh_token (steady)", MaxWrites: 4, MaxReads: 3, Resolutions: 1,
+		Grant: "refresh_token (steady)", MaxWrites: 4, MaxReads: 4, Resolutions: 1,
 		drive: func(t *testing.T, h *Harness) Counts {
 			first := h.Grant()
 			second := h.Refresh(first.Refresh)

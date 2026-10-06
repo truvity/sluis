@@ -68,7 +68,7 @@ type Resolver struct {
 	// stored is what this process last wrote to state for each identity,
 	// so that an answer it would only write again unchanged is not
 	// written: see [Resolver.remember].
-	stored map[string]lastKnown
+	stored map[string]storedHeld
 	now    func() time.Time
 }
 
@@ -91,7 +91,7 @@ func (r *Resolver) UseState(state State) {
 	defer r.mu.Unlock()
 	r.state = state
 	// What was written to another store says nothing about this one.
-	r.stored = map[string]lastKnown{}
+	r.stored = map[string]storedHeld{}
 }
 
 // NewResolver returns a resolver over dir, holding last-known groups for
@@ -99,7 +99,7 @@ func (r *Resolver) UseState(state State) {
 func NewResolver(dir Directory, window time.Duration) *Resolver {
 	return &Resolver{
 		dir: dir, window: window,
-		seen: map[string]lastKnown{}, stored: map[string]lastKnown{}, now: time.Now,
+		seen: map[string]lastKnown{}, stored: map[string]storedHeld{}, now: time.Now,
 	}
 }
 
@@ -200,33 +200,50 @@ const heldRewrite = 8
 // (a store that is down must not turn a good answer into no answer).
 //
 // An answer this process itself wrote moments ago, with the same groups,
-// is not written again. The groups are what the hold window keeps, and
-// they have not changed; what has is the time beside them, which is where
-// the window is measured from. Rewriting it on every request was a State
-// write on every sign-in and every refresh -- in an installation where MCP
-// clients refresh every few minutes, the commonest write there was -- to
-// move that time forward by minutes. It is moved forward once it is an
-// eighth of the window old instead, so a hold that starts while it lags
-// ends at most an eighth of the window EARLY, never late: the issuer
-// stops acting on a directory it cannot reach slightly sooner, which is
-// the safe direction to be wrong in. A change of groups is always written.
+// and that is STILL the record in the State, is not written again. The
+// groups are what the hold window keeps, and they have not changed; what
+// has is the time beside them, which is where the window is measured
+// from. Rewriting it on every request was a State write on every sign-in
+// and every refresh -- in an installation where MCP clients refresh every
+// few minutes, the commonest write there was -- to move that time forward
+// by minutes. It is moved forward once it is an eighth of the window old
+// instead, so a hold that starts while it lags ends at most an eighth of
+// the window EARLY, never late: the issuer stops acting on a directory it
+// cannot reach slightly sooner, which is the safe direction to be wrong in.
+//
+// "Still the record" is checked, not assumed: another process may have
+// written since -- other groups, perhaps wider ones the directory has since
+// taken away -- or deleted it, and leaving THAT in place for the hold
+// window would be holding groups nobody holds any more. So the skip costs
+// one read of the record's revision (eventually consistent where the store
+// offers it, and never its value) and happens only when that revision is
+// the one this process wrote. Any other answer, a failed read included,
+// writes. A State that keeps no revisions always writes.
 func (r *Resolver) remember(ctx context.Context, email string, known lastKnown) {
 	r.mu.Lock()
 	state := r.state
 	prev, wrote := r.stored[email]
 	r.mu.Unlock()
 	if state != nil {
-		if wrote && slices.Equal(prev.groups, known.groups) &&
+		versioned, canSkip := state.(peekingState)
+		if canSkip && wrote && prev.version != "" && slices.Equal(prev.groups, known.groups) &&
 			known.at.Sub(prev.at) < r.window/heldRewrite && !known.at.Before(prev.at) {
-			return
+			if current, found, err := versioned.PeekVersion(ctx, heldKey(email)); err == nil && found && current == prev.version {
+				return
+			}
 		}
 		raw, err := json.Marshal(heldRecord{Groups: known.groups, At: known.at})
+		var version string
 		if err == nil {
-			err = state.Set(ctx, heldKey(email), raw, r.window)
+			if canSkip {
+				version, err = versioned.SetVersion(ctx, heldKey(email), raw, r.window)
+			} else {
+				err = state.Set(ctx, heldKey(email), raw, r.window)
+			}
 		}
 		if err == nil {
 			r.mu.Lock()
-			r.stored[email] = lastKnown{groups: slices.Clone(known.groups), at: known.at}
+			r.stored[email] = storedHeld{groups: slices.Clone(known.groups), at: known.at, version: version}
 			r.mu.Unlock()
 			return
 		}
@@ -236,6 +253,14 @@ func (r *Resolver) remember(ctx context.Context, email string, known lastKnown) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.seen[email] = known
+}
+
+// storedHeld is what this process last wrote to the State for one
+// identity, with the revision the write was given.
+type storedHeld struct {
+	groups  []string
+	at      time.Time
+	version string
 }
 
 // recall is what is remembered about an identity. With a State it is the

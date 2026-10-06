@@ -19,6 +19,7 @@ type portState struct {
 var (
 	_ State          = portState{}
 	_ versionedState = portState{}
+	_ peekingState   = portState{}
 )
 
 // NewPortState returns the issuer's [State] over the ports. A value is
@@ -90,4 +91,34 @@ func (p portState) Replace(ctx context.Context, key string, value []byte, ttl ti
 		return errGone
 	}
 	return err
+}
+
+// SetVersion implements [peekingState]: a Put, and the revision it wrote.
+func (p portState) SetVersion(ctx context.Context, key string, value []byte, ttl time.Duration) (string, error) {
+	rev, err := p.state.Put(ctx, key, value, ttl)
+	return string(rev), err
+}
+
+// PeekVersion implements [peekingState] with the port's
+// [port.RevisionPeeker] where the adapter has one (an eventually consistent
+// read on DynamoDB), and a Get where it has not.
+func (p portState) PeekVersion(ctx context.Context, key string) (string, bool, error) {
+	var (
+		rev port.Revision
+		err error
+	)
+	if peeker, ok := p.state.(port.RevisionPeeker); ok {
+		rev, err = peeker.PeekRevision(ctx, key)
+	} else {
+		var record port.Record
+		record, err = p.state.Get(ctx, key)
+		rev = record.Revision
+	}
+	if errors.Is(err, port.ErrNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return string(rev), true, nil
 }
