@@ -61,7 +61,7 @@ func DecodeRecord(b []byte) (Record, error) {
 // layout does, so any declared id has a path and two ids never share one.
 func Path(clientID string) string {
 	seg := clientID
-	if seg == "" || strings.HasPrefix(seg, "u-") || seg == "." || seg == ".." || port.CheckSecretPath(seg) != nil {
+	if seg == "" || strings.Contains(seg, "/") || strings.HasPrefix(seg, "u-") || seg == "." || seg == ".." || port.CheckSecretPath(seg) != nil {
 		seg = fmt.Sprintf("u-%x", clientID)
 	}
 	return port.CredentialsPrefix + Kind + "/" + seg + "/secret"
