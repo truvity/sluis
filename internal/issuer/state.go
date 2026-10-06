@@ -3,8 +3,10 @@ package issuer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -51,6 +53,48 @@ type State interface {
 	Members(ctx context.Context, key string) ([]string, error)
 }
 
+// versionedState is what a [State] offers when it keeps a revision on
+// every value, as the ports do: a read that says which revision it saw,
+// and a write that lands only while that revision still stands.
+//
+// It is optional. The refresh rotation uses it to write over exactly
+// what it read -- so that a refresh racing another refresh of the same
+// token, or a revocation of its session, loses cleanly instead of
+// undoing what the other did -- and falls back to plain writes over a
+// State without it.
+type versionedState interface {
+	// GetVersion is [State.Get] with the revision of what was read.
+	GetVersion(ctx context.Context, key string) (value []byte, version string, found bool, err error)
+	// Replace writes value under key only while key still holds version:
+	// [errMoved] when it has been written since, [errGone] when it has
+	// been deleted or has expired.
+	Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error
+}
+
+var (
+	errMoved = errors.New("issuer: the value changed since it was read")
+	errGone  = errors.New("issuer: the value is gone")
+)
+
+// getVersion reads a value and its revision, or the value alone ("") from
+// a State that keeps none.
+func getVersion(ctx context.Context, state State, key string) ([]byte, string, bool, error) {
+	if v, ok := state.(versionedState); ok {
+		return v.GetVersion(ctx, key)
+	}
+	raw, found, err := state.Get(ctx, key)
+	return raw, "", found, err
+}
+
+// replace writes over what was read at version, or unconditionally when
+// there is no revision to hold it to (a State that keeps none).
+func replace(ctx context.Context, state State, key string, value []byte, ttl time.Duration, version string) error {
+	if v, ok := state.(versionedState); ok && version != "" {
+		return v.Replace(ctx, key, value, ttl, version)
+	}
+	return state.Set(ctx, key, value, ttl)
+}
+
 // getJSON reads a value and decodes it.
 func getJSON[T any](ctx context.Context, state State, key string) (*T, error) {
 	raw, found, err := state.Get(ctx, key)
@@ -84,14 +128,20 @@ type MemoryState struct {
 	sets      map[string]map[string]struct{}
 	setExpiry map[string]time.Time
 	now       func() time.Time
+	// revision counts writes, so that every value has one of its own.
+	revision uint64
 }
 
 type memoryValue struct {
-	value   []byte
-	expires time.Time
+	value    []byte
+	expires  time.Time
+	revision uint64
 }
 
-var _ State = (*MemoryState)(nil)
+var (
+	_ State          = (*MemoryState)(nil)
+	_ versionedState = (*MemoryState)(nil)
+)
 
 // NewMemoryState returns an empty store.
 func NewMemoryState() *MemoryState {
@@ -118,18 +168,50 @@ func (m *MemoryState) Get(_ context.Context, key string) ([]byte, bool, error) {
 }
 
 func (m *MemoryState) get(key string) ([]byte, bool, error) {
+	held, ok := m.live(key)
+	return held.value, ok, nil
+}
+
+// live is the value under key, if it has not expired.
+func (m *MemoryState) live(key string) (memoryValue, bool) {
 	held, ok := m.values[key]
 	if !ok {
-		return nil, false, nil
+		return memoryValue{}, false
 	}
 	// Expiry is checked on read rather than swept: a value nobody asks
 	// for costs a little memory, and a sweeper that stops is a store that
 	// grows without anyone noticing.
 	if !held.expires.IsZero() && !m.now().Before(held.expires) {
 		delete(m.values, key)
-		return nil, false, nil
+		return memoryValue{}, false
 	}
-	return held.value, true, nil
+	return held, true
+}
+
+// GetVersion implements [versionedState].
+func (m *MemoryState) GetVersion(_ context.Context, key string) ([]byte, string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	held, ok := m.live(key)
+	if !ok {
+		return nil, "", false, nil
+	}
+	return held.value, strconv.FormatUint(held.revision, 10), true, nil
+}
+
+// Replace implements [versionedState].
+func (m *MemoryState) Replace(_ context.Context, key string, value []byte, ttl time.Duration, version string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	held, ok := m.live(key)
+	if !ok {
+		return errGone
+	}
+	if strconv.FormatUint(held.revision, 10) != version {
+		return errMoved
+	}
+	m.set(key, value, ttl)
+	return nil
 }
 
 // Set implements [State].
@@ -141,7 +223,8 @@ func (m *MemoryState) Set(_ context.Context, key string, value []byte, ttl time.
 }
 
 func (m *MemoryState) set(key string, value []byte, ttl time.Duration) {
-	held := memoryValue{value: value}
+	m.revision++
+	held := memoryValue{value: value, revision: m.revision}
 	if ttl > 0 {
 		held.expires = m.now().Add(ttl)
 	}

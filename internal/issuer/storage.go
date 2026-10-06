@@ -940,7 +940,19 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	// concurrent refreshes converges on ONE credential instead of
 	// refusing all but the first.
 	if currentRefreshToken != "" {
-		live, successor, ok, err := s.iss.Sessions().Refreshed(ctx, currentRefreshToken, refresh)
+		var (
+			live      Session
+			successor string
+			ok        bool
+		)
+		// The token as the library's first reading of it found it, when
+		// that is this request's: the rotation acts on what was read then
+		// rather than reading the token and its session a second time.
+		if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.token == currentRefreshToken {
+			live, successor, ok, err = s.iss.Sessions().rotate(ctx, req.presented, refresh)
+		} else {
+			live, successor, ok, err = s.iss.Sessions().Refreshed(ctx, currentRefreshToken, refresh)
+		}
 		if err != nil {
 			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
 		}
@@ -1300,14 +1312,17 @@ func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) erro
 
 // TokenRequestByRefreshToken implements [op.AuthStorage].
 func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken string) (op.RefreshTokenRequest, error) {
-	// ByRefreshToken, not ByToken: this is the library's FIRST reading of
-	// the token on a refresh, so a replay inside the grace window has to
-	// resolve here or it is refused before CreateAccessAndRefreshTokens
-	// can answer it.
-	session, ok, err := s.iss.Sessions().ByRefreshToken(ctx, refreshToken)
+	// Resolved as a refresh resolves it, not with ByToken: this is the
+	// library's FIRST reading of the token on a refresh, so a replay
+	// inside the grace window has to resolve here or it is refused before
+	// CreateAccessAndRefreshTokens can answer it. And it is the ONLY
+	// reading: what was read travels on the request to the rotation.
+	presented, ok, err := s.iss.Sessions().present(ctx, refreshToken)
 	if err != nil {
 		return nil, oidc.ErrServerError().WithDescription("%s", err)
 	}
+
+	session := presented.session
 
 	if !ok {
 		// Distinguish a refresh refused BY THE ABSOLUTE LIMIT from one
@@ -1363,13 +1378,15 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		return nil, oidc.ErrServerError().WithDescription("%s", err)
 	}
 
-	return &refreshRequest{session: session}, nil
+	return &refreshRequest{session: session, presented: presented}, nil
 }
 
 // refreshRequest is a live session presented for renewal.
 type refreshRequest struct {
 	session Session
 	scopes  []string
+	// presented is the token as it was read, which the rotation acts on.
+	presented presented
 }
 
 var _ op.RefreshTokenRequest = (*refreshRequest)(nil)
