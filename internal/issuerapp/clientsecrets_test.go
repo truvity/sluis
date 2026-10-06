@@ -194,7 +194,9 @@ func TestAnIssuerWithNoGeneratedClientReconcilesNothing(t *testing.T) {
 
 func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
 	t.Parallel()
-	notShared := withSecrets(memory.NewSecrets(), "memory")
+	// ssm secrets beside a process-local State: two replicas would share the
+	// record with leases that do not exclude each other.
+	notShared := withSecrets(memory.NewSecrets(), "ssm")
 	notShared.Shared = false
 	_, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: notShared}, replacePolicy(t, generatingPolicy))
 	if err == nil {
