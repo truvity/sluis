@@ -86,4 +86,4 @@ while the store says there is none, so the input does nothing once the record ex
   retried every five minutes on a server and on the directory refresh on Lambda.
 - Rotate with [rotate a client secret](rotate-a-client-secret.md). Reference: [`secret` in the policy](../reference/policy-clients.md#a-generated-secret),
   [`source: oidc-client`](../reference/exports.md#the-policy-document-exports), and the decision in
-  ADR 0039 (`docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md`).
+  [ADR 0039](../decisions/0039-the-issuer-generates-confidential-client-secrets.md).
