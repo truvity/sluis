@@ -456,19 +456,21 @@ func portsExportSchema() m {
 func exportsSchema() m {
 	item := obj("One copy: what is copied (`source` and the field that names it) and where it goes (`path`, in `namespace`).", m{
 		"name":       str("Identifies the export in the log, the metrics and its lease: lower-case letters, digits, '.', '_' and '-'. Absent, the source and what it names, e.g. `slack-app.alerts`."),
-		"source":     enum("What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).", "", "slack-app", "github-app", "runner-app", "bundle"),
+		"source":     enum("What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `oidc-client`: a confidential client's id and the secret the issuer generated for it (`client`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).", "", "slack-app", "github-app", "runner-app", "oidc-client", "bundle"),
 		"app":        str("The catalogue id, for `slack-app` and `github-app`. It must be declared in the catalogue."),
 		"tier":       str("A runner tier, for `runner-app`. It must be one of `github.runnerTiers`."),
 		"org":        str("The organisation, for `runner-app`."),
+		"client":     str("The id of a policy client, for `oidc-client`. It must be confidential with `secret: {generate: true}`."),
 		"bundle":     enum("The bundle, for `bundle`: each is what the Kubernetes Secret of that name held, one JSON document per entry. Written with `replace`: the key holds exactly the bundle.", "", "workspace-credentials", "github-apps", "github-links", "github-runner-apps", "github-catalogue-apps", "slack-credentials", "slack-records"),
 		"namespace":  str("The OpenBao namespace. Absent, `ports.export.openbao.namespace`."),
 		"path":       str("The key under the KV mount: `slack-apps/alerts`. No leading or trailing slash."),
-		"properties": m{"type": "object", "additionalProperties": m{"type": "string", "minLength": 1}, "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App. A property export is a PATCH: other properties of the key are left as they are. Not for `bundle`."},
+		"properties": m{"type": "object", "additionalProperties": m{"type": "string", "minLength": 1}, "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App; `client-id`, `client-secret` for an `oidc-client` (the current secret only, never the previous one), which is written with `replace`: the key holds exactly its properties. Otherwise a property export is a PATCH: other properties of the key are left as they are. Not for `bundle`."},
 		"interval":   duration("How often the copy is made again with nothing changed, to put back what somebody altered. A change is copied at once; this is the backstop.", "1h"),
 	}, "source", "path")
 	item["allOf"] = []any{
 		m{"if": m{"properties": m{"source": m{"enum": []string{"slack-app", "github-app"}}}}, "then": m{"required": []string{"app"}}},
 		m{"if": m{"properties": m{"source": m{"const": "runner-app"}}}, "then": m{"required": []string{"tier", "org"}}},
+		m{"if": m{"properties": m{"source": m{"const": "oidc-client"}}}, "then": m{"required": []string{"client"}}},
 		m{"if": m{"properties": m{"source": m{"const": "bundle"}}}, "then": m{"required": []string{"bundle"}}},
 	}
 	return m{"type": "array", "items": item, "description": "The secrets this service copies out of itself into the store `ports.export` names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. Validated at start; an unknown source, a source this deployment does not declare and two exports that would write one key stop the service before it serves."}

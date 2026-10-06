@@ -73,6 +73,7 @@ version 2 mount over the HTTP API with no SDK:
 | `slack-app` (`app`) | a catalogue Slack App's bot token | `bot_token` | patch |
 | `github-app` (`app`) | a catalogue GitHub App | `app_id`, `installation_id`, `private_key` | patch |
 | `runner-app` (`tier`, `org`) | a runner App | `github-app-id`, `github-installation-id`, `github-private-key` | patch |
+| `oidc-client` (`client`) | a confidential client whose secret the issuer generates | `client-id`, `client-secret` (the current secret, never the previous) | replace |
 | `bundle` (`bundle`) | one of `workspace-credentials`, `github-apps`, `github-links`, `github-runner-apps`, `github-catalogue-apps`, `slack-credentials`, `slack-records`, whole | the Secret's entries, one JSON document each | replace |
 
 The property names are the ones the PushSecrets wrote, so a consumer sees no change.

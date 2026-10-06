@@ -580,6 +580,20 @@
             "if": {
               "properties": {
                 "source": {
+                  "const": "oidc-client"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "client"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "source": {
                   "const": "bundle"
                 }
               }
@@ -609,6 +623,11 @@
               "slack-credentials",
               "slack-records"
             ]
+          },
+          "client": {
+            "description": "The id of a policy client, for `oidc-client`. It must be confidential with `secret: {generate: true}`.",
+            "minLength": 1,
+            "type": "string"
           },
           "interval": {
             "$ref": "#/$defs/duration",
@@ -640,15 +659,16 @@
               "minLength": 1,
               "type": "string"
             },
-            "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App. A property export is a PATCH: other properties of the key are left as they are. Not for `bundle`.",
+            "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App; `client-id`, `client-secret` for an `oidc-client` (the current secret only, never the previous one), which is written with `replace`: the key holds exactly its properties. Otherwise a property export is a PATCH: other properties of the key are left as they are. Not for `bundle`.",
             "type": "object"
           },
           "source": {
-            "description": "What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).",
+            "description": "What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `oidc-client`: a confidential client's id and the secret the issuer generated for it (`client`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).",
             "enum": [
               "slack-app",
               "github-app",
               "runner-app",
+              "oidc-client",
               "bundle"
             ]
           },
