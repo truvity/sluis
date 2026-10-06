@@ -22,6 +22,10 @@ const (
 	// OutcomeAdopted: the input `clients/<id>/secret` was copied into the
 	// record, so a client that already uses it keeps working.
 	OutcomeAdopted Outcome = "adopted"
+	// OutcomeRestored: a record that had been reported orphaned is back in use
+	// (its client is in the policy again); the record is kept as it is and
+	// only the orphaned mark was cleared.
+	OutcomeRestored Outcome = "restored"
 	// OutcomeExisting: a record was already there; nothing was written.
 	OutcomeExisting Outcome = "existing"
 	// OutcomeConflict: another writer created the record between the read and
@@ -44,6 +48,14 @@ type Input interface {
 // installation. Every field may be nil. A hook receives the client id and the
 // outcome and never a value.
 type Hooks struct {
+	// Lock serialises a write to an existing record (the orphaned mark) with
+	// a rotation of the same client. A secrets adapter whose conditional
+	// write is a read and then a write (ssm) needs it. Nil runs unserialised,
+	// which is right only for one process.
+	Lock Locker
+	// Orphaned is called once for each record newly found with no generated
+	// client in the policy. See [ReconcileOrphans].
+	Orphaned func(ctx context.Context, clientID string)
 	// Outcome is called once per client per pass. err is set for
 	// OutcomeUnsupported and OutcomeFailed.
 	Outcome func(ctx context.Context, clientID string, outcome Outcome, err error)
@@ -86,14 +98,14 @@ func Reconcile(
 	}
 	res := Result{Outcomes: make(map[string]Outcome, len(clients))}
 	for _, id := range clients {
-		outcome, err := reconcileOne(ctx, id, store, input, now)
+		outcome, err := reconcileOne(ctx, id, store, input, now, hooks.Lock)
 		res.Outcomes[id] = outcome
 		countReconcile(ctx, outcome)
 		switch outcome {
 		case OutcomeUnsupported, OutcomeFailed:
 			log.WarnContext(ctx, "a generated client secret could not be settled; the client keeps the input secret, if any, until the next pass",
 				"client", id, "outcome", string(outcome), "error", safeError(err))
-		case OutcomeCreated, OutcomeAdopted, OutcomeConflict:
+		case OutcomeCreated, OutcomeAdopted, OutcomeConflict, OutcomeRestored:
 			log.InfoContext(ctx, "a generated client secret was settled", "client", id, "outcome", string(outcome))
 		default:
 			log.DebugContext(ctx, "a generated client secret is in place", "client", id, "outcome", string(outcome))
@@ -105,14 +117,17 @@ func Reconcile(
 	return res
 }
 
-func reconcileOne(ctx context.Context, id string, store port.Secrets, input Input, now time.Time) (Outcome, error) {
+func reconcileOne(ctx context.Context, id string, store port.Secrets, input Input, now time.Time, lock Locker) (Outcome, error) {
 	if store == nil {
 		return OutcomeUnsupported, errors.New("no secrets adapter is configured")
 	}
 	path := Path(id)
-	_, err := store.Get(ctx, path)
+	got, err := store.Get(ctx, path)
 	switch {
 	case err == nil:
+		if rec, derr := DecodeRecord(got.Value); derr == nil && !rec.Orphaned.IsZero() {
+			return restore(ctx, id, store, lock)
+		}
 		return OutcomeExisting, nil
 	case !errors.Is(err, port.ErrNotFound):
 		return OutcomeFailed, fmt.Errorf("read the record: %w", err)
@@ -178,4 +193,43 @@ func safeError(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// restore clears the orphaned mark of a record whose client is declared
+// again, and nothing else: the secret it holds is the one the client's
+// relying parties already use.
+func restore(ctx context.Context, id string, store port.Secrets, lock Locker) (Outcome, error) {
+	outcome, err := OutcomeExisting, error(nil)
+	ran, lerr := withLock(ctx, lock, KindLease, leaseTarget(id), func(held context.Context) {
+		got, gerr := store.Get(held, Path(id))
+		if gerr != nil {
+			outcome, err = OutcomeFailed, fmt.Errorf("read the record: %w", gerr)
+			return
+		}
+		rec, derr := DecodeRecord(got.Value)
+		if derr != nil || rec.Orphaned.IsZero() {
+			return
+		}
+		rec.Orphaned = time.Time{}
+		body, eerr := rec.Encode()
+		if eerr != nil {
+			outcome, err = OutcomeFailed, eerr
+			return
+		}
+		switch _, perr := store.PutIfVersion(held, Path(id), body, got.Version); {
+		case perr == nil:
+			outcome = OutcomeRestored
+		case errors.Is(perr, port.ErrConflict):
+			// Changed under us: the next pass looks again.
+		default:
+			outcome, err = OutcomeFailed, fmt.Errorf("write the record: %w", perr)
+		}
+	})
+	if lerr != nil {
+		return OutcomeFailed, fmt.Errorf("take the lease: %w", lerr)
+	}
+	if !ran {
+		return OutcomeExisting, nil
+	}
+	return outcome, err
 }

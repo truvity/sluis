@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/policy"
 )
@@ -48,25 +50,74 @@ func checkGeneratedSecrets(ids []string, st *store.Stores) error {
 	return nil
 }
 
+// newClientSecretManager is what the operator endpoint, and the reconcile's
+// writes to an existing record, go through. Its lease is the State's, so two
+// replicas rotate one client one at a time (ssm's conditional write is a read
+// and then a write, and does not exclude a second writer by itself).
+func newClientSecretManager(
+	set *policy.Set, st *store.Stores, creds *clientcreds.Resolver, changed func(context.Context, string), log *slog.Logger,
+) (*clientcreds.Manager, *rails.Leases) {
+	state, _ := st.LeaseState()
+	leases := &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log}
+	return &clientcreds.Manager{
+		Store:    st.Ports.Secrets,
+		Lock:     leases,
+		Resolver: creds,
+		// The policy in force when asked, not when assembled.
+		Generated: func(id string) bool {
+			c, ok := set.Client(id)
+			return ok && c.SecretGenerated()
+		},
+		Changed: changed,
+		Log:     log,
+	}, leases
+}
+
 // ReconcileClientSecrets makes sure every generated client has its secret
 // stored, and reports what it did. A failure for one client is logged and
 // counted, never returned: the next pass retries, and meanwhile the resolver
 // serves the input secret, if the installation delivers one.
+//
+// It also reports, once each, the stored secrets whose client is no longer a
+// generated client of the policy (see [clientcreds.ReconcileOrphans]).
 func (a *App) ReconcileClientSecrets(ctx context.Context) clientcreds.Result {
-	if len(a.generated) == 0 {
+	if a.credStore == nil {
 		return clientcreds.Result{}
 	}
 	var input clientcreds.Input
 	if a.cfg.secrets != nil {
 		input = a.cfg.secrets
 	}
-	return clientcreds.Reconcile(ctx, a.generated, a.credStore, input, time.Now(), a.log, clientcreds.Hooks{
-		Outcome: func(_ context.Context, id string, o clientcreds.Outcome, _ error) {
-			if o == clientcreds.OutcomeCreated || o == clientcreds.OutcomeAdopted || o == clientcreds.OutcomeConflict {
+	now := time.Now()
+	hooks := clientcreds.Hooks{
+		Lock: a.leases,
+		Orphaned: func(ctx context.Context, id string) {
+			a.issuer.Record(ctx, audit.ClientSecretOrphaned(id, now))
+		},
+		Outcome: func(ctx context.Context, id string, o clientcreds.Outcome, err error) {
+			if o == clientcreds.OutcomeCreated || o == clientcreds.OutcomeAdopted ||
+				o == clientcreds.OutcomeConflict || o == clientcreds.OutcomeRestored {
 				a.creds.Forget(id)
 			}
+			if err != nil {
+				return
+			}
+			switch o {
+			case clientcreds.OutcomeCreated:
+				a.issuer.Record(ctx, audit.ClientSecretCreated(id, now))
+			case clientcreds.OutcomeAdopted:
+				a.issuer.Record(ctx, audit.ClientSecretAdopted(id, "input", now))
+			case clientcreds.OutcomeRestored:
+				a.issuer.Record(ctx, audit.ClientSecretAdopted(id, "record", now))
+			}
 		},
-	})
+	}
+	res := clientcreds.Result{}
+	if len(a.generated) > 0 {
+		res = clientcreds.Reconcile(ctx, a.generated, a.credStore, input, now, a.log, hooks)
+	}
+	clientcreds.ReconcileOrphans(ctx, a.generated, a.credStore, now, a.log, hooks)
+	return res
 }
 
 // watchClientSecrets repeats [App.ReconcileClientSecrets] until ctx ends.

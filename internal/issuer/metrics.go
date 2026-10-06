@@ -172,6 +172,8 @@ func Route(r *http.Request) string {
 		return "grants"
 	}
 	switch {
+	case strings.HasPrefix(path, ClientSecretsPath+"/"):
+		return "client_secrets"
 	case strings.HasPrefix(path, "/login/") && strings.HasSuffix(path, "/start"):
 		return "login_start"
 	case strings.HasPrefix(path, "/login/") && strings.HasSuffix(path, "/callback"):

@@ -28,6 +28,10 @@ type Record struct {
 	PreviousValidUntil time.Time `json:"previous_valid_until,omitzero"`
 	Created            time.Time `json:"created"`
 	Rotated            time.Time `json:"rotated,omitzero"`
+	// Orphaned is when reconcile first found the record with no generated
+	// client of that id in the policy. It is how the finding is reported once;
+	// a client that comes back clears it and keeps the record as it is.
+	Orphaned time.Time `json:"orphaned,omitzero"`
 }
 
 // Encode returns the record's stored form.
