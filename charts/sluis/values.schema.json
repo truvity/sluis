@@ -309,9 +309,27 @@
                 "type": "array"
               },
               "secret": {
-                "description": "For a confidential client: the name its secret is delivered under.",
-                "minLength": 1,
-                "type": "string"
+                "description": "For a confidential client: the name its secret is delivered under, or `{generate: true}` to have the issuer generate it and keep it with its credentials.",
+                "oneOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "The issuer generates the secret.",
+                    "properties": {
+                      "generate": {
+                        "const": true,
+                        "description": "Must be true; `generate: false` is refused."
+                      }
+                    },
+                    "required": [
+                      "generate"
+                    ],
+                    "type": "object"
+                  }
+                ]
               },
               "secretKey": {
                 "description": "The chart's: the key of the Secret `secret` names that holds the client's secret. Default client-secret. Not rendered into the policy document.",

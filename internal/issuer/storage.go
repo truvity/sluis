@@ -18,6 +18,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/policy"
 )
@@ -183,7 +184,7 @@ type Storage struct {
 	iss     *Issuer
 	verify  Verifier
 	keys    *KeyRings
-	secrets func(clientID string) (string, bool)
+	secrets clientcreds.Lookup
 	// verifyOnly are public keys published beside the rings' (UseVerifyOnly),
 	// and now is the clock that ends them.
 	verifyOnly []VerifyOnlyKey
@@ -305,10 +306,19 @@ var (
 	_ op.TokenExchangeTokensVerifierStorage = (*Storage)(nil)
 )
 
+// noClientSecrets is the lookup of a storage given none: no client has a
+// secret, so no confidential client authenticates.
+type noClientSecrets struct{}
+
+func (noClientSecrets) Resolve(context.Context, string) (clientcreds.Secrets, bool) {
+	return clientcreds.Secrets{}, false
+}
+
 // NewStorage returns the storage over an issuer.
 //
-// secrets resolves a confidential client's secret, which lives in a
-// Kubernetes Secret and never in the policy file. key is the primary
+// secrets resolves a confidential client's secrets (the current one and, for
+// a while after a rotation, the previous), which live in the credentials or in
+// the installation's inputs and never in the policy file. key is the primary
 // signing key; a nil one is generated, which is right for a local run and
 // wrong for a deployment — see [SigningKey]. additional is every OTHER
 // algorithm this installation signs with at once, at most one key per
@@ -328,7 +338,7 @@ var (
 // tokens because the RS256 Secret was never mounted — the opposite of
 // what naming an algorithm at all is for.
 func NewStorage(
-	iss *Issuer, verify Verifier, secrets func(string) (string, bool),
+	iss *Issuer, verify Verifier, secrets clientcreds.Lookup,
 	key *SigningKey, additional []*SigningKey, state State,
 ) (*Storage, error) {
 	if key == nil {
@@ -339,7 +349,7 @@ func NewStorage(
 		key = generated
 	}
 	if secrets == nil {
-		secrets = func(string) (string, bool) { return "", false }
+		secrets = noClientSecrets{}
 	}
 	if state == nil {
 		state = NewMemoryState()
@@ -597,7 +607,7 @@ func (s *Storage) tokenLifetime(declared policy.Client) time.Duration {
 }
 
 // AuthorizeClientIDSecret implements [op.OPStorage].
-func (s *Storage) AuthorizeClientIDSecret(_ context.Context, clientID, secret string) error {
+func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret string) error {
 	declared, ok := s.iss.Policy().Client(clientID)
 	if !ok {
 		// A client that describes itself is public and reaches the token
@@ -633,13 +643,33 @@ func (s *Storage) AuthorizeClientIDSecret(_ context.Context, clientID, secret st
 
 		return nil
 	}
-	want, ok := s.secrets(clientID)
+	want, ok := s.secrets.Resolve(ctx, clientID)
 	// Constant time: the comparison must not tell a caller how much of a
-	// guess was right.
-	if !ok || want == "" || subtle.ConstantTimeCompare([]byte(want), []byte(secret)) != 1 {
-		return errors.New("the client secret does not match")
+	// guess was right, nor whether the client has a previous secret. Both
+	// slots are compared every time; with no previous one the guess is
+	// compared with a buffer of its own length, whose answer is ignored.
+	got := []byte(secret)
+	current := subtle.ConstantTimeCompare([]byte(want.Current), got) == 1
+	previous := want.Previous
+	hasPrevious := previous != ""
+	var other []byte
+	if hasPrevious {
+		other = []byte(previous)
+	} else {
+		other = make([]byte, len(got))
 	}
-	return nil
+	previousMatch := subtle.ConstantTimeCompare(other, got) == 1
+	previousLive := hasPrevious && s.now().Before(want.PreviousValidUntil)
+	switch {
+	case ok && want.Current != "" && current:
+		clientcreds.CountAuth(ctx, clientcreds.SlotCurrent)
+		return nil
+	case ok && previousLive && previousMatch:
+		clientcreds.CountAuth(ctx, clientcreds.SlotPrevious)
+		return nil
+	}
+	clientcreds.CountAuth(ctx, clientcreds.SlotNone)
+	return errors.New("the client secret does not match")
 }
 
 // --------------------------------------------------------- auth requests
