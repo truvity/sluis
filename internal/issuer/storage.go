@@ -914,6 +914,9 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 	if err != nil {
 		return "", time.Time{}, err
 	}
+	if err = s.keep(ctx, request, issued); err != nil {
+		return "", time.Time{}, err
+	}
 	return issued.ID, issued.Expires, nil
 }
 
@@ -953,8 +956,12 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		// for the token minted at sign-in and for none minted after it --
 		// and a sign-in exchange, which must see a LIVE session behind
 		// the token, could never be offered a token that shows one.
+		//
+		// Kept only now, once the session is known, so that the record is
+		// written once per grant rather than once without the session and
+		// again with it.
 		issued.Session = live.ID
-		if err = setJSON(ctx, s.state, tokenKey(issued.ID), issued, time.Until(issued.Expires)); err != nil {
+		if err = s.keep(ctx, request, issued); err != nil {
 			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
 		}
 
@@ -981,9 +988,10 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 
 	// The ACCESS token names it too, so that revoking the session stops
 	// `userinfo` answering with a token already in circulation. Written
-	// after the session exists, because that is when its id does.
+	// after the session exists, because that is when its id does -- and
+	// only then, once.
 	issued.Session = session.ID
-	if err = setJSON(ctx, s.state, tokenKey(issued.ID), issued, time.Until(issued.Expires)); err != nil {
+	if err = s.keep(ctx, request, issued); err != nil {
 		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
 	}
 
@@ -1124,7 +1132,8 @@ func sessionOf(request op.IDTokenRequest) string {
 	}
 }
 
-// issue records one access token and returns it.
+// issue decides one access token and returns it, unrecorded: [Storage.keep]
+// records it, once whatever session it belongs to is known.
 func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, error) {
 	// Marked before anything else: this is the FIRST storage call the
 	// library makes for either a fresh access token or one paired with a
@@ -1216,14 +1225,20 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 		Expires:  expires,
 	}
 	issued.GivenName, issued.FamilyName = given, family
+	return issued, nil
+}
+
+// keep records an access token [Storage.issue] decided, which is what
+// `userinfo` and revocation answer from.
+func (s *Storage) keep(ctx context.Context, request op.TokenRequest, issued *token) error {
 	// Kept only until it expires: an access token past its lifetime
 	// answers nothing, and a store that has to be swept is a store that
 	// grows when the sweeper stops.
-	if err = setJSON(ctx, s.state, tokenKey(issued.ID), issued, time.Until(issued.Expires)); err != nil {
-		return nil, err
+	if err := setJSON(ctx, s.state, tokenKey(issued.ID), issued, time.Until(issued.Expires)); err != nil {
+		return err
 	}
 	s.recordToken(ctx, request)
-	return issued, nil
+	return nil
 }
 
 // clientOf reads the client id off whichever kind of request this is.
