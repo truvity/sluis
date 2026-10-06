@@ -37,6 +37,8 @@ Replace a workspace credential, the session key, an OAuth client secret or a Sla
 - **Service-account key, connected through the console:** Upload key again with the new JSON; the old one is replaced.
 - **Service-account key, declared:** replace the named Secret. Delete the old key in Google Cloud only after step 3
   shows the new one was read.
+- **A confidential client's secret the issuer generates** (`secret: {generate: true}`): not a restart. Follow
+  [rotate a client secret](rotate-a-client-secret.md); the rest of this page does not apply.
 - **OAuth client secret:** update the declared Secret. The console cannot set it (`SettingsService` has `GetSettings` and
   no `SetOAuthClient`, because a credential a console can change is one somebody can change from a browser). Existing
   refresh tokens keep working; the secret is used only to exchange and refresh.

@@ -24,6 +24,7 @@ Secrets still exist and the chart's `push` values (deprecated) copy them. Source
 | `slack-app` | `app` | a catalogue Slack App's bot token, once it is installed | `bot_token` | patch |
 | `github-app` | `app` | a catalogue GitHub App, once it is installed | `app_id`, `installation_id`, `private_key` | patch |
 | `runner-app` | `tier`, `org` | a runner App, once it is installed | `github-app-id`, `github-installation-id`, `github-private-key` | patch |
+| `oidc-client` | `client` | a [generated](policy-clients.md#a-generated-secret) confidential client's id and its current secret, never the previous one | `client-id`, `client-secret` | replace |
 | `bundle` | `bundle` | `workspace-credentials`, `github-apps`, `github-links`, `github-runner-apps`, `github-catalogue-apps`, `slack-credentials` or `slack-records`, whole | one JSON document per entry, as the Secret of that name held them | replace |
 
 `path` is the key under the KV mount and `namespace` the OpenBao namespace (an
@@ -76,6 +77,11 @@ exports:
 ```
 
 ## What the service does, and does not do
+
+- **`oidc-client` follows the client, not the State.** The client must be confidential with `secret: {generate: true}`,
+  or the policy is refused at start. Nothing watches the Secrets port, so a copy is made at start and every `interval`;
+  a rotation by `sluisctl clients rotate` copies the new secret out at once. The Secrets adapter must be `ssm` or
+  `openbao`. The copy is not removed with the client ([how to](../how-to/rotate-a-client-secret.md#retire-a-generated-client)).
 
 - **A copy, asynchronous, never a dependency.** An export runs out of band after
   the State write that changed its source, so sign-in, a tick and a console action

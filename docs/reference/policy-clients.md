@@ -17,7 +17,7 @@ means nobody, not everyone, and sluis refuses to start on one.
 | Key | Meaning |
 |---|---|
 | `kind` | `public`, `confidential` or `exchange` |
-| `secret` | the secret a confidential client names; required for that kind |
+| `secret` | a confidential client's secret; required for that kind: a name, or [`{generate: true}`](#a-generated-secret) |
 | `redirects` | where a code is delivered: a path that starts a sign-in |
 | `signed_out` | the pages a person may land on after an RP-initiated logout. An address in both lists fails the load; an `exchange` client may declare none |
 | `requires` | the internal groups, any one of which admits a caller |
@@ -28,6 +28,32 @@ means nobody, not everyone, and sluis refuses to start on one.
 | `groups` | [the groups override](#groups-override) |
 | `groups_delimiter` | [rewrites `:` in the audience's groups](#groups_delimiter) |
 | `signing_alg` | [pins the signing algorithm](#signing_alg) |
+
+### A generated secret
+
+`secret` is one of two shapes:
+
+| Shape | Meaning |
+|---|---|
+| a string | the name of an input, `clients/<id>/secret`, delivered by the installation (unchanged) |
+| `{generate: true}` | the issuer makes a 32-byte random secret (base64url, no padding) and keeps it itself |
+
+A generated secret is one record at `credentials/oidc-client/<id>/secret` in the Secrets port, holding the current
+secret, a previous one and the time until which the previous is accepted. It is written create-only, so replicas and
+Lambda invocations that start together agree on one value, and an existing record is never overwritten. If the input
+`clients/<id>/secret` exists at that moment it is adopted unchanged. The token endpoint reads the record of a generated
+client first and the input only while the store says there is none; a corrupt or unreadable record authenticates nobody,
+except that a record read earlier is served for at most 5 minutes when the store fails. A record is cached for 30
+seconds, and the current and the previous secret are both compared on every request, in constant time.
+
+Refused at start: the object form with `generate: false`; on a `public` or `exchange` client; with a Secrets adapter that
+cannot create only if absent (`legacy`); and, for a generated client, a State that replicas do not share (the `memory`
+adapter excepted). An older binary refuses the object form, so roll every replica first. Stored records of clients no
+longer generated are reported once as orphans and never deleted by the issuer. The relying party receives the secret
+through an [`oidc-client` export](exports.md#the-policy-document-exports); rotation is
+[`sluisctl clients`](sluisctl.md#clients-rotate-show-purge). How:
+[let the issuer generate a client's secret](../how-to/let-the-issuer-generate-a-clients-secret.md),
+[rotate a client secret](../how-to/rotate-a-client-secret.md).
 
 A token **exchange** trades a proof for a token whose `aud` is any declared client, and the target's `requires` decides.
 Each proof is checked against its own issuer's keys.
