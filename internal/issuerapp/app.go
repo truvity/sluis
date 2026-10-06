@@ -399,6 +399,10 @@ type Deps struct {
 	// catalogue and the Secret it keeps each App's key in. Nil mints none,
 	// and every such request is refused as naming an App that cannot.
 	GitHubApps *issuer.GitHubApps
+	// ClientSecretChanged is called after a person rotated a generated
+	// client's secret, so that what copies it out (an export) need not wait
+	// for its interval. It must not block. Nil does nothing.
+	ClientSecretChanged func(ctx context.Context, clientID string)
 	// Around wraps everything this issuer serves on its port, the console
 	// included. It is applied to the one handler both [App.Handler] and
 	// [App.Run] use, so what a caller tests through the first is what the
@@ -420,12 +424,14 @@ type App struct {
 	generated []string
 	creds     *clientcreds.Resolver
 	credStore port.Secrets
-	handler   http.Handler
-	health    http.Handler
-	issuer    *issuer.Issuer
-	storage   *issuer.Storage
-	cfg       Config
-	log       *slog.Logger
+	// leases serialises writers of one client's record.
+	leases  *rails.Leases
+	handler http.Handler
+	health  http.Handler
+	issuer  *issuer.Issuer
+	storage *issuer.Storage
+	cfg     Config
+	log     *slog.Logger
 }
 
 // MintFor signs a short-lived access token for a person signed in to this
@@ -595,6 +601,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		input = cfg.secrets
 	}
 	creds := clientcreds.NewResolver(stores.Ports.Secrets, input, log)
+	secretsAdmin, leases := newClientSecretManager(set, stores, creds, deps.ClientSecretChanged, log)
+	if stores.Ports.Secrets != nil {
+		core.UseClientSecrets(secretsAdmin)
+	}
 	storage, err := issuer.NewStorage(core, verifiers, creds, key, additionalKeys, shared)
 	if err != nil {
 		return nil, err
@@ -715,7 +725,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
 	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
-		generated: generated, creds: creds, credStore: stores.Ports.Secrets}
+		generated: generated, creds: creds, credStore: stores.Ports.Secrets, leases: leases}
 	// At start, and not only on the tick, so a first deploy has its secrets as
 	// soon as it serves. A client that fails here does not stop the issuer: it
 	// is logged and tried again, and the input secret serves it meanwhile.
@@ -806,7 +816,7 @@ func (a *App) Run(ctx context.Context) error {
 			return nil
 		})
 	}
-	if len(a.generated) > 0 {
+	if a.credStore != nil {
 		group.Go(func() error {
 			a.watchClientSecrets(gctx, a.log)
 			return nil

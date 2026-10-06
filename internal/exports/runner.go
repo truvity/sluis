@@ -137,6 +137,20 @@ func (r *Runner) Pass(ctx context.Context) PassResult {
 	return res
 }
 
+// RefreshClient makes the exports of one generated client's secret now, each
+// under its lease, and returns when they are made or have failed. A rotation
+// calls it so that the copy a consumer reads does not wait for the export's
+// interval (a failure is retried at that interval, and counted as any is).
+func (r *Runner) RefreshClient(ctx context.Context, clientID string) {
+	for i := range r.Specs {
+		spec := r.Specs[i]
+		if spec.Source != SourceOIDCClient || spec.Client != clientID {
+			continue
+		}
+		r.attempt(ctx, spec, 0)
+	}
+}
+
 // work is one export's loop.
 func (r *Runner) work(ctx context.Context, spec Spec, wake <-chan struct{}) {
 	first := time.Duration(0)

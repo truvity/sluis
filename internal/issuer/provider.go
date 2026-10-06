@@ -233,6 +233,15 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 		}
 		return claims.Subject, groupsOf(claims), nil
 	}))
+	// An operator's rotation, look and purge of a generated client's secret.
+	// The same verifier again; the groups in the token are what admit it.
+	mux.Handle(ClientSecretsPath+"/", clientSecretsHandler(iss, func(ctx context.Context, bearer string) (string, []string, error) {
+		claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
+		if err != nil {
+			return "", nil, err
+		}
+		return claims.Subject, groupsOf(claims), nil
+	}))
 	// Everything not ours is the protocol's. A catch-all rather than a
 	// list, so that a library endpoint added by an upgrade keeps working
 	// instead of turning into a 404 nobody expected.
