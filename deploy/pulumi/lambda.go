@@ -271,7 +271,9 @@ const DefaultDirectoryRefreshSchedule = "rate(15 minutes)"
 // method, the path (never the query string, which carries OAuth codes and
 // state), the status and the two latencies. No header, address, user agent or
 // identity field is in it.
-const AccessLogFormat = `{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLatency":"$context.responseLatency","integrationLatency":"$context.integrationLatency"}`
+const AccessLogFormat = `{"requestTime":"$context.requestTime","requestId":"$context.requestId",` +
+	`"httpMethod":"$context.httpMethod","path":"$context.path","status":"$context.status",` +
+	`"responseLatency":"$context.responseLatency","integrationLatency":"$context.integrationLatency"}`
 
 // AccessLogsArgs turns on the HTTP API's access log. API Gateway needs no
 // account-level CloudWatch role for an HTTP API (that is REST APIs only), so
