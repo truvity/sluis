@@ -207,6 +207,17 @@ actions:
     message:
       en: "{actor} deleted the stored secret of client {targets_0_id}"
 
+  roster.client.secret.denied:
+    summary: A signed-in caller was refused when managing the secret of a generated client.
+    operation: access
+    categories: [credential_lifecycle, privileged_access]
+    profiles: [security]
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/client-secret.json
+    message:
+      en: "{actor} was refused {data_action} on a client secret: {outcome_reason}"
+
   # ------------------------------------------------------------ directories
 
   roster.workspace.connected:

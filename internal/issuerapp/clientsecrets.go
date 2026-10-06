@@ -47,6 +47,18 @@ func checkGeneratedSecrets(ids []string, st *store.Stores) error {
 			"only if absent (the legacy adapter, or none): choose a secrets adapter (ssm, openbao or memory) "+
 			"or name the secret with `secret: <name>`", ids[0])
 	}
+	// A rotation and an orphan mark are serialised by a lease on the State. A
+	// lease held in this process only would let two replicas write one record
+	// at once (ssm's conditional write is a read and then a write), so a
+	// generated secret needs a shared State: it fails closed rather than
+	// risk two replicas serving different secrets.
+	// The memory adapter keeps the secrets in this process too, so there is no
+	// second replica to exclude.
+	if _, shared := st.LeaseState(); !shared && st.Adapter != store.AdapterMemory {
+		return fmt.Errorf("client %q has `secret: {generate: true}` and the State is not shared between replicas, "+
+			"so a rotation cannot be serialised: configure a shared State (adapters.state) "+
+			"or name the secret with `secret: <name>`", ids[0])
+	}
 	return nil
 }
 

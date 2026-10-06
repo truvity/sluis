@@ -11,7 +11,7 @@ Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Targ
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.8.0, 67 actions.
+Catalogue version 1.8.0, 68 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -27,6 +27,7 @@ Catalogue version 1.8.0, 67 actions.
 | `roster.client.secret.rotated` | modify | client | async | The secret of a generated client was replaced, the old one staying valid for an overlap. |
 | `roster.client.secret.orphaned` | access | client | async | A stored client secret was found with no generated client of that id in the policy. |
 | `roster.client.secret.deleted` | remove | client | async | The stored secret of a client no longer in the policy was deleted. |
+| `roster.client.secret.denied` | access | client | async | A signed-in caller was refused when managing the secret of a generated client. |
 | `roster.workspace.connected` | create | workspace | async | A directory was connected. |
 | `roster.workspace.reconnected` | modify | workspace | async | A connected directory was given a new consent. |
 | `roster.workspace.disconnected` | remove | workspace | async | A directory was disconnected. |

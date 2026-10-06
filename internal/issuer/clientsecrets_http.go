@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +35,11 @@ type ClientSecretAdmin interface {
 	Show(ctx context.Context, clientID string) (clientcreds.Meta, error)
 	Purge(ctx context.Context, clientID string) error
 }
+
+// ClientSecretsAudiences are the clients whose tokens may manage secrets:
+// sluisctl's (`accessctl`, its default) and the console's. A token minted for
+// any other client, however valid and whatever its groups, is refused.
+var ClientSecretsAudiences = []string{"accessctl", "console"}
 
 // UseClientSecrets mounts the operator endpoint over admin. Without it the
 // endpoint answers 404.
@@ -79,7 +86,7 @@ func stamp(t time.Time) string {
 // clientSecretsHandler serves the operator endpoint. verify turns the caller's
 // bearer into who they are and the groups the token carries.
 func clientSecretsHandler(
-	iss *Issuer, verify func(context.Context, string) (string, []string, error),
+	iss *Issuer, verify func(context.Context, string) (string, []string, []string, error),
 ) http.Handler {
 	mux := http.NewServeMux()
 	handle := func(name string, do func(w http.ResponseWriter, r *http.Request, admin ClientSecretAdmin, identity string, req clientSecretRequest)) {
@@ -91,12 +98,23 @@ func clientSecretsHandler(
 			}
 			bearer := bearerFrom(r)
 			if bearer == "" {
+				refuseUnauthenticated(r, name)
 				http.Error(w, "a bearer token is required", http.StatusUnauthorized)
 				return
 			}
-			identity, groups, err := verify(r.Context(), bearer)
+			identity, groups, audiences, err := verify(r.Context(), bearer)
 			if err != nil {
+				refuseUnauthenticated(r, name)
 				http.Error(w, "that token was not accepted", http.StatusUnauthorized)
+				return
+			}
+			// From here the caller is a verified identity, so a refusal is
+			// audited. The body is not read yet: somebody who may not manage
+			// secrets learns nothing about which clients exist.
+			if !slices.ContainsFunc(audiences, func(a string) bool { return slices.Contains(ClientSecretsAudiences, a) }) {
+				clientcreds.CountAdminRefused(r.Context(), "wrong_audience")
+				iss.record(r.Context(), audit.ClientSecretDenied(audit.Identified(identity), "", name, "wrong_audience", nil))
+				http.Error(w, "this token was not issued for a client that manages secrets", http.StatusForbidden)
 				return
 			}
 			operator := false
@@ -104,6 +122,8 @@ func clientSecretsHandler(
 				operator = operator || g == policy.GroupOperators
 			}
 			if !operator {
+				clientcreds.CountAdminRefused(r.Context(), "forbidden")
+				iss.record(r.Context(), audit.ClientSecretDenied(audit.Identified(identity), "", name, "forbidden", nil))
 				http.Error(w, "managing client secrets is an operator's", http.StatusForbidden)
 				return
 			}
@@ -122,6 +142,7 @@ func clientSecretsHandler(
 		if req.OverlapSeconds != nil {
 			// Bounded before it becomes a Duration, which wraps.
 			if secs := *req.OverlapSeconds; secs < 0 || secs > int64(clientcreds.MaxOverlap/time.Second) {
+				iss.record(r.Context(), audit.ClientSecretDenied(audit.Identified(identity), req.Client, "rotate", "bad_overlap", req.OverlapSeconds))
 				http.Error(w, "the overlap is between 0 and 7 days", http.StatusBadRequest)
 				return
 			}
@@ -129,6 +150,7 @@ func clientSecretsHandler(
 		}
 		res, err := admin.Rotate(r.Context(), req.Client, overlap)
 		if err != nil {
+			iss.deny(r.Context(), identity, req.Client, "rotate", err, req.OverlapSeconds)
 			clientSecretError(w, err)
 			return
 		}
@@ -139,9 +161,10 @@ func clientSecretsHandler(
 			PreviousValidUntil: stamp(res.PreviousValidUntil), DiscardedPrevious: res.DiscardedPrevious,
 		})
 	})
-	handle("show", func(w http.ResponseWriter, r *http.Request, admin ClientSecretAdmin, _ string, req clientSecretRequest) {
+	handle("show", func(w http.ResponseWriter, r *http.Request, admin ClientSecretAdmin, identity string, req clientSecretRequest) {
 		meta, err := admin.Show(r.Context(), req.Client)
 		if err != nil {
+			iss.deny(r.Context(), identity, req.Client, "show", err, nil)
 			clientSecretError(w, err)
 			return
 		}
@@ -154,6 +177,7 @@ func clientSecretsHandler(
 	})
 	handle("purge", func(w http.ResponseWriter, r *http.Request, admin ClientSecretAdmin, identity string, req clientSecretRequest) {
 		if err := admin.Purge(r.Context(), req.Client); err != nil {
+			iss.deny(r.Context(), identity, req.Client, "purge", err, nil)
 			clientSecretError(w, err)
 			return
 		}
@@ -185,5 +209,37 @@ func clientSecretError(w http.ResponseWriter, err error) {
 		http.Error(w, "the client's secret is being changed; try again", http.StatusConflict)
 	default:
 		http.Error(w, "the secret could not be changed", http.StatusInternalServerError)
+	}
+}
+
+// refuseUnauthenticated is a request with no verified identity: logged and
+// counted, never audited, since there is no actor to name.
+func refuseUnauthenticated(r *http.Request, action string) {
+	clientcreds.CountAdminRefused(r.Context(), "unauthenticated")
+	slog.WarnContext(r.Context(), "a request to manage client secrets carried no accepted token", "action", action)
+}
+
+// denialReason is the audit reason for a refusal the caller can be told of; ""
+// for any other error, which is not a refusal.
+func denialReason(err error) string {
+	switch {
+	case errors.Is(err, clientcreds.ErrOverlap):
+		return "bad_overlap"
+	case errors.Is(err, clientcreds.ErrNotGenerated):
+		return "not_generated"
+	case errors.Is(err, clientcreds.ErrStillDeclared):
+		return "still_declared"
+	case errors.Is(err, clientcreds.ErrNoRecord):
+		return "no_record"
+	case errors.Is(err, clientcreds.ErrBusy):
+		return "busy"
+	}
+	return ""
+}
+
+// deny records a refused admin request by a verified caller.
+func (i *Issuer) deny(ctx context.Context, identity, client, action string, err error, overlap *int64) {
+	if reason := denialReason(err); reason != "" {
+		i.record(ctx, audit.ClientSecretDenied(audit.Identified(identity), client, action, reason, overlap))
 	}
 }
