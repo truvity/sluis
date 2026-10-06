@@ -102,6 +102,19 @@ type State interface {
 	Watch(ctx context.Context, prefix string) (<-chan Event, error)
 }
 
+// RevisionPeeker is an optional State capability: a key's revision as an
+// EVENTUALLY consistent read sees it, at the engine's cheaper rate where it
+// has one (half a DynamoDB read unit). It never returns a value, so nothing
+// can be decided from what it read but "is this still the revision I wrote":
+// a caller compares it with a revision of its own write and, on any other
+// answer -- a different revision, [ErrNotFound], an error -- acts as though
+// the record had moved. A stale answer can therefore only be the revision
+// the caller wrote before a newer write landed, for the moment the engine
+// takes to converge.
+type RevisionPeeker interface {
+	PeekRevision(ctx context.Context, key string) (Revision, error)
+}
+
 // Index is an unordered set of members under one key, with the set's own
 // expiry refreshed on every Add.
 //

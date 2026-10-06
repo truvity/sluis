@@ -110,6 +110,18 @@ func (s countedState) Get(ctx context.Context, key string) (port.Record, error) 
 	return s.State.Get(ctx, key)
 }
 
+// PeekRevision counts a [port.RevisionPeeker] read as a read, passed to
+// the adapter's own when it has one, so that what is measured is the call
+// production makes (an eventually consistent read on DynamoDB).
+func (s countedState) PeekRevision(ctx context.Context, key string) (port.Revision, error) {
+	s.c.add(Op{Port: PortState, Call: "peek_revision", Kind: stateKind(key)})
+	if peeker, ok := s.State.(port.RevisionPeeker); ok {
+		return peeker.PeekRevision(ctx, key)
+	}
+	record, err := s.State.Get(ctx, key)
+	return record.Revision, err
+}
+
 func (s countedState) Put(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
 	s.c.add(Op{Port: PortState, Call: "put", Kind: stateKind(key), Write: true})
 	return s.State.Put(ctx, key, value, ttl)

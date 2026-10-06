@@ -98,12 +98,29 @@ func (f *fakeAPI) GetItem(_ context.Context, in *ddb.GetItemInput, _ ...func(*dd
 	if err != nil {
 		return nil, err
 	}
-	if in.ConsistentRead == nil || !*in.ConsistentRead {
-		return nil, fmt.Errorf("GetItem must be a consistent read")
+	if (in.ConsistentRead == nil || !*in.ConsistentRead) && !readsNoValue(in) {
+		// The one eventually consistent read allowed is a revision peek
+		// (port.RevisionPeeker), which projects the value away.
+		return nil, fmt.Errorf("GetItem must be a consistent read, or project no value")
 	}
 	pk, _ := str(in.Key, attrPK)
 	sk, _ := str(in.Key, attrSK)
 	return &ddb.GetItemOutput{Item: maps.Clone(t[pk][sk])}, nil
+}
+
+// readsNoValue reports whether a GetItem projects only named attributes and
+// none of them is the value.
+func readsNoValue(in *ddb.GetItemInput) bool {
+	if in.ProjectionExpression == nil {
+		return false
+	}
+	for _, name := range strings.Split(*in.ProjectionExpression, ",") {
+		attr, ok := in.ExpressionAttributeNames[strings.TrimSpace(name)]
+		if !ok || attr == attrValue {
+			return false
+		}
+	}
+	return true
 }
 
 // check evaluates one of the two conditions.

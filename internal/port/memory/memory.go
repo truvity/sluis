@@ -64,16 +64,17 @@ type grant struct {
 }
 
 var (
-	_ port.State         = (*Store)(nil)
-	_ port.Index         = (*Store)(nil)
-	_ port.Blob          = (*Blobs)(nil)
-	_ port.Replacer      = (*Blobs)(nil)
-	_ port.ReaderAll     = (*Blobs)(nil)
-	_ port.Trigger       = (*Trigger)(nil)
-	_ port.Trigger       = (*Store)(nil)
-	_ port.StateExporter = (*Store)(nil)
-	_ port.IndexExporter = (*Store)(nil)
-	_ port.Identity      = (*Store)(nil)
+	_ port.State          = (*Store)(nil)
+	_ port.RevisionPeeker = (*Store)(nil)
+	_ port.Index          = (*Store)(nil)
+	_ port.Blob           = (*Blobs)(nil)
+	_ port.Replacer       = (*Blobs)(nil)
+	_ port.ReaderAll      = (*Blobs)(nil)
+	_ port.Trigger        = (*Trigger)(nil)
+	_ port.Trigger        = (*Store)(nil)
+	_ port.StateExporter  = (*Store)(nil)
+	_ port.IndexExporter  = (*Store)(nil)
+	_ port.Identity       = (*Store)(nil)
 )
 
 // Option configures [New].
@@ -176,6 +177,13 @@ func (s *Store) write(key string, value []byte, ttl time.Duration) port.Revision
 	s.records[key] = &entry{value: slices.Clone(value), rev: rev, expires: s.expiry(ttl)}
 	s.emitLocked(port.Event{Key: key, Revision: rev})
 	return rev
+}
+
+// PeekRevision implements [port.RevisionPeeker]: memory has one kind of
+// read, so it is Get's revision.
+func (s *Store) PeekRevision(ctx context.Context, key string) (port.Revision, error) {
+	record, err := s.Get(ctx, key)
+	return record.Revision, err
 }
 
 // Get implements [port.State].
