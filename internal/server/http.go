@@ -611,7 +611,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this installation cannot sign in with that provider", http.StatusNotFound)
 		return
 	}
-	cookie, err := r.Cookie(access.LoginCookieName)
+	cookie, err := r.Cookie(access.CookieNameFor(access.LoginCookieName, s.sessions.Secure()))
 	state := r.URL.Query().Get("state")
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
@@ -900,7 +900,7 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(access.ConnectCookieName)
+	cookie, err := r.Cookie(access.CookieNameFor(access.ConnectCookieName, s.sessions.Secure()))
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		s.consentProblem(w, r, http.StatusBadRequest,
 			"This consent did not start in this browser.", "", []string{

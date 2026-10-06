@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/truvity/sluis/internal/access"
 )
 
 // SSOCookieName is the browser's session with the ISSUER, which is a
@@ -282,7 +284,7 @@ func (s *SSO) EndFor(ctx context.Context, identity string) (int, error) {
 // token of their own.
 func (s *SSO) Cookie(value string, secure bool) *http.Cookie {
 	cookie := &http.Cookie{
-		Name:     SSOCookieName,
+		Name:     access.CookieNameFor(SSOCookieName, secure),
 		Value:    value,
 		Path:     "/",
 		MaxAge:   int(s.lifetime.Seconds()),
@@ -298,8 +300,10 @@ func (s *SSO) Cookie(value string, secure bool) *http.Cookie {
 }
 
 // SSOFromRequest reads the session id the browser is presenting.
-func SSOFromRequest(r *http.Request) string {
-	cookie, err := r.Cookie(SSOCookieName)
+//
+// secure must be the flag the cookie was set with: it decides the name.
+func SSOFromRequest(r *http.Request, secure bool) string {
+	cookie, err := r.Cookie(access.CookieNameFor(SSOCookieName, secure))
 	if err != nil {
 		return ""
 	}

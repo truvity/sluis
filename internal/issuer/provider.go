@@ -216,7 +216,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 		keySetOf(storage),
 		op.WithSupportedAccessTokenSigningAlgorithms(signingAlgorithmStrings()...),
 	)
-	path, sessions := accessissuerv1connect.NewSessionServiceHandler(NewSessionsService(iss, verifier), telemetry.ConnectOptions()...)
+	path, sessions := accessissuerv1connect.NewSessionServiceHandler(NewSessionsService(iss, verifier, signIn.Secure), telemetry.ConnectOptions()...)
 	if signIn.ConsoleOrigin != "" {
 		sessions = browserAllowed(signIn.ConsoleOrigin, sessions)
 	}

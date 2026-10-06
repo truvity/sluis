@@ -26,13 +26,13 @@ import (
 // address, and it has to survive this: recovery exists for the day
 // nothing else works, and the console is where the operator then
 // connects the first directory.
-func signedIn(iss *issuer.Issuer) func(*http.Request) (access.Principal, bool) {
+func signedIn(iss *issuer.Issuer, secure bool) func(*http.Request) (access.Principal, bool) {
 	sso := iss.SSO()
 	if sso == nil {
 		return nil
 	}
 	return func(r *http.Request) (access.Principal, bool) {
-		session, live, err := sso.Get(r.Context(), issuer.SSOFromRequest(r))
+		session, live, err := sso.Get(r.Context(), issuer.SSOFromRequest(r, secure))
 		if err != nil || !live || session.Identity == "" {
 			return access.Principal{}, false
 		}

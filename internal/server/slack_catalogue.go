@@ -449,7 +449,7 @@ func (s *ConsoleServer) slackBound(r *http.Request, refuse slackRefusal, learn f
 		return "", "", false
 	}
 	learn(binding.Bind, binding.Actor)
-	cookie, err := r.Cookie(access.ConnectCookieName)
+	cookie, err := r.Cookie(access.CookieNameFor(access.ConnectCookieName, s.sessions.Secure()))
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		refuse(http.StatusBadRequest, "This install did not start in this browser.", "", "the flow cookie is missing or is not this state's", []string{
 			"It was started in another browser, profile or private window.",

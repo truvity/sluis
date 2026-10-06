@@ -1,4 +1,8 @@
-## Unreleased
+## v1.66.0
+
+### Changed
+
+- **Every cookie sluis sets carries the `__Host-` prefix when cookies are Secure.** The console session (`access_roster_session`), the three flow cookies (`access_roster_connect`, `access_roster_login`, `access_roster_link`) and the issuer's browser session (`access_issuer_sso`) are now written, read and cleared as `__Host-<name>`. A browser honours that prefix only for a cookie that is Secure, has `Path=/` and no `Domain`, which these already were, so a sibling host in the same zone can no longer plant ("toss") a cookie that the issuer or console would then read. One helper, `access.CookieNameFor`, decides the name for every write, read and clear. With `issuer.secureCookies` false (plain-HTTP local development) the old unprefixed names are kept, because a browser rejects a `__Host-` cookie that is not Secure. The old names are not read as a fallback: sessions and in-flight sign-ins started before the upgrade are dropped once, and every user signs in again a single time.
 
 ## v1.65.1
 

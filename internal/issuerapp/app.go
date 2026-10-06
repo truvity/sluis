@@ -663,7 +663,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		// The console is on this origin and in this process, so it reads
 		// the browser's issuer session directly rather than being told by
 		// a proxy that ran an OpenID flow against this very service.
-		deps.UseSignedIn(signedIn(core))
+		deps.UseSignedIn(signedIn(core, cfg.secureCookies))
 	}
 	if deps.UseWorkloads != nil {
 		// The SAME verifiers token exchange uses, and only the clusters and AWS accounts:
