@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/truvity/sluis/backend"
@@ -31,9 +32,24 @@ const (
 // the encoding is the one the legacy cache has always written, and the lease
 // is a Create with a lifetime, released by deleting it only if it is still
 // the one this caller took.
+//
+// A snapshot read is decoded once per version of the blob: the blob is
+// still read every time, so what is answered is always what is stored,
+// but the decompression and decoding of a whole tenant -- most of what a
+// read costs this process -- happens again only when the content changed.
 type BlobSnapshots struct {
 	blob   port.Blob
 	leases port.State
+
+	mu      sync.Mutex
+	decoded map[string]decodedSnapshot
+}
+
+// decodedSnapshot is the last snapshot of one workspace this store
+// decoded, and the version of the blob it was decoded from.
+type decodedSnapshot struct {
+	version string
+	snap    *Snapshot
 }
 
 var (
@@ -43,19 +59,49 @@ var (
 
 // NewBlobSnapshots returns the store.
 func NewBlobSnapshots(blob port.Blob, leases port.State) *BlobSnapshots {
-	return &BlobSnapshots{blob: blob, leases: leases}
+	return &BlobSnapshots{blob: blob, leases: leases, decoded: map[string]decodedSnapshot{}}
 }
 
 // Get implements [SnapshotStore].
+//
+// The snapshot returned for an unchanged blob is the one returned last
+// time, shared. Nothing in this package changes a snapshot it was handed
+// -- a patch is made on a clone ([Snapshot.clone]) -- and a caller
+// outside it must not either.
 func (s *BlobSnapshots) Get(ctx context.Context, workspace string) (*Snapshot, error) {
 	object, err := s.blob.Read(ctx, SnapshotBlobPrefix+workspace)
 	if errors.Is(err, port.ErrNotFound) {
+		s.forget(workspace)
 		return nil, nil //nolint:nilnil // absence is not an error: there is simply no snapshot yet
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read the snapshot of %s: %w", workspace, err)
 	}
-	return DecodeSnapshot(object.Body)
+	if object.Version != "" {
+		s.mu.Lock()
+		held, ok := s.decoded[workspace]
+		s.mu.Unlock()
+		if ok && held.version == object.Version {
+			return held.snap, nil
+		}
+	}
+	snap, err := DecodeSnapshot(object.Body)
+	if err != nil {
+		return nil, err
+	}
+	if object.Version != "" {
+		s.mu.Lock()
+		s.decoded[workspace] = decodedSnapshot{version: object.Version, snap: snap}
+		s.mu.Unlock()
+	}
+	return snap, nil
+}
+
+// forget drops what was decoded for a workspace.
+func (s *BlobSnapshots) forget(workspace string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.decoded, workspace)
 }
 
 // Put implements [SnapshotStore].
@@ -64,6 +110,9 @@ func (s *BlobSnapshots) Put(ctx context.Context, snap *Snapshot) error {
 	if err != nil {
 		return err
 	}
+	// Forgotten rather than replaced with snap: the caller still holds
+	// snap, and the next read decodes what was actually stored.
+	s.forget(snap.Workspace)
 	if _, err = s.blob.Write(ctx, SnapshotBlobPrefix+snap.Workspace, body); err != nil {
 		return fmt.Errorf("store the snapshot of %s: %w", snap.Workspace, err)
 	}
@@ -72,6 +121,7 @@ func (s *BlobSnapshots) Put(ctx context.Context, snap *Snapshot) error {
 
 // Delete implements [SnapshotStore].
 func (s *BlobSnapshots) Delete(ctx context.Context, workspace string) error {
+	s.forget(workspace)
 	if err := s.blob.Delete(ctx, SnapshotBlobPrefix+workspace); err != nil {
 		return fmt.Errorf("delete the snapshot of %s: %w", workspace, err)
 	}
