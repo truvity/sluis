@@ -74,6 +74,10 @@ type Session struct {
 	IssuedAt      time.Time `json:"issued_at"`
 	ExpiresAt     time.Time `json:"expires_at"`
 	LastRefreshed time.Time `json:"last_refreshed,omitempty"`
+	// IndexedUntil is when the session's membership of the index sets
+	// written last runs out (see [Sessions.indexed]). Zero for a session
+	// recorded before it existed, which is re-added at its next refresh.
+	IndexedUntil time.Time `json:"indexed_until,omitempty"`
 }
 
 // Live reports whether the session is still usable at now. An expired
@@ -288,9 +292,12 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 		// OPENED, not only from its first refresh: a browser session
 		// carried down from hours-old SSO (a new client added to an
 		// existing sign-in) must not get a fresh 24 hours of its own.
-		ExpiresAt: capEnd(now, o.AuthTime, s.lifetime, s.absoluteOf(o.Resource)),
+		ExpiresAt:    capEnd(now, o.AuthTime, s.lifetime, s.absoluteOf(o.Resource)),
+		IndexedUntil: now.Add(s.indexLifetime()),
 	}
 
+	// The record before the sets: a listing that met the id in a set
+	// before its record existed would drop it as expired.
 	if err := s.put(ctx, session); err != nil {
 		return Session{}, err
 	}
@@ -299,13 +306,45 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 		return Session{}, err
 	}
 
-	for _, key := range []string{sessionAllKey, sessionOfKey(session.Identity), sessionForKey(session.ClientID)} {
-		if err := s.state.Add(ctx, key, session.ID, s.lifetime); err != nil {
-			return Session{}, err
-		}
+	if err := s.index(ctx, session); err != nil {
+		return Session{}, err
 	}
 
 	return session, nil
+}
+
+// indexLifetime is how long one Add keeps a session in the index sets:
+// twice the refresh lifetime, so that a session refreshed within one
+// lifetime of its last Add is still covered at its new end and needs no
+// Add of its own (see [Sessions.indexed]). Every Add of these sets uses
+// it, which is what keeps an engine whose expiry is the whole set's
+// (memory, Valkey) from ever shortening a member's.
+func (s *Sessions) indexLifetime() time.Duration { return 2 * s.lifetime }
+
+// indexed reports whether a session's membership of the index sets already
+// outlasts the end it is about to be given, so that adding it again would
+// be a write that changes nothing anybody can see.
+//
+// Membership needs to last only as long as the session is live: a listing
+// shows only live sessions and drops a member whose record is gone. With
+// the default lifetimes (a 12-hour refresh window inside a 24-hour
+// absolute limit) a session's first Add already outlasts every end it can
+// be given, so its refreshes never add again. A set holding an ended
+// session's id a while longer than before is the cost; the listing that
+// meets it drops it, as it always has.
+func (s *Sessions) indexed(session Session) bool {
+	return !session.IndexedUntil.Before(session.ExpiresAt)
+}
+
+// index adds a session to the sets that make it findable.
+func (s *Sessions) index(ctx context.Context, session Session) error {
+	for _, key := range []string{sessionAllKey, sessionOfKey(session.Identity), sessionForKey(session.ClientID)} {
+		if err := s.state.Add(ctx, key, session.ID, s.indexLifetime()); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // presented is a refresh token as one refresh found it: the session it
@@ -415,6 +454,10 @@ func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Se
 //  3. The session record, with its new end -- only if it is still what
 //     was read. A session ended while this refresh ran stays ended; the
 //     refresh is refused rather than writing the record back.
+//
+// The index sets are written between the last two only when the
+// session's membership would run out before its new end
+// ([Sessions.indexed]).
 func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Session, string, bool, error) {
 	if p.successor != "" {
 		return p.session, p.successor, true, nil
@@ -470,6 +513,18 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 		return Session{}, "", false, err
 	}
 
+	// The sets carry the session forward when its membership would run
+	// out before its new end -- before the record is written, so that a
+	// record never claims a membership that a failed Add left unwritten.
+	// The record still holds the id while they are written, so a listing
+	// in between finds it rather than dropping it.
+	if !s.indexed(session) {
+		session.IndexedUntil = now.Add(s.indexLifetime())
+		if err = s.index(ctx, session); err != nil {
+			return Session{}, "", false, err
+		}
+	}
+
 	raw, err := json.Marshal(session)
 	if err != nil {
 		return Session{}, "", false, fmt.Errorf("issuer: encode session %s: %w", session.ID, err)
@@ -489,15 +544,6 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 
 	if err != nil {
 		return Session{}, "", false, err
-	}
-
-	// The sets carry the session forward too: their expiry is refreshed
-	// with every add, so a session that keeps being used keeps being
-	// findable.
-	for _, key := range []string{sessionAllKey, sessionOfKey(session.Identity), sessionForKey(session.ClientID)} {
-		if err = s.state.Add(ctx, key, session.ID, s.lifetime); err != nil {
-			return Session{}, "", false, err
-		}
 	}
 
 	return session, newToken, true, nil
@@ -811,8 +857,8 @@ func (s *Sessions) byIDVersion(ctx context.Context, id string) (Session, string,
 // put writes a record, refusing one that is already expired.
 //
 // It is kept in the store for s.lifetime from now -- the SAME horizon as
-// the token pointer ([sessionTokenKey]) and the index sets, not derived
-// from ExpiresAt. The two used to be the same duration always, because
+// the token pointer ([sessionTokenKey]), not derived from ExpiresAt (the
+// index sets are kept longer: [Sessions.indexLifetime]). The two used to be the same duration always, because
 // ExpiresAt was always exactly now+s.lifetime; now that the absolute
 // session limit can cap ExpiresAt short of that, [Session.Live] is what
 // decides whether the record still answers, and this is a different
