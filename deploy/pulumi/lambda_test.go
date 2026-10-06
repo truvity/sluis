@@ -578,6 +578,12 @@ func TestAccessLogsLogPathAndStatusOnly(t *testing.T) {
 		t.Fatal("the stage has no access log settings")
 	}
 	format := set.ObjectValue()["format"].StringValue()
+	const exact = `{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod",` +
+		`"path":"$context.path","status":"$context.status","responseLatency":"$context.responseLatency",` +
+		`"integrationLatency":"$context.integrationLatency"}`
+	if format != exact {
+		t.Errorf("format = %s", format)
+	}
 	var parsed map[string]string
 	if err := json.Unmarshal([]byte(format), &parsed); err != nil {
 		t.Fatalf("format is not JSON: %v", err)
