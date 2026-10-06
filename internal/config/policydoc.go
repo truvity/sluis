@@ -450,8 +450,8 @@ func (d *PolicyDocument) DeclaredForExports() exportspec.Declared {
 		RunnerTiers: append([]string{}, d.RunnerTiers()...),
 		Clients:     map[string]bool{},
 	}
-	for id, c := range d.Policy.Clients {
-		declared.Clients[id] = c.SecretGenerated()
+	for id := range d.Policy.Clients {
+		declared.Clients[id] = d.Policy.Clients[id].SecretGenerated()
 	}
 	for _, a := range d.SlackCatalogue().Apps {
 		declared.SlackApps = append(declared.SlackApps, a.ID)
