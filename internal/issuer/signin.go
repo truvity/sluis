@@ -563,7 +563,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this issuer cannot sign in with that directory", http.StatusNotFound)
 		return
 	}
-	cookie, err := r.Cookie(access.LoginCookieName)
+	cookie, err := r.Cookie(access.CookieNameFor(access.LoginCookieName, s.deps.Secure))
 	state := r.URL.Query().Get("state")
 	if err != nil || cookie.Value == "" ||
 		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
@@ -687,7 +687,7 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 		return
 	}
 
-	if id := SSOFromRequest(r); id != "" {
+	if id := SSOFromRequest(r, deps.Secure); id != "" {
 		record, live, err := deps.SSO.Get(r.Context(), id)
 		if deps.Issuer != nil && err == nil && live {
 			// Read before revoking: once they are gone there is nothing
@@ -859,7 +859,7 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		return false
 	}
 
-	session, live, err := s.deps.SSO.Get(r.Context(), SSOFromRequest(r))
+	session, live, err := s.deps.SSO.Get(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err != nil || !live {
 		return false
 	}
@@ -1046,7 +1046,7 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 func (s *signIn) account(w http.ResponseWriter, r *http.Request) {
 	to := s.deps.ConsoleMount + "/"
 
-	session, live, err := s.deps.SSO.Get(r.Context(), SSOFromRequest(r))
+	session, live, err := s.deps.SSO.Get(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err == nil && live && session.Identity != "" {
 		// The console routes in the FRAGMENT, so the path is the console
 		// itself and the page is what follows the hash.

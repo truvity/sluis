@@ -14,6 +14,7 @@ import (
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/policy"
 )
@@ -36,6 +37,8 @@ type SessionsService struct {
 	// same-origin call from the account page by cookie, and ending the
 	// sign-in when a revoke means "everywhere".
 	sso *SSO
+	// secure is the flag the browser cookies were set with; it decides their name.
+	secure bool
 	// groups is what the policy puts an identity in. A bearer carries its
 	// own; a cookie says only who, so this answers the rest.
 	groups func(ctx context.Context, identity string) ([]string, error)
@@ -48,8 +51,9 @@ type SessionsService struct {
 var _ accessissuerv1connect.SessionServiceHandler = (*SessionsService)(nil)
 
 // NewSessionsService returns the handler over an issuer.
-func NewSessionsService(iss *Issuer, verifier *op.AccessTokenVerifier) *SessionsService {
+func NewSessionsService(iss *Issuer, verifier *op.AccessTokenVerifier, secure bool) *SessionsService {
 	return &SessionsService{
+		secure:   secure,
 		sessions: iss.Sessions(),
 		record:   iss.record,
 		sso:      iss.SSO(),
@@ -128,7 +132,7 @@ func (c caller) may(identity string) bool {
 // JavaScript. The bearer is the cross-origin path, for a console that
 // weaves the operator's view into its own pages.
 func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, error) {
-	if id := cookieIn(header, SSOCookieName); id != "" && s.sso != nil {
+	if id := cookieIn(header, access.CookieNameFor(SSOCookieName, s.secure)); id != "" && s.sso != nil {
 		session, live, err := s.sso.Get(ctx, id)
 		if err == nil && live {
 			return s.hold(ctx, session.Identity)

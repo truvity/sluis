@@ -32,6 +32,25 @@ const (
 	LinkCookieName    = "access_roster_link"
 )
 
+// HostPrefix makes a Secure cookie a host-locked one.
+const HostPrefix = "__Host-"
+
+// CookieNameFor is the name a cookie is written, read and cleared under.
+//
+// With secure cookies it carries the __Host- prefix, which a browser honours
+// only for a cookie that is Secure, has Path=/ and no Domain: so a sibling
+// host in the same zone cannot plant (toss) a cookie this host will then
+// read. Without them (plain-HTTP development) the base name is kept, since a
+// browser refuses a __Host- cookie that is not Secure. Every cookie this
+// service sets takes its name from here, so a write, a read and a clear
+// cannot disagree.
+func CookieNameFor(base string, secure bool) string {
+	if secure {
+		return HostPrefix + base
+	}
+	return base
+}
+
 // ErrBadState is returned for a state that is forged, stale or malformed.
 var ErrBadState = errors.New("access: state is not valid")
 
@@ -60,7 +79,7 @@ func LoginCookie(value string, secure bool, ttl time.Duration) *http.Cookie {
 
 func flowCookie(name, value string, secure bool, ttl time.Duration) *http.Cookie {
 	cookie := &http.Cookie{
-		Name:     name,
+		Name:     CookieNameFor(name, secure),
 		Value:    value,
 		Path:     "/",
 		MaxAge:   int(ttl.Seconds()),

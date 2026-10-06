@@ -89,7 +89,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, p Principal) error {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(body)
 	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
+		Name:     CookieNameFor(CookieName, s.secure),
 		Value:    encoded + "." + s.sign(encoded),
 		Path:     "/",
 		Expires:  expires,
@@ -102,7 +102,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, p Principal) error {
 
 // Read returns the principal a request carries.
 func (s *Sessions) Read(r *http.Request) (Principal, error) {
-	cookie, err := r.Cookie(CookieName)
+	cookie, err := r.Cookie(CookieNameFor(CookieName, s.secure))
 	if err != nil {
 		return Principal{}, ErrNoSession
 	}
@@ -136,7 +136,7 @@ func (s *Sessions) Read(r *http.Request) (Principal, error) {
 // Clear removes the cookie.
 func (s *Sessions) Clear(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
+		Name:     CookieNameFor(CookieName, s.secure),
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
