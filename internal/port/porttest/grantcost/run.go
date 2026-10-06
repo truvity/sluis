@@ -36,10 +36,12 @@ type Budget struct {
 // Measured 2026-10-07, before any of the cost work, the same on the memory
 // adapter, the DynamoDB fake and LocalStack: authorization_code 13 writes, 5
 // reads, 3 resolutions; refresh_token 14 writes, 8 reads, 4 resolutions,
-// first refresh and steady state alike.
+// first refresh and steady state alike. After it, the same on all three:
+// authorization_code 9 writes, 3 reads, 1 resolution; refresh_token 4
+// writes, 3 reads, 1 resolution.
 var Budgets = []Budget{
 	{
-		Grant: "authorization_code", MaxWrites: 13, MaxReads: 5, Resolutions: 1,
+		Grant: "authorization_code", MaxWrites: 9, MaxReads: 3, Resolutions: 1,
 		drive: func(t *testing.T, h *Harness) Counts {
 			code := h.SignIn()
 			if code == "" {
