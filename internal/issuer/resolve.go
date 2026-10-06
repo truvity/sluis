@@ -65,7 +65,11 @@ type Resolver struct {
 
 	mu   sync.Mutex
 	seen map[string]lastKnown
-	now  func() time.Time
+	// stored is what this process last wrote to state for each identity,
+	// so that an answer it would only write again unchanged is not
+	// written: see [Resolver.remember].
+	stored map[string]lastKnown
+	now    func() time.Time
 }
 
 // heldKey is where one identity's last-known answer is kept in the State.
@@ -86,12 +90,17 @@ func (r *Resolver) UseState(state State) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.state = state
+	// What was written to another store says nothing about this one.
+	r.stored = map[string]lastKnown{}
 }
 
 // NewResolver returns a resolver over dir, holding last-known groups for
 // window.
 func NewResolver(dir Directory, window time.Duration) *Resolver {
-	return &Resolver{dir: dir, window: window, seen: map[string]lastKnown{}, now: time.Now}
+	return &Resolver{
+		dir: dir, window: window,
+		seen: map[string]lastKnown{}, stored: map[string]lastKnown{}, now: time.Now,
+	}
 }
 
 // SetClock replaces the clock, for tests.
@@ -181,19 +190,44 @@ func (r *Resolver) clock() time.Time {
 	return r.now()
 }
 
+// heldRewrite is how stale, as a fraction of the hold window, this
+// process lets the time on a held answer it wrote become before it writes
+// the same groups again: an eighth, so 30 minutes of a 4-hour window.
+const heldRewrite = 8
+
 // remember records an authoritative answer: in the shared State when there
 // is one, and in memory when there is none or the State refused the write
 // (a store that is down must not turn a good answer into no answer).
+//
+// An answer this process itself wrote moments ago, with the same groups,
+// is not written again. The groups are what the hold window keeps, and
+// they have not changed; what has is the time beside them, which is where
+// the window is measured from. Rewriting it on every request was a State
+// write on every sign-in and every refresh -- in an installation where MCP
+// clients refresh every few minutes, the commonest write there was -- to
+// move that time forward by minutes. It is moved forward once it is an
+// eighth of the window old instead, so a hold that starts while it lags
+// ends at most an eighth of the window EARLY, never late: the issuer
+// stops acting on a directory it cannot reach slightly sooner, which is
+// the safe direction to be wrong in. A change of groups is always written.
 func (r *Resolver) remember(ctx context.Context, email string, known lastKnown) {
 	r.mu.Lock()
 	state := r.state
+	prev, wrote := r.stored[email]
 	r.mu.Unlock()
 	if state != nil {
+		if wrote && slices.Equal(prev.groups, known.groups) &&
+			known.at.Sub(prev.at) < r.window/heldRewrite && !known.at.Before(prev.at) {
+			return
+		}
 		raw, err := json.Marshal(heldRecord{Groups: known.groups, At: known.at})
 		if err == nil {
 			err = state.Set(ctx, heldKey(email), raw, r.window)
 		}
 		if err == nil {
+			r.mu.Lock()
+			r.stored[email] = lastKnown{groups: slices.Clone(known.groups), at: known.at}
+			r.mu.Unlock()
 			return
 		}
 		slog.WarnContext(ctx, "the issuer could not store the last-known groups; keeping them in memory",
@@ -246,6 +280,7 @@ func (r *Resolver) Forget(ctx context.Context, email string) error {
 	r.mu.Lock()
 	state := r.state
 	delete(r.seen, email)
+	delete(r.stored, email)
 	r.mu.Unlock()
 	if state == nil {
 		return nil
