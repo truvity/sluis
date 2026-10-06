@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -127,8 +129,21 @@ func (e *Refused) Error() string { return "refused: " + e.Reason }
 // taken and remembered; a non-authoritative answer falls back to what was
 // last known, if that is recent enough; an identity never seen before
 // gets nothing, because there is nothing to hold.
+//
+// Within one request (see [resolutions]) an address is resolved once and
+// every later call is answered with that first answer.
 func (r *Resolver) Resolve(ctx context.Context, email string) (Resolution, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
+	once := resolutionsFrom(ctx)
+	if got, ok := once.get(email); ok {
+		return got.res, got.err
+	}
+	res, err := r.resolve(ctx, email)
+	once.put(email, res, err)
+	return res, err
+}
+
+func (r *Resolver) resolve(ctx context.Context, email string) (Resolution, error) {
 	standing, err := r.dir.ResolveUser(ctx, email)
 
 	now := r.clock()
@@ -227,6 +242,7 @@ func (r *Resolver) forget(ctx context.Context, email string) {
 // unreachable hub.
 func (r *Resolver) Forget(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
+	resolutionsFrom(ctx).drop(email)
 	r.mu.Lock()
 	state := r.state
 	delete(r.seen, email)
@@ -251,4 +267,86 @@ func (res Resolution) Input(email string) policy.Input {
 		// anything at all", which within the window it may.
 		Authoritative: true,
 	}
+}
+
+// resolutions is one request's memory of what [Resolver.Resolve] answered,
+// so that a request asks the directory about any one address once.
+//
+// A token request asks about the same person several times over: whether
+// they may still use the client, what the access token carries, what the
+// ID token carries. Each of those was a full resolution -- a workspace
+// listing, a snapshot read, a write of the last-known groups -- and in an
+// installation where MCP clients refresh every few minutes, that was most
+// of what a refresh cost. It is also more than one answer to a question
+// that should have one: a snapshot replaced halfway through a request
+// could have given the access token and the ID token different groups.
+//
+// It lives exactly as long as the request ([withOneResolution]) and never
+// longer: what the directory says about a person is asked afresh by the
+// next request, at whichever replica takes it. Without one installed,
+// every call resolves, which is what a caller outside an HTTP request
+// (a test, a background task) gets.
+type resolutions struct {
+	mu   sync.Mutex
+	done map[string]resolved
+}
+
+type resolved struct {
+	res Resolution
+	err error
+}
+
+type resolutionsKey struct{}
+
+// withResolutions returns ctx carrying an empty [resolutions].
+func withResolutions(ctx context.Context) context.Context {
+	return context.WithValue(ctx, resolutionsKey{}, &resolutions{done: map[string]resolved{}})
+}
+
+// resolutionsFrom is the request's memory, or nil where none was
+// installed; every method is safe on nil and remembers nothing.
+func resolutionsFrom(ctx context.Context) *resolutions {
+	once, _ := ctx.Value(resolutionsKey{}).(*resolutions)
+	return once
+}
+
+func (o *resolutions) get(email string) (resolved, bool) {
+	if o == nil {
+		return resolved{}, false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	got, ok := o.done[email]
+	// A copy of the groups: a caller that narrows the slice it was handed
+	// must not narrow it for the next caller in the same request.
+	got.res.Groups = slices.Clone(got.res.Groups)
+	return got, ok
+}
+
+func (o *resolutions) put(email string, res Resolution, err error) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	res.Groups = slices.Clone(res.Groups)
+	o.done[email] = resolved{res: res, err: err}
+}
+
+// drop forgets an address, so that a request which revokes somebody and
+// then asks about them is not answered with what it knew before.
+func (o *resolutions) drop(email string) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.done, email)
+}
+
+// withOneResolution installs a fresh [resolutions] on every request.
+func withOneResolution(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(withResolutions(r.Context())))
+	})
 }

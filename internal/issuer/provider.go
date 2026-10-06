@@ -263,7 +263,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	}
 	mux.Handle("/", neverCached(protocol))
 
-	return withSigningAudience(mux), nil
+	return withSigningAudience(withOneResolution(mux)), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every
