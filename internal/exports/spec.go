@@ -28,6 +28,8 @@ const (
 	SourceGitHubApp = exportspec.SourceGitHubApp
 	SourceRunnerApp = exportspec.SourceRunnerApp
 	SourceBundle    = exportspec.SourceBundle
+
+	SourceOIDCClient = exportspec.SourceOIDCClient
 )
 
 // The bundles, as `bundle` spells them.
@@ -50,6 +52,8 @@ const (
 	PropAppID          = exportspec.PropAppID
 	PropInstallationID = exportspec.PropInstallationID
 	PropPrivateKey     = exportspec.PropPrivateKey
+	PropClientID       = exportspec.PropClientID
+	PropClientSecret   = exportspec.PropClientSecret
 )
 
 // DefaultInterval and MinInterval are exportspec's.

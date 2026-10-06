@@ -29,7 +29,7 @@ type Entry struct {
 	// Name identifies the export in the log, the metrics and its lease.
 	// Empty is the source and what it names.
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
-	// Source is slack-app, github-app, runner-app or bundle.
+	// Source is slack-app, github-app, runner-app, oidc-client or bundle.
 	Source string `json:"source" yaml:"source"`
 	// App is the catalogue id of a slack-app or a github-app.
 	App string `json:"app,omitempty" yaml:"app,omitempty"`
@@ -38,6 +38,9 @@ type Entry struct {
 	Org  string `json:"org,omitempty" yaml:"org,omitempty"`
 	// Bundle names a bundle.
 	Bundle string `json:"bundle,omitempty" yaml:"bundle,omitempty"`
+	// Client is the id of an oidc-client: a confidential policy client whose
+	// secret the issuer generates.
+	Client string `json:"client,omitempty" yaml:"client,omitempty"`
 	// Namespace is the OpenBao namespace written to; empty is the
 	// adapter's.
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
@@ -59,6 +62,10 @@ const (
 	// SourceRunnerApp is a runner App's id, installation id and private key,
 	// by tier and organisation.
 	SourceRunnerApp = "runner-app"
+	// SourceOIDCClient is a confidential policy client's id and its generated
+	// secret (`secret: {generate: true}`), by client id. Only the current
+	// secret is exported, never the previous one.
+	SourceOIDCClient = "oidc-client"
 	// SourceBundle is the whole of one of the disaster-recovery bundles.
 	SourceBundle = "bundle"
 )
@@ -95,6 +102,9 @@ const (
 	PropAppID          = "app_id"
 	PropInstallationID = "installation_id"
 	PropPrivateKey     = "private_key"
+	// PropClientID and PropClientSecret are an oidc-client's.
+	PropClientID     = "client-id"
+	PropClientSecret = "client-secret"
 )
 
 // sourceProperties maps each source to its properties and the name each is
@@ -108,6 +118,7 @@ var sourceProperties = map[string]map[string]string{
 	SourceRunnerApp: {
 		PropAppID: "github-app-id", PropInstallationID: "github-installation-id", PropPrivateKey: "github-private-key",
 	},
+	SourceOIDCClient: {PropClientID: "client-id", PropClientSecret: "client-secret"},
 }
 
 // DefaultInterval is how often an export is made again with nothing having
@@ -135,6 +146,8 @@ type Spec struct {
 	Tier, Org string
 	// Bundle names a bundle.
 	Bundle string
+	// Client is the id of an oidc-client.
+	Client string
 	Target port.ExportTarget
 	// Properties maps a source property to the property written, for the
 	// per-App sources. Never nil for them.
@@ -142,10 +155,10 @@ type Spec struct {
 	Interval   time.Duration
 }
 
-// Mode is how the export writes: a bundle replaces the key, an App's
-// properties are patched into a key other properties may share.
+// Mode is how the export writes: a bundle and a client's secret replace the
+// key, an App's properties are patched into a key other properties may share.
 func (s Spec) Mode() port.ExportMode {
-	if s.Source == SourceBundle {
+	if s.Source == SourceBundle || s.Source == SourceOIDCClient {
 		return port.ExportReplace
 	}
 	return port.ExportPatch
@@ -157,6 +170,9 @@ type Declared struct {
 	SlackApps   []string
 	GitHubApps  []string
 	RunnerTiers []string
+	// Clients maps each policy client's id to whether the issuer generates its
+	// secret. Nil says the clients are not known.
+	Clients map[string]bool
 }
 
 // FromConfig validates the `exports` list and returns it as specs, in the
@@ -188,15 +204,15 @@ func FromConfig(entries []Entry, declared Declared) ([]Spec, error) {
 
 //nolint:gocyclo // one switch over the sources, each with its own fields
 func fromEntry(e Entry, declared Declared) (Spec, error) {
-	spec := Spec{Source: e.Source, App: e.App, Tier: e.Tier, Org: e.Org, Bundle: e.Bundle, Interval: DefaultInterval}
+	spec := Spec{Source: e.Source, App: e.App, Tier: e.Tier, Org: e.Org, Bundle: e.Bundle, Client: e.Client, Interval: DefaultInterval}
 	props, known := sourceProperties[e.Source]
 	switch e.Source {
 	case SourceSlackApp, SourceGitHubApp:
 		if !appIDPattern.MatchString(e.App) {
 			return Spec{}, fmt.Errorf("%s needs `app`, the catalogue id of the App", e.Source)
 		}
-		if e.Tier != "" || e.Org != "" || e.Bundle != "" {
-			return Spec{}, fmt.Errorf("%s takes `app` and no tier, org or bundle", e.Source)
+		if e.Tier != "" || e.Org != "" || e.Bundle != "" || e.Client != "" {
+			return Spec{}, fmt.Errorf("%s takes `app` and no tier, org, bundle or client", e.Source)
 		}
 		list, kind := declared.SlackApps, "slackApps"
 		if e.Source == SourceGitHubApp {
@@ -210,24 +226,41 @@ func fromEntry(e Entry, declared Declared) (Spec, error) {
 		if !runnerapp.ValidTier(e.Tier) || !status.ValidOrg(e.Org) {
 			return Spec{}, errors.New("runner-app needs `tier` and `org`: a runner tier and an organisation login")
 		}
-		if e.App != "" || e.Bundle != "" {
-			return Spec{}, errors.New("runner-app takes `tier` and `org` and no app or bundle")
+		if e.App != "" || e.Bundle != "" || e.Client != "" {
+			return Spec{}, errors.New("runner-app takes `tier` and `org` and no app, bundle or client")
 		}
 		if declared.RunnerTiers != nil && !slices.Contains(declared.RunnerTiers, e.Tier) {
 			return Spec{}, fmt.Errorf("runner-app tier %q is not one of github.runnerTiers (%s)", e.Tier, listOf(declared.RunnerTiers))
 		}
 		spec.Name = SourceRunnerApp + "." + e.Tier + "." + strings.ToLower(e.Org)
+	case SourceOIDCClient:
+		if e.Client == "" {
+			return Spec{}, errors.New("oidc-client needs `client`, the id of a confidential client whose secret the issuer generates")
+		}
+		if e.App != "" || e.Tier != "" || e.Org != "" || e.Bundle != "" {
+			return Spec{}, errors.New("oidc-client takes `client` and no app, tier, org or bundle")
+		}
+		if declared.Clients != nil {
+			generated, ok := declared.Clients[e.Client]
+			switch {
+			case !ok:
+				return Spec{}, fmt.Errorf("oidc-client %q is not a client of the policy", e.Client)
+			case !generated:
+				return Spec{}, fmt.Errorf("oidc-client %q does not have `secret: {generate: true}`: only a generated secret is exported", e.Client)
+			}
+		}
+		spec.Name = SourceOIDCClient + "." + e.Client
 	case SourceBundle:
 		if !slices.Contains(Bundles, e.Bundle) {
 			return Spec{}, fmt.Errorf("bundle %q is not one of %s", e.Bundle, strings.Join(Bundles, ", "))
 		}
-		if e.App != "" || e.Tier != "" || e.Org != "" || len(e.Properties) > 0 {
-			return Spec{}, errors.New("bundle takes `bundle` and no app, tier, org or properties: the whole bundle is copied as it is")
+		if e.App != "" || e.Tier != "" || e.Org != "" || e.Client != "" || len(e.Properties) > 0 {
+			return Spec{}, errors.New("bundle takes `bundle` and no app, tier, org, client or properties: the whole bundle is copied as it is")
 		}
 		spec.Name = SourceBundle + "." + e.Bundle
 	default:
-		return Spec{}, fmt.Errorf("source %q is not one of %s, %s, %s, %s",
-			e.Source, SourceSlackApp, SourceGitHubApp, SourceRunnerApp, SourceBundle)
+		return Spec{}, fmt.Errorf("source %q is not one of %s, %s, %s, %s, %s",
+			e.Source, SourceSlackApp, SourceGitHubApp, SourceRunnerApp, SourceOIDCClient, SourceBundle)
 	}
 	if e.Name != "" {
 		if !namePattern.MatchString(e.Name) {

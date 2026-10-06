@@ -25,6 +25,9 @@ func openExports(cfg Config, stores *store.Stores, directory *app.App, log *slog
 			"or choose a secrets adapter (adapters.secrets, or a preset), whose export/ prefix is then used")
 	}
 	sources := directory.ExportSources()
+	if stores.Ports.Secrets != nil {
+		sources.Secrets = stores.Ports.Secrets
+	}
 	if err := sources.Check(specs); err != nil {
 		return nil, fmt.Errorf("exports: %w", err)
 	}

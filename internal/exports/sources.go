@@ -2,17 +2,20 @@ package exports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strconv"
 
 	"github.com/truvity/sluis/backend"
+	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/hub"
+	"github.com/truvity/sluis/internal/port"
 	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
 	slackconnection "github.com/truvity/sluis/internal/slackroster/connection"
 )
@@ -84,6 +87,9 @@ type Sources struct {
 	SlackWorkspaces     SlackWorkspaces
 	SlackShared         SlackShared
 	SlackChannels       SlackChannels
+	// Secrets is the Secrets port, where the issuer keeps a generated client
+	// secret's record. Nil when the deployment has no Secrets port.
+	Secrets port.Secrets
 }
 
 // Check refuses an export whose store this deployment does not have.
@@ -98,6 +104,8 @@ func (s Sources) Check(specs []Spec) error {
 			have = s.GitHubCatalogueApps != nil
 		case SourceRunnerApp:
 			have = s.RunnerApps != nil
+		case SourceOIDCClient:
+			have = s.Secrets != nil
 		case SourceBundle:
 			have = s.has(spec.Bundle)
 		}
@@ -171,6 +179,8 @@ func (s Sources) Read(ctx context.Context, spec Spec) (properties map[string]str
 		entries, found, err = s.githubApp(ctx, spec)
 	case SourceRunnerApp:
 		entries, found, err = s.runnerApp(ctx, spec)
+	case SourceOIDCClient:
+		entries, found, err = s.oidcClient(ctx, spec)
 	case SourceBundle:
 		entries, err = s.bundle(ctx, spec.Bundle)
 		found = len(entries) > 0
@@ -197,6 +207,28 @@ func (s Sources) Read(ctx context.Context, spec Spec) (properties map[string]str
 		}
 	}
 	return out, len(out) > 0, nil
+}
+
+// oidcClient is a generated client's id and current secret. The previous
+// secret is never exported: it exists to ease a rotation at the issuer. A
+// client with no record yet has nothing to copy. The error never holds a
+// value.
+func (s Sources) oidcClient(ctx context.Context, spec Spec) (map[string][]byte, bool, error) {
+	got, err := s.Secrets.Get(ctx, clientcreds.Path(spec.Client))
+	if errors.Is(err, port.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("reading the secret record of client %q: %w", spec.Client, err)
+	}
+	rec, err := clientcreds.DecodeRecord(got.Value)
+	if err != nil {
+		return nil, false, fmt.Errorf("client %q: %w", spec.Client, err)
+	}
+	return map[string][]byte{
+		PropClientID:     []byte(spec.Client),
+		PropClientSecret: []byte(rec.Current),
+	}, true, nil
 }
 
 func (s Sources) slackApp(ctx context.Context, spec Spec) (map[string][]byte, bool, error) {
