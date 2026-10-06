@@ -125,6 +125,12 @@ type authRequest struct {
 	// request object to the token creation and to the ID token creation
 	// within one exchange, and after that the request is deleted.
 	Session string `json:"-"`
+
+	// involved is set when the code's redemption has already recorded the
+	// client among the sign-in's clients ([Storage.involveAhead]), so the
+	// ID token that follows does not record it again. Never written down,
+	// for the same reason as Session.
+	involved bool
 }
 
 var _ op.AuthRequest = (*authRequest)(nil)
@@ -949,7 +955,12 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		// that is this request's: the rotation acts on what was read then
 		// rather than reading the token and its session a second time.
 		if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.token == currentRefreshToken {
-			live, successor, ok, err = s.iss.Sessions().rotate(ctx, req.presented, refresh)
+			p := req.presented
+			if req.involved, err = s.involveAhead(ctx, request, p.session.Involved); err != nil {
+				return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+			}
+			p.session.Involved = p.session.Involved || req.involved
+			live, successor, ok, err = s.iss.Sessions().rotate(ctx, p, refresh)
 		} else {
 			live, successor, ok, err = s.iss.Sessions().Refreshed(ctx, currentRefreshToken, refresh)
 		}
@@ -984,6 +995,13 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	if _, ok := request.(op.TokenExchangeRequest); ok {
 		how = HowExchange
 	}
+	involved, err := s.involveAhead(ctx, request, false)
+	if err != nil {
+		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+	}
+	if opened, ok := request.(*authRequest); ok {
+		opened.involved = involved
+	}
 	session, err := s.iss.Sessions().Record(ctx, Opened{
 		Identity: issued.Subject,
 		ClientID: clientOf(request),
@@ -993,6 +1011,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		Scopes:   request.GetScopes(),
 		SSO:      ssoOf(request),
 		AuthTime: authTimeOf(request),
+		Involved: involved,
 	})
 	if err != nil {
 		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
@@ -1084,13 +1103,51 @@ func (s *Storage) SetUserinfoFromRequest(
 	// tell each of them. The session index cannot say: a client that
 	// asked for `openid` alone holds no refresh token and has no session
 	// there, yet it signed somebody in all the same.
-	if sso := ssoOf(request); sso != "" && s.iss.SSO() != nil {
+	if sso := ssoOf(request); sso != "" && s.iss.SSO() != nil && !involvedAhead(request) {
 		if err = s.iss.SSO().Involve(ctx, sso, request.GetClientID()); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// involveAhead records a grant's client among the clients of the sign-in
+// it was made under, ahead of the ID token, when the grant opens or
+// carries a session: the session record written next can then say so,
+// and the refreshes that follow skip the write. It reports whether the
+// client is now recorded -- false only for a grant under no sign-in.
+//
+// Recording it here rather than when the ID token is assembled is the
+// same fact a moment earlier: every code redemption and every refresh
+// answers with an ID token. One Add already outlasts the sign-in it
+// belongs to (both are kept for the sign-in lifetime, the Add from no
+// earlier than the sign-in), so adding it again would only keep it past
+// the sign-in's end, where nothing reads it.
+func (s *Storage) involveAhead(ctx context.Context, request op.TokenRequest, already bool) (bool, error) {
+	sso := ssoOf(request)
+	if sso == "" || s.iss.SSO() == nil {
+		return false, nil
+	}
+	if !already {
+		if err := s.iss.SSO().Involve(ctx, sso, clientOf(request)); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// involvedAhead reports whether [Storage.involveAhead] already recorded
+// this request's client.
+func involvedAhead(request op.IDTokenRequest) bool {
+	switch req := request.(type) {
+	case *authRequest:
+		return req.involved
+	case *refreshRequest:
+		return req.involved
+	default:
+		return false
+	}
 }
 
 // authTimeOf is when the person behind a token request authenticated, and
@@ -1387,6 +1444,9 @@ type refreshRequest struct {
 	scopes  []string
 	// presented is the token as it was read, which the rotation acts on.
 	presented presented
+	// involved is set once the client is known to be recorded among the
+	// sign-in's clients ([Storage.involveAhead]).
+	involved bool
 }
 
 var _ op.RefreshTokenRequest = (*refreshRequest)(nil)

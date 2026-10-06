@@ -74,6 +74,12 @@ type Session struct {
 	IssuedAt      time.Time `json:"issued_at"`
 	ExpiresAt     time.Time `json:"expires_at"`
 	LastRefreshed time.Time `json:"last_refreshed,omitempty"`
+	// Involved says the session's client is recorded among the clients of
+	// the sign-in it was opened under (see [SSO.Involve]), so a refresh
+	// need not record it again. False for a session under no sign-in, and
+	// for one recorded before the field existed, whose next refresh
+	// records it.
+	Involved bool `json:"involved,omitempty"`
 	// IndexedUntil is when the session's membership of the index sets
 	// written last runs out (see [Sessions.indexed]). Zero for a session
 	// recorded before it existed, which is re-added at its next refresh.
@@ -267,6 +273,8 @@ type Opened struct {
 	// AuthTime is when the person authenticated; zero for a flow where
 	// nobody did.
 	AuthTime time.Time
+	// Involved says the client is already recorded among SSO's clients.
+	Involved bool
 }
 
 // Record files a newly issued refresh token and returns the session it
@@ -287,6 +295,7 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 		Scopes:   o.Scopes,
 		SSO:      o.SSO,
 		AuthTime: o.AuthTime,
+		Involved: o.Involved,
 		IssuedAt: now,
 		// The absolute limit applies from the moment the session is
 		// OPENED, not only from its first refresh: a browser session
