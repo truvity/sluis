@@ -121,6 +121,19 @@ refresh token that is neither live nor inside the grace window is spent *or
 unknown*: a spent token is not kept past the window, so the two are not told
 apart. A burst of either is a client bug or a stolen credential; one is noise.
 
+### Generated client secrets
+
+Source: `internal/clientcreds/telemetry.go`. No client id is ever a label, so a guessed id cannot mint a series.
+
+| Metric | Type | Labels | What it says |
+|---|---|---|---|
+| `sluis.client_secret.reconcile` | counter | `outcome` | Generated secrets looked after: `created`, `adopted`, `existing`, `conflict`, `unsupported` or `failed`. |
+| `sluis.client_secret.auth` | counter | `slot` | Confidential client authentications at the token endpoint, by the secret that matched: `current`, `previous` or `none`. |
+| `sluis.client_secret.rotations` | counter | `outcome` | Rotations a person asked for: `ok`, `busy`, `not_generated`, `no_record` or `failed`. |
+| `sluis.client_secret.purges` | counter | `outcome` | Purges a person asked for: `ok`, `still_declared`, `no_record`, `busy` or `failed`. |
+| `sluis.client_secret.orphans` | counter | none | Stored records newly found with no generated client in the policy, each counted once. |
+| `sluis.client_secret.admin_refused` | counter | `reason` | Requests to the admin endpoint refused before they acted: `unauthenticated`, `forbidden` or `wrong_audience`. |
+
 ### The controllers and the rails
 
 | Metric | Type | Labels | What it says |

@@ -13,6 +13,8 @@ preconditions, known traps, steps with a way to verify and to roll back, and wha
 | back up or restore what the console holds, Slack state included | [Back up and restore](back-up-and-restore.md) |
 | write everything the service manages to one file | [Export](export.md) |
 | rotate a credential, the session key or a Slack token | [Rotate keys and credentials](rotate-keys-and-credentials.md) |
+| let the issuer generate a confidential client's secret | [Let the issuer generate a client's secret](let-the-issuer-generate-a-clients-secret.md) |
+| rotate such a secret | [Rotate a client secret](rotate-a-client-secret.md) |
 | choose replica counts, size the snapshot cache | [Scaling and cache](scaling-and-cache.md) |
 | run more than one replica | [Run more than one replica](high-availability.md) |
 | find something in the service's own log | [Read the logs](read-the-logs.md) |

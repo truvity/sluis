@@ -82,6 +82,7 @@ and needs no config, session or `HOME`.
 | `aws` | an AWS credential-process answer (run by the AWS SDKs) | [caches](#where-things-are-kept) |
 | `exchange` | the raw exchange: a token in, a token for an audience out | below |
 | `bao`, `r2`, `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
+| `clients rotate\|show\|purge` | look after a generated client's secret | [clients](#clients-rotate-show-purge) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
 
@@ -274,6 +275,24 @@ though `kube-token`, `aws` and `r2` keep their per-credential caches
 (see the table above) there as anywhere. A repository that would rather
 download nothing of ours uses the action, which is `curl` and `jq`
 ([../connect/github-actions.md](../how-to/connect/github-actions.md)).
+
+## clients: rotate, show, purge
+
+```sh
+sluisctl clients rotate <id> [--overlap 24h]   # a new secret; the old one stays valid for the overlap
+sluisctl clients show <id>                     # metadata only, never a secret
+sluisctl clients purge <id>                    # delete the record of a client no longer generated
+```
+
+The id and the flags may come in either order; all three take `--issuer` and `--client`. `--overlap` is a duration from
+`0` to `168h` (default `24h`; `0` cuts the old secret at once). The caller must be an operator, with a token issued to
+`accessctl` or `console`. `rotate` and `purge` print what they did; `purge` also says to delete `clients/<id>/secret` and
+the exported copy by hand. How: [rotate a client secret](../how-to/rotate-a-client-secret.md). Endpoints:
+[`/.access/client-secrets`](endpoints.md#client-secrets).
+
+These commands exit `2` for a bad command line or overlap, `3` when not signed in (a `401`), `4` when refused (a `403`:
+not an operator, or the wrong audience), `5` when the issuer cannot be reached, and `1` for everything else, including
+a client that is not generated, has no record, is still declared, or is busy.
 
 ## Exit codes
 
