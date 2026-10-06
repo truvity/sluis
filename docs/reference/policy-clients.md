@@ -11,13 +11,13 @@ means nobody, not everyone, and sluis refuses to start on one.
 | Kind | Used by | Has a secret |
 |---|---|---|
 | `public` | kubelogin per cluster, `sluisctl`, Kargo's web UI and CLI, `local-dev` | no |
-| `confidential` | ArgoCD, Grafana, a console behind oauth2-proxy | yes: the `secret` it names |
+| `confidential` | ArgoCD, Grafana, a console behind oauth2-proxy | yes: the `secret` it names, or one the issuer generates ([ADR 0039](../decisions/0039-the-issuer-generates-confidential-client-secrets.md)) |
 | `exchange` | AWS roles reached by token exchange | no |
 
 | Key | Meaning |
 |---|---|
 | `kind` | `public`, `confidential` or `exchange` |
-| `secret` | the secret a confidential client names; required for that kind |
+| `secret` | the secret a confidential client names; required for that kind unless the issuer generates it, see [ADR 0039](../decisions/0039-the-issuer-generates-confidential-client-secrets.md) |
 | `redirects` | where a code is delivered: a path that starts a sign-in |
 | `signed_out` | the pages a person may land on after an RP-initiated logout. An address in both lists fails the load; an `exchange` client may declare none |
 | `requires` | the internal groups, any one of which admits a caller |
