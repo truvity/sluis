@@ -44,7 +44,8 @@
 //
 //   - Get is GetItem with ConsistentRead: an eventually consistent read could be
 //     behind a write the caller was acknowledged for, and a revoked session
-//     must read as revoked.
+//     must read as revoked. PeekRevision is the one exception, and reads no
+//     value ([port.RevisionPeeker]).
 //   - Put is an unconditional PutItem. Create is a PutItem conditioned on the
 //     key being absent or expired. Update and DeleteIfRevision are conditioned
 //     on `rev` being the caller's and the item being live. A failed condition
@@ -108,9 +109,10 @@ import (
 )
 
 var (
-	_ port.State   = (*Store)(nil)
-	_ port.Index   = (*Store)(nil)
-	_ port.Trigger = (*Store)(nil)
+	_ port.State          = (*Store)(nil)
+	_ port.RevisionPeeker = (*Store)(nil)
+	_ port.Index          = (*Store)(nil)
+	_ port.Trigger        = (*Store)(nil)
 
 	_ port.StateExporter = (*Store)(nil)
 	_ port.IndexExporter = (*Store)(nil)
@@ -469,6 +471,44 @@ func (s *Store) live(ctx context.Context, pk, sk string) (item, error) {
 		return item{}, port.ErrNotFound
 	}
 	return it, nil
+}
+
+// PeekRevision implements [port.RevisionPeeker]: a GetItem WITHOUT
+// ConsistentRead, the one read here that is not consistent, projected to the
+// revision, the expiry and the index mark so that no value is ever read this
+// way.
+func (s *Store) PeekRevision(ctx context.Context, key string) (port.Revision, error) {
+	pk, sk, err := locate(key)
+	if err != nil {
+		return "", port.ErrNotFound
+	}
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+	out, err := s.api.GetItem(ctx, &ddb.GetItemInput{
+		TableName:            &s.table,
+		Key:                  keyOf(pk, sk),
+		ConsistentRead:       aws.Bool(false),
+		ProjectionExpression: aws.String("#r, #e, #k"),
+		ExpressionAttributeNames: map[string]string{
+			"#r": attrRev, "#e": attrExpires, "#k": attrKind,
+		},
+	})
+	if err != nil {
+		return "", unavailable(err)
+	}
+	rev, ok := out.Item[attrRev].(*types.AttributeValueMemberN)
+	if !ok {
+		return "", port.ErrNotFound
+	}
+	if v, ok := out.Item[attrKind].(*types.AttributeValueMemberS); ok && v.Value == kindIndex {
+		return "", port.ErrNotFound
+	}
+	if v, ok := out.Item[attrExpires].(*types.AttributeValueMemberN); ok {
+		if exp, err := strconv.ParseInt(v.Value, 10, 64); err == nil && exp != 0 && exp <= s.nowSec() {
+			return "", port.ErrNotFound
+		}
+	}
+	return port.Revision(rev.Value), nil
 }
 
 // Get implements [port.State].

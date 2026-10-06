@@ -147,6 +147,26 @@ func (s state) Get(ctx context.Context, key string) (port.Record, error) {
 	return r, err
 }
 
+// PeekRevision implements [port.RevisionPeeker]: the adapter's own when it
+// has one, and the revision of a (consistent) Get when it has not -- a
+// stronger read than asked for, which a peek's caller is always content with.
+func (s state) PeekRevision(ctx context.Context, key string) (port.Revision, error) {
+	ctx, done := call(ctx, PortState, "peek_revision")
+	var (
+		rev port.Revision
+		err error
+	)
+	if peeker, ok := s.State.(port.RevisionPeeker); ok {
+		rev, err = peeker.PeekRevision(ctx, key)
+	} else {
+		var record port.Record
+		record, err = s.State.Get(ctx, key)
+		rev = record.Revision
+	}
+	done(err)
+	return rev, err
+}
+
 func (s state) Put(ctx context.Context, key string, value []byte, ttl time.Duration) (port.Revision, error) {
 	ctx, done := call(ctx, PortState, "put")
 	r, err := s.State.Put(ctx, key, value, ttl)

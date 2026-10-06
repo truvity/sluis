@@ -175,8 +175,9 @@ them.
 | `access_roster.port.operation.duration` | histogram, `s` | `port`, `operation`, `outcome` | One storage port call. |
 
 `port` is `state`, `index` or `blob`. `operation` is the call (`get`, `put`,
-`create`, `update`, `delete`, `delete_if_revision`, `list`, `add`, `remove`,
-`members`, `read`, `write`, `write_if_version`, `replace`, `read_all`).
+`create`, `update`, `delete`, `delete_if_revision`, `peek_revision`, `list`,
+`add`, `remove`, `members`, `read`, `write`, `write_if_version`, `replace`,
+`read_all`).
 `outcome` is `ok`, `not_found`, `exists`, `conflict`, `unavailable` (the store
 is down), `canceled` (the caller gave up) or `error`. The histogram's count by
 outcome is the call rate, the error rate and the **compare-and-swap conflicts**

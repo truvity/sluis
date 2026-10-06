@@ -71,6 +71,21 @@ type versionedState interface {
 	Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error
 }
 
+// peekingState is what a [State] offers when a writer can later ask, cheaply,
+// whether a value is still the one it wrote. It is optional, and apart from
+// [versionedState]: the last-known groups use it to skip a write only while
+// the record is their own ([Resolver.remember]), and a State without it has
+// that write made every time.
+type peekingState interface {
+	// SetVersion is [State.Set] that says which revision it wrote.
+	SetVersion(ctx context.Context, key string, value []byte, ttl time.Duration) (string, error)
+	// PeekVersion is the revision under key as a cheap, possibly
+	// eventually consistent read sees it, and no value: for a caller that
+	// only asks "is this still what I wrote" and treats any other answer
+	// as "no" ([port.RevisionPeeker]).
+	PeekVersion(ctx context.Context, key string) (version string, found bool, err error)
+}
+
 var (
 	errMoved = errors.New("issuer: the value changed since it was read")
 	errGone  = errors.New("issuer: the value is gone")
@@ -141,6 +156,7 @@ type memoryValue struct {
 var (
 	_ State          = (*MemoryState)(nil)
 	_ versionedState = (*MemoryState)(nil)
+	_ peekingState   = (*MemoryState)(nil)
 )
 
 // NewMemoryState returns an empty store.
@@ -197,6 +213,20 @@ func (m *MemoryState) GetVersion(_ context.Context, key string) ([]byte, string,
 		return nil, "", false, nil
 	}
 	return held.value, strconv.FormatUint(held.revision, 10), true, nil
+}
+
+// SetVersion implements [peekingState].
+func (m *MemoryState) SetVersion(_ context.Context, key string, value []byte, ttl time.Duration) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.set(key, value, ttl)
+	return strconv.FormatUint(m.revision, 10), nil
+}
+
+// PeekVersion implements [peekingState].
+func (m *MemoryState) PeekVersion(ctx context.Context, key string) (string, bool, error) {
+	_, version, found, err := m.GetVersion(ctx, key)
+	return version, found, err
 }
 
 // Replace implements [versionedState].
