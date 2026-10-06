@@ -2,6 +2,7 @@ package issuer_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -22,7 +24,7 @@ func (l lookup) Resolve(_ context.Context, id string) (clientcreds.Secrets, bool
 
 var secretNow = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
 
-func secretStorage(t *testing.T, l lookup) *issuer.Storage {
+func secretStorage(t *testing.T, l clientcreds.Lookup) *issuer.Storage {
 	t.Helper()
 	declared, err := policy.Parse([]byte(`version: 1
 groups: { a: { members: [g@h.example] } }
@@ -151,5 +153,70 @@ func TestAuthorizeClientIDSecretCountsTheSlot(t *testing.T) {
 	_ = storage.AuthorizeClientIDSecret(ctx, "target", "")
 	if slot(clientcreds.SlotCurrent) != cur || slot(clientcreds.SlotPrevious) != prev || slot(clientcreds.SlotNone) != none {
 		t.Error("a public or exchange client was counted as a confidential authentication")
+	}
+}
+
+// A rotation as the token endpoint sees it, through the real record, manager and
+// resolver: both secrets until the overlap ends, then only the new one; a hard
+// cut at once.
+func TestTheTokenEndpointAfterARotation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for name, tc := range map[string]struct {
+		overlap     time.Duration
+		oldDuring   bool
+		oldAtExpiry bool
+	}{
+		"an hour's overlap": {time.Hour, true, false},
+		"a hard cut":        {0, false, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := memory.NewSecrets()
+			clientcreds.Reconcile(ctx, []string{"grafana"}, store, nil, secretNow, slog.New(slog.DiscardHandler), clientcreds.Hooks{})
+			resolver := clientcreds.NewResolver(store, nil, slog.New(slog.DiscardHandler))
+			storage := secretStorage(t, resolver)
+			now := secretNow
+			issuer.SetStorageClock(storage, func() time.Time { return now })
+			manager := &clientcreds.Manager{
+				Store: store, Resolver: resolver, Now: func() time.Time { return secretNow },
+				Generated: func(id string) bool { return id == "grafana" },
+			}
+
+			got, ok := resolver.Resolve(ctx, "grafana")
+			if !ok {
+				t.Fatal("no secret")
+			}
+			old := got.Current
+			if err := storage.AuthorizeClientIDSecret(ctx, "grafana", old); err != nil {
+				t.Fatalf("before the rotation: %v", err)
+			}
+			if _, err := manager.Rotate(ctx, "grafana", tc.overlap); err != nil {
+				t.Fatal(err)
+			}
+			got, _ = resolver.Resolve(ctx, "grafana")
+			fresh := got.Current
+			if fresh == old {
+				t.Fatal("the secret did not change")
+			}
+
+			if err := storage.AuthorizeClientIDSecret(ctx, "grafana", fresh); err != nil {
+				t.Errorf("the new secret: %v", err)
+			}
+			if err := storage.AuthorizeClientIDSecret(ctx, "grafana", old); (err == nil) != tc.oldDuring {
+				t.Errorf("the old secret during the overlap: %v, want accepted=%v", err, tc.oldDuring)
+			}
+			now = secretNow.Add(tc.overlap) // the overlap's last instant is excluded
+			if err := storage.AuthorizeClientIDSecret(ctx, "grafana", old); err == nil {
+				t.Error("the old secret is accepted at the end of its overlap")
+			}
+			now = secretNow.Add(tc.overlap + 24*time.Hour)
+			if err := storage.AuthorizeClientIDSecret(ctx, "grafana", old); err == nil {
+				t.Error("the old secret is accepted after its overlap")
+			}
+			if err := storage.AuthorizeClientIDSecret(ctx, "grafana", fresh); err != nil {
+				t.Errorf("the new secret later: %v", err)
+			}
+		})
 	}
 }
