@@ -120,6 +120,11 @@ func clientSecretsHandler(
 	handle("rotate", func(w http.ResponseWriter, r *http.Request, admin ClientSecretAdmin, identity string, req clientSecretRequest) {
 		overlap := clientcreds.DefaultOverlap
 		if req.OverlapSeconds != nil {
+			// Bounded before it becomes a Duration, which wraps.
+			if secs := *req.OverlapSeconds; secs < 0 || secs > int64(clientcreds.MaxOverlap/time.Second) {
+				http.Error(w, "the overlap is between 0 and 7 days", http.StatusBadRequest)
+				return
+			}
 			overlap = time.Duration(*req.OverlapSeconds) * time.Second
 		}
 		res, err := admin.Rotate(r.Context(), req.Client, overlap)
