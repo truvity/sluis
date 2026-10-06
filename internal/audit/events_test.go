@@ -72,6 +72,7 @@ func every() []*record.Record {
 			time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC), true),
 		audit.ClientSecretOrphaned("grafana", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)),
 		audit.ClientSecretDeleted(person, "grafana"),
+		audit.ClientSecretDenied(person, "grafana", "rotate", "busy", nil),
 		audit.WorkspaceConnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceReconnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceDisconnected(person, "ws-1"),

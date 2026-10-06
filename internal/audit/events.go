@@ -212,6 +212,23 @@ func ClientSecretDeleted(actor Actor, client string) *record.Record {
 		[]*record.Target{targetClient(client)}, nil)
 }
 
+// ClientSecretDenied is a verified caller refused when managing a generated
+// client's secret: action is rotate, show or purge, reason one of forbidden,
+// wrong_audience, busy, not_generated, still_declared, no_record or bad_overlap.
+// client is empty when the refusal came before the body was read. overlap is
+// the requested overlap in seconds, where the request had one.
+func ClientSecretDenied(actor Actor, client, action, reason string, overlap *int64) *record.Record {
+	var targets []*record.Target
+	if client != "" {
+		targets = []*record.Target{targetClient(client)}
+	}
+	d := data{"action": action, "reason": reason}
+	if overlap != nil {
+		d["overlap_seconds"] = int(*overlap)
+	}
+	return build("roster.client.secret.denied", actor, Denied(reason), subjectOf(actor), targets, d)
+}
+
 // --------------------------------------------------------------- directories
 
 // WorkspaceConnected is a directory connected, by consent or by key.
