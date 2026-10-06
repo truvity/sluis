@@ -157,6 +157,59 @@ func SessionRefreshRefused(person, client, reason string) *record.Record {
 		personParty(person), []*record.Target{targetClient(client)}, nil)
 }
 
+// ------------------------------------------------------------ client secrets
+
+// None of these holds a secret's value: the client, the times and the
+// overlap.
+
+func rfc3339(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+// ClientSecretCreated is the issuer making the secret of a generated client.
+func ClientSecretCreated(client string, created time.Time) *record.Record {
+	return build("roster.client.secret.created", System(), Succeeded(), nil,
+		[]*record.Target{targetClient(client)}, data{"created": rfc3339(created)})
+}
+
+// ClientSecretAdopted is the issuer taking a secret that already existed as the
+// client's stored secret, unchanged: source is `input` (the secret the
+// installation delivers) or `record` (a stored record that came back).
+func ClientSecretAdopted(client, source string, created time.Time) *record.Record {
+	return build("roster.client.secret.adopted", System(), Succeeded(), nil,
+		[]*record.Target{targetClient(client)}, data{"source": source, "created": rfc3339(created)})
+}
+
+// ClientSecretRotated is somebody replacing the secret of a generated client.
+// overlap is how long the old one stays accepted; discardedPrevious is set when
+// that cut an earlier overlap short.
+func ClientSecretRotated(actor Actor, client string, rotated time.Time, overlap time.Duration, previousValidUntil time.Time, discardedPrevious bool) *record.Record {
+	return build("roster.client.secret.rotated", actor, Succeeded(), nil,
+		[]*record.Target{targetClient(client)}, data{
+			"rotated":              rfc3339(rotated),
+			"overlap_seconds":      int(overlap / time.Second),
+			"previous_valid_until": rfc3339(previousValidUntil),
+			"discarded_previous":   discardedPrevious,
+		})
+}
+
+// ClientSecretOrphaned is the issuer finding a stored secret with no generated
+// client of that id in the policy. It is reported once.
+func ClientSecretOrphaned(client string, orphaned time.Time) *record.Record {
+	return build("roster.client.secret.orphaned", System(), Succeeded(), nil,
+		[]*record.Target{targetClient(client)}, data{"orphaned": rfc3339(orphaned)})
+}
+
+// ClientSecretDeleted is somebody deleting the stored secret of a client that
+// is no longer in the policy.
+func ClientSecretDeleted(actor Actor, client string) *record.Record {
+	return build("roster.client.secret.deleted", actor, Succeeded(), nil,
+		[]*record.Target{targetClient(client)}, nil)
+}
+
 // --------------------------------------------------------------- directories
 
 // WorkspaceConnected is a directory connected, by consent or by key.
