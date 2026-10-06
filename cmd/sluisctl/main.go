@@ -151,6 +151,8 @@ func run(args []string) error {
 		return awsConfig(args[1:])
 	case "setup":
 		return setup(args[1:])
+	case "clients":
+		return clientsCommand(args[1:])
 	case "policy":
 		return policyCommand(args[1:])
 	case "render":
@@ -186,6 +188,7 @@ func usage(to *os.File) {
   ssh           known-hosts: trust SSH host CAs before the first connect
   exchange      the raw exchange: a token in, a token for an audience out
 
+  clients       rotate, show or purge the stored secret of a generated client (operators)
   render        an installation in, the service and policy documents out
   policy render the one policy document an installation reads, from its layers
 
