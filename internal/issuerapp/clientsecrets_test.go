@@ -205,8 +205,22 @@ func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
 	if !strings.Contains(err.Error(), "the State is not shared between replicas") || !strings.Contains(err.Error(), `"grafana"`) {
 		t.Errorf("refusal = %v", err)
 	}
-	// The memory adapter keeps the secrets in this process too: no second
-	// replica to exclude.
+	// openbao secrets are shared by every replica too.
+	notSharedBao := withSecrets(memory.NewSecrets(), "openbao")
+	notSharedBao.Shared = false
+	if _, err = tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: notSharedBao}, replacePolicy(t, generatingPolicy)); err == nil ||
+		!strings.Contains(err.Error(), "the State is not shared between replicas") {
+		t.Errorf("openbao beside a process-local State: %v", err)
+	}
+	// Memory SECRETS are in this process, so there is no second replica to
+	// exclude, whatever adapter the State has.
+	for name, adapter := range map[string]string{"no adapter named": "", "the legacy adapter": store.AdapterLegacy} {
+		memSecrets := withSecrets(memory.NewSecrets(), "memory")
+		memSecrets.Shared, memSecrets.Adapter = false, adapter
+		if _, err = tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: memSecrets}, replacePolicy(t, generatingPolicy)); err != nil {
+			t.Errorf("memory secrets beside a process-local State (%s) were refused: %v", name, err)
+		}
+	}
 	inMemory := withSecrets(memory.NewSecrets(), "memory")
 	inMemory.Shared, inMemory.Adapter = false, store.AdapterMemory
 	if _, err = tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: inMemory}, replacePolicy(t, generatingPolicy)); err != nil {
