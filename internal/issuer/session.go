@@ -330,19 +330,27 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 // (memory, Valkey) from ever shortening a member's.
 func (s *Sessions) indexLifetime() time.Duration { return 2 * s.lifetime }
 
-// indexed reports whether a session's membership of the index sets already
-// outlasts the end it is about to be given, so that adding it again would
-// be a write that changes nothing anybody can see.
+// indexed reports whether a session's membership of the index sets, as
+// its record says it was last written, is far enough from running out
+// that adding it again at now would be a write that changes nothing
+// anybody can see.
 //
-// Membership needs to last only as long as the session is live: a listing
-// shows only live sessions and drops a member whose record is gone. With
-// the default lifetimes (a 12-hour refresh window inside a 24-hour
-// absolute limit) a session's first Add already outlasts every end it can
-// be given, so its refreshes never add again. A set holding an ended
-// session's id a while longer than before is the cost; the listing that
-// meets it drops it, as it always has.
-func (s *Sessions) indexed(session Session) bool {
-	return !session.IndexedUntil.Before(session.ExpiresAt)
+// Far enough is a full refresh lifetime past now. That covers the end the
+// session is about to be given (never later than now plus one lifetime),
+// and it bounds how long a membership that was LOST -- evicted by an
+// engine short of memory, or dropped by a listing that read the record as
+// expired while a refresh was rotating it -- stays lost: a session that
+// keeps refreshing is added again within one lifetime of its last Add, so
+// a revocation by person, client or everything finds it again. A record
+// with no IndexedUntil (written before it existed) is added at once.
+//
+// With the default lifetimes (a 12-hour refresh window inside a 24-hour
+// absolute limit) that is one Add per twelve hours of refreshing rather
+// than one per refresh. A set holding an ended session's id a while
+// longer than before is the cost; the listing that meets it drops it, as
+// it always has.
+func (s *Sessions) indexed(session Session, now time.Time) bool {
+	return !session.IndexedUntil.Before(now.Add(s.lifetime)) && !session.IndexedUntil.Before(session.ExpiresAt)
 }
 
 // index adds a session to the sets that make it findable.
@@ -460,12 +468,13 @@ func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Se
 //     its successor -- only if it is still what was read. If another
 //     refresh spent it first this one is a replay and gets that one's
 //     successor; if it was revoked or has expired, this one is refused.
-//  3. The session record, with its new end -- only if it is still what
-//     was read. A session ended while this refresh ran stays ended; the
-//     refresh is refused rather than writing the record back.
+//  3. The session record, with its new end -- only over what is there
+//     ([Sessions.writeRotated]). A session ended while this refresh ran
+//     stays ended; the refresh is refused rather than writing the record
+//     back.
 //
 // The index sets are written between the last two only when the
-// session's membership would run out before its new end
+// session's membership is within a refresh lifetime of running out
 // ([Sessions.indexed]).
 func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Session, string, bool, error) {
 	if p.successor != "" {
@@ -505,7 +514,21 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 		s.discard(ctx, newToken)
 
 		if errors.Is(err, errGone) {
-			return Session{}, "", false, nil
+			// Revoked, expired -- or spent by a replica of the version
+			// before this one, which deletes the pointer and records the
+			// successor under a key of its own. That last is a replay
+			// during a rollout, answered as [Sessions.present] answers it.
+			raw, found, err := s.state.Get(ctx, sessionRotatedKey(p.token))
+			if err != nil || !found {
+				return Session{}, "", false, err
+			}
+
+			again, live, err := s.replayedTo(ctx, p.token, string(raw))
+			if err != nil || !live {
+				return Session{}, "", false, err
+			}
+
+			return again.session, again.successor, true, nil
 		}
 
 		// Another refresh of this same token got there first. This is
@@ -522,40 +545,78 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 		return Session{}, "", false, err
 	}
 
-	// The sets carry the session forward when its membership would run
-	// out before its new end -- before the record is written, so that a
+	// The sets carry the session forward when its membership is close to
+	// running out ([Sessions.indexed]) -- before the record is written, so that a
 	// record never claims a membership that a failed Add left unwritten.
 	// The record still holds the id while they are written, so a listing
 	// in between finds it rather than dropping it.
-	if !s.indexed(session) {
+	if !s.indexed(session, now) {
 		session.IndexedUntil = now.Add(s.indexLifetime())
 		if err = s.index(ctx, session); err != nil {
 			return Session{}, "", false, err
 		}
 	}
 
-	raw, err := json.Marshal(session)
-	if err != nil {
-		return Session{}, "", false, fmt.Errorf("issuer: encode session %s: %w", session.ID, err)
-	}
-
-	switch err = replace(ctx, s.state, sessionKey(session.ID), raw, s.lifetime, p.record); {
-	case errors.Is(err, errGone):
-		// Ended while this refresh ran. It stays ended.
-		s.discard(ctx, newToken)
-
-		return Session{}, "", false, nil
-	case errors.Is(err, errMoved):
-		// Written by something else since it was read, and still there:
-		// the record carries on with this refresh's end, as it always did.
-		err = s.put(ctx, session)
-	}
-
+	written, live, err := s.writeRotated(ctx, session, p.record)
 	if err != nil {
 		return Session{}, "", false, err
 	}
 
-	return session, newToken, true, nil
+	if !live {
+		// Ended while this refresh ran. It stays ended.
+		s.discard(ctx, newToken)
+
+		return Session{}, "", false, nil
+	}
+
+	return written, newToken, true, nil
+}
+
+// rotatedAttempts bounds how many times a rotation re-reads a session
+// record that keeps moving under it before it gives up with an error.
+const rotatedAttempts = 3
+
+// writeRotated writes a rotated session's record over the revision read,
+// and reports false when the session turned out to have ended.
+//
+// A record written by something else since it was read is read again and
+// this rotation's part -- its new end, when it refreshed, its index and
+// sign-in membership -- applied to what is there now, never written blind
+// over it: the something else may have been a revocation, and a plain
+// write would bring the revoked session back. A record that is gone, or
+// no longer live, when read again ends the rotation as a revoked one.
+func (s *Sessions) writeRotated(ctx context.Context, session Session, version string) (Session, bool, error) {
+	for range rotatedAttempts {
+		raw, err := json.Marshal(session)
+		if err != nil {
+			return Session{}, false, fmt.Errorf("issuer: encode session %s: %w", session.ID, err)
+		}
+
+		err = replace(ctx, s.state, sessionKey(session.ID), raw, s.lifetime, version)
+		switch {
+		case err == nil:
+			return session, true, nil
+		case errors.Is(err, errGone):
+			return Session{}, false, nil
+		case !errors.Is(err, errMoved):
+			return Session{}, false, err
+		}
+
+		fresh, freshVersion, live, err := s.byIDVersion(ctx, session.ID)
+		if err != nil || !live {
+			return Session{}, false, err
+		}
+
+		fresh.LastRefreshed = session.LastRefreshed
+		fresh.ExpiresAt = session.ExpiresAt
+		if fresh.IndexedUntil.Before(session.IndexedUntil) {
+			fresh.IndexedUntil = session.IndexedUntil
+		}
+		fresh.Involved = fresh.Involved || session.Involved
+		session, version = fresh, freshVersion
+	}
+
+	return Session{}, false, fmt.Errorf("issuer: session %s kept changing while it was refreshed", session.ID)
 }
 
 // discard removes the pointer of a token a rotation minted and then did
