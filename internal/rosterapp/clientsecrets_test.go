@@ -1,0 +1,84 @@
+package rosterapp_test
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/truvity/sluis/internal/clientcreds"
+	"github.com/truvity/sluis/internal/rosterapp"
+)
+
+func bootWithPolicy(t *testing.T, clients string) *rosterapp.App {
+	t.Helper()
+	app, err := tryBootWithPolicy(t, clients, "adapters:\n  secrets: {adapter: memory}\n")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(app.Close)
+	return app
+}
+
+func tryBootWithPolicy(t *testing.T, clients, extra string) (*rosterapp.App, error) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(`
+version: 1
+groups:
+  all:access-roster:operator: { members: [platform@north.example] }
+  all:access-roster:viewer: {}
+lifetimes: { default: 12h }
+clients:
+  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
+`+clients), 0o600); err != nil {
+		t.Fatalf("write the policy: %v", err)
+	}
+	cfg := load(t, `
+issuerURL: https://access.example
+publicURL: https://access.example/console
+policyDir: `+dir+`
+listen: {address: ":0"}
+probes: {address: ":0"}
+`+extra)
+	return rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+// The function that has no loop runs the same pass on its schedule: it is the
+// issuer's, reached through the service that joins the issuer to the
+// directory.
+func TestReconcileClientSecretsIsTheIssuersPass(t *testing.T) {
+	app := bootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+  argocd:  { kind: confidential, secret: argocd-oidc, requires: [all:access-roster:operator] }
+`)
+	// New made the record once; a scheduled pass finds it, for the generated
+	// client only.
+	res := app.ReconcileClientSecrets(context.Background())
+	if len(res.Outcomes) != 1 || res.Outcomes["grafana"] != clientcreds.OutcomeExisting || res.Failed() != 0 {
+		t.Errorf("res = %+v", res)
+	}
+}
+
+func TestReconcileClientSecretsWithNoGeneratedClientDoesNothing(t *testing.T) {
+	app := bootWithPolicy(t, "")
+	if res := app.ReconcileClientSecrets(context.Background()); len(res.Outcomes) != 0 {
+		t.Errorf("res = %+v", res)
+	}
+}
+
+// Without a secrets adapter that can create only if absent the roster does not
+// start with a generated client: the same refusal the issuer alone gives.
+func TestAGeneratedClientIsRefusedWithNoSecretsAdapter(t *testing.T) {
+	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+`, "")
+	if err == nil {
+		app.Close()
+		t.Fatal("started")
+	}
+	if !strings.Contains(err.Error(), "generate: true") {
+		t.Errorf("the refusal is for another reason: %v", err)
+	}
+}
