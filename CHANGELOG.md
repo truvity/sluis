@@ -9,6 +9,10 @@
 - **Orphaned generated secrets are reported once.** At start, on the five-minute tick and on the Lambda refresh, stored `credentials/oidc-client/<id>/secret` records whose client is no longer a generated client in the policy are logged and audited once (an `orphaned` time is written into the record); they are never deleted by the issuer. A client that comes back clears the mark and keeps the stored secret unchanged.
 - **Audit catalogue 1.8.0**: `roster.client.secret.created`, `.adopted`, `.rotated`, `.orphaned`, `.deleted` and `.denied` on a `client` target, with the client, the times and the overlap, never a value (actor `system` for reconcile and the orphan report, the person for a rotation and a purge). An audit installation on Kubernetes registers the new catalogue automatically when the service starts; a Lambda audit writer needs the new catalogue release asset (`roster-1.8.0.yaml`) before it can keep these records.
 
+### Changed
+
+- **Every cookie sluis sets carries the `__Host-` prefix when cookies are Secure.** The console session (`access_roster_session`), the three flow cookies (`access_roster_connect`, `access_roster_login`, `access_roster_link`) and the issuer's browser session (`access_issuer_sso`) are now written, read and cleared as `__Host-<name>`. A browser honours that prefix only for a cookie that is Secure, has `Path=/` and no `Domain`, which these already were, so a sibling host in the same zone can no longer plant ("toss") a cookie that the issuer or console would then read. One helper, `access.CookieNameFor`, decides the name for every write, read and clear. With `issuer.secureCookies` false (plain-HTTP local development) the old unprefixed names are kept, because a browser rejects a `__Host-` cookie that is not Secure. The old names are not read as a fallback: sessions and in-flight sign-ins started before the upgrade are dropped once, and every user signs in again a single time.
+
 ## v1.65.1
 
 ### Fixed

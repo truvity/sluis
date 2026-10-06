@@ -380,7 +380,7 @@ func (s *ConsoleServer) githubFlowFor(w http.ResponseWriter, r *http.Request, pr
 // the owner the flow was begun to record.
 func (s *ConsoleServer) githubBound(w http.ResponseWriter, r *http.Request) (bind, actor, owner string, ok bool) {
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(access.ConnectCookieName)
+	cookie, err := r.Cookie(access.CookieNameFor(access.ConnectCookieName, s.sessions.Secure()))
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		s.githubProblem(w, r, http.StatusBadRequest, "This connect did not start in this browser.", "", []string{
 			"It was started in another browser, profile or private window.",

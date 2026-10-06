@@ -243,7 +243,7 @@ func (s *ConsoleServer) githubLinkPage(w http.ResponseWriter, r *http.Request) {
 // those it knows.
 func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(access.LinkCookieName)
+	cookie, err := r.Cookie(access.CookieNameFor(access.LinkCookieName, s.sessions.Secure()))
 	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		s.linkProblem(w, r, http.StatusBadRequest,
 			"This link did not start in this browser, or took longer than fifteen minutes. Start again.", "")
