@@ -1,7 +1,9 @@
 package clientcreds
 
 import (
+	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -154,12 +156,13 @@ func TestResolveCachesTheAbsenceOfARecordAndForgetFindsTheNewOne(t *testing.T) {
 	}
 }
 
-func TestResolveAFailedReadServesTheLastGoodRecord(t *testing.T) {
+func TestResolveAFailedReadServesTheLastGoodRecordForAtMostFiveMinutes(t *testing.T) {
 	t.Parallel()
 	inner := memory.NewSecrets()
 	putRecord(t, inner, "grafana", Record{Current: "good", Created: t0})
 	store := &flaky{Secrets: inner}
-	r, clk := newResolver(store, nil)
+	in := &inputs{values: map[string]string{secrets.ClientSecret("grafana"): "input"}}
+	r, clk := newResolver(store, in)
 	if got, _ := r.Resolve(ctx0, "grafana"); got.Current != "good" {
 		t.Fatalf("got %+v", got)
 	}
@@ -167,29 +170,66 @@ func TestResolveAFailedReadServesTheLastGoodRecord(t *testing.T) {
 	store.mu.Lock()
 	store.getErr = errors.New("openbao sealed")
 	store.mu.Unlock()
-	clk.t = t0.Add(10 * CacheTTL)
+	clk.t = t0.Add(2 * time.Minute)
 	got, ok := r.Resolve(ctx0, "grafana")
 	if !ok || got.Current != "good" {
-		t.Errorf("stale-on-error: %+v, %v", got, ok)
+		t.Errorf("stale-on-error within the window: %+v, %v", got, ok)
 	}
 
-	// And when the store is back, the record is read again.
+	// The failure is remembered for a few seconds: a recovered store is not
+	// asked again at once, and then it is.
 	store.mu.Lock()
 	store.getErr = nil
 	store.mu.Unlock()
 	putRecord(t, inner, "grafana", Record{Current: "newer", Created: t0})
+	clk.t = t0.Add(2*time.Minute + retryAfterFailure - time.Second)
+	if got, _ = r.Resolve(ctx0, "grafana"); got.Current != "good" {
+		t.Errorf("inside the retry delay: %+v", got)
+	}
+	clk.t = t0.Add(2*time.Minute + retryAfterFailure + time.Second)
 	if got, _ = r.Resolve(ctx0, "grafana"); got.Current != "newer" {
 		t.Errorf("after recovery: %+v", got)
 	}
 }
 
-func TestResolveAFailedReadWithNothingCachedFallsToTheInput(t *testing.T) {
+func TestResolveAFailedReadIsNotServedPastFiveMinutesAndNeverFallsToTheInput(t *testing.T) {
+	t.Parallel()
+	inner := memory.NewSecrets()
+	putRecord(t, inner, "grafana", Record{Current: "good", Created: t0})
+	store := &flaky{Secrets: inner}
+	in := &inputs{values: map[string]string{secrets.ClientSecret("grafana"): "input"}}
+	r, clk := newResolver(store, in)
+	r.Resolve(ctx0, "grafana")
+	store.mu.Lock()
+	store.getErr = errors.New("down")
+	store.mu.Unlock()
+
+	clk.t = t0.Add(StaleFor)
+	if got, ok := r.Resolve(ctx0, "grafana"); !ok || got.Current != "good" {
+		t.Errorf("at five minutes: %+v, %v", got, ok)
+	}
+	// (A stale answer is itself cached for the retry delay, so the cap holds
+	// to within that delay.)
+	clk.t = t0.Add(StaleFor + retryAfterFailure + time.Second)
+	if got, ok := r.Resolve(ctx0, "grafana"); ok {
+		t.Errorf("served %+v more than five minutes after the last good read", got)
+	}
+	// Nor is the input a way around it.
+	if len(in.reads) != 0 {
+		t.Errorf("the input was read for a generated client whose record could not be: %v", in.reads)
+	}
+}
+
+func TestResolveAFailedReadWithNothingCachedFailsClosed(t *testing.T) {
 	t.Parallel()
 	store := &flaky{Secrets: memory.NewSecrets(), getErr: errors.New("down")}
 	in := &inputs{values: map[string]string{secrets.ClientSecret("grafana"): "input"}}
 	r, _ := newResolver(store, in)
-	if got, ok := r.Resolve(ctx0, "grafana"); !ok || got.Current != "input" {
-		t.Errorf("got %+v, %v", got, ok)
+	if got, ok := r.Resolve(ctx0, "grafana"); ok {
+		t.Errorf("authenticated against %+v with the store down", got)
+	}
+	if len(in.reads) != 0 {
+		t.Errorf("the input was read: %v", in.reads)
 	}
 	r2, _ := newResolver(store, nil)
 	if _, ok := r2.Resolve(ctx0, "grafana"); ok {
@@ -197,7 +237,23 @@ func TestResolveAFailedReadWithNothingCachedFallsToTheInput(t *testing.T) {
 	}
 }
 
-func TestResolveAnUnreadableRecordServesTheLastGoodOne(t *testing.T) {
+func TestResolveACorruptRecordFailsClosedWhateverTheInputSays(t *testing.T) {
+	t.Parallel()
+	store := memory.NewSecrets()
+	if _, err := store.Put(ctx0, Path("grafana"), []byte(`{"v":9,"current":"leaky-value"}`)); err != nil {
+		t.Fatal(err)
+	}
+	in := &inputs{values: map[string]string{secrets.ClientSecret("grafana"): "input"}}
+	r, _ := newResolver(store, in)
+	if got, ok := r.Resolve(ctx0, "grafana"); ok {
+		t.Errorf("a corrupt record authenticated against %+v", got)
+	}
+	if len(in.reads) != 0 {
+		t.Errorf("the input was read: %v", in.reads)
+	}
+}
+
+func TestResolveAnUnreadableRecordServesTheLastGoodOneForFiveMinutes(t *testing.T) {
 	t.Parallel()
 	store := memory.NewSecrets()
 	putRecord(t, store, "grafana", Record{Current: "good", Created: t0})
@@ -206,8 +262,101 @@ func TestResolveAnUnreadableRecordServesTheLastGoodOne(t *testing.T) {
 	if _, err := store.Put(ctx0, Path("grafana"), []byte(`{"v":9,"current":"x"}`)); err != nil {
 		t.Fatal(err)
 	}
-	clk.t = t0.Add(time.Hour)
+	clk.t = t0.Add(time.Minute)
 	if got, ok := r.Resolve(ctx0, "grafana"); !ok || got.Current != "good" {
+		t.Errorf("within five minutes: %+v, %v", got, ok)
+	}
+	clk.t = t0.Add(StaleFor + time.Second)
+	if got, ok := r.Resolve(ctx0, "grafana"); ok {
+		t.Errorf("past five minutes: %+v", got)
+	}
+}
+
+// A failed read is retried after a few seconds, not by every request.
+func TestResolveAFailedReadIsRetriedAfterFiveSecondsNotEveryRequest(t *testing.T) {
+	t.Parallel()
+	inner := memory.NewSecrets()
+	putRecord(t, inner, "grafana", Record{Current: "good", Created: t0})
+	store := &countingGets{Secrets: inner}
+	r, clk := newResolver(store, nil)
+	r.Resolve(ctx0, "grafana")
+	store.fail.Store(true)
+	before := store.gets.Load()
+	clk.t = t0.Add(time.Minute) // past the 30s cache: the next request reads
+	for range 20 {
+		r.Resolve(ctx0, "grafana")
+	}
+	if n := store.gets.Load() - before; n != 1 {
+		t.Errorf("%d reads for 20 requests inside the retry delay, want 1", n)
+	}
+	clk.t = clk.t.Add(retryAfterFailure)
+	r.Resolve(ctx0, "grafana")
+	if n := store.gets.Load() - before; n != 2 {
+		t.Errorf("%d reads after the delay, want 2", n)
+	}
+	if retryAfterFailure != 5*time.Second || StaleFor != 5*time.Minute {
+		t.Errorf("retry %v, stale %v", retryAfterFailure, StaleFor)
+	}
+}
+
+type countingGets struct {
+	port.Secrets
+	gets atomic.Int32
+	fail atomic.Bool
+}
+
+func (c *countingGets) Get(ctx context.Context, path string) (port.Secret, error) {
+	c.gets.Add(1)
+	if c.fail.Load() {
+		return port.Secret{}, errors.New("down")
+	}
+	return c.Secrets.Get(ctx, path)
+}
+
+// Only a generated client consults a record.
+func TestResolveOnlyAGeneratedClientConsultsTheRecord(t *testing.T) {
+	t.Parallel()
+	store := memory.NewSecrets()
+	putRecord(t, store, "back-on-a-name", Record{Current: "stale-record", Created: t0})
+	putRecord(t, store, "generated", Record{Current: "from-record", Created: t0})
+	in := &inputs{values: map[string]string{
+		secrets.ClientSecret("back-on-a-name"): "named-input",
+		secrets.ClientSecret("generated"):      "input",
+	}}
+	r, _ := newResolver(store, in)
+	generated := map[string]bool{"generated": true}
+	r.UseGenerated(func(id string) bool { return generated[id] })
+
+	if got, ok := r.Resolve(ctx0, "back-on-a-name"); !ok || got.Current != "named-input" || got.Previous != "" {
+		t.Errorf("a named client: %+v, %v", got, ok)
+	}
+	if got, ok := r.Resolve(ctx0, "generated"); !ok || got.Current != "from-record" {
+		t.Errorf("a generated client: %+v, %v", got, ok)
+	}
+	// The policy in force is asked each time: a client that leaves
+	// `generate: true` is served by its input at once, cache or not.
+	delete(generated, "generated")
+	if got, ok := r.Resolve(ctx0, "generated"); !ok || got.Current != "input" {
+		t.Errorf("after leaving generate: %+v, %v", got, ok)
+	}
+	generated["generated"] = true
+	if got, ok := r.Resolve(ctx0, "generated"); !ok || got.Current != "from-record" {
+		t.Errorf("generated again: %+v, %v", got, ok)
+	}
+	// Not a generated client and no input: nobody, whatever a record says.
+	if got, ok := r.Resolve(ctx0, "unlisted"); ok {
+		t.Errorf("an unlisted client: %+v", got)
+	}
+}
+
+// A resolver told nothing about the policy treats every client as generated;
+// the issuer's wiring must always tell it (see issuerapp).
+func TestResolveWithoutAPolicyTreatsEveryClientAsGenerated(t *testing.T) {
+	t.Parallel()
+	store := memory.NewSecrets()
+	putRecord(t, store, "any", Record{Current: "from-record", Created: t0})
+	r, _ := newResolver(store, nil)
+	if got, ok := r.Resolve(ctx0, "any"); !ok || got.Current != "from-record" {
 		t.Errorf("got %+v, %v", got, ok)
 	}
 }

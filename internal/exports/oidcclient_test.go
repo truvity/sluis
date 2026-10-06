@@ -24,7 +24,7 @@ func clients() exports.Declared {
 }
 
 func oidcExport(client, path string) config.Export {
-	return config.Export{Source: "oidc-client", Client: client, Namespace: "kernel", Path: path}
+	return config.Export{Source: "oidc-client", Client: client, Namespace: "example", Path: path}
 }
 
 func TestAnOIDCClientExportIsAReplaceWithTheDefaultProperties(t *testing.T) {
@@ -43,7 +43,7 @@ func TestAnOIDCClientExportIsAReplaceWithTheDefaultProperties(t *testing.T) {
 	if want := map[string]string{"client-id": "client-id", "client-secret": "client-secret"}; !maps.Equal(s.Properties, want) {
 		t.Errorf("properties = %v", s.Properties)
 	}
-	if s.Target != (port.ExportTarget{Namespace: "kernel", Path: "oidc/grafana"}) || s.Interval != exports.DefaultInterval {
+	if s.Target != (port.ExportTarget{Namespace: "example", Path: "oidc/grafana"}) || s.Interval != exports.DefaultInterval {
 		t.Errorf("target %v interval %v", s.Target, s.Interval)
 	}
 	// An own name replaces the default.
@@ -126,7 +126,7 @@ func TestTwoReplaceExportsOnOneTargetClash(t *testing.T) {
 		t.Errorf("another path: %v", err)
 	}
 	// And a client's secret over a key an App patches would erase it.
-	app := config.Export{Source: "slack-app", App: "alerts", Namespace: "kernel", Path: "oidc/grafana"}
+	app := config.Export{Source: "slack-app", App: "alerts", Namespace: "example", Path: "oidc/grafana"}
 	both := []config.Export{app, oidcExport("grafana", "oidc/grafana")}
 	if _, err := exports.FromConfig(both, clients()); err == nil || !strings.Contains(err.Error(), "replaces") {
 		t.Errorf("a client over a patched key: %v", err)
@@ -286,7 +286,7 @@ func newClientRig(t *testing.T, clientIDs ...string) *clientRig {
 }
 
 func (r *clientRig) target(id string) port.ExportTarget {
-	return port.ExportTarget{Namespace: "kernel", Path: "oidc/" + id}
+	return port.ExportTarget{Namespace: "example", Path: "oidc/" + id}
 }
 
 func (r *clientRig) seed(t *testing.T, id string) clientcreds.Record {

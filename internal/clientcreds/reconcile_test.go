@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -414,5 +415,35 @@ func TestReconcileConcurrentPassesMakeExactlyOneRecord(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReconcileACorruptRecordIsFailedNeverReplacedNorServedFromTheInput(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"not json":      `leaky-value`,
+		"wrong version": `{"v":9,"current":"leaky-value"}`,
+		"no current":    `{"v":1,"current":""}`,
+	} {
+		store := memory.NewSecrets()
+		if _, err := store.Put(ctx0, Path("grafana"), []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+		in := &inputs{values: map[string]string{secrets.ClientSecret("grafana"): "input"}}
+		var h seen
+		res := Reconcile(ctx0, []string{"grafana"}, store, in, t0, quiet(), h.hooks())
+		if res.Outcomes["grafana"] != OutcomeFailed || res.Failed() != 1 {
+			t.Errorf("%s: %+v", name, res)
+		}
+		got, _ := store.Get(ctx0, Path("grafana"))
+		if string(got.Value) != body {
+			t.Errorf("%s: the record was replaced", name)
+		}
+		if err := h.errs["grafana"][0]; err == nil || strings.Contains(err.Error(), "leaky-value") {
+			t.Errorf("%s: hook error %v", name, err)
+		}
+		if len(in.reads) != 0 {
+			t.Errorf("%s: the input was read", name)
+		}
 	}
 }

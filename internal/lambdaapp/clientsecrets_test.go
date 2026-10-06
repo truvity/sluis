@@ -68,6 +68,7 @@ publicURL: https://access.example/console
 policyDir: `+dir+`
 listen: {address: ":0"}
 probes: {address: ":0"}
+ports: {adapter: memory}
 adapters:
   secrets: {adapter: memory}
 `), 0o600); err != nil {

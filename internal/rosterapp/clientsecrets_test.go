@@ -15,7 +15,7 @@ import (
 
 func bootWithPolicy(t *testing.T, clients string) *rosterapp.App {
 	t.Helper()
-	app, err := tryBootWithPolicy(t, clients, "adapters:\n  secrets: {adapter: memory}\n")
+	app, err := tryBootWithPolicy(t, clients, "ports: {adapter: memory}\nadapters:\n  secrets: {adapter: memory}\n")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -80,5 +80,19 @@ func TestAGeneratedClientIsRefusedWithNoSecretsAdapter(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "generate: true") {
 		t.Errorf("the refusal is for another reason: %v", err)
+	}
+}
+
+// A rotation and an orphan mark are serialised by a lease on the State; held in
+// this process only it would not keep a second replica off, so start is refused.
+func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
+	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+`, "adapters:\n  secrets: {adapter: memory}\n")
+	if err == nil {
+		app.Close()
+		t.Fatal("started with a State that is only this process's")
+	}
+	if !strings.Contains(err.Error(), "the State is not shared between replicas") || !strings.Contains(err.Error(), `"grafana"`) {
+		t.Errorf("refusal = %v", err)
 	}
 }

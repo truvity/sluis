@@ -18,7 +18,7 @@ const oidcBase = "apiVersion: sluis.truvity.github.io/policy/v2\n" +
 func TestAnOIDCClientExportOfAGeneratedClientLoads(t *testing.T) {
 	t.Parallel()
 	d, err := config.Load[config.PolicyDocument](write(t, oidcBase+
-		"exports: [{source: oidc-client, client: grafana, namespace: kernel, path: oidc/grafana, properties: {client-secret: GF_SECRET}}]\n"))
+		"exports: [{source: oidc-client, client: grafana, namespace: example, path: oidc/grafana, properties: {client-secret: GF_SECRET}}]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}

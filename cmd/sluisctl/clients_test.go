@@ -88,13 +88,9 @@ func TestClientsRotateTakesTheIdBeforeOrAfterTheFlags(t *testing.T) {
 }
 
 // `rotate --issuer URL grafana --overlap 0`: the flag package stops at the first
-// word that is not a flag, so what follows the id is left over, and
-// parseClientsFlags takes the first leftover for the id and ignores the rest. A
-// hard cut asked for after a leak is sent as the default 24h overlap, without a
-// word.
+// word that is not a flag, so what follows the id is left over. A hard cut asked
+// for after a leak must not be sent as the default 24h overlap, without a word.
 func TestClientsRotateDoesNotDropFlagsAfterTheId(t *testing.T) {
-	t.Skip("source bug: cmd/sluisctl/clients.go parseClientsFlags ignores arguments after the id " +
-		"when flags came first (`flags.NArg() > 1` is never checked); remove this skip when it refuses or parses them")
 	issuer := newClientsIssuer(t, http.StatusOK, rotatedReply)
 	_, err := captureStdoutErr(t, func() error {
 		return run([]string{"clients", "rotate", "--issuer", issuer.URL, "grafana", "--overlap", "0"})
@@ -277,6 +273,11 @@ func TestClientsPurge(t *testing.T) {
 	out, err := captureStdoutErr(t, func() error { return run([]string{"clients", "purge", "gone", "--issuer", issuer.URL}) })
 	if err != nil || !strings.Contains(out, "deleted the stored secret of gone") {
 		t.Errorf("%q, %v", out, err)
+	}
+	// What a purge does not do is said: the input and the exported copy are the
+	// operator's.
+	if !strings.Contains(out, "clients/gone/secret") || !strings.Contains(out, "exported copy") {
+		t.Errorf("the purge does not say what is left to do: %q", out)
 	}
 	if issuer.paths[0] != "POST /.access/client-secrets/purge" || issuer.bodies[0]["client"] != "gone" {
 		t.Errorf("request %v %v", issuer.paths, issuer.bodies)

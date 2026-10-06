@@ -2,13 +2,18 @@ package issuerapp_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/config"
@@ -61,8 +66,10 @@ func tryBoot(t *testing.T, deps issuerapp.Deps, change ...func(*config.Serve)) (
 	return issuerapp.New(context.Background(), cfg, deps, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
+// withSecrets is stores with a Secrets port and a State every replica sees, as
+// a generated client needs.
 func withSecrets(s port.Secrets, adapter string) *store.Stores {
-	st := &store.Stores{Secrets: testSecrets, Ports: port.Set{Secrets: s}}
+	st := &store.Stores{Secrets: testSecrets, Ports: port.Set{Secrets: s, State: memory.New().Set().State}, Shared: true}
 	if adapter != "" {
 		st.Plan = port.Table{port.ConcernSecrets: {Adapter: adapter}}
 	}
@@ -182,5 +189,94 @@ func TestAnIssuerWithNoGeneratedClientReconcilesNothing(t *testing.T) {
 	app := boot(t)
 	if res := app.ReconcileClientSecrets(context.Background()); len(res.Outcomes) != 0 {
 		t.Errorf("outcomes = %+v", res)
+	}
+}
+
+func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
+	t.Parallel()
+	notShared := withSecrets(memory.NewSecrets(), "memory")
+	notShared.Shared = false
+	_, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: notShared}, replacePolicy(t, generatingPolicy))
+	if err == nil {
+		t.Fatal("started")
+	}
+	if !strings.Contains(err.Error(), "the State is not shared between replicas") || !strings.Contains(err.Error(), `"grafana"`) {
+		t.Errorf("refusal = %v", err)
+	}
+	// The memory adapter keeps the secrets in this process too: no second
+	// replica to exclude.
+	inMemory := withSecrets(memory.NewSecrets(), "memory")
+	inMemory.Shared, inMemory.Adapter = false, store.AdapterMemory
+	if _, err = tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: inMemory}, replacePolicy(t, generatingPolicy)); err != nil {
+		t.Errorf("the memory adapter was refused: %v", err)
+	}
+	// And a named secret needs no shared State.
+	const named = `
+version: 1
+groups:
+  platform: { members: [platform@north.example] }
+clients:
+  argocd: { kind: confidential, secret: argocd-oidc, requires: [platform] }
+`
+	if _, err = tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: notShared}, replacePolicy(t, named)); err != nil {
+		t.Errorf("a named secret was refused: %v", err)
+	}
+}
+
+// The token endpoint, as the issuer is assembled: a generated client is served
+// by its record, and a client on `secret: <name>` by its input, record or not.
+// A resolver never told which clients are generated would treat them all as
+// generated, so this pins that the assembly tells it.
+func TestTheAssembledTokenEndpointConsultsTheRecordOnlyForAGeneratedClient(t *testing.T) {
+	t.Parallel()
+	mem := memory.NewSecrets()
+	put := func(id, value string) {
+		body, err := clientcreds.Record{Current: value, Created: time.Now()}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = mem.Put(context.Background(), clientcreds.Path(id), body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("grafana", "the-record-secret")
+	put("argocd", "a-stale-record-secret")
+	stores := withSecrets(mem, "memory")
+	stores.Secrets = inputDir(t, map[string]string{"grafana": "the-input-secret", "argocd": "the-input-secret"})
+	app, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: stores}, replacePolicy(t, generatingPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, doc := get(t, app.Handler(), "/.well-known/openid-configuration")
+	var discovery struct {
+		Token string `json:"token_endpoint"`
+	}
+	if err = json.Unmarshal([]byte(doc), &discovery); err != nil || discovery.Token == "" {
+		t.Fatalf("discovery: %v %s", err, doc)
+	}
+	authenticates := func(client, secret string) bool {
+		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"nothing"}}
+		req := httptest.NewRequest(http.MethodPost, discovery.Token, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth(url.QueryEscape(client), url.QueryEscape(secret))
+		rec := httptest.NewRecorder()
+		app.Handler().ServeHTTP(rec, req)
+		// A client that does not authenticate is refused as such; one that does
+		// goes on and is refused for its (made-up) refresh token.
+		return rec.Code != http.StatusUnauthorized && !strings.Contains(rec.Body.String(), "invalid_client")
+	}
+	for _, tc := range []struct {
+		client, secret string
+		want           bool
+	}{
+		{"grafana", "the-record-secret", true},
+		{"grafana", "the-input-secret", false},
+		{"argocd", "the-input-secret", true},
+		{"argocd", "a-stale-record-secret", false},
+		{"grafana", "wrong", false},
+	} {
+		if got := authenticates(tc.client, tc.secret); got != tc.want {
+			t.Errorf("%s with %s: authenticated = %v, want %v", tc.client, tc.secret, got, tc.want)
+		}
 	}
 }
