@@ -186,7 +186,9 @@ func ClientSecretAdopted(client, source string, created time.Time) *record.Recor
 // ClientSecretRotated is somebody replacing the secret of a generated client.
 // overlap is how long the old one stays accepted; discardedPrevious is set when
 // that cut an earlier overlap short.
-func ClientSecretRotated(actor Actor, client string, rotated time.Time, overlap time.Duration, previousValidUntil time.Time, discardedPrevious bool) *record.Record {
+func ClientSecretRotated(
+	actor Actor, client string, rotated time.Time, overlap time.Duration, previousValidUntil time.Time, discardedPrevious bool,
+) *record.Record {
 	return build("roster.client.secret.rotated", actor, Succeeded(), nil,
 		[]*record.Target{targetClient(client)}, data{
 			"rotated":              rfc3339(rotated),
