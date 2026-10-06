@@ -79,12 +79,26 @@ func vocabularySchema() m {
 	})
 }
 
+// clientSecretSchema is a client's `secret`: the name of an input, or
+// `{generate: true}` to have the issuer make the value itself.
+func clientSecretSchema() m {
+	return m{
+		"description": "For a confidential client: the name its secret is delivered under, or `{generate: true}` to have the issuer generate it and keep it with its credentials.",
+		"oneOf": []any{
+			m{"type": "string", "minLength": 1},
+			obj("The issuer generates the secret.", m{
+				"generate": m{"const": true, "description": "Must be true; `generate: false` is refused."},
+			}, "generate"),
+		},
+	}
+}
+
 func clientSchema() m {
 	return obj("A client: who may be issued a token, and for what. Its id is the audience.", m{
 		"kind":                   m{"enum": []string{"public", "confidential", "exchange"}, "description": "public, confidential or exchange."},
 		"display_name":           str("What the sign-in page calls it. Public."),
 		"description":            str("One line about it on the sign-in page. Public."),
-		"secret":                 str("For a confidential client: the name its secret is delivered under."),
+		"secret":                 clientSecretSchema(),
 		"redirects":              strList("The redirect URIs."),
 		"signed_out":             strList("Where sign-out may return the browser."),
 		"requires":               strList("The groups a caller must hold, any of them."),

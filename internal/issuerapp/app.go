@@ -31,6 +31,7 @@ import (
 	"github.com/truvity/sluis/backend/google"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/issuer"
@@ -413,13 +414,18 @@ type App struct {
 	// wrapped is set when the keys are KMS-wrapped; Run keeps them rotating.
 	wrapped bool
 	// state is the shared state the secret fingerprint lives in.
-	state   issuer.State
-	handler http.Handler
-	health  http.Handler
-	issuer  *issuer.Issuer
-	storage *issuer.Storage
-	cfg     Config
-	log     *slog.Logger
+	state issuer.State
+	// generated are the clients whose secret the issuer makes; creds is what
+	// the token endpoint reads and credStore where the records live.
+	generated []string
+	creds     *clientcreds.Resolver
+	credStore port.Secrets
+	handler   http.Handler
+	health    http.Handler
+	issuer    *issuer.Issuer
+	storage   *issuer.Storage
+	cfg       Config
+	log       *slog.Logger
 }
 
 // MintFor signs a short-lived access token for a person signed in to this
@@ -580,7 +586,16 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
-	storage, err := issuer.NewStorage(core, verifiers, clientSecrets(cfg, log), key, additionalKeys, shared)
+	generated := generatedClients(set)
+	if err = checkGeneratedSecrets(generated, stores); err != nil {
+		return nil, err
+	}
+	var input clientcreds.Input
+	if cfg.secrets != nil {
+		input = cfg.secrets
+	}
+	creds := clientcreds.NewResolver(stores.Ports.Secrets, input, log)
+	storage, err := issuer.NewStorage(core, verifiers, creds, key, additionalKeys, shared)
 	if err != nil {
 		return nil, err
 	}
@@ -699,7 +714,13 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	return &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared}, nil
+	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
+		generated: generated, creds: creds, credStore: stores.Ports.Secrets}
+	// At start, and not only on the tick, so a first deploy has its secrets as
+	// soon as it serves. A client that fails here does not stop the issuer: it
+	// is logged and tried again, and the input secret serves it meanwhile.
+	app.ReconcileClientSecrets(ctx)
+	return app, nil
 }
 
 // directorySource says where the answer about a person comes from. There
@@ -785,6 +806,12 @@ func (a *App) Run(ctx context.Context) error {
 			return nil
 		})
 	}
+	if len(a.generated) > 0 {
+		group.Go(func() error {
+			a.watchClientSecrets(gctx, a.log)
+			return nil
+		})
+	}
 	if a.wrapped {
 		group.Go(func() error {
 			ticker := time.NewTicker(a.cfg.keyPollInterval)
@@ -805,40 +832,6 @@ func (a *App) Run(ctx context.Context) error {
 		return nil
 	})
 	return group.Wait()
-}
-
-// clientSecrets resolves a confidential client's secret from the files
-// the deployment mounted, one per client id.
-//
-// From FILES and not from the API, for the same reason the signing key
-// comes from one: this service holds no RBAC to read a Secret, so a
-// compromise of it cannot become a read of every credential in its
-// namespace. The chart projects each declared client's Secret to a file
-// named after the client.
-//
-// Read per call rather than once at start, so that rotating a client's
-// Secret takes effect when the kubelet refreshes the mount instead of
-// needing a restart.
-func clientSecrets(cfg Config, log *slog.Logger) func(string) (string, bool) {
-	if cfg.secrets == nil {
-		return nil
-	}
-	return func(clientID string) (string, bool) {
-		// A client id is a segment of the secret's name. One that is not a
-		// name the source can hold would read a secret nobody declared, so it
-		// is refused rather than cleaned.
-		name := secrets.ClientSecret(clientID)
-		if clientID == "" || strings.ContainsAny(clientID, `/\`) || secrets.Check(name) != nil {
-			return "", false
-		}
-		value, err := cfg.secrets.Get(context.Background(), name)
-		if err != nil {
-			log.Warn("a declared client's secret could not be read; that client cannot authenticate",
-				"client", clientID, "secret", cfg.secrets.Describe(name), "error", err)
-			return "", false
-		}
-		return value, true
-	}
 }
 
 // openRecovery builds the way in that needs no directory, or nothing.

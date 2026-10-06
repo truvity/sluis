@@ -72,7 +72,7 @@ func TestADocumentClientIsAdmittedAsPublic(t *testing.T) {
 	if got.Kind != policy.KindPublic {
 		t.Errorf("kind = %q, want %q: a document carries no secret", got.Kind, policy.KindPublic)
 	}
-	if got.Secret != "" {
+	if !got.Secret.IsZero() {
 		t.Error("a document client was given a secret")
 	}
 	if got.DisplayName != "An Editor" {

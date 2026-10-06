@@ -31,6 +31,7 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/app"
+	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/exports"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
@@ -198,6 +199,13 @@ func (a *App) ExportsPass(ctx context.Context) (res exports.PassResult, declared
 		return exports.PassResult{}, false
 	}
 	return a.exports.Pass(ctx), true
+}
+
+// ReconcileClientSecrets makes sure every client whose secret the issuer
+// generates has it stored. New runs it once; a function with no loop runs it
+// on a schedule, beside the directory refresh.
+func (a *App) ReconcileClientSecrets(ctx context.Context) clientcreds.Result {
+	return a.issuer.ReconcileClientSecrets(ctx)
 }
 
 // UseRequestRefresh makes the directory refresh a snapshot that is due from the

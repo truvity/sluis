@@ -174,6 +174,11 @@ func open(ctx context.Context, file string) (*Function, error) {
 	return &Function{
 		Handler: NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers).
 			WithRefresh(func(ctx context.Context) (RefreshResult, error) {
+				// The issuer's generated client secrets are looked after on the
+				// same schedule: there is no loop on Lambda and no schedule of
+				// their own, and a failure is logged and counted, never this
+				// refresh's error (the next pass retries).
+				service.ReconcileClientSecrets(ctx)
 				res, err := service.RefreshDirectory(ctx)
 				return RefreshResult{Kind: KindRefresh, Workspaces: res.Workspaces, Ran: res.Ran, Contended: res.Contended, Failed: res.Failed}, err
 			}).WithExports(func(ctx context.Context) (ExportsResult, error) {

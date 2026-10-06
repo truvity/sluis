@@ -457,7 +457,7 @@ func (a Access) clients() (map[string]Client, error) {
 			return nil, fmt.Errorf("client %q is declared twice", c.Name)
 		}
 		out[c.Name] = Client{
-			Kind: c.Kind, DisplayName: c.DisplayName, Description: c.Description, Secret: c.Secret,
+			Kind: c.Kind, DisplayName: c.DisplayName, Description: c.Description, Secret: ClientSecret{Name: c.Secret},
 			Redirects: c.Redirects, SignedOut: c.SignedOut, Requires: c.Requires, TTLCap: c.TTLCap,
 			SignInExchange: c.SignInExchange, BackChannelLogout: c.BackchannelLogout, SigningAlg: c.SigningAlg,
 			Groups: c.Groups, GroupsDelimiter: c.GroupsDelimiter,
