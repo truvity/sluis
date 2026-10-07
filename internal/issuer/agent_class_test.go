@@ -45,7 +45,8 @@ func agentPolicyText(agent bool) string {
 	}
 
 	return strings.Replace(demo.Policy, "clients:\n", "clients:\n"+
-		"  "+agentClient+": { kind: public, redirects: [http://127.0.0.1/callback], requires: [devel:k8s:viewer], session: "+session+" }\n"+
+		"  "+agentClient+": { kind: public, redirects: [http://127.0.0.1/callback], "+
+		"requires: [devel:k8s:viewer, all:directory-roster:reader], session: "+session+" }\n"+
 		"  "+agentCapped+": { kind: public, redirects: [http://127.0.0.1/callback], requires: [devel:k8s:viewer], ttl_cap: 10m, session: "+session+" }\n"+
 		"  cli: { kind: public, redirects: [http://127.0.0.1/callback], requires: [devel:k8s:viewer, mgmt:k8s:admin], sign_in_exchange: true }\n", 1) +
 		"resources:\n" +
@@ -684,5 +685,87 @@ func TestAnIdleAgentSessionIsRefiledAndKept(t *testing.T) {
 	got, live, err := w.iss.Sessions().ByID(t.Context(), agent.ID)
 	if err != nil || !live || got.SSO != "browser-2" || !got.Agent() {
 		t.Errorf("on day 13: live=%v sso=%q class=%q (err %v), want it live, agent, under browser-2", live, got.SSO, got.Class, err)
+	}
+}
+
+// Lowering lifetimes.agent.refresh ends, at its next refresh, an agent chain
+// already idle past the new window, though the end its record was written
+// with is still ahead; one idle less than the new window carries on.
+func TestAShorterAgentIdleLimitEndsAChainAlreadyIdlePastIt(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		idle    time.Duration
+		refused bool
+	}{
+		{3 * day, true},
+		{day, false},
+	} {
+		t.Run(tc.idle.String(), func(t *testing.T) {
+			t.Parallel()
+
+			w := newAgentWorld(t, agentPolicyText(true))
+			w.open(t, issuer.Opened{ClientID: agentClient, Token: "t-0", Class: issuer.ClassAgent})
+			w.iss.Sessions().SetAgentLifetimes(issuer.AgentLifetimes{Refresh: 2 * day, Absolute: 30 * day, Access: 30 * time.Minute}, nil)
+			storage, err := issuer.NewStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			w.at(tc.idle)
+			_, err = storage.TokenRequestByRefreshToken(t.Context(), "t-0")
+			if refused := err != nil; refused != tc.refused {
+				t.Errorf("a chain idle %s under a 2-day window: err = %v, want refused = %v", tc.idle, err, tc.refused)
+			}
+		})
+	}
+}
+
+// A recovery sign-in, the way in that bypasses the directory, always opens
+// an interactive chain, whatever the client's class.
+func TestARecoverySignInIsAlwaysInteractive(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	w := newAgentWorld(t, agentPolicyText(true))
+	w.now = time.Now()
+	storage, err := issuer.NewStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, who := range []issuer.Authenticated{
+		{Subject: "k8s:identity-system:authorization-webhook", AuthTime: time.Now(), How: issuer.RecoveryHow},
+		{Subject: "ada@north.example", AuthTime: time.Now(), How: "google"},
+	} {
+		pending, err := storage.CreateAuthRequest(ctx, &oidc.AuthRequest{
+			ClientID: agentClient, RedirectURI: "http://127.0.0.1/callback",
+			Scopes: oidc.SpaceDelimitedArray{"openid"}, ResponseType: oidc.ResponseTypeCode,
+		}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = storage.Complete(ctx, pending.GetID(), who); err != nil {
+			t.Fatalf("complete %s: %v", who.How, err)
+		}
+		completed, err := storage.AuthRequestByID(ctx, pending.GetID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err = storage.CreateAccessAndRefreshTokens(ctx, completed.(op.TokenRequest), ""); err != nil {
+			t.Fatalf("redeem %s: %v", who.How, err)
+		}
+
+		sessions, err := w.iss.Sessions().List(ctx, issuer.Query{Identity: who.Subject})
+		if err != nil || len(sessions) != 1 {
+			t.Fatalf("%s: sessions = %v, %v", who.How, sessions, err)
+		}
+		want := issuer.ClassAgent
+		if who.How == issuer.RecoveryHow {
+			want = issuer.ClassInteractive
+		}
+		if got := sessions[0].Class; got != want {
+			t.Errorf("a %s sign-in to an agent client opened a %q chain, want %q", who.How, got, want)
+		}
 	}
 }

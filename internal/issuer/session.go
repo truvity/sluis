@@ -327,13 +327,30 @@ func (s *Sessions) absoluteOf(touched ...string) time.Duration {
 // last written; if the policy has since withdrawn an extension, or shortened
 // an agent chain, the chain must end at its next refresh rather than keep
 // the longer end it was given.
+//
+// An agent chain is also past its limit once it has been idle for its
+// class's refresh window as the configuration stands NOW: its record keeps
+// the end the window it was written under gave it, so without this a
+// shorter `lifetimes.agent.refresh` would leave a chain already idle past
+// the new window alive until the old one ran out.
 func (s *Sessions) pastLimit(session Session) bool {
+	now := s.now()
+	if session.Agent() {
+		written := session.IssuedAt
+		if session.LastRefreshed.After(written) {
+			written = session.LastRefreshed
+		}
+		if !written.IsZero() && !now.Before(written.Add(s.refreshOf(session))) {
+			return true
+		}
+	}
+
 	limit := s.limitOf(session)
 	if limit.IsZero() {
 		return false
 	}
 
-	return !s.now().Before(limit)
+	return !now.Before(limit)
 }
 
 // SetClock replaces the clock, for tests.
@@ -663,28 +680,37 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 func (s *Sessions) indexLifetime() time.Duration { return max(2*s.lifetime, s.agent.Absolute) }
 
 // indexed reports whether a session's membership of the index sets, as
-// its record says it was last written, is far enough from running out
-// that adding it again at now would be a write that changes nothing
-// anybody can see.
+// its record says it was last written, is recent enough that adding it
+// again at now would be a write that changes nothing anybody can see.
 //
-// Far enough is a full refresh window of the session's class past now
-// ([Sessions.refreshOf]). That covers the end the session is about to be
-// given and the store lifetime of the record about to be written (never
-// later than now plus one window),
-// and it bounds how long a membership that was LOST -- evicted by an
-// engine short of memory, or dropped by a listing that read the record as
-// expired while a refresh was rotating it -- stays lost: a session that
-// keeps refreshing is added again within one lifetime of its last Add, so
+// Recent enough is three things at once:
+//
+//   - the membership reaches a full refresh window of the session's class
+//     past now ([Sessions.refreshOf]), which covers the store lifetime of
+//     the record about to be written;
+//   - it reaches the session's end;
+//   - and the last Add is no older than one refresh window: its horizon is
+//     at least [Sessions.indexLifetime] minus that window past now.
+//
+// The last is what bounds how long a membership that was LOST -- evicted
+// by an engine short of memory, or dropped by a listing that read the
+// record as expired while a refresh was rotating it -- stays lost. With
+// one long horizon for every Add (30 days by default) the first two would
+// hold for weeks after a loss; with the third, a session that keeps
+// refreshing is added again within one refresh window of its last Add, so
 // a revocation by person, client or everything finds it again. A record
 // with no IndexedUntil (written before it existed) is added at once.
 //
-// With the default lifetimes (a 12-hour refresh window inside a 24-hour
-// absolute limit) that is one Add per twelve hours of refreshing rather
-// than one per refresh. A set holding an ended session's id a while
-// longer than before is the cost; the listing that meets it drops it, as
-// it always has.
+// With the default lifetimes that is one Add per twelve hours of refreshing
+// for an interactive session and one per fourteen days for an agent one,
+// rather than one per refresh. A set holding an ended session's id a while
+// longer is the cost; the listing that meets it drops it, as it always has.
 func (s *Sessions) indexed(session Session, now time.Time) bool {
-	return !session.IndexedUntil.Before(now.Add(s.refreshOf(session))) && !session.IndexedUntil.Before(session.ExpiresAt)
+	window := s.refreshOf(session)
+
+	return !session.IndexedUntil.Before(now.Add(window)) &&
+		!session.IndexedUntil.Before(session.ExpiresAt) &&
+		!session.IndexedUntil.Before(now.Add(s.indexLifetime()-window))
 }
 
 // index adds a session to the sets that make it findable.
@@ -1280,14 +1306,17 @@ func (s *Sessions) Revoke(ctx context.Context, q Query) (int, error) {
 // keeps no revisions moves nothing, since a plain write there could bring
 // back a session revoked between the read and the write.
 //
-// One read of the identity's index set and one of each session in it, and
-// one write per session moved.
+// One read of the identity's index set and one of each session in it, one
+// write per session moved, and one removal from the set per id whose
+// record is gone, as a listing makes.
 func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, error) {
 	if from == "" || to == "" || from == to {
 		return 0, nil
 	}
 
-	ids, err := s.state.Members(ctx, sessionOfKey(identity))
+	set := sessionOfKey(identity)
+
+	ids, err := s.state.Members(ctx, set)
 	if err != nil {
 		return 0, err
 	}
@@ -1298,7 +1327,7 @@ func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, 
 	var errs []error
 
 	for _, id := range ids {
-		done, err := s.refile(ctx, id, identity, from, to)
+		done, err := s.refile(ctx, set, id, identity, from, to)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("session %s: %w", id, err))
 
@@ -1315,9 +1344,16 @@ func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, 
 
 // refile moves one session, when it is still live and still filed under
 // from, and reports whether it did.
-func (s *Sessions) refile(ctx context.Context, id, identity, from, to string) (bool, error) {
+func (s *Sessions) refile(ctx context.Context, set, id, identity, from, to string) (bool, error) {
 	for range rotatedAttempts {
 		session, version, live, err := s.byIDVersion(ctx, id)
+		if err == nil && !live {
+			// Self-repair, as a listing does: the record is gone, so the id
+			// is not a session any more and the person's set should stop
+			// saying it is. Otherwise every step-up reads a horizon's worth
+			// of dead ids again.
+			err = s.state.Remove(ctx, set, id)
+		}
 		if err != nil || !live || session.Identity != identity || session.SSO != from || version == "" {
 			return false, err
 		}
