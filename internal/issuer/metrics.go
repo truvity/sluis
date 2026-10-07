@@ -145,7 +145,7 @@ func grantTypeOf(request op.TokenRequest) string {
 func Route(r *http.Request) string {
 	path := r.URL.Path
 	switch path {
-	case "/.well-known/openid-configuration":
+	case "/.well-known/openid-configuration", "/.well-known/oauth-authorization-server":
 		return "discovery"
 	case "/keys":
 		return "jwks"
