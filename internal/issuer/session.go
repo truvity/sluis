@@ -104,7 +104,8 @@ type Session struct {
 // than asked of the directory: a recovery sign-in, by the method its
 // sign-in recorded, or an exchange, whose subject this issuer minted
 // itself from the verified proof (a cluster's ServiceAccount token reads
-// as one; a person's email or a GitHub job does not). A browser sign-in
+// as one; a person's address never does, whatever else it contains, and
+// neither does a GitHub job). A browser sign-in
 // through an identity provider is a person, whatever its subject looks
 // like.
 func (s Session) serviceAccount() bool {
@@ -112,6 +113,15 @@ func (s Session) serviceAccount() bool {
 	case s.Method == RecoveryHow:
 		return true
 	case s.How == HowExchange:
+		// A person can open an exchange's session too, trading their own
+		// sign-in ([Storage.signInProof]), and their address is theirs to
+		// choose: `k8s:ns:x@corp.example` parses as a ServiceAccount. Every
+		// subject an exchange mints for a ServiceAccount (`k8s:<ns>:<name>`,
+		// `<cluster>:k8s:<ns>:<name>`, `system:serviceaccount:...`) has no
+		// `@`, and every person's has one.
+		if strings.Contains(s.Identity, "@") {
+			return false
+		}
 		_, ok := serviceAccountSubject(s.Identity)
 		return ok
 	default:

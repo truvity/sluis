@@ -168,3 +168,24 @@ func TestARefreshIsEvaluatedByHowTheSessionBegan(t *testing.T) {
 		})
 	}
 }
+
+// A person's exchange session is a person's, even when their address
+// parses as a ServiceAccount: `k8s:<ns>:<name>` with an `@` in the name is
+// an address, and the directory decides it at every refresh.
+func TestAPersonsExchangeSessionIsAPersonWhateverTheirAddress(t *testing.T) {
+	t.Parallel()
+	const address = "k8s:sluis:ops@corp.example"
+	server, iss := signInServerWith(t, address, lookAlikePolicy)
+	if _, err := iss.Sessions().Record(t.Context(), issuer.Opened{
+		Identity: address, ClientID: "local-dev", How: issuer.HowExchange,
+		Token: "refresh-exchange-address", Scopes: []string{"openid"},
+	}); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	status, body := refreshLocalDev(t, server.URL, "refresh-exchange-address")
+	if status != http.StatusOK {
+		t.Fatalf("refresh: %d %v; want the directory's groups for the person", status, body)
+	}
+	tokenGroups(t, "the refresh's tokens", body, "devel:k8s:viewer", operators)
+}
