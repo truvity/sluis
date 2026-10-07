@@ -26,11 +26,31 @@ import (
 // A third for a person linking a GitHub account, for the same reason: an
 // operator connecting an organisation in one tab and linking their own
 // account in another must not have either flow finish the other.
+//
+// A fourth for a recovery form, which shared the sign-in's at first: the
+// issuer and a console mounted on its host both set it, so opening any
+// sign-in page -- either one's, or a provider button on it -- replaced the
+// state a recovery form already open in another tab was bound to, and a
+// cookie holding a recovery state could be presented to a provider
+// callback, and the other way round. Its own name keeps each flow's state
+// in a cookie only that flow sets and reads.
 const (
-	ConnectCookieName = "access_roster_connect"
-	LoginCookieName   = "access_roster_login"
-	LinkCookieName    = "access_roster_link"
+	ConnectCookieName  = "access_roster_connect"
+	LoginCookieName    = "access_roster_login"
+	LinkCookieName     = "access_roster_link"
+	RecoveryCookieName = "access_roster_recovery"
 )
+
+// RecoveryPurpose is what a recovery form's state carries as its
+// [Binding.Owner], and a provider round trip's never does, so that each
+// door refuses the other's state as well as the other's cookie.
+const RecoveryPurpose = "recovery"
+
+// RecoveryFormLimit is the most a recovery form post may carry. A proof
+// is a ServiceAccount token or a password, a few KiB at most; the
+// standard library would otherwise read up to 10 MiB of form, or 32 MiB
+// of multipart, from anybody before anything is checked.
+const RecoveryFormLimit = 16 << 10
 
 // HostPrefix makes a Secure cookie a host-locked one.
 const HostPrefix = "__Host-"
@@ -77,18 +97,34 @@ func LoginCookie(value string, secure bool, ttl time.Duration) *http.Cookie {
 	return flowCookie(LoginCookieName, value, secure, ttl)
 }
 
+// RecoveryCookie is the same for a recovery form.
+func RecoveryCookie(value string, secure bool, ttl time.Duration) *http.Cookie {
+	return flowCookie(RecoveryCookieName, value, secure, ttl)
+}
+
 // LoginStartedHere reports whether the request carries the login cookie
-// bound to state: whether this is the browser a sign-in step was handed
-// to -- a provider round trip it started, a recovery form it was served --
-// rather than one somebody else's page posted or redirected into it.
+// bound to state: whether this is the browser that started the provider
+// round trip, rather than one somebody else's page redirected into it.
+func LoginStartedHere(r *http.Request, state string, secure bool) bool {
+	return startedHere(r, LoginCookieName, state, secure)
+}
+
+// RecoveryStartedHere is [LoginStartedHere] for a recovery form: whether
+// the post comes from the browser the form was served to.
+func RecoveryStartedHere(r *http.Request, state string, secure bool) bool {
+	return startedHere(r, RecoveryCookieName, state, secure)
+}
+
+// startedHere reports whether the request carries the named flow cookie
+// bound to state.
 //
 // A signed state is no proof of that on its own: anybody can start a
 // flow of their own and read its state. The cookie is HttpOnly and
 // SameSite=Lax, so another site can neither read it nor make a cross-site
 // POST carry it. Compared in constant time, because the cookie is the half
 // of the pair an attacker does not have.
-func LoginStartedHere(r *http.Request, state string, secure bool) bool {
-	cookie, err := r.Cookie(CookieNameFor(LoginCookieName, secure))
+func startedHere(r *http.Request, name, state string, secure bool) bool {
+	cookie, err := r.Cookie(CookieNameFor(name, secure))
 
 	return err == nil && cookie.Value != "" && state != "" &&
 		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) == 1
@@ -148,7 +184,9 @@ type Binding struct {
 	// operator asked for the consent. This only carries the answer.
 	Actor string
 	// Owner is the directory workspace id the flow will record as the
-	// owner of what it connects, empty for none. It is chosen where the
+	// owner of what it connects, empty for none. A recovery form's state
+	// carries [RecoveryPurpose] here instead, and is never presented to a
+	// flow that connects anything (its cookie is its own). It is chosen where the
 	// flow begins, under the role question asked then, and read back by the
 	// callback that creates the record: signed, so a browser cannot change
 	// it on the way.

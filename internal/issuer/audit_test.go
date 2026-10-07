@@ -116,7 +116,7 @@ func (acceptingRecovery) Verify(context.Context, string) (string, error) {
 func TestTheRecoveryPageSaysTheTrailRefused(t *testing.T) {
 	t.Parallel()
 	codec := access.NewStateCodec(make([]byte, 32), time.Minute)
-	state, err := codec.Issue("req-recovery")
+	state, err := codec.IssueAs(access.Binding{Bind: "req-recovery", Owner: access.RecoveryPurpose})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestTheRecoveryPageSaysTheTrailRefused(t *testing.T) {
 	form := url.Values{"state": {state}, "proof": {"a-good-token"}}
 	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.AddCookie(&http.Cookie{Name: access.LoginCookieName, Value: state})
+	request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: state})
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 
@@ -202,7 +202,7 @@ func TestARefusedRecoveryEndsTheBrowserSessionItBegan(t *testing.T) {
 	ctx := context.Background()
 	sso := issuer.NewSSO(issuer.NewMemoryState(), time.Hour)
 	codec := access.NewStateCodec(make([]byte, 32), time.Minute)
-	state, err := codec.Issue("req-recovery")
+	state, err := codec.IssueAs(access.Binding{Bind: "req-recovery", Owner: access.RecoveryPurpose})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestARefusedRecoveryEndsTheBrowserSessionItBegan(t *testing.T) {
 	form := url.Values{"state": {state}, "proof": {"a-good-token"}}
 	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.AddCookie(&http.Cookie{Name: access.LoginCookieName, Value: state})
+	request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: state})
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 
