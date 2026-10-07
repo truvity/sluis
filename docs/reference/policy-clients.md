@@ -22,6 +22,7 @@ means nobody, not everyone, and sluis refuses to start on one.
 | `signed_out` | the pages a person may land on after an RP-initiated logout. An address in both lists fails the load; an `exchange` client may declare none |
 | `requires` | the internal groups, any one of which admits a caller |
 | `ttl_cap` | an upper bound on this client's token lifetime |
+| `session` | `interactive` (the default) or `agent`: the class of this client's refresh chains, see [agent-class sessions](#agent-class-sessions). Refused on an `exchange` client |
 | `sign_in_exchange` | `true` lets a person's sign-in to this client be presented as a proof in a token exchange, as its `access_token`, while the session behind it is live. `public` clients only. No other token this service signs is a proof |
 | `display_name`, `description` | what the sign-in page shows, see below |
 | `backchannel_logout_uri` | opts the client into OIDC Back-Channel Logout: when a sign-in ends, a signed `logout+jwt` naming the session (`sid`) is POSTed here |
@@ -114,6 +115,12 @@ The service's `lifetimes.absolute` ends every session 24 hours after `auth_time`
 ([ADR 0001](../decisions/0001-sessions-and-an-absolute-limit.md), [configuration.md](configuration.md)). A resource that
 only reads may ask for longer, up to 168h ([ADR 0033](../decisions/0033-a-longer-absolute-limit-for-read-only-resources.md)).
 
+**Deprecated.** Lengthening is superseded by [agent-class sessions](#agent-class-sessions)
+([ADR 0040](../decisions/0040-agent-class-sessions.md)). An `absolute_cap` above `lifetimes.absolute` on a `read_only`
+resource is still honoured, with a warning at start naming the resources, and a later minor release will refuse it.
+To migrate, mark the clients that need a longer chain `session: agent`, then remove `absolute_cap` from those
+resources or lower it to at most `lifetimes.absolute`. `absolute_cap` as a shortening cap stays.
+
 | Field | Meaning |
 |---|---|
 | `absolute_cap` | this resource's absolute session limit, in place of `lifetimes.absolute` |
@@ -127,6 +134,55 @@ access token's `exp`. Sign-out, removal or suspension, and refresh-token reuse e
 other. The sliding window still applies: a chain ends at the earlier of `now + lifetimes.refresh` and
 `auth_time + limit`, and `lifetimes.refresh` defaults to `12h`, so raise it (to `168h`) for the cap to be usable across a
 closed laptop. In the access document the fields are `readOnly` and `absoluteCap`.
+
+## Agent-class sessions
+
+A client that is software holding its own refresh token and working in the background, such as an MCP host, is not a
+person at a browser, and a daily sign-in or a console sign-out that ends its chain serves nobody. Such a client is
+declared `session: agent` ([ADR 0040](../decisions/0040-agent-class-sessions.md)); a client without the key is
+`interactive` and keeps the installation's `lifetimes`.
+
+```yaml
+clients:
+  mcp-host:
+    kind: public
+    session: agent
+    redirects: [/callback]
+    requires: [rung:engineering]
+
+client_documents:
+  origins: [agents.example]
+  requires: [rung:engineering]
+  session: agent                  # EVERY document client below gets the class
+```
+
+The class's lifetimes are in the service configuration, under `lifetimes.agent`
+([configuration.md](configuration.md)):
+
+| Key | Default | Ceiling | Meaning |
+|---|---|---|---|
+| `lifetimes.agent.refresh` | `336h` (14 days) | `lifetimes.agent.absolute` | the idle limit |
+| `lifetimes.agent.absolute` | `720h` (30 days) | `2160h` (90 days) | the limit from `auth_time` |
+| `lifetimes.agent.access` | `30m` | `1h` | the longest an access or ID token lives |
+
+All three must be positive, and shortening is always allowed. A resource's `absolute_cap` is only a ceiling for an
+agent chain, and the client's, `client_documents`' and the resource's `ttl_cap` still shorten its tokens.
+
+A document cannot set its own class: the issuer reads `session` only from the installation's policy, never from a
+fetched document. `client_documents.session` gives the class to **every** document client, so admit with `agent` only
+an origin whose documents their vendor controls and its users cannot publish. An installation that needs one document
+client interactive and another agent declares one of them as a `clients` row.
+
+Refused at load: `session` on an `exchange` client, which opens no chain, and `session: agent` with
+`sign_in_exchange: true`, because a month-long chain behind a person's CLI would make every credential traded from it
+a month long in effect. Warned at start: `session: agent` on a client with `signed_out` or `backchannel_logout_uri`,
+which describe a browser-facing application.
+
+**Not yet complete in this release.** The consent page that stops an agent authorization completing silently, and
+sign-out sparing agent sessions, arrive in a later release (decisions 6 and 7 of the ADR). Until then an agent
+authorization can complete silently and a browser sign-out ends agent sessions as it ends any other, so prefer not to
+mark a client `session: agent` until that release is deployed. Why the class exists and how a chain ends:
+[sessions](../explanation/sessions.md#agent-class-sessions).
 
 ## Groups override
 
