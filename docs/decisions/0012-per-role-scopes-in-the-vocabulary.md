@@ -11,11 +11,11 @@ Extends [0010](0010-a-declared-vocabulary.md).
 and checked every concrete grant's scope against it. That check is
 thing-wide: every role a thing declares is valid on every scope the thing
 declares, with no way to say otherwise. In practice a thing's roles do
-not always share that shape. An `ssh` thing declared across `kernel`,
+not always share that shape. An `ssh` thing declared across `core`,
 `devel`, `stage` and `prod` might have an `admin` role that legitimately
 belongs on all four, and a `user` role meant only for a break-glass login
 on `devel` — but the vocabulary as 0010 left it could not say that:
-`kernel:ssh:user` validated exactly as cleanly as `devel:ssh:user`, even
+`core:ssh:user` validated exactly as cleanly as `devel:ssh:user`, even
 though the second is the only one anyone meant to grant.
 
 The cost is the same one 0010 exists to remove for scopes and things
@@ -46,14 +46,14 @@ authoring mistake.
 
 **A concrete grant is refused when the role does not cover its scope**,
 checked after the existing thing-scope check and reported distinctly from
-it: `kernel:ssh:user` is refused with a message naming the role's own
+it: `core:ssh:user` is refused with a message naming the role's own
 scopes (`role "user" of thing "ssh" is valid only on scopes [devel]`),
-never conflated with `ssh` not declaring `kernel` at all, which is a
+never conflated with `ssh` not declaring `core` at all, which is a
 different, already-existing refusal.
 
 **A mapping wildcard skips a combination the role disallows, exactly like
 it already skips a thing that lacks the role.** `*:ssh:user` expands to
-`devel:ssh:user` alone; `kernel`, `stage` and `prod` are left out
+`devel:ssh:user` alone; `core`, `stage` and `prod` are left out
 silently, the same way `devel:*:viewer` already silently leaves out a
 thing with no `viewer` role. The existing "a wildcard that expands to no
 group is refused" rule gains one more reason a wildcard can come back
@@ -65,7 +65,7 @@ folding it into the generic sensitivity message.
 every scope its source does.** `admin: [user]` where `admin` is valid on
 every scope (the default) and `user` restricts itself to `devel` alone is
 refused, naming the scope the mismatch would have lost (`role "admin"
-implies "user", but "user" is not valid on scope "kernel", which "admin"
+implies "user", but "user" is not valid on scope "core", which "admin"
 is`). Silently intersecting the two — granting `admin` only as much
 `user` as `user` itself covers — was rejected: see Alternatives.
 

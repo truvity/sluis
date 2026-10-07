@@ -680,8 +680,8 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
 
 - **Removed: sluis's own OTLP Lambda extension.** `cmd/sluis-lambda` used to be the
   extension installed as `extensions/access-roster-otlp`, deprecated in v1.57.0 for
-  `truvity/observability`'s `otlp-lambda` layer. Nothing in `truvity/gitops` or
-  an estate's deploy repository deploys it, so the extension and the `sluis-lambda-layer_*` assets are
+  `truvity/observability`'s `otlp-lambda` layer. Nothing in an estate's GitOps repository or
+  deploy repository deploys it, so the extension and the `sluis-lambda-layer_*` assets are
   gone and `cmd/sluis-lambda` is the function's composition root. The layer is the only
   telemetry layer; sluis ships none.
 
@@ -2534,7 +2534,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   the plain implies-list form it has always accepted, restricting that
   role to a non-empty subset of its thing's own declared scopes — `ssh`'s
   `user` role valid on `devel` alone even though `ssh` itself also
-  declares `kernel`, `stage` and `prod`. `kernel:ssh:user` is refused,
+  declares `core`, `stage` and `prod`. `core:ssh:user` is refused,
   distinctly from a scope the thing itself does not have; a mapping
   wildcard skips a combination the role disallows the same way it already
   skips a thing without the role at all (`*:ssh:user` reaches

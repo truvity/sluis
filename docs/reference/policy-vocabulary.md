@@ -7,20 +7,20 @@ write one, [how-to/declare-a-vocabulary.md](../how-to/declare-a-vocabulary.md).
 ```yaml
 vocabulary:
   scopes:
-    kernel: { sensitive: true }
+    core: { sensitive: true }
     prod:   { sensitive: true }
     devel: {}
     stage: {}
     all:   {}          # only for a thing that exists once per installation
   things:
     k8s:
-      scopes: [kernel, devel, stage, prod]
+      scopes: [core, devel, stage, prod]
       roles: { viewer: [], operator: [viewer], admin: [operator] }
     argocd:
-      scopes: [kernel, devel, stage, prod]
+      scopes: [core, devel, stage, prod]
       roles: { viewer: [], deployer: [viewer], operator: [viewer], admin: [deployer, operator] }
     ssh:
-      scopes: [kernel, devel, stage, prod]
+      scopes: [core, devel, stage, prod]
       roles:
         admin: []                    # list form: valid on every scope ssh declares
         user: { scopes: [devel] }    # object form: valid on devel alone
@@ -59,7 +59,7 @@ optional; the list form parses as it always did. A role's own `scopes`, when dec
 thing's. Refused at load, naming which: a scope not declared under `vocabulary.scopes` at all, a scope the thing does
 not have, or an explicit empty list.
 
-A concrete grant the role does not cover is refused, distinctly from a scope the *thing* lacks: `kernel:ssh:user` gives
+A concrete grant the role does not cover is refused, distinctly from a scope the *thing* lacks: `core:ssh:user` gives
 `role "user" of thing "ssh" is valid only on scopes [devel]`. A mapping wildcard skips instead of refusing:
 `*:ssh:user` expands to `devel:ssh:user` alone.
 
@@ -80,7 +80,7 @@ evaluation ([policy-groups.md](policy-groups.md#groups-to-token-by-deep-merge)).
   the concrete groups (e.g. "prod:k8s:viewer") instead`;
 - any other empty expansion: `"<key>" expands to no group: <why>`. The reasons: no declared thing has the role
   (`devel:*:admins`), no thing with the role declares the scope, no such thing's role allows the scope
-  (`kernel:*:user`), or every scope a swept-in thing declares is sensitive (`*:k8s:viewer`).
+  (`core:*:user`), or every scope a swept-in thing declares is sensitive (`*:k8s:viewer`).
 
 ## Explainability
 

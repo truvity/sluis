@@ -53,7 +53,7 @@ A minimal `installation.yaml` and every key are in [the installation document](d
 
 ## Consumers
 
-The `sluis` chart installs in `truvity/gitops` and a second, non-AWS estate. The Go module is imported by `truvity/gitops`
+The `sluis` chart installs from an estate's GitOps repository and a second, non-AWS estate. The Go module is imported by an estate's GitOps repository
 (`policy`, in its render tests) and by `truvity/gemaal` (`identity`). CI workflows use `sluisctl` and the GitHub Action
 `truvity/sluis`; developers use `sluisctl` to mint credentials locally. The sluis service is a token audience for
 `truvity/cloudflare` (r2broker) and `truvity/observability` (vmauth).
