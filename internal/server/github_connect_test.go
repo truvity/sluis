@@ -124,6 +124,9 @@ type fakeGitHub struct {
 	reads int
 }
 
+// githubBaseMu is held by the test that has pointed githubapp at its fake.
+var githubBaseMu sync.Mutex
+
 func startFakeGitHub(t *testing.T) *fakeGitHub {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -178,6 +181,10 @@ func startFakeGitHub(t *testing.T) *fakeGitHub {
 	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
+	// githubapp.APIBase and WebBase are package variables: one test at a time owns
+	// them, from here to its cleanup, so parallel tests do not swap them under each other.
+	githubBaseMu.Lock()
+	t.Cleanup(githubBaseMu.Unlock)
 	api, web := githubapp.APIBase, githubapp.WebBase
 	githubapp.APIBase, githubapp.WebBase = server.URL, "https://github.example"
 	t.Cleanup(func() { githubapp.APIBase, githubapp.WebBase = api, web })

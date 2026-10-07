@@ -77,7 +77,6 @@ func withSecrets(s port.Secrets, adapter string) *store.Stores {
 }
 
 func TestAGeneratedClientIsRefusedWhereTheSecretsAdapterCannotCreateOnlyIfAbsent(t *testing.T) {
-	t.Parallel()
 	for name, stores := range map[string]*store.Stores{
 		"the legacy adapter": withSecrets(memory.NewSecrets(), store.AdapterLegacy),
 		"no secrets port":    withSecrets(nil, ""),
@@ -85,7 +84,6 @@ func TestAGeneratedClientIsRefusedWhereTheSecretsAdapterCannotCreateOnlyIfAbsent
 		"no ports at all":    {Secrets: testSecrets},
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			_, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: stores}, replacePolicy(t, generatingPolicy))
 			if err == nil {
 				t.Fatal("started")
@@ -99,7 +97,6 @@ func TestAGeneratedClientIsRefusedWhereTheSecretsAdapterCannotCreateOnlyIfAbsent
 
 // The same adapters are fine when nobody asks for a generated secret.
 func TestNoGeneratedClientNeedsNoSecretsPort(t *testing.T) {
-	t.Parallel()
 	const named = `
 version: 1
 groups:
@@ -115,7 +112,6 @@ clients:
 }
 
 func TestAGeneratedClientHasItsSecretAtStart(t *testing.T) {
-	t.Parallel()
 	mem := memory.NewSecrets()
 	app, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: withSecrets(mem, "memory")}, replacePolicy(t, generatingPolicy))
 	if err != nil {
@@ -164,7 +160,6 @@ func (f *failingPuts) set(fail bool) {
 }
 
 func TestAClientWhoseSecretCannotBeSettledDoesNotStopTheIssuerAndIsRetried(t *testing.T) {
-	t.Parallel()
 	flaky := &failingPuts{Secrets: memory.NewSecrets(), fail: true}
 	app, err := tryBoot(t, issuerapp.Deps{Directory: nobody{}, Stores: withSecrets(flaky, "memory")}, replacePolicy(t, generatingPolicy))
 	if err != nil {
@@ -185,7 +180,6 @@ func TestAClientWhoseSecretCannotBeSettledDoesNotStopTheIssuerAndIsRetried(t *te
 }
 
 func TestAnIssuerWithNoGeneratedClientReconcilesNothing(t *testing.T) {
-	t.Parallel()
 	app := boot(t)
 	if res := app.ReconcileClientSecrets(context.Background()); len(res.Outcomes) != 0 {
 		t.Errorf("outcomes = %+v", res)
@@ -193,7 +187,6 @@ func TestAnIssuerWithNoGeneratedClientReconcilesNothing(t *testing.T) {
 }
 
 func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
-	t.Parallel()
 	// ssm secrets beside a process-local State: two replicas would share the
 	// record with leases that do not exclude each other.
 	notShared := withSecrets(memory.NewSecrets(), "ssm")
@@ -244,7 +237,6 @@ clients:
 // A resolver never told which clients are generated would treat them all as
 // generated, so this pins that the assembly tells it.
 func TestTheAssembledTokenEndpointConsultsTheRecordOnlyForAGeneratedClient(t *testing.T) {
-	t.Parallel()
 	mem := memory.NewSecrets()
 	put := func(id, value string) {
 		body, err := clientcreds.Record{Current: value, Created: time.Now()}.Encode()

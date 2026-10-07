@@ -286,7 +286,7 @@ func TestGroupsScopingEnforceLeavesTheGateAndLifetimeUnaffected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}

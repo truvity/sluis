@@ -88,7 +88,6 @@ func (c *keySetCluster) token(t *testing.T, subject, audience string) string {
 // source says workload, so the policy — not the door it came through —
 // decides what it may do.
 func TestAWorkloadReadsTheConsoleWithItsOwnServiceAccountToken(t *testing.T) {
-	t.Parallel()
 
 	mgmt := newKeySetCluster(t)
 	clusters := issuer.Verifiers{&verify.Cluster{
@@ -146,7 +145,6 @@ func TestAWorkloadReadsTheConsoleWithItsOwnServiceAccountToken(t *testing.T) {
 // that would verify, so there is no reader at all rather than one
 // consulted on every request to refuse.
 func TestNoFederatedClusterMeansNoWorkloadDoor(t *testing.T) {
-	t.Parallel()
 	if read := workloadBearer(nil, slog.New(slog.NewTextHandler(io.Discard, nil))); read != nil {
 		t.Error("a reader was built with no cluster to verify against")
 	}
@@ -157,7 +155,6 @@ func TestNoFederatedClusterMeansNoWorkloadDoor(t *testing.T) {
 // set by the SAME AWS verifier token exchange uses. It becomes an AWS-role
 // principal, and the policy's `aws` matchers decide what it may do.
 func TestALambdaControllerReadsTheConsoleWithItsRolesWebIdentityToken(t *testing.T) {
-	t.Parallel()
 
 	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {

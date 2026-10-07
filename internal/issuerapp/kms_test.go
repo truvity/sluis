@@ -82,7 +82,6 @@ func kmsConfigWith(t *testing.T, content string, keys ...string) func(*config.Se
 // On an installation that has seen none of them, only the LAST listed key is
 // adopted: an older one is never newly recorded, so it cannot sign.
 func TestKMSKeysArePublishedFromTheList(t *testing.T) {
-	t.Parallel()
 	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	b, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"alias/a": a, "alias/b": b}},
@@ -103,7 +102,6 @@ func TestKMSKeysArePublishedFromTheList(t *testing.T) {
 }
 
 func TestKMSAndFileAreExclusive(t *testing.T) {
-	t.Parallel()
 	f := &config.Serve{IssuerURL: "https://issuer.example",
 		SigningKey: &config.SigningKey{File: "/k", KMS: &config.SigningKeyKMS{Keys: []string{"k"}, StateSecret: "s"}}}
 	if _, err := issuerapp.FromConfig(withPolicy(t, f)); err == nil || !strings.Contains(err.Error(), "exclusive") {
@@ -112,7 +110,6 @@ func TestKMSAndFileAreExclusive(t *testing.T) {
 }
 
 func TestAPlaceholderStateSecretIsRefused(t *testing.T) {
-	t.Parallel()
 	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	for name, content := range map[string]string{
 		"repeated": strings.Repeat("x", 64), "short": "abcd", "few bytes": strings.Repeat("ab", 40),
@@ -149,7 +146,6 @@ func writeTemp(t *testing.T, content string) string {
 // signingKey.kms.additional adds an RS256 ring beside the ES384 one: both are
 // published, each from its own KMS key.
 func TestKMSAdditionalRS256IsPublishedBesideES384(t *testing.T) {
-	t.Parallel()
 	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	r, _ := rsa.GenerateKey(rand.Reader, 3072)
 	change := kmsConfig(t, "alias/es")
@@ -174,7 +170,6 @@ func TestKMSAdditionalRS256IsPublishedBesideES384(t *testing.T) {
 
 // An RS256 KMS list beside an RS256 file is the same refusal as two files.
 func TestKMSRS256AndAnRS256FileClash(t *testing.T) {
-	t.Parallel()
 	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	r, _ := rsa.GenerateKey(rand.Reader, 3072)
 	der, _ := x509.MarshalPKCS8PrivateKey(r)

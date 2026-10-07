@@ -99,7 +99,7 @@ func awsExchange(t *testing.T) (server *httptest.Server, mint func(sub string) s
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatal(err)
 	}
