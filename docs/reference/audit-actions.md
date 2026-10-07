@@ -11,7 +11,7 @@ Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Targ
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.8.0, 68 actions.
+Catalogue version 1.9.0, 68 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
