@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -61,13 +62,15 @@ type logoutToken struct {
 // relying party that cannot be reached must not turn a completed
 // sign-out into a failed one.
 //
-// Sequential on purpose. The number of clients is small, the calls are
-// short, and a failure that blocks is easier to read in a log than a
-// fan-out that interleaves.
+// The posts run concurrently, at most [announceInFlight] at a time, and all
+// are waited for before returning: a relying party that cannot answer costs
+// its own timeout once, not once per client and sign-in, and nothing is left
+// running after the response (a function platform may freeze it).
 func (s *Storage) announceLogout(ctx context.Context, log *slog.Logger, ended []Session) {
-	if len(ended) == 0 {
-		return
-	}
+	var (
+		wg   sync.WaitGroup
+		slot = make(chan struct{}, announceInFlight)
+	)
 
 	for i := range ended {
 		one := &ended[i]
@@ -77,17 +80,31 @@ func (s *Storage) announceLogout(ctx context.Context, log *slog.Logger, ended []
 			continue
 		}
 
-		if err := s.postLogoutToken(ctx, declared.BackChannelLogout, one); err != nil {
-			log.WarnContext(ctx, "a client could not be told its session ended",
-				"client_id", logsafe.Value(one.ClientID), "error", logsafe.Error(err))
+		slot <- struct{}{}
 
-			continue
-		}
+		wg.Add(1)
 
-		log.InfoContext(ctx, "told a client its session ended",
-			"client_id", logsafe.Value(one.ClientID))
+		go func() {
+			defer wg.Done()
+			defer func() { <-slot }()
+
+			if err := s.postLogoutToken(ctx, declared.BackChannelLogout, one); err != nil {
+				log.WarnContext(ctx, "a client could not be told its session ended",
+					"client_id", logsafe.Value(one.ClientID), "error", logsafe.Error(err))
+
+				return
+			}
+
+			log.InfoContext(ctx, "told a client its session ended",
+				"client_id", logsafe.Value(one.ClientID))
+		}()
 	}
+
+	wg.Wait()
 }
+
+// announceInFlight bounds how many logout tokens are being delivered at once.
+const announceInFlight = 8
 
 // postLogoutToken mints one token and delivers it.
 func (s *Storage) postLogoutToken(ctx context.Context, where string, session *Session) error {
