@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.68.0
+
 ### Added
 
 - **The issuer serves OAuth 2.0 Authorization Server Metadata (RFC 8414) at `/.well-known/oauth-authorization-server`**, so an MCP client that probes it no longer gets a 404. It is OpenID discovery narrowed, not a second document: the same corrected values (`response_types_supported`, `grant_types_supported`, and the rest), the same content type, caching and CORS behaviour, and the same refusals for other methods and paths, kept to `issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`, `scopes_supported`, `response_types_supported`, `grant_types_supported`, `token_endpoint_auth_methods_supported`, `revocation_endpoint` and its auth methods, `introspection_endpoint` and its auth methods, `code_challenge_methods_supported`, and the extension `client_id_metadata_document_supported` (only when the installation admits client ID metadata documents). OIDC-only members (`userinfo_endpoint`, `end_session_endpoint`, `acr_values_supported`, the ID token members) stay in discovery. `registration_endpoint` is listed only if discovery has one, which this issuer does not. An issuer URL with a path is served at the well-known segment followed by that path, as RFC 8414 section 3.1 inserts it. No gateway or Lambda route change is needed: both already forward every path.
