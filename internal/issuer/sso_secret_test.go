@@ -889,3 +889,31 @@ func TestLogsNeverHoldTheSecretOrItsHash(t *testing.T) {
 		}
 	}
 }
+
+// Signing out everywhere tells the clients that held no refresh token, which
+// only the sign-in knows.
+func TestSignOutEverywhereTellsTheOpenIDOnlyClients(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORig(t, issuer.Config{})
+	_, id := rig.signedInBrowser(t)
+
+	if err := rig.iss.SSO().Involve(context.Background(), id, "openid-only"); err != nil {
+		t.Fatal(err)
+	}
+
+	var told []issuer.Session
+
+	service := rig.service().WithAnnounceForTest(func(_ context.Context, sessions []issuer.Session) {
+		told = append(told, sessions...)
+	})
+
+	if _, err := revoke(t, service, "ada@north.example|",
+		&accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail}); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	if len(told) != 1 || told[0].ClientID != "openid-only" || told[0].Identity != ssoEmail || told[0].SSO != id {
+		t.Errorf("told %+v, want the one openid-only client of sign-in %s", told, id)
+	}
+}
