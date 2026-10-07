@@ -476,6 +476,27 @@ func (s *SessionsService) RevokeSessions(
 		return s.revokeClass(ctx, who, identity, class)
 	}
 
+	// Naming no client means everywhere, and everywhere includes the
+	// sign-in itself. Ending only the running sessions would leave the
+	// browser able to open new ones with no password, which is the
+	// half-sign-out that looks exactly like a whole one. Naming a client
+	// is narrower on purpose and leaves the sign-in alone.
+	//
+	// The sign-ins FIRST, then the sessions, as [endSignIn] and
+	// [SessionsService.revokeClass] do: a code redeemed under one of them
+	// after this either filed its session before the listing below, or
+	// finds its sign-in ended and ends its own. Revoking first left a
+	// window in which a code opened a session under a sign-in still live,
+	// which "Sign out everything" -- the lever for a suspected compromise
+	// -- then never reached.
+	var (
+		involved []Session
+		endErr   error
+	)
+	if clientID == "" && s.sso != nil {
+		_, involved, endErr = s.sso.EndForInvolving(ctx, identity)
+	}
+
 	// Read before revoking, as at an ordinary sign-out: once the sessions
 	// are gone nothing says which clients held them.
 	var held []Session
@@ -484,33 +505,24 @@ func (s *SessionsService) RevokeSessions(
 	}
 
 	ended, err := s.sessions.Revoke(ctx, Query{Identity: identity, ClientID: clientID})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+
+	// Told as an ordinary sign-out tells them: the sessions the revoke
+	// ended as they were held, and, by subject, the clients signed in
+	// under these browsers without a refresh token (`openid` alone),
+	// which only the sign-in knows. One token per client and sign-in.
+	// Best effort: the sign-ins have ended either way, and whatever was
+	// collected before a failure is still told, because a retry cannot
+	// find what was already dropped. Every live chain was just revoked, so
+	// none is spared.
+	if clientID == "" && s.sso != nil && s.announce != nil {
+		s.announce(ctx, withInvolved(held, involved))
 	}
 
-	// Naming no client means everywhere, and everywhere includes the
-	// sign-in itself. Ending only the running sessions would leave the
-	// browser able to open new ones with no password, which is the
-	// half-sign-out that looks exactly like a whole one. Naming a client
-	// is narrower on purpose and leaves the sign-in alone.
-	if clientID == "" && s.sso != nil {
-		_, involved, endErr := s.sso.EndForInvolving(ctx, identity)
-
-		// Told as an ordinary sign-out tells them: the sessions the
-		// revoke ended as they were held, and, by subject, the clients
-		// signed in under these browsers without a refresh token
-		// (`openid` alone), which only the sign-in knows. One token per
-		// client and sign-in. Best effort: the sign-ins have ended
-		// either way, and whatever was collected before a failure is
-		// still told, because a retry cannot find what was already
-		// dropped. Every live chain was just revoked, so none is spared.
-		if s.announce != nil {
-			s.announce(ctx, withInvolved(held, involved))
-		}
-
-		if endErr != nil {
-			return nil, connect.NewError(connect.CodeInternal, endErr)
-		}
+	switch {
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err)
+	case endErr != nil:
+		return nil, connect.NewError(connect.CodeInternal, endErr)
 	}
 
 	scope := audit.ScopeEverywhere
