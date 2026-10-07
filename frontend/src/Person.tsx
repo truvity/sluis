@@ -14,7 +14,7 @@ import Typography from "@mui/material/Typography";
 
 import { access, forHowLong, github, issuerIsSameOrigin, personName, reason, roleName, sessions, sourceName, type Me } from "./api";
 import type { ExplainRequest, ExplainResponse } from "./gen/directoryroster/v1/access_pb";
-import type { Session } from "./gen/accessissuer/v1/session_pb";
+import { RevokeScope, type Session } from "./gen/accessissuer/v1/session_pb";
 import { formatChain } from "./heldChain";
 import { useAsync } from "./hooks";
 import { paths } from "./router";
@@ -133,24 +133,32 @@ export function Explanation({
     }
   };
 
-  const signOutEverywhere = async () => {
+  // A person's own sign-out everywhere comes in three
+  // (docs/decisions/0040-agent-class-sessions.md, decision 7): every
+  // browser and interactive app, every agent connection, or both. Only
+  // "everything" is offered on somebody else's page, where the issuer
+  // would end every class whatever was asked.
+  const signOutEverywhere = async (scope: RevokeScope) => {
     if (!sessionsOf) return;
     setBusy("*");
     setSessionFailure(undefined);
     try {
-      await sessions.revokeSessions({ identity: sessionsOf });
+      await sessions.revokeSessions({ identity: sessionsOf, scope });
 
-      // "Everywhere" includes HERE. Naming no client ends the sign-in as
-      // well as the sessions, so on your own page this page's own
-      // session is one of the ones that just ended — and staying put
-      // left it acting signed in until the next call failed with a
-      // sentence about tokens. Follow through instead.
-      if (signOutURL) {
+      // "Everywhere" includes HERE, unless only the agents were
+      // disconnected. Ending the browser sign-ins ends this page's own
+      // too — and staying put left it acting signed in until the next
+      // call failed with a sentence about tokens. Follow through instead.
+      if (signOutURL && scope !== RevokeScope.AGENTS) {
         window.location.href = signOutURL;
         return;
       }
 
-      onDone?.(`${sessionsOf} is signed out everywhere.`);
+      onDone?.(
+        scope === RevokeScope.AGENTS
+          ? `Disconnected every agent of ${sessionsOf}.`
+          : `${sessionsOf} is signed out everywhere.`,
+      );
       found.reload();
     } catch (error) {
       setSessionFailure(reason(error));
@@ -295,9 +303,38 @@ export function Explanation({
           title="Active sessions"
           hint="one row per application, grouped under the browser session that opened them; agent connections outlive a browser sign-out"
           action={
-            <Button size="small" color="warning" disabled={busy === "*"} onClick={signOutEverywhere}>
-              Sign out everywhere
-            </Button>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {signOutURL ? (
+                <>
+                  <Button
+                    size="small"
+                    color="warning"
+                    disabled={busy === "*"}
+                    onClick={() => signOutEverywhere(RevokeScope.INTERACTIVE)}
+                  >
+                    Sign out all browsers and apps
+                  </Button>
+                  <Button
+                    size="small"
+                    color="warning"
+                    disabled={busy === "*"}
+                    onClick={() => signOutEverywhere(RevokeScope.AGENTS)}
+                  >
+                    Disconnect all agents
+                  </Button>
+                </>
+              ) : null}
+              {/* Primary: the one to press when an account may be compromised. */}
+              <Button
+                size="small"
+                variant="contained"
+                color="error"
+                disabled={busy === "*"}
+                onClick={() => signOutEverywhere(RevokeScope.EVERYTHING)}
+              >
+                Sign out everything
+              </Button>
+            </Box>
           }
         >
           <Loading busy={found.loading} />
