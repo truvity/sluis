@@ -454,7 +454,7 @@ client_documents:
   requires: [devel:grafana:viewer]
   groups: [shop]
 `,
-			wantErr: "client_documents declares requires, ttl_cap or groups and no origins",
+			wantErr: "client_documents declares requires, ttl_cap, groups or session and no origins",
 		},
 	}
 	for _, tc := range tests {

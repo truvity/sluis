@@ -183,6 +183,25 @@ const (
 // LifetimeDefault is the key under which the fallback lifetime lives.
 const LifetimeDefault = "default"
 
+// The session classes a client's refresh chains may have: `session` on a
+// declared client and on `client_documents`. See
+// docs/decisions/0040-agent-class-sessions.md.
+const (
+	// SessionInteractive is a person at a browser: the installation's
+	// `lifetimes` hold. It is what an absent `session` means.
+	SessionInteractive = "interactive"
+	// SessionAgent is software that holds a refresh token in its own
+	// credential store and works in the background, such as an MCP host:
+	// the service configuration's `lifetimes.agent` hold.
+	SessionAgent = "agent"
+)
+
+// validSession reports whether a `session` value is one of the classes,
+// or absent.
+func validSession(class string) bool {
+	return class == "" || class == SessionInteractive || class == SessionAgent
+}
+
 // The signing algorithms a client or a resource may pin with `signing_alg`.
 // Exactly three, not the four [algorithms this issuer can ever produce]:
 // ES512 is a curve this issuer accepts for a KEY, but no relying party has
@@ -593,7 +612,21 @@ type Client struct {
 	// See docs/decisions/0015-a-per-audience-groups-delimiter-for-opkssh.md
 	// and docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop.
 	GroupsDelimiter string `yaml:"groups_delimiter,omitempty"`
+	// Session is the class of the refresh chains this client opens:
+	// [SessionInteractive] (absent) or [SessionAgent]. An agent chain is
+	// held to the service configuration's `lifetimes.agent` rather than to
+	// the installation's absolute limit, and its access and ID tokens to
+	// `lifetimes.agent.access`. The class is decided when an authorization
+	// completes and recorded on the chain, so a later change here never
+	// changes the class of a chain already open. Refused on an exchange
+	// client, which opens no chain with an `auth_time`, and as `agent`
+	// together with [Client.SignInExchange]. See
+	// docs/decisions/0040-agent-class-sessions.md.
+	Session string `yaml:"session,omitempty"`
 }
+
+// Agent reports whether this client's chains are agent-class.
+func (c Client) Agent() bool { return c.Session == SessionAgent }
 
 // Parse reads one layer and checks its shape. Unknown keys are an error:
 // a renamed field must fail a rollout, not a login.
@@ -1001,6 +1034,18 @@ func (c Client) validate(id string, p Policy) error {
 	}
 	if c.SignInExchange && c.Kind != KindPublic {
 		return fmt.Errorf("client %q allows sign_in_exchange but is %s: only a public client, a CLI, may trade its sign-in", id, c.Kind)
+	}
+	if !validSession(c.Session) {
+		return fmt.Errorf("client %q: session %q is not %q or %q", id, c.Session, SessionInteractive, SessionAgent)
+	}
+	if c.Session != "" && c.Kind == KindExchange {
+		return fmt.Errorf("client %q is an exchange target and declares session: an exchange opens no chain "+
+			"with an auth_time, so it has no session class", id)
+	}
+	if c.Agent() && c.SignInExchange {
+		return fmt.Errorf("client %q declares session: agent and sign_in_exchange: true: a sign-in that is "+
+			"traded for cluster and cloud credentials is a person's CLI, and a month-long chain there would "+
+			"make every credential traded from it a month long in effect", id)
 	}
 	// A post-logout URI that is also a redirect URI sends the person
 	// straight back into the login they just ended. It is the one mistake

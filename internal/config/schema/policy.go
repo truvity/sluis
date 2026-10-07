@@ -93,6 +93,15 @@ func clientSecretSchema() m {
 	}
 }
 
+// sessionClass is `session`: the class of the refresh chains a client opens.
+func sessionClass(whose, rule string) m {
+	return m{
+		"enum":        []string{"interactive", "agent"},
+		"default":     "interactive",
+		"description": whose + ": `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). " + rule,
+	}
+}
+
 func clientSchema() m {
 	return obj("A client: who may be issued a token, and for what. Its id is the audience.", m{
 		"kind":                   m{"enum": []string{"public", "confidential", "exchange"}, "description": "public, confidential or exchange."},
@@ -108,6 +117,7 @@ func clientSchema() m {
 		"signing_alg":            str("The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384."),
 		"groups":                 groupsOverride(),
 		"groups_delimiter":       str("Rewrites `:` in its `groups` claim (docs/decisions/0015)."),
+		"session":                sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange`."),
 	}, "kind")
 }
 
@@ -118,7 +128,7 @@ func resourceSchema() m {
 		"requires":         strList("The groups a caller must hold, any of them."),
 		"ttl_cap":          duration("The longest a token for it lives.", ""),
 		"absolute_cap":     duration("The longest a session that touched it lives.", ""),
-		"read_only":        boolean("It only reads: an absolute cap past the installation's may be honoured."),
+		"read_only":        boolean("It only reads: an absolute cap past the installation's may be honoured. Deprecated as a lengthening (docs/decisions/0040): mark the clients `session: agent` instead; a lengthening row is warned about at start."),
 		"signing_alg":      str("The algorithm its tokens are signed with: RS256, ES256 or ES384."),
 		"groups":           groupsOverride(),
 		"groups_delimiter": str("Rewrites `:` in its `groups` claim."),
@@ -238,7 +248,7 @@ func policySchema() m {
 		"claims":           table("What a group adds to a token, by group.", m{"type": "object", "description": "A claims fragment: merged into the token (docs/reference/policy.md#claims)."}),
 		"lifetimes":        table("How long a token lives, by group, and `default`. The shortest across a caller's groups wins.", duration("A lifetime.", "")),
 		"resources":        table("What a token may be minted FOR, by resource indicator.", resourceSchema()),
-		"client_documents": obj("Admits clients that are not declared, by a document they serve about themselves. Off unless it names an origin.", m{"origins": strList("The origins."), "requires": strList("The groups a caller must hold."), "ttl_cap": duration("The longest a token lives.", ""), "groups": groupsOverride()}),
+		"client_documents": obj("Admits clients that are not declared, by a document they serve about themselves. Off unless it names an origin.", m{"origins": strList("The origins."), "requires": strList("The groups a caller must hold."), "ttl_cap": duration("The longest a token lives.", ""), "groups": groupsOverride(), "session": sessionClass("Every document client's refresh chains", "Never read from a document: admit with `agent` only an origin whose documents its vendor controls.")}),
 		"clients":          table("Who may be issued a token, by client id.", clientSchema()),
 		"github":           githubTableSchema(),
 		"people":           table("Which addresses are one person, by a name the installation chooses.", strList("The addresses.")),
