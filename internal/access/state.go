@@ -77,6 +77,23 @@ func LoginCookie(value string, secure bool, ttl time.Duration) *http.Cookie {
 	return flowCookie(LoginCookieName, value, secure, ttl)
 }
 
+// LoginStartedHere reports whether the request carries the login cookie
+// bound to state: whether this is the browser a sign-in step was handed
+// to -- a provider round trip it started, a recovery form it was served --
+// rather than one somebody else's page posted or redirected into it.
+//
+// A signed state is no proof of that on its own: anybody can start a
+// flow of their own and read its state. The cookie is HttpOnly and
+// SameSite=Lax, so another site can neither read it nor make a cross-site
+// POST carry it. Compared in constant time, because the cookie is the half
+// of the pair an attacker does not have.
+func LoginStartedHere(r *http.Request, state string, secure bool) bool {
+	cookie, err := r.Cookie(CookieNameFor(LoginCookieName, secure))
+
+	return err == nil && cookie.Value != "" && state != "" &&
+		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) == 1
+}
+
 func flowCookie(name, value string, secure bool, ttl time.Duration) *http.Cookie {
 	cookie := &http.Cookie{
 		Name:     CookieNameFor(name, secure),
