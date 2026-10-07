@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.70.0
+
 ### Added
 
 - **The Pulumi library's Lambda shape publishes an earlier signer's public keys as verify-only: `LambdaArgs.VerifyOnly`.** An estate moving an existing issuer onto the Lambda shape can keep the tokens the old issuer signed verifying for the overlap after the switch, as the chart's `signingKey.verifyOnly` does on Kubernetes. Each `VerifyOnlyKeyArgs` is a `PEM` (one `PUBLIC KEY`, `RSA PUBLIC KEY` or `CERTIFICATE` block, RSA or ECDSA), an optional `KeyID` and `Alg`, and a required `Until`. The configuration layer holds each at `/opt/sluis/verify-keys/<index>.pem` (`VerifyOnlyKeyPath`), and the library writes `signingKey.verifyOnly` into the service document naming them, with `kid`, `alg` and `until` in RFC 3339, whether the document is rendered from an `Installation` or given as `Config`. A private key (or anything that says PRIVATE), two keys in one PEM, the same key or `kid` twice, an `Alg` the key does not sign with and a zero `Until` are refused before anything is published, and the error never quotes the key. `signingKey.verifyOnly` is the library's on Lambda: a `Config` or an `Installation` that names it is refused, since the files it names are not in the layer. A stack that sets no `VerifyOnly` publishes the same layer as before.
