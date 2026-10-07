@@ -97,7 +97,26 @@ type Session struct {
 	// written last runs out (see [Sessions.indexed]). Zero for a session
 	// recorded before it existed, which is re-added at its next refresh.
 	IndexedUntil time.Time `json:"indexed_until,omitempty"`
+	// Class is who holds this chain ([SessionClass]): decided when its
+	// authorization completed, taken from the request at code redemption
+	// and never re-derived, so a later policy change never changes it.
+	// Empty for a session recorded before classes existed, which is
+	// interactive.
+	Class SessionClass `json:"class,omitempty"`
+	// Deadline is the latest an agent-class chain may live: auth_time plus
+	// the class's absolute limit as it stood when the chain was opened,
+	// shortened by its resource's absolute_cap. A later policy or
+	// configuration change may end the chain sooner, never later. Zero for
+	// an interactive chain; an agent chain with a zero deadline is
+	// interactive.
+	Deadline time.Time `json:"deadline,omitempty"`
 }
+
+// Agent reports whether this chain is agent-class: recorded so, with a
+// deadline. Anything else -- no class, interactive, or agent with a zero
+// deadline -- is interactive, which covers every chain recorded before
+// classes existed. See docs/decisions/0040-agent-class-sessions.md.
+func (s Session) Agent() bool { return s.Class == ClassAgent && !s.Deadline.IsZero() }
 
 // serviceAccount reports whether the session's subject was proved AS a
 // ServiceAccount, and so is evaluated by the policy's matchers rather
@@ -168,6 +187,14 @@ type Sessions struct {
 	// what a caller that never declares a resource wants and what every
 	// existing test builds.
 	resolve func(touched []string) time.Duration
+	// agent are the lifetimes of agent-class chains, in place of lifetime
+	// and absolute for them. Zero, as [NewSessions] leaves it, records no
+	// agent chain: a session opened as agent is then interactive.
+	agent AgentLifetimes
+	// agentResolve is the absolute limit of an agent chain that has been
+	// used for these resources ([policy.AgentAbsolute]). Nil is
+	// agent.Absolute for every chain.
+	agentResolve func(touched []string) time.Duration
 }
 
 // NewSessions returns the index over a shared store. lifetime is how long
@@ -191,6 +218,97 @@ func (s *Sessions) SetAbsoluteResolver(resolve func(touched []string) time.Durat
 	s.resolve = resolve
 }
 
+// SetAgentLifetimes sets the lifetimes agent-class chains are held to, and
+// how their absolute limit is decided from the resources they have been
+// used for ([policy.AgentAbsolute]; nil is the class's limit for every
+// chain). The issuer sets it from `lifetimes.agent` and the policy.
+func (s *Sessions) SetAgentLifetimes(agent AgentLifetimes, resolve func(touched []string) time.Duration) {
+	s.agent, s.agentResolve = agent, resolve
+}
+
+// agentAbsoluteOf is the absolute limit of an agent chain that has touched
+// these resources, as the configuration and the policy stand now.
+func (s *Sessions) agentAbsoluteOf(touched ...string) time.Duration {
+	if s.agentResolve == nil {
+		return s.agent.Absolute
+	}
+
+	return s.agentResolve(touched)
+}
+
+// agentDeadline is the deadline an agent chain opened now, for resource,
+// by a person who authenticated at authTime gets: zero where this index
+// records no agent chain (no agent lifetimes, or no auth_time), which
+// makes the chain interactive.
+func (s *Sessions) agentDeadline(authTime time.Time, resource string) time.Time {
+	absolute := s.agentAbsoluteOf(resource)
+	if authTime.IsZero() || s.agent.Refresh <= 0 || absolute <= 0 {
+		return time.Time{}
+	}
+
+	return authTime.Add(absolute)
+}
+
+// refreshOf is a session's idle limit: its class's refresh window. Every
+// store lifetime that follows the session -- the record's, its token
+// pointers' -- is this, so that a record still stored and no longer live is
+// one cut short of it by a limit ([Sessions.endedByAbsoluteLimit]).
+func (s *Sessions) refreshOf(session Session) time.Duration {
+	if session.Agent() && s.agent.Refresh > 0 {
+		return s.agent.Refresh
+	}
+
+	return s.lifetime
+}
+
+// limitOf is the latest a session may live to as the policy and the
+// configuration stand NOW, or zero for none.
+//
+// An agent chain's is its recorded deadline, shortened by the class's
+// current absolute limit and its resource's current cap: a change may end
+// it sooner, never later than the deadline it was opened with. An
+// interactive chain's is auth_time plus the limit its resource allows. A
+// session with no auth_time (a workload's exchange) has none.
+func (s *Sessions) limitOf(session Session) time.Time {
+	if session.Agent() {
+		limit := session.Deadline
+		if absolute := s.agentAbsoluteOf(session.Resource); !session.AuthTime.IsZero() && absolute > 0 {
+			if current := session.AuthTime.Add(absolute); current.Before(limit) {
+				limit = current
+			}
+		}
+
+		return limit
+	}
+
+	absolute := s.absoluteOf(session.Resource)
+	if session.AuthTime.IsZero() || absolute <= 0 {
+		return time.Time{}
+	}
+
+	return session.AuthTime.Add(absolute)
+}
+
+// endOf is a session's end if it is written at now: its class's refresh
+// window from now, or its limit ([Sessions.limitOf]), whichever comes
+// first.
+//
+// A session with no auth_time is a workload or a machine exchange, which
+// authenticated nobody -- there is no "since sign-in" to measure the limit
+// from, so only the refresh window applies, exactly as before this limit
+// existed. That is the whole of how [Sessions.Record] and
+// [Sessions.Refreshed] leave a machine's session alone: this is the one
+// place either of them decides an end, and here it simply has nothing to
+// cap against.
+func (s *Sessions) endOf(session Session, now time.Time) time.Time {
+	end := now.Add(s.refreshOf(session))
+	if limit := s.limitOf(session); !limit.IsZero() && limit.Before(end) {
+		return limit
+	}
+
+	return end
+}
+
 // absoluteOf is the absolute limit of a chain that has touched these
 // resources. A chain is bound to the resource it was opened for -- a
 // refresh never changes it -- so this is a set of one today; it is a set
@@ -204,17 +322,18 @@ func (s *Sessions) absoluteOf(touched ...string) time.Duration {
 }
 
 // pastLimit reports whether a session has outlived the absolute limit its
-// resources allow as the policy stands NOW. A record's own ExpiresAt was
-// decided when it was last written; if the policy has since withdrawn an
-// extension, the chain must end at its next refresh rather than keep the
-// longer end it was given.
+// class and resources allow as the policy and configuration stand NOW
+// ([Sessions.limitOf]). A record's own ExpiresAt was decided when it was
+// last written; if the policy has since withdrawn an extension, or shortened
+// an agent chain, the chain must end at its next refresh rather than keep
+// the longer end it was given.
 func (s *Sessions) pastLimit(session Session) bool {
-	absolute := s.absoluteOf(session.Resource)
-	if session.AuthTime.IsZero() || absolute <= 0 {
+	limit := s.limitOf(session)
+	if limit.IsZero() {
 		return false
 	}
 
-	return !s.now().Before(session.AuthTime.Add(absolute))
+	return !s.now().Before(limit)
 }
 
 // SetClock replaces the clock, for tests.
@@ -244,27 +363,6 @@ func sessionTokenKey(token string) string {
 func sessionRotatedKey(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return "issuer:session-rotated:" + hex.EncodeToString(sum[:])
-}
-
-// capEnd is a session's end: the sliding refresh window from now, or the
-// absolute session limit from auth_time, whichever comes first.
-//
-// A session with no auth_time is a workload or a machine exchange, which
-// authenticated nobody -- there is no "since sign-in" to measure the limit
-// from, so only the refresh window applies, exactly as before this limit
-// existed. That is the whole of how [Sessions.Record] and
-// [Sessions.Refreshed] leave a machine's session alone: this is the one
-// place either of them decides an end, and here it simply has nothing to
-// cap against.
-func capEnd(now, authTime time.Time, refresh, absolute time.Duration) time.Time {
-	end := now.Add(refresh)
-	if authTime.IsZero() || absolute <= 0 {
-		return end
-	}
-	if limit := authTime.Add(absolute); limit.Before(end) {
-		return limit
-	}
-	return end
 }
 
 // spentPrefix marks a token pointer whose token has been spent. The value
@@ -418,8 +516,8 @@ func successorCipher(token string) (cipher.AEAD, error) {
 // spentLifetime is how long a rotation keeps the mark of the token it
 // spent: until the absolute deadline of the refresh family the token
 // belongs to -- auth_time plus the absolute limit its resource allows, the
-// same limit [capEnd] caps every end at -- and never less than the grace
-// window. A session that keeps refreshing slides its own end forward, so
+// same limit [Sessions.endOf] caps every end at, or for an agent chain the
+// deadline recorded on it -- and never less than the grace window. A session that keeps refreshing slides its own end forward, so
 // a mark kept only until the end the rotation set would lapse while the
 // family it could end was still alive; kept until the deadline, it lasts
 // exactly as long as there is a family to end, and never longer.
@@ -428,9 +526,18 @@ func successorCipher(token string) (cipher.AEAD, error) {
 // authenticated, or a deployment with no absolute limit) keeps it until
 // the end the rotation set: one refresh lifetime, as long as the spent
 // token itself could have lived unspent.
+//
+// An agent chain's mark is kept until its RECORDED deadline, not until the
+// end a shorter configuration now gives it, nor for one refresh window
+// alone: a thief who keeps refreshing must not outlast a host that sat
+// idle, so the host's returning token still ends the thief's chain as a
+// reuse (docs/decisions/0040-agent-class-sessions.md, decision 9).
 func (s *Sessions) spentLifetime(session Session, now time.Time) time.Duration {
 	end := session.ExpiresAt
-	if absolute := s.absoluteOf(session.Resource); !session.AuthTime.IsZero() && absolute > 0 {
+	switch absolute := s.absoluteOf(session.Resource); {
+	case session.Agent():
+		end = session.Deadline
+	case !session.AuthTime.IsZero() && absolute > 0:
 		end = session.AuthTime.Add(absolute)
 	}
 
@@ -475,6 +582,11 @@ type Opened struct {
 	AuthTime time.Time
 	// Involved says the client is already recorded among SSO's clients.
 	Involved bool
+	// Class is the class the authorization completed with
+	// ([authRequest.Class]), never the policy's at redemption. Empty is
+	// interactive, and so is agent where no deadline can be given (no
+	// auth_time, or no agent lifetimes).
+	Class SessionClass
 }
 
 // Record files a newly issued refresh token and returns the session it
@@ -487,24 +599,34 @@ type Opened struct {
 func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 	now := s.now()
 	session := Session{
-		ID:       s.newID(),
-		Identity: strings.ToLower(o.Identity),
-		ClientID: o.ClientID,
-		Resource: o.Resource,
-		How:      o.How,
-		Method:   o.Method,
-		Scopes:   o.Scopes,
-		SSO:      o.SSO,
-		AuthTime: o.AuthTime,
-		Involved: o.Involved,
-		IssuedAt: now,
-		// The absolute limit applies from the moment the session is
-		// OPENED, not only from its first refresh: a browser session
-		// carried down from hours-old SSO (a new client added to an
-		// existing sign-in) must not get a fresh 24 hours of its own.
-		ExpiresAt:    capEnd(now, o.AuthTime, s.lifetime, s.absoluteOf(o.Resource)),
+		ID:           s.newID(),
+		Identity:     strings.ToLower(o.Identity),
+		ClientID:     o.ClientID,
+		Resource:     o.Resource,
+		How:          o.How,
+		Method:       o.Method,
+		Scopes:       o.Scopes,
+		SSO:          o.SSO,
+		AuthTime:     o.AuthTime,
+		Involved:     o.Involved,
+		IssuedAt:     now,
+		Class:        ClassInteractive,
 		IndexedUntil: now.Add(s.indexLifetime()),
 	}
+
+	// The class the authorization completed with, and for an agent chain
+	// the deadline it is given now, once: nothing re-derives either.
+	if o.Class == ClassAgent {
+		if deadline := s.agentDeadline(o.AuthTime, o.Resource); !deadline.IsZero() {
+			session.Class, session.Deadline = ClassAgent, deadline
+		}
+	}
+
+	// The absolute limit applies from the moment the session is OPENED,
+	// not only from its first refresh: a browser session carried down from
+	// hours-old SSO (a new client added to an existing sign-in) must not
+	// get a fresh 24 hours of its own.
+	session.ExpiresAt = s.endOf(session, now)
 
 	// The record before the sets: a listing that met the id in a set
 	// before its record existed would drop it as expired.
@@ -512,7 +634,7 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 		return Session{}, err
 	}
 
-	if err := s.state.Set(ctx, sessionTokenKey(o.Token), []byte(session.ID), s.lifetime); err != nil {
+	if err := s.state.Set(ctx, sessionTokenKey(o.Token), []byte(session.ID), s.refreshOf(session)); err != nil {
 		return Session{}, err
 	}
 
@@ -524,20 +646,31 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 }
 
 // indexLifetime is how long one Add keeps a session in the index sets:
-// twice the refresh lifetime, so that a session refreshed within one
-// lifetime of its last Add is still covered at its new end and needs no
-// Add of its own (see [Sessions.indexed]). Every Add of these sets uses
-// it, which is what keeps an engine whose expiry is the whole set's
-// (memory, Valkey) from ever shortening a member's.
-func (s *Sessions) indexLifetime() time.Duration { return 2 * s.lifetime }
+// twice the refresh lifetime, or the agent class's absolute limit where
+// that is longer, so that a session refreshed within one of its refresh
+// windows of its last Add is still covered at its new end and needs no Add
+// of its own (see [Sessions.indexed]), and an agent session is indexed
+// until its deadline from the Add that opened it.
+//
+// It is ONE horizon for every session, whatever its class. Every Add of
+// these sets uses it, which is what keeps an engine whose expiry is the
+// whole set's (memory, Valkey) from ever shortening a member's: an
+// interactive Add after an agent one must not cut the agent session out of
+// the set while its record lives. Interactive ids stay in the sets longer
+// in exchange, and a listing that meets one whose record is gone drops it.
+//
+// Invariant: index membership never ends before the record does.
+func (s *Sessions) indexLifetime() time.Duration { return max(2*s.lifetime, s.agent.Absolute) }
 
 // indexed reports whether a session's membership of the index sets, as
 // its record says it was last written, is far enough from running out
 // that adding it again at now would be a write that changes nothing
 // anybody can see.
 //
-// Far enough is a full refresh lifetime past now. That covers the end the
-// session is about to be given (never later than now plus one lifetime),
+// Far enough is a full refresh window of the session's class past now
+// ([Sessions.refreshOf]). That covers the end the session is about to be
+// given and the store lifetime of the record about to be written (never
+// later than now plus one window),
 // and it bounds how long a membership that was LOST -- evicted by an
 // engine short of memory, or dropped by a listing that read the record as
 // expired while a refresh was rotating it -- stays lost: a session that
@@ -551,7 +684,7 @@ func (s *Sessions) indexLifetime() time.Duration { return 2 * s.lifetime }
 // longer than before is the cost; the listing that meets it drops it, as
 // it always has.
 func (s *Sessions) indexed(session Session, now time.Time) bool {
-	return !session.IndexedUntil.Before(now.Add(s.lifetime)) && !session.IndexedUntil.Before(session.ExpiresAt)
+	return !session.IndexedUntil.Before(now.Add(s.refreshOf(session))) && !session.IndexedUntil.Before(session.ExpiresAt)
 }
 
 // index adds a session to the sets that make it findable.
@@ -849,9 +982,10 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 	now := s.now()
 	session.LastRefreshed = now
 	// Capped exactly as at open: a sliding refresher plateaus at
-	// auth_time+absolute rather than sliding forever, because every
-	// rotation recomputes the SAME limit from the SAME auth_time.
-	session.ExpiresAt = capEnd(now, session.AuthTime, s.lifetime, s.absoluteOf(session.Resource))
+	// auth_time+absolute (an agent chain at its deadline) rather than
+	// sliding forever, because every rotation recomputes the SAME limit
+	// from the SAME auth_time, in the class the chain was recorded with.
+	session.ExpiresAt = s.endOf(session, now)
 
 	// The policy may have withdrawn the extension this chain was opened
 	// under. The token is spent and the chain ends here, as it would at
@@ -873,7 +1007,7 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 		return Session{}, "", false, err
 	}
 
-	if err = s.state.Set(ctx, sessionTokenKey(newToken), []byte(session.ID), s.lifetime); err != nil {
+	if err = s.state.Set(ctx, sessionTokenKey(newToken), []byte(session.ID), s.refreshOf(session)); err != nil {
 		return Session{}, "", false, err
 	}
 
@@ -962,7 +1096,8 @@ func (s *Sessions) writeRotated(ctx context.Context, session Session, version st
 			return Session{}, false, fmt.Errorf("issuer: encode session %s: %w", session.ID, err)
 		}
 
-		err = replace(ctx, s.state, sessionKey(session.ID), raw, s.lifetime, version)
+		// The class's refresh window, as [Sessions.put] keeps a record.
+		err = replace(ctx, s.state, sessionKey(session.ID), raw, s.refreshOf(session), version)
 		switch {
 		case err == nil:
 			return session, true, nil
@@ -1188,13 +1323,14 @@ func (s *Sessions) refile(ctx context.Context, id, identity, from, to string) (b
 		}
 
 		// The horizon the last write gave it: put and writeRotated keep a
-		// record for one refresh lifetime from when they wrote it.
+		// record for one refresh window of its class from when they wrote
+		// it.
 		written := session.IssuedAt
 		if session.LastRefreshed.After(written) {
 			written = session.LastRefreshed
 		}
 
-		ttl := written.Add(s.lifetime).Sub(s.now())
+		ttl := written.Add(s.refreshOf(session)).Sub(s.now())
 		if ttl <= 0 {
 			return false, nil
 		}
@@ -1397,9 +1533,10 @@ func (s *Sessions) byIDVersion(ctx context.Context, id string) (Session, string,
 
 // put writes a record, refusing one that is already expired.
 //
-// It is kept in the store for s.lifetime from now -- the SAME horizon as
-// the token pointer ([sessionTokenKey]), not derived from ExpiresAt (the
-// index sets are kept longer: [Sessions.indexLifetime]). The two used to be the same duration always, because
+// It is kept in the store for its class's refresh window from now
+// ([Sessions.refreshOf]) -- the SAME horizon as the token pointer
+// ([sessionTokenKey]), not derived from ExpiresAt (the index sets are kept
+// longer: [Sessions.indexLifetime]). The two used to be the same duration always, because
 // ExpiresAt was always exactly now+s.lifetime; now that the absolute
 // session limit can cap ExpiresAt short of that, [Session.Live] is what
 // decides whether the record still answers, and this is a different
@@ -1412,7 +1549,7 @@ func (s *Sessions) put(ctx context.Context, session Session) error {
 		return fmt.Errorf("issuer: session %s has already expired", session.ID)
 	}
 
-	return setJSON(ctx, s.state, sessionKey(session.ID), session, s.lifetime)
+	return setJSON(ctx, s.state, sessionKey(session.ID), session, s.refreshOf(session))
 }
 
 // endedByAbsoluteLimit resolves a refresh token to the session it named
@@ -1424,11 +1561,14 @@ func (s *Sessions) put(ctx context.Context, session Session) error {
 // instead of the generic "not live" both would otherwise share.
 //
 // It answers true only when the record is still IN THE STORE (see [put])
-// and no longer live. Given how [put] keeps it -- for s.lifetime from the
-// write that set ExpiresAt, regardless of what ExpiresAt itself is -- a
-// record found here with ExpiresAt already passed can only be one whose
-// ExpiresAt was capped short of that horizon, which is exactly what the
-// absolute limit does and nothing else does.
+// and no longer live. Given how [put] keeps it -- for its class's refresh
+// window from the write that set ExpiresAt ([Sessions.refreshOf]),
+// regardless of what ExpiresAt itself is -- a record found here with
+// ExpiresAt already passed can only be one whose ExpiresAt was capped short
+// of that horizon, which is exactly what the absolute limit (an agent
+// chain's deadline) does and nothing else does. Every write of a record
+// (put, writeRotated, refile) keeps it for that window, so this stays true
+// for both classes.
 func (s *Sessions) endedByAbsoluteLimit(ctx context.Context, token string) (Session, bool, error) {
 	raw, found, err := s.state.Get(ctx, sessionTokenKey(token))
 	if err != nil || !found {
