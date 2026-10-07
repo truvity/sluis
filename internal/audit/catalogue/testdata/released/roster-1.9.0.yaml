@@ -128,7 +128,7 @@ actions:
       en: "{actor} signed out, ending {data_ended, plural, one {# session} other {# sessions}}"
 
   roster.session.revoked:
-    summary: A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window.
+    summary: A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, or (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser.
     operation: remove
     categories: [authentication, account_lifecycle]
     profiles: [security]
