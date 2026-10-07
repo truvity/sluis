@@ -255,6 +255,20 @@ func (r *reports) workspace(t *testing.T, key string) status.Workspace {
 	return w
 }
 
+// reported is the workspace's report once its own tick has published one. A
+// pass publishes each workspace in turn, so one workspace's report existing
+// says nothing about another's.
+func (r *reports) reported(key string) (status.Workspace, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	document, ok := r.documents[status.Key(key)]
+	if !ok {
+		return status.Workspace{}, false
+	}
+	w, err := status.Decode(document)
+	return w, err == nil
+}
+
 func (r *reports) channel(t *testing.T, ws, name string) status.Channel {
 	t.Helper()
 	channels := r.workspace(t, ws).Channels
@@ -1256,7 +1270,14 @@ func TestAChangedCredentialRunsAPassWithoutWaitingForTheInterval(t *testing.T) {
 		<-done
 	})
 
+	// The pass publishes acme's report and then globex's, so the count of
+	// publications can reach 1 before globex has one at all: wait for the
+	// report this reads, not for a proxy of it.
 	waitFor(t, "the first pass", func() bool { return r.reports.published() >= 1 })
+	waitFor(t, "globex's report before its install", func() bool {
+		_, ok := r.reports.reported("globex")
+		return ok
+	})
 	if got := r.reports.workspace(t, "globex").Tick.Outcome; got != status.OutcomeWaiting {
 		t.Fatalf("globex before its install = %q, want waiting", got)
 	}
@@ -1281,7 +1302,8 @@ func TestAChangedCredentialRunsAPassWithoutWaitingForTheInterval(t *testing.T) {
 	// pass that counted for acme may not have reached globex yet: wait for
 	// globex's own report to leave "waiting" instead of reading it at once.
 	waitFor(t, "globex's report after its install", func() bool {
-		return r.reports.workspace(t, "globex").Tick.Outcome != status.OutcomeWaiting
+		w, ok := r.reports.reported("globex")
+		return ok && w.Tick.Outcome != status.OutcomeWaiting
 	})
 }
 
