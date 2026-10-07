@@ -89,6 +89,39 @@ var Budgets = []Budget{
 			return counts
 		},
 	},
+	{
+		// One request to the console on this issuer's origin from a browser
+		// already signed in, in steady state. The console decides whether
+		// the browser's sign-in still stands with the issuer's own checks
+		// -- the absolute limit and the directory -- and then resolves the
+		// role; both ask about the same person, and they are answered by
+		// ONE resolution ([hub.OneAnswerPerRequest]).
+		//
+		// Measured 2026-10-07 on the memory adapter. Before the console
+		// applied the issuer's checks: 0 writes, 3 reads (the sign-in's
+		// cookie and record, the workspaces), 1 resolution, 1 snapshot
+		// read. After: 0 writes, 4 reads, 1 resolution, 1 snapshot read --
+		// the fourth read is the revision of the last-known groups (an
+		// eventually consistent read of no value), the same one every
+		// refresh pays, and the resolution is the one the authorizer
+		// already made. Without the one-answer memory it was 5 reads, 2
+		// resolutions and 2 snapshot reads.
+		Grant: "console request", MaxWrites: 0, MaxReads: 4, Resolutions: 1,
+		drive: func(t *testing.T, h *Harness) Counts {
+			if code := h.SignIn(); code == "" {
+				t.Fatal("the sign-in ended in no authorization code")
+			}
+			if first := h.Console(); first.Status != "signed-in" {
+				t.Fatalf("first console request: %+v, want signed in", first)
+			}
+			var who Whoami
+			counts := h.Measure(func() { who = h.Console() })
+			if who.Status != "signed-in" || who.Email != Person {
+				t.Fatalf("console request: %+v, want %s signed in", who, Person)
+			}
+			return counts
+		},
+	},
 }
 
 // Run measures every [Budget] and runs the guards over env, each on an

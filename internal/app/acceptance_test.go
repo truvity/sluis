@@ -294,7 +294,7 @@ func TestTheConsoleAdmitsWhoeverTheIssuerSignedIn(t *testing.T) {
 
 	// Now the issuer says who the browser is. A real one reads its own
 	// session cookie; what the console depends on is only the answer.
-	assembled.ConsoleServer().UseSignedIn(func(*http.Request) (access.Principal, bool) {
+	assembled.ConsoleServer().UseSignedIn(func(http.ResponseWriter, *http.Request) (access.Principal, bool) {
 		return access.Principal{Email: "ada@north.example", Source: access.SourceOIDC}, true
 	})
 
@@ -341,7 +341,7 @@ func TestTheCodeIsStrippedFromTheConsolesURL(t *testing.T) {
 	client, at, assembled := console(t, noDirectoryLogin)
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	assembled.ConsoleServer().UseSignedIn(func(*http.Request) (access.Principal, bool) {
+	assembled.ConsoleServer().UseSignedIn(func(http.ResponseWriter, *http.Request) (access.Principal, bool) {
 		return access.Principal{Email: "ada@north.example", Source: access.SourceOIDC}, true
 	})
 

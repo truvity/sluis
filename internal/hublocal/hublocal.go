@@ -43,7 +43,11 @@ var _ issuer.Directory = (*Directory)(nil)
 // New returns a directory over the hub. A zero maxAge leaves freshness
 // to the hub.
 func New(h Resolver, maxAge time.Duration) *Directory {
-	d := &Directory{hub: h}
+	// One answer per request where the request asks for one: the console
+	// identifies every request through both this and its authorizer, over
+	// the same person, and the second question costs nothing. Everywhere
+	// else it passes straight through.
+	d := &Directory{hub: hub.OneAnswerPerRequest(h)}
 	if maxAge > 0 {
 		d.maxAge = &maxAge
 	}
