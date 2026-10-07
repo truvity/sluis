@@ -151,3 +151,16 @@ func TestAPrefixIsAQueryOnlyWhenItNamesOneKind(t *testing.T) {
 		}
 	}
 }
+
+// The browser sign-in's pointer has a partition of its own, apart from the
+// record it names, so a table can tell the two apart.
+func TestTheSSOCookiePointerHasItsOwnAddress(t *testing.T) {
+	got, err := port.Locate("issuer:sso-cookie:x")
+	if err != nil || got.String() != "issuer-sso-cookie/x" {
+		t.Errorf("Locate(issuer:sso-cookie:x) = %v, %v; want issuer-sso-cookie/x", got, err)
+	}
+
+	if rec, err := port.Locate("issuer:sso:x"); err != nil || rec.Kind == got.Kind {
+		t.Errorf("the record and its pointer share a kind: %v, %v", rec, err)
+	}
+}
