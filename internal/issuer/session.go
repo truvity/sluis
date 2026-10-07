@@ -50,6 +50,14 @@ type Session struct {
 	Identity string `json:"identity"`
 	ClientID string `json:"client_id"`
 	How      How    `json:"how"`
+	// Method is how the person was proved at the sign-in this session was
+	// opened from: a provider's kind, or [RecoveryHow]. It decides how the
+	// subject is evaluated at every refresh -- a recovery sign-in by the
+	// policy's ServiceAccount matchers, anybody else by the directory --
+	// so that what a subject merely LOOKS like decides nothing. Empty for
+	// an exchange, and for a session recorded before the field existed,
+	// which is evaluated as a person.
+	Method string `json:"method,omitempty"`
 	// Scopes are what this session was granted at sign-in. A session
 	// recorded before this field existed has none, and a refresh on one
 	// of those is answered with the scopes it asks for or with none —
@@ -89,6 +97,26 @@ type Session struct {
 	// written last runs out (see [Sessions.indexed]). Zero for a session
 	// recorded before it existed, which is re-added at its next refresh.
 	IndexedUntil time.Time `json:"indexed_until,omitempty"`
+}
+
+// serviceAccount reports whether the session's subject was proved AS a
+// ServiceAccount, and so is evaluated by the policy's matchers rather
+// than asked of the directory: a recovery sign-in, by the method its
+// sign-in recorded, or an exchange, whose subject this issuer minted
+// itself from the verified proof (a cluster's ServiceAccount token reads
+// as one; a person's email or a GitHub job does not). A browser sign-in
+// through an identity provider is a person, whatever its subject looks
+// like.
+func (s Session) serviceAccount() bool {
+	switch {
+	case s.Method == RecoveryHow:
+		return true
+	case s.How == HowExchange:
+		_, ok := serviceAccountSubject(s.Identity)
+		return ok
+	default:
+		return false
+	}
 }
 
 // Live reports whether the session is still usable at now. An expired
@@ -424,6 +452,8 @@ type Opened struct {
 	// Resource is what the tokens are for, when the request named one.
 	Resource string
 	How      How
+	// Method is how the person was proved; see [Session.Method].
+	Method string
 	// Token is the refresh token; it is hashed into its key, never stored.
 	Token string
 	// Scopes are what was consented to.
@@ -452,6 +482,7 @@ func (s *Sessions) Record(ctx context.Context, o Opened) (Session, error) {
 		ClientID: o.ClientID,
 		Resource: o.Resource,
 		How:      o.How,
+		Method:   o.Method,
 		Scopes:   o.Scopes,
 		SSO:      o.SSO,
 		AuthTime: o.AuthTime,
