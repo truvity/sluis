@@ -827,6 +827,16 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingLive bool, audited func(ended int) *auditrecord.Record) {
 	id := signIn.ID
 
+	// Not cancelled with the request: once the sign-in has ended, a
+	// browser that goes away must not leave its sessions half revoked
+	// under a sign-in nothing can end any more. Bounded instead, as one
+	// background task is. The clients are told on the request's values
+	// without its cancellation, each post bounded by its own timeout, so
+	// that a slow relying party cannot use up the store's budget.
+	detached := context.WithoutCancel(ctx)
+	ctx, cancel := context.WithTimeout(detached, signInEndTimeout)
+	defer cancel()
+
 	// The clients that were signed in under this browser WITHOUT a
 	// refresh token -- `openid` alone -- which the session index knows
 	// nothing about. Read now, because ending the sign-in deletes the set
@@ -891,13 +901,6 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingL
 		ended, err = deps.Issuer.Sessions().Revoke(ctx, Query{Identity: signIn.Identity, SSO: id})
 	}
 
-	// After revoking, not before: a client told its session ended and
-	// then finding it alive is worse than one told a moment late. Best
-	// effort, because the sign-out has happened either way (OIDC
-	// Back-Channel Logout 1.0).
-	if deps.Announce != nil {
-		deps.Announce(ctx, announce)
-	}
 	switch {
 	case err != nil:
 		deps.log().WarnContext(ctx, "sign-out could not end what this browser opened",
@@ -909,7 +912,20 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingL
 	if err == nil && !sparingLive {
 		deps.Issuer.record(ctx, audited(ended))
 	}
+	// After revoking, not before: a client told its session ended and
+	// then finding it alive is worse than one told a moment late. Best
+	// effort, because the sign-out has happened either way (OIDC
+	// Back-Channel Logout 1.0).
+	// Last, after the audit record: the clients may take seconds each.
+	if deps.Announce != nil {
+		deps.Announce(detached, announce)
+	}
 }
+
+// signInEndTimeout bounds the store work of ending a sign-in -- the end
+// itself, the revocation or the move of its sessions, the audit record --
+// which is no longer cancelled with the request that asked for it.
+const signInEndTimeout = 30 * time.Second
 
 // log is the deps' logger, or the default one. SignOut is reached from
 // the provider middleware as well as from this handler, and that path
@@ -1171,6 +1187,13 @@ func (s *signIn) handOver(w http.ResponseWriter, r *http.Request, who Authentica
 // themselves: their sessions under it are revoked and the clients told,
 // because the browser no longer holds anything that could end them.
 func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
+	// Not cancelled with the request, and bounded, for the reason
+	// [endSignIn] gives: a browser that goes away between ending the old
+	// sign-in and moving its sessions must not strand them under it.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), signInEndTimeout)
+	defer cancel()
+	r = r.WithContext(ctx)
+
 	previous, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err != nil {
 		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be read",
