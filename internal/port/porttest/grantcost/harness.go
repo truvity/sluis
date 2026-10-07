@@ -85,7 +85,10 @@ type Harness struct {
 	set     *policy.Set
 	hub     Resolver
 	console http.Handler
-	cookies map[string]string
+	// accounts is the issuer's session service, which the console calls
+	// at this origin by the browser's cookie.
+	accounts *issuer.SessionsService
+	cookies  map[string]string
 	// skew is how far [Harness.Advance] has moved the clocks, which the
 	// issuer's session index reads as well as the State.
 	skew atomic.Int64

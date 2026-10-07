@@ -33,15 +33,19 @@ type SessionsService struct {
 	// record writes a revoke down: ending somebody's access is the event
 	// an audit exists to find.
 	record func(context.Context, *record.Record)
-	// sso is the browser-session store, for two things: authorizing a
-	// same-origin call from the account page by cookie, and ending the
-	// sign-in when a revoke means "everywhere".
+	// sso is the browser-session store, for ending the sign-in when a
+	// revoke means "everywhere". A call is authorized by cookie through
+	// signedIn, below.
 	sso *SSO
 	// secure is the flag the browser cookies were set with; it decides their name.
 	secure bool
-	// groups is what the policy puts an identity in. A bearer carries its
-	// own; a cookie says only who, so this answers the rest.
-	groups func(ctx context.Context, identity string) ([]string, error)
+	// signedIn is who a browser's sign-in cookie proves the caller is, and
+	// in which groups, when the sign-in still stands by the issuer's own
+	// decision ([Issuer.checkSignIn]): live, inside the absolute limit,
+	// and admitted by the directory. A cookie says only who, so the groups
+	// are what the policy makes of the directory's answer. Nil where there
+	// are no browser sessions to read.
+	signedIn func(ctx context.Context, cookie string) (caller, bool)
 	// verify turns the caller's own bearer into who they are. It is this
 	// issuer's token, verified against this issuer's key: the one caller
 	// whose identity it can establish without asking anyone.
@@ -57,21 +61,11 @@ func NewSessionsService(iss *Issuer, verifier *op.AccessTokenVerifier, secure bo
 		sessions: iss.Sessions(),
 		record:   iss.record,
 		sso:      iss.SSO(),
-		groups: func(ctx context.Context, identity string) ([]string, error) {
-			// The same evaluation a token gets, so a cookie and a bearer
-			// cannot come to mean different things. A ServiceAccount
-			// subject is a recovery sign-in: no directory to ask, and the
-			// policy's matchers decide it exactly as for a workload.
-			if account, ok := serviceAccountSubject(identity); ok {
-				return iss.Policy().Evaluate(policy.Input{ServiceAccount: &account}).Groups, nil
+		signedIn: func(ctx context.Context, cookie string) (caller, bool) {
+			if iss.SSO() == nil {
+				return caller{}, false
 			}
-
-			resolved, err := iss.resolver.Resolve(ctx, identity)
-			if err != nil {
-				return nil, err
-			}
-
-			return iss.Policy().Evaluate(resolved.Input(identity)).Groups, nil
+			return cookieCaller(iss, iss.checkSignIn(ctx, iss.SSO(), cookie, "", 0))
 		},
 		verify: func(ctx context.Context, bearer string) (string, []string, error) {
 			claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
@@ -132,10 +126,16 @@ func (c caller) may(identity string) bool {
 // JavaScript. The bearer is the cross-origin path, for a console that
 // weaves the operator's view into its own pages.
 func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, error) {
-	if cookie := cookieIn(header, access.CookieNameFor(SSOCookieName, s.secure)); cookie != "" && s.sso != nil {
-		session, live, err := s.sso.Resolve(ctx, cookie)
-		if err == nil && live {
-			return s.hold(ctx, session.Identity)
+	// A cookie whose sign-in does not stand -- past the absolute limit, a
+	// person the directory no longer admits -- proves nobody here, not
+	// even who they are: this service revokes sessions, and a sign-in the
+	// issuer would end at its next /authorize must not be used to do so
+	// in the meantime. It is refused, not ended (that is the issuer's
+	// pages' and the console's to do), and a bearer may still prove the
+	// caller.
+	if cookie := cookieIn(header, access.CookieNameFor(SSOCookieName, s.secure)); cookie != "" && s.signedIn != nil {
+		if held, ok := s.signedIn(ctx, cookie); ok {
+			return held, nil
 		}
 	}
 
@@ -157,19 +157,25 @@ func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, 
 	return withGroups(identity, groups), nil
 }
 
-// hold answers who a cookie's holder is. A browser session carries no
-// groups of its own -- it says who, and the policy says what -- so the
-// groups are evaluated the same way a token's would be.
-func (s *SessionsService) hold(ctx context.Context, identity string) (caller, error) {
-	groups, err := s.groups(ctx, identity)
-	if err != nil {
-		// Whoever they are, they are themselves: a directory that cannot
-		// be reached must not turn a person's own account page into an
-		// error, and it grants nothing extra either way.
-		return caller{identity: identity}, nil
+// cookieCaller is who a standing sign-in is, and in which groups: the
+// same evaluation a token gets, so a cookie and a bearer cannot come to
+// mean different things. A recovery sign-in -- by what the sign-in
+// recorded, not the shape of its subject -- has no directory answer, and
+// the policy's matchers decide it exactly as for a workload.
+func cookieCaller(iss *Issuer, standing signInStanding) (caller, bool) {
+	if standing.Verdict != signInStands {
+		return caller{}, false
+	}
+	identity := standing.Session.Identity
+	if standing.Session.recovered() {
+		account, ok := serviceAccountSubject(identity)
+		if !ok {
+			return caller{identity: identity}, true
+		}
+		return withGroups(identity, iss.Policy().Evaluate(policy.Input{ServiceAccount: &account}).Groups), true
 	}
 
-	return withGroups(identity, groups), nil
+	return withGroups(identity, iss.Policy().Evaluate(standing.Resolution.Input(identity)).Groups), true
 }
 
 // withGroups is the one place a group list becomes a decision.

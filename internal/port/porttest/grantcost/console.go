@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
+
+	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/server"
@@ -75,4 +78,24 @@ func (h *Harness) Console() Whoami {
 		h.t.Fatalf("console whoami: %d, %v", response.Code, err)
 	}
 	return out
+}
+
+// OwnSessions is one call to the issuer's session service by the browser's
+// cookie, as the console's account page makes it: the caller's own
+// sessions. What is measured is the cookie's check -- the same decision
+// the issuer's silent sign-in makes -- and the listing it guards.
+func (h *Harness) OwnSessions() (int, error) {
+	h.t.Helper()
+	if h.accounts == nil {
+		h.accounts = issuer.NewSessionsService(h.Issuer, nil, false)
+	}
+	request := connect.NewRequest(&accessissuerv1.ListSessionsRequest{Identity: Person})
+	for name, value := range h.cookies {
+		request.Header().Add("Cookie", (&http.Cookie{Name: name, Value: value}).String())
+	}
+	response, err := h.accounts.ListSessions(h.t.Context(), request)
+	if err != nil {
+		return 0, err
+	}
+	return len(response.Msg.GetSessions()), nil
 }

@@ -99,13 +99,21 @@ func newConsoleUnderTest(t *testing.T, cfg issuer.Config) *consoleUnderTest {
 	return c
 }
 
-// signIn begins a sign-in for identity, authenticated at authTime, and
-// returns its id and the secret the browser's cookie carries.
+// signIn begins a sign-in for identity through a provider, authenticated
+// at authTime, and returns its id and the secret the browser's cookie
+// carries.
 func (c *consoleUnderTest) signIn(t *testing.T, identity string, authTime time.Time) (id, secret string) {
+	t.Helper()
+	return c.signInBy(t, identity, "google", authTime)
+}
+
+// signInBy is [consoleUnderTest.signIn] made by how: a provider's kind, or
+// [issuer.RecoveryHow].
+func (c *consoleUnderTest) signInBy(t *testing.T, identity, how string, authTime time.Time) (id, secret string) {
 	t.Helper()
 	c.iss.SSO().SetClock(func() time.Time { return authTime })
 	defer c.iss.SSO().SetClock(time.Now)
-	session, secret, err := c.iss.SSO().Begin(t.Context(), identity, "google")
+	session, secret, err := c.iss.SSO().Begin(t.Context(), identity, how)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -275,7 +283,7 @@ func TestARecoverySignInOpensTheConsoleWithoutTheDirectory(t *testing.T) {
 	c := newConsoleUnderTest(t, issuer.Config{AbsoluteLifetime: time.Hour})
 	c.dir.set(issuer.Standing{}, errors.New("the directory did not answer"))
 	subject := "system:serviceaccount:sluis:recovery"
-	_, secret := c.signIn(t, subject, time.Now())
+	_, secret := c.signInBy(t, subject, issuer.RecoveryHow, time.Now())
 
 	who, ok, _ := c.ask(secret)
 	if !ok || who.Source != access.SourceRecovery || !strings.HasSuffix(who.Subject, ":recovery") {
@@ -285,8 +293,48 @@ func TestARecoverySignInOpensTheConsoleWithoutTheDirectory(t *testing.T) {
 		t.Errorf("the directory was asked %d times about a recovery sign-in", n)
 	}
 
-	_, old := c.signIn(t, subject, time.Now().Add(-2*time.Hour))
+	_, old := c.signInBy(t, subject, issuer.RecoveryHow, time.Now().Add(-2*time.Hour))
 	if _, ok, _ := c.ask(old); ok {
 		t.Error("a recovery sign-in past the absolute limit opened the console")
 	}
+}
+
+// Recovery is known by how the sign-in was made, not by what its subject
+// looks like. A sign-in through an identity provider whose subject happens
+// to read as a ServiceAccount is a person: the directory is asked, and it
+// is never the recovery account, which is the global operator.
+func TestAServiceAccountShapedSubjectIsNotRecovery(t *testing.T) {
+	t.Parallel()
+	subject := "system:serviceaccount:sluis:recovery"
+
+	t.Run("the directory refuses it", func(t *testing.T) {
+		t.Parallel()
+		c := newConsoleUnderTest(t, issuer.Config{})
+		c.dir.set(issuer.Standing{Found: false, Authoritative: true}, nil)
+		id, secret := c.signIn(t, subject, time.Now())
+
+		if who, ok, _ := c.ask(secret); ok {
+			t.Errorf("a provider's ServiceAccount-shaped subject opened the console as %+v", who)
+		}
+		if n := c.dir.asked(); n != 1 {
+			t.Errorf("the directory was asked %d times, want once", n)
+		}
+		if c.live(t, id) {
+			t.Error("the sign-in the directory refused is still live")
+		}
+	})
+
+	t.Run("the directory admits it", func(t *testing.T) {
+		t.Parallel()
+		c := newConsoleUnderTest(t, issuer.Config{})
+		_, secret := c.signIn(t, subject, time.Now())
+
+		who, ok, _ := c.ask(secret)
+		if !ok {
+			t.Fatal("an admitted sign-in was refused")
+		}
+		if who.Source == access.SourceRecovery || who.ServiceAccount != nil {
+			t.Errorf("a provider's sign-in read as recovery: %+v", who)
+		}
+	})
 }
