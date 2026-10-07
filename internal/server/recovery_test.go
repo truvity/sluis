@@ -126,7 +126,7 @@ func TestTheForwardedIdentityMustBeAnAddress(t *testing.T) {
 		if tc.value != "" {
 			request.Header.Set("X-Forwarded-Email", tc.value)
 		}
-		principal, ok := server.principal(request)
+		principal, ok := server.principal(httptest.NewRecorder(), request)
 		switch {
 		case tc.want == "" && ok:
 			t.Errorf("%q was taken as the identity %q", tc.value, principal.Email)

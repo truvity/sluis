@@ -368,7 +368,7 @@ type Deps struct {
 	// session, once this half exists. It is how the console on this
 	// origin learns who is signed in without a proxy in front of it and
 	// without a login of its own.
-	UseSignedIn func(func(*http.Request) (access.Principal, bool))
+	UseSignedIn func(func(http.ResponseWriter, *http.Request) (access.Principal, bool))
 	// Audit is the service's recorder, shared with the directory half so
 	// both write one history. Nil records to this process's log alone.
 	Audit audit.Recorder
@@ -652,7 +652,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
-	handler, err := issuer.HandlerWithSignIn(core, storage, issuer.SignInDeps{
+	signInDeps := issuer.SignInDeps{
 		Providers:     signIn,
 		Recovery:      openRecovery(ctx, cfg, stores, log),
 		State:         access.NewStateCodec(key.Derive("sluis/sign-in-state"), signInWindow),
@@ -674,7 +674,8 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		AfterSignOut: afterSignOut(deps),
 		Secure:       cfg.secureCookies,
 		Log:          log,
-	})
+	}
+	handler, err := issuer.HandlerWithSignIn(core, storage, signInDeps)
 	if err != nil {
 		return nil, err
 	}
@@ -694,7 +695,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		// The console is on this origin and in this process, so it reads
 		// the browser's issuer session directly rather than being told by
 		// a proxy that ran an OpenID flow against this very service.
-		deps.UseSignedIn(signedIn(core, cfg.secureCookies))
+		//
+		// The reader is built from the same sign-in dependencies as the
+		// issuer's handler: what it ends -- a sign-in past the absolute
+		// limit, a person the directory no longer admits -- it ends the
+		// way the issuer's own pages do.
+		deps.UseSignedIn(signedIn(issuer.SignedInReader(core, storage, signInDeps)))
 	}
 	if deps.UseWorkloads != nil {
 		// The SAME verifiers token exchange uses, and only the clusters and AWS accounts:

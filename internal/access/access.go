@@ -232,6 +232,11 @@ type heldGrant struct {
 
 // NewAuthorizer returns an authorizer over a policy and a directory.
 func NewAuthorizer(set *policy.Set, dir Directory, holdWindow time.Duration) *Authorizer {
+	// One answer per request where the request asks for one: see
+	// [hub.OneAnswerPerRequest].
+	if dir != nil {
+		dir = hub.OneAnswerPerRequest(dir)
+	}
 	return &Authorizer{
 		dir:        dir,
 		set:        set,

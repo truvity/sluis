@@ -946,65 +946,12 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		return false
 	}
 
-	session, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
-	if err != nil || !live {
+	session, ok := standingSignIn(s.deps, w, r, pending.Resource, pending.MaxAge)
+	if !ok {
 		return false
 	}
 
-	// The absolute session limit measures from auth_time and ends the
-	// SIGN-IN itself, not only the silence: a browser session past its
-	// limit must not go on answering /authorize at all, or a person who
-	// leaves a tab open would renew their sign-in indefinitely, one
-	// client at a time, without ever meeting the limit that exists to
-	// stop exactly that. Ending it here runs the SAME cascade an explicit
-	// sign-out does -- the per-client sessions this browser opened, and
-	// Back-Channel Logout to the clients that held them -- so a relying
-	// party finds out the way it would if the person had clicked sign
-	// out, and the browser falls through to an interactive sign-in below.
-	//
-	// The limit is the one THIS request's resource allows: a read-only
-	// resource may carry a longer absolute session than the installation's
-	// (ADR 0033), and a browser session older than the installation's
-	// limit may still complete for it, since the chain it opens is held to
-	// the resource's own end. A request for anything else is held to the
-	// installation's, as before.
-	if absolute := s.deps.Issuer.AbsoluteFor(pending.Resource); absolute > 0 && !time.Now().Before(session.AuthTime.Add(absolute)) {
-		// Sparing what is still live: past the installation's limit the
-		// only sessions this browser still holds are chains a resource
-		// extended, which are inside their own limit and are ended by
-		// sign-out, revocation or their own end -- never by an unrelated
-		// console's silent request finding the browser session old.
-		// A failure is logged there and leaves the cookie; the browser
-		// goes to an interactive sign-in either way, which ends the
-		// sign-in it held once it succeeds ([signIn.established]).
-		_ = signOut(s.deps, w, r, true)
-		return false
-	}
-
-	if !session.Fresh(time.Now(), pending.MaxAge) {
-		return false
-	}
-
-	// The browser proved who it is; the DIRECTORY still decides whether
-	// that account is live. Without this a suspended person would keep
-	// signing in silently for as long as their browser session lasted --
-	// the one failure single sign-on can introduce that the login path
-	// does not have, and the one an identity service least wants. A
-	// ServiceAccount subject (a recovery sign-in) has no directory to ask:
-	// the policy's matchers decide it at token time, exactly as they do
-	// for a workload.
-	if strings.Contains(session.Identity, "@") {
-		if _, err = s.deps.Issuer.resolver.Resolve(r.Context(), session.Identity); err != nil {
-			s.deps.Log.WarnContext(r.Context(), "browser session is no longer admitted",
-				"identity", logsafe.Value(session.Identity), "error", logsafe.Error(err))
-			_ = s.deps.SSO.End(r.Context(), session.ID)
-			http.SetCookie(w, s.deps.SSO.Cookie("", s.deps.Secure))
-
-			return false
-		}
-	}
-
-	if err = s.deps.Storage.Complete(r.Context(), request, Authenticated{
+	if err := s.deps.Storage.Complete(r.Context(), request, Authenticated{
 		Subject:  session.Identity,
 		AuthTime: session.AuthTime,
 		SSO:      session.ID,

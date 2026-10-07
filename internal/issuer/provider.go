@@ -165,24 +165,9 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	//
 	// The chooser renders with no provider buttons and says so, which is
 	// the honest page for an installation that signs nobody in yet.
-	signIn.Issuer = iss
+	signIn = signIn.over(iss, storage)
 	if signIn.Return == nil {
 		signIn.Return = op.AuthCallbackURL(provider)
-	}
-	if signIn.SSO == nil {
-		signIn.SSO = iss.SSO()
-	}
-	if completer, ok := storage.(Completer); ok && signIn.Storage == nil {
-		signIn.Storage = completer
-	}
-
-	// Wired here because this is the one place that holds BOTH halves:
-	// the storage owns the signing key a logout token needs, and the
-	// sign-in deps own the moment a sign-out happens.
-	if own, ok := storage.(*Storage); ok && signIn.Announce == nil {
-		signIn.Announce = func(ctx context.Context, ended []Session) {
-			own.announceLogout(ctx, signIn.log(), ended)
-		}
 	}
 
 	mux := http.NewServeMux()

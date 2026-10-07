@@ -1,9 +1,8 @@
 package issuerapp
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/internal/issuer"
 )
@@ -13,40 +12,28 @@ import (
 func TestTheConsoleIsNotSignedInByASignInID(t *testing.T) {
 	t.Parallel()
 
-	iss := issuer.New(issuer.Config{URL: "https://access.example"}, nil, nil, issuer.NewMemoryState())
-	signedIn := signedIn(iss, true)
-	if signedIn == nil {
-		t.Fatal("no signed-in reader for an issuer with a sign-in store")
-	}
-
-	session, secret, err := iss.SSO().Begin(t.Context(), "ada@north.example", "google")
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
+	c := newConsoleUnderTest(t, issuer.Config{})
+	id, secret := c.signIn(t, consolePerson, time.Now())
 
 	asking := func(value string) (string, bool) {
-		r := httptest.NewRequest(http.MethodGet, "/console/", nil)
-		r.AddCookie(iss.SSO().Cookie(value, true))
-		who, ok := signedIn(r)
-
+		who, ok, _ := c.ask(value)
 		return who.Subject, ok
 	}
 
-	if who, ok := asking(secret); !ok || who != "ada@north.example" {
+	if who, ok := asking(secret); !ok || who != consolePerson {
 		t.Errorf("the real cookie: %q, %v", who, ok)
 	}
 
-	if who, ok := asking(session.ID); ok {
+	if who, ok := asking(id); ok {
 		t.Errorf("the sign-in id signed %q in to the console", who)
 	}
 
 	// The cookie of a sign-in that has ended signs nobody in either.
-	if err = iss.SSO().End(t.Context(), session.ID); err != nil {
+	if err := c.iss.SSO().End(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 
 	if who, ok := asking(secret); ok {
 		t.Errorf("an ended sign-in's cookie signed %q in", who)
 	}
-
 }
