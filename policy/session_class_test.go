@@ -184,7 +184,8 @@ func TestTheRowsWarnedAboutAtStart(t *testing.T) {
 
 	declared, err := parseSessionPolicy(t, "clients:\n"+
 		"  agent-signed-out: { kind: public, redirects: ['http://127.0.0.1/cb'], signed_out: ['http://127.0.0.1/'], requires: [a], session: agent }\n"+
-		"  agent-backchannel: { kind: confidential, secret: s, redirects: ['https://a.example/cb'], backchannel_logout_uri: 'https://a.example/bc', requires: [a], session: agent }\n"+
+		"  agent-backchannel: { kind: confidential, secret: s, redirects: ['https://a.example/cb'],\n"+
+		"    backchannel_logout_uri: 'https://a.example/bc', requires: [a], session: agent }\n"+
 		"  agent-plain: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: agent }\n"+
 		"  browser: { kind: public, redirects: ['http://127.0.0.1/cb'], signed_out: ['http://127.0.0.1/'], requires: [a] }\n"+
 		"resources:\n"+
