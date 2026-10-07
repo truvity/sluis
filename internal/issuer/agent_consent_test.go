@@ -486,3 +486,37 @@ func tokenAnswer(t *testing.T, serverURL string, form url.Values) (int, map[stri
 
 	return response.StatusCode, body
 }
+
+// The sign-in's record carries the class of the chain it opens and the
+// computed deadline (audit catalogue 1.10.0, whose schema the recorder
+// validates every record against): agent and thirty days for the agent
+// client, interactive and the installation's limit for any other.
+func TestTheSignInRecordCarriesTheClassAndDeadline(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	b, _ := rig.signedInBrowser(t)
+
+	_, _, _, page := agentAuthorize(b, "")
+	if status, _, _, _ := accept(b, tokenOn(t, page)); status != http.StatusFound {
+		t.Fatalf("accept: %d", status)
+	}
+
+	byClass := map[string]string{}
+	for _, signedIn := range rig.trail.Find("roster.person.signed_in") {
+		class, _ := fieldOf(signedIn, "class").(string)
+		deadline, _ := fieldOf(signedIn, "deadline").(string)
+		byClass[class] = deadline
+	}
+
+	for class, lasts := range map[string]time.Duration{"agent": 30 * day, "interactive": issuer.DefaultAbsoluteLifetime} {
+		deadline, err := time.Parse(time.RFC3339, byClass[class])
+		if err != nil {
+			t.Errorf("no %s sign-in with a deadline: %v", class, byClass)
+			continue
+		}
+		if want := time.Now().Add(lasts); deadline.Before(want.Add(-time.Minute)) || deadline.After(want.Add(time.Minute)) {
+			t.Errorf("the %s sign-in's deadline is %s, want about %s", class, deadline, want)
+		}
+	}
+}
