@@ -139,7 +139,13 @@ func TestADamagedMarkOverTheFakeIsRefusedAndRevokesNothing(t *testing.T) {
 		}},
 		{"another session id", func(ms, sealed, _ string) string { return "spent:" + ms + ":" + sealed + ":s-other" }},
 		{"another time", func(ms, sealed, session string) string {
-			return "spent:" + ms[:len(ms)-1] + "9:" + sealed + ":" + session
+			// Always a different last digit: replacing a 9 with 9 would leave
+			// the mark as it was, and a genuine in-grace replay would pass.
+			d := "9"
+			if ms[len(ms)-1] == '9' {
+				d = "8"
+			}
+			return "spent:" + ms[:len(ms)-1] + d + ":" + sealed + ":" + session
 		}},
 		{"missing parts", func(string, string, string) string { return "spent:123" }},
 		{"no session", func(ms, sealed, _ string) string { return "spent:" + ms + ":" + sealed + ":" }},
