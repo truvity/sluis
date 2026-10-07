@@ -410,15 +410,20 @@ func (s *SessionsService) RevokeSessions(
 		// sign-in — the same hole the by-id path above guards, and the
 		// reason that one reads the record before acting on it.
 		//
-		// Absent and somebody else's are one answer, so an id cannot be
-		// probed for existence.
+		// A sign-in that is ABSENT still has its sessions revoked: one
+		// that already ended -- expired, or replaced by another sign-in
+		// in the same browser -- leaves sessions filed under its id, and
+		// this is the only way to end them as a browser's. The query is
+		// narrowed to the identity the caller was allowed above, so it
+		// reaches nobody else's sessions, and it answers what a listing
+		// of that identity would already show: no probe.
 		if s.sso != nil {
 			record, found, err := s.sso.Get(ctx, sso)
 			if err != nil {
 				return nil, connect.NewError(connect.CodeInternal, err)
 			}
 
-			if !found || !strings.EqualFold(record.Identity, identity) {
+			if found && !strings.EqualFold(record.Identity, identity) {
 				return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{}), nil
 			}
 		}
