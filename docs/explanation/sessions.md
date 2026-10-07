@@ -18,10 +18,18 @@ what the console and the `sso` field of a listed session show, and it authentica
 anyone be that person. Before this, the cookie *was* the id, so an id seen in a listing was a credential. A cookie set
 by an older version signs nobody in: after that upgrade every browser signs in once more. For one release, a sign-out
 from a browser still holding such a cookie ends that old sign-in and revokes its sessions, as before; that fallback is
-removed in the next release, and it never signs anyone in.
+removed in the next release, and it never signs anyone in. That sign-out is audited as `roster.session.revoked` with
+an anonymous actor, because an id proves nothing about who presented it. During a rolling upgrade, or after a rollback,
+an older replica still accepts a sign-in id as the cookie, so the protection holds once no older replica serves
+traffic.
 
 A new interactive sign-in (step-up, `prompt=login`, `max_age`, another account) ends the sign-in the browser held
-before, the sign-in only and not its per-client sessions. A sign-in that fails clears the cookie.
+before, once the new one is handed to the browser; a refused recovery leaves the earlier sign-in and its cookie in
+place. When the same person signs in again, only the previous sign-in record ends. When a different person signs in
+in the same browser, the previous person's sign-in ends and so do its per-client sessions, with back-channel logout;
+`roster.session.revoked` records it, by the new person, with the previous person as subject. A sign-in that fails
+clears the cookie. The console's "revoke one browser" also ends the sessions filed under a sign-in that has already
+ended.
 
 When the store cannot be read at sign-out, `/logout` and `/end_session` answer 503 and end nothing: an HTML "Sign-out
 did not complete" page with a retry link, or JSON `temporarily_unavailable`. The cookie is kept, so the person can

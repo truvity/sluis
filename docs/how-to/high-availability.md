@@ -24,6 +24,8 @@ Run `sluis serve` at two or more replicas so a node loss or a rollout does not s
 - **A rollout is the default `RollingUpdate`.** A pod that crashes at start never becomes Ready and the old pods keep
   serving ([check health](check-health.md#2-a-rollout-that-does-not-complete)). Prefer not to set `Recreate`: it deletes
   the old pod first.
+  The upgrade that made the SSO cookie a random secret needs care here: while an older replica still serves, or after a
+  rollback, it accepts a sign-in id as the cookie, so the protection holds only once no older replica serves traffic.
 - **`/keys` must reach verifiers with no caching header added in front of it.** A proxy or CDN that adds one brings back
   the stale-JWKS window the key ring's `activationDelay` exists to avoid.
 - **A client that changes its own metadata document** may be seen with old values by one replica and new by another for
