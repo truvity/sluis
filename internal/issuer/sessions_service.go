@@ -118,7 +118,16 @@ type caller struct {
 // whole authorization model here, and it is why "sign out everywhere"
 // needs no special case: it is this rule applied to yourself.
 func (c caller) may(identity string) bool {
-	return c.operator || strings.EqualFold(c.identity, identity)
+	return c.operator || sameIdentity(c.identity, identity)
+}
+
+// sameIdentity reports whether two identities are one, compared exactly
+// as the session index keys them ([sessionOfKey]: lower-cased): not by
+// Unicode case folding, under which "ſ" and "s" are one letter while the
+// index holds them apart, so that "your own" means the sessions filed
+// under your own key and nobody else's.
+func sameIdentity(a, b string) bool {
+	return strings.ToLower(strings.TrimSpace(a)) == strings.ToLower(strings.TrimSpace(b))
 }
 
 // who establishes the caller, from either of the two ways a browser or a
@@ -541,7 +550,7 @@ func (s *SessionsService) RevokeSessions(
 // class: a scope only ever ends less by being understood, and only for
 // the person asking.
 func ownScope(who caller, identity, clientID string, scope accessissuerv1.RevokeScope) (SessionClass, bool) {
-	if clientID != "" || !strings.EqualFold(strings.TrimSpace(who.identity), identity) {
+	if clientID != "" || !sameIdentity(who.identity, identity) {
 		return "", false
 	}
 
