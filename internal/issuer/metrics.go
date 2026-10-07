@@ -26,6 +26,7 @@ type issuerInstruments struct {
 	failures metric.Int64Counter
 	logins   metric.Int64Counter
 	reuse    metric.Int64Counter
+	ahead    metric.Int64Counter
 }
 
 var issuerMetrics = newIssuerInstruments()
@@ -42,8 +43,11 @@ func newIssuerInstruments() issuerInstruments {
 		metric.WithDescription("Sign-ins that completed, by how the person was proved: a directory's kind, `recovery` or `browser_session`."))
 	reuse, _ := meter.Int64Counter("access_issuer.reuse_detected",
 		metric.WithDescription("A credential presented that was already spent, by kind: an authorization code (its session is ended) "+
-			"or a refresh token outside the grace window (spent or unknown: the two are not told apart)."))
-	return issuerInstruments{tokens, failures, logins, reuse}
+			"or a refresh token outside the grace window (spent in a live session, which is then ended; or unknown)."))
+	ahead, _ := meter.Int64Counter("access_issuer.spent_mark_ahead",
+		metric.WithDescription("Spent refresh token marks read that are dated more than 2 s ahead of this replica's clock: "+
+			"the replicas' clocks disagree, which moves the 30-second grace window."))
+	return issuerInstruments{tokens, failures, logins, reuse, ahead}
 }
 
 // The reasons a sign-in fails: the whole set, so the label stays bounded and an
@@ -86,6 +90,9 @@ func recordLoginFailure(ctx context.Context, reason string) {
 func recordLoginSuccess(ctx context.Context, method string) {
 	issuerMetrics.logins.Add(ctx, 1, metric.WithAttributes(attribute.String("method", method)))
 }
+
+// recordMarkAhead counts one spent mark dated ahead of this replica's clock.
+func recordMarkAhead(ctx context.Context) { issuerMetrics.ahead.Add(ctx, 1) }
 
 // recordReuse counts one spent credential presented again.
 func recordReuse(ctx context.Context, kind string) {
