@@ -1663,9 +1663,10 @@ func warnBroadAWSMatchers(ctx context.Context, set *policy.Set, log *slog.Logger
 // exception that docs/decisions/0040-agent-class-sessions.md deprecates.
 func LengtheningResources(set *policy.Set, absolute time.Duration) []string {
 	var out []string
-	for _, row := range set.Resources() {
-		if row.LengthensAbsolute(absolute) {
-			out = append(out, row.ID)
+	rows := set.Resources()
+	for i := range rows {
+		if rows[i].LengthensAbsolute(absolute) {
+			out = append(out, rows[i].ID)
 		}
 	}
 	return out
