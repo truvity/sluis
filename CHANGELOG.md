@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The issuer's recovery sign-in is accepted only from the browser the form was served to.** `POST /login/recovery` checked the signed `state` field and nothing else, and a valid state is anybody's to fetch: load the sign-in page for a request of your own and read it off the form. So whoever held a valid recovery proof could post it from a page of theirs and sign a victim's browser in as the ServiceAccount (a login CSRF). The sign-in page that renders the recovery form now sets the login cookie (`__Host-access_roster_login`, `access_roster_login` without Secure cookies; HttpOnly, SameSite=Lax, 10 minutes) to the form's state, and the POST is refused with 400 ("this sign-in did not start in this browser") unless the browser presents that cookie with the same value, compared in constant time, exactly as the provider callback already did. A cross-site POST never carries a SameSite=Lax cookie. The cookie is cleared once a proof is accepted; a refused proof keeps it so the form can be submitted again. A person who opens the sign-in page in two tabs can recover only from the last one loaded, as with a provider round trip. A recovery form loaded before the upgrade is refused once; reload the page.
+
 ## v1.67.0
 
 ### Changed

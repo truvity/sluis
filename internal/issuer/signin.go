@@ -256,7 +256,7 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kinds := slices.Sorted(maps.Keys(s.providers))
-	recovery := s.recoveryForm(request)
+	recovery, recoveryState := s.recoveryForm(request)
 
 	// One provider and no recovery is the only case with a single way in,
 	// and skipping a page with one button on it is a kindness. With
@@ -286,6 +286,14 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		buttons.WriteString(`<p>No directory is configured to sign in with yet.</p>`)
 	}
 	buttons.WriteString(recovery)
+	if recoveryState != "" {
+		// The recovery form's state, pinned to this browser the way
+		// [signIn.start] pins a provider round trip's: the POST is
+		// accepted only from the browser that was served the form. A
+		// provider button followed from this page replaces it with its
+		// own, which is the one that browser is then in the middle of.
+		http.SetCookie(w, access.LoginCookie(recoveryState, s.deps.Secure, signInWindow))
+	}
 	s.page(w, "Sign in", buttons.String())
 }
 
@@ -468,19 +476,22 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 	http.Redirect(w, r, to.String(), http.StatusFound)
 }
 
-// recoveryForm renders the recovery block, or nothing when a deployment
-// has no recovery at all.
+// recoveryForm renders the recovery block and returns the state it
+// carries, or nothing when a deployment has no recovery at all.
 //
 // The pending authorization request travels in a signed state, exactly as
 // it does through a provider round trip: a POST carrying somebody else's
-// request id would otherwise finish their sign-in as this person.
-func (s *signIn) recoveryForm(request string) string {
+// request id would otherwise finish their sign-in as this person. And the
+// state is the login cookie's too, which the chooser sets: a signed state
+// alone is something anybody can fetch for themselves and post from
+// another site (see [signIn.recover]).
+func (s *signIn) recoveryForm(request string) (form, state string) {
 	if s.deps.Recovery == nil {
-		return ""
+		return "", ""
 	}
 	state, err := s.deps.State.Issue(request)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	prompt := s.deps.Recovery.Prompt()
 	command := ""
@@ -496,7 +507,7 @@ func (s *signIn) recoveryForm(request string) string {
 	</form>
 	<p class="warn">%s</p></details>`,
 		html.EscapeString(prompt.Intro), command, html.EscapeString(state),
-		html.EscapeString(prompt.Label), html.EscapeString(prompt.Caution))
+		html.EscapeString(prompt.Label), html.EscapeString(prompt.Caution)), state
 }
 
 // recover completes a sign-in with a ServiceAccount the cluster vouches
@@ -515,7 +526,21 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "that form could not be read", http.StatusBadRequest)
 		return
 	}
-	request, err := s.deps.State.Verify(r.PostFormValue("state"))
+	// The browser must be the one the form was served to, as a provider's
+	// callback must be the browser that started the round trip. A signed
+	// state is no proof of that: anybody can load the sign-in page for a
+	// request of their own and read the state off it. Without this, the
+	// holder of a valid proof could post it from a page of theirs and sign
+	// a VICTIM's browser in as the ServiceAccount -- a login CSRF, and the
+	// victim then works in a session somebody else chose and can watch.
+	// The cookie is SameSite=Lax, so a cross-site POST never carries it.
+	state := r.PostFormValue("state")
+	if !startedHere(r, state, s.deps.Secure) {
+		recordLoginFailure(r.Context(), LoginBadState)
+		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
+		return
+	}
+	request, err := s.deps.State.Verify(state)
 	if err != nil || request == "" {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in is not valid any more; start again", http.StatusBadRequest)
@@ -532,6 +557,10 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "that proof was not accepted", http.StatusForbidden)
 		return
 	}
+	// Spent once a proof is accepted, as the callback spends it: the
+	// form is not one to post twice. A refused proof leaves it, so the
+	// person can correct a paste without reloading the page.
+	http.SetCookie(w, access.LoginCookie("", s.deps.Secure, 0))
 
 	who, secret := s.established(w, r, subject, RecoveryHow)
 	if err = s.deps.Storage.Complete(r.Context(), request, who); err != nil {
@@ -561,6 +590,18 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 
+// startedHere reports whether the browser holds the login cookie bound to
+// state: whether this is the browser a sign-in step was handed to, rather
+// than one somebody else's page posted or redirected into it. Compared in
+// constant time, because the cookie is the half of the pair an attacker
+// does not have.
+func startedHere(r *http.Request, state string, secure bool) bool {
+	cookie, err := r.Cookie(access.CookieNameFor(access.LoginCookieName, secure))
+
+	return err == nil && cookie.Value != "" && state != "" &&
+		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) == 1
+}
+
 // callback finishes it: the provider says who, the hub says whether we
 // serve them, and the authorization request is completed with the address.
 func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
@@ -570,10 +611,8 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this issuer cannot sign in with that directory", http.StatusNotFound)
 		return
 	}
-	cookie, err := r.Cookie(access.CookieNameFor(access.LoginCookieName, s.deps.Secure))
 	state := r.URL.Query().Get("state")
-	if err != nil || cookie.Value == "" ||
-		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
+	if !startedHere(r, state, s.deps.Secure) {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
 		return

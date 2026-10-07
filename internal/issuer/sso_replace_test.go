@@ -294,6 +294,9 @@ func (r *recoveryRig) recover(cookie string) *httptest.ResponseRecorder {
 	form := url.Values{"state": {r.state}, "proof": {"a-good-token"}}
 	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// The browser the form was served to holds its state as the login
+	// cookie ([issuer.SignInRoutes]' chooser sets it).
+	request.AddCookie(&http.Cookie{Name: access.LoginCookieName, Value: r.state})
 
 	if cookie != "" {
 		request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
