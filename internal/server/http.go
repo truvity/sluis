@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -480,8 +481,11 @@ func (s *ConsoleServer) loginPage(w http.ResponseWriter, r *http.Request) {
 	// path for the day the one above is broken, and a field sitting in
 	// the open invites a password manager to fill it and everyone else to
 	// treat it as the normal way in.
-	recovery := ""
+	recovery, recoveryState := "", ""
 	if recoveryEnabled(s.recovery) {
+		recoveryState = s.recoveryState()
+	}
+	if recoveryState != "" {
 		prompt := s.recovery.Prompt()
 		command := ""
 		if prompt.Command != "" {
@@ -500,12 +504,19 @@ func (s *ConsoleServer) loginPage(w http.ResponseWriter, r *http.Request) {
 		recovery = fmt.Sprintf(`<details><summary class="note">Recovery sign-in</summary>
 		<p class="note">For the day the directory is what is broken. %s</p>
 		%s<form method="post" action="%s/login/recovery">
+			<input type="hidden" name="state" value="%s">
 			<p><label>%s<br><input type="password" name="proof" autocomplete="off"></label></p>
 			<p><button type="submit">Recover access</button></p>
 		</form>
 		<p class="warn">%s</p></details>`,
-			html.EscapeString(prompt.Intro), command, s.mount,
+			html.EscapeString(prompt.Intro), command, s.mount, html.EscapeString(recoveryState),
 			html.EscapeString(prompt.Label), html.EscapeString(prompt.Caution))
+		// The form's state, pinned to this browser as the login cookie,
+		// the way signInStart pins a provider round trip's: the form's
+		// POST is accepted only from the browser it was served to (see
+		// [ConsoleServer.recoveryLogin]). A provider button followed from
+		// this page replaces it with its own.
+		http.SetCookie(w, access.LoginCookie(recoveryState, s.sessions.Secure(), signInWindow))
 	}
 	// With no way in of its own, this page is otherwise a card with a
 	// heading and nothing under it — which is what somebody who has just
@@ -611,13 +622,12 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this installation cannot sign in with that provider", http.StatusNotFound)
 		return
 	}
-	cookie, err := r.Cookie(access.CookieNameFor(access.LoginCookieName, s.sessions.Secure()))
 	state := r.URL.Query().Get("state")
-	if err != nil || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
+	if !access.LoginStartedHere(r, state, s.sessions.Secure()) {
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
 		return
 	}
-	if _, err = s.state.Verify(state); err != nil {
+	if _, err := s.state.Verify(state); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -727,12 +737,12 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 			"so nothing needs rotating.", http.StatusForbidden)
 		return
 	}
-	proof := r.FormValue("proof")
-	if proof == "" {
-		proof = jsonField(r, "proof")
-	}
-	if proof == "" {
-		proof = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	proof, fromForm := recoveryProof(r)
+	if fromForm && !s.servedHere(r) {
+		// Not recorded: nothing about the proof was checked, and a
+		// forged post is anybody's to send in a loop.
+		http.Error(w, "this sign-in did not start in this browser; open the sign-in page again", http.StatusBadRequest)
+		return
 	}
 
 	subject, err := s.recovery.Verify(r.Context(), strings.TrimSpace(proof))
@@ -786,8 +796,69 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if fromForm {
+		// Spent, as the provider callback spends its own.
+		http.SetCookie(w, access.LoginCookie("", s.sessions.Secure(), 0))
+	}
 	s.log.WarnContext(r.Context(), "recovery sign-in", "subject", logsafe.Value(subject), "kind", s.recovery.Kind())
 	redirectOrOK(w, r, s.at("/"))
+}
+
+// recoveryStateBinding is what the recovery form's state is bound to, so
+// that a provider round trip's state is not one a recovery post accepts.
+const recoveryStateBinding = "recovery"
+
+// recoveryState is a fresh state for the recovery form, or "" when this
+// console has nothing to sign one with -- then the form is not offered,
+// since its post could only be refused, and the bearer stays the way in.
+func (s *ConsoleServer) recoveryState() string {
+	if s.state == nil || s.sessions == nil {
+		return ""
+	}
+	state, err := s.state.Issue(recoveryStateBinding)
+	if err != nil {
+		return ""
+	}
+	return state
+}
+
+// servedHere reports whether a recovery form post comes from the browser
+// the form was served to: its state is this console's, bound to recovery,
+// and equal to the login cookie the sign-in page set beside it.
+func (s *ConsoleServer) servedHere(r *http.Request) bool {
+	if s.state == nil || s.sessions == nil {
+		return false
+	}
+	state := r.PostFormValue("state")
+	if !access.LoginStartedHere(r, state, s.sessions.Secure()) {
+		return false
+	}
+	bound, err := s.state.Verify(state)
+	return err == nil && bound == recoveryStateBinding
+}
+
+// recoveryProof reads the proof of a recovery post and reports whether it
+// came in a FORM, which is the one channel another site can make a
+// browser send: a cross-site page can post a form (urlencoded, multipart
+// or text/plain) without asking, but cannot set an Authorization header
+// or a JSON content type without a CORS preflight, which this console
+// never answers. So a form post must prove it came from the browser the
+// sign-in page was served to ([ConsoleServer.servedHere]), and the two
+// programmatic channels -- a bearer for a one-line curl, a JSON body --
+// need nothing more than the proof.
+//
+// A JSON body is read only under a JSON content type: read regardless, a
+// cross-site text/plain post carrying JSON would be a form by another
+// name. A request with no bearer and no JSON is a form, whatever it holds,
+// and the proof is read from the body alone, never the query string.
+func recoveryProof(r *http.Request) (proof string, fromForm bool) {
+	if bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && strings.TrimSpace(bearer) != "" {
+		return bearer, false
+	}
+	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && media == "application/json" {
+		return jsonField(r, "proof"), false
+	}
+	return r.PostFormValue("proof"), true
 }
 
 // reasonUnaudited is the reason a refused recovery sign-in is recorded

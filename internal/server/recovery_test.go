@@ -230,9 +230,15 @@ func TestTheSignInPageShowsTheRealCommand(t *testing.T) {
 	t.Parallel()
 
 	page := func(recovery Recovery) string {
+		sessions, err := access.NewSessions(make([]byte, access.SessionKeyBytes), time.Hour, true)
+		if err != nil {
+			t.Fatal(err)
+		}
 		server := &ConsoleServer{
 			signIn:     true,
 			recovery:   recovery,
+			sessions:   sessions,
+			state:      access.NewStateCodec(make([]byte, 32), time.Minute),
 			connectors: map[string]Connector{"google": stubSignIn{}},
 			log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		}
