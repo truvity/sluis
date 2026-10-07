@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -114,4 +115,9 @@ func (s *SessionsService) WithAnnounceForTest(f func(context.Context, []Session)
 	s.announce = f
 
 	return s
+}
+
+// AnnounceLogoutForTest delivers logout tokens as sign-out does.
+func (s *Storage) AnnounceLogoutForTest(ctx context.Context, ended []Session) {
+	s.announceLogout(ctx, slog.New(slog.DiscardHandler), ended)
 }
