@@ -29,6 +29,12 @@ import (
 type State interface {
 	// Get returns the value, or false when there is none. An expired
 	// value is absent, not an error.
+	//
+	// It reads consistently: a write the caller was acknowledged for is
+	// seen (DynamoDB's ConsistentRead, Valkey's primary). The refresh
+	// path's negative cache remembers an absence it read here for five
+	// minutes ([deadRefreshes]), so a read-replica or eventually consistent
+	// option must never serve these reads.
 	Get(ctx context.Context, key string) ([]byte, bool, error)
 	// Set stores it for ttl.
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
