@@ -321,8 +321,10 @@ type functionPolicyIn struct {
 	signingKeyArns     []string
 	wrappedKeyArn      string
 	webIdentityAud     string
-	parameterKeyArn    string
-	instance           string
+	// webIdentityExtra are audiences after webIdentityAud; used only with it.
+	webIdentityExtra []string
+	parameterKeyArn  string
+	instance         string
 	// exports is whether the function runs the exports: only then does it read
 	// what it wrote under export/ (a copy that is already there writes nothing).
 	exports            bool
@@ -406,7 +408,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Effect":   "Allow",
 		"Action":   lambdaInvokeFunction,
 		"Resource": in.invokeFunctionArns,
-	}, webIdentityStatement(in.webIdentityAud))
+	}, webIdentityStatement(in.webIdentityAud, in.webIdentityExtra))
 	return document(st)
 }
 
@@ -416,7 +418,8 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 // an audience the request must carry it and no other: the key is multi-valued
 // (the API takes a list), so it is ForAllValues:StringEquals, which also passes
 // an empty set and is safe only because the audience is a required parameter.
-func webIdentityStatement(audience string) statement {
+// The extra audiences follow the first and are listed only beside it.
+func webIdentityStatement(audience string, extra []string) statement {
 	st := statement{
 		"Sid":      sidWebID,
 		"Effect":   "Allow",
@@ -425,7 +428,7 @@ func webIdentityStatement(audience string) statement {
 	}
 	if audience != "" {
 		st["Condition"] = map[string]any{
-			"ForAllValues:StringEquals": map[string]any{"sts:IdentityTokenAudience": []string{audience}},
+			"ForAllValues:StringEquals": map[string]any{"sts:IdentityTokenAudience": append([]string{audience}, extra...)},
 		}
 	}
 	return st
