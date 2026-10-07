@@ -22,6 +22,10 @@ Each of these is a refusal that has been mistaken for something else.
   audience, or belongs to an account that may not recover. Mint another with both `--audience` and `--duration`.
 - **Outside a cluster, `429 too many attempts`**: ten wrong passwords stop the password answering for a minute, the
   correct one included, so the limit is no hint about which guess was close. Wait, then try once.
+- **`400 this sign-in did not start in this browser`**: the recovery form must be posted from the browser that loaded
+  the sign-in page, which sets a login cookie bound to the form's state. A form loaded before an upgrade, or in an older
+  tab, is refused once; reload `/login` and paste again. With two sign-in tabs open, only the last one loaded can
+  recover.
 - **Recovery disabled** (`config.recovery.enabled: false`): there is no password to recover, only RBAC to hold. Step 1
   turns it back on.
 - **Behind a gateway that fronts the console with its own cookie**, sign-out has to run the whole chain (the proxy's
