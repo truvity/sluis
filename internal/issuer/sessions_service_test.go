@@ -304,7 +304,7 @@ func TestSigningABrowserOutEndsTheSignInToo(t *testing.T) {
 	sso := issuer.NewSSO(state, time.Hour)
 	svc := issuer.NewSessionsServiceWithSSOForTest(sessions, sso, verifier())
 
-	browser, err := sso.Begin(ctx, "ada@north.example", "google")
+	browser, _, err := sso.Begin(ctx, "ada@north.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestASignInIdIsNotEnoughOnItsOwn(t *testing.T) {
 	sso := issuer.NewSSO(state, time.Hour)
 	svc := issuer.NewSessionsServiceWithSSOForTest(sessions, sso, verifier())
 
-	hers, err := sso.Begin(ctx, "eli@south.example", "google")
+	hers, _, err := sso.Begin(ctx, "eli@south.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestTheListingIncludesTheSignInsBehindTheSessions(t *testing.T) {
 	sso := issuer.NewSSO(state, time.Hour)
 	svc := issuer.NewSessionsServiceWithSSOForTest(sessions, sso, verifier())
 
-	browser, err := sso.Begin(ctx, "ada@north.example", "google")
+	browser, _, err := sso.Begin(ctx, "ada@north.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}

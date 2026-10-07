@@ -304,7 +304,7 @@ func TestSilentAuthorizeUsesTheRequestsResourcesLimit(t *testing.T) {
 	iss.SSO().SetClock(func() time.Time { return past })
 	b.signIn()
 	iss.SSO().SetClock(time.Now)
-	ssoID := b.cookies[issuer.SSOCookieName]
+	ssoID := b.signInID(iss.SSO())
 	if ssoID == "" {
 		t.Fatal("signing in left no browser session cookie")
 	}

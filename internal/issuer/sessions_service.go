@@ -132,8 +132,8 @@ func (c caller) may(identity string) bool {
 // JavaScript. The bearer is the cross-origin path, for a console that
 // weaves the operator's view into its own pages.
 func (s *SessionsService) who(ctx context.Context, header http.Header) (caller, error) {
-	if id := cookieIn(header, access.CookieNameFor(SSOCookieName, s.secure)); id != "" && s.sso != nil {
-		session, live, err := s.sso.Get(ctx, id)
+	if cookie := cookieIn(header, access.CookieNameFor(SSOCookieName, s.secure)); cookie != "" && s.sso != nil {
+		session, live, err := s.sso.Resolve(ctx, cookie)
 		if err == nil && live {
 			return s.hold(ctx, session.Identity)
 		}

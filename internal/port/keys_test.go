@@ -57,6 +57,7 @@ var stateRows = []struct{ key, kind, id string }{
 	{"issuer:token:5b0f1f0e", "issuer-token", "5b0f1f0e"},
 	{"issuer:sso:s1", "issuer-sso", "s1"},
 	{"issuer:sso-of:ada@acme.example", "issuer-sso-of", "ada@acme.example"},
+	{"issuer:sso-cookie:h1", "issuer-sso-cookie", "h1"},
 	{"issuer:session:s1", "issuer-session", "s1"},
 	{"issuer:session-token:h1", "issuer-session-token", "h1"},
 	{"issuer:session-rotated:h1", "issuer-session-rotated", "h1"},
