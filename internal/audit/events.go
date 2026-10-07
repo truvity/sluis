@@ -151,6 +151,18 @@ func SessionRevoked(actor Actor, person, client, scope string, ended int) *recor
 		personParty(person), targets, data{"scope": scope, "ended": ended})
 }
 
+// ScopeRefreshTokenReuse is the scope of a [SessionRevoked] record the
+// issuer writes when it ends a session because one of its spent refresh
+// tokens was presented after the grace window.
+const ScopeRefreshTokenReuse = "refresh_token_reuse"
+
+// SessionReuseRevoked is the issuer ending one of a person's sessions at a
+// client because a refresh token already spent in it was presented again
+// (RFC 9700 section 4.14.2).
+func SessionReuseRevoked(person, client string) *record.Record {
+	return SessionRevoked(System(), person, client, ScopeRefreshTokenReuse, 1)
+}
+
 // SessionRefreshRefused is a session refused a refresh.
 func SessionRefreshRefused(person, client, reason string) *record.Record {
 	return build("roster.session.refresh_refused", System(), Denied(reason),

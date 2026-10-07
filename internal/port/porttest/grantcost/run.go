@@ -138,7 +138,7 @@ var guards = []struct {
 	run  func(t *testing.T, h *Harness)
 }{
 	{"replay-in-grace-gets-the-same-successor", replayInGrace},
-	{"reuse-after-grace-is-refused", reuseAfterGrace},
+	{"reuse-after-grace-ends-the-session", reuseAfterGrace},
 	{"revocation-ends-the-chain", revocation},
 	{"operator-revoke-ends-the-chain", operatorRevoke},
 	{"stale-snapshot-is-not-authoritative", staleSnapshot},
@@ -160,11 +160,11 @@ func replayInGrace(t *testing.T, h *Harness) {
 	}
 }
 
-// Past the grace window a spent refresh token is refused: rotation is how a
-// stolen token is detected. Today's issuer refuses the spent token and does
-// NOT end the chain -- the successor keeps working -- so that is what is
-// pinned: ending the chain on reuse would be a behaviour change of its own,
-// to be made on purpose and not as a side effect of making a grant cheaper.
+// Past the grace window a spent refresh token is refused AND ends the
+// session it was spent in (RFC 9700 section 4.14.2): two parties presenting
+// one token is how a stolen token shows itself, and which of them is the
+// thief cannot be told, so the successor stops working too and the session
+// is gone from every listing.
 func reuseAfterGrace(t *testing.T, h *Harness) {
 	first := h.Grant()
 	rotated := h.Refresh(first.Refresh)
@@ -179,10 +179,10 @@ func reuseAfterGrace(t *testing.T, h *Harness) {
 	if reused.Error != "invalid_grant" {
 		t.Errorf("reuse answered %q, want invalid_grant", reused.Error)
 	}
-	if next := h.Refresh(rotated.Refresh); next.Status != http.StatusOK {
-		t.Errorf("the successor stopped working after a reuse of its predecessor: %d %q "+
-			"(the chain was ended; that is a behaviour change)", next.Status, next.Error)
+	if next := h.Refresh(rotated.Refresh); next.Status == http.StatusOK {
+		t.Error("the successor still refreshes after a reuse of its predecessor; the session was not ended")
 	}
+	assertSessions(t, h, 0)
 }
 
 // RFC 7009 revocation of the live refresh token ends the session: the token
