@@ -126,7 +126,10 @@ func TestRotationOverTheFakeSpendsTheOldPointer(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(rec.Value), "spent:") || !strings.HasSuffix(string(rec.Value), ":"+opened.ID) {
 		t.Fatalf("the old pointer = %q, %v; want the mark of a token spent in %s", rec.Value, err, opened.ID)
 	}
-	if strings.Contains(string(rec.Value), "t1") {
+	// A field of its own, not a substring: the sealed field is random
+	// base64url, and "t1" turns up in it by chance about once a hundred
+	// runs.
+	if slices.Contains(strings.Split(string(rec.Value), ":"), "t1") {
 		t.Errorf("the mark %q holds the successor in plain", rec.Value)
 	}
 
