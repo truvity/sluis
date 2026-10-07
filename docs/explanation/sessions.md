@@ -51,8 +51,9 @@ Sign-out ends the sign-in AND every session opened under it, through whichever d
 person follows, and `end_session`, which a proxy chains to. Ending the sign-in alone would stop only the next silent
 `/authorize`: a console already open would keep refreshing and serving pages after a sign-out that reported success,
 so the refresh tokens are revoked too. The order matters: the sign-in ends first, then its sessions are listed and
-revoked, their clients told and the audit record written, so nothing can be opened under a sign-in whose end has
-begun.
+revoked, the audit record is written, and the clients are told last, so nothing can be opened under a sign-in whose end
+has begun. The work is not cancelled when the browser disconnects (it is bounded at 30 seconds), so a closed tab does
+not leave sessions unrevoked, and each back-channel logout is limited to 5 seconds per client.
 
 What a sign-out reaches is scoped by what the request can PROVE, which is the cookie it carries. An `id_token_hint` is
 a hint in the specification rather than a credential (the library accepts an expired one by design), so it chooses
@@ -65,7 +66,9 @@ before the sign-out listed its sessions, and the sign-out revokes it. Either way
 sign-out could reach. The client starts again, and the browser signs in again or completes silently under the new
 sign-in. For a client that asked for `openid` alone, the client is recorded among the sign-in's clients before the
 sign-in is read, so the code is refused or the client is told at sign-out. What remains is a sign-out whose two adjacent
-store calls (reading the clients, ending the sign-in) straddle both.
+store calls (reading the clients, ending the sign-in) straddle both. A code that opens no session (an `openid`-only
+client, or a request whose every scope the client may not ask for) is held to its sign-in the same way, before any
+token is minted.
 
 To tell the relying party that its session ended, see [back-channel logout](back-channel-logout.md).
 
