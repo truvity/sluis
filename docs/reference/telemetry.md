@@ -96,6 +96,7 @@ Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and th
 | `access_issuer.login.failures` | counter | `reason` | Sign-ins that did not complete. |
 | `access_issuer.login.successes` | counter | `method` | Sign-ins that completed: a directory's kind, `recovery` or `browser_session`. |
 | `access_issuer.reuse_detected` | counter | `kind` | A spent credential presented again: `authorization_code` or `refresh_token`. |
+| `access_issuer.dead_refresh_token_hits` | counter | none | A refresh token refused from the issuer's in-process negative cache: one already refused as naming no live session, presented again within 5 minutes and refused with no State read. A steady rate is a client looping on an ended chain; the WARN `refused a refresh token that names no live session` names it once per 5 minutes, with the client id and an 8-hex `token_fingerprint`. |
 | `access_issuer.spent_mark_ahead` | counter | none | A spent refresh token mark read that is dated more than 2 s ahead of the replica's clock. The replicas' clocks disagree, which moves the 30-second grace window. The issuer logs a WARN and keeps the grace. |
 | `access_issuer.signing_keys_published` | gauge | `algorithm` | Keys in the JWKS, per algorithm. Healthy is at least one. |
 | `access_issuer.signing_key.active_since_timestamp` | gauge, `s` | `algorithm` | When the active key became active (Unix seconds). |
@@ -123,6 +124,9 @@ session or unknown. A spent one ends that session, but only once the library has
 authenticated the client and matched it to the session's; the count does not say
 which of the two it was, and a forged or unsealable mark counts as unknown.
 A burst of either is a client bug or a stolen credential; one is noise.
+A refresh token refused from the negative cache is still counted here, so the
+rate does not drop when the cache answers; `dead_refresh_token_hits` says how
+much of it cost no State read.
 
 ### Generated client secrets
 
