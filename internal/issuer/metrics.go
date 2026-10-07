@@ -27,6 +27,7 @@ type issuerInstruments struct {
 	logins   metric.Int64Counter
 	reuse    metric.Int64Counter
 	ahead    metric.Int64Counter
+	dead     metric.Int64Counter
 }
 
 var issuerMetrics = newIssuerInstruments()
@@ -47,7 +48,10 @@ func newIssuerInstruments() issuerInstruments {
 	ahead, _ := meter.Int64Counter("access_issuer.spent_mark_ahead",
 		metric.WithDescription("Spent refresh token marks read that are dated more than 2 s ahead of this replica's clock: "+
 			"the replicas' clocks disagree, which moves the 30-second grace window."))
-	return issuerInstruments{tokens, failures, logins, reuse, ahead}
+	dead, _ := meter.Int64Counter("access_issuer.dead_refresh_token_hits",
+		metric.WithDescription("Refresh tokens refused from the issuer's in-process negative cache: a token already refused "+
+			"as naming no live session, presented again within 5 minutes, and refused with no State read."))
+	return issuerInstruments{tokens, failures, logins, reuse, ahead, dead}
 }
 
 // The reasons a sign-in fails: the whole set, so the label stays bounded and an
@@ -93,6 +97,10 @@ func recordLoginSuccess(ctx context.Context, method string) {
 
 // recordMarkAhead counts one spent mark dated ahead of this replica's clock.
 func recordMarkAhead(ctx context.Context) { issuerMetrics.ahead.Add(ctx, 1) }
+
+// recordDeadRefreshHit counts one refresh token refused from the negative
+// cache ([deadRefreshes]).
+func recordDeadRefreshHit(ctx context.Context) { issuerMetrics.dead.Add(ctx, 1) }
 
 // recordReuse counts one spent credential presented again.
 func recordReuse(ctx context.Context, kind string) {

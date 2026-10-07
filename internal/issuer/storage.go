@@ -2,6 +2,7 @@ package issuer
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -230,6 +231,11 @@ type Storage struct {
 	// scopingReport rate-limits the groups-scoping report line; see
 	// [Storage.reportGroupsScoping].
 	scopingReport *groupsScopingReporter
+
+	// dead refuses a refresh token already refused as naming no live
+	// session, with no State read ([deadRefreshes]). Per-process, like
+	// documents: a replica that has not seen the token pays its reads once.
+	dead *deadRefreshes
 }
 
 // The authentication context classes this issuer can report. Custom
@@ -389,6 +395,10 @@ func NewStorage(
 		documents:     newDocumentClients(iss.Policy().ClientDocuments()),
 		scopingReport: newGroupsScopingReporter(),
 		now:           time.Now,
+		// The session index's clock, so that time a test moves for the
+		// sessions moves for the cache's TTL too.
+		dead: newDeadRefreshes(fingerprintKey(key.seed), deadRefreshEntries, deadRefreshTTL,
+			func() time.Time { return iss.Sessions().now() }),
 	}, nil
 }
 
@@ -1714,6 +1724,17 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 
 // TokenRequestByRefreshToken implements [op.AuthStorage].
 func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken string) (op.RefreshTokenRequest, error) {
+	// A token already refused as dead is refused again before anything is
+	// read: a host looping on an ended chain costs no State call
+	// ([deadRefreshes]).
+	sum := s.dead.sum(refreshToken)
+	if s.dead.refused(sum) {
+		recordDeadRefreshHit(ctx)
+		recordReuse(ctx, "refresh_token")
+
+		return nil, op.ErrInvalidRefreshToken
+	}
+
 	// Resolved as a refresh resolves it, not with ByToken: this is the
 	// library's FIRST reading of the token on a refresh, so a replay
 	// inside the grace window has to resolve here or it is refused before
@@ -1741,8 +1762,12 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		// refresh refused for a client the identity no longer belongs to
 		// is, below. See [Sessions.endedByAbsoluteLimit] for why the two
 		// are tellable apart at all.
-		if ended, hit, endErr := s.iss.Sessions().endedByAbsoluteLimit(ctx, refreshToken); endErr == nil && hit {
-			return nil, s.refuseAtAbsoluteLimit(ctx, ended)
+		//
+		// A dead token has no record to find there, so it is not asked.
+		if !presented.dead {
+			if ended, hit, endErr := s.iss.Sessions().endedByAbsoluteLimit(ctx, refreshToken); endErr == nil && hit {
+				return nil, s.refuseAtAbsoluteLimit(ctx, ended)
+			}
 		}
 
 		// A token that is neither live nor spent in a session that is still
@@ -1750,6 +1775,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		// (whose mark lasted the grace window alone), or spent in a session
 		// that has since ended. Counted with the reuses, as it always was.
 		recordReuse(ctx, "refresh_token")
+		s.refuseDead(ctx, sum, presented.dead)
 
 		return nil, op.ErrInvalidRefreshToken
 	}
@@ -1788,6 +1814,24 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	}
 
 	return &refreshRequest{session: session, presented: presented}, nil
+}
+
+// refuseDead says, once, that a refresh token naming no live session was
+// refused: the client the request named and a fingerprint of the token,
+// never the token. A dead token is remembered ([deadRefreshes]) and its
+// repeats refused in silence, counted, for the cache's TTL; the WARN is
+// written when the entry is made. A refusal that is not dead (a mark in
+// its tolerance band, a successor that is no longer live) is not
+// remembered, and says so each time.
+func (s *Storage) refuseDead(ctx context.Context, sum [sha256.Size]byte, dead bool) {
+	if dead && !s.dead.add(sum) {
+		return
+	}
+
+	s.logger().WarnContext(ctx, "refused a refresh token that names no live session",
+		"client_id", logsafe.Value(presentedClientFrom(ctx)),
+		"token_fingerprint", fingerprint(sum),
+		"remembered", dead)
 }
 
 // refreshRequest is a live session presented for renewal.

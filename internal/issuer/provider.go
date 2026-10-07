@@ -240,9 +240,9 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// Everything not ours is the protocol's. A catch-all rather than a
 	// list, so that a library endpoint added by an upgrade keeps working
 	// instead of turning into a 404 nobody expected.
-	protocol := challenges(refusedAuthorize(resourceIndicators(iss.Policy().Resource,
+	protocol := challenges(refusedAuthorize(resourceIndicators(iss.Policy().Resource, presentedClients(
 		endSession(signIn, truthfulDiscovery(
-			iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, provider)))))
+			iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, provider))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
