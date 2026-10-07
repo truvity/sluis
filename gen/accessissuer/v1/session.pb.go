@@ -150,6 +150,69 @@ func (SessionClass) EnumDescriptor() ([]byte, []int) {
 	return file_accessissuer_v1_session_proto_rawDescGZIP(), []int{1}
 }
 
+// Which of a person's sessions their own *sign out everywhere* ends
+// (docs/decisions/0040-agent-class-sessions.md, decision 7). A value this
+// issuer does not know is EVERYTHING: a scope can only ever end less by
+// being understood.
+type RevokeScope int32
+
+const (
+	// Everything, as EVERYTHING.
+	RevokeScope_REVOKE_SCOPE_UNSPECIFIED RevokeScope = 0
+	// Every session of every class and every browser sign-in: "Sign out
+	// everything", the one lever for a suspected compromise.
+	RevokeScope_REVOKE_SCOPE_EVERYTHING RevokeScope = 1
+	// Every interactive session and every browser sign-in; agent sessions
+	// keep working: "Sign out all browsers and apps".
+	RevokeScope_REVOKE_SCOPE_INTERACTIVE RevokeScope = 2
+	// Every agent session; the browsers stay signed in: "Disconnect all
+	// agents".
+	RevokeScope_REVOKE_SCOPE_AGENTS RevokeScope = 3
+)
+
+// Enum value maps for RevokeScope.
+var (
+	RevokeScope_name = map[int32]string{
+		0: "REVOKE_SCOPE_UNSPECIFIED",
+		1: "REVOKE_SCOPE_EVERYTHING",
+		2: "REVOKE_SCOPE_INTERACTIVE",
+		3: "REVOKE_SCOPE_AGENTS",
+	}
+	RevokeScope_value = map[string]int32{
+		"REVOKE_SCOPE_UNSPECIFIED": 0,
+		"REVOKE_SCOPE_EVERYTHING":  1,
+		"REVOKE_SCOPE_INTERACTIVE": 2,
+		"REVOKE_SCOPE_AGENTS":      3,
+	}
+)
+
+func (x RevokeScope) Enum() *RevokeScope {
+	p := new(RevokeScope)
+	*p = x
+	return p
+}
+
+func (x RevokeScope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RevokeScope) Descriptor() protoreflect.EnumDescriptor {
+	return file_accessissuer_v1_session_proto_enumTypes[2].Descriptor()
+}
+
+func (RevokeScope) Type() protoreflect.EnumType {
+	return &file_accessissuer_v1_session_proto_enumTypes[2]
+}
+
+func (x RevokeScope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RevokeScope.Descriptor instead.
+func (RevokeScope) EnumDescriptor() ([]byte, []int) {
+	return file_accessissuer_v1_session_proto_rawDescGZIP(), []int{2}
+}
+
 // Session is one refresh token, described. The token itself is never
 // here: this is the index that makes them listable and revocable, and an
 // index that carried the credential would be a second place to steal it
@@ -568,6 +631,11 @@ type RevokeSessionsRequest struct {
 	// otherwise be the mistake the identity rule above exists to refuse.
 	// The incident lever for a client whose tokens are in doubt.
 	EveryIdentity bool `protobuf:"varint,5,opt,name=every_identity,json=everyIdentity,proto3" json:"every_identity,omitempty"`
+	// Narrows a person's OWN sign-out everywhere (identity is the caller's,
+	// and no client, session or browser is named) to one class. Ignored
+	// everywhere else -- an operator ending somebody else's sessions, any
+	// narrower revoke -- which ends every class as it always did.
+	Scope         RevokeScope `protobuf:"varint,6,opt,name=scope,proto3,enum=accessissuer.v1.RevokeScope" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -635,6 +703,13 @@ func (x *RevokeSessionsRequest) GetEveryIdentity() bool {
 		return x.EveryIdentity
 	}
 	return false
+}
+
+func (x *RevokeSessionsRequest) GetScope() RevokeScope {
+	if x != nil {
+		return x.Scope
+	}
+	return RevokeScope_REVOKE_SCOPE_UNSPECIFIED
 }
 
 type RevokeSessionsResponse struct {
@@ -719,14 +794,15 @@ const file_accessissuer_v1_session_proto_rawDesc = "" +
 	"\x03how\x18\x03 \x01(\tR\x03how\x127\n" +
 	"\tauth_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bauthTime\x129\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xa8\x01\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xdc\x01\n" +
 	"\x15RevokeSessionsRequest\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x10\n" +
 	"\x03sso\x18\x04 \x01(\tR\x03sso\x12%\n" +
-	"\x0eevery_identity\x18\x05 \x01(\bR\reveryIdentity\".\n" +
+	"\x0eevery_identity\x18\x05 \x01(\bR\reveryIdentity\x122\n" +
+	"\x05scope\x18\x06 \x01(\x0e2\x1c.accessissuer.v1.RevokeScopeR\x05scope\".\n" +
 	"\x16RevokeSessionsResponse\x12\x14\n" +
 	"\x05ended\x18\x01 \x01(\x05R\x05ended*J\n" +
 	"\x03How\x12\x13\n" +
@@ -738,7 +814,12 @@ const file_accessissuer_v1_session_proto_rawDesc = "" +
 	"\fSessionClass\x12\x1d\n" +
 	"\x19SESSION_CLASS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19SESSION_CLASS_INTERACTIVE\x10\x01\x12\x17\n" +
-	"\x13SESSION_CLASS_AGENT\x10\x022\xd0\x01\n" +
+	"\x13SESSION_CLASS_AGENT\x10\x02*\x7f\n" +
+	"\vRevokeScope\x12\x1c\n" +
+	"\x18REVOKE_SCOPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17REVOKE_SCOPE_EVERYTHING\x10\x01\x12\x1c\n" +
+	"\x18REVOKE_SCOPE_INTERACTIVE\x10\x02\x12\x17\n" +
+	"\x13REVOKE_SCOPE_AGENTS\x10\x032\xd0\x01\n" +
 	"\x0eSessionService\x12[\n" +
 	"\fListSessions\x12$.accessissuer.v1.ListSessionsRequest\x1a%.accessissuer.v1.ListSessionsResponse\x12a\n" +
 	"\x0eRevokeSessions\x12&.accessissuer.v1.RevokeSessionsRequest\x1a'.accessissuer.v1.RevokeSessionsResponseB\xbd\x01\n" +
@@ -756,39 +837,41 @@ func file_accessissuer_v1_session_proto_rawDescGZIP() []byte {
 	return file_accessissuer_v1_session_proto_rawDescData
 }
 
-var file_accessissuer_v1_session_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_accessissuer_v1_session_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_accessissuer_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_accessissuer_v1_session_proto_goTypes = []any{
 	(How)(0),                       // 0: accessissuer.v1.How
 	(SessionClass)(0),              // 1: accessissuer.v1.SessionClass
-	(*Session)(nil),                // 2: accessissuer.v1.Session
-	(*ListSessionsRequest)(nil),    // 3: accessissuer.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),   // 4: accessissuer.v1.ListSessionsResponse
-	(*SignIn)(nil),                 // 5: accessissuer.v1.SignIn
-	(*RevokeSessionsRequest)(nil),  // 6: accessissuer.v1.RevokeSessionsRequest
-	(*RevokeSessionsResponse)(nil), // 7: accessissuer.v1.RevokeSessionsResponse
-	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
+	(RevokeScope)(0),               // 2: accessissuer.v1.RevokeScope
+	(*Session)(nil),                // 3: accessissuer.v1.Session
+	(*ListSessionsRequest)(nil),    // 4: accessissuer.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),   // 5: accessissuer.v1.ListSessionsResponse
+	(*SignIn)(nil),                 // 6: accessissuer.v1.SignIn
+	(*RevokeSessionsRequest)(nil),  // 7: accessissuer.v1.RevokeSessionsRequest
+	(*RevokeSessionsResponse)(nil), // 8: accessissuer.v1.RevokeSessionsResponse
+	(*timestamppb.Timestamp)(nil),  // 9: google.protobuf.Timestamp
 }
 var file_accessissuer_v1_session_proto_depIdxs = []int32{
 	0,  // 0: accessissuer.v1.Session.how:type_name -> accessissuer.v1.How
-	8,  // 1: accessissuer.v1.Session.issued_at:type_name -> google.protobuf.Timestamp
-	8,  // 2: accessissuer.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
-	8,  // 3: accessissuer.v1.Session.last_refreshed:type_name -> google.protobuf.Timestamp
+	9,  // 1: accessissuer.v1.Session.issued_at:type_name -> google.protobuf.Timestamp
+	9,  // 2: accessissuer.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: accessissuer.v1.Session.last_refreshed:type_name -> google.protobuf.Timestamp
 	1,  // 4: accessissuer.v1.Session.session_class:type_name -> accessissuer.v1.SessionClass
-	8,  // 5: accessissuer.v1.Session.deadline:type_name -> google.protobuf.Timestamp
-	2,  // 6: accessissuer.v1.ListSessionsResponse.sessions:type_name -> accessissuer.v1.Session
-	5,  // 7: accessissuer.v1.ListSessionsResponse.sign_ins:type_name -> accessissuer.v1.SignIn
-	8,  // 8: accessissuer.v1.SignIn.auth_time:type_name -> google.protobuf.Timestamp
-	8,  // 9: accessissuer.v1.SignIn.expires_at:type_name -> google.protobuf.Timestamp
-	3,  // 10: accessissuer.v1.SessionService.ListSessions:input_type -> accessissuer.v1.ListSessionsRequest
-	6,  // 11: accessissuer.v1.SessionService.RevokeSessions:input_type -> accessissuer.v1.RevokeSessionsRequest
-	4,  // 12: accessissuer.v1.SessionService.ListSessions:output_type -> accessissuer.v1.ListSessionsResponse
-	7,  // 13: accessissuer.v1.SessionService.RevokeSessions:output_type -> accessissuer.v1.RevokeSessionsResponse
-	12, // [12:14] is the sub-list for method output_type
-	10, // [10:12] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	9,  // 5: accessissuer.v1.Session.deadline:type_name -> google.protobuf.Timestamp
+	3,  // 6: accessissuer.v1.ListSessionsResponse.sessions:type_name -> accessissuer.v1.Session
+	6,  // 7: accessissuer.v1.ListSessionsResponse.sign_ins:type_name -> accessissuer.v1.SignIn
+	9,  // 8: accessissuer.v1.SignIn.auth_time:type_name -> google.protobuf.Timestamp
+	9,  // 9: accessissuer.v1.SignIn.expires_at:type_name -> google.protobuf.Timestamp
+	2,  // 10: accessissuer.v1.RevokeSessionsRequest.scope:type_name -> accessissuer.v1.RevokeScope
+	4,  // 11: accessissuer.v1.SessionService.ListSessions:input_type -> accessissuer.v1.ListSessionsRequest
+	7,  // 12: accessissuer.v1.SessionService.RevokeSessions:input_type -> accessissuer.v1.RevokeSessionsRequest
+	5,  // 13: accessissuer.v1.SessionService.ListSessions:output_type -> accessissuer.v1.ListSessionsResponse
+	8,  // 14: accessissuer.v1.SessionService.RevokeSessions:output_type -> accessissuer.v1.RevokeSessionsResponse
+	13, // [13:15] is the sub-list for method output_type
+	11, // [11:13] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_accessissuer_v1_session_proto_init() }
@@ -801,7 +884,7 @@ func file_accessissuer_v1_session_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_accessissuer_v1_session_proto_rawDesc), len(file_accessissuer_v1_session_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,

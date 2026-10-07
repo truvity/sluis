@@ -5,7 +5,7 @@
   "properties": {
     "scope": {
       "type": "string",
-      "description": "What was revoked: one client's session, or all of a person's.",
+      "description": "What was revoked: one client's session, all of a person's (everywhere), one class of their own (every_browser_and_app, every_agent), or one client's for every person (client_every_identity).",
       "x-audit-class": "shared",
       "x-audit-pii": "none",
       "x-audit-facet": true
@@ -13,6 +13,21 @@
     "ended": {
       "type": "integer",
       "description": "How many client sessions ended.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "ended_class": {
+      "type": "string",
+      "enum": ["interactive", "agent"],
+      "description": "For a person's own sign-out everywhere narrowed to one class (scope every_browser_and_app or every_agent): the class of sessions it ended. Absent when every class ended.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "kept_class": {
+      "type": "string",
+      "enum": ["interactive", "agent"],
+      "description": "For a person's own sign-out everywhere narrowed to one class: the class of sessions it kept running. Absent when every class ended.",
       "x-audit-class": "shared",
       "x-audit-pii": "none"
     }

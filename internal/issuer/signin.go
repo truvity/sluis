@@ -1090,12 +1090,13 @@ func (d SignInDeps) log() *slog.Logger {
 // connection -- an assistant's tools, an MCP host -- keeps running, and the
 // way to end it too is *sign out everywhere*, linked from here.
 func (s *signIn) signedOut(w http.ResponseWriter, _ *http.Request) {
-	everywhere := `<p class="note">To end those too, sign out everywhere from the console's page for you, or ask whoever administers access.</p>`
+	everywhere := `<p class="note">To end those too, use <em>Disconnect all agents</em> or <em>Sign out everything</em> on the console's page for you, or ask whoever administers access.</p>`
 	if s.deps.SSO != nil && s.deps.ConsoleMount != "" {
 		// `/account` lands on the console's page for the person, which is
 		// where *sign out everywhere* is. Signed out, it lands on the
 		// console's front page, which signs them in first.
-		everywhere = `<p><a class="btn" href="/account">Sign out everywhere</a></p>`
+		everywhere = `<p class="note">To end those too, disconnect all agents, or sign out everything if you think your account is compromised.</p>
+	<p><a class="btn" href="/account">Your sessions</a></p>`
 	}
 
 	s.page(w, "Signed out", `<p>Your sign-in here has ended, and so has every session it opened in a browser.</p>

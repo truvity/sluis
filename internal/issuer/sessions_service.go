@@ -468,6 +468,14 @@ func (s *SessionsService) RevokeSessions(
 
 	clientID := strings.TrimSpace(req.Msg.GetClientId())
 
+	// A person's own sign-out everywhere, narrowed to one class: "Sign out
+	// all browsers and apps" or "Disconnect all agents". Everything else --
+	// "Sign out everything", an operator's revoke of somebody else, any
+	// narrower revoke -- falls through and ends every class.
+	if class, scoped := ownScope(who, identity, clientID, req.Msg.GetScope()); scoped {
+		return s.revokeClass(ctx, who, identity, class)
+	}
+
 	// Read before revoking, as at an ordinary sign-out: once the sessions
 	// are gone nothing says which clients held them.
 	var held []Session
@@ -505,7 +513,7 @@ func (s *SessionsService) RevokeSessions(
 		}
 	}
 
-	scope := "everywhere"
+	scope := audit.ScopeEverywhere
 	if clientID != "" {
 		scope = "one client"
 	}
@@ -513,9 +521,129 @@ func (s *SessionsService) RevokeSessions(
 	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
 }
 
+// ownScope reports which class a revoke ends when it is a person's own
+// sign-out everywhere narrowed by scope: their own identity, no client
+// named, and a scope of INTERACTIVE or AGENTS. Anything else -- no scope,
+// EVERYTHING, a value this issuer does not know, somebody else's identity
+// (an operator's revoke), a client named -- is not scoped, and ends every
+// class: a scope only ever ends less by being understood, and only for
+// the person asking.
+func ownScope(who caller, identity, clientID string, scope accessissuerv1.RevokeScope) (SessionClass, bool) {
+	if clientID != "" || !strings.EqualFold(strings.TrimSpace(who.identity), identity) {
+		return "", false
+	}
+
+	switch scope {
+	case accessissuerv1.RevokeScope_REVOKE_SCOPE_INTERACTIVE:
+		return ClassInteractive, true
+	case accessissuerv1.RevokeScope_REVOKE_SCOPE_AGENTS:
+		return ClassAgent, true
+	default:
+		return "", false
+	}
+}
+
+// revokeClass is a person's own sign-out everywhere for one class
+// (docs/decisions/0040-agent-class-sessions.md, decision 7, amended):
+//
+//   - interactive, "Sign out all browsers and apps": every browser sign-in
+//     ends, then every interactive session; agent sessions keep working;
+//   - agent, "Disconnect all agents": every agent session ends; the
+//     browsers stay signed in.
+//
+// Back-Channel Logout goes to exactly the sessions that ended, and the
+// subject-only logout token to the `openid`-only clients of the ended
+// sign-ins that hold no session that keeps running. The record states the
+// scope, the class ended and the class kept.
+func (s *SessionsService) revokeClass(
+	ctx context.Context, who caller, identity string, class SessionClass,
+) (*connect.Response[accessissuerv1.RevokeSessionsResponse], error) {
+	scope, kept := audit.ScopeEveryBrowserAndApp, ClassAgent
+	if class == ClassAgent {
+		scope, kept = audit.ScopeEveryAgent, ClassInteractive
+	}
+
+	// The sign-ins first, as at an ordinary sign-out ([endSignIn]): a code
+	// redeemed under one of them after this either files its session
+	// before the listing below, or finds its sign-in ended and ends its
+	// own. Read with the clients that used them, which ending deletes.
+	var (
+		involved []Session
+		endErr   error
+	)
+	if class == ClassInteractive && s.sso != nil {
+		_, involved, endErr = s.sso.EndForInvolving(ctx, identity)
+	}
+
+	held, err := s.sessions.List(ctx, Query{Identity: identity})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	var ending, running []Session
+	for i := range held {
+		if (class == ClassAgent) == held[i].Agent() {
+			ending = append(ending, held[i])
+		} else {
+			running = append(running, held[i])
+		}
+	}
+
+	ended := 0
+	for i := range ending {
+		gone, revokeErr := s.sessions.RevokeID(ctx, ending[i].ID)
+		if revokeErr != nil {
+			err = revokeErr
+
+			break
+		}
+
+		if gone {
+			ended++
+		}
+	}
+
+	if s.announce != nil {
+		s.announce(ctx, withInvolved(ending, notRunning(involved, running)))
+	}
+
+	s.record(ctx, audit.SessionsRevokedByClass(audit.Identified(who.identity), identity, scope, ended,
+		string(class), string(kept)))
+
+	switch {
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err)
+	case endErr != nil:
+		return nil, connect.NewError(connect.CodeInternal, endErr)
+	}
+
+	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+}
+
+// notRunning drops from the `openid`-only clients of the ended sign-ins
+// those that hold a session under the same sign-in that keeps running: the
+// subject-only logout token would end it at the relying party.
+func notRunning(involved, running []Session) []Session {
+	type key struct{ client, sso string }
+
+	keep := make(map[key]bool, len(running))
+	for i := range running {
+		keep[key{running[i].ClientID, running[i].SSO}] = true
+	}
+
+	var out []Session
+	for i := range involved {
+		if !keep[key{involved[i].ClientID, involved[i].SSO}] {
+			out = append(out, involved[i])
+		}
+	}
+
+	return out
+}
+
 // ScopeClientEverywhere is the scope of the revoke that ends one client's
-// sessions for every identity.
-const ScopeClientEverywhere = "one client, every identity"
+// sessions for every identity ([audit.ScopeClientEveryIdentity]).
+const ScopeClientEverywhere = audit.ScopeClientEveryIdentity
 
 // revokeClientEverywhere ends every session of one client, whoever holds
 // it, for an operator: [Query] by client alone, which the

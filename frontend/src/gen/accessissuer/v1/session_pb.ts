@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file accessissuer/v1/session.proto.
  */
 export const file_accessissuer_v1_session: GenFile = /*@__PURE__*/
-  fileDesc("Ch1hY2Nlc3Npc3N1ZXIvdjEvc2Vzc2lvbi5wcm90bxIPYWNjZXNzaXNzdWVyLnYxIuECCgdTZXNzaW9uEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEhEKCWNsaWVudF9pZBgDIAEoCRIhCgNob3cYBCABKA4yFC5hY2Nlc3Npc3N1ZXIudjEuSG93Ei0KCWlzc3VlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoObGFzdF9yZWZyZXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgsKA3NzbxgIIAEoCRI0Cg1zZXNzaW9uX2NsYXNzGAkgASgOMh0uYWNjZXNzaXNzdWVyLnYxLlNlc3Npb25DbGFzcxIsCghkZWFkbGluZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicwoTTGlzdFNlc3Npb25zUmVxdWVzdBIQCghpZGVudGl0eRgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEAoIY29udGFpbnMYBSABKAgihgEKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEioKCHNlc3Npb25zGAEgAygLMhguYWNjZXNzaXNzdWVyLnYxLlNlc3Npb24SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEikKCHNpZ25faW5zGAMgAygLMhcuYWNjZXNzaXNzdWVyLnYxLlNpZ25JbiKSAQoGU2lnbkluEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEgsKA2hvdxgDIAEoCRItCglhdXRoX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wInUKFVJldm9rZVNlc3Npb25zUmVxdWVzdBIQCghpZGVudGl0eRgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCRILCgNzc28YBCABKAkSFgoOZXZlcnlfaWRlbnRpdHkYBSABKAgiJwoWUmV2b2tlU2Vzc2lvbnNSZXNwb25zZRINCgVlbmRlZBgBIAEoBSpKCgNIb3cSEwoPSE9XX1VOU1BFQ0lGSUVEEAASDAoISE9XX0NPREUQARIOCgpIT1dfREVWSUNFEAISEAoMSE9XX0VYQ0hBTkdFEAMqZQoMU2Vzc2lvbkNsYXNzEh0KGVNFU1NJT05fQ0xBU1NfVU5TUEVDSUZJRUQQABIdChlTRVNTSU9OX0NMQVNTX0lOVEVSQUNUSVZFEAESFwoTU0VTU0lPTl9DTEFTU19BR0VOVBACMtABCg5TZXNzaW9uU2VydmljZRJbCgxMaXN0U2Vzc2lvbnMSJC5hY2Nlc3Npc3N1ZXIudjEuTGlzdFNlc3Npb25zUmVxdWVzdBolLmFjY2Vzc2lzc3Vlci52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZRJhCg5SZXZva2VTZXNzaW9ucxImLmFjY2Vzc2lzc3Vlci52MS5SZXZva2VTZXNzaW9uc1JlcXVlc3QaJy5hY2Nlc3Npc3N1ZXIudjEuUmV2b2tlU2Vzc2lvbnNSZXNwb25zZUK9AQoTY29tLmFjY2Vzc2lzc3Vlci52MUIMU2Vzc2lvblByb3RvUAFaO2dpdGh1Yi5jb20vdHJ1dml0eS9zbHVpcy9nZW4vYWNjZXNzaXNzdWVyL3YxO2FjY2Vzc2lzc3VlcnYxogIDQVhYqgIPQWNjZXNzaXNzdWVyLlYxygIPQWNjZXNzaXNzdWVyXFYx4gIbQWNjZXNzaXNzdWVyXFYxXEdQQk1ldGFkYXRh6gIQQWNjZXNzaXNzdWVyOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("Ch1hY2Nlc3Npc3N1ZXIvdjEvc2Vzc2lvbi5wcm90bxIPYWNjZXNzaXNzdWVyLnYxIuECCgdTZXNzaW9uEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEhEKCWNsaWVudF9pZBgDIAEoCRIhCgNob3cYBCABKA4yFC5hY2Nlc3Npc3N1ZXIudjEuSG93Ei0KCWlzc3VlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoObGFzdF9yZWZyZXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgsKA3NzbxgIIAEoCRI0Cg1zZXNzaW9uX2NsYXNzGAkgASgOMh0uYWNjZXNzaXNzdWVyLnYxLlNlc3Npb25DbGFzcxIsCghkZWFkbGluZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicwoTTGlzdFNlc3Npb25zUmVxdWVzdBIQCghpZGVudGl0eRgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEAoIY29udGFpbnMYBSABKAgihgEKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEioKCHNlc3Npb25zGAEgAygLMhguYWNjZXNzaXNzdWVyLnYxLlNlc3Npb24SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEikKCHNpZ25faW5zGAMgAygLMhcuYWNjZXNzaXNzdWVyLnYxLlNpZ25JbiKSAQoGU2lnbkluEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEgsKA2hvdxgDIAEoCRItCglhdXRoX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqIBChVSZXZva2VTZXNzaW9uc1JlcXVlc3QSEAoIaWRlbnRpdHkYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkSCwoDc3NvGAQgASgJEhYKDmV2ZXJ5X2lkZW50aXR5GAUgASgIEisKBXNjb3BlGAYgASgOMhwuYWNjZXNzaXNzdWVyLnYxLlJldm9rZVNjb3BlIicKFlJldm9rZVNlc3Npb25zUmVzcG9uc2USDQoFZW5kZWQYASABKAUqSgoDSG93EhMKD0hPV19VTlNQRUNJRklFRBAAEgwKCEhPV19DT0RFEAESDgoKSE9XX0RFVklDRRACEhAKDEhPV19FWENIQU5HRRADKmUKDFNlc3Npb25DbGFzcxIdChlTRVNTSU9OX0NMQVNTX1VOU1BFQ0lGSUVEEAASHQoZU0VTU0lPTl9DTEFTU19JTlRFUkFDVElWRRABEhcKE1NFU1NJT05fQ0xBU1NfQUdFTlQQAip/CgtSZXZva2VTY29wZRIcChhSRVZPS0VfU0NPUEVfVU5TUEVDSUZJRUQQABIbChdSRVZPS0VfU0NPUEVfRVZFUllUSElORxABEhwKGFJFVk9LRV9TQ09QRV9JTlRFUkFDVElWRRACEhcKE1JFVk9LRV9TQ09QRV9BR0VOVFMQAzLQAQoOU2Vzc2lvblNlcnZpY2USWwoMTGlzdFNlc3Npb25zEiQuYWNjZXNzaXNzdWVyLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaJS5hY2Nlc3Npc3N1ZXIudjEuTGlzdFNlc3Npb25zUmVzcG9uc2USYQoOUmV2b2tlU2Vzc2lvbnMSJi5hY2Nlc3Npc3N1ZXIudjEuUmV2b2tlU2Vzc2lvbnNSZXF1ZXN0GicuYWNjZXNzaXNzdWVyLnYxLlJldm9rZVNlc3Npb25zUmVzcG9uc2VCvQEKE2NvbS5hY2Nlc3Npc3N1ZXIudjFCDFNlc3Npb25Qcm90b1ABWjtnaXRodWIuY29tL3RydXZpdHkvc2x1aXMvZ2VuL2FjY2Vzc2lzc3Vlci92MTthY2Nlc3Npc3N1ZXJ2MaICA0FYWKoCD0FjY2Vzc2lzc3Vlci5WMcoCD0FjY2Vzc2lzc3VlclxWMeICG0FjY2Vzc2lzc3VlclxWMVxHUEJNZXRhZGF0YeoCEEFjY2Vzc2lzc3Vlcjo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * Session is one refresh token, described. The token itself is never
@@ -321,6 +321,16 @@ export type RevokeSessionsRequest = Message<"accessissuer.v1.RevokeSessionsReque
    * @generated from field: bool every_identity = 5;
    */
   everyIdentity: boolean;
+
+  /**
+   * Narrows a person's OWN sign-out everywhere (identity is the caller's,
+   * and no client, session or browser is named) to one class. Ignored
+   * everywhere else -- an operator ending somebody else's sessions, any
+   * narrower revoke -- which ends every class as it always did.
+   *
+   * @generated from field: accessissuer.v1.RevokeScope scope = 6;
+   */
+  scope: RevokeScope;
 };
 
 /**
@@ -431,6 +441,53 @@ export enum SessionClass {
  */
 export const SessionClassSchema: GenEnum<SessionClass> = /*@__PURE__*/
   enumDesc(file_accessissuer_v1_session, 1);
+
+/**
+ * Which of a person's sessions their own *sign out everywhere* ends
+ * (docs/decisions/0040-agent-class-sessions.md, decision 7). A value this
+ * issuer does not know is EVERYTHING: a scope can only ever end less by
+ * being understood.
+ *
+ * @generated from enum accessissuer.v1.RevokeScope
+ */
+export enum RevokeScope {
+  /**
+   * Everything, as EVERYTHING.
+   *
+   * @generated from enum value: REVOKE_SCOPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Every session of every class and every browser sign-in: "Sign out
+   * everything", the one lever for a suspected compromise.
+   *
+   * @generated from enum value: REVOKE_SCOPE_EVERYTHING = 1;
+   */
+  EVERYTHING = 1,
+
+  /**
+   * Every interactive session and every browser sign-in; agent sessions
+   * keep working: "Sign out all browsers and apps".
+   *
+   * @generated from enum value: REVOKE_SCOPE_INTERACTIVE = 2;
+   */
+  INTERACTIVE = 2,
+
+  /**
+   * Every agent session; the browsers stay signed in: "Disconnect all
+   * agents".
+   *
+   * @generated from enum value: REVOKE_SCOPE_AGENTS = 3;
+   */
+  AGENTS = 3,
+}
+
+/**
+ * Describes the enum accessissuer.v1.RevokeScope.
+ */
+export const RevokeScopeSchema: GenEnum<RevokeScope> = /*@__PURE__*/
+  enumDesc(file_accessissuer_v1_session, 2);
 
 /**
  * SessionService lists and ends what this issuer is holding.

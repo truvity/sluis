@@ -169,6 +169,28 @@ func SessionRevoked(actor Actor, person, client, scope string, ended int) *recor
 		personParty(person), targets, data{"scope": scope, "ended": ended})
 }
 
+// The scopes of a person's sessions revoked everywhere: every class and
+// every sign-in ("Sign out everything", and every operator's revoke of a
+// person), or one class of a person's own (docs/decisions/0040-agent-class-sessions.md,
+// decision 7).
+const (
+	ScopeEverywhere         = "everywhere"
+	ScopeEveryBrowserAndApp = "every_browser_and_app"
+	ScopeEveryAgent         = "every_agent"
+	// ScopeClientEveryIdentity is an operator ending one client's sessions
+	// for every person: the record names the client and no subject.
+	ScopeClientEveryIdentity = "client_every_identity"
+)
+
+// SessionsRevokedByClass is a person ending one class of their own
+// sessions everywhere: ScopeEveryBrowserAndApp ends the interactive class
+// and every browser sign-in and keeps the agent one, ScopeEveryAgent ends
+// the agent class and keeps the rest.
+func SessionsRevokedByClass(actor Actor, person, scope string, ended int, endedClass, keptClass string) *record.Record {
+	return build("roster.session.revoked", actor, Succeeded(), personParty(person), nil,
+		data{"scope": scope, "ended": ended, "ended_class": endedClass, "kept_class": keptClass})
+}
+
 // ScopeRefreshTokenReuse is the scope of a [SessionRevoked] record the
 // issuer writes when it ends a session because one of its spent refresh
 // tokens was presented after the grace window.

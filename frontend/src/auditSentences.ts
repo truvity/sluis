@@ -237,9 +237,9 @@ export const roster: Sentences = {
       }
     },
     "roster.session.revoked": {
-      "summary": "A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, or (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser.",
+      "summary": "A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser, by the person themselves for one class of their own (scope `every_browser_and_app` ends every browser sign-in and interactive session and keeps the agent sessions, scope `every_agent` ends every agent session and keeps the browsers, and `ended_class` and `kept_class` say which), or by an operator for one client and every person (scope `client_every_identity`, no subject).",
       "message": {
-        "en": "{actor} revoked {subject}'s sessions, ending {data_ended, plural, one {#} other {#}}"
+        "en": "{data_scope, select, every_browser_and_app {{actor} signed out of every browser and app, keeping agent connections, ending {data_ended, plural, one {# session} other {# sessions}}} every_agent {{actor} disconnected every agent, ending {data_ended, plural, one {# session} other {# sessions}}} client_every_identity {{actor} ended {targets_0_id}'s sessions for every person, ending {data_ended, plural, one {#} other {#}}} other {{actor} revoked {subject}'s sessions, ending {data_ended, plural, one {#} other {#}}}}"
       }
     },
     "roster.slack_action.held": {
