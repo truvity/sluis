@@ -51,6 +51,15 @@ type signingAudience struct {
 	mu  sync.Mutex
 	id  string
 	set bool
+
+	// subject is who the token about to be minted is for, and
+	// serviceAccount whether that subject was proved as a ServiceAccount
+	// (see [provedAsServiceAccount]). [Storage.issue] marks them, and
+	// [Storage.GetPrivateClaimsFromScopes], which the library hands the
+	// subject string alone, reads them back: the same one-request carrier,
+	// for the same reason.
+	subject        string
+	serviceAccount bool
 }
 
 // withSigningAudienceContext installs a fresh, empty carrier on ctx.
@@ -87,6 +96,29 @@ func (c *signingAudience) get() (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.id, c.set
+}
+
+// markSubject records who the token about to be minted is for, and
+// whether that subject was proved as a ServiceAccount.
+func (c *signingAudience) markSubject(subject string, serviceAccount bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.subject, c.serviceAccount = subject, serviceAccount
+}
+
+// subjectIsServiceAccount reports whether subject is the one marked and
+// was marked as proved as a ServiceAccount. Anything else -- no carrier,
+// nothing marked, another subject -- is a person.
+func (c *signingAudience) subjectIsServiceAccount(subject string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.serviceAccount && c.subject == subject
 }
 
 // accessAudienceOf is the id an ACCESS token about to be minted for
