@@ -27,6 +27,18 @@ func NewSessionsServiceWithSSOForTest(
 	return &SessionsService{sessions: sessions, sso: sso, verify: verify}
 }
 
+// NewSessionsServiceForCookieTest is the same with the group lookup a
+// browser's cookie needs: the cookie says who, and this says what the policy
+// makes of them.
+func NewSessionsServiceForCookieTest(
+	sessions *Sessions,
+	sso *SSO,
+	verify func(ctx context.Context, bearer string) (string, []string, error),
+	groups func(ctx context.Context, identity string) ([]string, error),
+) *SessionsService {
+	return &SessionsService{sessions: sessions, sso: sso, verify: verify, groups: groups}
+}
+
 // ErrUnverifiedForTest is what a stub verifier refuses with.
 var ErrUnverifiedForTest = errors.New("unverified")
 
