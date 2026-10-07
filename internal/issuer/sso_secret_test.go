@@ -778,7 +778,7 @@ func TestWhatTheSignInStoreCosts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		check(t, st, "sign-out", 3, 5)
+		check(t, st, "sign-out", 4, 4)
 	})
 
 	t.Run("end by id", func(t *testing.T) {
@@ -792,13 +792,14 @@ func TestWhatTheSignInStoreCosts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		check(t, st, "end by id", 1, 5)
+		check(t, st, "end by id", 2, 4)
 	})
 
 	t.Run("end for an identity", func(t *testing.T) {
 		t.Parallel()
 
-		// One read for the set, then per sign-in 1 read / 4 writes.
+		// One read for the set, then per sign-in 2 reads (the record, the
+		// clients set) / 4 writes, when no client was involved.
 		for _, n := range []int{1, 3} {
 			sso, st := fresh()
 
@@ -814,7 +815,7 @@ func TestWhatTheSignInStoreCosts(t *testing.T) {
 				t.Fatalf("EndFor ended %d: %v", ended, err)
 			}
 
-			check(t, st, "EndFor", 1+n, 4*n)
+			check(t, st, "EndFor", 1+2*n, 4*n)
 		}
 	})
 }
