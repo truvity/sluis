@@ -127,7 +127,17 @@ type Resolution struct {
 }
 
 // Refused reports that no token may be issued, with the reason.
-type Refused struct{ Reason string }
+//
+// Authoritative says the directory vouched for the refusal: it answered
+// authoritatively that the account is suspended or not found. That is a
+// removal, and a refresh that meets it ends its session
+// (docs/decisions/0040-agent-class-sessions.md, decision 5). Every other
+// refusal -- a directory that cannot vouch with nothing held, a subject that
+// names no ServiceAccount -- is not, and ends nothing.
+type Refused struct {
+	Reason        string
+	Authoritative bool
+}
 
 func (e *Refused) Error() string { return "refused: " + e.Reason }
 
@@ -160,7 +170,7 @@ func (r *Resolver) resolve(ctx context.Context, email string) (Resolution, error
 	if err == nil && standing.Authoritative {
 		if !standing.Found || standing.Suspended {
 			r.forget(ctx, email)
-			return Resolution{}, &Refused{Reason: "the directory says this account is not live"}
+			return Resolution{}, &Refused{Reason: "the directory says this account is not live", Authoritative: true}
 		}
 		r.remember(ctx, email, lastKnown{groups: standing.Groups, at: now})
 
