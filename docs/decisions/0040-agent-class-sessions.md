@@ -210,6 +210,34 @@ client, by browser or by id, refresh-token reuse, and an authoritative "not live
 `signInProof` refuses a token whose session has class `agent`. The load-time refusal of `sign_in_exchange` is not
 enough on its own, because a recorded class outlives a policy change.
 
+**Amendment (2026-10-07, owner decision D30): a person's sign-out everywhere comes in three.** The person's own
+*sign out everywhere* (`RevokeSessions` for their own identity, naming no client, session or browser) takes a
+`scope`:
+
+| Action | Ends | Keeps |
+|---|---|---|
+| *Sign out all browsers and apps* (`interactive`) | every browser sign-in, then every interactive session | agent sessions |
+| *Disconnect all agents* (`agents`) | every agent session | the browsers and their interactive sessions |
+| *Sign out everything* (`everything`, the default) | every session of every class and every browser sign-in | nothing |
+
+A missing or unknown scope is *everything*: a scope only ever ends less by being understood. *Sign out everything* is
+exactly the earlier *sign out everywhere* and stays the one lever for a suspected compromise. Back-Channel Logout goes
+to exactly the sessions that end, and the subject-only logout token only to `openid`-only clients of ended sign-ins
+that hold no session still running under them. `roster.session.revoked` names the scope (`every_browser_and_app`,
+`every_agent`, `everywhere`) and, for the two scoped actions, `ended_class` and `kept_class`.
+
+The invariant below is restated with this amendment. **Only three things consult the class: the person's own browser
+sign-out (own sign-out mode above) and the two scoped person-initiated actions.** *Sign out everything*,
+`Issuer.Revoke(identity)`, removal from the directory, refresh-token reuse, and every operator's revoke (of one person,
+whatever scope it names, and of one client for everybody) end every class and never consult it.
+
+**Residual, the consent page and DoubleClickjacking.** The consent page's *Allow* is disabled until the page has been
+visible for 500 ms and again whenever it is hidden, by the page's own nonce'd script, so a page that opens it under the
+person's cursor between the two clicks of a double-click does not land the second click on it. What remains: a person
+who reads nothing and clicks *Allow* deliberately once it is armed, and a browser with JavaScript disabled, which cannot
+accept at all (fail closed). An authorization request already completed is never completed again as another person or
+under another sign-in.
+
 **Incident levers.** To end a person, use `Issuer.Revoke(identity)`. To end one client for one person, use the
 per-client revoke. To end one client for everybody, there is a new operator-only console action revoking
 `Query{ClientID}`; the query and the `issuer:sessions-for:` index already exist. Removing a client or an origin from
