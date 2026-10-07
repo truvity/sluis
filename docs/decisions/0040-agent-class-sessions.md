@@ -1,8 +1,8 @@
 # 0040 — Agent-class sessions: a longer chain by client class, not by resource
 
-**Status:** Proposed; amends [0001](0001-sessions-and-an-absolute-limit.md) (agent-class chains are
-not held to the installation's absolute limit) and deprecates the lengthening half of
-[0033](0033-a-longer-absolute-limit-for-read-only-resources.md)
+**Status:** Accepted; amends [0001](0001-sessions-and-an-absolute-limit.md) (agent-class chains are
+not held to the installation's absolute limit) and [0033](0033-a-longer-absolute-limit-for-read-only-resources.md)
+(its lengthening half is deprecated)
 **Date:** 2026-10-07
 
 ## Context
@@ -74,7 +74,8 @@ access token (`Storage.issue` looks the client up among declared clients only); 
 Everything that shows a person how long a chain lasts shows the computed deadline, never a nominal 30 days.
 
 **3. The class is recorded on the session.** `Session` (`internal/issuer/session.go`) gains `class` and `deadline`,
-written by `Sessions.Record` at authorization from the client's class at that moment and never re-derived on refresh.
+written by `Sessions.Record` from the class recorded on the authorization request when it completed (decision 6),
+and never re-derived on refresh.
 A later policy or configuration change can **shorten** a chain (the current `lifetimes.agent` and resource caps
 still bound it at the next refresh, as 0033 does for a withdrawn cap) but never **lengthen** it past its recorded
 deadline or change its class. A client moved from `agent` to `interactive` keeps its agent chains until they end or
@@ -151,11 +152,34 @@ one-click page in front of a live sign-in can also be forced by CSRF or clickjac
 - **After authentication.** The interstitial sits after authentication, between `callback`, `silent` or the recovery
   form and `Storage.Complete`, where it can also say "signed in as". It names the client, its origin (for a document
   client), the redirect host, the class and the computed deadline.
-- **A bound POST.** Its accept is a POST carrying a token bound to this request **and** this browser, through a
-  cookie. This is the pattern of the recovery form's purpose-bound state and `access.LoginStartedHere` /
+- **A bound POST.** Its accept is a POST carrying an acceptance token bound to this request **and** this browser.
+  This is the pattern of the recovery form's purpose-bound state and of `access.LoginStartedHere` /
   `access.RecoveryStartedHere` in `internal/access/state.go`.
-- **One refusal point.** `Storage.Complete`, the one place every sign-in converges, refuses an agent-class request
-  unless that browser-bound acceptance is presented.
+- **The token has its own purpose.** It is a `StateCodec` state (`IssueAs`), a fresh value with a 16-byte nonce,
+  carrying:
+  - `Owner`: a purpose of its own, `agent-consent`, as the recovery form's state carries `RecoveryPurpose`;
+  - `Bind`: the authorization request id;
+  - `Actor`: the authenticated subject and the sign-in id.
+- **The cookie is its own too.** The token travels in a cookie of its own name, built by `flowCookie`: `__Host-`
+  prefixed when cookies are secure, HttpOnly, SameSite=Lax, `Path=/`, the flow's lifetime.
+- **Minted in one place.** The token is minted **only** when the interstitial is rendered after authentication.
+  Neither of these is accepted in its place:
+  - the login state that `start` sets;
+  - a legacy four-part state, which `VerifyBinding` returns with an empty `Owner`.
+- **Re-checked on the click.** The POST re-runs `checkSignIn`, so a person signed out, past the limit or suspended
+  between seeing the page and clicking cannot complete.
+- **Why another site cannot use it.** It cannot read the token, because the cookie is HttpOnly and `__Host-` keeps
+  any sibling host from setting or shadowing it. It cannot make a cross-site POST carry the token, because the
+  cookie is SameSite=Lax. A token replayed for another request fails on `Bind`. Replaying it for the same request in
+  the same browser only repeats the person's own acceptance.
+- **One refusal point that verifies for itself.** `Storage.Complete`, the one place every sign-in converges (the
+  recovery form, `callback` and `silent` all call it), refuses an agent-class request unless it verifies the
+  acceptance itself. It takes the state and the cookie value, or a type only the `access` package can construct. It
+  checks that `Owner` is the purpose, that `Bind` is this request's id and that `Actor` is the subject being
+  completed, and compares the cookie in constant time. It never trusts a boolean passed by a caller.
+- **The class is decided once.** `Complete` decides the class from the policy and records it on the authorization
+  request. `Sessions.Record` takes it from the request at code redemption, not from the policy. A policy change
+  between `Complete` and redemption therefore cannot issue an agent chain that skipped the interstitial.
 - **No framing.** The page is served with `Content-Security-Policy: frame-ancestors 'none'` and
   `X-Frame-Options: DENY`.
 - **Tests.** A start link opened in another browser does not complete; an accept made in the attacker's browser
@@ -226,7 +250,9 @@ Each presentation costs two to four State reads (`Sessions.present`, then `ended
   per cache entry, and a counter counts the hits.
 - **What may be cached.** Only terminal states, read consistently: no pointer **and** no legacy rotated record, or a
   pointer whose session record is absent. The entry is written only after the refusing path has done its work, so
-  the absolute-limit refusal still audits once.
+  the absolute-limit refusal still audits once. "Read consistently" means a DynamoDB `GetItem` with
+  `ConsistentRead`, as the State adapter's `Get` already does, or a Valkey read from the primary. Any future
+  read-replica or eventually consistent read option must leave out the reads this cache is fed from.
 - **Invariant: never cached.** A record that is present with `ExpiresAt` in the past, however long ago, because a
   slow request on another replica can still rotate the chain later than `refreshGrace + markAheadTolerance`. Also
   never: a spent mark inside its 30-second grace window or in the 2-second tolerance band past it; a spent mark whose

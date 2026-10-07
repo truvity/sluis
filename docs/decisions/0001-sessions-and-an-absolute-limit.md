@@ -1,6 +1,6 @@
 # 0001 — Sessions and an absolute limit
 
-**Status:** Accepted; amended by [0033](0033-a-longer-absolute-limit-for-read-only-resources.md)
+**Status:** Accepted; amended by [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) and [0040](0040-agent-class-sessions.md)
 **Date:** 2026-09-25
 
 > **Amended (2026-10-07).** The limit also governs the directory console's
