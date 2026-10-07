@@ -109,6 +109,7 @@ var keyRules = []keyRule{
 	{prefix: "issuer:token:", kind: "issuer-token"},
 	{prefix: "issuer:sso:", kind: "issuer-sso"},
 	{prefix: "issuer:sso-of:", kind: "issuer-sso-of"},
+	{prefix: "issuer:sso-cookie:", kind: "issuer-sso-cookie"},
 	{prefix: "issuer:session:", kind: "issuer-session"},
 	{prefix: "issuer:session-token:", kind: "issuer-session-token"},
 	{prefix: "issuer:session-rotated:", kind: "issuer-session-rotated"},

@@ -183,6 +183,24 @@ func (b *browser) authorizeWith(over map[string]string, extra string) string {
 	return next
 }
 
+// signInID is the id of the sign-in this browser's cookie proves, or ""
+// when it proves none. The cookie is a secret of its own, not the id, so
+// a test that needs the id -- to file a session under it, or to look the
+// record up afterwards -- asks the store, as the issuer does.
+func (b *browser) signInID(sso *issuer.SSO) string {
+	b.t.Helper()
+
+	session, live, err := sso.Resolve(context.Background(), b.cookies[issuer.SSOCookieName])
+	if err != nil {
+		b.t.Fatalf("resolve the browser's cookie: %v", err)
+	}
+	if !live {
+		return ""
+	}
+
+	return session.ID
+}
+
 // signIn walks the provider round trip once, so the issuer has a browser
 // session to remember.
 func (b *browser) signIn() {
@@ -491,7 +509,7 @@ func TestEndSessionRevokesWhatTheBrowserOpened(t *testing.T) {
 	b := newBrowser(t, server)
 	b.signIn()
 
-	sso := b.cookies[issuer.SSOCookieName]
+	sso := b.signInID(iss.SSO())
 	if sso == "" {
 		t.Fatal("the browser holds no sign-in to revoke under")
 	}
@@ -699,7 +717,7 @@ func TestBackChannelLogoutTellsOnlyTheClientsThatAsked(t *testing.T) {
 
 	if _, err := iss.Sessions().Record(t.Context(), issuer.Opened{
 		Identity: "ada@north.example", ClientID: "argocd",
-		How: issuer.HowCode, Token: "a-refresh-token", SSO: b.cookies[issuer.SSOCookieName],
+		How: issuer.HowCode, Token: "a-refresh-token", SSO: b.signInID(iss.SSO()),
 	}); err != nil {
 		t.Fatalf("record: %v", err)
 	}
