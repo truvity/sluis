@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -60,6 +61,15 @@ type signingAudience struct {
 	// for the same reason.
 	subject        string
 	serviceAccount bool
+
+	// agentUntil is the latest the ID token minted next may expire, when
+	// the request belongs to an agent-class chain: the access token's own
+	// end, which [Storage.issue] decided from `lifetimes.agent.access` and
+	// the chain's deadline. [client.IDTokenLifetime], which the library
+	// calls with no context after the access token is minted, reads it
+	// back. Zero for every other request, whose ID token keeps the
+	// client's own lifetime.
+	agentUntil time.Time
 }
 
 // withSigningAudienceContext installs a fresh, empty carrier on ctx.
@@ -119,6 +129,32 @@ func (c *signingAudience) subjectIsServiceAccount(subject string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.serviceAccount && c.subject == subject
+}
+
+// markAgentUntil records the latest the next ID token for this request may
+// expire: the request belongs to an agent-class chain.
+func (c *signingAudience) markAgentUntil(until time.Time) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.agentUntil = until
+}
+
+// idTokenLifetime is the lifetime an ID token minted now may have, given
+// the client's own: shortened to what [signingAudience.markAgentUntil]
+// recorded, when it did.
+func (c *signingAudience) idTokenLifetime(own time.Duration) time.Duration {
+	if c == nil {
+		return own
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.agentUntil.IsZero() {
+		return own
+	}
+	return max(min(own, time.Until(c.agentUntil)), 0)
 }
 
 // accessAudienceOf is the id an ACCESS token about to be minted for
