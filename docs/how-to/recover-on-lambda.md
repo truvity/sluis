@@ -30,9 +30,11 @@ recovery is a **password**. The password's design is in [recovery](../explanatio
 - **Ten refused attempts within a minute make a function instance answer 429 for the next minute.** The count lives in
   each instance, so it bounds guessing per instance, not per installation; a 40-character password is not guessable
   either way, and the limit exists because a check costs memory on purpose.
-- **Post the form from the browser that loaded it.** The sign-in page sets a login cookie bound to the form's state, and
-  a proof posted without it is refused with `400 this sign-in did not start in this browser`. A form loaded before an
-  upgrade, or in an older tab, needs a reload; with two sign-in tabs only the last loaded can recover.
+- **Post the form from the browser that loaded it.** The sign-in page sets a recovery cookie
+  (`__Host-access_roster_recovery`) bound to the form's state, and a proof posted without it is refused with `400 this
+  sign-in did not start in this browser`. A form loaded before an upgrade needs a reload. Opening another sign-in page
+  does not break a pending form, but two recovery forms share the one cookie, so only the last loaded can recover. A body
+  over 16 KiB is answered 413.
 - **Every attempt is recorded** as `roster.recovery.signed_in`, the refused ones too (outcome `denied`, with the reason:
   `the proof was not accepted`, `too many refused attempts`, `recovery sign-in is turned off`) and a failure to check as
   `failure`. A refused attempt names nobody (`anonymous`), and none carries the password. A successful one is written
