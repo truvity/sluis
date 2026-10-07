@@ -48,6 +48,7 @@ required=(
     'TestConformance/limits/permanent-family'
     'TestConformance/index/members'
     'TestConformance/trigger/notify'
+    'TestGrantCostOnDynamoDB'
     'TestAMissingTableIsUnavailableNotNotFound'
     'TestCreatingAnExistingTableIsHarmless'
     'TestTheTableHasTTLOnExpires'

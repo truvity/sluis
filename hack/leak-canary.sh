@@ -32,6 +32,14 @@
 #     start, and CHANGELOG.md, whose rollback note moves them back. Any
 #     other file naming it, or any other host in those two, still matches.
 #
+# Estate-internal names (a pattern group added with the neutral-names
+# change): the owner's rule is that this public tree names no estate, so
+# the names are matched as words, case-insensitively, and the script itself
+# is excluded as for every other pattern. 'kernel' is deliberately NOT a
+# pattern: it names a cluster in the estate but is also the OS kernel in
+# legitimate places, and this script has no context-specific patterns.
+# 'hive' is word-bounded so archive/archived never match.
+#
 # Add a pattern here the first time something new turns out to be a
 # particular. Never add an exception without one.
 set -uo pipefail
@@ -55,6 +63,9 @@ legacy_label_prefix='directory-roster\.truvity\.com/'
 # that carries it, for a value that is neither a particular nor secret.
 # `\b` keeps every real shape (bare, in an ARN, as an ECR host: each is
 # bounded by a non-word character) and drops the hex-embedded ones.
+estate_names='\b(opwerm|excavador|nexus)\b'
+estate_hive='\bhive\b'
+
 patterns=(
   "$account_id"                        # AWS account id
   "$arn"                               # any ARN
@@ -64,7 +75,20 @@ patterns=(
   'truvity-[a-z0-9-]*-(ci-cache|artifacts|state)'   # S3 buckets
   "$internal_host"                     # internal hostnames
   'glpat-|ghp_|github_pat_'            # tokens, in case of an accident
+  "$estate_names"                      # estate-internal names
+  "$estate_hive"                       # estate-internal cluster name
+  'excavador\.xyz'                     # estate domain
+  '\.truvity\.private\b'               # private hostnames
+  'truvity/gitops'                     # the private estate repository
 )
+
+# Name patterns match case-insensitively; every other pattern is exact.
+flags() {
+  case "$1" in
+    "$estate_names" | "$estate_hive" | 'excavador\.xyz' | '\.truvity\.private\b' | 'truvity/gitops') echo -iE ;;
+    *) echo -E ;;
+  esac
+}
 
 # mask hides the one shape the header allows for a pattern, on hits read
 # as grep prints them (file:line:text). A pattern with no delta passes
@@ -103,8 +127,8 @@ for p in "${patterns[@]}"; do
   # Exclude this script: it necessarily contains the patterns it bans.
   hits=$(printf '%s\0' "${tracked[@]}" \
            | grep -zZv '^hack/leak-canary\.sh$' \
-           | xargs -0 -r grep -InE "$p" 2>/dev/null \
-           | mask "$p" | grep -E "$p")
+           | xargs -0 -r grep -In $(flags "$p") "$p" 2>/dev/null \
+           | mask "$p" | grep $(flags "$p") "$p")
   if [ -n "$hits" ]; then
     echo "LEAK: pattern /$p/ matched — particulars belong in caller inputs or org variables:"
     echo "$hits" | head -5 | sed 's/^/    /'

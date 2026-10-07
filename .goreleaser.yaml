@@ -182,7 +182,7 @@ archives:
 
   # What the audit installation needs to accept sluis's events: the
   # catalogue and EVERY schema it references, side by side. The audit writer
-  # refuses to start when a schema the catalogue names is missing (hive's was
+  # refuses to start when a schema the catalogue names is missing (an installation's was
   # down for a day on exactly that), so the test holds this glob to the
   # catalogue: nothing missing, nothing extra.
   - id: audit-catalogue
