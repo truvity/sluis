@@ -709,9 +709,11 @@ func (s *signIn) logout(w http.ResponseWriter, r *http.Request) {
 // is what oauth2-proxy chains to, only ended the sign-in — so every
 // console behind a proxy had exactly the failure the fix was written for.
 //
-// Sessions first, sign-in second. If the first half fails the sign-in is
-// still there and the person can try again; the other order would leave
-// sessions running with nothing listing them. Narrowed by identity, which
+// The sign-in first, its sessions second ([endSignIn]): a sign-in still
+// live while its sessions are revoked and its clients told is one a code
+// can still open a session under, which nothing would end. A session the
+// revocation fails to end is still listed under the person, in the
+// console, for them or an operator to end. Narrowed by identity, which
 // the sign-in record carries: an SSO-only query reads every session in
 // the installation and filters, and this runs on an ordinary sign-out.
 //
@@ -803,73 +805,95 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 	return nil
 }
 
-// endSignIn ends one sign-in and everything opened under it: the
-// per-client sessions, Back-Channel Logout to the clients that held them,
-// the audit record, and the sign-in itself. sparingLive leaves the
+// endSignIn ends one sign-in and everything opened under it: the sign-in
+// itself, then the per-client sessions, Back-Channel Logout to the clients
+// that held them, and the audit record. sparingLive leaves the
 // per-client sessions alone and tells nobody (see [signOut]); audited
 // builds the record from how many sessions ended.
 func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingLive bool, audited func(ended int) *auditrecord.Record) {
 	id := signIn.ID
+
+	// The clients that were signed in under this browser WITHOUT a
+	// refresh token -- `openid` alone -- which the session index knows
+	// nothing about. Read now, because ending the sign-in deletes the set
+	// that names them.
+	var (
+		involved    []string
+		involvedErr error
+	)
 	if deps.Issuer != nil {
-		// Read before revoking: once they are gone there is nothing
-		// left to say WHICH clients held them, and the clients that
-		// asked to be told are told by name.
-		held, _ := deps.Issuer.Sessions().List(ctx, Query{Identity: signIn.Identity, SSO: id})
-		// Sparing the live ones means not telling them either: a
-		// Back-Channel Logout would end a session that is still
-		// inside its limit, at the relying party's end.
-		announce := held
-		if sparingLive {
-			announce = nil
-		}
-
-		// And the clients that were signed in under this browser
-		// WITHOUT a refresh token -- `openid` alone -- which the
-		// session index knows nothing about. They hold a session with
-		// this issuer all the same, and are told by subject: there
-		// is no session id to name because their ID token carried
-		// none.
-		if involved, err := deps.SSO.Involved(ctx, id); err == nil {
-			seen := map[string]bool{}
-			for i := range held {
-				seen[held[i].ClientID] = true
-			}
-			for _, clientID := range involved {
-				if !seen[clientID] {
-					announce = append(announce, Session{ClientID: clientID, Identity: signIn.Identity, SSO: id})
-				}
-			}
-		}
-
-		ended := 0
-		var err error
-		if !sparingLive {
-			ended, err = deps.Issuer.Sessions().Revoke(ctx, Query{Identity: signIn.Identity, SSO: id})
-		}
-
-		// After revoking, not before: a client told its session ended
-		// and then finding it alive is worse than one told a moment
-		// late. Best effort, because the sign-out has happened either
-		// way (OIDC Back-Channel Logout 1.0).
-		if deps.Announce != nil {
-			deps.Announce(ctx, announce)
-		}
-		switch {
-		case err != nil:
-			deps.log().WarnContext(ctx, "sign-out could not end what this browser opened",
-				"error", logsafe.Error(err))
-		case ended > 0:
-			deps.log().InfoContext(ctx, "sign-out ended the sessions this browser opened",
-				"ended", ended)
-		}
-		if err == nil && !sparingLive {
-			deps.Issuer.record(ctx, audited(ended))
-		}
+		involved, involvedErr = deps.SSO.Involved(ctx, id)
 	}
 
+	// The sign-in first, then what it opened. From this write on no
+	// browser is signed in by it, and no code completed under it opens
+	// anything: a redemption that reads it now is refused, and one that
+	// read it a moment earlier has filed its session before the listing
+	// below, or reads it again once filed and ends its own
+	// ([Storage.CreateAccessAndRefreshTokens]). The other order left the
+	// sign-in live through the revocation and every Back-Channel Logout,
+	// seconds each, and a code redeemed then opened a session no sign-out
+	// could reach.
 	if err := deps.SSO.End(ctx, id); err != nil {
 		deps.log().WarnContext(ctx, "sign-out could not end the session",
 			"error", logsafe.Error(err))
+	}
+
+	if deps.Issuer == nil {
+		return
+	}
+
+	// Read before revoking: once they are gone there is nothing left to
+	// say WHICH clients held them, and the clients that asked to be told
+	// are told by name. The sessions are records of their own, so the
+	// sign-in having ended does not hide them.
+	held, _ := deps.Issuer.Sessions().List(ctx, Query{Identity: signIn.Identity, SSO: id})
+	// Sparing the live ones means not telling them either: a Back-Channel
+	// Logout would end a session that is still inside its limit, at the
+	// relying party's end.
+	announce := held
+	if sparingLive {
+		announce = nil
+	}
+
+	// The `openid`-only clients hold a session with this issuer all the
+	// same, and are told by subject: there is no session id to name
+	// because their ID token carried none.
+	if involvedErr == nil {
+		seen := map[string]bool{}
+		for i := range held {
+			seen[held[i].ClientID] = true
+		}
+		for _, clientID := range involved {
+			if !seen[clientID] {
+				announce = append(announce, Session{ClientID: clientID, Identity: signIn.Identity, SSO: id})
+			}
+		}
+	}
+
+	ended := 0
+	var err error
+	if !sparingLive {
+		ended, err = deps.Issuer.Sessions().Revoke(ctx, Query{Identity: signIn.Identity, SSO: id})
+	}
+
+	// After revoking, not before: a client told its session ended and
+	// then finding it alive is worse than one told a moment late. Best
+	// effort, because the sign-out has happened either way (OIDC
+	// Back-Channel Logout 1.0).
+	if deps.Announce != nil {
+		deps.Announce(ctx, announce)
+	}
+	switch {
+	case err != nil:
+		deps.log().WarnContext(ctx, "sign-out could not end what this browser opened",
+			"error", logsafe.Error(err))
+	case ended > 0:
+		deps.log().InfoContext(ctx, "sign-out ended the sessions this browser opened",
+			"ended", ended)
+	}
+	if err == nil && !sparingLive {
+		deps.Issuer.record(ctx, audited(ended))
 	}
 }
 
@@ -1150,17 +1174,29 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 		return
 	}
 
-	carryOver(r.Context(), s.deps, previous, who.SSO)
+	// The clients are read before the old sign-in ends, which deletes the
+	// set that names them; the sessions are moved after it, so that a
+	// code redeemed under the old sign-in either files its session before
+	// the move reads the index, or finds the sign-in ended and ends its
+	// own ([Storage.CreateAccessAndRefreshTokens]).
+	clients, clientsErr := s.deps.SSO.Involved(r.Context(), previous.ID)
 
 	if err = s.deps.SSO.End(r.Context(), previous.ID); err != nil {
 		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be ended",
 			"error", logsafe.Error(err))
 	}
+
+	if clientsErr != nil {
+		s.deps.log().WarnContext(r.Context(), "the clients of the browser's previous sign-in could not be read",
+			"error", logsafe.Error(clientsErr))
+	}
+
+	carryOver(r.Context(), s.deps, previous, clients, who.SSO)
 }
 
 // carryOver files what a person opened under one sign-in under the one
-// that replaces it, before the old one ends: the clients it was used at,
-// then the per-client sessions. Nothing is revoked and nobody is told.
+// that replaced it: the clients it was used at, then the per-client
+// sessions. Nothing is revoked and nobody is told.
 //
 // Without it, a step-up stranded everything opened before it: sign-out
 // ends the sessions filed under the sign-in the browser holds, and these
@@ -1171,27 +1207,22 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 // never one whose client it does not list. Best effort, as the rest of
 // [signIn.endPrevious] is: a part that could not be carried is logged and
 // left where it was, which is how a step-up behaved before.
-func carryOver(ctx context.Context, deps SignInDeps, previous SSOSession, to string) {
-	clients, err := deps.SSO.Involved(ctx, previous.ID)
-	if err == nil {
-		for _, clientID := range clients {
-			if err = deps.SSO.Involve(ctx, to, clientID); err != nil {
-				break
-			}
-		}
-	}
+func carryOver(ctx context.Context, deps SignInDeps, previous SSOSession, clients []string, to string) {
+	for _, clientID := range clients {
+		if err := deps.SSO.Involve(ctx, to, clientID); err != nil {
+			deps.log().WarnContext(ctx, "the clients of the browser's previous sign-in could not be carried over",
+				"error", logsafe.Error(err))
 
-	if err != nil {
-		deps.log().WarnContext(ctx, "the clients of the browser's previous sign-in could not be carried over",
-			"error", logsafe.Error(err))
+			break
+		}
 	}
 
 	if deps.Issuer == nil {
 		return
 	}
 
-	if _, err = deps.Issuer.Sessions().Refile(ctx, previous.Identity, previous.ID, to); err != nil {
-		deps.log().WarnContext(ctx, "the sessions of the browser's previous sign-in could not be carried over",
+	if _, err := deps.Issuer.Sessions().Refile(ctx, previous.Identity, previous.ID, to); err != nil {
+		deps.log().WarnContext(ctx, "some sessions of the browser's previous sign-in could not be carried over",
 			"error", logsafe.Error(err))
 	}
 }

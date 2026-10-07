@@ -47,7 +47,7 @@ type Budget struct {
 // completed under a browser sign-in reads that sign-in before anything is
 // opened from it, so that a sign-out landing between a silent completion
 // and the redemption is not outlived by the session the code would open
-// (issuer.Storage.signInStands). The refresh path pays nothing for it.
+// (issuer.Storage.signInEnded, read once the session is filed). The refresh path pays nothing for it.
 var Budgets = []Budget{
 	{
 		Grant: "authorization_code", MaxWrites: 9, MaxReads: 5, Resolutions: 1,

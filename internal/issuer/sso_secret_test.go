@@ -67,6 +67,9 @@ type recState struct {
 	// failGetKey makes the reads of the keys it names fail.
 	failGetKey func(key string) bool
 	failSet    func(key string) bool
+
+	// onWrite runs after a Set of a key: see [recState.setOnWrite].
+	onWrite func(key string)
 }
 
 var errStoreDown = errors.New("the store is down")
@@ -124,6 +127,72 @@ func (r *recState) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	return r.State.Get(ctx, key)
 }
 
+// versioned is the State underneath, when it keeps revisions, as the
+// memory one and every port do.
+type versioned interface {
+	GetVersion(ctx context.Context, key string) ([]byte, string, bool, error)
+	Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error
+}
+
+// GetVersion and Replace forward the revisions, so that what is written
+// over a revision read is written that way here too, and counted as Get
+// and Set are.
+func (r *recState) GetVersion(ctx context.Context, key string) ([]byte, string, bool, error) {
+	if r.failing(true, key) {
+		return nil, "", false, errStoreDown
+	}
+
+	r.note(true, 0)
+
+	if v, ok := r.State.(versioned); ok {
+		return v.GetVersion(ctx, key)
+	}
+
+	raw, found, err := r.State.Get(ctx, key)
+
+	return raw, "", found, err
+}
+
+func (r *recState) Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error {
+	if r.failing(false, key) {
+		return errStoreDown
+	}
+
+	r.note(false, ttl, key, string(value))
+
+	var err error
+	if v, ok := r.State.(versioned); ok {
+		err = v.Replace(ctx, key, value, ttl, version)
+	} else {
+		err = r.State.Set(ctx, key, value, ttl)
+	}
+
+	if err == nil {
+		r.wrote(key)
+	}
+
+	return err
+}
+
+// setOnWrite runs fn after each write of a key, once the write is done,
+// for a test that needs something to happen between two writes.
+func (r *recState) setOnWrite(fn func(key string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.onWrite = fn
+}
+
+func (r *recState) wrote(key string) {
+	r.mu.Lock()
+	fn := r.onWrite
+	r.mu.Unlock()
+
+	if fn != nil {
+		fn(key)
+	}
+}
+
 func (r *recState) Members(ctx context.Context, key string) ([]string, error) {
 	r.note(true, 0)
 
@@ -137,7 +206,13 @@ func (r *recState) Set(ctx context.Context, key string, value []byte, ttl time.D
 
 	r.note(false, ttl, key, string(value))
 
-	return r.State.Set(ctx, key, value, ttl)
+	if err := r.State.Set(ctx, key, value, ttl); err != nil {
+		return err
+	}
+
+	r.wrote(key)
+
+	return nil
 }
 
 func (r *recState) SetIfAbsent(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
@@ -256,6 +331,9 @@ type ssoRig struct {
 
 	mu        sync.Mutex
 	announced []issuer.Session
+	// duringAnnounce runs while a sign-out is telling the clients, for a
+	// test about what can happen in that window.
+	duringAnnounce func()
 }
 
 func (g *ssoRig) told() []issuer.Session {
@@ -304,9 +382,13 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 		Log:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Announce: func(_ context.Context, sessions []issuer.Session) {
 			rig.mu.Lock()
-			defer rig.mu.Unlock()
-
 			rig.announced = append(rig.announced, sessions...)
+			during := rig.duringAnnounce
+			rig.mu.Unlock()
+
+			if during != nil {
+				during()
+			}
 		},
 	})
 	if err != nil {
