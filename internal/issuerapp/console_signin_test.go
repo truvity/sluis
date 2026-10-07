@@ -12,7 +12,6 @@ import (
 // declares, a redirect the client declares back, and a challenge,
 // because a public client is a native one and the library requires one.
 func TestTheConsoleSendsAnOrdinaryAuthorizationRequest(t *testing.T) {
-	t.Parallel()
 
 	entry := signInEntry("https://access.example/", "directory-console", "/console")
 	if entry == nil {
@@ -60,7 +59,6 @@ func TestTheConsoleSendsAnOrdinaryAuthorizationRequest(t *testing.T) {
 // sign-in page of its own rather than sending somebody to a request the
 // issuer will refuse.
 func TestNoConsoleClientMeansNoEntry(t *testing.T) {
-	t.Parallel()
 	for _, tc := range []struct{ name, issuer, client, mount string }{
 		{"no client", "https://access.example", "", "/console"},
 		{"no console", "https://access.example", "directory-console", ""},

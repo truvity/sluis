@@ -41,10 +41,10 @@ func TestTheOpenIDSurfaceIsServed(t *testing.T) {
 	// them.
 	surfaces := map[string]func() (http.Handler, error){
 		"machines only": func() (http.Handler, error) {
-			return issuer.Handler(iss, storage)
+			return handler(iss, storage)
 		},
 		"with sign-in": func() (http.Handler, error) {
-			return issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+			return handlerWithSignIn(iss, storage, issuer.SignInDeps{
 				Providers: []issuer.SignIn{stubSignIn{}},
 			})
 		},

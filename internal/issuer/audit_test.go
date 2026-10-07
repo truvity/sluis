@@ -155,7 +155,7 @@ func TestATokenExchangeKeepsItsRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatal(err)
 	}

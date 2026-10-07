@@ -134,7 +134,7 @@ func newMultiAlgServerState(t *testing.T, primary, rsaKey *issuer.SigningKey, st
 		t.Fatalf("storage: %v", err)
 	}
 
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{
 		Providers: []issuer.SignIn{oneProvider{email: "ada@north.example"}},
 		State:     access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
 	})

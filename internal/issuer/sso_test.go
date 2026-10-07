@@ -67,7 +67,7 @@ func signInServerWith(t *testing.T, email, policyYAML string) (*httptest.Server,
 		t.Fatalf("storage: %v", err)
 	}
 
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{
 		Providers: []issuer.SignIn{oneProvider{email: email}},
 		State:     access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
 		// Where an old /account bookmark is sent, now that the page it

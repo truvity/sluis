@@ -18,7 +18,8 @@ import (
 // counts and every call behind them are logged (go test -v) so a change
 // shows its before and after.
 func TestGrantCostOverTheMemoryAdapter(t *testing.T) {
-	t.Parallel()
+	// Not parallel: the harness builds its own provider and serves it unguarded,
+	// which writes zitadel/oidc's shared default endpoints (see provider_guard_test.go).
 	grantcost.Run(t, func(*testing.T) grantcost.Env {
 		s := memory.New()
 		return grantcost.Env{Set: s.Set(), Advance: s.Advance}

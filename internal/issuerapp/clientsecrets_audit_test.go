@@ -62,7 +62,6 @@ func targetsOf(trail *audittest.Recorder, action string) []string {
 }
 
 func TestACreatedClientSecretIsAuditedOnce(t *testing.T) {
-	t.Parallel()
 	mem := memory.NewSecrets()
 	app, trail, err := auditedBoot(t, mem, inputDir(t, nil), generatingPolicy)
 	if err != nil {
@@ -91,7 +90,6 @@ func TestACreatedClientSecretIsAuditedOnce(t *testing.T) {
 }
 
 func TestAnAdoptedInputSecretIsAuditedWithItsSource(t *testing.T) {
-	t.Parallel()
 	mem := memory.NewSecrets()
 	_, trail, err := auditedBoot(t, mem, inputDir(t, map[string]string{"grafana": "the-secret-in-use"}), generatingPolicy)
 	if err != nil {
@@ -116,7 +114,6 @@ func TestAnAdoptedInputSecretIsAuditedWithItsSource(t *testing.T) {
 }
 
 func TestAnOrphanIsAuditedOnceAndARestoredClientIsAuditedAsAdoptedFromTheRecord(t *testing.T) {
-	t.Parallel()
 	mem := memory.NewSecrets()
 	// What an earlier run left: a record for a client that is not in the policy,
 	// and the record of a client that is, marked orphaned while it was away.
@@ -172,7 +169,6 @@ func TestAnOrphanIsAuditedOnceAndARestoredClientIsAuditedAsAdoptedFromTheRecord(
 // An installation that has dropped its last generated client still hears of the
 // records it left.
 func TestOrphansAreReportedWhenThereIsNoGeneratedClientAtAll(t *testing.T) {
-	t.Parallel()
 	mem := memory.NewSecrets()
 	body, _ := clientcreds.Record{Current: "left-behind", Created: time.Now()}.Encode()
 	if _, err := mem.Put(context.Background(), clientcreds.Path("old-client"), body); err != nil {

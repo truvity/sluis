@@ -11,7 +11,6 @@ import (
 // The console reads the browser's cookie and nothing else: the sign-in's id,
 // which the console itself lists and links, signs nobody in.
 func TestTheConsoleIsNotSignedInByASignInID(t *testing.T) {
-	t.Parallel()
 
 	iss := issuer.New(issuer.Config{URL: "https://access.example"}, nil, nil, issuer.NewMemoryState())
 	signedIn := signedIn(iss, true)

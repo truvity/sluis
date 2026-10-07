@@ -30,7 +30,8 @@ func ssoClientAdds(h *grantcost.Harness) int {
 // session recorded before the flag existed is recorded once more at its next
 // refresh and then carries the flag.
 func TestInvolveHappensOnceAtSignIn(t *testing.T) {
-	t.Parallel()
+	// Not parallel: the harness builds its own provider and serves it unguarded,
+	// which writes zitadel/oidc's shared default endpoints (see provider_guard_test.go).
 	s := memory.New()
 	involveScenario(t, s.Set().State, func(t *testing.T) *grantcost.Harness {
 		return grantcost.New(t, grantcost.Env{Set: s.Set(), Advance: s.Advance})

@@ -87,7 +87,7 @@ func serveIssuerFor(t *testing.T, dir issuer.Directory) (*httptest.Server, *issu
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
@@ -558,7 +558,7 @@ func TestAnIssuerThatSignsNobodyInStillServesItsSessions(t *testing.T) {
 	}
 
 	// No providers at all, which is the posture under test.
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{})
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{})
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}

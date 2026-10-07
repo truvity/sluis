@@ -29,7 +29,6 @@ import (
 // other, so a credential handed to one consumer is not silently a credential
 // for the other.
 func TestTheTwoAWSDoorsEachTakeOnlyTheirOwnAudience(t *testing.T) {
-	t.Parallel()
 	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +83,6 @@ func TestTheTwoAWSDoorsEachTakeOnlyTheirOwnAudience(t *testing.T) {
 
 // One value for both would make them one door again: refused at start.
 func TestTheSameAudienceForBothAWSDoorsIsRefused(t *testing.T) {
-	t.Parallel()
 	cfg := Config{aws: config.AWSFederation{Audience: "same", Accounts: []config.AWSAccount{{
 		Account: "111122223333", Name: "prod", Issuer: "https://abc.tokens.sts.global.api.aws",
 	}}}, consoleAWSAudience: "same", audience: "x"}
@@ -94,7 +92,6 @@ func TestTheSameAudienceForBothAWSDoorsIsRefused(t *testing.T) {
 }
 
 func TestBroadAWSMatchersAreNamedAndNeverRefused(t *testing.T) {
-	t.Parallel()
 	declared, err := policy.Parse([]byte(`
 version: 1
 groups:

@@ -104,7 +104,7 @@ func serveScoping(
 	rec = &recordingHandler{}
 	storage.UseLog(slog.New(rec))
 
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}

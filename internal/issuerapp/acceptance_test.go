@@ -38,6 +38,11 @@ func bootWith(t *testing.T, directory issuer.Directory, change ...func(*config.S
 }
 
 // bootDeps is the same with the dependencies of the caller's choosing.
+//
+// A test that boots an App does not call t.Parallel: issuerapp.New builds an
+// OpenID provider, and zitadel/oidc's constructor writes a package-level
+// default shared by every provider (see internal/issuer/provider_guard_test.go),
+// which the race detector reports as soon as two Apps are built or served at once.
 func bootDeps(t *testing.T, deps issuerapp.Deps, change ...func(*config.Serve)) *issuerapp.App {
 	t.Helper()
 	policyDir := t.TempDir()

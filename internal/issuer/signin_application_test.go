@@ -207,7 +207,7 @@ func chooserServer(t *testing.T, policyYAML string) *httptest.Server {
 		t.Fatalf("storage: %v", err)
 	}
 
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{
 		Providers: []issuer.SignIn{kindOnly("google"), kindOnly("entra")},
 		State:     access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
 	})
