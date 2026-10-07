@@ -3,6 +3,8 @@ package issuer_test
 import (
 	"context"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -253,4 +255,55 @@ func TestAScopeNeverNarrowsAnOperatorOrTheDirectory(t *testing.T) {
 			t.Errorf("one client for everybody with a scope ended %d and left %v", ended, w.clients(t))
 		}
 	})
+}
+
+// "Sign out everything" ends the sign-ins before it revokes the sessions:
+// a code redeemed in between -- here, as the revoke deletes the first
+// session -- is refused, because its sign-in has already ended, and no
+// session survives the lever for a suspected compromise. In the other
+// order the code opened a session under a sign-in still live, which the
+// revoke had already passed.
+func TestACodeRedeemedDuringSignOutEverythingDoesNotSurvive(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	b, id := rig.signedInBrowser(t)
+	rig.open(t, ssoEmail, "argocd", id)
+
+	// A code completed silently under the sign-in, not yet redeemed.
+	sentTo := b.authorizeWith(map[string]string{"scope": "openid offline_access"}, "")
+	if strings.Contains(sentTo, "/login/") {
+		t.Fatalf("the silent sign-in went to %q", sentTo)
+	}
+
+	var (
+		revoking atomic.Bool
+		status   int
+		body     map[string]any
+	)
+
+	// Once, on the first session the revoke touches; the redemption's own
+	// writes come back through here and find the flag already spent.
+	rig.state.setOnWrite(func(key string) {
+		if strings.HasPrefix(key, "issuer:session:") && revoking.CompareAndSwap(true, false) {
+			status, body = redeemAnswer(t, b, sentTo)
+		}
+	})
+
+	revoking.Store(true)
+	if _, err := revoke(t, rig.service(), ssoEmail+"|", &accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail}); err != nil {
+		t.Fatalf("sign out everything: %v", err)
+	}
+
+	if status == 0 {
+		t.Fatal("the code was never redeemed during the revoke; the test proves nothing")
+	}
+
+	if status != http.StatusBadRequest || body["error"] != "invalid_grant" {
+		t.Errorf("redeeming during sign out everything = %d %v, want 400 invalid_grant", status, body["error"])
+	}
+
+	if left := rig.listed(t, ssoEmail); len(left) != 0 {
+		t.Errorf("sessions survived sign out everything: %v", left)
+	}
 }
