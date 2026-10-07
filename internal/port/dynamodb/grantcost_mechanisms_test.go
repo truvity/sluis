@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -122,8 +123,11 @@ func TestRotationOverTheFakeSpendsTheOldPointer(t *testing.T) {
 		t.Fatalf("Refreshed = %q, %v", got, ok)
 	}
 	rec, err := s.store.Get(ctx, pointerKey("t0"))
-	if err != nil || string(rec.Value) != "spent:t1" {
-		t.Fatalf("the old pointer = %q, %v; want spent:t1", rec.Value, err)
+	if err != nil || !strings.HasPrefix(string(rec.Value), "spent:") || !strings.HasSuffix(string(rec.Value), ":"+opened.ID) {
+		t.Fatalf("the old pointer = %q, %v; want the mark of a token spent in %s", rec.Value, err, opened.ID)
+	}
+	if strings.Contains(string(rec.Value), "t1") {
+		t.Errorf("the mark %q holds the successor in plain", rec.Value)
 	}
 
 	// A replay inside the grace window is answered with the successor.
@@ -134,13 +138,10 @@ func TestRotationOverTheFakeSpendsTheOldPointer(t *testing.T) {
 		t.Error("after a replay exactly the successor should be live")
 	}
 
-	s.store.Advance(29 * time.Second)
+	// Kept past the grace window, so that a reuse is known for one.
+	s.store.Advance(31 * time.Second)
 	if _, err = s.store.Get(ctx, pointerKey("t0")); err != nil {
-		t.Errorf("the spent pointer lapsed before 30 seconds: %v", err)
-	}
-	s.store.Advance(2 * time.Second)
-	if _, err = s.store.Get(ctx, pointerKey("t0")); err == nil {
-		t.Error("the spent pointer outlived its 30 seconds")
+		t.Errorf("the spent pointer lapsed with the grace window: %v", err)
 	}
 	if _, ok := s.refresh(t, "t0", "t-late"); ok {
 		t.Error("a replay after the grace window was answered")
