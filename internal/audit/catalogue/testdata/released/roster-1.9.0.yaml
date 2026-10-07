@@ -128,7 +128,7 @@ actions:
       en: "{actor} signed out, ending {data_ended, plural, one {# session} other {# sessions}}"
 
   roster.session.revoked:
-    summary: A person's sessions were revoked.
+    summary: A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window.
     operation: remove
     categories: [authentication, account_lifecycle]
     profiles: [security]

@@ -315,6 +315,15 @@ func (m spentMark) bound() string {
 // little ahead of this one reads as inside it.
 func (m spentMark) inGrace(now time.Time) bool { return now.Sub(m.at) < refreshGrace }
 
+// reusedAt reports whether a spent token presented at now is a reuse that
+// ends its session: past the grace window by more than the clock
+// tolerance, so that a replica whose clock runs a little ahead of the one
+// that spent the token cannot turn a client's own burst of refreshes,
+// spread across replicas, into a revocation.
+func (m spentMark) reusedAt(now time.Time) bool {
+	return now.Sub(m.at) > refreshGrace+markAheadTolerance
+}
+
 // successor opens the successor sealed in the mark, with the spent token
 // that was presented. False when it does not open, which a mark written
 // for this token always does.
@@ -568,10 +577,12 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 		}
 
 		// The seal is opened on both paths, not only the one that needs the
-		// successor. A mark that does not open with the presented token was
-		// not written by the rotation that spent it -- planted by somebody
-		// who can write the store, under a token hash of their choosing --
-		// and must not end the session it names.
+		// successor. It is bound to the mark's time and session id, so a
+		// mark whose time or session was edited does not open, and ends
+		// nothing. It is no defence against somebody who can write the
+		// store, who could delete the session outright anyway; it keeps a
+		// mark from being read as anything other than what its rotation
+		// wrote.
 		successor, ok := mark.successor(token)
 		if !ok {
 			return presented{}, false, nil
@@ -587,11 +598,17 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 				"the replicas' clocks disagree", "ahead", ahead.String())
 		}
 
-		if !mark.inGrace(now) {
+		switch {
+		case mark.inGrace(now):
+			return s.replayedTo(ctx, token, successor)
+		case mark.reusedAt(now):
 			return s.reusedIn(ctx, token, mark.session)
+		default:
+			// Between the grace window and the tolerance past it: refused,
+			// and nothing ended, in case this replica's clock is the one
+			// that runs ahead.
+			return presented{}, false, nil
 		}
-
-		return s.replayedTo(ctx, token, successor)
 	}
 
 	session, record, live, err := s.byIDVersion(ctx, string(raw))
@@ -602,22 +619,56 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 	return presented{token: token, session: session, pointer: pointer, record: record}, true, nil
 }
 
-// markAheadTolerance is how far ahead of this replica's clock a spent
-// mark may be dated before it is reported as clock skew.
+// markAheadTolerance is how far the replicas' clocks may disagree before
+// it matters: a spent mark dated further ahead of this replica's clock than
+// this is reported as skew, and a reuse is acted on only this far past the
+// grace window ([spentMark.reusedAt]). The replicas are expected to keep
+// their clocks with NTP; the tolerance is for its residual error, not a
+// substitute for it.
 const markAheadTolerance = 2 * time.Second
 
 // reusedIn answers a token spent longer ago than the grace window with the
 // session it was spent in, when that is still live: one read, of the
-// record. A session already ended, by a revocation, its expiry or an
-// earlier reuse of the same token, leaves nothing to end, and the token is
-// then simply refused.
+// record, whose revision is kept so that ending it is conditional on it
+// ([Sessions.endReused]). A session already ended, by a revocation, its
+// expiry or an earlier reuse of the same token, leaves nothing to end, and
+// the token is then simply refused.
 func (s *Sessions) reusedIn(ctx context.Context, token, id string) (presented, bool, error) {
-	session, live, err := s.byID(ctx, id)
+	session, record, live, err := s.byIDVersion(ctx, id)
 	if err != nil || !live {
 		return presented{}, false, err
 	}
 
-	return presented{token: token, session: session, reused: session.ID}, false, nil
+	return presented{token: token, session: session, reused: session.ID, record: record}, false, nil
+}
+
+// endReused ends the session a reuse was detected in, only if its record
+// is still the revision [Sessions.reusedIn] read. It reports whether this
+// call ended it: false, with no error, when something else wrote or ended
+// the record since -- another presentation of the same spent token, most
+// likely, which is then the one that ends it and says so.
+//
+// The record goes first, and conditionally: that one write ends the
+// session, since every token resolves through it, and decides which of
+// several concurrent reuses is the one. The three index sets follow; a
+// failure there leaves ids the next listing drops, and the session ended.
+// Four writes in all, and none for a reuse that lost.
+func (s *Sessions) endReused(ctx context.Context, p presented) (bool, error) {
+	err := deleteVersion(ctx, s.state, sessionKey(p.session.ID), p.record)
+	switch {
+	case errors.Is(err, errMoved), errors.Is(err, errGone):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	for _, key := range []string{sessionAllKey, sessionOfKey(p.session.Identity), sessionForKey(p.session.ClientID)} {
+		if err = s.state.Remove(ctx, key, p.session.ID); err != nil {
+			return true, err
+		}
+	}
+
+	return true, nil
 }
 
 // replayedTo answers a token that was rotated moments ago with the

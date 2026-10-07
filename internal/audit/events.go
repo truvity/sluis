@@ -158,16 +158,12 @@ const ScopeRefreshTokenReuse = "refresh_token_reuse"
 
 // SessionReuseRevoked is the issuer ending one of a person's sessions at a
 // client because a refresh token already spent in it was presented again
-// (RFC 9700 section 4.14.2). sso is the browser sign-in the session was
-// opened under, which the issuer leaves alone, so that an operator can end
-// it; empty for a session opened under none.
-func SessionReuseRevoked(person, client, sso string) *record.Record {
-	d := data{"scope": ScopeRefreshTokenReuse, "ended": 1}
-	if sso != "" {
-		d["sso"] = sso
-	}
-	return build("roster.session.revoked", System(), Succeeded(),
-		personParty(person), []*record.Target{targetClient(client)}, d)
+// (RFC 9700 section 4.14.2).
+//
+// It names no browser sign-in: a sign-in's id is the value of its cookie,
+// and nothing that is a credential goes into an audit record.
+func SessionReuseRevoked(person, client string) *record.Record {
+	return SessionRevoked(System(), person, client, ScopeRefreshTokenReuse, 1)
 }
 
 // SessionRefreshRefused is a session refused a refresh.

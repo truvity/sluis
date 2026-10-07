@@ -939,7 +939,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	// A spent token past its grace window, presented by the session's own
 	// client: the session ends here, before anything is resolved or minted.
 	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
-		return "", "", time.Time{}, s.endReuse(ctx, req.session)
+		return "", "", time.Time{}, s.endReuse(ctx, req.presented)
 	}
 
 	issued, err := s.issue(ctx, request)
@@ -1402,23 +1402,43 @@ func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) erro
 // listing, every refresh token of it dead, the access tokens naming it
 // refused by userinfo. A client that asked for back-channel logout is
 // told. The browser sign-in the session was opened under is left alone, so
-// that a false positive costs one client's session and not every one; the
-// audit record names it, for an operator who decides otherwise.
+// that a false positive costs one client's session and not every one.
 //
-// The audit record is written before the session is deleted, and the
-// record goes first in the delete, so a delete that fails part way and is
-// retried finds no live session and writes no second record. A delete
-// that fails outright is a server error rather than a refusal, so that the
-// client tries again and the reuse is met again.
-func (s *Storage) endReuse(ctx context.Context, session Session) error {
+// Ending it is conditional on the record being the revision read when the
+// reuse was detected ([Sessions.endReused]). Several presentations of one
+// spent token at once all detect the reuse; the one whose delete lands
+// ends the session, and only it is audited and announced. The others are
+// refused as any spent token is, and write nothing. The audit record
+// follows the delete that decides this rather than preceding it: written
+// first, every presentation would write one, and a delete that then failed
+// would leave a record of an end that did not happen. A delete that fails
+// outright is a server error rather than a refusal, so that the client
+// tries again and the reuse is met again.
+func (s *Storage) endReuse(ctx context.Context, p presented) error {
 	recordReuse(ctx, "refresh_token")
-	s.iss.record(ctx, audit.SessionReuseRevoked(session.Identity, session.ClientID, session.SSO))
+	session := p.session
 
-	if err := s.iss.Sessions().deleteSession(ctx, session); err != nil {
-		s.logger().WarnContext(ctx, "a spent refresh token was reused and its session could not be ended",
+	ended, err := s.iss.Sessions().endReused(ctx, p)
+	if !ended {
+		if err != nil {
+			s.logger().WarnContext(ctx, "a spent refresh token was reused and its session could not be ended",
+				"error", logsafe.Error(err))
+
+			return oidc.ErrServerError().WithDescription("%s", err)
+		}
+
+		// Another presentation of the same token ended it, or something
+		// else wrote the record since: nothing for this one to do.
+		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+	}
+
+	s.iss.record(ctx, audit.SessionReuseRevoked(session.Identity, session.ClientID))
+	if err != nil {
+		// Ended -- the record is gone, and every token resolves through it
+		// -- with an index set still naming it, which the next listing
+		// drops.
+		s.logger().WarnContext(ctx, "a reused session was ended and an index set still names it",
 			"error", logsafe.Error(err))
-
-		return oidc.ErrServerError().WithDescription("%s", err)
 	}
 
 	// WARN, as for a reused authorization code: a broken client or a
