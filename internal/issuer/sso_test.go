@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -99,7 +100,28 @@ func newBrowser(t *testing.T, server *httptest.Server) *browser {
 func (b *browser) do(method, path string) (status int, location, body string) {
 	b.t.Helper()
 
-	request, err := http.NewRequestWithContext(b.t.Context(), method, b.server.URL+path, nil)
+	status, location, body, _ = b.send(method, path, nil)
+
+	return status, location, body
+}
+
+// post sends a form, as a page's form does, and returns the response's
+// headers too.
+func (b *browser) post(path string, form url.Values) (status int, location, body string, header http.Header) {
+	b.t.Helper()
+
+	return b.send(http.MethodPost, path, form)
+}
+
+func (b *browser) send(method, path string, form url.Values) (status int, location, body string, header http.Header) {
+	b.t.Helper()
+
+	var content io.Reader
+	if form != nil {
+		content = strings.NewReader(form.Encode())
+	}
+
+	request, err := http.NewRequestWithContext(b.t.Context(), method, b.server.URL+path, content)
 	if err != nil {
 		b.t.Fatalf("build the request: %v", err)
 	}
@@ -132,10 +154,9 @@ func (b *browser) do(method, path string) (status int, location, body string) {
 		b.cookies[cookie.Name] = cookie.Value
 	}
 
-	buf := make([]byte, 1<<16)
-	n, _ := response.Body.Read(buf)
+	raw, _ := io.ReadAll(response.Body)
 
-	return response.StatusCode, response.Header.Get("Location"), string(buf[:n])
+	return response.StatusCode, response.Header.Get("Location"), string(raw), response.Header
 }
 
 // authorize starts one authorization request and returns where the

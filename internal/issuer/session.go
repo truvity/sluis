@@ -249,6 +249,29 @@ func (s *Sessions) agentDeadline(authTime time.Time, resource string) time.Time 
 	return authTime.Add(absolute)
 }
 
+// deadlineAt is the deadline a chain of class opened now, for resource, by
+// a person who authenticated at authTime, gets: an agent chain's
+// [Sessions.agentDeadline], an interactive one's auth_time plus the limit
+// its resource allows. Zero where there is none. It is what the consent
+// page shows and the sign-in's audit record carries, computed as
+// [Sessions.Record] will compute it, never a nominal 30 days.
+func (s *Sessions) deadlineAt(class SessionClass, authTime time.Time, resource string) time.Time {
+	if class == ClassAgent {
+		return s.agentDeadline(authTime, resource)
+	}
+
+	if absolute := s.absoluteOf(resource); !authTime.IsZero() && absolute > 0 {
+		return authTime.Add(absolute)
+	}
+
+	return time.Time{}
+}
+
+// DeadlineOf is the latest a session may live to as the policy and the
+// configuration stand now ([Sessions.limitOf]), or zero for none: what the
+// console shows beside the sliding expiry.
+func (s *Sessions) DeadlineOf(session Session) time.Time { return s.limitOf(session) }
+
 // refreshOf is a session's idle limit: its class's refresh window. Every
 // store lifetime that follows the session -- the record's, its token
 // pointers' -- is this, so that a record still stored and no longer live is

@@ -252,7 +252,7 @@ func TestAnAgentCodeRedemptionCapsItsTokens(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = storage.Complete(ctx, pending.GetID(), Authenticated{
+			if err = storage.CompleteAcceptedForTest(ctx, pending.GetID(), Authenticated{
 				Subject: "ada@north.example", AuthTime: time.Now().Add(-tc.authAgo), How: "google",
 			}); err != nil {
 				t.Fatalf("complete: %v", err)

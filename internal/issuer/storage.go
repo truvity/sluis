@@ -18,6 +18,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
+	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/logsafe"
@@ -236,6 +237,11 @@ type Storage struct {
 	// session, with no State read ([deadRefreshes]). Per-process, like
 	// documents: a replica that has not seen the token pays its reads once.
 	dead *deadRefreshes
+
+	// signInState is the codec the sign-in pages sign their states with:
+	// what an agent-consent acceptance is verified against
+	// ([Storage.UseSignInState]). Nil completes no agent-class request.
+	signInState *access.StateCodec
 }
 
 // The authentication context classes this issuer can report. Custom
@@ -880,7 +886,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// one a code can be issued for.
 	if err = s.entitled(ctx, req.Req.ClientID, req.Resource, who.Subject, who.How == RecoveryHow); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
-			s.iss.record(ctx, signInEvent(who, req.Req.ClientID,
+			s.iss.record(ctx, signInEvent(who, req.Req.ClientID, "", time.Time{},
 				audit.Denied("signed in, and admitted to no group this client requires")))
 		}
 		return err
@@ -901,6 +907,26 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	if who.How == RecoveryHow {
 		req.Class = ClassInteractive
 	}
+	deadline := s.iss.Sessions().deadlineAt(req.Class, authTime, req.Resource)
+	if req.Class == ClassAgent && deadline.IsZero() {
+		// No agent lifetimes to give it: the session the code opens would be
+		// interactive ([Sessions.Record]), so the request is one too.
+		req.Class = ClassInteractive
+		deadline = s.iss.Sessions().deadlineAt(req.Class, authTime, req.Resource)
+	}
+
+	// An agent-class request never completes silently: only on an
+	// acceptance made, after authentication, in the browser the consent
+	// page was shown in, and verified HERE rather than by the page that
+	// received it -- every sign-in converges on this function, so no door
+	// can complete one without it (docs/decisions/0040-agent-class-sessions.md,
+	// decision 6). Nothing is recorded: the page that asks is not a refusal.
+	if req.Class == ClassAgent {
+		if err = s.acceptedAgent(id, who); err != nil {
+			return err
+		}
+	}
+	signedIn := signInEvent(who, req.Req.ClientID, req.Class, deadline, audit.Succeeded())
 
 	// A recovery sign-in is written down durably before the request is
 	// marked done — a request marked done is one a code can be issued for —
@@ -910,8 +936,8 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// and the pod's own token alone, nothing this service runs.
 	recovery := who.How == RecoveryHow
 	if recovery {
-		if err = s.iss.recordDurable(ctx, signInEvent(who, req.Req.ClientID, audit.Succeeded())); err != nil {
-			s.iss.record(ctx, signInEvent(who, req.Req.ClientID,
+		if err = s.iss.recordDurable(ctx, signedIn); err != nil {
+			s.iss.record(ctx, signInEvent(who, req.Req.ClientID, req.Class, deadline,
 				audit.Denied("the audit trail could not be written, and a recovery sign-in is refused without its record")))
 			return fmt.Errorf("%w: %w", ErrUnaudited, err)
 		}
@@ -920,12 +946,12 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	if err = setJSON(ctx, s.state, requestKey(id), req, authRequestTTL); err != nil {
 		if recovery {
 			// Its record already says it succeeded; this says it did not.
-			s.iss.record(ctx, signInEvent(who, req.Req.ClientID, audit.Failed("the sign-in could not be saved")))
+			s.iss.record(ctx, signInEvent(who, req.Req.ClientID, req.Class, deadline, audit.Failed("the sign-in could not be saved")))
 		}
 		return err
 	}
 	if !recovery {
-		s.iss.record(ctx, signInEvent(who, req.Req.ClientID, audit.Succeeded()))
+		s.iss.record(ctx, signedIn)
 	}
 	return nil
 }
@@ -933,6 +959,34 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 // ErrUnaudited is a recovery sign-in refused because its record could not
 // be written.
 var ErrUnaudited = errors.New("the audit trail could not be written")
+
+// ErrAgentConsentRequired is an agent-class request that cannot complete
+// without the person's acceptance in this browser: none was presented, or
+// the one presented does not verify. The sign-in pages answer it with the
+// consent page after authentication, and an acceptance post with a refusal.
+var ErrAgentConsentRequired = errors.New("an agent connection needs to be accepted in this browser")
+
+// UseSignInState gives the storage the codec the sign-in pages sign their
+// states with, which is what [Storage.Complete] verifies an agent-consent
+// acceptance against. A storage given none completes no agent-class request
+// at all. [HandlerWithSignIn] wires it from the sign-in dependencies.
+func (s *Storage) UseSignInState(codec *access.StateCodec) { s.signInState = codec }
+
+// acceptedAgent verifies the acceptance a completion carries for this
+// request and this person: the token's purpose, the request it is bound
+// to, the subject and sign-in it was shown to, and the cookie beside it,
+// compared in constant time ([access.StateCodec.VerifyAgentConsent]).
+func (s *Storage) acceptedAgent(request string, who Authenticated) error {
+	if s.signInState == nil {
+		return fmt.Errorf("%w: this issuer has no sign-in state to verify an acceptance with", ErrAgentConsentRequired)
+	}
+
+	if err := s.signInState.VerifyAgentConsent(who.Consent, request, access.AgentConsentActor(who.Subject, who.SSO)); err != nil {
+		return fmt.Errorf("%w: %w", ErrAgentConsentRequired, err)
+	}
+
+	return nil
+}
 
 // classOf is the session class the policy gives a client NOW: its own row's
 // `session`, or, for a client that describes itself and is admitted by an
@@ -985,11 +1039,15 @@ func classOfRequest(request op.TokenRequest) SessionClass {
 // signInEvent is a completed or refused sign-in at one client. A recovery
 // sign-in is its own kind, because it is the way in that bypasses the
 // directory and has to be findable as such.
-func signInEvent(who Authenticated, clientID string, o audit.Outcome) *record.Record {
+//
+// A person's carries the class of the chain the sign-in opens and its
+// computed deadline (docs/decisions/0040-agent-class-sessions.md, decision
+// 8); a refusal decided neither and carries none.
+func signInEvent(who Authenticated, clientID string, class SessionClass, deadline time.Time, o audit.Outcome) *record.Record {
 	if who.How == RecoveryHow {
 		return audit.RecoverySignedIn(audit.RecoveryIdentity(who.Subject), clientID, who.How, o)
 	}
-	return audit.SignedIn(audit.Identified(who.Subject), clientID, who.How, o)
+	return audit.SignedInSession(audit.Identified(who.Subject), clientID, who.How, string(class), deadline, o)
 }
 
 // Pending reports what an authorization request asks of a sign-in, so
@@ -1011,6 +1069,14 @@ func (s *Storage) Pending(id string) (Pending, error) {
 	// row is simply no name.
 	if declared, ok := s.iss.Policy().Client(req.Req.ClientID); ok {
 		out.Client = declared
+	}
+
+	// Whether the request would open an agent-class chain as the policy
+	// stands now, for the pages to bypass a silent completion and say so.
+	// [Storage.Complete] decides the class again, and is what enforces it.
+	if s.classOf(req.Req.ClientID) == ClassAgent {
+		out.Agent = true
+		out.AgentAbsolute = s.iss.Sessions().agentAbsoluteOf(req.Resource)
 	}
 
 	for _, prompt := range req.Req.Prompt {

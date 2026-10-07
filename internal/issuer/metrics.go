@@ -83,6 +83,9 @@ const (
 	LoginNotWaiting = "not_waiting"
 	// LoginBadRequest is a form or a start that is not well formed.
 	LoginBadRequest = "bad_request"
+	// LoginConsentRefused is an agent connection's acceptance that did not
+	// verify, or one whose browser sign-in no longer stood when it arrived.
+	LoginConsentRefused = "consent_refused"
 )
 
 // recordLoginFailure counts one sign-in that did not complete.

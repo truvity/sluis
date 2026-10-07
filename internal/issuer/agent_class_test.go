@@ -454,7 +454,7 @@ func TestTheClassDecidedAtCompleteSurvivesAPolicyFlip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = before.Complete(ctx, pending.GetID(), issuer.Authenticated{
+			if err = before.CompleteAcceptedForTest(ctx, pending.GetID(), issuer.Authenticated{
 				Subject: "ada@north.example", AuthTime: time.Now(), How: "google",
 			}); err != nil {
 				t.Fatalf("complete: %v", err)
@@ -745,7 +745,13 @@ func TestARecoverySignInIsAlwaysInteractive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = storage.Complete(ctx, pending.GetID(), who); err != nil {
+		// A recovery sign-in needs no acceptance, being interactive
+		// whatever the client; a person's to an agent client does.
+		complete := storage.Complete
+		if who.How != issuer.RecoveryHow {
+			complete = storage.CompleteAcceptedForTest
+		}
+		if err = complete(ctx, pending.GetID(), who); err != nil {
 			t.Fatalf("complete %s: %v", who.How, err)
 		}
 		completed, err := storage.AuthRequestByID(ctx, pending.GetID())
