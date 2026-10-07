@@ -14,7 +14,7 @@ A name is a path of segments of letters, digits, `.`, `_` and `-`, separated by 
 ```yaml
 secrets:
   source: ssm          # env | file | ssm
-  root: /sluis/hive    # file: a directory; ssm: the installation's root
+  root: /sluis/example    # file: a directory; ssm: the installation's root
   region: eu-west-1    # ssm only
   refresh: 5m          # ssm only
 ```

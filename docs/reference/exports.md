@@ -36,7 +36,7 @@ nothing changed. `name` (default `<source>.<what>`, for instance
 
 ## An example
 
-The blocks that reproduce, on the kernel cluster, the External Secrets `PushSecret`s an estate ran before
+The blocks that reproduce, on a cluster, the External Secrets `PushSecret`s an estate ran before
 (`ports.adapter: dynamodb` with a secrets adapter, the `slackApps` and `apps.github.runnerTiers` declared as usual),
 first in the service document, then in the policy document:
 
@@ -46,13 +46,13 @@ ports:
   export:
     adapter: openbao
     openbao:
-      address: https://openbao.kernel.example
+      address: https://openbao.staging.example
       caFile: /var/run/access-issuer/openbao-ca/ca.pem   # exports.openbao.caBundle
       mount: kv
-      namespace: kernel
+      namespace: staging
       auth:
         method: jwt                      # or kubernetes
-        mount: jwt-kernel
+        mount: jwt-staging
         role: sluis-writer
         tokenFile: /var/run/openbao/token                # exports.openbao.token.audience
 ```
@@ -64,9 +64,9 @@ exports:
   - {source: slack-app, app: alerts-trustform, path: slack-apps/alerts-trustform}
   - {source: slack-app, app: deadman, path: slack-apps/deadman}
   - {source: runner-app, tier: preview, org: trust-form, namespace: devel, path: arc/trustform}
-  - {source: runner-app, tier: preview, org: truvity, namespace: devel, path: arc/truvity}
+  - {source: runner-app, tier: preview, org: truvity, namespace: devel, path: arc/acme}
   - {source: runner-app, tier: stable, org: trust-form, path: arc/trustform}
-  - {source: runner-app, tier: stable, org: truvity, path: arc/truvity}
+  - {source: runner-app, tier: stable, org: truvity, path: arc/acme}
   - {source: bundle, bundle: workspace-credentials, path: sluis-backup/workspace-credentials}
   - {source: bundle, bundle: github-apps, path: sluis-backup/github-apps}
   - {source: bundle, bundle: github-links, path: sluis-backup/github-links}

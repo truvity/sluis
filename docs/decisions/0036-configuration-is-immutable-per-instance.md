@@ -12,7 +12,7 @@ once there is more than one platform. Three pressures arrived together:
 - **Lambda.** The function's code is the released artefact, and an installation
   must be able to show that what runs is the release. Baking the installation's
   configuration into the zip makes the deployed code something nobody released.
-- **Two installations in one account.** hive and Truvity's `kernel` both run
+- **Two installations in one account.** Two estates (one on Kubernetes, one on AWS Lambda) both run
   sluis; their SSM parameters must not collide.
 - **Policy-like keys in the service documents.** Exchange clusters and AWS
   accounts, GitHub owners and runner tiers, catalogues, exports and the
@@ -62,7 +62,7 @@ schemas authored, tests binding the structs) already answers part of this.
    mounted file, or a declared secret source (an amendment to contract section
    5). On Lambda sluis resolves `/sluis/<instance>/private/config/...` by
    prefix and re-reads it every five minutes. SSM layout v3, with `<instance>`
-   the installation's name (hive: `hive`, Truvity: `kernel`), so two
+   the installation's name (for example `acme` and `prod`), so two
    installations can share an account:
 
    ```

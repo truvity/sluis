@@ -78,7 +78,7 @@ trail](read-the-audit-trail.md)).
 
 ```go
 off := false
-sluispulumi.NewLambda(ctx, "kernel", &sluispulumi.LambdaArgs{
+sluispulumi.NewLambda(ctx, "acme", &sluispulumi.LambdaArgs{
 	// ...
 	Recovery: &sluispulumi.RecoveryArgs{Enabled: &off},
 })

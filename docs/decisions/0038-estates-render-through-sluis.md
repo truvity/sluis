@@ -12,11 +12,11 @@ An instance is started with two documents: the service document (`sluis.yaml`,
 immutable per instance and 0037 made them one pair. Neither said who writes them,
 and in practice both estates write them by hand, each in its own way:
 
-- **hive** (AWS Lambda) builds `map[string]any` documents in Go, and keeps the
+- **One estate** (on AWS Lambda) builds `map[string]any` documents in Go, and keeps the
   names the library owns (`secrets`, the state secret, the trigger's function) out
   of them by convention. The Pulumi library renders the policy from layers and
   refuses a document that disagrees with what it writes.
-- **Truvity** (Kubernetes) hand-renders the policy pieces in Go and Helm helpers:
+- **The other estate** (on Kubernetes) hand-renders the policy pieces in Go and Helm helpers:
   the roster values, the exchange clusters, the catalogue, the exports. The chart
   copies `config` into a ConfigMap and re-checks it against the values around it.
 
@@ -70,8 +70,8 @@ package) and a deprecation period for what it replaces.
 
 ## Consequences
 
-- An estate deletes its hand-rendering: nexus its `map[string]any` documents and the
-  policy layers' Go, gitops `pkg/cfggen/render/values.go`'s policy pieces and the
+- An estate deletes its hand-rendering: the Lambda estate its `map[string]any` documents and the
+  policy layers' Go, the Kubernetes estate its generated policy pieces and the
   Helm helpers that rebuild the policy from values. What remains in an estate is the
   facts, as data.
 - A change to the documents' shape is made once, in sluis, and reaches both estates

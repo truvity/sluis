@@ -67,7 +67,7 @@ lifetime), `secrets` (dynamic secrets, and the exports under `export/`), `blobs`
 `on-request`) and a factory from its settings. `port.Catalogue` lists the adapters that are planned and not built;
 `port.Default.Matrix()` is the registry plus the catalogue, which [adapters](../reference/adapters.md) is generated from.
 
-**Only what Truvity and hive need is built.** Both run the `aws-hybrid` preset: sluis on Lambda, DynamoDB state, SSM
+**Only what the current estates need is built.** Both run the `aws-hybrid` preset: sluis on Lambda, DynamoDB state, SSM
 secrets, KMS token signing, S3 blobs, SQS audit, EventBridge ticks and an asynchronous invoke for "run a pass now".
 Every other adapter is *on request*: it is in the matrix, and start refuses it.
 

@@ -5,7 +5,7 @@ is not in the root module's dependency graph. The infrastructure lives here, in 
 serves, and gitops only wires it: a stack calls the constructors and renders the processes' configuration from the same
 names. Source: `deploy/pulumi`; the exported identifiers are in [Go packages](go-module.md).
 
-**Lambda is the main path** (decision of 2026-10-04: Truvity and hive both run sluis on AWS Lambda). `NewLambda` is the
+**Lambda is the main path** (decision of 2026-10-04: both estates run sluis on AWS Lambda). `NewLambda` is the
 whole of it: ONE function, one role, the HTTP API with a mutual-TLS custom domain, the signing key and the schedules.
 `NewKubernetesIdentity` (EKS Pod Identity) is kept for an installation that still runs the Deployment, and is not
 extended. Since v1.63 sluis is one process everywhere ([decision 0037](../decisions/0037-one-process-everywhere.md)): one
@@ -30,14 +30,14 @@ and `RenderPorts` (`RenderPortsYAML`), which renders the `ports:` block. The Lam
 example here is the storage, the table and the Pod Identity role.
 
 ```go
-store, _ := sluispulumi.NewStorage(ctx, "kernel", &sluispulumi.StorageArgs{
-	BucketName: "acme-kernel-sluis",
+store, _ := sluispulumi.NewStorage(ctx, "acme", &sluispulumi.StorageArgs{
+	BucketName: "acme-prod-sluis",
 }, pulumi.Providers(awsProvider))
-state, _ := sluispulumi.NewState(ctx, "kernel", &sluispulumi.StateArgs{
-	TableName: "kernel-sluis",
+state, _ := sluispulumi.NewState(ctx, "acme", &sluispulumi.StateArgs{
+	TableName: "acme-sluis",
 }, pulumi.Providers(awsProvider))
-ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "kernel", &sluispulumi.KubernetesIdentityArgs{
-	ClusterName: "kernel", ClusterArn: clusterArn, AccountID: accountID,
+ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.KubernetesIdentityArgs{
+	ClusterName: "acme", ClusterArn: clusterArn, AccountID: accountID,
 	Namespace:              "sluis",
 	PermissionsBoundaryArn: boundaryArn,
 	ServiceAccount:         "sluis",
@@ -175,8 +175,8 @@ the components were given, so none waits for a resource:
 
 ```go
 y, _ := sluispulumi.RenderPortsYAML(sluispulumi.PortsArgs{
-	BucketName: "acme-kernel-sluis",
-	TableName:  "kernel-sluis",
+	BucketName: "acme-prod-sluis",
+	TableName:  "acme-sluis",
 	Region:     "eu-west-1",
 })
 ```
@@ -186,8 +186,8 @@ ports:
   adapter: dynamodb
   blob:
     adapter: s3
-    s3: {bucket: acme-kernel-sluis, region: eu-west-1}
-  dynamodb: {region: eu-west-1, table: kernel-sluis}
+    s3: {bucket: acme-prod-sluis, region: eu-west-1}
+  dynamodb: {region: eu-west-1, table: acme-sluis}
 ```
 
 `create` is never rendered: the table is the infrastructure's, and the adapter binds to it and checks it. Credentials are
@@ -206,7 +206,7 @@ do is in [AWS Lambda: reference](lambda.md); why it is shaped so, in [sluis on A
 ```go
 l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Region: "eu-central-1", AccountID: accountID,
-	Instance:      "kernel",    // the SSM root /sluis/kernel (layout v3)
+	Instance:      "acme",    // the SSM root /sluis/acme (layout v3)
 	Package:       "dist/sluis-lambda_1.63.0_linux_arm64.zip", // or an https URL
 	PackageSHA256: "<the release's digest, pinned here>",
 	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
@@ -243,7 +243,7 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | Field | Default | Meaning |
 |---|---|---|
 | `Region`, `AccountID` | required | Name the SSM parameters and the function in the role's policy. |
-| `Instance` | required | The installation's name (`hive`, `kernel`): lower-case letters, digits and dashes, never `private` or `export`. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account. |
+| `Instance` | required | The installation's name (`acme`, `prod`): lower-case letters, digits and dashes, never `private` or `export`. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account. |
 | `Package`, `PackageSHA256`, `PackageVersion` | required, required, from the file name | The released zip, deployed unchanged; its SHA-256 (a reviewed pin); the release it is, when its name does not say. |
 | `Installation` | `Config`, or this | What the estate knows ([the installation document](installation-document.md), `github.com/truvity/sluis/config`): the library renders both documents from it, with the renderer `sluisctl render` runs, and writes what is its own (the shape `lambda`, and `Instance`, `Region`, `AccountID` and the function's name from the arguments, when the installation leaves them out; a disagreement is refused). It replaces `Config`, `Policy` and `PolicyPath`. |
 | `Config` (deprecated) | required without `Installation` | The one service document (`sluis/v3`: the `serve` keys at the top level and `controllers.github` / `controllers.slack`), in the configuration layer. With the `invoke` trigger the library writes `adapters.trigger.settings` (`github` and `slack` are this function); a document that names another is refused. `GitHubConfig`, `SlackConfig` are gone. |

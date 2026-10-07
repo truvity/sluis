@@ -176,8 +176,8 @@ since the platform freezes the process afterwards (a controller does it by closi
 
 ### `Instance` and the SSM root
 
-The library's `Instance` argument (required: lower-case letters, digits and dashes) names the installation (hive:
-`hive`, Truvity's: `kernel`). Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account
+The library's `Instance` argument (required: lower-case letters, digits and dashes) names the installation (for
+example `acme` or `prod`). Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account
 without colliding. `private` and `export` may not be used as an instance name: they would put the root's parameters
 under another tree, and the root is refused at start. The layout is in
 [storage layout](storage-layout.md#ssm-the-ssm-secrets-adapter).
