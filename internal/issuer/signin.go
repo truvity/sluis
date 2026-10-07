@@ -288,10 +288,10 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 	if recoveryState != "" {
 		// The recovery form's state, pinned to this browser the way
 		// [signIn.start] pins a provider round trip's: the POST is
-		// accepted only from the browser that was served the form. A
-		// provider button followed from this page replaces it with its
-		// own, which is the one that browser is then in the middle of.
-		http.SetCookie(w, access.LoginCookie(recoveryState, s.deps.Secure, signInWindow))
+		// accepted only from the browser that was served the form. In a
+		// cookie of its own, so that a provider button followed from this
+		// page, or any other sign-in page on this host, leaves it alone.
+		http.SetCookie(w, access.RecoveryCookie(recoveryState, s.deps.Secure, signInWindow))
 	}
 	s.page(w, "Sign in", buttons.String())
 }
@@ -480,15 +480,16 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 //
 // The pending authorization request travels in a signed state, exactly as
 // it does through a provider round trip: a POST carrying somebody else's
-// request id would otherwise finish their sign-in as this person. And the
-// state is the login cookie's too, which the chooser sets: a signed state
-// alone is something anybody can fetch for themselves and post from
+// request id would otherwise finish their sign-in as this person. The
+// state is bound to recovery, so that neither door accepts the other's,
+// and it is the recovery cookie's too, which the chooser sets: a signed
+// state alone is something anybody can fetch for themselves and post from
 // another site (see [signIn.recover]).
 func (s *signIn) recoveryForm(request string) (form, state string) {
 	if s.deps.Recovery == nil {
 		return "", ""
 	}
-	state, err := s.deps.State.Issue(request)
+	state, err := s.deps.State.IssueAs(access.Binding{Bind: request, Owner: access.RecoveryPurpose})
 	if err != nil {
 		return "", ""
 	}
@@ -520,8 +521,15 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this issuer has no recovery", http.StatusNotFound)
 		return
 	}
+	// A proof is a few KiB at most. Bounded before anything is read, so
+	// that nobody can make this door read megabytes of form unchecked.
+	r.Body = http.MaxBytesReader(w, r.Body, access.RecoveryFormLimit)
 	if err := r.ParseForm(); err != nil {
 		recordLoginFailure(r.Context(), LoginBadRequest)
+		if tooLarge := (*http.MaxBytesError)(nil); errors.As(err, &tooLarge) {
+			http.Error(w, "that form is too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "that form could not be read", http.StatusBadRequest)
 		return
 	}
@@ -534,13 +542,16 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	// victim then works in a session somebody else chose and can watch.
 	// The cookie is SameSite=Lax, so a cross-site POST never carries it.
 	state := r.PostFormValue("state")
-	if !access.LoginStartedHere(r, state, s.deps.Secure) {
+	if !access.RecoveryStartedHere(r, state, s.deps.Secure) {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
 		return
 	}
-	request, err := s.deps.State.Verify(state)
-	if err != nil || request == "" {
+	// And the state must be a recovery form's, not a provider round
+	// trip's, which carries the same request.
+	bound, err := s.deps.State.VerifyBinding(state)
+	request := bound.Bind
+	if err != nil || request == "" || bound.Owner != access.RecoveryPurpose {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in is not valid any more; start again", http.StatusBadRequest)
 		return
@@ -559,7 +570,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	// Spent once a proof is accepted, as the callback spends it: the
 	// form is not one to post twice. A refused proof leaves it, so the
 	// person can correct a paste without reloading the page.
-	http.SetCookie(w, access.LoginCookie("", s.deps.Secure, 0))
+	http.SetCookie(w, access.RecoveryCookie("", s.deps.Secure, 0))
 
 	who, secret := s.established(w, r, subject, RecoveryHow)
 	if err = s.deps.Storage.Complete(r.Context(), request, who); err != nil {
@@ -604,8 +615,11 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
 		return
 	}
-	request, err := s.deps.State.Verify(state)
-	if err != nil || request == "" {
+	// A provider round trip's state, never a recovery form's: the two
+	// carry the same request, and neither door accepts the other's.
+	bound, err := s.deps.State.VerifyBinding(state)
+	request := bound.Bind
+	if err != nil || request == "" || bound.Owner == access.RecoveryPurpose {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in is not valid any more; start again", http.StatusBadRequest)
 		return

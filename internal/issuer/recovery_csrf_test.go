@@ -2,6 +2,7 @@ package issuer_test
 
 import (
 	"context"
+	"errors"
 	"html"
 	"log/slog"
 	"net/http"
@@ -85,15 +86,15 @@ func TestARecoveryPostFromAnotherBrowserIsRefused(t *testing.T) {
 	for name, cookie := range map[string]func(codec *access.StateCodec) *http.Cookie{
 		"no login cookie": func(*access.StateCodec) *http.Cookie { return nil },
 		"an empty login cookie": func(*access.StateCodec) *http.Cookie {
-			return &http.Cookie{Name: access.LoginCookieName, Value: ""}
+			return &http.Cookie{Name: access.RecoveryCookieName, Value: ""}
 		},
 		"another flow's login cookie": func(codec *access.StateCodec) *http.Cookie {
-			other, err := codec.Issue("req-attacker")
+			other, err := codec.IssueAs(access.Binding{Bind: "req-attacker", Owner: access.RecoveryPurpose})
 			if err != nil {
 				panic(err)
 			}
 
-			return &http.Cookie{Name: access.LoginCookieName, Value: other}
+			return &http.Cookie{Name: access.RecoveryCookieName, Value: other}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -101,7 +102,7 @@ func TestARecoveryPostFromAnotherBrowserIsRefused(t *testing.T) {
 
 			handler, codec, storage, sso := recoveryDoor(t)
 
-			state, err := codec.Issue("req-victim")
+			state, err := codec.IssueAs(access.Binding{Bind: "req-victim", Owner: access.RecoveryPurpose})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -155,7 +156,7 @@ func TestTheRecoveryFormWorksFromTheBrowserItWasServedTo(t *testing.T) {
 	var login *http.Cookie
 
 	for _, c := range page.Result().Cookies() {
-		if c.Name == access.LoginCookieName {
+		if c.Name == access.RecoveryCookieName {
 			login = c
 		}
 	}
@@ -180,12 +181,201 @@ func TestTheRecoveryFormWorksFromTheBrowserItWasServedTo(t *testing.T) {
 	spent := false
 
 	for _, c := range response.Result().Cookies() {
-		if c.Name == access.LoginCookieName && c.MaxAge < 0 {
+		if c.Name == access.RecoveryCookieName && c.MaxAge < 0 {
 			spent = true
 		}
 	}
 
 	if !spent {
 		t.Error("the login cookie was not spent by the recovery it pinned")
+	}
+}
+
+// refusingProvider is a directory that counts the callbacks that reached
+// it and never says who anybody is.
+type refusingProvider struct {
+	mu         sync.Mutex
+	identified int
+}
+
+func (*refusingProvider) Kind() string { return "google" }
+
+func (*refusingProvider) URL(state string) (string, error) {
+	return "https://idp.example/authorize?state=" + url.QueryEscape(state), nil
+}
+
+func (p *refusingProvider) Identify(context.Context, string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.identified++
+
+	return "", errors.New("the stand-in identifies nobody")
+}
+
+func (p *refusingProvider) count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.identified
+}
+
+// recoveryAndProviderDoor is [recoveryDoor] with a provider beside it.
+func recoveryAndProviderDoor(t *testing.T) (http.Handler, *access.StateCodec, *countingCompleter, *refusingProvider) {
+	t.Helper()
+
+	codec := access.NewStateCodec(make([]byte, 32), time.Minute)
+	storage := &countingCompleter{}
+	provider := &refusingProvider{}
+	mux := http.NewServeMux()
+	issuer.SignInRoutes(mux, issuer.SignInDeps{
+		Recovery: acceptingRecovery{}, Storage: storage, State: codec,
+		Providers: []issuer.SignIn{provider},
+		SSO:       issuer.NewSSO(issuer.NewMemoryState(), time.Hour),
+		Return:    func(context.Context, string) string { return "/done" },
+		Log:       slog.New(slog.DiscardHandler),
+	})
+
+	return mux, codec, storage, provider
+}
+
+// A provider round trip's state is refused by the recovery door, and a
+// recovery form's by the provider callback, even from the browser that
+// holds it in every cookie: the two carry the same request, and each door
+// takes only its own.
+func TestEachSignInDoorRefusesTheOtherDoorsState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a provider state at the recovery door", func(t *testing.T) {
+		t.Parallel()
+
+		handler, codec, storage, _ := recoveryAndProviderDoor(t)
+
+		provider, err := codec.Issue("req-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		form := url.Values{"state": {provider}, "proof": {"a-good-token"}}
+		request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.AddCookie(&http.Cookie{Name: access.LoginCookieName, Value: provider})
+		request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: provider})
+
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("recovery with a provider state = %d %q, want 400", response.Code, response.Body.String())
+		}
+
+		if n := storage.count(); n != 0 {
+			t.Errorf("%d requests completed with a provider state", n)
+		}
+	})
+
+	t.Run("a recovery state at the provider callback", func(t *testing.T) {
+		t.Parallel()
+
+		handler, codec, _, provider := recoveryAndProviderDoor(t)
+
+		recovery, err := codec.IssueAs(access.Binding{Bind: "req-1", Owner: access.RecoveryPurpose})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		request := httptest.NewRequest(http.MethodGet,
+			"/login/google/callback?code=x&state="+url.QueryEscape(recovery), nil)
+		request.AddCookie(&http.Cookie{Name: access.LoginCookieName, Value: recovery})
+		request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: recovery})
+
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("callback with a recovery state = %d %q, want 400", response.Code, response.Body.String())
+		}
+
+		if n := provider.count(); n != 0 {
+			t.Errorf("a recovery state reached the provider %d times", n)
+		}
+	})
+}
+
+// Opening another sign-in -- a provider button on the same page, or any
+// sign-in page on this host -- leaves a recovery form already open working:
+// the two keep their states in cookies of their own.
+func TestAProviderSignInDoesNotBreakAPendingRecoveryForm(t *testing.T) {
+	t.Parallel()
+
+	handler, _, storage, _ := recoveryAndProviderDoor(t)
+	jar := map[string]string{}
+
+	keep := func(response *httptest.ResponseRecorder) {
+		for _, c := range response.Result().Cookies() {
+			jar[c.Name] = c.Value
+		}
+	}
+
+	page := httptest.NewRecorder()
+	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/login?auth=req-1", nil))
+	keep(page)
+
+	match := recoveryStateField.FindStringSubmatch(page.Body.String())
+	if match == nil {
+		t.Fatalf("the chooser rendered no recovery form: %s", page.Body.String())
+	}
+
+	start := httptest.NewRecorder()
+	handler.ServeHTTP(start, httptest.NewRequest(http.MethodGet, "/login/google/start?auth=req-1", nil))
+	keep(start)
+
+	if start.Code != http.StatusFound || jar[access.LoginCookieName] == "" {
+		t.Fatalf("provider start = %d, cookies %v", start.Code, jar)
+	}
+
+	form := url.Values{"state": {html.UnescapeString(match[1])}, "proof": {"a-good-token"}}
+	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	for name, value := range jar {
+		request.AddCookie(&http.Cookie{Name: name, Value: value})
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusFound || storage.count() != 1 {
+		t.Errorf("recovery after a provider start = %d %q, completed %d; want it to complete",
+			response.Code, response.Body.String(), storage.count())
+	}
+}
+
+// A recovery post is bounded before it is read: a proof is a few KiB, and a
+// body of megabytes is refused unread rather than parsed.
+func TestAnOversizedRecoveryPostIsRefused(t *testing.T) {
+	t.Parallel()
+
+	handler, codec, storage, _ := recoveryDoor(t)
+
+	state, err := codec.IssueAs(access.Binding{Bind: "req-1", Owner: access.RecoveryPurpose})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{"state": {state}, "proof": {strings.Repeat("x", 1<<20)}}
+	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: state})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("a 1 MiB recovery post = %d, want 413", response.Code)
+	}
+
+	if n := storage.count(); n != 0 {
+		t.Errorf("%d requests completed by an oversized post", n)
 	}
 }

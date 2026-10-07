@@ -266,7 +266,7 @@ func newRecoveryRig(t *testing.T, complete error) (*recoveryRig, *ssoRig) {
 	// The rig's issuer and stores, with its own sign-in routes in front.
 	g := newSSORig(t, issuer.Config{})
 	codec := access.NewStateCodec(make([]byte, 32), time.Minute)
-	state, err := codec.Issue("req-recovery")
+	state, err := codec.IssueAs(access.Binding{Bind: "req-recovery", Owner: access.RecoveryPurpose})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,9 +294,9 @@ func (r *recoveryRig) recover(cookie string) *httptest.ResponseRecorder {
 	form := url.Values{"state": {r.state}, "proof": {"a-good-token"}}
 	request := httptest.NewRequest(http.MethodPost, "/login/recovery", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	// The browser the form was served to holds its state as the login
+	// The browser the form was served to holds its state as the recovery
 	// cookie ([issuer.SignInRoutes]' chooser sets it).
-	request.AddCookie(&http.Cookie{Name: access.LoginCookieName, Value: r.state})
+	request.AddCookie(&http.Cookie{Name: access.RecoveryCookieName, Value: r.state})
 
 	if cookie != "" {
 		request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
