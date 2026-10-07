@@ -963,6 +963,72 @@ func TestARecordWrittenMeanwhileIsStillRefreshed(t *testing.T) {
 	})
 }
 
+// A writer that shortens the session between the rotation's read and its
+// write is not undone: the stored end is the shortened one, never the later
+// one the refresh computed. A lengthening writer does not extend it either.
+func TestARotationNeverExtendsAShortenedSession(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		name  string
+		moved func(computed time.Time) time.Time
+		want  func(computed time.Time) time.Time
+	}{
+		{"shortened meanwhile", func(c time.Time) time.Time { return c.Add(-6 * time.Hour) }, func(c time.Time) time.Time { return c.Add(-6 * time.Hour) }},
+		{"lengthened meanwhile", func(c time.Time) time.Time { return c.Add(6 * time.Hour) }, func(c time.Time) time.Time { return c }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
+				session := e.open(t, "t0")
+				e.advance(time.Hour)
+				computed := e.clock.now().Add(gcLifetime)
+				fired := false
+				e.counting.before = func(op, key string) {
+					if op != "replace" || key != sessionKey(session.ID) || fired {
+						return
+					}
+					fired = true
+					moved := session
+					moved.ExpiresAt = c.moved(computed)
+					raw, _ := json.Marshal(moved)
+					if err := e.state.Set(ctx, key, raw, gcLifetime); err != nil {
+						t.Error(err)
+					}
+				}
+
+				got, _, ok := e.refresh(t, "t0", "t1")
+				if !fired || !ok {
+					t.Fatalf("fired %v, ok %v; want a refresh that went through", fired, ok)
+				}
+				want := c.want(computed)
+				stored, live, _ := e.sessions.ByID(ctx, session.ID)
+				if !live || !stored.ExpiresAt.Equal(want) {
+					t.Errorf("stored end = %v (live %v), want %v", stored.ExpiresAt, live, want)
+				}
+				if !got.ExpiresAt.Equal(want) {
+					t.Errorf("the refresh answered end %v, want %v", got.ExpiresAt, want)
+				}
+			})
+		})
+	}
+}
+
+// With nothing racing, the refresh sets the end it computed.
+func TestARotationWithoutARaceSetsTheComputedEnd(t *testing.T) {
+	gcEachKind(t, 0, false, func(t *testing.T, e *gcEnv) {
+		session := e.open(t, "t0")
+		e.advance(time.Hour)
+		want := e.clock.now().Add(gcLifetime)
+		got, _, ok := e.refresh(t, "t0", "t1")
+		if !ok || !got.ExpiresAt.Equal(want) {
+			t.Fatalf("answered end %v (ok %v), want %v", got.ExpiresAt, ok, want)
+		}
+		stored, live, _ := e.sessions.ByID(context.Background(), session.ID)
+		if !live || !stored.ExpiresAt.Equal(want) {
+			t.Errorf("stored end = %v (live %v), want %v", stored.ExpiresAt, live, want)
+		}
+	})
+}
+
 // The previous version recorded a spent token's successor under a key of its
 // own; a token it rotated during a rollout is still answered.
 func TestTheLegacyRotatedKeyIsStillHonoured(t *testing.T) {
