@@ -140,6 +140,8 @@ other client was refusing it. On every request it now asks the same function the
 - **A recovery sign-in** has no directory to ask and is held to the absolute limit only. It is recognised by the
   method recorded when the sign-in began, never by the shape of its subject: a sign-in made through an identity
   provider is a person whatever its subject looks like, is asked of the directory, and is never the recovery account.
+  Tokens and refreshes likewise evaluate a subject as a ServiceAccount only for a recovery sign-in, so a recovery
+  session from before the upgrade, which recorded no method, must sign in again.
 - **Losing a console role** does not end the sign-in. The console refuses those calls by role, as before, as a
   silent sign-in to a client the person is not entitled to also keeps the sign-in.
 
