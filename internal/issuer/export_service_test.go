@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -106,4 +107,27 @@ func (s *Storage) CreatePendingAuthRequestForTest(ctx context.Context, id, clien
 // which is all the sign-out route reaches for.
 func NewForSessionsTest(sessions *Sessions) *Issuer {
 	return &Issuer{sessions: sessions}
+}
+
+// EndPreviousForTest runs what an interactive sign-in does to the sign-in
+// the browser held before, for a test that controls the request's context.
+func EndPreviousForTest(deps SignInDeps, r *http.Request, who Authenticated) {
+	(&signIn{deps: deps}).endPrevious(r, who)
+}
+
+// CreateSignedInAuthRequestForTest is [CreateAuthRequestForTest] completed
+// under a browser sign-in, with no scope at all: what a request whose every
+// scope the client was not allowed comes to.
+func (s *Storage) CreateSignedInAuthRequestForTest(ctx context.Context, subject, clientID, sso string) (string, error) {
+	request := &authRequest{
+		ID:  "req-" + subject + "-" + clientID + "-" + sso,
+		Req: &oidc.AuthRequest{ClientID: clientID, RedirectURI: "https://rp.example/cb", ResponseType: oidc.ResponseTypeCode},
+	}
+	if err := setJSON(ctx, s.state, requestKey(request.ID), request, authRequestTTL); err != nil {
+		return "", err
+	}
+	if err := s.Complete(ctx, request.ID, Authenticated{Subject: subject, SSO: sso}); err != nil {
+		return "", err
+	}
+	return request.ID, nil
 }

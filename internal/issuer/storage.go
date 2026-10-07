@@ -971,6 +971,29 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 		return "", time.Time{}, oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
 	}
 
+	// A code that opens no session -- `openid` alone, or a request whose
+	// every scope the client was not allowed, which mints no ID token
+	// claims and so never reaches [Storage.SetUserinfoFromRequest] -- is
+	// held to its sign-in here, before anything is minted: the client is
+	// recorded among the sign-in's clients, then the sign-in is read
+	// ([Storage.signInEnded]). Recorded here, the ID token's own hook
+	// skips both.
+	if opened, ok := request.(*authRequest); ok && opened.SSO != "" && s.iss.SSO() != nil {
+		involved, err := s.involveAhead(ctx, request, false)
+		if err != nil {
+			return "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+		}
+		opened.involved = involved
+
+		ended, err := s.signInEnded(ctx, opened.SSO, opened.Req.ClientID)
+		if err != nil {
+			return "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+		}
+		if ended {
+			return "", time.Time{}, errSignInEnded()
+		}
+	}
+
 	issued, err := s.issue(ctx, request)
 	if err != nil {
 		return "", time.Time{}, err
@@ -1184,10 +1207,12 @@ func (s *Storage) SetUserinfoFromRequest(
 			return err
 		}
 
-		// A code that opened no session -- `openid` alone -- is held to
-		// its sign-in here, once the client is recorded among its clients
-		// ([Storage.signInEnded]). The access token minted a moment ago
-		// is never handed out: the whole response is refused.
+		// A code that opened no session is held to its sign-in in
+		// [Storage.CreateAccessToken], which records the client first, so
+		// this is not reached for one. Kept for an ID token minted with
+		// no access token before it: the client is recorded, then the
+		// sign-in read ([Storage.signInEnded]), and the whole response
+		// refused when it has ended.
 		if opened, ok := request.(*authRequest); ok && opened.Session == "" {
 			ended, err := s.signInEnded(ctx, sso, opened.Req.ClientID)
 			if err != nil {

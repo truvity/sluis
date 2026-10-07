@@ -70,6 +70,30 @@ type recState struct {
 
 	// onWrite runs after a Set of a key: see [recState.setOnWrite].
 	onWrite func(key string)
+	// cancellable makes every call refuse a cancelled context, as a
+	// State over the network does.
+	cancellable bool
+}
+
+// honourCancel makes every call refuse a context that has been cancelled.
+func (r *recState) honourCancel() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.cancellable = true
+}
+
+// cancelled is the context's error, when this State refuses those.
+func (r *recState) cancelled(ctx context.Context) error {
+	r.mu.Lock()
+	cancellable := r.cancellable
+	r.mu.Unlock()
+
+	if cancellable {
+		return ctx.Err()
+	}
+
+	return nil
 }
 
 var errStoreDown = errors.New("the store is down")
@@ -118,6 +142,10 @@ func (r *recState) note(read bool, ttl time.Duration, strs ...string) {
 }
 
 func (r *recState) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	if err := r.cancelled(ctx); err != nil {
+		return nil, false, err
+	}
+
 	if r.failing(true, key) {
 		return nil, false, errStoreDown
 	}
@@ -138,6 +166,10 @@ type versioned interface {
 // over a revision read is written that way here too, and counted as Get
 // and Set are.
 func (r *recState) GetVersion(ctx context.Context, key string) ([]byte, string, bool, error) {
+	if err := r.cancelled(ctx); err != nil {
+		return nil, "", false, err
+	}
+
 	if r.failing(true, key) {
 		return nil, "", false, errStoreDown
 	}
@@ -154,6 +186,10 @@ func (r *recState) GetVersion(ctx context.Context, key string) ([]byte, string, 
 }
 
 func (r *recState) Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error {
+	if err := r.cancelled(ctx); err != nil {
+		return err
+	}
+
 	if r.failing(false, key) {
 		return errStoreDown
 	}
@@ -174,7 +210,7 @@ func (r *recState) Replace(ctx context.Context, key string, value []byte, ttl ti
 	return err
 }
 
-// setOnWrite runs fn after each write of a key, once the write is done,
+// setOnWrite runs fn after each write or delete of a key, once it is done,
 // for a test that needs something to happen between two writes.
 func (r *recState) setOnWrite(fn func(key string)) {
 	r.mu.Lock()
@@ -194,12 +230,20 @@ func (r *recState) wrote(key string) {
 }
 
 func (r *recState) Members(ctx context.Context, key string) ([]string, error) {
+	if err := r.cancelled(ctx); err != nil {
+		return nil, err
+	}
+
 	r.note(true, 0)
 
 	return r.State.Members(ctx, key)
 }
 
 func (r *recState) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if err := r.cancelled(ctx); err != nil {
+		return err
+	}
+
 	if r.failing(false, key) {
 		return errStoreDown
 	}
@@ -216,24 +260,46 @@ func (r *recState) Set(ctx context.Context, key string, value []byte, ttl time.D
 }
 
 func (r *recState) SetIfAbsent(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	if err := r.cancelled(ctx); err != nil {
+		return false, err
+	}
+
 	r.note(false, ttl, key, string(value))
 
 	return r.State.SetIfAbsent(ctx, key, value, ttl)
 }
 
 func (r *recState) Delete(ctx context.Context, key string) error {
+	if err := r.cancelled(ctx); err != nil {
+		return err
+	}
+
 	r.note(false, 0, key)
 
-	return r.State.Delete(ctx, key)
+	if err := r.State.Delete(ctx, key); err != nil {
+		return err
+	}
+
+	r.wrote(key)
+
+	return nil
 }
 
 func (r *recState) Add(ctx context.Context, key, member string, ttl time.Duration) error {
+	if err := r.cancelled(ctx); err != nil {
+		return err
+	}
+
 	r.note(false, ttl, key, member)
 
 	return r.State.Add(ctx, key, member, ttl)
 }
 
 func (r *recState) Remove(ctx context.Context, key, member string) error {
+	if err := r.cancelled(ctx); err != nil {
+		return err
+	}
+
 	r.note(false, 0, key, member)
 
 	return r.State.Remove(ctx, key, member)
