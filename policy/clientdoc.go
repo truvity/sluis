@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/truvity/sluis/internal/agentgate"
 )
 
 // ClientDocuments admits clients that were never declared here.
@@ -102,6 +104,9 @@ func (d ClientDocuments) validate(p Policy) error {
 	}
 	if !validSession(d.Session) {
 		return fmt.Errorf("client_documents: session %q is not %q or %q", d.Session, SessionInteractive, SessionAgent)
+	}
+	if d.Agent() && !agentgate.Open() {
+		return fmt.Errorf("client_documents: %w", errAgentClassNotYet)
 	}
 	if len(d.Requires) == 0 {
 		return fmt.Errorf("client_documents lists origins and requires no group, which would admit every person who can sign in")

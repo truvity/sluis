@@ -13,6 +13,7 @@
 package policy
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -25,6 +26,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/truvity/sluis/internal/agentgate"
 	"github.com/truvity/sluis/internal/emailaddr"
 )
 
@@ -195,6 +197,14 @@ const (
 	// the service configuration's `lifetimes.agent` hold.
 	SessionAgent = "agent"
 )
+
+// errAgentClassNotYet refuses `session: agent` in this release: the class's
+// lifetimes and token caps are in place, and the consent page that keeps an
+// agent authorization from completing silently is not yet (see
+// internal/agentgate).
+var errAgentClassNotYet = errors.New("session: agent is refused by this release: agent-class sessions become " +
+	"available with the release that adds their consent page (docs/decisions/0040-agent-class-sessions.md); " +
+	"until then the client stays interactive")
 
 // validSession reports whether a `session` value is one of the classes,
 // or absent.
@@ -1041,6 +1051,9 @@ func (c Client) validate(id string, p Policy) error {
 	if c.Session != "" && c.Kind == KindExchange {
 		return fmt.Errorf("client %q is an exchange target and declares session: an exchange opens no chain "+
 			"with an auth_time, so it has no session class", id)
+	}
+	if c.Agent() && !agentgate.Open() {
+		return fmt.Errorf("client %q: %w", id, errAgentClassNotYet)
 	}
 	if c.Agent() && c.SignInExchange {
 		return fmt.Errorf("client %q declares session: agent and sign_in_exchange: true: a sign-in that is "+
