@@ -92,8 +92,6 @@ func (s *Store) Members(ctx context.Context, key string) ([]string, error) {
 	if key == "" {
 		return nil, nil
 	}
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
 	items, err := s.members(ctx, key)
 	if err != nil {
 		return nil, err
@@ -110,8 +108,6 @@ func (s *Store) Members(ctx context.Context, key string) ([]string, error) {
 // makes the set permanent). Sets are found by a Scan: there is no partition to
 // ask for.
 func (s *Store) ExportIndex(ctx context.Context, prefix string, fn func(port.Exported) error) error {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
 	in := &ddb.ScanInput{
 		ConsistentRead:   aws.Bool(true),
 		FilterExpression: aws.String(scanIndex),
