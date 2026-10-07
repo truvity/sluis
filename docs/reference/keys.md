@@ -20,7 +20,8 @@ hot path.
 | `sid.<sid>` | pointer from a session id to `<person>`; written with the session, deleted with it | issuer | the session lifetime |
 | `rt.<hash>` | live refresh token to `<person>.<sid>` | issuer | the session lifetime |
 | `rtrot.<hash>` | legacy: a spent refresh token's successor, as an older version wrote it. The retry grace is now carried by `rt.<hash>` itself (`spent:<successor>`, 30 s). Still read for one release, never written, then removed | issuer | 30 s |
-| `sso.<id>` | the browser-wide SSO session and the clients it covers | issuer | the session lifetime |
+| `sso.<id>` | the browser-wide SSO session and the clients it covers; the record carries `cookie_hash` | issuer | the session lifetime |
+| `issuer:sso-cookie:<hash>` | the browser's SSO cookie, hashed, pointing to the sign-in id; the cookie itself is a random secret and is never stored. It has no dot-spelling form because it was introduced after that layout | issuer | the sign-in's |
 | `tok.<jti>` | a minted token's own record, for userinfo and revocation | issuer | until the token expires |
 | `keyring.<kid>` | a signing key's schedule: first seen, activation | issuer replicas | 30 days, renewed on each poll |
 | `ws.dir.<id>` | a connected directory workspace: its record, **with its credential in Secrets** (`credentials/workspace/<id>/<ref>`) | console | permanent |
