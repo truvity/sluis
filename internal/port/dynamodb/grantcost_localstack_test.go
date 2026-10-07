@@ -87,3 +87,28 @@ func TestGrantCostOnDynamoDB(t *testing.T) {
 		return grantcost.Env{Set: s.Set(), Advance: s.Advance, Calls: api.snapshot}
 	})
 }
+
+// What a reuse of a spent refresh token costs a real DynamoDB API
+// (LocalStack): the first presentation after the grace window ends the
+// session, a repeat finds it gone. Runs where ACCESS_ROSTER_DYNAMODB_URL is
+// set, as TestGrantCostOnDynamoDB does, and skips elsewhere.
+func TestReuseCostOnDynamoDB(t *testing.T) {
+	url := localstack(t)
+	ctx := context.Background()
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := ddb.NewFromConfig(awsCfg, func(o *ddb.Options) { o.BaseEndpoint = aws.String(url) })
+	api := &countingAPI{API: client, calls: map[string]int{}}
+	name := "ar-" + randomName(t)
+	s, err := dynamoport.New(ctx, api, dynamoport.Config{Table: name, Endpoint: url, Create: true},
+		dynamoport.WithPollInterval(100*time.Millisecond))
+	if err != nil {
+		t.Fatalf("opening the table: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = client.DeleteTable(context.Background(), &ddb.DeleteTableInput{TableName: aws.String(name)})
+	})
+	dynamoport.ReuseCost(t, grantcost.Env{Set: s.Set(), Advance: s.Advance, Calls: api.snapshot})
+}
