@@ -2,8 +2,11 @@ package issuer
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 
 	"github.com/truvity/sluis/policy"
 )
@@ -187,5 +190,198 @@ func TestAnAgentSessionsIndexNeverEndsBeforeItsRecord(t *testing.T) {
 		}
 		check(now, refreshed)
 		token = successor
+	}
+}
+
+// agentInternalIssuer is an issuer whose one client, mcp-host, is
+// agent-class, over the default lifetimes.
+func agentInternalIssuer(t *testing.T) (*Issuer, *Storage) {
+	t.Helper()
+
+	declared, err := policy.Parse([]byte("version: 1\n" +
+		"groups: { viewers: { members: [eng@north.example] } }\n" +
+		"clients:\n" +
+		"  mcp-host: { kind: public, redirects: ['http://127.0.0.1/callback'], requires: [viewers], session: agent }\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set,
+		aDirectory{"ada@north.example": {Found: true, Authoritative: true, Groups: []string{"eng@north.example"}}},
+		NewMemoryState())
+	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return iss, storage
+}
+
+// On the code-redemption path, with and without a refresh token, an agent
+// client's access token and the ID token minted after it are held to
+// lifetimes.agent.access (30m under a 1h lifetimes.token) and never past
+// the deadline the chain is about to be recorded with.
+func TestAnAgentCodeRedemptionCapsItsTokens(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		refresh bool
+		authAgo time.Duration
+		max     time.Duration
+		min     time.Duration
+	}{
+		{"with a refresh token", true, 0, 30 * time.Minute, 29 * time.Minute},
+		{"without a refresh token", false, 0, 30 * time.Minute, 29 * time.Minute},
+		{"with a refresh token, ten minutes before the deadline", true, 30*24*time.Hour - 10*time.Minute, 10 * time.Minute, 9 * time.Minute},
+		{"without a refresh token, ten minutes before the deadline", false, 30*24*time.Hour - 10*time.Minute, 10 * time.Minute, 9 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, storage := agentInternalIssuer(t)
+			ctx := withSigningAudienceContext(context.Background())
+
+			pending, err := storage.CreateAuthRequest(ctx, &oidc.AuthRequest{
+				ClientID: "mcp-host", RedirectURI: "http://127.0.0.1/callback",
+				Scopes: oidc.SpaceDelimitedArray{"openid"}, ResponseType: oidc.ResponseTypeCode,
+			}, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = storage.Complete(ctx, pending.GetID(), Authenticated{
+				Subject: "ada@north.example", AuthTime: time.Now().Add(-tc.authAgo), How: "google",
+			}); err != nil {
+				t.Fatalf("complete: %v", err)
+			}
+			request, err := storage.request(ctx, pending.GetID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			client, err := storage.GetClientByClientID(ctx, "mcp-host")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var expires time.Time
+			if tc.refresh {
+				_, _, expires, err = storage.CreateAccessAndRefreshTokens(ctx, request, "")
+			} else {
+				_, expires, err = storage.CreateAccessToken(ctx, request)
+			}
+			if err != nil {
+				t.Fatalf("redeem: %v", err)
+			}
+
+			if lifetime := time.Until(expires); lifetime > tc.max || lifetime < tc.min {
+				t.Errorf("the access token lives %s, want between %s and %s", lifetime.Round(time.Second), tc.min, tc.max)
+			}
+			if lifetime := client.IDTokenLifetime(); lifetime > tc.max || lifetime < tc.min {
+				t.Errorf("the ID token lives %s, want between %s and %s", lifetime.Round(time.Second), tc.min, tc.max)
+			}
+		})
+	}
+}
+
+// indexed re-adds a session once its last Add is a refresh window old, so a
+// membership lost out of band (an eviction, a listing racing a rotation)
+// is restored within one window: twelve hours for an interactive session,
+// fourteen days for an agent one -- not after the 30-day horizon every Add
+// now carries.
+func TestALostMembershipIsRestoredWithinOneRefreshWindow(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		class  SessionClass
+		before time.Duration // a refresh here does not re-add
+		after  time.Duration // a refresh here does
+	}{
+		{"interactive", ClassInteractive, 6 * time.Hour, 12*time.Hour + time.Minute},
+		{"agent", ClassAgent, 13 * 24 * time.Hour, 14*24*time.Hour + time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			t0 := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+			now := t0
+			clock := func() time.Time { return now }
+			state := NewMemoryState()
+			state.SetClock(clock)
+			sessions := NewSessions(state, 12*time.Hour, 24*time.Hour)
+			sessions.SetClock(clock)
+			sessions.SetAgentLifetimes(AgentLifetimes{Refresh: 14 * 24 * time.Hour, Absolute: 30 * 24 * time.Hour, Access: 30 * time.Minute}, nil)
+
+			opened, err := sessions.Record(ctx, Opened{
+				Identity: "ada@north.example", ClientID: "c", How: HowCode, Token: "t0", AuthTime: t0, Class: tc.class,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := sessionOfKey("ada@north.example")
+			if err = state.Remove(ctx, key, opened.ID); err != nil {
+				t.Fatal(err)
+			}
+			member := func() bool {
+				ids, err := state.Members(ctx, key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return slices.Contains(ids, opened.ID)
+			}
+
+			now = t0.Add(tc.before)
+			_, token, ok, err := sessions.Refreshed(ctx, "t0", "t1")
+			if err != nil || !ok {
+				t.Fatalf("refresh at +%s: %v %v", tc.before, ok, err)
+			}
+			if member() {
+				t.Errorf("re-added at +%s, inside one window of the last Add: one Add per refresh is what indexed exists to avoid", tc.before)
+			}
+
+			now = t0.Add(tc.after)
+			if _, _, ok, err = sessions.Refreshed(ctx, token, "t2"); err != nil || !ok {
+				t.Fatalf("refresh at +%s: %v %v", tc.after, ok, err)
+			}
+			if !member() {
+				t.Errorf("a membership lost at the opening is still lost at +%s, past one refresh window", tc.after)
+			}
+		})
+	}
+}
+
+// A step-up's refile drops from the person's set the ids whose records are
+// gone, as a listing does, rather than reading them again at every step-up
+// for as long as the set's horizon lasts.
+func TestRefileDropsTheIDsOfEndedSessions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	now := t0
+	clock := func() time.Time { return now }
+	state := NewMemoryState()
+	state.SetClock(clock)
+	sessions := NewSessions(state, 12*time.Hour, 24*time.Hour)
+	sessions.SetClock(clock)
+
+	for _, token := range []string{"t-a", "t-b"} {
+		if _, err := sessions.Record(ctx, Opened{
+			Identity: "ada@north.example", ClientID: "c", How: HowCode, Token: token, AuthTime: t0, SSO: "browser-1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now = t0.Add(13 * time.Hour) // both records ran out at 12h
+	if moved, err := sessions.Refile(ctx, "ada@north.example", "browser-1", "browser-2"); err != nil || moved != 0 {
+		t.Fatalf("Refile = %d, %v, want nothing to move", moved, err)
+	}
+	if ids, err := state.Members(ctx, sessionOfKey("ada@north.example")); err != nil || len(ids) != 0 {
+		t.Errorf("the person's set still names %v (err %v) after a refile met their ended records", ids, err)
 	}
 }

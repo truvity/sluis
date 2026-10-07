@@ -884,8 +884,13 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	req.AuthTime, req.SSO, req.How = authTime, who.SSO, who.How
 	// The class of the chain this request opens is decided here, once,
 	// from the policy as it stands now, and travels on the request to the
-	// code's redemption (docs/decisions/0040-agent-class-sessions.md).
+	// code's redemption (docs/decisions/0040-agent-class-sessions.md). A
+	// recovery sign-in is the way in that bypasses the directory, and it
+	// never opens a month-long chain, whatever the client's class.
 	req.Class = s.classOf(req.Req.ClientID)
+	if who.How == RecoveryHow {
+		req.Class = ClassInteractive
+	}
 
 	// A recovery sign-in is written down durably before the request is
 	// marked done — a request marked done is one a code can be issued for —
@@ -921,7 +926,7 @@ var ErrUnaudited = errors.New("the audit trail could not be written")
 
 // classOf is the session class the policy gives a client NOW: its own row's
 // `session`, or, for a client that describes itself and is admitted by an
-// origin, `client_documents.session`. Never anything a document says about
+// origin, `client_documents.session` as the document resolver holds it. Never anything a document says about
 // itself: the class is a grant of time the installation makes, not one a
 // client takes. Anything unknown is interactive.
 func (s *Storage) classOf(clientID string) SessionClass {
@@ -938,7 +943,10 @@ func (s *Storage) classOf(clientID string) SessionClass {
 		return ClassInteractive
 	}
 
-	documents := set.ClientDocuments()
+	// The same client_documents the resolver admitted the client by
+	// ([documentClients.allow]), so the origin that let it in and the class
+	// it gets can never come from two different policies.
+	documents := s.documents.allow
 	if target, err := documentURL(clientID); err == nil && documents.Enabled() && documents.Permits(target) && documents.Agent() {
 		return ClassAgent
 	}
@@ -1452,11 +1460,12 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	lifetime := s.iss.Config().TokenLifetime
 	if declared, ok := s.iss.Policy().Client(clientOf(request)); ok {
 		lifetime = declared.Cap(lifetime)
-	} else if documents := s.iss.Policy().ClientDocuments(); documents.Enabled() {
+	} else if documents := s.documents.allow; documents.Enabled() {
 		// A client that describes itself is held to `client_documents`'
 		// ttl_cap, as its ID token already is ([Storage.GetClientByClientID]).
-		// Read from the policy rather than the document, which says nothing
-		// about its own lifetime.
+		// Read from the policy the resolver admitted it by, as the ID token's
+		// is, rather than from the document, which says nothing about its
+		// own lifetime.
 		if target, err := documentURL(clientOf(request)); err == nil && documents.Permits(target) {
 			lifetime = policy.Client{TTLCap: documents.TTLCap}.Cap(lifetime)
 		}
