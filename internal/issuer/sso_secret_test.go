@@ -890,15 +890,27 @@ func TestLogsNeverHoldTheSecretOrItsHash(t *testing.T) {
 	}
 }
 
-// Signing out everywhere tells the clients that held no refresh token, which
-// only the sign-in knows.
-func TestSignOutEverywhereTellsTheOpenIDOnlyClients(t *testing.T) {
+// Signing out everywhere tells every client once: the one holding a refresh
+// token by its session, the one holding none by what the sign-in knows.
+func TestSignOutEverywhereTellsEveryClient(t *testing.T) {
 	t.Parallel()
 
 	rig := newSSORig(t, issuer.Config{})
 	_, id := rig.signedInBrowser(t)
 
 	if err := rig.iss.SSO().Involve(context.Background(), id, "openid-only"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A client that holds a refresh token, and is also filed as involved, as
+	// a real sign-in files it.
+	if _, err := rig.iss.Sessions().Record(context.Background(), issuer.Opened{
+		Identity: ssoEmail, ClientID: "refreshing", How: issuer.HowCode, Token: "t-refreshing", SSO: id,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := rig.iss.SSO().Involve(context.Background(), id, "refreshing"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -913,7 +925,22 @@ func TestSignOutEverywhereTellsTheOpenIDOnlyClients(t *testing.T) {
 		t.Fatalf("revoke: %v", err)
 	}
 
-	if len(told) != 1 || told[0].ClientID != "openid-only" || told[0].Identity != ssoEmail || told[0].SSO != id {
-		t.Errorf("told %+v, want the one openid-only client of sign-in %s", told, id)
+	count := map[string]int{}
+	for _, one := range told {
+		count[one.ClientID]++
+
+		if one.Identity != ssoEmail || one.SSO != id {
+			t.Errorf("told %+v, want identity %s and sign-in %s", one, ssoEmail, id)
+		}
+	}
+
+	if len(told) != 2 || count["openid-only"] != 1 || count["refreshing"] != 1 {
+		t.Errorf("told %+v, want one token each for openid-only and refreshing", told)
+	}
+
+	for _, one := range told {
+		if one.ClientID == "refreshing" && one.ID == "" {
+			t.Error("the client holding a session was told without its session id")
+		}
 	}
 }

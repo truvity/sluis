@@ -452,6 +452,13 @@ func (s *SessionsService) RevokeSessions(
 
 	clientID := strings.TrimSpace(req.Msg.GetClientId())
 
+	// Read before revoking, as at an ordinary sign-out: once the sessions
+	// are gone nothing says which clients held them.
+	var held []Session
+	if clientID == "" && s.announce != nil {
+		held, _ = s.sessions.List(ctx, Query{Identity: identity})
+	}
+
 	ended, err := s.sessions.Revoke(ctx, Query{Identity: identity, ClientID: clientID})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -465,15 +472,16 @@ func (s *SessionsService) RevokeSessions(
 	if clientID == "" && s.sso != nil {
 		_, involved, endErr := s.sso.EndForInvolving(ctx, identity)
 
-		// The clients signed in under these browsers without a refresh
-		// token (`openid` alone) hold no session the revoke above could
-		// name, so only the sign-in knows them. Best effort, as at
-		// sign-out: the sign-ins have ended either way, and whatever was
-		// collected before a failure is still told, because a retry
-		// cannot find what was already dropped. Every live chain was
-		// just revoked, so there is none to spare.
-		if s.announce != nil && len(involved) > 0 {
-			s.announce(ctx, involved)
+		// Told as an ordinary sign-out tells them: the sessions the
+		// revoke ended as they were held, and, by subject, the clients
+		// signed in under these browsers without a refresh token
+		// (`openid` alone), which only the sign-in knows. One token per
+		// client and sign-in. Best effort: the sign-ins have ended
+		// either way, and whatever was collected before a failure is
+		// still told, because a retry cannot find what was already
+		// dropped. Every live chain was just revoked, so none is spared.
+		if s.announce != nil {
+			s.announce(ctx, withInvolved(held, involved))
 		}
 
 		if endErr != nil {
@@ -487,6 +495,27 @@ func (s *SessionsService) RevokeSessions(
 	}
 	s.revoked(ctx, who.identity, identity, clientID, scope, ended)
 	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+}
+
+// withInvolved adds to the sessions held those involved clients that held
+// none in the same sign-in, so a client gets one logout token per sign-in.
+func withInvolved(held, involved []Session) []Session {
+	type key struct{ client, sso string }
+
+	seen := make(map[key]bool, len(held))
+	for i := range held {
+		seen[key{held[i].ClientID, held[i].SSO}] = true
+	}
+
+	out := held
+	for i := range involved {
+		if k := (key{involved[i].ClientID, involved[i].SSO}); !seen[k] {
+			seen[k] = true
+			out = append(out, involved[i])
+		}
+	}
+
+	return out
 }
 
 // revoked records one revoke: who did it, whose sessions, where, and how
