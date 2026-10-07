@@ -33,7 +33,7 @@ jobs:
       # job summary, and fails this job when a rule fails.
       policy-conformance: true
       policy-conformance-strict: true
-      recipes: '["build","test","lint","chart-lint","telemetry","archive-check","docs-check","leak-canary","audit-catalogue","ts","console","pulumi-test"]'
+      recipes: '["build","test","lint","chart-lint","telemetry","archive-check","docs-check","leak-canary","audit-catalogue","ts","console","pulumi-test","test-race"]'
 
   # The S3 Blob and DynamoDB State adapters against a real S3 and DynamoDB
   # API. The image
