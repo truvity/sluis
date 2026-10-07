@@ -15,12 +15,15 @@ import (
 // page, after authentication (docs/decisions/0040-agent-class-sessions.md,
 // decision 6). Held mechanically: across the module's code (tests mint
 // their own, and are left out), IssueAgentConsent has one call site, in
-// internal/issuer/consent.go. A second one is a second door that mints an
-// acceptance, which is what this test exists to stop without a review.
+// internal/issuer/consent.go, and the purpose an acceptance carries
+// (AgentConsentPurpose, or its value) appears nowhere but
+// internal/access/consent.go, so no other code can issue a state with it.
+// A second site is a second door that mints an acceptance, which is what
+// this test exists to stop without a review.
 func TestAnAgentConsentIsMintedInOnePlace(t *testing.T) {
 	root := moduleRoot(t)
 
-	var sites []string
+	var sites, purposes []string
 
 	scanned := 0
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -44,14 +47,26 @@ func TestAnAgentConsentIsMintedInOnePlace(t *testing.T) {
 		}
 		scanned++
 
+		rel, _ := filepath.Rel(root, path)
+		rel = filepath.ToSlash(rel)
+
 		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if selector, ok := call.Fun.(*ast.SelectorExpr); ok && selector.Sel.Name == "IssueAgentConsent" {
-				rel, _ := filepath.Rel(root, path)
-				sites = append(sites, filepath.ToSlash(rel))
+			switch node := n.(type) {
+			case *ast.CallExpr:
+				if selector, ok := node.Fun.(*ast.SelectorExpr); ok && selector.Sel.Name == "IssueAgentConsent" {
+					sites = append(sites, rel)
+				}
+			case *ast.Ident:
+				// The purpose, by name: a state issued with it elsewhere is
+				// an acceptance minted by another door.
+				if node.Name == "AgentConsentPurpose" && rel != "internal/access/consent.go" {
+					purposes = append(purposes, rel)
+				}
+			case *ast.BasicLit:
+				// And by value, so that the name cannot be sidestepped.
+				if node.Kind == token.STRING && strings.Trim(node.Value, "`\"") == "agent-consent" && rel != "internal/access/consent.go" {
+					purposes = append(purposes, rel)
+				}
 			}
 			return true
 		})
@@ -69,6 +84,10 @@ func TestAnAgentConsentIsMintedInOnePlace(t *testing.T) {
 
 	if len(sites) != 1 || sites[0] != "internal/issuer/consent.go" {
 		t.Errorf("IssueAgentConsent is called at %v, want exactly once, in internal/issuer/consent.go", sites)
+	}
+
+	if len(purposes) != 0 {
+		t.Errorf("the agent-consent purpose is used at %v, want only in internal/access/consent.go", purposes)
 	}
 }
 
