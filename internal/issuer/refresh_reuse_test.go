@@ -3,7 +3,10 @@ package issuer_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -61,6 +64,13 @@ type faultState struct {
 	// beforeReplace runs once before a Replace of a key with this prefix.
 	replacePrefix string
 	beforeReplace func()
+	// beforeDelete runs before each conditional delete of a session record
+	// while deleteHooks is above zero, counting it down.
+	beforeDelete func()
+	deleteHooks  int
+	// ghost, when set, makes a conditional delete of a session record apply
+	// and then report this error: a delete that committed but says it failed.
+	ghost error
 }
 
 var errInjected = errors.New("injected State failure")
@@ -116,7 +126,24 @@ func (s *faultState) Delete(ctx context.Context, key string) error {
 func (s *faultState) DeleteVersion(ctx context.Context, key, version string) error {
 	s.mu.Lock()
 	fail := s.failDelete != "" && strings.HasPrefix(key, s.failDelete)
+	hook, ghost := s.beforeDelete, s.ghost
+	if s.deleteHooks > 0 && strings.HasPrefix(key, "issuer:session:") {
+		s.deleteHooks--
+	} else {
+		hook = nil
+	}
 	s.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	if ghost != nil && strings.HasPrefix(key, "issuer:session:") {
+		err := s.MemoryState.DeleteVersion(ctx, key, version)
+		if err == nil {
+			s.writes.Add(1)
+			return ghost
+		}
+		return err
+	}
 	if fail {
 		return errInjected
 	}
@@ -179,9 +206,20 @@ type reuseRig struct {
 
 func newReuseRig(t *testing.T, absolute time.Duration) *reuseRig {
 	t.Helper()
+	return newReuseRigWith(t, absolute, "")
+}
+
+// newReuseRigWith is the rig with argocd asking for back-channel logout at
+// listener, when one is given.
+func newReuseRigWith(t *testing.T, absolute time.Duration, listener string) *reuseRig {
+	t.Helper()
 	metricsReader()
 
-	declared, err := policy.Parse([]byte(demo.Policy))
+	text := demo.Policy
+	if listener != "" {
+		text = strings.Replace(text, "    ttl_cap: 2h", "    ttl_cap: 2h\n    backchannel_logout_uri: "+listener+"/backchannel", 1)
+	}
+	declared, err := policy.Parse([]byte(text))
 	if err != nil {
 		t.Fatalf("policy: %v", err)
 	}
@@ -566,7 +604,8 @@ func (r *reuseRig) warningAttrs() []string {
 // record -- so it is audited once and answered as any reuse is, with
 // invalid_grant; the index ids that remain are dropped by the next listing.
 func TestAnIndexFailureAfterTheRecordIsDeletedStillEndsTheSessionAuditedOnce(t *testing.T) {
-	r := newReuseRig(t, 0)
+	url, told := logoutListener(t)
+	r := newReuseRigWith(t, 0, url)
 	_, t0 := r.grant()
 	access1, t1, err := r.refresh(t0)
 	if err != nil {
@@ -595,6 +634,9 @@ func TestAnIndexFailureAfterTheRecordIsDeletedStillEndsTheSessionAuditedOnce(t *
 	}
 	if got := r.revoked(); len(got) != 1 {
 		t.Errorf("revocation records = %d, want exactly 1", len(got))
+	}
+	if got := told(); got != 1 {
+		t.Errorf("%d back-channel logouts, want exactly 1", got)
 	}
 }
 
@@ -811,5 +853,154 @@ func TestConcurrentReusesOfOneSpentTokenEndTheSessionOnce(t *testing.T) {
 		if _, _, err = r.refresh(t1); err == nil {
 			t.Errorf("round %d: the successor refreshes", round)
 		}
+	}
+}
+
+// ------------------------------------------ a refresh racing a reuse
+
+// logoutListener is a client's back-channel endpoint that counts what it is told.
+func logoutListener(t *testing.T) (url string, told func() int) {
+	t.Helper()
+	var n atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL, func() int { return int(n.Load()) }
+}
+
+// reuseBound is the number of conditional deletes before the unconditional one.
+const reuseBound = 3
+
+// A thief holding the live successor refreshes it between the reuse's read
+// of the record and its delete, on every attempt the delete makes at a
+// revision, and beyond: the session is still ended -- by the final
+// unconditional delete -- with one audit record and one logout, and the
+// rotations that lost are refused or end up with nothing.
+func TestAReuseRacingRepeatedRotationsStillEndsTheSessionOnce(t *testing.T) {
+	for _, rotations := range []int{1, 3, 6} {
+		t.Run(fmt.Sprintf("%d rotations", rotations), func(t *testing.T) {
+			url, told := logoutListener(t)
+			r := newReuseRigWith(t, 0, url)
+			access0, t0 := r.grant()
+			access1, t1, err := r.refresh(t0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.clock.advance(33 * time.Second)
+
+			live, rotated := t1, 0
+			var hookReads, hookWrites int64
+			r.state.mu.Lock()
+			r.state.deleteHooks = rotations
+			r.state.beforeDelete = func() {
+				r0, w0 := r.state.reads.Load(), r.state.writes.Load()
+				defer func() {
+					hookReads += r.state.reads.Load() - r0
+					hookWrites += r.state.writes.Load() - w0
+				}()
+				_, next, rerr := r.refresh(live)
+				if rerr != nil {
+					t.Errorf("rotation %d during the reuse: %v", rotated, rerr)
+					return
+				}
+				live = next
+				rotated++
+			}
+			r.state.mu.Unlock()
+
+			reads, writes := r.state.reads.Load(), r.state.writes.Load()
+			_, _, err = r.refresh(t0)
+			wantInvalidGrant(t, err)
+			reads, writes = r.state.reads.Load()-reads-hookReads, r.state.writes.Load()-writes-hookWrites
+			if wantReads := int64(2 + min(rotations, reuseBound)); reads != wantReads || writes != 4 {
+				t.Errorf("a reuse racing %d rotations made %d reads and %d landed writes, want %d and 4", rotations, reads, writes, wantReads)
+			}
+			if rotated == 0 {
+				t.Fatal("no rotation raced the delete, so the guard is not exercised")
+			}
+			if len(r.sessions()) != 0 {
+				t.Error("a thief refreshing the successor kept the session alive")
+			}
+			if _, _, err = r.refresh(live); err == nil {
+				t.Error("the newest successor still refreshes")
+			}
+			for _, a := range []string{access0, access1} {
+				if err = r.userinfo(a); err == nil {
+					t.Error("userinfo answers for the ended session")
+				}
+			}
+			if got := r.revoked(); len(got) != 1 {
+				t.Errorf("%d revocation records, want exactly 1", len(got))
+			}
+			if got := told(); got != 1 {
+				t.Errorf("%d back-channel logouts, want exactly 1", got)
+			}
+		})
+	}
+}
+
+// A delete that committed but reports failure ends the session; nobody can
+// say who ended it, so there is no audit record, and one WARN names the
+// session without a token. The client's answer is invalid_grant.
+func TestADeleteThatCommittedButReportsFailureEndsTheSessionWithoutARecord(t *testing.T) {
+	r := newReuseRig(t, 0)
+	access0, t0 := r.grant()
+	_, t1, err := r.refresh(t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := r.sessions()[0].ID
+	r.clock.advance(33 * time.Second)
+
+	capture := &recordingHandler{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(capture))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	r.state.mu.Lock()
+	r.state.ghost = errors.New("the store is unavailable")
+	r.state.mu.Unlock()
+
+	_, _, err = r.refresh(t0)
+	wantInvalidGrant(t, err)
+
+	if len(r.sessions()) != 0 {
+		t.Error("the session is still listed")
+	}
+	if _, _, err = r.refresh(t1); err == nil {
+		t.Error("the successor refreshes")
+	}
+	if err = r.userinfo(access0); err == nil {
+		t.Error("userinfo answers for the ended session")
+	}
+	if got := r.revoked(); len(got) != 0 {
+		t.Errorf("%d revocation records for an end nobody can claim, want none", len(got))
+	}
+
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	warned := 0
+	for i := range capture.records {
+		rec := &capture.records[i]
+		if rec.Level != slog.LevelWarn || !strings.Contains(rec.Message, "already gone") {
+			continue
+		}
+		rec.Attrs(func(a slog.Attr) bool {
+			if a.Key == "session" && a.Value.String() == id {
+				warned++
+			}
+			if strings.Contains(a.Value.String(), t0) || strings.Contains(a.Value.String(), t1) {
+				t.Errorf("the warning carries a token in %s", a.Key)
+			}
+			return true
+		})
+		if strings.Contains(rec.Message, t0) || strings.Contains(rec.Message, t1) {
+			t.Error("the warning message carries a token")
+		}
+	}
+	if warned != 1 {
+		t.Errorf("%d warnings naming session %s, want 1", warned, id)
 	}
 }

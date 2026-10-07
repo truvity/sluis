@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -857,9 +858,11 @@ func TestOfConcurrentEndsOfOneReuseExactlyOneWins(t *testing.T) {
 	})
 }
 
-// A reuse that detected the session at one revision does not end it once
-// anything has written it since: the record then belongs to whoever did.
-func TestAReuseDoesNotEndARecordWrittenSinceItWasRead(t *testing.T) {
+// A record rewritten between the reuse's read and its delete -- a rotation of
+// the live successor, which a thief holding it can keep doing -- does not
+// save the session: the end re-reads and deletes at the new revision, and is
+// still the call that ended it.
+func TestAReuseStillEndsARecordWrittenSinceItWasRead(t *testing.T) {
 	gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
 		ctx := context.Background()
 		session := e.open(t, "t0")
@@ -868,13 +871,106 @@ func TestAReuseDoesNotEndARecordWrittenSinceItWasRead(t *testing.T) {
 		p, _ := e.present(t, "t0")
 
 		e.refresh(t, "t1", "t2") // rewrites the record
-		if ended, err := e.sessions.endReused(ctx, p); err != nil || ended {
-			t.Errorf("endReused over a moved record = %v, %v; want false, nil", ended, err)
+		ended, err := e.sessions.endReused(ctx, p)
+		if err != nil || !ended {
+			t.Fatalf("endReused over a moved record = %v, %v; want it ended by this call", ended, err)
 		}
-		if !e.sessionLive(t, session.ID) || !e.live(t, "t2") {
-			t.Error("a stale reuse ended the session")
+		if e.sessionLive(t, session.ID) || e.live(t, "t2") {
+			t.Error("a refresh between the read and the delete saved the session")
+		}
+		if again, err := e.sessions.endReused(ctx, p); err != nil || again {
+			t.Errorf("a second end = %v, %v; want it already ended and not claimed", again, err)
 		}
 	})
+}
+
+// However often the record moves, the final unconditional delete ends it, and
+// a rotation that loses to the delete is refused and does not bring it back.
+func TestARecordThatKeepsMovingIsEndedUnconditionallyAndNotResurrected(t *testing.T) {
+	ctx := context.Background()
+	gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
+		session := e.open(t, "t0")
+		e.refresh(t, "t0", "t1")
+		e.advance(33 * time.Second)
+		p, _ := e.present(t, "t0")
+
+		live, moves := "t1", 0
+		e.counting.before = func(op, key string) {
+			if op == "delete-version" && key == sessionKey(session.ID) {
+				next := fmt.Sprintf("m%d", moves)
+				moves++
+				if _, _, ok, err := e.sessions.Refreshed(ctx, live, next); err != nil || !ok {
+					t.Errorf("rotation %d = %v, %v", moves, ok, err)
+					return
+				}
+				live = next
+			}
+		}
+		ended, err := e.sessions.endReused(ctx, p)
+		if err != nil || !ended {
+			t.Fatalf("endReused = %v, %v; want it ended by this call", ended, err)
+		}
+		if moves != reuseEndAttempts {
+			t.Errorf("%d conditional attempts raced, want %d", moves, reuseEndAttempts)
+		}
+		if e.sessionLive(t, session.ID) || e.live(t, live) {
+			t.Error("the session survived a record that kept moving")
+		}
+		// A rotation that read the token before the end is refused by its own write.
+		if _, _, ok := e.refresh(t, live, "late"); ok || e.live(t, "late") {
+			t.Error("a rotation after the end came back")
+		}
+	})
+}
+
+// A conditional delete that applies and then reports the record missing, or
+// reports an unavailable store, ended the session; nobody can claim it.
+func TestADeleteThatAppliedButReportedFailureIsEndedAndNotClaimed(t *testing.T) {
+	for name, ghost := range map[string]error{"missing": errGone, "unavailable": errors.New("unavailable")} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			clock := newGCClock()
+			inner := NewMemoryState()
+			inner.SetClock(clock.now)
+			state := &ghostState{MemoryState: inner}
+			sessions := NewSessions(state, gcLifetime, 0)
+			sessions.SetClock(clock.now)
+			session, err := sessions.Record(ctx, Opened{Identity: gcPerson, ClientID: "cli", How: HowCode, Token: "t0", AuthTime: clock.now()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, ok, err := sessions.Refreshed(ctx, "t0", "t1"); err != nil || !ok {
+				t.Fatal(err)
+			}
+			clock.advance(33 * time.Second)
+			p, _, err := sessions.present(ctx, "t0")
+			if err != nil || p.reused != session.ID {
+				t.Fatalf("present = %+v, %v", p, err)
+			}
+			state.ghost = ghost
+			ended, err := sessions.endReused(ctx, p)
+			if err != nil || ended {
+				t.Errorf("endReused = %v, %v; want ended by nobody this call can name", ended, err)
+			}
+			if _, live, _ := sessions.ByID(ctx, session.ID); live {
+				t.Error("the session survived a delete that applied")
+			}
+		})
+	}
+}
+
+// ghostState applies a conditional delete and then reports ghost.
+type ghostState struct {
+	*MemoryState
+	ghost error
+}
+
+func (g *ghostState) DeleteVersion(ctx context.Context, key, version string) error {
+	err := g.MemoryState.DeleteVersion(ctx, key, version)
+	if err == nil && g.ghost != nil {
+		return g.ghost
+	}
+	return err
 }
 
 // A mark at grace+1s is not acted on and one at grace+3s is, whatever the
