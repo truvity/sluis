@@ -729,7 +729,7 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 		return nil, errors.New("no such authorization code")
 	}
 
-	request, err := s.AuthRequestByID(ctx, string(raw))
+	request, err := s.request(ctx, string(raw))
 	if err != nil {
 		// The code is known and its request is gone, which is what a
 		// SECOND redemption looks like: the first one deleted the
@@ -742,7 +742,53 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 		return nil, err
 	}
 
+	if err = s.signInStands(ctx, request); err != nil {
+		return nil, err
+	}
+
 	return request, nil
+}
+
+// errSignInEnded refuses a code whose request was completed under a
+// browser sign-in that has ended since.
+var errSignInEnded = errors.New("the sign-in this code was issued under has ended")
+
+// signInStands refuses a code completed under a browser sign-in that is no
+// longer there, before anything is opened from it.
+//
+// A silent sign-in reads the browser's sign-in and then completes the
+// request; a sign-out in another tab can land in between, or anywhere
+// before the relying party redeems the code. Sign-out ends the sessions
+// filed under the sign-in and then the sign-in itself, so a session this
+// code opened afterwards would be filed under a sign-in nothing can end
+// any more: it would outlive the sign-out the person just made, and no
+// later sign-out would reach it. Here is where every completion, silent
+// or interactive, becomes a session or an ID token, so this is the one
+// place to ask.
+//
+// One read per code redemption under a sign-in, and none on a refresh:
+// a session that exists was filed while its sign-in stood, and sign-out
+// reaches it. What is left is the moment between this read and the
+// session's write, against a sign-out that has to fall entirely inside
+// it.
+func (s *Storage) signInStands(ctx context.Context, request *authRequest) error {
+	if request.SSO == "" || s.iss.SSO() == nil {
+		return nil
+	}
+
+	_, live, err := s.iss.SSO().Get(ctx, request.SSO)
+	if err != nil {
+		return err
+	}
+
+	if !live {
+		s.logger().InfoContext(ctx, "refused an authorization code: the sign-in it was completed under has ended",
+			"client", request.Req.ClientID)
+
+		return errSignInEnded
+	}
+
+	return nil
 }
 
 // revokeCodeSession ends the session one authorization code opened, on

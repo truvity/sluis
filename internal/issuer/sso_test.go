@@ -828,6 +828,19 @@ groups:
 func redeem(t *testing.T, b *browser, sentTo string) map[string]any {
 	t.Helper()
 
+	status, body := redeemAnswer(t, b, sentTo)
+	if status != http.StatusOK {
+		t.Fatalf("redeem answered %d: %v", status, body)
+	}
+
+	return body
+}
+
+// redeemAnswer is [redeem] for a test that expects the redemption may be
+// refused: the status and the body, whatever they are.
+func redeemAnswer(t *testing.T, b *browser, sentTo string) (int, map[string]any) {
+	t.Helper()
+
 	// A signed-in browser is sent through the library's own callback hop
 	// (/authorize/callback?id=...) before it reaches the client's; walk
 	// the issuer-relative hops until the client's absolute one.
@@ -861,11 +874,7 @@ func redeem(t *testing.T, b *browser, sentTo string) map[string]any {
 		t.Fatalf("token response: %v", err)
 	}
 
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("redeem answered %d: %v", response.StatusCode, body)
-	}
-
-	return body
+	return response.StatusCode, body
 }
 
 // jwtPart decodes one segment of a compact JWT without verifying it --
