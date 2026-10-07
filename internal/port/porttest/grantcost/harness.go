@@ -187,6 +187,10 @@ func (h *Harness) Advance(d time.Duration) {
 	h.skew.Add(int64(d))
 }
 
+// now is the clock the issuer's session index reads: the real one, moved by
+// every [Harness.Advance].
+func (h *Harness) now() time.Time { return time.Now().Add(time.Duration(h.skew.Load())) }
+
 // Measure runs step and returns what it cost.
 func (h *Harness) Measure(step func()) Counts {
 	var before map[string]int

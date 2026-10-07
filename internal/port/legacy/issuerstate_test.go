@@ -8,6 +8,7 @@ import (
 
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/port/memory"
+	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 )
 
 // The issuer's State, built over the ports, behaves as it always did over the
@@ -83,4 +84,22 @@ func TestTheIssuersStateOverThePortsBehavesAsItAlwaysDid(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An idle agent session stays in the index sets as long as its record, and
+// every revocation still finds it, over the legacy (Valkey) adapter and the
+// memory one (docs/decisions/0040-agent-class-sessions.md).
+func TestAnIdleAgentSessionIsRevocableOverThePorts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("memory adapter", func(t *testing.T) {
+		t.Parallel()
+		s := memory.New()
+		grantcost.IdleAgentSessionIsRevocable(t, issuer.NewPortState(s, s), s.Advance)
+	})
+	t.Run("legacy adapter", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		grantcost.IdleAgentSessionIsRevocable(t, issuer.NewPortState(f.ports.State, f.ports.Index), f.redis.FastForward)
+	})
 }
