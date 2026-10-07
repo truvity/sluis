@@ -921,10 +921,12 @@ func TestSignOutEverywhereTellsEveryClient(t *testing.T) {
 	})
 
 	if _, err := revoke(t, service, "ada@north.example|",
-		&accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail}); err != nil {
+		&accessissuerv1.RevokeSessionsRequest{Identity: strings.ToUpper(ssoEmail)}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
+	// Asked for in another case, every token still names the identity as
+	// stored, which is the `sub` of the clients' ID tokens.
 	count := map[string]int{}
 	for _, one := range told {
 		count[one.ClientID]++

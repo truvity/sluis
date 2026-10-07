@@ -458,13 +458,20 @@ func (s *SSO) EndForInvolving(ctx context.Context, identity string) (int, []Sess
 			}
 		}
 
+		// The identity as stored, which is what the clients' ID tokens
+		// named: the caller's spelling may differ in case.
+		stored := strings.ToLower(strings.TrimSpace(identity))
+		if record != nil && record.Identity != "" {
+			stored = record.Identity
+		}
+
 		var clients []string
 		if clients, err = s.Involved(ctx, id); err != nil {
 			return ended, involved, err
 		}
 
 		for _, client := range clients {
-			involved = append(involved, Session{ClientID: client, Identity: identity, SSO: id})
+			involved = append(involved, Session{ClientID: client, Identity: stored, SSO: id})
 		}
 
 		if err = s.removeClients(ctx, id, clients); err != nil {
