@@ -395,9 +395,9 @@ func TestTheOperatorEndsOneClientForEveryIdentity(t *testing.T) {
 		request *accessissuerv1.RevokeSessionsRequest
 		code    connect.Code
 	}{
-		"by a person":           {ssoEmail + "|", everybody, connect.CodePermissionDenied},
-		"naming no client":      {operator, &accessissuerv1.RevokeSessionsRequest{EveryIdentity: true}, connect.CodeInvalidArgument},
-		"naming an identity":    {operator, &accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail, ClientId: agentClient, EveryIdentity: true}, connect.CodeInvalidArgument},
+		"by a person":            {ssoEmail + "|", everybody, connect.CodePermissionDenied},
+		"naming no client":       {operator, &accessissuerv1.RevokeSessionsRequest{EveryIdentity: true}, connect.CodeInvalidArgument},
+		"naming an identity":     {operator, &accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail, ClientId: agentClient, EveryIdentity: true}, connect.CodeInvalidArgument},
 		"without every_identity": {operator, &accessissuerv1.RevokeSessionsRequest{ClientId: agentClient}, connect.CodeInvalidArgument},
 	} {
 		if _, err := revoke(t, svc, tc.as, tc.request); connect.CodeOf(err) != tc.code {

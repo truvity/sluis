@@ -155,6 +155,24 @@ message SignIn {
   google.protobuf.Timestamp expires_at = 5;
 }
 
+// Which of a person's sessions their own *sign out everywhere* ends
+// (docs/decisions/0040-agent-class-sessions.md, decision 7). A value this
+// issuer does not know is EVERYTHING: a scope can only ever end less by
+// being understood.
+enum RevokeScope {
+  // Everything, as EVERYTHING.
+  REVOKE_SCOPE_UNSPECIFIED = 0;
+  // Every session of every class and every browser sign-in: "Sign out
+  // everything", the one lever for a suspected compromise.
+  REVOKE_SCOPE_EVERYTHING = 1;
+  // Every interactive session and every browser sign-in; agent sessions
+  // keep working: "Sign out all browsers and apps".
+  REVOKE_SCOPE_INTERACTIVE = 2;
+  // Every agent session; the browsers stay signed in: "Disconnect all
+  // agents".
+  REVOKE_SCOPE_AGENTS = 3;
+}
+
 message RevokeSessionsRequest {
   // The identity whose sessions to end. Required, unless every_identity
   // names one client for everybody: revocation is about somebody, and a
@@ -182,6 +200,11 @@ message RevokeSessionsRequest {
   // otherwise be the mistake the identity rule above exists to refuse.
   // The incident lever for a client whose tokens are in doubt.
   bool every_identity = 5;
+  // Narrows a person's OWN sign-out everywhere (identity is the caller's,
+  // and no client, session or browser is named) to one class. Ignored
+  // everywhere else -- an operator ending somebody else's sessions, any
+  // narrower revoke -- which ends every class as it always did.
+  RevokeScope scope = 6;
 }
 
 message RevokeSessionsResponse {
