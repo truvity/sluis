@@ -743,6 +743,14 @@ type presented struct {
 	// pointer and record are the revisions of the token's pointer and of
 	// the session record as read, "" from a State that keeps none.
 	pointer, record string
+	// dead is set, with the answer false, when what was read is a terminal
+	// state that no later write can undo: no pointer and no legacy rotated
+	// record, or a pointer naming a session record that is absent. Only
+	// over a State that keeps revisions, whose every later write of a
+	// pointer or a record is conditional on what was read. It is what the
+	// negative cache may remember ([deadRefreshes]); everything else that
+	// is refused is not dead.
+	dead bool
 }
 
 // present resolves a refresh token for a refresh: to its live session, or
@@ -763,8 +771,13 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 		// Spent by the version before this one, which recorded the
 		// successor under a key of its own.
 		raw, found, err = s.state.Get(ctx, sessionRotatedKey(token))
-		if err != nil || !found {
+		if err != nil {
 			return presented{}, false, err
+		}
+
+		if !found {
+			// Neither: never issued, expired or deleted. Terminal.
+			return s.deadToken(), false, nil
 		}
 
 		return s.replayedTo(ctx, token, string(raw))
@@ -811,12 +824,30 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 		}
 	}
 
-	session, record, live, err := s.byIDVersion(ctx, string(raw))
-	if err != nil || !live {
+	session, record, found, err := s.recordOf(ctx, string(raw))
+	switch {
+	case err != nil:
 		return presented{}, false, err
+	case !found:
+		// The pointer outlived its record: revoked, ended, or idled out.
+		// Terminal, since no record is ever created under an old id.
+		return s.deadToken(), false, nil
+	case !session.Live(s.now()):
+		// Present and past its end: NOT terminal. A slow rotation on
+		// another replica may still write it, and [Storage]'s
+		// absolute-limit refusal reads it next.
+		return presented{}, false, nil
 	}
 
 	return presented{token: token, session: session, pointer: pointer, record: record}, true, nil
+}
+
+// deadToken is the answer for a token whose state is terminal: dead only
+// over a State that keeps revisions (see [presented.dead]).
+func (s *Sessions) deadToken() presented {
+	_, versioned := s.state.(versionedState)
+
+	return presented{dead: versioned}
 }
 
 // markAheadTolerance is how far the replicas' clocks may disagree before
@@ -834,9 +865,16 @@ const markAheadTolerance = 2 * time.Second
 // expiry or an earlier reuse of the same token, leaves nothing to end, and
 // the token is then simply refused.
 func (s *Sessions) reusedIn(ctx context.Context, token, id string) (presented, bool, error) {
-	session, record, live, err := s.byIDVersion(ctx, id)
-	if err != nil || !live {
+	session, record, found, err := s.recordOf(ctx, id)
+	switch {
+	case err != nil:
 		return presented{}, false, err
+	case !found:
+		// Spent past the grace window in a session that is gone: there is
+		// nothing to end, and nothing ever will be. Terminal.
+		return s.deadToken(), false, nil
+	case !session.Live(s.now()):
+		return presented{}, false, nil
 	}
 
 	return presented{token: token, session: session, reused: session.ID, record: record}, false, nil
@@ -1550,6 +1588,19 @@ func (s *Sessions) byID(ctx context.Context, id string) (Session, bool, error) {
 
 // byIDVersion is [Sessions.byID] with the revision of the record read.
 func (s *Sessions) byIDVersion(ctx context.Context, id string) (Session, string, bool, error) {
+	session, version, found, err := s.recordOf(ctx, id)
+	if err != nil || !found || !session.Live(s.now()) {
+		return Session{}, "", false, err
+	}
+
+	return session, version, true, nil
+}
+
+// recordOf reads one record as it is stored, live or past its end, with its
+// revision; found is false only when there is no record at all. It is the
+// one read that tells a session that is gone from one that has merely ended,
+// which [Sessions.present] needs and every other caller folds together.
+func (s *Sessions) recordOf(ctx context.Context, id string) (Session, string, bool, error) {
 	raw, version, found, err := getVersion(ctx, s.state, sessionKey(id))
 	if err != nil || !found {
 		return Session{}, "", false, err
@@ -1558,10 +1609,6 @@ func (s *Sessions) byIDVersion(ctx context.Context, id string) (Session, string,
 	var session Session
 	if err = json.Unmarshal(raw, &session); err != nil {
 		return Session{}, "", false, fmt.Errorf("issuer: %s is not readable: %w", sessionKey(id), err)
-	}
-
-	if !session.Live(s.now()) {
-		return Session{}, "", false, nil
 	}
 
 	return session, version, true, nil
