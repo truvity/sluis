@@ -304,8 +304,19 @@ Absent, the controller reads `tokenFile`, as on Kubernetes. Three things must ag
 
    ```json
    {"Effect":"Allow","Action":"sts:GetWebIdentityToken","Resource":"*",
-    "Condition":{"ForAnyValue:StringEquals":{"sts:IdentityTokenAudience":"https://sluis.example/console"}}}
+    "Condition":{"ForAllValues:StringEquals":{"sts:IdentityTokenAudience":["https://sluis.example/console"]}}}
    ```
+
+   `ForAllValues` is the operator the key needs (the API takes a list of audiences) and is safe only because STS
+   requires an audience on every call. `AdditionalWebIdentityAudiences` appends further exact audiences to that list,
+   after the console's, for code in the function that needs its own AWS-minted token, such as an OpenTelemetry layer
+   authenticating to a collector through the issuer's token exchange (`exchange.aws.audience`, typically the issuer
+   URL). The console audience stays required and first. Empty entries, duplicates (the console audience included) and
+   use while `WebIdentityAudience` is empty (any audience) are refused; unset, the policy is unchanged.
+
+   **What this gives up.** The role is then no longer "console bearer only": any code running with the function role
+   (the function, its layers and their dependencies) can mint a token for every audience listed. A policy document rule
+   that matches the role for an exchange must therefore grant only what that audience's consumer needs.
 
 2. **The issuer.** The policy document's `exchange.aws.accounts` lists the account (`issuer` from
    `aws iam get-outbound-web-identity-federation-info`). The console door uses the same accounts with

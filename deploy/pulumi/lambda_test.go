@@ -949,6 +949,91 @@ func TestTheRoleMayAskForAWebIdentityTokenTheControllersReadTheConsoleWith(t *te
 	}
 }
 
+// webIdentityCondition is the audiences of the role's web identity grant, nil
+// when the grant has no condition.
+func webIdentityCondition(t *testing.T, rec *recorder) []string {
+	t.Helper()
+	var got []string
+	var n int
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
+		if s["Sid"] != "SluisWebIdentity" {
+			continue
+		}
+		n++
+		if c, ok := s["Condition"].(map[string]any); ok {
+			got = strs(c["ForAllValues:StringEquals"].(map[string]any)["sts:IdentityTokenAudience"])
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d web identity statements", n)
+	}
+	return got
+}
+
+func TestAdditionalWebIdentityAudiencesFollowTheConsoleAudienceInOrder(t *testing.T) {
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+		a.WebIdentityAudience = "https://access.example.test/console"
+		a.AdditionalWebIdentityAudiences = []string{"https://issuer.example", "https://collector.example"}
+	}})
+	want := []string{"https://access.example.test/console", "https://issuer.example", "https://collector.example"}
+	if got := webIdentityCondition(t, rec); !reflect.DeepEqual(got, want) {
+		t.Errorf("audiences %v, want %v", got, want)
+	}
+	rec, _ = mustLambda(t, withInstallation(exampleInstallation(t), func(a *arp.LambdaArgs) {
+		a.AdditionalWebIdentityAudiences = []string{"https://issuer.example"}
+	}))
+	want = []string{"https://access.example.test/console", "https://issuer.example"}
+	if got := webIdentityCondition(t, rec); !reflect.DeepEqual(got, want) {
+		t.Errorf("with an installation: audiences %v, want %v", got, want)
+	}
+}
+
+func TestAdditionalWebIdentityAudiencesAreRefusedWhenEmptyDuplicateOrWithoutAnAudience(t *testing.T) {
+	const prefix = "sluispulumi: LambdaArgs.AdditionalWebIdentityAudiences"
+	for name, c := range map[string]struct {
+		primary string
+		extra   []string
+		want    string
+	}{
+		"an empty entry":           {"https://a.example", []string{"https://b.example", ""}, "[1] is empty"},
+		"a blank entry":            {"https://a.example", []string{"  "}, "[0] is empty"},
+		"a repeated entry":         {"https://a.example", []string{"https://b.example", "https://b.example"}, "duplicate"},
+		"the console audience":     {"https://a.example", []string{"https://a.example"}, "duplicate"},
+		"no web identity audience": {"", []string{"https://b.example"}, "WebIdentityAudience is empty"},
+	} {
+		_, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+			a.WebIdentityAudience = c.primary
+			a.AdditionalWebIdentityAudiences = c.extra
+		}})
+		if err == nil || !strings.Contains(err.Error(), prefix) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// Unset, or empty, the role's policy is the document it was before the field.
+func TestTheRolePolicyIsUnchangedWithoutAdditionalWebIdentityAudiences(t *testing.T) {
+	for _, aud := range []string{"", "https://access.example.test/console"} {
+		set := func(extra []string) string {
+			rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
+				a.WebIdentityAudience = aud
+				a.AdditionalWebIdentityAudiences = extra
+			}})
+			return prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()
+		}
+		base := set(nil)
+		if got := set([]string{}); got != base {
+			t.Errorf("audience %q: an empty list changes the policy:\n%s\n%s", aud, base, got)
+		}
+		if aud != "" && !strings.Contains(base, `"ForAllValues:StringEquals":{"sts:IdentityTokenAudience":["`+aud+`"]}`) {
+			t.Errorf("the single-audience condition changed:\n%s", base)
+		}
+		if aud == "" && strings.Contains(base, "Condition") && strings.Contains(base, "IdentityTokenAudience") {
+			t.Errorf("a condition without an audience:\n%s", base)
+		}
+	}
+}
+
 func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		a.Exports = arp.ExportsArgs{Rate: "rate(1 hour)"}

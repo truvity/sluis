@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library's Lambda role can mint web identity tokens for further audiences: `LambdaArgs.AdditionalWebIdentityAudiences`.** For code that runs in the function and needs its own AWS-minted token, such as an OpenTelemetry layer authenticating to a collector through the issuer's token exchange (`exchange.aws.audience`, typically the issuer URL). The entries are appended, after the console audience, to the exact `ForAllValues:StringEquals` condition on `sts:IdentityTokenAudience`; the console audience stays first and required. Empty entries, duplicates (the console audience included) and use while `WebIdentityAudience` resolves empty are refused. Unset, the role's policy is byte-identical, so an existing stack shows no diff. This gives up "the role mints a console bearer and nothing else": any code running with the function role, its layers and their dependencies included, can mint a token for every audience listed, so a policy rule that matches the role for an exchange must grant only what that audience's consumer needs. `docs/reference/lambda.md` now shows the `ForAllValues:StringEquals` the code emits, where it showed `ForAnyValue`.
+
 ## v1.70.0
 
 ### Added

@@ -208,6 +208,25 @@ type LambdaArgs struct {
 	// `sts:GetWebIdentityToken` either way (the controllers read the console with
 	// it), and the account must have outbound identity federation enabled.
 	WebIdentityAudience string
+	// AdditionalWebIdentityAudiences are further audiences the function's role
+	// may ask STS to mint a web identity token for, after WebIdentityAudience
+	// (which stays first and required). It is for code that runs in the function
+	// and needs its own AWS-minted token, such as an OpenTelemetry layer
+	// authenticating to a collector through the issuer's token exchange (whose
+	// audience is `exchange.aws.audience`, typically the issuer URL). The
+	// condition stays an exact `ForAllValues:StringEquals` on
+	// `sts:IdentityTokenAudience`, with these appended.
+	//
+	// This gives up "the role mints a console bearer and nothing else": any code
+	// running with the function role (the function, its layers and their
+	// dependencies) can mint a token for every audience listed, so a policy
+	// document rule that matches the role for an exchange must grant only what
+	// that audience's consumer needs.
+	//
+	// Empty entries, duplicates (the console audience included) and use while
+	// WebIdentityAudience resolves empty (which allows any audience) are refused.
+	// Unset, the role's policy is unchanged.
+	AdditionalWebIdentityAudiences []string
 	// Telemetry is the OpenTelemetry layer. Nil: no layer and no OTEL
 	// environment, which is how an estate whose collector is not ready runs.
 	Telemetry *TelemetryArgs
@@ -477,6 +496,30 @@ var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 // but with WrappedSigning, which replaces them.
 func (a *LambdaArgs) remoteSigning() bool { return a.WrappedSigning == nil }
 
+// checkAdditionalAudiences refuses an additional web identity audience list
+// that is empty-valued, repeats an audience, or sits beside an empty
+// WebIdentityAudience (which means any audience, so listing more makes no sense).
+func checkAdditionalAudiences(primary string, extra []string) error {
+	if len(extra) == 0 {
+		return nil
+	}
+	if primary == "" {
+		return errors.New("sluispulumi: LambdaArgs.AdditionalWebIdentityAudiences is set while WebIdentityAudience is empty, " +
+			"which allows any audience: set WebIdentityAudience (or an Installation) first")
+	}
+	seen := map[string]bool{primary: true}
+	for i, aud := range extra {
+		switch {
+		case strings.TrimSpace(aud) == "":
+			return fmt.Errorf("sluispulumi: LambdaArgs.AdditionalWebIdentityAudiences[%d] is empty", i)
+		case seen[aud]:
+			return fmt.Errorf("sluispulumi: LambdaArgs.AdditionalWebIdentityAudiences[%d] %q is a duplicate (the console audience counts)", i, aud)
+		}
+		seen[aud] = true
+	}
+	return nil
+}
+
 func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if a == nil {
 		return LambdaArgs{}, errors.New("sluispulumi: LambdaArgs is nil")
@@ -487,6 +530,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 		if out, err = out.withInstallation(); err != nil {
 			return out, err
 		}
+	}
+	if err := checkAdditionalAudiences(out.WebIdentityAudience, out.AdditionalWebIdentityAudiences); err != nil {
+		return out, err
 	}
 	var missing []string
 	for k, v := range map[string]string{
@@ -1026,6 +1072,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance, exports: !a.Exports.Disabled,
 			invokeFunctionArns: []string{selfArn},
 			webIdentityAud:     a.WebIdentityAudience,
+			webIdentityExtra:   a.AdditionalWebIdentityAudiences,
 		})
 	}).(pulumi.StringOutput)
 	if _, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
