@@ -161,9 +161,12 @@ func agentConsentBody(pending Pending, who Authenticated, token, nonce string) s
 	</form>
 	<noscript><p class="warn">Allowing a background connection needs JavaScript in this browser.</p></noscript>
 	<script nonce="%s">(function(){var b=document.getElementById("allow"),armed=0;
-	function arm(){var mine=++armed;b.disabled=true;if(document.visibilityState==="visible"){setTimeout(function(){if(mine===armed&&document.visibilityState==="visible"){b.disabled=false;}},%d);}}
+	function arm(){var mine=++armed;b.disabled=true;
+	if(document.visibilityState==="visible"){setTimeout(function(){
+	if(mine===armed&&document.visibilityState==="visible"){b.disabled=false;}},%d);}}
 	document.addEventListener("visibilitychange",arm);arm();})();</script>
-	<p class="note">If you did not just start this, close this page. To end a connection later, use the console's Sessions page or <em>Disconnect all agents</em>.</p>`,
+	<p class="note">If you did not just start this, close this page. To end a connection later, use the console's
+	Sessions page or <em>Disconnect all agents</em>.</p>`,
 		agentConsentPath, html.EscapeString(token), nonce, allowArmDelay.Milliseconds())
 
 	return out.String()
