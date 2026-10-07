@@ -5,10 +5,46 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+
+	"github.com/truvity/sluis/internal/access"
 )
+
+// consentTestKey signs the acceptances [Storage.CompleteAcceptedForTest]
+// makes, when a test gave the storage no sign-in state of its own.
+const consentTestKey = "a-test-key-for-signing-state"
+
+// CompleteAcceptedForTest completes a request as the consent page's accept
+// does: with an acceptance minted for this request and this person, from
+// the browser holding its cookie. For a test whose subject is what the
+// completion opens rather than how it was accepted.
+func (s *Storage) CompleteAcceptedForTest(ctx context.Context, id string, who Authenticated) error {
+	if s.signInState == nil {
+		s.signInState = access.NewStateCodec([]byte(consentTestKey), 0)
+	}
+
+	who.Consent = acceptedForTest(s.signInState, id, who)
+
+	return s.Complete(ctx, id, who)
+}
+
+// acceptedForTest is an acceptance for one request and one person, as the
+// browser the page was shown in presents it.
+func acceptedForTest(codec *access.StateCodec, id string, who Authenticated) access.AgentConsent {
+	token, err := codec.IssueAgentConsent(id, access.AgentConsentActor(who.Subject, who.SSO))
+	if err != nil {
+		panic(err)
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/login/agent-consent", nil)
+	r.AddCookie(access.AgentConsentCookie(token, false, time.Minute))
+
+	return access.AgentConsentPresented(r, token, false)
+}
 
 // NewSessionsServiceForTest builds the contract over a stubbed verifier,
 // so the authorization rules can be tested without minting real tokens.

@@ -215,6 +215,12 @@ func (d SignInDeps) over(iss *Issuer, storage op.Storage) SignInDeps {
 		d.Storage = completer
 	}
 
+	// The storage verifies an agent-consent acceptance itself, against the
+	// codec the consent page minted it with.
+	if own, ok := storage.(*Storage); ok && d.State != nil {
+		own.UseSignInState(d.State)
+	}
+
 	// Wired here because this is the one place that holds BOTH halves:
 	// the storage owns the signing key a logout token needs, and the
 	// sign-in deps own the moment a sign-out happens.

@@ -188,6 +188,7 @@ func SignInRoutes(mux *http.ServeMux, deps SignInDeps) {
 	mux.HandleFunc("GET /login/{provider}/start", s.start)
 	mux.HandleFunc("GET /login/{provider}/callback", s.callback)
 	mux.HandleFunc("POST /login/recovery", s.recover)
+	mux.HandleFunc("POST "+agentConsentPath, s.acceptAgent)
 	// BOTH methods. A person following a link sends GET; the console
 	// sends POST, because its own sign-out was a POST — "a link that logs
 	// you out would be a link anyone could put in a page" — and a
@@ -246,6 +247,17 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 		pending = asked
 	}
 
+	// An agent connection is never made without the person seeing it, so
+	// `prompt=none` -- complete silently or not at all -- is answered
+	// `consent_required` at the client (OpenID Connect Core 3.1.2.6), with
+	// or without a sign-in to answer from.
+	if pending.Agent && pending.ForbidsUI {
+		s.refuse(w, r, pending, "consent_required",
+			"an agent connection has to be accepted by the person, which prompt=none forbids")
+
+		return
+	}
+
 	if s.silent(w, r, request, pending) {
 		return
 	}
@@ -276,7 +288,10 @@ func (s *signIn) chooser(w http.ResponseWriter, r *http.Request) {
 	// recovery there are two, and forwarding to a provider that may not
 	// be able to help -- which is exactly the state a fresh installation
 	// is in -- would hide the one that can.
-	if len(kinds) == 1 && recovery == "" {
+	//
+	// Not for an agent connection: its sign-in is one the person should see
+	// begin, and the consent page after it is the one that decides.
+	if len(kinds) == 1 && recovery == "" && !pending.Agent {
 		http.Redirect(w, r, s.startURL(kinds[0], request), http.StatusFound)
 		return
 	}
@@ -679,7 +694,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	// entitled to, does not undo that.
 	s.handOver(w, r, who, secret)
 	if err != nil {
-		if s.refuseUnentitled(w, r, err, request) {
+		if s.refuseUnentitled(w, r, err, request) || s.askAgentConsent(w, r, err, request, who) {
 			return
 		}
 
@@ -1040,12 +1055,12 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		return false
 	}
 
-	session, ok := standingSignIn(s.deps, w, r, pending.Resource, pending.MaxAge)
+	session, ok := standingSignIn(s.deps, w, r, s.limitResource(pending), pending.MaxAge)
 	if !ok {
 		return false
 	}
 
-	if err := s.deps.Storage.Complete(r.Context(), request, Authenticated{
+	who := Authenticated{
 		Subject:  session.Identity,
 		AuthTime: session.AuthTime,
 		SSO:      session.ID,
@@ -1053,11 +1068,15 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		// does not re-prove anybody, so the token must say how they were
 		// proved in the first place.
 		How: session.How,
-	}); err != nil {
+	}
+	if err := s.deps.Storage.Complete(r.Context(), request, who); err != nil {
 		// TRUE because it is answered, not because it succeeded: falling
 		// through would show a login page to somebody already signed in,
-		// who would sign in again and be refused again.
-		return s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err)
+		// who would sign in again and be refused again. An agent
+		// connection is answered with its consent page: the person is
+		// authenticated, and is asked rather than completed silently.
+		return s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err) ||
+			s.askAgentConsent(w, r, err, request, who)
 	}
 
 	recordLoginSuccess(r.Context(), "browser_session")
