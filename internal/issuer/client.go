@@ -107,7 +107,12 @@ func (c *client) LoginURL(id string) string { return "/login?auth=" + id }
 // JWKS rather than asking the issuer about every request.
 func (c *client) AccessTokenType() op.AccessTokenType { return op.AccessTokenTypeJWT }
 
-func (c *client) IDTokenLifetime() time.Duration { return c.lifetime }
+// IDTokenLifetime is this client's lifetime, narrowed by its `ttl_cap`.
+// For a request that belongs to an agent-class chain it is shortened to the
+// access token's end ([Storage.issue] marks it on the request's carrier),
+// so an agent client's ID token is held to `lifetimes.agent.access` and
+// never outlives the chain's deadline.
+func (c *client) IDTokenLifetime() time.Duration { return c.signing.idTokenLifetime(c.lifetime) }
 
 func (c *client) DevMode() bool { return false }
 

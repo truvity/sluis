@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/truvity/sluis/policy"
 )
 
 // An agent chain's spent marks are kept until the deadline recorded on it,
@@ -65,6 +67,75 @@ func TestAnAgentChainsSpentMarksLiveUntilItsDeadline(t *testing.T) {
 	now = deadline.Add(time.Second)
 	if _, found, _ = state.Get(ctx, sessionTokenKey("t0")); found {
 		t.Error("the mark outlived the chain's deadline")
+	}
+}
+
+// client_documents.ttl_cap reaches the ACCESS token of a document client,
+// not only its ID token: the cap is looked up from the policy, not among
+// declared clients alone, and never from the document.
+func TestClientDocumentsTTLCapReachesAccessTokens(t *testing.T) {
+	t.Parallel()
+
+	declared, err := policy.Parse([]byte("version: 1\n" +
+		"groups: { viewers: { members: [eng@north.example] } }\n" +
+		"client_documents: { origins: [hosts.example], requires: [viewers], ttl_cap: 10m }\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set,
+		aDirectory{"ada@north.example": {Found: true, Authoritative: true, Groups: []string{"eng@north.example"}}},
+		NewMemoryState())
+	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for client, want := range map[string]time.Duration{
+		"https://hosts.example/client.json": 10 * time.Minute,
+		"https://elsewhere.example/c.json":  time.Hour,
+	} {
+		issued, err := storage.issue(context.Background(), &refreshRequest{session: Session{
+			ID: "s", Identity: "ada@north.example", ClientID: client, How: HowCode, AuthTime: time.Now(),
+		}})
+		if err != nil {
+			t.Fatalf("issue for %s: %v", client, err)
+		}
+		if lifetime := time.Until(issued.Expires); lifetime > want || lifetime < want-time.Minute {
+			t.Errorf("an access token for %s lives %s, want %s", client, lifetime.Round(time.Second), want)
+		}
+	}
+}
+
+// The ID token minted after an agent chain's access token is held to the
+// same end, through the request's carrier; one for any other request
+// keeps the client's own lifetime.
+func TestAnAgentChainsIDTokenFollowsItsAccessToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := withSigningAudienceContext(context.Background())
+	carrier := signingAudienceFrom(ctx)
+	c := &client{id: "mcp-host", lifetime: time.Hour, signing: carrier}
+
+	if got := c.IDTokenLifetime(); got != time.Hour {
+		t.Errorf("unmarked: %s, want the client's own hour", got)
+	}
+
+	carrier.markAgentUntil(time.Now().Add(30 * time.Minute))
+	if got := c.IDTokenLifetime(); got > 30*time.Minute || got < 29*time.Minute {
+		t.Errorf("marked for an agent chain: %s, want 30m", got)
+	}
+
+	short := &client{id: "mcp-capped", lifetime: 10 * time.Minute, signing: carrier}
+	if got := short.IDTokenLifetime(); got != 10*time.Minute {
+		t.Errorf("a client capped below the mark: %s, want its own 10m", got)
+	}
+
+	if got := (&client{lifetime: time.Hour}).IDTokenLifetime(); got != time.Hour {
+		t.Errorf("no carrier: %s, want the client's own hour", got)
 	}
 }
 

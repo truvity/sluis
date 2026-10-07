@@ -1452,6 +1452,14 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	lifetime := s.iss.Config().TokenLifetime
 	if declared, ok := s.iss.Policy().Client(clientOf(request)); ok {
 		lifetime = declared.Cap(lifetime)
+	} else if documents := s.iss.Policy().ClientDocuments(); documents.Enabled() {
+		// A client that describes itself is held to `client_documents`'
+		// ttl_cap, as its ID token already is ([Storage.GetClientByClientID]).
+		// Read from the policy rather than the document, which says nothing
+		// about its own lifetime.
+		if target, err := documentURL(clientOf(request)); err == nil && documents.Permits(target) {
+			lifetime = policy.Client{TTLCap: documents.TTLCap}.Cap(lifetime)
+		}
 	}
 	// And the resource's own cap, when the request named one. The SHORTER
 	// of the two wins, because each was written by somebody saying "not
@@ -1472,6 +1480,16 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 		}
 	}
 
+	// An agent chain's tokens are held to the class's own cap, which is
+	// mandatory: it is what bounds how long an agent client keeps access
+	// after its person is removed, with or without a resource.
+	agent := classOfRequest(request) == ClassAgent
+	if agent {
+		if capped := s.iss.Config().Agent.Access; capped > 0 && (lifetime == 0 || capped < lifetime) {
+			lifetime = capped
+		}
+	}
+
 	now := time.Now()
 	expires := now.Add(lifetime)
 
@@ -1489,12 +1507,17 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// the installation's only for a read-only resource that says so (see
 	// [policy.EffectiveAbsolute]) -- so a token never outlives the chain
 	// it belongs to, nor is cut short of a chain that was given more.
-	if authTime := authTimeOf(request); !authTime.IsZero() {
-		if absolute := s.iss.AbsoluteFor(resourceOf(request)); absolute > 0 {
-			if limit := authTime.Add(absolute); limit.Before(expires) {
-				expires = limit
-			}
-		}
+	//
+	// An agent chain's limit is its deadline, as the chain itself is held
+	// to it ([Sessions.limitOf]): the one recorded on the session for a
+	// refresh, and the one about to be recorded for a code.
+	if limit := s.tokenLimit(request, agent); !limit.IsZero() && limit.Before(expires) {
+		expires = limit
+	}
+	if agent {
+		// The ID token minted next for this request is held to the same
+		// end ([client.IDTokenLifetime]).
+		signingAudienceFrom(ctx).markAgentUntil(expires)
 	}
 
 	issued := &token{
@@ -1508,6 +1531,32 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	}
 	issued.GivenName, issued.FamilyName = given, family
 	return issued, nil
+}
+
+// tokenLimit is the latest a token for this request may expire: the end of
+// the chain it belongs to, or zero for a request with no auth_time (a
+// workload or a machine exchange, which opens no session to cap against).
+func (s *Storage) tokenLimit(request op.TokenRequest, agent bool) time.Time {
+	authTime := authTimeOf(request)
+	if authTime.IsZero() {
+		return time.Time{}
+	}
+
+	if agent {
+		if refresh, ok := request.(*refreshRequest); ok {
+			return s.iss.Sessions().limitOf(refresh.session)
+		}
+
+		if deadline := s.iss.Sessions().agentDeadline(authTime, resourceOf(request)); !deadline.IsZero() {
+			return deadline
+		}
+	}
+
+	if absolute := s.iss.AbsoluteFor(resourceOf(request)); absolute > 0 {
+		return authTime.Add(absolute)
+	}
+
+	return time.Time{}
 }
 
 // keep records an access token [Storage.issue] decided, which is what
@@ -2359,13 +2408,21 @@ func (s *Storage) signInProof(ctx context.Context, request exchangeSubject) (Pro
 		return refuse("no session stands behind that access token")
 	}
 
-	_, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
+	session, live, err := s.iss.Sessions().ByID(ctx, issued.Session)
 	if err != nil {
 		return Proof{}, oidc.ErrServerError().WithDescription("%s", err)
 	}
 
 	if !live {
 		return refuse("the session behind that access token has ended")
+	}
+
+	// A sign-in exchange trades a person's CLI sign-in, and an agent chain
+	// is a background host's. The load-time refusal of `session: agent`
+	// with `sign_in_exchange` is not enough on its own: a recorded class
+	// outlives a policy change, so the class of the session itself decides.
+	if session.Agent() {
+		return refuse("a sign-in held by an agent-class session cannot be exchanged")
 	}
 
 	return Proof{Email: issued.Subject}, nil

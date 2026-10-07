@@ -1,6 +1,9 @@
 package issuer_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -532,6 +535,130 @@ func TestAnIdleAgentSessionIsStillFoundByEveryRevocation(t *testing.T) {
 			}
 			if _, live, _ := w.iss.Sessions().ByID(t.Context(), agent.ID); live {
 				t.Error("the agent session is still live after the revocation reported it ended")
+			}
+		})
+	}
+}
+
+// signInProof refuses a token whose session has class agent: a recorded
+// class outlives a policy change, so the load-time refusal of agent with
+// sign_in_exchange is not enough on its own. The same client's interactive
+// session still trades.
+func TestASignInHeldByAnAgentSessionIsNotAProof(t *testing.T) {
+	t.Parallel()
+
+	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true},
+		agentPolicySet(t, agentPolicyText(true)), adaDirectory(), issuer.NewMemoryState())
+	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := handler(iss, storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(h)
+	t.Cleanup(server.Close)
+
+	for _, tc := range []struct {
+		class  issuer.SessionClass
+		status int
+	}{
+		{issuer.ClassAgent, http.StatusBadRequest},
+		{issuer.ClassInteractive, http.StatusOK},
+	} {
+		refresh := "cli-" + string(tc.class)
+		// The CLI recorded as agent stands for a chain opened while the
+		// policy said so; the policy now says interactive and trades.
+		if _, err = iss.Sessions().Record(t.Context(), issuer.Opened{
+			Identity: "ada@north.example", ClientID: "cli", How: issuer.HowCode, Token: refresh,
+			Scopes: []string{"openid"}, AuthTime: time.Now(), Class: tc.class,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		tokens := postToken(t, server, url.Values{
+			"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {"cli"}, "scope": {"openid"},
+		}, "cli", http.StatusOK)
+		access, _ := tokens["access_token"].(string)
+
+		status, body := exchangeSubject(t, server, "cli", access, string(oidc.AccessTokenType), "aws:1111:power")
+		if status != tc.status {
+			t.Errorf("a %s session's sign-in exchanged with %d %v, want %d", tc.class, status, body, tc.status)
+		}
+		if tc.class == issuer.ClassAgent && !strings.Contains(body["error_description"].(string), "agent-class") {
+			t.Errorf("the refusal says %v, want it to name the agent class", body["error_description"])
+		}
+	}
+}
+
+// An agent chain's access and ID tokens are held to lifetimes.agent.access
+// (30m, under a 1h lifetimes.token), and to anything shorter: the client's
+// ttl_cap, a resource's ttl_cap, and the chain's own deadline. An
+// interactive chain keeps the ordinary lifetime.
+func TestAgentTokensAreCappedAtTheClassAccessLifetime(t *testing.T) {
+	t.Parallel()
+
+	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true},
+		agentPolicySet(t, agentPolicyText(true)), adaDirectory(), issuer.NewMemoryState())
+	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := handler(iss, storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(h)
+	t.Cleanup(server.Close)
+
+	nearDeadline := time.Now().Add(-30*day + 10*time.Minute)
+	for _, tc := range []struct {
+		name     string
+		client   string
+		resource string
+		class    issuer.SessionClass
+		authTime time.Time
+		max      time.Duration // the token's lifetime is at most this
+		min      time.Duration // and at least this
+		idToken  bool
+	}{
+		{"agent", agentClient, "", issuer.ClassAgent, time.Now(), 30 * time.Minute, 25 * time.Minute, true},
+		{"agent with a client ttl_cap", agentCapped, "", issuer.ClassAgent, time.Now(), 10 * time.Minute, 5 * time.Minute, true},
+		{"agent with a resource ttl_cap", agentClient, shortTokenTarget, issuer.ClassAgent, time.Now(), 5 * time.Minute, 3 * time.Minute, false},
+		{"agent near its deadline", agentClient, "", issuer.ClassAgent, nearDeadline, 10 * time.Minute, 5 * time.Minute, true},
+		{"interactive", "local-dev", "", issuer.ClassInteractive, time.Now(), time.Hour, 55 * time.Minute, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refresh := "t-" + strings.ReplaceAll(tc.name, " ", "-")
+			if _, err := iss.Sessions().Record(t.Context(), issuer.Opened{
+				Identity: "ada@north.example", ClientID: tc.client, Resource: tc.resource, How: issuer.HowCode,
+				Token: refresh, Scopes: []string{"openid"}, AuthTime: tc.authTime, Class: tc.class,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			body := postToken(t, server, url.Values{
+				"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {tc.client}, "scope": {"openid"},
+			}, tc.client, http.StatusOK)
+
+			now := time.Now()
+			check := func(kind, raw string) {
+				exp, ok := payloadOf(t, raw)["exp"].(float64)
+				if !ok {
+					t.Fatalf("the %s carries no exp", kind)
+				}
+				lifetime := time.Unix(int64(exp), 0).Sub(now)
+				if lifetime > tc.max+5*time.Second || lifetime < tc.min {
+					t.Errorf("the %s lives %s, want between %s and %s", kind, lifetime.Round(time.Second), tc.min, tc.max)
+				}
+			}
+			access, _ := body["access_token"].(string)
+			check("access token", access)
+			if tc.idToken {
+				id, _ := body["id_token"].(string)
+				if id == "" {
+					t.Fatalf("no id_token in %v", body)
+				}
+				check("ID token", id)
 			}
 		})
 	}
