@@ -401,8 +401,15 @@ func (s *SSO) dropClients(ctx context.Context, id string) error {
 		return err
 	}
 
+	return s.removeClients(ctx, id, clients)
+}
+
+// removeClients removes the named members of a sign-in's clients set.
+func (s *SSO) removeClients(ctx context.Context, id string, clients []string) error {
+	key := ssoClientsKey(id)
+
 	for _, client := range clients {
-		if err = s.state.Remove(ctx, key, client); err != nil {
+		if err := s.state.Remove(ctx, key, client); err != nil {
 			return err
 		}
 	}
@@ -415,11 +422,24 @@ func (s *SSO) dropClients(ctx context.Context, id string) error {
 // sign-in; revoking the per-client sessions is the half that ends the
 // ones already running.
 func (s *SSO) EndFor(ctx context.Context, identity string) (int, error) {
+	ended, _, err := s.EndForInvolving(ctx, identity)
+
+	return ended, err
+}
+
+// EndForInvolving is [SSO.EndFor] that also returns the clients each ended
+// sign-in involved, one [Session] per client and sign-in, read before the
+// set is dropped: afterwards nothing says which clients to tell. On error it
+// returns what was collected from the sign-ins already ended. It costs one
+// operation than [SSO.EndFor] alone: none, as the one read of the set serves
+// both the announcement and the drop.
+func (s *SSO) EndForInvolving(ctx context.Context, identity string) (int, []Session, error) {
 	key := ssoOfKey(identity)
+	var involved []Session
 
 	ids, err := s.state.Members(ctx, key)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	ended := 0
@@ -429,35 +449,44 @@ func (s *SSO) EndFor(ctx context.Context, identity string) (int, error) {
 		// hash that names its cookie's pointer.
 		var record *ssoRecord
 		if record, err = getJSON[ssoRecord](ctx, s.state, ssoKey(id)); err != nil {
-			return ended, err
+			return ended, involved, err
 		}
 
 		if record != nil && record.Cookie != "" {
 			if err = s.state.Delete(ctx, ssoCookieKey(record.Cookie)); err != nil {
-				return ended, err
+				return ended, involved, err
 			}
 		}
 
-		if err = s.dropClients(ctx, id); err != nil {
-			return ended, err
+		var clients []string
+		if clients, err = s.Involved(ctx, id); err != nil {
+			return ended, involved, err
+		}
+
+		for _, client := range clients {
+			involved = append(involved, Session{ClientID: client, Identity: identity, SSO: id})
+		}
+
+		if err = s.removeClients(ctx, id, clients); err != nil {
+			return ended, involved, err
 		}
 
 		if err = s.state.Delete(ctx, ssoKey(id)); err != nil {
-			return ended, err
+			return ended, involved, err
 		}
 
 		// Both indexes, as End does: the global one would otherwise hold
 		// the id until List found it dangling.
 		for _, index := range []string{ssoAllKey, key} {
 			if err = s.state.Remove(ctx, index, id); err != nil {
-				return ended, err
+				return ended, involved, err
 			}
 		}
 
 		ended++
 	}
 
-	return ended, nil
+	return ended, involved, nil
 }
 
 // Cookie is the browser's half. SameSite=Lax is load-bearing twice over:

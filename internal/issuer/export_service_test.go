@@ -107,3 +107,11 @@ func (s *Storage) CreatePendingAuthRequestForTest(ctx context.Context, id, clien
 func NewForSessionsTest(sessions *Sessions) *Issuer {
 	return &Issuer{sessions: sessions}
 }
+
+// WithAnnounceForTest sets the announcer sign-out everywhere tells clients
+// through.
+func (s *SessionsService) WithAnnounceForTest(f func(context.Context, []Session)) *SessionsService {
+	s.announce = f
+
+	return s
+}
