@@ -190,12 +190,19 @@ Three things end a sign-in, and they treat agent sessions differently:
 | The browser sign-in passes its own absolute limit | kept, like every other live chain |
 | Another person signs in in the same browser | ended, with everything else the first person opened |
 
-The signed-out page says that agent connections were kept and links to *sign out everywhere*. When `/end_session`
+The signed-out page says that agent connections were kept and links to the console's page for the person, where
+*Disconnect all agents* or *Sign out everything* ends them too. When `/end_session`
 names an agent client, by `client_id` or by the audience of its `id_token_hint`, that client's own sessions under the
 sign-in end too. A hint proves nothing, so the name is used only to end more, never less.
 
-Everything that revokes ignores the class: *sign out everywhere*, a per-client revoke, a per-browser revoke, removal
-from the directory and refresh-token reuse end an agent chain as they end any other. The console groups sessions under
+A person's own sign-out everywhere comes in three ([ADR 0040](../decisions/0040-agent-class-sessions.md), decision
+7 as amended): *Sign out all browsers and apps* ends every browser sign-in and interactive session and keeps the agent
+sessions; *Disconnect all agents* ends every agent session and keeps the browsers; *Sign out everything* ends both and
+is the lever for a suspected compromise. A missing or unknown scope is *Sign out everything*.
+
+Everything else that revokes ignores the class: *Sign out everything*, a per-client revoke, a per-browser revoke, an
+operator's revoke of a person (whatever scope it names) or of one client for everybody, removal from the directory and
+refresh-token reuse end an agent chain as they end any other. The console groups sessions under
 their sign-in, ended sign-ins included, so that revoking one browser still reaches the agent sessions its sign-out
 spared ([the console](console.md#the-sessions-page)).
 

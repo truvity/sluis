@@ -83,12 +83,17 @@ A person's page lists their sessions grouped under the sign-in that opened them,
 has ended, because the person signed out, stays listed while it still holds sessions, marked as a signed-out browser:
 those are the agent connections the sign-out kept. Each row shows the client, its class (`interactive` or `agent`) and
 its deadline, the computed end of the chain, beside the sliding expiry. *End this browser* ends the sign-in and every
-session under it, spared agent sessions included; a row's own revoke ends only that session, and *sign out everywhere*
-ends everything the person holds.
+session under it, spared agent sessions included; a row's own revoke ends only that session.
+
+On your own page there are three buttons for everything at once. *Sign out all browsers and apps* ends every browser
+sign-in and interactive session and keeps your agent connections; *Disconnect all agents* ends every agent connection
+and keeps you signed in; *Sign out everything*, the primary button, ends both and is the one to press if you think
+your account is compromised. Somebody else's page offers only *Sign out everything*, which is what an operator's revoke
+does whatever it asks.
 
 A client's page lists its sessions across people. Beside the per-person revoke it offers, to an operator only, *End for
 everybody*, which ends that client's sessions for every identity (`every_identity` on `RevokeSessions`) and is audited
-as `roster.session.revoked` with scope `one client, every identity`. It is the lever for one client when removing it
+as `roster.session.revoked` with scope `client_every_identity`. It is the lever for one client when removing it
 from the policy would only stop its chains.
 
 ## Navigation
