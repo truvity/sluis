@@ -764,8 +764,13 @@ func (s *signIn) logout(w http.ResponseWriter, r *http.Request) {
 // proves: then nothing has ended, the cookie is left in place so the
 // person can try again, and the caller answers with an error rather than
 // a sign-out that did not happen.
+//
+// Except the agent-class sessions it opened (docs/decisions/0040-agent-class-sessions.md,
+// decision 7): a background host signed in through this browser keeps
+// working after the person signs the browser out. They end on a revoke --
+// per client, per browser, *sign out everywhere* -- and at their own end.
 func SignOut(deps SignInDeps, w http.ResponseWriter, r *http.Request) error {
-	return signOut(deps, w, r, false)
+	return signOut(deps, w, r, spareAgents, nil)
 }
 
 // errSignOutUnresolved is [SignOut]'s one failure.
@@ -791,13 +796,32 @@ func signOutFailed(w http.ResponseWriter, r *http.Request) {
 	<p><a class="btn" href="/logout">Sign out</a></p>`)
 }
 
-// signOut is [SignOut]. sparingLive leaves the per-client sessions that
-// are still live alone and ends the browser session and tells the clients
-// without a refresh token: the sign-in expiring at the installation's
-// absolute limit, as opposed to a person signing out. Everything else a
-// browser opened has already ended at its own limit, so what is live then
-// is exactly a chain a resource extended.
-func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLive bool) error {
+// sparing is what ending a sign-in leaves running, by why it ends
+// (docs/decisions/0040-agent-class-sessions.md, decision 7). Only
+// [endSignIn] reads it: nothing that REVOKES -- [Issuer.Revoke], every
+// [SessionsService.RevokeSessions] scope, reuse detection, a refusal at
+// refresh -- consults a session's class.
+type sparing int
+
+const (
+	// spareNothing: another person signed in in the same browser
+	// ([signIn.endPrevious]). The browser no longer holds anything that
+	// could end what the first person opened, so all of it ends.
+	spareNothing sparing = iota
+	// spareAgents: the person signed the browser out (`/logout`,
+	// `/end_session`). Their live agent-class sessions keep running.
+	spareAgents
+	// spareLive: the browser's sign-in reached its own absolute limit.
+	// Every live chain is inside a limit of its own and keeps running;
+	// only the clients without a refresh token are told.
+	spareLive
+)
+
+// signOut is [SignOut], with what it spares ([sparing]). named are clients
+// the request named (`end_session`'s `client_id`, the audience of its
+// `id_token_hint`): their sessions under the sign-in are never spared. A
+// name proves nothing, so it is only ever used to end MORE.
+func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, mode sparing, named []string) error {
 	if deps.SSO == nil {
 		return nil
 	}
@@ -828,15 +852,15 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 			// Who the record names is what the cookie PROVED, except for
 			// a pre-upgrade cookie: an id anyone may have seen, so the
 			// end is not recorded as that person signing out.
-			audited := func(ended int) *auditrecord.Record {
-				return audit.SessionEnded(audit.Identified(record.Identity), ended, nil)
+			audited := func(ended int, spared []string) *auditrecord.Record {
+				return audit.SessionEnded(audit.Identified(record.Identity), ended, spared)
 			}
 			if preUpgrade {
-				audited = func(ended int) *auditrecord.Record {
+				audited = func(ended int, _ []string) *auditrecord.Record {
 					return audit.SessionRevoked(audit.Anonymous(), record.Identity, "", audit.ScopePreUpgradeCookie, ended)
 				}
 			}
-			endSignIn(r.Context(), deps, record, sparingLive, audited)
+			endSignIn(r.Context(), deps, record, mode, named, audited)
 		}
 	}
 
@@ -850,10 +874,15 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 
 // endSignIn ends one sign-in and everything opened under it: the sign-in
 // itself, then the per-client sessions, Back-Channel Logout to the clients
-// that held them, and the audit record. sparingLive leaves the
-// per-client sessions alone and tells nobody (see [signOut]); audited
-// builds the record from how many sessions ended.
-func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingLive bool, audited func(ended int) *auditrecord.Record) {
+// that held them, and the audit record. mode is what it spares
+// ([sparing]); a spared session is not revoked, not announced, stays filed
+// under the ended sign-in's id, and its client is not sent the
+// subject-only logout token either. named are clients whose sessions are
+// never spared ([signOut]). audited builds the record from how many
+// sessions ended and the client ids of those spared.
+func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, mode sparing, named []string,
+	audited func(ended int, spared []string) *auditrecord.Record,
+) {
 	id := signIn.ID
 
 	// Not cancelled with the request: once the sign-in has ended, a
@@ -900,18 +929,19 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingL
 	// say WHICH clients held them, and the clients that asked to be told
 	// are told by name. The sessions are records of their own, so the
 	// sign-in having ended does not hide them.
-	held, _ := deps.Issuer.Sessions().List(ctx, Query{Identity: signIn.Identity, SSO: id})
-	// Sparing the live ones means not telling them either: a Back-Channel
-	// Logout would end a session that is still inside its limit, at the
-	// relying party's end.
-	announce := held
-	if sparingLive {
-		announce = nil
-	}
+	query := Query{Identity: signIn.Identity, SSO: id}
+	held, listErr := deps.Issuer.Sessions().List(ctx, query)
+	ending, spared := spare(held, mode, named)
+
+	// Telling a spared session's client would end at the relying party a
+	// session that is still running here.
+	announce := slices.Clone(ending)
 
 	// The `openid`-only clients hold a session with this issuer all the
 	// same, and are told by subject: there is no session id to name
-	// because their ID token carried none.
+	// because their ID token carried none. Never a client that holds a
+	// session under this sign-in -- one that is ending is told by its
+	// session, and one that is spared is not told at all.
 	if involvedErr == nil {
 		seen := map[string]bool{}
 		for i := range held {
@@ -924,11 +954,7 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingL
 		}
 	}
 
-	ended := 0
-	var err error
-	if !sparingLive {
-		ended, err = deps.Issuer.Sessions().Revoke(ctx, Query{Identity: signIn.Identity, SSO: id})
-	}
+	ended, err := endSessions(ctx, deps.Issuer.Sessions(), query, mode, ending, listErr)
 
 	switch {
 	case err != nil:
@@ -936,10 +962,10 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingL
 			"error", logsafe.Error(err))
 	case ended > 0:
 		deps.log().InfoContext(ctx, "sign-out ended the sessions this browser opened",
-			"ended", ended)
+			"ended", ended, "spared", len(spared))
 	}
-	if err == nil && !sparingLive {
-		deps.Issuer.record(ctx, audited(ended))
+	if err == nil && mode != spareLive {
+		deps.Issuer.record(ctx, audited(ended, sparedClients(spared)))
 	}
 	// After revoking, not before: a client told its session ended and
 	// then finding it alive is worse than one told a moment late. Best
@@ -949,6 +975,81 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingL
 	if deps.Announce != nil {
 		deps.Announce(detached, announce)
 	}
+}
+
+// spare splits the sessions held under a sign-in into those that end and
+// those that keep running, by why the sign-in ends ([sparing]). A session
+// whose client was named is never spared.
+func spare(held []Session, mode sparing, named []string) (ending, spared []Session) {
+	for i := range held {
+		keep := false
+
+		switch mode {
+		case spareLive:
+			keep = true
+		case spareAgents:
+			keep = held[i].Agent() && !slices.Contains(named, held[i].ClientID)
+		case spareNothing:
+		}
+
+		if keep {
+			spared = append(spared, held[i])
+		} else {
+			ending = append(ending, held[i])
+		}
+	}
+
+	return ending, spared
+}
+
+// endSessions ends what [spare] said ends, and returns how many did.
+//
+// Sparing nothing is the query, as it always was. Sparing the agents ends
+// the listed sessions one by one -- the listing is complete, since the
+// sign-in ended before it was read ([endSignIn]) -- or, when the listing
+// itself failed and nothing can be told apart, the whole query: a sign-out
+// that cannot say which sessions are agents ends more, never less.
+// Sparing every live chain ends nothing.
+func endSessions(ctx context.Context, sessions *Sessions, query Query, mode sparing, ending []Session, listErr error) (int, error) {
+	switch {
+	case mode == spareLive:
+		return 0, nil
+	case mode == spareNothing || listErr != nil:
+		return sessions.Revoke(ctx, query)
+	}
+
+	ended := 0
+
+	for i := range ending {
+		gone, err := sessions.RevokeID(ctx, ending[i].ID)
+		if err != nil {
+			// Say how many actually ended, as [Sessions.Revoke] does.
+			return ended, err
+		}
+
+		if gone {
+			ended++
+		}
+	}
+
+	return ended, nil
+}
+
+// sparedClients are the client ids of the spared sessions, one per
+// session, sorted: what the sign-out's audit record names.
+func sparedClients(spared []Session) []string {
+	if len(spared) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(spared))
+	for i := range spared {
+		out = append(out, spared[i].ClientID)
+	}
+
+	slices.Sort(out)
+
+	return out
 }
 
 // signInEndTimeout bounds the store work of ending a sign-in -- the end
@@ -983,11 +1084,27 @@ func (d SignInDeps) log() *slog.Logger {
 // into a proxy that is already holding a valid access token, so a
 // console can serve for up to that token's remaining life. Minutes, and
 // bounded by the client's `ttl_cap`.
+//
+// And since agent-class sessions (docs/decisions/0040-agent-class-sessions.md,
+// decision 7), it says what sign-out deliberately LEFT: a background
+// connection -- an assistant's tools, an MCP host -- keeps running, and the
+// way to end it too is *sign out everywhere*, linked from here.
 func (s *signIn) signedOut(w http.ResponseWriter, _ *http.Request) {
-	s.page(w, "Signed out", `<p>Your sign-in here has ended, and so has every session it opened.</p>
+	everywhere := `<p class="note">To end those too, sign out everywhere from the console's page for you, or ask whoever administers access.</p>`
+	if s.deps.SSO != nil && s.deps.ConsoleMount != "" {
+		// `/account` lands on the console's page for the person, which is
+		// where *sign out everywhere* is. Signed out, it lands on the
+		// console's front page, which signs them in first.
+		everywhere = `<p><a class="btn" href="/account">Sign out everywhere</a></p>`
+	}
+
+	s.page(w, "Signed out", `<p>Your sign-in here has ended, and so has every session it opened in a browser.</p>
 	<p class="note">An application you already had open can take a few more minutes to notice:
 	it finds out when it next refreshes. To check, or to end something else, use the console's
-	Sessions page.</p>`)
+	Sessions page.</p>
+	<p><strong>Agent connections were kept.</strong> An application you allowed to work in the background,
+	such as an assistant's tools, keeps its connection after you sign out of this browser.</p>
+	`+everywhere)
 }
 
 // providerName is what a person calls the directory, rather than what the
@@ -1238,7 +1355,7 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 	}
 
 	if !strings.EqualFold(previous.Identity, strings.TrimSpace(who.Subject)) {
-		endSignIn(r.Context(), s.deps, previous, false, func(ended int) *auditrecord.Record {
+		endSignIn(r.Context(), s.deps, previous, spareNothing, nil, func(ended int, _ []string) *auditrecord.Record {
 			return audit.SessionRevoked(audit.Identified(who.Subject), previous.Identity, "", audit.ScopeSignInReplaced, ended)
 		})
 		return

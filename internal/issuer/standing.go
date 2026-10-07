@@ -138,13 +138,14 @@ func standingSignIn(deps SignInDeps, w http.ResponseWriter, r *http.Request, res
 		//
 		// Sparing what is still live: past the installation's limit the
 		// only sessions this browser still holds are chains a resource
-		// extended, which are inside their own limit and are ended by
-		// sign-out, revocation or their own end -- never by an unrelated
-		// console's silent request finding the browser session old.
+		// extended or agent-class chains, which are inside their own limit
+		// and are ended by sign-out, revocation or their own end -- never
+		// by an unrelated console's silent request finding the browser
+		// session old ([spareLive]).
 		// A failure is logged there and leaves the cookie; the browser
 		// goes to an interactive sign-in either way, which ends the
 		// sign-in it held once it succeeds ([signIn.established]).
-		_ = signOut(deps, w, r, true)
+		_ = signOut(deps, w, r, spareLive, nil)
 
 	case signInNotAdmitted:
 		// The browser proved who it is; the DIRECTORY still decides whether
