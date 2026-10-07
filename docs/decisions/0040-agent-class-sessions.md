@@ -232,8 +232,9 @@ sign-out (own sign-out mode above) and the two scoped person-initiated actions.*
 whatever scope it names, and of one client for everybody) end every class and never consult it.
 
 **Residual, the consent page and DoubleClickjacking.** The consent page's *Allow* is disabled until the page has been
-visible for 500 ms and again whenever it is hidden, by the page's own nonce'd script, so a page that opens it under the
-person's cursor between the two clicks of a double-click does not land the second click on it. What remains: a person
+visible and focused for 500 ms, and again whenever it is hidden or loses focus (the delay starts over when it is back),
+by the page's own nonce'd script, so a page that opens it under the person's cursor between the two clicks of a
+double-click does not land the second click on it. What remains: a person
 who reads nothing and clicks *Allow* deliberately once it is armed, and a browser with JavaScript disabled, which cannot
 accept at all (fail closed). An authorization request already completed is never completed again as another person or
 under another sign-in.
