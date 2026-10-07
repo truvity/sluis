@@ -11,15 +11,15 @@ Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Targ
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.9.0, 68 actions.
+Catalogue version 1.10.0, 68 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
-| `roster.person.signed_in` | authentication | client | async | A person signed in to a client, or was refused. |
+| `roster.person.signed_in` | authentication | client | async | A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline. |
 | `roster.recovery.signed_in` | authentication | client | block | Somebody signed in with the recovery identity, which bypasses the directory. |
 | `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. |
 | `roster.github_token.minted` | create | github_app | async | A GitHub App installation token was minted, or refused. Never the token. |
-| `roster.session.ended` | authentication | — | async | A person signed out, ending their sessions. |
+| `roster.session.ended` | authentication | — | async | A person signed out, ending their sessions, except the agent-class sessions it spared (by client id in `spared`), which keep running until revoked or their own end. |
 | `roster.session.revoked` | remove | client | async | A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, or (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser. |
 | `roster.session.refresh_refused` | authentication | client | async | A session was refused a refresh because its holder is no longer admitted to the client. |
 | `roster.client.secret.created` | create | client | async | The secret of a generated client was made. |

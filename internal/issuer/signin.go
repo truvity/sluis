@@ -52,6 +52,11 @@ type Authenticated struct {
 	// "recovery". It becomes the token's `acr`, which is the one claim a
 	// relying party can read to refuse a break-glass sign-in.
 	How string
+	// Consent is the agent-consent acceptance the browser presented, when
+	// it presented one: only the acceptance post carries it, and only the
+	// access package can make one. [Storage.Complete] verifies it itself for
+	// an agent-class request and completes none without it.
+	Consent access.AgentConsent
 }
 
 // Pending is what an authorization request asks of a sign-in, expressed
@@ -87,6 +92,15 @@ type Pending struct {
 	// Zero when the policy no longer declares the client, which leaves
 	// the page naming it by id.
 	Client policy.Client
+	// Agent is a request that would open an agent-class chain as the
+	// policy stands now: it never completes silently, and `prompt=none`
+	// is answered `consent_required`. [Storage.Complete] decides the class
+	// again when the request completes, and is what enforces it.
+	Agent bool
+	// AgentAbsolute is how long such a chain lives from auth_time:
+	// `lifetimes.agent.absolute`, shortened by the resource's absolute_cap.
+	// The consent page shows auth_time plus this, the computed deadline.
+	AgentAbsolute time.Duration
 }
 
 // Completer is the part of the storage a sign-in finishes against: an
@@ -800,7 +814,7 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 			// a pre-upgrade cookie: an id anyone may have seen, so the
 			// end is not recorded as that person signing out.
 			audited := func(ended int) *auditrecord.Record {
-				return audit.SessionEnded(audit.Identified(record.Identity), ended)
+				return audit.SessionEnded(audit.Identified(record.Identity), ended, nil)
 			}
 			if preUpgrade {
 				audited = func(ended int) *auditrecord.Record {

@@ -9,6 +9,21 @@
       "x-audit-class": "shared",
       "x-audit-pii": "none",
       "x-audit-facet": true
+    },
+    "class": {
+      "type": "string",
+      "enum": ["interactive", "agent"],
+      "description": "The class of the session the sign-in opens: interactive for a person at a browser, agent for software that keeps its own refresh token and works in the background. Absent on a refusal and on a sign-in to the console.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "deadline": {
+      "type": "string",
+      "description": "The latest the session the sign-in opens may live, however often it is refreshed: auth_time plus its class's absolute limit, shortened by its resource's.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "format": "date-time"
     }
   }
 }
