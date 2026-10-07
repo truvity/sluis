@@ -53,6 +53,7 @@ func TestTheOpenIDSurfaceIsServed(t *testing.T) {
 	for name, build := range surfaces {
 		for _, path := range []string{
 			"/.well-known/openid-configuration",
+			"/.well-known/oauth-authorization-server",
 			"/keys",
 		} {
 			t.Run(name+" "+path, func(t *testing.T) {

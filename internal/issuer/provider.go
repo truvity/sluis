@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -253,7 +254,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// instead of turning into a 404 nobody expected.
 	protocol := challenges(refusedAuthorize(resourceIndicators(iss.Policy().Resource,
 		endSession(signIn, truthfulDiscovery(
-			func() bool { return iss.Policy().ClientDocuments().Enabled() }, provider)))))
+			iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, provider)))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -527,6 +528,60 @@ func (h *heldResponse) release(r *http.Request) {
 // discoveryPath is where a relying party looks first.
 const discoveryPath = "/.well-known/openid-configuration"
 
+// authorizationServerPath is the RFC 8414 well-known URI, which MCP clients
+// probe before they try OpenID discovery. RFC 8414 3.1 inserts the
+// well-known segment between the host and the issuer's path component, so an
+// issuer with no path is served at exactly this path, and one with a path
+// (`https://h/tenant`) at this path followed by it. See [authorizationServerURI].
+const authorizationServerPath = "/.well-known/oauth-authorization-server"
+
+// authorizationServerURI is the path RFC 8414 3.1 derives from an issuer
+// URL: the well-known segment, then the issuer's own path with any trailing
+// slash dropped.
+func authorizationServerURI(issuerURL string) string {
+	if u, err := url.Parse(issuerURL); err == nil {
+		return authorizationServerPath + strings.TrimRight(u.Path, "/")
+	}
+	return authorizationServerPath
+}
+
+// authorizationServerFields is every member of the RFC 8414 2 metadata
+// that OpenID discovery also carries, and so the whole of what the
+// authorization-server document takes from it. It is an allow-list so that a
+// field an upgrade adds to discovery appears here only by a decision; the
+// values are never restated, only copied, so the two documents cannot drift.
+//
+// `client_id_metadata_document_supported` is not an RFC 8414 member but an
+// extension (RFC 8414 2 permits them) that MCP clients read from exactly this
+// document. The OIDC-only members (`userinfo_endpoint`, `end_session_endpoint`,
+// `id_token_signing_alg_values_supported`, `subject_types_supported`,
+// `claims_supported`, `acr_values_supported`, ...) stay in discovery.
+var authorizationServerFields = []string{
+	"issuer",
+	"authorization_endpoint",
+	"token_endpoint",
+	"jwks_uri",
+	"registration_endpoint",
+	"scopes_supported",
+	"response_types_supported",
+	"response_modes_supported",
+	"grant_types_supported",
+	"token_endpoint_auth_methods_supported",
+	"token_endpoint_auth_signing_alg_values_supported",
+	"service_documentation",
+	"ui_locales_supported",
+	"op_policy_uri",
+	"op_tos_uri",
+	"revocation_endpoint",
+	"revocation_endpoint_auth_methods_supported",
+	"revocation_endpoint_auth_signing_alg_values_supported",
+	"introspection_endpoint",
+	"introspection_endpoint_auth_methods_supported",
+	"introspection_endpoint_auth_signing_alg_values_supported",
+	"code_challenge_methods_supported",
+	"client_id_metadata_document_supported",
+}
+
 // servedACRValues is every authentication context class a token from
 // here can carry, which is exactly two: the directory answered, or
 // recovery bypassed it.
@@ -571,11 +626,25 @@ var servedGrantTypes = []string{
 // documentClientsEnabled is read per request rather than captured once, so
 // that discovery always says what the policy this instance decides by says:
 // the policy is immutable for an instance, and a change is a new one.
-func truthfulDiscovery(documentClientsEnabled func() bool, next http.Handler) http.Handler {
+//
+// The same handler answers the RFC 8414 well-known URI: that request is
+// served as discovery and the corrected document is then narrowed to the
+// members RFC 8414 defines, so headers, status and content come from one
+// place.
+func truthfulDiscovery(issuerURL string, documentClientsEnabled func() bool, next http.Handler) http.Handler {
+	asPath := authorizationServerURI(issuerURL)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != discoveryPath {
+		asMetadata := r.URL.Path == asPath
+		if r.URL.Path != discoveryPath && !asMetadata {
 			next.ServeHTTP(w, r)
 			return
+		}
+		if asMetadata {
+			clone := r.Clone(r.Context())
+			u := *r.URL
+			u.Path, u.RawPath = discoveryPath, ""
+			clone.URL = &u
+			r = clone
 		}
 
 		recorder := &captured{header: http.Header{}}
@@ -607,6 +676,16 @@ func truthfulDiscovery(documentClientsEnabled func() bool, next http.Handler) ht
 		// send every such client down a path that ends in a refusal.
 		if documentClientsEnabled != nil && documentClientsEnabled() {
 			doc["client_id_metadata_document_supported"] = true
+		}
+
+		if asMetadata {
+			narrowed := make(map[string]any, len(authorizationServerFields))
+			for _, name := range authorizationServerFields {
+				if value, ok := doc[name]; ok {
+					narrowed[name] = value
+				}
+			}
+			doc = narrowed
 		}
 
 		corrected, err := json.Marshal(doc)
