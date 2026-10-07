@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,8 +54,9 @@ func (e *gcEnv) present(t *testing.T, token string) (presented, bool) {
 // the client: the session record in hand, deleted with its index entries.
 func (e *gcEnv) end(t *testing.T, p presented) {
 	t.Helper()
-	if err := e.sessions.deleteSession(context.Background(), p.session); err != nil {
-		t.Fatalf("deleteSession: %v", err)
+	ended, err := e.sessions.endReused(context.Background(), p)
+	if err != nil || !ended {
+		t.Fatalf("endReused = %v, %v; want it ended", ended, err)
 	}
 }
 
@@ -69,16 +71,24 @@ func (e *gcEnv) sessionLive(t *testing.T, id string) bool {
 
 // -------------------------------------------------- 1. the window's edge
 
-func TestASpentTokenIsAReplayBeforeThirtySecondsAndAReuseFrom(t *testing.T) {
+func TestASpentTokenIsAReplayInGraceRefusedInTheSkewBandAndAReuseBeyondIt(t *testing.T) {
+	const (
+		replay = "replay"
+		band   = "band" // past the grace window, inside the clock tolerance
+		reuse  = "reuse"
+	)
 	for _, c := range []struct {
-		after  time.Duration
-		replay bool
+		after time.Duration
+		want  string
 	}{
-		{29 * time.Second, true},
-		{30*time.Second - time.Millisecond, true},
-		{30 * time.Second, false},
-		{31 * time.Second, false},
-		{time.Hour, false},
+		{29 * time.Second, replay},
+		{30*time.Second - time.Millisecond, replay},
+		{30 * time.Second, band},
+		{31 * time.Second, band},
+		{32 * time.Second, band},
+		{32*time.Second + time.Millisecond, reuse},
+		{33 * time.Second, reuse},
+		{time.Hour, reuse},
 	} {
 		t.Run(c.after.String(), func(t *testing.T) {
 			gcEachKind(t, 0, false, func(t *testing.T, e *gcEnv) {
@@ -87,14 +97,22 @@ func TestASpentTokenIsAReplayBeforeThirtySecondsAndAReuseFrom(t *testing.T) {
 				e.advance(c.after)
 
 				p, ok := e.present(t, "t0")
-				switch {
-				case c.replay && (!ok || p.successor != "t1" || p.reused != ""):
-					t.Fatalf("at %v: present = %+v, %v; want a replay answered with t1", c.after, p, ok)
-				case !c.replay && (ok || p.reused != session.ID || p.successor != ""):
-					t.Fatalf("at %v: present = %+v, %v; want a reuse naming %s and no successor", c.after, p, ok, session.ID)
+				switch c.want {
+				case replay:
+					if !ok || p.successor != "t1" || p.reused != "" {
+						t.Fatalf("at %v: present = %+v, %v; want a replay answered with t1", c.after, p, ok)
+					}
+				case band:
+					if ok || p.reused != "" || p.successor != "" || p.session.ID != "" {
+						t.Fatalf("at %v: present = %+v, %v; want a refusal that names no reuse", c.after, p, ok)
+					}
+				case reuse:
+					if ok || p.reused != session.ID || p.session.ID != session.ID || p.successor != "" {
+						t.Fatalf("at %v: present = %+v, %v; want a reuse naming %s and its record", c.after, p, ok, session.ID)
+					}
 				}
-				if _, _, ok = e.refresh(t, "t0", "t-new"); ok == !c.replay {
-					t.Errorf("at %v: Refreshed answered = %v, want %v", c.after, ok, c.replay)
+				if _, _, ok = e.refresh(t, "t0", "t-new"); ok == (c.want != replay) {
+					t.Errorf("at %v: Refreshed answered = %v", c.after, ok)
 				}
 				if e.live(t, "t-new") {
 					t.Errorf("at %v: a presentation of a spent token minted a live token", c.after)
@@ -115,9 +133,9 @@ func TestAReuseIsKnownAfterTheSuccessorWasRotatedAgain(t *testing.T) {
 		ctx := context.Background()
 		session := e.open(t, "t0")
 		e.refresh(t, "t0", "t1")
-		e.advance(31 * time.Second)
+		e.advance(33 * time.Second)
 		e.refresh(t, "t1", "t2")
-		e.advance(31 * time.Second)
+		e.advance(33 * time.Second)
 
 		for _, spent := range []string{"t0", "t1"} {
 			if p, ok := e.present(t, spent); ok || p.reused != session.ID {
@@ -160,7 +178,7 @@ func TestAReuseOfASessionAlreadyEndedNamesNothingToEnd(t *testing.T) {
 	gcEachKind(t, 0, false, func(t *testing.T, e *gcEnv) {
 		session := e.open(t, "t0")
 		e.refresh(t, "t0", "t1")
-		e.advance(31 * time.Second)
+		e.advance(33 * time.Second)
 
 		first, ok := e.present(t, "t0")
 		if ok || first.reused != session.ID {
@@ -180,7 +198,7 @@ func TestAReuseOfASessionAlreadyEndedNamesNothingToEnd(t *testing.T) {
 		// Ended by a revocation rather than a reuse: the same.
 		other := e.open(t, "u0")
 		e.refresh(t, "u0", "u1")
-		e.advance(31 * time.Second)
+		e.advance(33 * time.Second)
 		if _, err := e.sessions.RevokeID(context.Background(), other.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -362,7 +380,7 @@ func TestATamperedMarkIsRefusedAndRevokesNothing(t *testing.T) {
 		{"a sealed part that is not base64", func(m spentMark) string { m.sealed = "!!not*base64!!"; return m.encode() }},
 	}
 	for _, c := range cases {
-		for _, age := range []time.Duration{time.Second, 31 * time.Second, time.Hour} {
+		for _, age := range []time.Duration{time.Second, 33 * time.Second, time.Hour} {
 			t.Run(c.name+"/"+age.String(), func(t *testing.T) {
 				gcEachKind(t, 0, false, func(t *testing.T, e *gcEnv) {
 					ctx := context.Background()
@@ -557,8 +575,8 @@ func TestNoPlaintextSuccessorIsEverKeptInTheState(t *testing.T) {
 		if ok || p.reused != session.ID {
 			t.Fatalf("present = %+v, %v; want the reuse", p, ok)
 		}
-		if err := sessions.deleteSession(ctx, p.session); err != nil {
-			t.Fatalf("deleteSession: %v", err)
+		if ended, err := sessions.endReused(ctx, p); err != nil || !ended {
+			t.Fatalf("endReused = %v, %v", ended, err)
 		}
 		if hasPlain(dump()) {
 			t.Fatal("the successor is in the State in plain after the session ended")
@@ -683,7 +701,7 @@ func TestAReuseDuringARotationIsNotUndoneByIt(t *testing.T) {
 			gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
 				session := e.open(t, "t0")
 				e.refresh(t, "t0", "t1")
-				e.advance(31 * time.Second)
+				e.advance(33 * time.Second)
 
 				fired := false
 				e.counting.before = func(op, key string) {
@@ -698,8 +716,8 @@ func TestAReuseDuringARotationIsNotUndoneByIt(t *testing.T) {
 							t.Errorf("present(t0) = %+v, %v, %v; want the reuse", p, ok, err)
 							return
 						}
-						if err = e.sessions.deleteSession(ctx, p.session); err != nil {
-							t.Errorf("deleteSession: %v", err)
+						if ended, err := e.sessions.endReused(ctx, p); err != nil || !ended {
+							t.Errorf("endReused = %v, %v", ended, err)
 						}
 					}
 				}
@@ -734,7 +752,7 @@ func TestARotationReadBeforeAReuseEndedTheSessionIsRefused(t *testing.T) {
 	gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
 		session := e.open(t, "t0")
 		e.refresh(t, "t0", "t1")
-		e.advance(31 * time.Second)
+		e.advance(33 * time.Second)
 
 		p, ok := e.present(t, "t1")
 		if !ok {
@@ -779,6 +797,107 @@ func TestAMarkDatedAheadOfThisReplicaIsAReplayNotAReuse(t *testing.T) {
 		}
 		if !e.sessionLive(t, session.ID) {
 			t.Error("a mark dated ahead ended the session")
+		}
+	})
+}
+
+// ------------------------------------------- concurrent ends of one reuse
+
+// Several presentations of one spent token all detect the reuse with the
+// same record revision; the conditional delete lets exactly one of them end
+// the session, and the others are told it was not theirs to end.
+func TestOfConcurrentEndsOfOneReuseExactlyOneWins(t *testing.T) {
+	gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
+		ctx := context.Background()
+		session := e.open(t, "t0")
+		e.refresh(t, "t0", "t1")
+		e.advance(33 * time.Second)
+
+		const racers = 12
+		seen := make([]presented, racers)
+		for i := range racers {
+			p, ok := e.present(t, "t0")
+			if ok || p.reused != session.ID || p.record == "" {
+				t.Fatalf("racer %d: present = %+v, %v; want the reuse with the record's revision", i, p, ok)
+			}
+			seen[i] = p
+		}
+
+		won := make([]bool, racers)
+		errs := make([]error, racers)
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := range racers {
+			wg.Go(func() {
+				<-start
+				won[i], errs[i] = e.sessions.endReused(ctx, seen[i])
+			})
+		}
+		close(start)
+		wg.Wait()
+
+		winners := 0
+		for i := range racers {
+			if errs[i] != nil {
+				t.Errorf("racer %d: %v", i, errs[i])
+			}
+			if won[i] {
+				winners++
+			}
+		}
+		if winners != 1 {
+			t.Fatalf("%d racers ended the session, want exactly 1", winners)
+		}
+		if e.sessionLive(t, session.ID) {
+			t.Error("the session is live after its end")
+		}
+		if p, a, all := listings(t, e.sessions); p+a+all != 0 {
+			t.Errorf("listings = %d/%d/%d, want empty", p, a, all)
+		}
+	})
+}
+
+// A reuse that detected the session at one revision does not end it once
+// anything has written it since: the record then belongs to whoever did.
+func TestAReuseDoesNotEndARecordWrittenSinceItWasRead(t *testing.T) {
+	gcEachKind(t, 0, true, func(t *testing.T, e *gcEnv) {
+		ctx := context.Background()
+		session := e.open(t, "t0")
+		e.refresh(t, "t0", "t1")
+		e.advance(33 * time.Second)
+		p, _ := e.present(t, "t0")
+
+		e.refresh(t, "t1", "t2") // rewrites the record
+		if ended, err := e.sessions.endReused(ctx, p); err != nil || ended {
+			t.Errorf("endReused over a moved record = %v, %v; want false, nil", ended, err)
+		}
+		if !e.sessionLive(t, session.ID) || !e.live(t, "t2") {
+			t.Error("a stale reuse ended the session")
+		}
+	})
+}
+
+// A mark at grace+1s is not acted on and one at grace+3s is, whatever the
+// clock reads exactly.
+func TestRevocationNeedsMoreThanTheGraceWindowAndTheClockTolerance(t *testing.T) {
+	gcEachKind(t, 0, false, func(t *testing.T, e *gcEnv) {
+		ctx := context.Background()
+		session := e.open(t, "t0")
+		for _, c := range []struct {
+			after time.Duration
+			reuse bool
+		}{{refreshGrace + time.Second, false}, {refreshGrace + 3*time.Second, true}} {
+			mark, err := markSpent("t0", "t1", session.ID, e.clock.now().Add(-c.after))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = e.state.Set(ctx, sessionTokenKey("t0"), mark, gcLifetime); err != nil {
+				t.Fatal(err)
+			}
+			p, ok := e.present(t, "t0")
+			if ok || (p.reused != "") != c.reuse {
+				t.Errorf("mark at grace%+v: present = %+v, %v; want reuse=%v", c.after-refreshGrace, p, ok, c.reuse)
+			}
 		}
 	})
 }

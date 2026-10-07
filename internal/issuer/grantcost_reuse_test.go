@@ -21,7 +21,7 @@ import (
 // runs.
 // Not parallel: the OpenID library writes a package variable while a provider
 // is built, so two tests building one at once race.
-func TestAReuseCostsTwoReadsAndFourWritesThenTwoReads(t *testing.T) {
+func TestAReuseCostsTwoReadsAndFourWritesThenThreeReadsAndNoWrite(t *testing.T) {
 	h := grantcost.New(t, func() grantcost.Env {
 		s := memory.New()
 		return grantcost.Env{Set: s.Set(), Advance: s.Advance}
@@ -32,7 +32,7 @@ func TestAReuseCostsTwoReadsAndFourWritesThenTwoReads(t *testing.T) {
 	if rotated.Status != 200 {
 		t.Fatalf("refresh: %d %q", rotated.Status, rotated.Error)
 	}
-	h.Advance(31 * time.Second)
+	h.Advance(33 * time.Second)
 
 	var reused grantcost.Tokens
 	one := h.Measure(func() { reused = h.Refresh(first.Refresh) })
@@ -57,13 +57,11 @@ func TestAReuseCostsTwoReadsAndFourWritesThenTwoReads(t *testing.T) {
 		t.Fatalf("repeated reuse = %d %q, want 400 invalid_grant", again.Status, again.Error)
 	}
 	t.Run("repeated reuse", func(t *testing.T) {
-		// The documented cost is 2 reads (the pointer and the record). It is 3
-		// today: the refusal path of a session that is gone reads the spent
-		// token's pointer a second time to tell the absolute limit from a
-		// plain refusal. Held at what it is, with no write at all; tighten to
-		// 2 when that read is shared.
+		// The pointer, the record, and the pointer again on the refusal path
+		// of a session that is gone, which tells the absolute limit from a
+		// plain refusal. No write at all.
 		if two.Reads > 3 || two.Writes != 0 {
-			t.Errorf("a repeated reuse made %d reads and %d writes, want at most 3 and 0 (documented: 2 and 0)", two.Reads, two.Writes)
+			t.Errorf("a repeated reuse made %d reads and %d writes, want at most 3 and 0", two.Reads, two.Writes)
 		}
 	})
 	if two.Resolutions != 0 {
@@ -119,7 +117,7 @@ func TestAReuseUnderAnotherClientEndsNothingAndUnderTheOwnClientEndsTheSession(t
 	if rotated.Status != http.StatusOK {
 		t.Fatalf("refresh: %d %q", rotated.Status, rotated.Error)
 	}
-	h.Advance(31 * time.Second)
+	h.Advance(33 * time.Second)
 
 	count := func() int {
 		got, err := h.Issuer.Sessions().List(t.Context(), issuer.Query{})
@@ -143,7 +141,7 @@ func TestAReuseUnderAnotherClientEndsNothingAndUnderTheOwnClientEndsTheSession(t
 	if live.Status != http.StatusOK {
 		t.Fatalf("the live token stopped refreshing after a presentation under another client: %d %q", live.Status, live.Error)
 	}
-	h.Advance(31 * time.Second)
+	h.Advance(33 * time.Second)
 
 	// The session's own client, presenting a token spent long ago.
 	if reused := h.Refresh(first.Refresh); reused.Status != http.StatusBadRequest || reused.Error != "invalid_grant" {

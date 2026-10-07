@@ -105,7 +105,7 @@ func TestAReplayAt29SecondsIsAnsweredAndAReuseAt31SecondsIsNotOverTheFake(t *tes
 	for _, c := range []struct {
 		after  time.Duration
 		replay bool
-	}{{29 * time.Second, true}, {31 * time.Second, false}} {
+	}{{29 * time.Second, true}, {33 * time.Second, false}} {
 		s := newGCSetup(t, 0)
 		opened := s.open(t, "t0")
 		s.refresh(t, "t0", "t1")
@@ -190,7 +190,7 @@ func TestALegacyRotatedKeyAfterItsGraceIsRefusedWithoutARevocationOverTheFake(t 
 	if got, ok := s.refresh(t, "t0", "t-in"); !ok || got != "t1" {
 		t.Errorf("legacy replay inside grace = %q, %v", got, ok)
 	}
-	s.store.Advance(31 * time.Second)
+	s.store.Advance(33 * time.Second)
 	if _, ok := s.refresh(t, "t0", "t-out"); ok {
 		t.Error("a legacy-rotated token was answered after its grace")
 	}
@@ -212,7 +212,7 @@ func reuseCost(t *testing.T, env grantcost.Env) {
 	if rotated.Status != http.StatusOK {
 		t.Fatalf("refresh: %d %q", rotated.Status, rotated.Error)
 	}
-	h.Advance(31 * time.Second)
+	h.Advance(33 * time.Second)
 
 	var reused grantcost.Tokens
 	one := h.Measure(func() { reused = h.Refresh(first.Refresh) })
@@ -236,11 +236,10 @@ func reuseCost(t *testing.T, env grantcost.Env) {
 		t.Fatalf("repeated reuse = %d %q, want 400 invalid_grant", again.Status, again.Error)
 	}
 	t.Run("repeated reuse", func(t *testing.T) {
-		// Documented: 2 reads. It is 3 today (the refusal path reads the spent
-		// token's pointer a second time to tell the absolute limit from a
-		// plain refusal); held at what it is, with no write at all.
+		// The pointer, the record, and the pointer again on the refusal path
+		// (it tells the absolute limit from a plain refusal). No write.
 		if two.Reads > 3 || two.Writes != 0 {
-			t.Errorf("a repeated reuse made %d reads and %d writes, want at most 3 and 0 (documented: 2 and 0)", two.Reads, two.Writes)
+			t.Errorf("a repeated reuse made %d reads and %d writes, want at most 3 and 0", two.Reads, two.Writes)
 		}
 		if two.Engine != nil && (two.EngineReads() > 3 || two.EngineWrites() != 0) {
 			t.Errorf("a repeated reuse sent the engine %d reads and %d writes, want at most 3 and 0", two.EngineReads(), two.EngineWrites())
@@ -253,7 +252,7 @@ func reuseCost(t *testing.T, env grantcost.Env) {
 
 // Not parallel: the OpenID library writes a package variable while a provider
 // is built, so two tests building one at once race.
-func TestAReuseCostsTwoReadsAndFourWritesThenTwoReadsOverTheFake(t *testing.T) {
+func TestAReuseCostsTwoReadsAndFourWritesThenThreeReadsAndNoWriteOverTheFake(t *testing.T) {
 	f := newFake()
 	s := fakeStore(t, f)
 	reuseCost(t, grantcost.Env{
