@@ -117,6 +117,22 @@ export function Explanation({
     }
   };
 
+  // One browser: its sign-in and everything filed under it, including the
+  // agent sessions a sign-out of that browser kept running.
+  const signOutBrowser = async (session: Session) => {
+    setBusy(session.sso);
+    setSessionFailure(undefined);
+    try {
+      await sessions.revokeSessions({ identity: session.identity, sso: session.sso });
+      onDone?.("Ended that browser's sessions.");
+      found.reload();
+    } catch (error) {
+      setSessionFailure(reason(error));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   const signOutEverywhere = async () => {
     if (!sessionsOf) return;
     setBusy("*");
@@ -277,7 +293,7 @@ export function Explanation({
       {sessionsOf ? (
         <Section
           title="Active sessions"
-          hint="one row per application, grouped under the browser session that opened them"
+          hint="one row per application, grouped under the browser session that opened them; agent connections outlive a browser sign-out"
           action={
             <Button size="small" color="warning" disabled={busy === "*"} onClick={signOutEverywhere}>
               Sign out everywhere
@@ -288,8 +304,10 @@ export function Explanation({
           <Failure error={found.error ?? sessionFailure} />
           <SessionsPanel
             sessions={found.value?.sessions ?? []}
+            signIns={found.value?.signIns}
             showClient
             onRevoke={revoke}
+            onSignOutBrowser={signOutBrowser}
             revoking={busy}
             empty="No open session."
           />

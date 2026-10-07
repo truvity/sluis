@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file accessissuer/v1/session.proto.
  */
 export const file_accessissuer_v1_session: GenFile = /*@__PURE__*/
-  fileDesc("Ch1hY2Nlc3Npc3N1ZXIvdjEvc2Vzc2lvbi5wcm90bxIPYWNjZXNzaXNzdWVyLnYxIv0BCgdTZXNzaW9uEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEhEKCWNsaWVudF9pZBgDIAEoCRIhCgNob3cYBCABKA4yFC5hY2Nlc3Npc3N1ZXIudjEuSG93Ei0KCWlzc3VlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoObGFzdF9yZWZyZXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgsKA3NzbxgIIAEoCSJzChNMaXN0U2Vzc2lvbnNSZXF1ZXN0EhAKCGlkZW50aXR5GAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIRCglwYWdlX3NpemUYAyABKAUSEgoKcGFnZV90b2tlbhgEIAEoCRIQCghjb250YWlucxgFIAEoCCKGAQoUTGlzdFNlc3Npb25zUmVzcG9uc2USKgoIc2Vzc2lvbnMYASADKAsyGC5hY2Nlc3Npc3N1ZXIudjEuU2Vzc2lvbhIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSKQoIc2lnbl9pbnMYAyADKAsyFy5hY2Nlc3Npc3N1ZXIudjEuU2lnbkluIpIBCgZTaWduSW4SCgoCaWQYASABKAkSEAoIaWRlbnRpdHkYAiABKAkSCwoDaG93GAMgASgJEi0KCWF1dGhfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXQoVUmV2b2tlU2Vzc2lvbnNSZXF1ZXN0EhAKCGlkZW50aXR5GAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRISCgpzZXNzaW9uX2lkGAMgASgJEgsKA3NzbxgEIAEoCSInChZSZXZva2VTZXNzaW9uc1Jlc3BvbnNlEg0KBWVuZGVkGAEgASgFKkoKA0hvdxITCg9IT1dfVU5TUEVDSUZJRUQQABIMCghIT1dfQ09ERRABEg4KCkhPV19ERVZJQ0UQAhIQCgxIT1dfRVhDSEFOR0UQAzLQAQoOU2Vzc2lvblNlcnZpY2USWwoMTGlzdFNlc3Npb25zEiQuYWNjZXNzaXNzdWVyLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaJS5hY2Nlc3Npc3N1ZXIudjEuTGlzdFNlc3Npb25zUmVzcG9uc2USYQoOUmV2b2tlU2Vzc2lvbnMSJi5hY2Nlc3Npc3N1ZXIudjEuUmV2b2tlU2Vzc2lvbnNSZXF1ZXN0GicuYWNjZXNzaXNzdWVyLnYxLlJldm9rZVNlc3Npb25zUmVzcG9uc2VCvQEKE2NvbS5hY2Nlc3Npc3N1ZXIudjFCDFNlc3Npb25Qcm90b1ABWjtnaXRodWIuY29tL3RydXZpdHkvc2x1aXMvZ2VuL2FjY2Vzc2lzc3Vlci92MTthY2Nlc3Npc3N1ZXJ2MaICA0FYWKoCD0FjY2Vzc2lzc3Vlci5WMcoCD0FjY2Vzc2lzc3VlclxWMeICG0FjY2Vzc2lzc3VlclxWMVxHUEJNZXRhZGF0YeoCEEFjY2Vzc2lzc3Vlcjo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Ch1hY2Nlc3Npc3N1ZXIvdjEvc2Vzc2lvbi5wcm90bxIPYWNjZXNzaXNzdWVyLnYxIuECCgdTZXNzaW9uEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEhEKCWNsaWVudF9pZBgDIAEoCRIhCgNob3cYBCABKA4yFC5hY2Nlc3Npc3N1ZXIudjEuSG93Ei0KCWlzc3VlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoObGFzdF9yZWZyZXNoZWQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgsKA3NzbxgIIAEoCRI0Cg1zZXNzaW9uX2NsYXNzGAkgASgOMh0uYWNjZXNzaXNzdWVyLnYxLlNlc3Npb25DbGFzcxIsCghkZWFkbGluZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicwoTTGlzdFNlc3Npb25zUmVxdWVzdBIQCghpZGVudGl0eRgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEAoIY29udGFpbnMYBSABKAgihgEKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEioKCHNlc3Npb25zGAEgAygLMhguYWNjZXNzaXNzdWVyLnYxLlNlc3Npb24SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEikKCHNpZ25faW5zGAMgAygLMhcuYWNjZXNzaXNzdWVyLnYxLlNpZ25JbiKSAQoGU2lnbkluEgoKAmlkGAEgASgJEhAKCGlkZW50aXR5GAIgASgJEgsKA2hvdxgDIAEoCRItCglhdXRoX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wInUKFVJldm9rZVNlc3Npb25zUmVxdWVzdBIQCghpZGVudGl0eRgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCRILCgNzc28YBCABKAkSFgoOZXZlcnlfaWRlbnRpdHkYBSABKAgiJwoWUmV2b2tlU2Vzc2lvbnNSZXNwb25zZRINCgVlbmRlZBgBIAEoBSpKCgNIb3cSEwoPSE9XX1VOU1BFQ0lGSUVEEAASDAoISE9XX0NPREUQARIOCgpIT1dfREVWSUNFEAISEAoMSE9XX0VYQ0hBTkdFEAMqZQoMU2Vzc2lvbkNsYXNzEh0KGVNFU1NJT05fQ0xBU1NfVU5TUEVDSUZJRUQQABIdChlTRVNTSU9OX0NMQVNTX0lOVEVSQUNUSVZFEAESFwoTU0VTU0lPTl9DTEFTU19BR0VOVBACMtABCg5TZXNzaW9uU2VydmljZRJbCgxMaXN0U2Vzc2lvbnMSJC5hY2Nlc3Npc3N1ZXIudjEuTGlzdFNlc3Npb25zUmVxdWVzdBolLmFjY2Vzc2lzc3Vlci52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZRJhCg5SZXZva2VTZXNzaW9ucxImLmFjY2Vzc2lzc3Vlci52MS5SZXZva2VTZXNzaW9uc1JlcXVlc3QaJy5hY2Nlc3Npc3N1ZXIudjEuUmV2b2tlU2Vzc2lvbnNSZXNwb25zZUK9AQoTY29tLmFjY2Vzc2lzc3Vlci52MUIMU2Vzc2lvblByb3RvUAFaO2dpdGh1Yi5jb20vdHJ1dml0eS9zbHVpcy9nZW4vYWNjZXNzaXNzdWVyL3YxO2FjY2Vzc2lzc3VlcnYxogIDQVhYqgIPQWNjZXNzaXNzdWVyLlYxygIPQWNjZXNzaXNzdWVyXFYx4gIbQWNjZXNzaXNzdWVyXFYxXEdQQk1ldGFkYXRh6gIQQWNjZXNzaXNzdWVyOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Session is one refresh token, described. The token itself is never
@@ -82,11 +82,30 @@ export type Session = Message<"accessissuer.v1.Session"> & {
    * The browser (SSO) session this one was opened from, empty for a flow
    * with no browser -- a device code redeemed by a CLI, an exchange. A
    * console groups a person's sessions under this so that "this laptop"
-   * reads as one thing, and *sign out everywhere* is what ends it.
+   * reads as one thing, and *sign out everywhere* is what ends it. An
+   * agent session a sign-out spared stays filed under the sign-in that
+   * ended, which is then no longer among the listing's sign_ins.
    *
    * @generated from field: string sso = 8;
    */
   sso: string;
+
+  /**
+   * Who holds the chain.
+   *
+   * @generated from field: accessissuer.v1.SessionClass session_class = 9;
+   */
+  sessionClass: SessionClass;
+
+  /**
+   * The latest the chain may live, however often it is refreshed: its
+   * auth_time plus the absolute limit its class and resource allow, as
+   * the policy and configuration stand now. Unset for a chain with no such
+   * limit (an exchange's). expires_at is the sliding end beside it.
+   *
+   * @generated from field: google.protobuf.Timestamp deadline = 10;
+   */
+  deadline?: Timestamp | undefined;
 };
 
 /**
@@ -254,9 +273,10 @@ export const SignInSchema: GenMessage<SignIn> = /*@__PURE__*/
  */
 export type RevokeSessionsRequest = Message<"accessissuer.v1.RevokeSessionsRequest"> & {
   /**
-   * The identity whose sessions to end. Required, always: revocation is
-   * about somebody, and a call that could omit them is a call that could
-   * sign out the installation by mistake.
+   * The identity whose sessions to end. Required, unless every_identity
+   * names one client for everybody: revocation is about somebody, and a
+   * call that could omit them by accident is a call that could sign out
+   * the installation by mistake.
    *
    * @generated from field: string identity = 1;
    */
@@ -290,6 +310,17 @@ export type RevokeSessionsRequest = Message<"accessissuer.v1.RevokeSessionsReque
    * @generated from field: string sso = 4;
    */
   sso: string;
+
+  /**
+   * End ONE CLIENT for everybody: with client_id set and identity empty,
+   * every session of that client, whoever holds it. Operator-only, and
+   * explicit rather than inferred from an empty identity, which would
+   * otherwise be the mistake the identity rule above exists to refuse.
+   * The incident lever for a client whose tokens are in doubt.
+   *
+   * @generated from field: bool every_identity = 5;
+   */
+  everyIdentity: boolean;
 };
 
 /**
@@ -361,6 +392,45 @@ export enum How {
  */
 export const HowSchema: GenEnum<How> = /*@__PURE__*/
   enumDesc(file_accessissuer_v1_session, 0);
+
+/**
+ * Who holds a refresh chain (docs/decisions/0040-agent-class-sessions.md).
+ * It decides how long the chain lives and whether a person's browser
+ * sign-out ends it.
+ *
+ * @generated from enum accessissuer.v1.SessionClass
+ */
+export enum SessionClass {
+  /**
+   * A session recorded before classes existed, which is interactive.
+   *
+   * @generated from enum value: SESSION_CLASS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * A person at a browser: held to the installation's lifetimes, and
+   * ended by their sign-out.
+   *
+   * @generated from enum value: SESSION_CLASS_INTERACTIVE = 1;
+   */
+  INTERACTIVE = 1,
+
+  /**
+   * Software that keeps its own refresh token and works in the
+   * background, such as an MCP host: held to the agent class's lifetimes,
+   * and kept when the person signs a browser out. Every revoke ends it.
+   *
+   * @generated from enum value: SESSION_CLASS_AGENT = 2;
+   */
+  AGENT = 2,
+}
+
+/**
+ * Describes the enum accessissuer.v1.SessionClass.
+ */
+export const SessionClassSchema: GenEnum<SessionClass> = /*@__PURE__*/
+  enumDesc(file_accessissuer_v1_session, 1);
 
 /**
  * SessionService lists and ends what this issuer is holding.
