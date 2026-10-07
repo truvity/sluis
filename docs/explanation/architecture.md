@@ -139,7 +139,10 @@ deliberately no stale fallback.
 
 **One hostname.** The issuer holds the root of it: the issuer URL is the
 `iss` claim in every token, and discovery must sit at
-`/.well-known/openid-configuration` at an origin root. The console is
+`/.well-known/openid-configuration` at an origin root. The same document is
+served as RFC 8414 authorization server metadata at
+`/.well-known/oauth-authorization-server` (with the issuer's path appended
+when the issuer URL has one). The console is
 mounted under `/console/`, same-origin with the issuer, so its session
 pages call the issuer with the browser's own cookie and no bearer in
 JavaScript. Each console request is checked against the SSO session with the

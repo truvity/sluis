@@ -175,7 +175,9 @@ its own resource URI as `resource`. That document is what lets a
 compliant MCP client discover which issuer to authenticate against
 without being told out of band. This is the MCP server's own
 responsibility to serve: sluis is the authorization server named
-inside it, not the party that publishes it.
+inside it, not the party that publishes it. Having found the issuer
+there, the client reads its metadata at
+`/.well-known/oauth-authorization-server` (RFC 8414), which sluis serves.
 
 ## Calling a backend: the server's own identity, not the caller's
 

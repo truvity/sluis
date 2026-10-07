@@ -11,7 +11,7 @@ endpoints, and discovery advertises each in its own field.
 
 | Path | Standard | Purpose |
 |---|---|---|
-| `/.well-known/openid-configuration`, `/keys` | OIDC discovery, JWKS | what relying parties read |
+| `/.well-known/openid-configuration`, `/.well-known/oauth-authorization-server`, `/keys` | OIDC discovery, OAuth 2.0 Authorization Server Metadata (RFC 8414), JWKS | what relying parties and MCP clients read |
 | `/authorize`, `/token`, `/userinfo`, `/end_session` | OIDC | login, tokens, RP-initiated logout |
 | `/logout` | ours | the same sign-out for a person rather than a relying party, on GET and on POST. It needs no `id_token_hint`. The console's sign-out button points here. When the store cannot be read, `/logout` and `/end_session` answer 503 (an HTML retry page, or JSON `temporarily_unavailable`), keep the cookie and end nothing |
 | `/token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` | RFC 8693 | CI and workload exchange; the requested `audience` is a client, gated by its `requires` |
