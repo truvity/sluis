@@ -96,6 +96,7 @@ Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and th
 | `access_issuer.login.failures` | counter | `reason` | Sign-ins that did not complete. |
 | `access_issuer.login.successes` | counter | `method` | Sign-ins that completed: a directory's kind, `recovery` or `browser_session`. |
 | `access_issuer.reuse_detected` | counter | `kind` | A spent credential presented again: `authorization_code` or `refresh_token`. |
+| `access_issuer.spent_mark_ahead` | counter | none | A spent refresh token mark read that is dated more than 2 s ahead of the replica's clock. The replicas' clocks disagree, which moves the 30-second grace window. The issuer logs a WARN and keeps the grace. |
 | `access_issuer.signing_keys_published` | gauge | `algorithm` | Keys in the JWKS, per algorithm. Healthy is at least one. |
 | `access_issuer.signing_key.active_since_timestamp` | gauge, `s` | `algorithm` | When the active key became active (Unix seconds). |
 | `access_issuer.signing_key_transitions` | counter | `event`, `algorithm` | Keys seen, activated, retired. |
@@ -117,9 +118,11 @@ and `bad_request`.
 
 **`reuse_detected` has two kinds with two meanings.** An authorization code
 presented twice is a certain reuse, and the session it opened is ended. A
-refresh token that is neither live nor inside the grace window is spent *or
-unknown*: a spent token is not kept past the window, so the two are not told
-apart. A burst of either is a client bug or a stolen credential; one is noise.
+refresh token presented after its 30-second grace is either spent in a live
+session or unknown. A spent one ends that session, but only once the library has
+authenticated the client and matched it to the session's; the count does not say
+which of the two it was, and a forged or unsealable mark counts as unknown.
+A burst of either is a client bug or a stolen credential; one is noise.
 
 ### Generated client secrets
 

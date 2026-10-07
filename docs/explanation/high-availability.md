@@ -20,7 +20,7 @@ port (`internal/issuerapp/app.go`, `openState`):
   correct for one replica, and at more than one a browser that comes back to a different pod finds nothing`.
 
 The records, their lifetimes and why each exists are the key table in [keys](../reference/keys.md): a pending authorize
-request, an authorization code, a session and its refresh token, the 30-second grace record of a rotated refresh token,
+request, an authorization code, a session and its refresh token, the mark of a spent refresh token (its grace and its reuse detection),
 the browser-wide SSO session, a minted token's record, an identity's last-known directory groups, and the signing-key
 schedule. Nothing is swept: every record carries its own TTL.
 

@@ -126,7 +126,7 @@ The logical keys the service writes are in [keys](keys.md); how the adapter cond
 | `issuer-code`, `issuer-code-session` | `<id>` | an authorization code, the session it opened |
 | `issuer-token` | `<uuid>` | a minted token's record |
 | `issuer-session`, `issuer-sso`, `issuer-sso-of` | `<id>`, `<id>`, `<identity>` | sessions and the browser's SSO session |
-| `issuer-session-token` | `<hash>` | a live refresh token; for 30 s after a rotation, `spent:<successor>` (the retry grace) |
+| `issuer-session-token` | `<hash>` | a live refresh token; once spent, `spent:<unix ms>:<sealed successor>:<session id>` |
 | `issuer-session-rotated` | `<hash>` | legacy: a spent token's successor as an older version wrote it; read for one release, never written, then removed |
 | `issuer-held` | `<identity>` | an identity's last-known directory groups, kept for the hold window (`lifetimes.hold`) |
 | `issuer-guard` | `state-secret-fingerprint` | the guard that a state secret has not changed |
@@ -139,8 +139,17 @@ The logical keys the service writes are in [keys](keys.md); how the adapter cond
 issuer's refresh path decide how often it writes:
 
 - A rotation marks the spent token in its own pointer: `issuer-session-token`
-  then holds `spent:<successor>` for 30 seconds, so a retry inside the grace
-  finds the successor. The mark is written only over the revision that was read,
+  then holds `spent:<unix ms>:<sealed successor>:<session id>`. The successor is
+  sealed with AES-256-GCM under a key derived from the spent token (SHA-256 of a
+  label, a zero byte and the token), so the key space never holds a live refresh
+  token in plain. A retry inside the 30-second grace finds the successor; a
+  presentation after it ends the session the mark names. The mark lives until
+  the absolute deadline of its refresh family,
+  `max(auth_time + absolute limit - now, 30 s)` (24 hours by default); a
+  session with no `auth_time` or no absolute limit keeps it until the session
+  ends, at most the refresh lifetime (12 hours by default). A mark that does not
+  open with the presented token is treated as an unknown token. The mark is
+  written only over the revision that was read,
   so a concurrent refresh becomes a replay and a revocation during a refresh is
   not undone. The separate `issuer-session-rotated` record is no longer written;
   it is still read for one release, for tokens an older version rotated, and then

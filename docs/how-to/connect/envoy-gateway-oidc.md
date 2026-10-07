@@ -199,7 +199,9 @@ replica, and a rotating refresh token is single-use: two concurrent
 requests on two replicas can each try to redeem the same refresh token
 within the same second. The issuer tolerates a short grace window for
 exactly this reason
-([ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md)). **Fix:**
+([ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md)); a replay
+after it ends the session
+([refresh token reuse](../../explanation/sessions.md#refresh-token-reuse)). **Fix:**
 never give a client fronted this way a very short `ttl_cap` (a minute or
 two) — it does not tighten revocation meaningfully at this shape's own
 floor, and it multiplies how often this race is tried.
