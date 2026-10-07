@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // maxResponse is what a function may return synchronously, 6 MB, counted after
@@ -105,14 +106,14 @@ func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error)
 func (h *HTTP) Serve(ctx context.Context, event events.APIGatewayV2HTTPRequest) (resp events.APIGatewayV2HTTPResponse) {
 	req, err := Request(ctx, event)
 	if err != nil {
-		h.log.WarnContext(ctx, "a request could not be read", "error", oneLine(err.Error()))
+		h.log.WarnContext(ctx, "a request could not be read", "error", logsafe.Error(err))
 		return text(http.StatusBadRequest, "bad request\n")
 	}
 	rec := &recorder{header: http.Header{}}
 	func() {
 		defer func() {
 			if p := recover(); p != nil {
-				h.log.ErrorContext(ctx, "a handler panicked", "panic", fmt.Sprint(p), "path", oneLine(req.URL.Path))
+				h.log.ErrorContext(ctx, "a handler panicked", "panic", logsafe.Value(fmt.Sprint(p)), "path", logsafe.Value(req.URL.Path))
 				resp = text(http.StatusInternalServerError, "internal error\n")
 				rec = nil
 			}
@@ -127,7 +128,7 @@ func (h *HTTP) Serve(ctx context.Context, event events.APIGatewayV2HTTPRequest) 
 	}
 	resp = Response(rec.status(), rec.header, rec.body.Bytes())
 	if size := len(resp.Body); size > maxResponse {
-		h.log.ErrorContext(ctx, "a response is over what a function may return", "path", oneLine(req.URL.Path), "bytes", size)
+		h.log.ErrorContext(ctx, "a response is over what a function may return", "path", logsafe.Value(req.URL.Path), "bytes", size)
 		return text(http.StatusBadGateway, "response too large\n")
 	}
 	return resp

@@ -1,12 +1,15 @@
 package valkey
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -192,5 +195,23 @@ func TestACallersOwnGivingUpIsFinal(t *testing.T) {
 	cancel()
 	if got := classify(ctx, &net.OpError{Op: "dial", Err: stdlibTimeout{}}); got != final {
 		t.Errorf("classify with a cancelled caller = %d, want final", got)
+	}
+}
+
+// Not parallel: it swaps the process's default logger.
+func TestARetryLogLineCarriesNoRecordSeparatorFromTheError(t *testing.T) {
+	var out bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	read := &net.OpError{Op: "read", Net: "tcp", Err: errors.New("lost\nlevel=ERROR msg=forged\r")}
+	f := &failing{err: read, left: 1}
+	if err := stateWith(t, f).Set(context.Background(), "k\nx", []byte("v"), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	if len(lines) != 1 || strings.ContainsAny(out.String(), "\r") || !strings.Contains(lines[0], "lostlevel=ERROR") {
+		t.Fatalf("want one record with the separators removed, got %q", out.String())
 	}
 }
