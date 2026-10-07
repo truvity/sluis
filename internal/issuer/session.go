@@ -580,8 +580,9 @@ const rotatedAttempts = 3
 // and reports false when the session turned out to have ended.
 //
 // A record written by something else since it was read is read again and
-// this rotation's part -- its new end, when it refreshed, its index and
-// sign-in membership -- applied to what is there now, never written blind
+// this rotation's part -- its new end (never later than the end there
+// now), when it refreshed, its index and sign-in membership -- applied to
+// what is there now, never written blind
 // over it: the something else may have been a revocation, and a plain
 // write would bring the revoked session back. A record that is gone, or
 // no longer live, when read again ends the rotation as a revoked one.
@@ -608,7 +609,11 @@ func (s *Sessions) writeRotated(ctx context.Context, session Session, version st
 		}
 
 		fresh.LastRefreshed = session.LastRefreshed
-		fresh.ExpiresAt = session.ExpiresAt
+		// Never later than what is there now: whatever wrote the record
+		// since may have shortened it, and a refresh must not undo that.
+		if session.ExpiresAt.Before(fresh.ExpiresAt) {
+			fresh.ExpiresAt = session.ExpiresAt
+		}
 		if fresh.IndexedUntil.Before(session.IndexedUntil) {
 			fresh.IndexedUntil = session.IndexedUntil
 		}
