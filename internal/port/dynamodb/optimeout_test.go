@@ -139,10 +139,10 @@ func TestShorterCallerDeadlineWins(t *testing.T) {
 // The timeout is per page: a loop of pages each shorter than opTimeout is not
 // cut by the sum.
 func TestTimeoutIsPerPage(t *testing.T) {
-	shortOpTimeout(t, 200*time.Millisecond)
+	shortOpTimeout(t, 400*time.Millisecond)
 	f := newFake()
 	s := fakeStore(t, f)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 8; i++ {
 		if _, err := s.Put(context.Background(), "issuer:p/"+string(rune('a'+i)), []byte("v"), time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -153,10 +153,35 @@ func TestTimeoutIsPerPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 5 {
-		t.Fatalf("exported %d records, want 5", n)
+	if n != 8 {
+		t.Fatalf("exported %d records, want 8", n)
 	}
-	if s.api.(*slowAPI).pages < 5 {
+	if s.api.(*slowAPI).pages < 8 {
 		t.Fatalf("%d pages: the loop did not run long enough to prove anything", s.api.(*slowAPI).pages)
+	}
+}
+
+// The same through the Query path: Members pages a set one record at a time.
+func TestTimeoutIsPerPageThroughQuery(t *testing.T) {
+	shortOpTimeout(t, 400*time.Millisecond)
+	f := newFake()
+	s := fakeStore(t, f)
+	const set = "issuer:sso-clients:abc"
+	for i := 0; i < 8; i++ {
+		if err := s.Add(context.Background(), set, "m"+string(rune('a'+i)), time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	slow := &slowAPI{API: f, delay: 80 * time.Millisecond}
+	s.api = slow
+	got, err := s.Members(context.Background(), set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 8 {
+		t.Fatalf("%d members, want 8", len(got))
+	}
+	if slow.pages < 8 {
+		t.Fatalf("%d pages: the loop did not run long enough to prove anything", slow.pages)
 	}
 }
