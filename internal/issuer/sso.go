@@ -310,6 +310,22 @@ func (s *SSO) Resolve(ctx context.Context, cookie string) (SSOSession, bool, err
 	return record.SSOSession, true, nil
 }
 
+// preUpgrade reads a sign-in by a cookie set before the cookie had a
+// secret of its own, when the cookie held the sign-in's id. It answers
+// only for a record with no cookie hash -- one written before then -- so
+// a current sign-in is never reached by its id, and only sign-out calls
+// it: it ends a sign-in, it never signs anybody in. Remove one release
+// after the one that introduced the cookie secret, when every such
+// record has expired.
+func (s *SSO) preUpgrade(ctx context.Context, cookie string) (SSOSession, bool, error) {
+	record, live, err := s.get(ctx, cookie)
+	if err != nil || !live || record.Cookie != "" {
+		return SSOSession{}, false, err
+	}
+
+	return record.SSOSession, true, nil
+}
+
 // Get returns a session by id, and whether it is there and live. An
 // expired record is absent: "it ended" and "it never was" are the same
 // answer.

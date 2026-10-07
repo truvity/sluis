@@ -385,7 +385,12 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 		held := &heldResponse{ResponseWriter: w}
 		next.ServeHTTP(held, r)
 		if held.succeeded() {
-			SignOut(signIn, w, r)
+			if err := SignOut(signIn, w, r); err != nil {
+				// The library's answer is dropped: it would say the
+				// person is signed out, and they are not.
+				signOutFailed(w, r)
+				return
+			}
 		}
 		held.release(r)
 	})

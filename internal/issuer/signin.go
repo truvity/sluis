@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -642,7 +643,10 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 // `end_session` has — ending a session is not a change somebody else can
 // exploit by making your browser visit it, only annoy you with.
 func (s *signIn) logout(w http.ResponseWriter, r *http.Request) {
-	SignOut(s.deps, w, r)
+	if err := SignOut(s.deps, w, r); err != nil {
+		signOutFailed(w, r)
+		return
+	}
 
 	where := strings.TrimSpace(s.deps.AfterSignOut)
 	if where == "" {
@@ -672,8 +676,36 @@ func (s *signIn) logout(w http.ResponseWriter, r *http.Request) {
 // sessions running with nothing listing them. Narrowed by identity, which
 // the sign-in record carries: an SSO-only query reads every session in
 // the installation and filters, and this runs on an ordinary sign-out.
-func SignOut(deps SignInDeps, w http.ResponseWriter, r *http.Request) {
-	signOut(deps, w, r, false)
+//
+// It fails only when the store could not say which sign-in the cookie
+// proves: then nothing has ended, the cookie is left in place so the
+// person can try again, and the caller answers with an error rather than
+// a sign-out that did not happen.
+func SignOut(deps SignInDeps, w http.ResponseWriter, r *http.Request) error {
+	return signOut(deps, w, r, false)
+}
+
+// errSignOutUnresolved is [SignOut]'s one failure.
+var errSignOutUnresolved = errors.New("issuer: the sign-in this browser holds could not be read")
+
+// signOutFailed answers a sign-out that ended nothing, as a page for a
+// person and as JSON for anything else.
+func signOutFailed(w http.ResponseWriter, r *http.Request) {
+	if !wantsHTML(r) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error":             "temporarily_unavailable",
+			"error_description": "the sign-in could not be read, so nothing was ended; try again",
+		})
+		return
+	}
+
+	_ = writePage(w, http.StatusServiceUnavailable, "Sign-out did not complete",
+		`<p>Your sign-in could not be read just now, so nothing was ended and you are still signed in.</p>
+	<p class="note">Try again in a moment.</p>
+	<p><a class="btn" href="/logout">Sign out</a></p>`)
 }
 
 // signOut is [SignOut]. sparingLive leaves the per-client sessions that
@@ -682,18 +714,36 @@ func SignOut(deps SignInDeps, w http.ResponseWriter, r *http.Request) {
 // absolute limit, as opposed to a person signing out. Everything else a
 // browser opened has already ended at its own limit, so what is live then
 // is exactly a chain a resource extended.
-func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLive bool) {
+func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLive bool) error {
 	if deps.SSO == nil {
-		return
+		return nil
 	}
 
 	if cookie := SSOFromRequest(r, deps.Secure); cookie != "" {
 		record, live, err := deps.SSO.Resolve(r.Context(), cookie)
+		if err == nil && !live {
+			// A cookie set before the cookie had a secret of its own
+			// holds the sign-in's id. It signs nobody in any more, but
+			// for one release it can still sign its own browser OUT, so
+			// that a person who clicks sign-out during the upgrade ends
+			// what they opened. Only here, and only a record with no
+			// cookie hash: see [SSO.preUpgrade]. Remove one release
+			// after the one that introduced the cookie secret.
+			record, live, err = deps.SSO.preUpgrade(r.Context(), cookie)
+		}
+		if err != nil {
+			// Nothing has ended, so nothing may say it has: the cookie
+			// stays for the retry, and the caller answers with an error.
+			deps.log().WarnContext(r.Context(), "sign-out could not read the browser's sign-in",
+				"error", logsafe.Error(err))
+
+			return errSignOutUnresolved
+		}
 		// The sign-in's id, never the cookie: what names it in the
 		// session index and the store. Empty when the cookie proves
 		// nothing, and then there is nothing here to end.
 		id := record.ID
-		if deps.Issuer != nil && err == nil && live {
+		if deps.Issuer != nil && live {
 			// Read before revoking: once they are gone there is nothing
 			// left to say WHICH clients held them, and the clients that
 			// asked to be told are told by name.
@@ -764,6 +814,8 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 	// already gone still makes the next request look signed in until it
 	// is checked, and clearing it costs nothing.
 	http.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
+
+	return nil
 }
 
 // log is the deps' logger, or the default one. SignOut is reached from
@@ -893,7 +945,10 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		// extended, which are inside their own limit and are ended by
 		// sign-out, revocation or their own end -- never by an unrelated
 		// console's silent request finding the browser session old.
-		signOut(s.deps, w, r, true)
+		// A failure is logged there and leaves the cookie; the browser
+		// goes to an interactive sign-in either way, which ends the
+		// sign-in it held once it succeeds ([signIn.established]).
+		_ = signOut(s.deps, w, r, true)
 		return false
 	}
 
@@ -1030,8 +1085,20 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 		s.deps.Log.WarnContext(r.Context(), "browser session could not be recorded",
 			"identity", logsafe.Value(identity), "error", logsafe.Error(err))
 
+		// And the browser must not keep the cookie it came with: that
+		// sign-in may be somebody else's, and the next console would
+		// complete silently as them right after this person signed in.
+		http.SetCookie(w, s.deps.SSO.Cookie("", s.deps.Secure))
+
 		return who
 	}
+
+	// The sign-in this browser held before -- a step-up, `prompt=login`,
+	// `max_age`, another account -- ends now. The new cookie replaces it
+	// in the browser, and a sign-in no browser holds would otherwise stay
+	// valid, listed and usable by anyone who had copied its cookie, until
+	// it expired.
+	s.endPrevious(r, session.ID)
 
 	// The secret, not the id: the id is shown to operators and carried by
 	// every session opened under this sign-in, and must not sign anybody
@@ -1040,6 +1107,20 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 	who.AuthTime, who.SSO = session.AuthTime, session.ID
 
 	return who
+}
+
+// endPrevious ends the sign-in the request's cookie proves, unless it is
+// the one just begun. Best effort: the new sign-in has happened either
+// way, and the old one still ends at its own lifetime.
+func (s *signIn) endPrevious(r *http.Request, current string) {
+	previous, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
+	if err == nil && live && previous.ID != current {
+		err = s.deps.SSO.End(r.Context(), previous.ID)
+	}
+	if err != nil {
+		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be ended",
+			"error", logsafe.Error(err))
+	}
 }
 
 // account sends an old bookmark to the console's page for the person.
