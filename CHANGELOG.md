@@ -1,5 +1,19 @@
 ## Unreleased
 
+### Added
+
+- **Agent-class sessions: `session: agent` on a client, and on `client_documents`, for software that holds its own refresh token and works in the background, such as MCP hosts** ([ADR 0040](docs/decisions/0040-agent-class-sessions.md)). Such a client's refresh chains are held to the service configuration's new `lifetimes.agent` instead of the installation's `lifetimes.refresh` and `lifetimes.absolute`: an idle limit of `336h` (14 days), an absolute limit of `720h` (30 days) from `auth_time`, and a mandatory `30m` cap on every access and ID token. A resource's `absolute_cap` is only ever a ceiling for an agent chain, and the client's, `client_documents`' and the resource's `ttl_cap` still shorten its tokens. The class is decided once, when the authorization completes, from the installation's policy and never from a client document, and is recorded on the session with the chain's `deadline`. A later policy or configuration change can shorten an agent chain at its next refresh but never lengthen it past that deadline or change its class; a chain recorded before this release, or by an older replica during a rollout, is interactive. Refused at load: `session` on an `exchange` client, `session: agent` with `sign_in_exchange: true`, `lifetimes.agent.absolute` above `2160h` (90 days) or not positive, `lifetimes.agent.refresh` above `lifetimes.agent.absolute` or not positive, and `lifetimes.agent.access` above `1h` or not positive. Warned at start: `session: agent` on a client with `signed_out` or `backchannel_logout_uri`. **This release does not yet put the consent page in front of an agent authorization, nor spare agent sessions at a browser sign-out** (decisions 6 and 7 of the ADR, in a later release): until then an agent authorization can complete silently, so mark a client `session: agent` only once that release is deployed. A rollback past this release needs `session` and `lifetimes.agent` removed first, since an older binary refuses both keys.
+
+### Changed
+
+- **`client_documents.ttl_cap` now caps a document client's access tokens, not only its ID tokens.** The token endpoint looked a client's `ttl_cap` up among declared clients only, so a document client's access token lived `lifetimes.token`.
+- **A token exchange of a sign-in (`sign_in_exchange`) refuses an access token whose session is agent-class**, whatever the client's row says now: a recorded class outlives a policy change.
+- **The session index sets are kept for `max(2 × lifetimes.refresh, lifetimes.agent.absolute)` (30 days by default) on every Add**, so that an interactive session's Add never shortens a set an agent session is in on an engine whose set expiry is the whole set's (memory, Valkey). An interactive session's id stays in the sets longer, and a listing that meets one whose record is gone drops it, as it always has. A spent refresh token's mark in an agent chain is kept until the chain's recorded deadline.
+
+### Deprecated
+
+- **A `read_only` resource's `absolute_cap` above `lifetimes.absolute`** ([ADR 0033](docs/decisions/0033-a-longer-absolute-limit-for-read-only-resources.md)'s lengthening) is deprecated in favour of `session: agent`. It is still honoured in this release, with a warning at start naming the resources and `session: agent`; a later minor release refuses it, marked **Breaking:**. Migrate by marking the clients that need a longer chain `session: agent`, then removing `absolute_cap` from those resources or lowering it to at most `lifetimes.absolute`. `absolute_cap` as a shortening cap stays.
+
 ## v1.68.0
 
 ### Added
