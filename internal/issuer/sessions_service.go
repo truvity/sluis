@@ -411,7 +411,7 @@ func (s *SessionsService) RevokeSessions(
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 
-		if !found || !strings.EqualFold(one.Identity, identity) {
+		if !found || !sameIdentity(one.Identity, identity) {
 			// A session that is not there and one that is somebody
 			// else's are the same answer, so that an id cannot be probed.
 			return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{}), nil
@@ -454,7 +454,7 @@ func (s *SessionsService) RevokeSessions(
 				return nil, connect.NewError(connect.CodeInternal, err)
 			}
 
-			if found && !strings.EqualFold(record.Identity, identity) {
+			if found && !sameIdentity(record.Identity, identity) {
 				return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{}), nil
 			}
 		}
@@ -530,6 +530,14 @@ func (s *SessionsService) RevokeSessions(
 		s.announce(ctx, withInvolved(held, involved))
 	}
 
+	// Recorded before any error is answered, with what did end: a sign-out
+	// that stopped halfway has still ended those sessions and sign-ins.
+	scope := audit.ScopeEverywhere
+	if clientID != "" {
+		scope = "one client"
+	}
+	s.revoked(ctx, who.identity, identity, clientID, scope, ended)
+
 	switch {
 	case err != nil:
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -537,11 +545,6 @@ func (s *SessionsService) RevokeSessions(
 		return nil, connect.NewError(connect.CodeInternal, endErr)
 	}
 
-	scope := audit.ScopeEverywhere
-	if clientID != "" {
-		scope = "one client"
-	}
-	s.revoked(ctx, who.identity, identity, clientID, scope, ended)
 	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
 }
 
