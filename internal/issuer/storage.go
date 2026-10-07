@@ -877,6 +877,18 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 		return err
 	}
 
+	// A request already completed is completed again only by the same
+	// person under the same sign-in, as a page answered twice does. Never by
+	// another: a holder of somebody else's request id who signs in
+	// themselves must not swap their identity into a request whose code is
+	// on its way to the first person's client.
+	if req.IsDone && (req.Subject != strings.ToLower(who.Subject) || req.SSO != who.SSO) {
+		s.logger().WarnContext(ctx, "refused to complete an authorization request again as somebody else",
+			"client", logsafe.Value(req.Req.ClientID))
+
+		return ErrCompletedByAnother
+	}
+
 	authTime := who.AuthTime
 	if authTime.IsZero() {
 		authTime = time.Now()
@@ -959,6 +971,10 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 // ErrUnaudited is a recovery sign-in refused because its record could not
 // be written.
 var ErrUnaudited = errors.New("the audit trail could not be written")
+
+// ErrCompletedByAnother is an authorization request that was already
+// completed by a different person, or under a different sign-in.
+var ErrCompletedByAnother = errors.New("this sign-in was already completed by somebody else")
 
 // ErrAgentConsentRequired is an agent-class request that cannot complete
 // without the person's acceptance in this browser: none was presented, or

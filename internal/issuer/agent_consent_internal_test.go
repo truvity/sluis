@@ -15,6 +15,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/policy"
 )
 
 // Storage.Complete is the one place every sign-in converges, and it
@@ -137,5 +138,67 @@ func TestCompleteVerifiesAnAgentAcceptanceItself(t *testing.T) {
 				t.Error("the request was marked done without an acceptance")
 			}
 		})
+	}
+}
+
+// Security review L3: an authorization request already completed is
+// completed again only by the same person under the same sign-in. Another
+// person -- a holder of the request id who signs in themselves -- or the
+// same person under another sign-in is refused, and the request keeps the
+// identity it was completed with.
+func TestACompletedRequestIsNotCompletedAgainAsSomebodyElse(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	declared, err := policy.Parse([]byte("version: 1\n" +
+		"groups: { viewers: { members: [eng@north.example] } }\n" +
+		"clients:\n" +
+		"  app: { kind: public, redirects: ['http://127.0.0.1/callback'], requires: [viewers] }\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := policy.NewSet(declared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engineer := Standing{Found: true, Authoritative: true, Groups: []string{"eng@north.example"}}
+	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set,
+		aDirectory{"ada@north.example": engineer, "eve@north.example": engineer}, NewMemoryState())
+	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := storage.CreatePendingAuthRequestForTest(ctx, "req-ada", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ada := Authenticated{Subject: "ada@north.example", AuthTime: time.Now(), SSO: "ada-sign-in", How: "google"}
+	if err = storage.Complete(ctx, id, ada); err != nil {
+		t.Fatalf("the first completion: %v", err)
+	}
+
+	for name, who := range map[string]Authenticated{
+		"another person":                   {Subject: "eve@north.example", AuthTime: time.Now(), SSO: "eve-sign-in", How: "google"},
+		"another person, same sign-in":     {Subject: "eve@north.example", AuthTime: time.Now(), SSO: "ada-sign-in", How: "google"},
+		"the same person, another sign-in": {Subject: "ada@north.example", AuthTime: time.Now(), SSO: "ada-other-sign-in", How: "google"},
+	} {
+		if err = storage.Complete(ctx, id, who); !errors.Is(err, ErrCompletedByAnother) {
+			t.Errorf("%s: %v, want ErrCompletedByAnother", name, err)
+		}
+	}
+
+	request, err := storage.request(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Subject != "ada@north.example" || request.SSO != "ada-sign-in" {
+		t.Errorf("the request is now %s under %s, want ada under her sign-in", request.Subject, request.SSO)
+	}
+
+	// The same person under the same sign-in, as a page answered twice.
+	if err = storage.Complete(ctx, id, ada); err != nil {
+		t.Errorf("completing again as the same person: %v", err)
 	}
 }
