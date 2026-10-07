@@ -744,12 +744,14 @@ type presented struct {
 	// the session record as read, "" from a State that keeps none.
 	pointer, record string
 	// dead is set, with the answer false, when what was read is a terminal
-	// state that no later write can undo: no pointer and no legacy rotated
-	// record, or a pointer naming a session record that is absent. Only
-	// over a State that keeps revisions, whose every later write of a
-	// pointer or a record is conditional on what was read. It is what the
-	// negative cache may remember ([deadRefreshes]); everything else that
-	// is refused is not dead.
+	// state: no pointer and no legacy rotated record, or a pointer naming a
+	// session record that is absent. Only over a State that keeps
+	// revisions, whose every later write of a pointer or a record is
+	// conditional on what was read. It is a verdict the negative cache
+	// remembers only once a second one, read a minute later, confirms it
+	// ([deadRefreshes]): an absence by expiry can still be overtaken by a
+	// write another replica built a moment before. Everything else that is
+	// refused is not dead.
 	dead bool
 }
 
@@ -919,6 +921,31 @@ const reuseEndAttempts = 3
 // races it; each refresh it races adds one failed conditional delete and
 // one read.
 func (s *Sessions) endReused(ctx context.Context, p presented) (bool, error) {
+	return s.endAt(ctx, p, "a reused session")
+}
+
+// endRemoved ends the session of a person the directory authoritatively
+// reports suspended or not found, as [Sessions.endReused] ends a reused one:
+// a delete at the revision read, read again while it moves, and true only
+// for the call whose delete ended it -- the one that audits and announces.
+// A grace-window replay read its session without a revision, so the record
+// is read here first; one already gone was ended by somebody else.
+func (s *Sessions) endRemoved(ctx context.Context, p presented) (bool, error) {
+	if p.record == "" {
+		session, version, live, err := s.byIDVersion(ctx, p.session.ID)
+		if err != nil || !live {
+			return false, err
+		}
+
+		p.session, p.record = session, version
+	}
+
+	return s.endAt(ctx, p, "a session of a person the directory no longer has")
+}
+
+// endAt is the conditional end [Sessions.endReused] describes; what names
+// the session in the warning.
+func (s *Sessions) endAt(ctx context.Context, p presented, what string) (bool, error) {
 	id, version := p.session.ID, p.record
 
 	for attempt := 0; ; attempt++ {
@@ -955,7 +982,7 @@ func (s *Sessions) endReused(ctx context.Context, p presented) (bool, error) {
 			}
 		}
 
-		slog.WarnContext(ctx, "a reused session was already gone when it was to be ended; "+
+		slog.WarnContext(ctx, what+" was already gone when it was to be ended; "+
 			"another presentation of the token, or this one's own retried delete, ended it, "+
 			"and it is not audited a second time", "session", id)
 

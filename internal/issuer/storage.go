@@ -397,7 +397,7 @@ func NewStorage(
 		now:           time.Now,
 		// The session index's clock, so that time a test moves for the
 		// sessions moves for the cache's TTL too.
-		dead: newDeadRefreshes(fingerprintKey(key.seed), deadRefreshEntries, deadRefreshTTL,
+		dead: newDeadRefreshes(fingerprintKey(key.seed), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
 			func() time.Time { return iss.Sessions().now() }),
 	}, nil
 }
@@ -1045,6 +1045,9 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
 		return "", time.Time{}, oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
 	}
+	if err := s.refusalOf(ctx, request); err != nil {
+		return "", time.Time{}, err
+	}
 
 	// A code that opens no session -- `openid` alone, or a request whose
 	// every scope the client was not allowed, which mints no ID token
@@ -1087,6 +1090,12 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	// client: the session ends here, before anything is resolved or minted.
 	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
 		return "", "", time.Time{}, s.endReuse(ctx, req.presented)
+	}
+
+	// A refusal the first reading carried, now that the client is matched:
+	// returned as it is, which the library passes to the wire unchanged.
+	if err := s.refusalOf(ctx, request); err != nil {
+		return "", "", time.Time{}, err
 	}
 
 	issued, err := s.issue(ctx, request)
@@ -1724,9 +1733,8 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 
 // TokenRequestByRefreshToken implements [op.AuthStorage].
 func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken string) (op.RefreshTokenRequest, error) {
-	// A token already refused as dead is refused again before anything is
-	// read: a host looping on an ended chain costs no State call
-	// ([deadRefreshes]).
+	// A token confirmed dead is refused again before anything is read: a
+	// host looping on an ended chain costs no State call ([deadRefreshes]).
 	sum := s.dead.sum(refreshToken)
 	if s.dead.refused(sum) {
 		recordDeadRefreshHit(ctx)
@@ -1741,8 +1749,18 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	// CreateAccessAndRefreshTokens can answer it. And it is the ONLY
 	// reading: what was read travels on the request to the rotation.
 	presented, ok, err := s.iss.Sessions().present(ctx, refreshToken)
+	if !presented.dead {
+		// Anything but a dead verdict -- a live token, a replay, a reuse,
+		// a refusal that is not terminal, a failed read -- undoes a
+		// pending one.
+		s.dead.alive(sum)
+	}
+
 	if err != nil {
-		return nil, oidc.ErrServerError().WithDescription("%s", err)
+		// An outage, not an answer about the token: server_error on the
+		// wire, which the library would turn into invalid_grant if it were
+		// returned here ([refreshRequest.refusal]).
+		return refusedLater(ctx, oidc.ErrServerError().WithDescription("%s", err)), nil
 	}
 
 	session := presented.session
@@ -1811,57 +1829,122 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 		}
 
 		// The directory said, and could vouch for it, that the person is
-		// suspended or gone: a removal, which ends the chain here rather
-		// than leaving it to idle out. A refusal it cannot vouch for is an
+		// suspended or gone: a removal, which ends the chain rather than
+		// leaving it to idle out. A refusal it cannot vouch for is an
 		// outage, which ends nothing and asks the client to try again.
+		//
+		// Both are carried on the request rather than returned here. The
+		// library answers every error of this first reading with
+		// invalid_grant, which would tell a client to give up in an outage,
+		// and it has not yet matched the authenticated client to the
+		// session's: a removal must not end a session for whoever holds a
+		// copy of its token. [Storage.CreateAccessAndRefreshTokens] acts on
+		// them, after that match, and its errors reach the wire as they are.
 		var refused *Refused
 		if errors.As(err, &refused) && refused.Authoritative {
-			return nil, s.refuseNotLive(ctx, presented)
+			return &refreshRequest{session: session, presented: presented, notLive: true}, nil
 		}
 
-		return nil, oidc.ErrServerError().WithDescription("%s", err)
+		return &refreshRequest{
+			session: session, presented: presented,
+			refusal: oidc.ErrServerError().WithDescription("%s", err),
+		}, nil
 	}
 
 	return &refreshRequest{session: session, presented: presented}, nil
 }
 
-// refuseDead says, once, that a refresh token naming no live session was
-// refused: the client the request named and a fingerprint of the token,
-// never the token. A dead token is remembered ([deadRefreshes]) and its
-// repeats refused in silence, counted, for the cache's TTL; the WARN is
-// written when the entry is made. A refusal that is not dead (a mark in
-// its tolerance band, a successor that is no longer live) is not
-// remembered, and says so each time.
+// refusedLater is a request that carries a refusal and nothing else, for a
+// token whose session could not be read. It names the client and the scopes
+// the request named, so that the library's checks between this reading and
+// [Storage.CreateAccessAndRefreshTokens] pass it on to where the refusal is
+// returned; it can never mint.
+func refusedLater(ctx context.Context, refusal error) *refreshRequest {
+	asked := presentedFrom(ctx)
+
+	return &refreshRequest{session: Session{ClientID: asked.clientID, Scopes: asked.scopes}, refusal: refusal}
+}
+
+// refusalOf is what a refresh request carries instead of a grant: the
+// removal decision 5 ends a session for, or another refusal to return as it
+// is. Nil for anything else.
+func (s *Storage) refusalOf(ctx context.Context, request op.TokenRequest) error {
+	req, isRefresh := request.(*refreshRequest)
+	switch {
+	case !isRefresh:
+		return nil
+	case req.notLive:
+		return s.refuseNotLive(ctx, req.presented)
+	default:
+		return req.refusal
+	}
+}
+
+// refuseDead says that a refresh token naming no live session was refused:
+// the client the request named and a fingerprint of the token, never the
+// token. A dead verdict makes a cache entry, and the WARN is written when it
+// is made; the entry's repeats are refused without it (the library still
+// logs its own `request error` line for every invalid_grant), counted, and
+// from memory once a second verdict has confirmed it ([deadRefreshes]). A
+// refusal that is not dead (a mark in its tolerance band, a successor that
+// is no longer live) makes no entry and warns each time. Every such WARN is
+// rate-limited across all tokens, and says how many it held back.
 func (s *Storage) refuseDead(ctx context.Context, sum [sha256.Size]byte, dead bool) {
-	if dead && !s.dead.add(sum) {
+	if dead && !s.dead.dead(sum) {
 		return
 	}
 
-	s.logger().WarnContext(ctx, "refused a refresh token that names no live session",
-		"client_id", logsafe.Value(presentedClientFrom(ctx)),
+	write, held := s.dead.warn()
+	if !write {
+		return
+	}
+
+	attrs := []any{
+		"client_id", logsafe.Value(presentedFrom(ctx).clientID),
 		"token_fingerprint", fingerprint(sum),
-		"remembered", dead)
+		"remembered", dead,
+	}
+	if held > 0 {
+		attrs = append(attrs, "suppressed", held)
+	}
+
+	s.logger().WarnContext(ctx, "refused a refresh token that names no live session", attrs...)
 }
 
 // refuseNotLive ends a session whose person the directory authoritatively
-// reports suspended or not found, at the refresh that found out: the
-// record, its index membership and the presented token's pointer go, the
-// refusal is audited, and the client is told invalid_grant
+// reports suspended or not found, at the refresh that found out, once the
+// library has matched the client to the session's: the record goes at the
+// revision read, as a reuse ends one ([Sessions.endRemoved]), then its index
+// membership and the presented token's pointer (and a grace replay's
+// successor's), and the client is told invalid_grant
 // (docs/decisions/0040-agent-class-sessions.md, decision 5). Every class
 // alike: nothing that ends a session consults it.
 //
-// The pointer of a grace-window replay's successor goes too: it is the
-// chain's live token.
+// Only the call whose delete ended the session audits it and announces it
+// over back-channel logout, as every other revocation does: of a burst of
+// presentations, the others find it gone and are refused as any dead token
+// is. A delete that failed with the session still live is a server error, so
+// that the client tries again and the removal is met again.
 func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
+	ended, err := s.iss.Sessions().endRemoved(ctx, p)
+	if !ended {
+		if err != nil {
+			s.logger().WarnContext(ctx, "a session whose person the directory no longer has could not be ended",
+				"client_id", logsafe.Value(p.session.ClientID), "error", logsafe.Error(err))
+
+			return oidc.ErrServerError().WithDescription("%s", err)
+		}
+
+		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+	}
+
 	session := p.session
-
-	if err := s.iss.Sessions().deleteSession(ctx, session); err != nil {
-		// Not ended: a server error, so that the client tries again and
-		// the removal is met again.
-		s.logger().WarnContext(ctx, "a session whose person the directory no longer has could not be ended",
+	if err != nil {
+		// Ended -- the record is gone, and every token resolves through it
+		// -- with an index set still naming it, which the next listing
+		// drops.
+		s.logger().WarnContext(ctx, "an ended session's index sets still name it",
 			"client_id", logsafe.Value(session.ClientID), "error", logsafe.Error(err))
-
-		return oidc.ErrServerError().WithDescription("%s", err)
 	}
 
 	for _, token := range []string{p.token, p.successor} {
@@ -1869,7 +1952,7 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 			continue
 		}
 
-		if err := s.iss.Sessions().state.Delete(ctx, sessionTokenKey(token)); err != nil {
+		if err = s.iss.Sessions().state.Delete(ctx, sessionTokenKey(token)); err != nil {
 			// Ended all the same: every token resolves through the record.
 			s.logger().WarnContext(ctx, "an ended session's refresh token pointer could not be removed",
 				"error", logsafe.Error(err))
@@ -1880,6 +1963,7 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 		"client_id", logsafe.Value(session.ClientID))
 	s.iss.record(ctx, audit.SessionRefreshRefused(session.Identity, session.ClientID,
 		"the directory says this account is not live"))
+	s.announceLogout(ctx, s.logger(), []Session{session})
 
 	return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
 }
@@ -1893,6 +1977,13 @@ type refreshRequest struct {
 	// involved is set once the client is known to be recorded among the
 	// sign-in's clients ([Storage.involveAhead]).
 	involved bool
+	// notLive is set when the directory authoritatively reported the
+	// person suspended or not found, and refusal when the refresh is
+	// refused for another reason: either is acted on where the library
+	// creates the tokens ([Storage.refusalOf]), and the request mints
+	// nothing.
+	notLive bool
+	refusal error
 }
 
 var _ op.RefreshTokenRequest = (*refreshRequest)(nil)
