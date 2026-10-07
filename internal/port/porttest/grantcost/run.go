@@ -42,9 +42,15 @@ type Budget struct {
 // last-known groups, read so that their write is skipped only while the
 // record is still this process's own: an eventually consistent read of no
 // value, half a read unit on DynamoDB (port.RevisionPeeker).
+//
+// authorization_code was raised to 5 reads once, on purpose: a code
+// completed under a browser sign-in reads that sign-in before anything is
+// opened from it, so that a sign-out landing between a silent completion
+// and the redemption is not outlived by the session the code would open
+// (issuer.Storage.signInStands). The refresh path pays nothing for it.
 var Budgets = []Budget{
 	{
-		Grant: "authorization_code", MaxWrites: 9, MaxReads: 4, Resolutions: 1,
+		Grant: "authorization_code", MaxWrites: 9, MaxReads: 5, Resolutions: 1,
 		drive: func(t *testing.T, h *Harness) Counts {
 			code := h.SignIn()
 			if code == "" {
