@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/issuer"
@@ -305,5 +307,30 @@ func TestACodeRedeemedDuringSignOutEverythingDoesNotSurvive(t *testing.T) {
 
 	if left := rig.listed(t, ssoEmail); len(left) != 0 {
 		t.Errorf("sessions survived sign out everything: %v", left)
+	}
+}
+
+// "Your own" is the identity as the session index keys it, lower-cased,
+// not as Unicode case folding sees it: "ſam" folds to "sam" and is filed
+// apart from it, so ſam may neither end sam's sessions nor narrow sam's
+// sign-out with a scope.
+func TestYourOwnIsTheIndexKeyNotACaseFold(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	rig.openAgent(t, "sam@north.example", agentClient, "", "sam-agent", time.Now())
+
+	for _, scope := range []accessissuerv1.RevokeScope{
+		accessissuerv1.RevokeScope_REVOKE_SCOPE_EVERYTHING, accessissuerv1.RevokeScope_REVOKE_SCOPE_AGENTS,
+	} {
+		_, err := revoke(t, rig.service(), "ſam@north.example|",
+			&accessissuerv1.RevokeSessionsRequest{Identity: "sam@north.example", Scope: scope})
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("ſam revoking sam's sessions (%s): %v, want permission denied", scope, err)
+		}
+	}
+
+	if len(rig.listed(t, "sam@north.example")) != 1 {
+		t.Error("ſam ended sam's session")
 	}
 }
