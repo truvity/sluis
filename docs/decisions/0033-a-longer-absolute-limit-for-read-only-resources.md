@@ -1,6 +1,6 @@
 # 0033 — A longer absolute limit for read-only resources
 
-**Status:** Accepted; amends [0001](0001-sessions-and-an-absolute-limit.md)
+**Status:** Accepted; amends [0001](0001-sessions-and-an-absolute-limit.md); amended by [0040](0040-agent-class-sessions.md) (the lengthening for read-only resources is deprecated)
 **Date:** 2026-10-03
 
 ## Context
