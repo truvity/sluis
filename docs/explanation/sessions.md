@@ -137,13 +137,23 @@ other client was refusing it. On every request it now asks the same function the
 - **A directory that cannot be reached** is answered from the issuer's hold window, as for a silent sign-in
   ([directory model](directory-model.md)): an admitted person keeps the console for the window (4 hours by default),
   and the sign-in ends past it, or for someone nothing is held for.
-- **A recovery sign-in** (a ServiceAccount) has no directory to ask and is held to the absolute limit only.
+- **A recovery sign-in** has no directory to ask and is held to the absolute limit only. It is recognised by the
+  method recorded when the sign-in began, never by the shape of its subject: a sign-in made through an identity
+  provider is a person whatever its subject looks like, is asked of the directory, and is never the recovery account.
 - **Losing a console role** does not end the sign-in. The console refuses those calls by role, as before, as a
   silent sign-in to a client the person is not entitled to also keeps the sign-in.
 
 A console request makes 4 State reads and no writes, one more than before: the eventually consistent revision read of
 the last-known groups that every refresh already pays. It still makes one directory resolution and one snapshot read,
 because the issuer's check and the console's authorizer share one answer per request.
+
+The issuer's session service (`ListSessions` and `RevokeSessions`, which the account page and the console's Sessions
+page call at the issuer's host) judges a browser's cookie by the same function. A cookie whose sign-in is past the
+absolute limit, or whose person the directory does not admit, proves nobody, and the call is refused as
+`unauthenticated`; an unreachable directory is answered from the hold window, and a bearer token, where one is sent,
+is still checked on its own. The service refuses the cookie and does not end the sign-in: the issuer's pages and the
+console end it on the browser's next visit. A cookie call makes 7 State reads for a person listing their own
+sessions, no writes, and one directory resolution.
 
 ## Who may open which console
 
