@@ -97,8 +97,9 @@ and each must become the recorded class's:
 - `spentLifetime` (decision 9).
 
 **Invariant: index membership never ends before the record does.** An agent session is indexed until its deadline.
-On an engine whose set expiry is the whole set's, an Add never shortens it, so every Add uses the longest horizon
-any class needs. Interactive ids then stay in the sets longer, and the listing's self-repair drops them as today.
+On an engine whose set expiry is the whole set's, an Add must never shorten it, so every Add there uses the one
+horizon `now + max(2 × lifetimes.refresh, lifetimes.agent.absolute)`. Interactive ids then stay in the sets longer,
+and the listing's self-repair drops them as today.
 Required test: an agent session idle for longer than `2 × lifetimes.refresh` is still ended by
 `Issuer.Revoke(identity)`, by a per-client revoke and by a per-browser revoke, and is still listed in the console.
 
@@ -110,17 +111,23 @@ mark the connector clients `session: agent`, then remove `absolute_cap` from tho
 `session: agent`; a later minor release refuses `absolute_cap` above `lifetimes.absolute` and `read_only` with it,
 marked **Breaking:** under [0007](0007-breaking-changes-inside-1x.md). `absolute_cap` as a shortening cap stays.
 
-**5. Bound on revocation latency.** After a person is removed from the directory, an agent chain ends within
-**the access-token cap plus `freshness.refreshInterval`** (15 minutes by default). The access-token cap is
-`lifetimes.agent.access` (at most 1h, 30 minutes by default) or the resource's `ttl_cap` if that is shorter. The hub
-answers from a snapshot that sees the removal within one refresh interval. Every refresh after that is refused,
-because the refresh re-checks the directory (`Storage.entitled` in the refresh path of
-`internal/issuer/storage.go`). The exposure is then the access token already issued. The cap is mandatory, so the
-bound holds for an agent client with no resource as well. While the directory cannot be reached, `Resolver.Resolve`
-(`internal/issuer/resolve.go`) answers with the last-known groups for `lifetimes.hold` (4h) from the last
-authoritative answer, and that window adds to the bound. This is the same for every class.
-`Issuer.Revoke(identity)` forgets the held groups and ends every chain at once, and is the lever when that is too
-long.
+**5. Bound on revocation latency.** The access-token cap is `lifetimes.agent.access` (at most 1h, 30 minutes by
+default) or the resource's `ttl_cap` if that is shorter. It is mandatory, so every bound below holds for an agent
+client with no resource as well. Every refresh re-checks the directory (`Storage.entitled` in the refresh path of
+`internal/issuer/storage.go`), so once the hub reports the removal, the exposure is the access token already issued.
+When the hub reports it depends on its snapshot. `Hub.authoritative` (`internal/hub/hub.go`) answers authoritatively
+while the workspace's last probe succeeded and the snapshot is younger than `freshness.freshnessWindow` (30 minutes
+by default). After a person is removed from the directory, an agent chain ends within:
+
+- **normally**, the access-token cap plus `freshness.refreshInterval` (15 minutes by default): the snapshot
+  refreshes and the removal is seen;
+- **degraded**, when snapshot refreshes fail while the workspace's probe still looks healthy, the access-token cap
+  plus `freshness.freshnessWindow`. After that the hub's answers become non-authoritative.
+
+Once answers are non-authoritative, `Resolver.Resolve` (`internal/issuer/resolve.go`) keeps the last-known groups
+for `lifetimes.hold` (4h) from the last authoritative answer. That window adds to the bound, the same for every
+class, and the owner accepted it for outages. `Issuer.Revoke(identity)` forgets the held groups and ends every chain
+at once, and is the lever when that is too long.
 
 **An authoritative "not live" answer ends the session.** Today a refresh whose person the directory authoritatively
 reports suspended or not found meets `*Refused`, which the refresh path maps to `server_error`: nothing is deleted
@@ -131,13 +138,33 @@ nothing is held) still answers `server_error` and ends nothing, because it is an
 who loses a group but stays live is refused with `invalid_grant` and audited, as today.
 
 **6. An agent authorization never completes silently.** For an agent-class client, `signIn.silent` and the
-single-provider redirect in `signIn.chooser` are bypassed. An interstitial names the client, its origin (for a
-document client), the redirect host, the class and the computed deadline, and asks for one click. With a live
-browser sign-in the click completes against it; without one, the provider buttons are the click. `prompt=none`
-returns `consent_required`. The browser sign-in's own limit stays `lifetimes.absolute` for agent clients:
-`checkSignIn` does not extend it per request as it does for an extended resource. This is what turns a phishing
-document or a forged authorization link into something a person has to read and accept. The cost is about one click
-per 30 days per connection.
+single-provider redirect in `signIn.chooser` are bypassed, and `prompt=none` returns `consent_required`.
+
+The interstitial must be enforced by the server, not merely shown. A page in front of the provider buttons is not
+enough. `/login/<kind>/start?auth=<request>` is a GET that anyone holding the request id can open, so an attacker
+could start `/authorize` for their own document client and send the victim the start link. The provider would return
+silently on its earlier consent, and `callback` → `established` → `Storage.Complete` would deliver the code to the
+attacker. A "consented" flag on the request fails too, because the attacker accepts it in their own browser. A
+one-click page in front of a live sign-in can also be forced by CSRF or clickjacking, and nothing in the service sets
+`frame-ancestors` or `X-Frame-Options` today. So:
+
+- **After authentication.** The interstitial sits after authentication, between `callback`, `silent` or the recovery
+  form and `Storage.Complete`, where it can also say "signed in as". It names the client, its origin (for a document
+  client), the redirect host, the class and the computed deadline.
+- **A bound POST.** Its accept is a POST carrying a token bound to this request **and** this browser, through a
+  cookie. This is the pattern of the recovery form's purpose-bound state and `access.LoginStartedHere` /
+  `access.RecoveryStartedHere` in `internal/access/state.go`.
+- **One refusal point.** `Storage.Complete`, the one place every sign-in converges, refuses an agent-class request
+  unless that browser-bound acceptance is presented.
+- **No framing.** The page is served with `Content-Security-Policy: frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`.
+- **Tests.** A start link opened in another browser does not complete; an accept made in the attacker's browser
+  does not complete the victim's request; the page refuses to be framed.
+
+The browser sign-in's own limit stays `lifetimes.absolute` for agent clients: `checkSignIn` does not extend it per
+request as it does for an extended resource. This turns a phishing document or a forged authorization link into
+something a person has to read and accept in their own browser. The cost is about one click per 30 days per
+connection.
 
 **7. Sign-out: three modes, and revocation never spares.** `endSignIn`'s `sparingLive` bool becomes a three-value
 mode:
@@ -178,11 +205,12 @@ Optionally, a session records the source address and User-Agent at open and at t
 signed-out page must say that agent connections were kept, and must link to the account page's *sign out
 everywhere*.
 
-**9. Spent marks and storage.** A mark is kept until `min(deadline, now + class.refresh)` instead of the deadline
-alone. A token older than the idle window can no longer be told apart as a reuse, but it is refused all the same.
-Assume a host that refreshes each time its 30-minute access token expires, and a mark of about 200 bytes. An agent
-chain then holds at most 14 days × 48 = **672 marks** (about 130 KB), where deadline-only retention would hold 1,440.
-An interactive chain refreshing hourly holds at most 24. A Valkey that backs State must run with `noeviction`, so
+**9. Spent marks and storage.** A mark is kept until the chain's recorded deadline, as `spentLifetime` keeps it today
+against the family's absolute limit. Shorter retention, such as `min(deadline, now + class.refresh)`, was rejected.
+With it, a thief who keeps refreshing could outlast a host that sat idle for more than 14 days: the returning host's
+token would then be merely refused, instead of ending the thief's chain as a reuse. Assume a host that refreshes each
+time its 30-minute access token expires, and a mark of about 200 bytes. An agent chain then holds up to 30 days × 48 =
+**1,440 marks**, about 290 KB. An interactive chain refreshing hourly holds at most 24. A Valkey that backs State must run with `noeviction`, so
 eviction can never remove a session, a pointer, a mark or an index key. A per-session rotation counter, with an alert
 on a chain that rotates much faster than its access-token cap implies, shows a looping host or a misused token.
 
@@ -196,12 +224,14 @@ Each presentation costs two to four State reads (`Sessions.present`, then `ended
 - **Negative cache.** An in-process LRU with a fixed (non-sliding) 5-minute TTL is keyed by the **full** HMAC; the
   8-hex prefix would collide and refuse a valid token. A repeat then costs 0 State calls. The WARN is written once
   per cache entry, and a counter counts the hits.
-- **What may be cached.** Only consistent reads that found no pointer **and** no legacy rotated record, a record that
-  is absent, or a record whose `ExpiresAt` is earlier than `now − (refreshGrace + markAheadTolerance)`. The entry is
-  written only after the refusing path has done its work, so the absolute-limit refusal still audits once.
-- **Invariant: never cached.** A spent mark inside its 30-second grace window or in the 2-second tolerance band past
-  it; a spent mark whose session is live (a reuse that must reach `endReuse`); any failed read. A dead token never
-  comes back, so nothing needs invalidating.
+- **What may be cached.** Only terminal states, read consistently: no pointer **and** no legacy rotated record, or a
+  pointer whose session record is absent. The entry is written only after the refusing path has done its work, so
+  the absolute-limit refusal still audits once.
+- **Invariant: never cached.** A record that is present with `ExpiresAt` in the past, however long ago, because a
+  slow request on another replica can still rotate the chain later than `refreshGrace + markAheadTolerance`. Also
+  never: a spent mark inside its 30-second grace window or in the 2-second tolerance band past it; a spent mark whose
+  session is live (a reuse that must reach `endReuse`); any failed read. A terminal state never comes back, so
+  nothing needs invalidating.
 
 ## Consequences
 
@@ -220,7 +250,8 @@ Each presentation costs two to four State reads (`Sessions.present`, then `ended
     living on the host can take each new token as it is minted.
   - **Who grants the class:** only policy authors mark a client `agent`, through the reviewed policy, and for
     document clients only the installation's `client_documents` block does, never the document.
-- Storage holds up to 672 marks per active agent chain (decision 9), and index sets hold interactive ids longer.
+- Storage holds up to 1,440 marks (about 290 KB) per active agent chain (decision 9), and index sets hold
+  interactive ids longer.
 - An older binary refuses the new policy and configuration keys, so a rollback past this change needs `session` and
   `lifetimes.agent` removed first; recorded agent chains then become interactive (decision 3).
 - 0001's class B (a relying party that keeps its own session) is unaffected: this widens what comes back to the
