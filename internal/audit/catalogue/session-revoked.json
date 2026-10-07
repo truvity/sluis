@@ -15,12 +15,6 @@
       "description": "How many client sessions ended.",
       "x-audit-class": "shared",
       "x-audit-pii": "none"
-    },
-    "sso": {
-      "type": "string",
-      "description": "The browser sign-in the ended session was opened under, when the issuer ended it on a refresh token reuse and left the sign-in alone.",
-      "x-audit-class": "shared",
-      "x-audit-pii": "none"
     }
   }
 }

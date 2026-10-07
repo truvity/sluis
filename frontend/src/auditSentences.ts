@@ -237,7 +237,7 @@ export const roster: Sentences = {
       }
     },
     "roster.session.revoked": {
-      "summary": "A person's sessions were revoked.",
+      "summary": "A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window.",
       "message": {
         "en": "{actor} revoked {subject}'s sessions, ending {data_ended, plural, one {#} other {#}}"
       }

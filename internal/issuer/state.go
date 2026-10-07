@@ -71,6 +71,28 @@ type versionedState interface {
 	Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error
 }
 
+// versionedDeleter is what a [State] offers when it can delete a value
+// only while it is still the revision read. It is optional, and apart from
+// [versionedState] so that a State that wraps one and forwards only that
+// keeps working: ending a reused session uses it so that only one of
+// several concurrent reuses ends it ([Sessions.endReused]), and falls back
+// to a plain delete over a State without it.
+type versionedDeleter interface {
+	// DeleteVersion removes key only while it still holds version:
+	// [errMoved] when it has been written since, [errGone] when it has
+	// been deleted or has expired.
+	DeleteVersion(ctx context.Context, key, version string) error
+}
+
+// deleteVersion deletes what was read at version, or unconditionally when
+// there is no revision to hold it to.
+func deleteVersion(ctx context.Context, state State, key, version string) error {
+	if v, ok := state.(versionedDeleter); ok && version != "" {
+		return v.DeleteVersion(ctx, key, version)
+	}
+	return state.Delete(ctx, key)
+}
+
 // peekingState is what a [State] offers when a writer can later ask, cheaply,
 // whether a value is still the one it wrote. It is optional, and apart from
 // [versionedState]: the last-known groups use it to skip a write only while
@@ -154,9 +176,10 @@ type memoryValue struct {
 }
 
 var (
-	_ State          = (*MemoryState)(nil)
-	_ versionedState = (*MemoryState)(nil)
-	_ peekingState   = (*MemoryState)(nil)
+	_ State            = (*MemoryState)(nil)
+	_ versionedState   = (*MemoryState)(nil)
+	_ versionedDeleter = (*MemoryState)(nil)
+	_ peekingState     = (*MemoryState)(nil)
 )
 
 // NewMemoryState returns an empty store.
@@ -241,6 +264,21 @@ func (m *MemoryState) Replace(_ context.Context, key string, value []byte, ttl t
 		return errMoved
 	}
 	m.set(key, value, ttl)
+	return nil
+}
+
+// DeleteVersion implements [versionedDeleter].
+func (m *MemoryState) DeleteVersion(_ context.Context, key, version string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	held, ok := m.live(key)
+	if !ok {
+		return errGone
+	}
+	if strconv.FormatUint(held.revision, 10) != version {
+		return errMoved
+	}
+	delete(m.values, key)
 	return nil
 }
 

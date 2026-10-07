@@ -17,9 +17,10 @@ type portState struct {
 }
 
 var (
-	_ State          = portState{}
-	_ versionedState = portState{}
-	_ peekingState   = portState{}
+	_ State            = portState{}
+	_ versionedState   = portState{}
+	_ peekingState     = portState{}
+	_ versionedDeleter = portState{}
 )
 
 // NewPortState returns the issuer's [State] over the ports. A value is
@@ -84,6 +85,19 @@ func (p portState) GetVersion(ctx context.Context, key string) ([]byte, string, 
 // Replace implements [versionedState]: an Update at the revision read.
 func (p portState) Replace(ctx context.Context, key string, value []byte, ttl time.Duration, version string) error {
 	_, err := p.state.Update(ctx, key, value, ttl, port.Revision(version))
+	switch {
+	case errors.Is(err, port.ErrConflict):
+		return errMoved
+	case errors.Is(err, port.ErrNotFound):
+		return errGone
+	}
+	return err
+}
+
+// DeleteVersion implements [versionedDeleter]: a DeleteIfRevision at the
+// revision read.
+func (p portState) DeleteVersion(ctx context.Context, key, version string) error {
+	err := p.state.DeleteIfRevision(ctx, key, port.Revision(version))
 	switch {
 	case errors.Is(err, port.ErrConflict):
 		return errMoved

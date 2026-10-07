@@ -20,7 +20,7 @@ Catalogue version 1.9.0, 68 actions.
 | `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. |
 | `roster.github_token.minted` | create | github_app | async | A GitHub App installation token was minted, or refused. Never the token. |
 | `roster.session.ended` | authentication | — | async | A person signed out, ending their sessions. |
-| `roster.session.revoked` | remove | client | async | A person's sessions were revoked. |
+| `roster.session.revoked` | remove | client | async | A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window. |
 | `roster.session.refresh_refused` | authentication | client | async | A session was refused a refresh because its holder is no longer admitted to the client. |
 | `roster.client.secret.created` | create | client | async | The secret of a generated client was made. |
 | `roster.client.secret.adopted` | create | client | async | An existing secret of a generated client was taken as its stored secret, unchanged. |
