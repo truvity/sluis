@@ -23,7 +23,8 @@ import (
 // is.
 //
 // A recovery sign-in completes as a ServiceAccount rather than an
-// address, and it has to survive this: recovery exists for the day
+// address, and it is known by how it was made ([issuer.RecoveryHow]), not
+// by what its subject looks like. It has to survive this: recovery exists for the day
 // nothing else works, and the console is where the operator then
 // connects the first directory.
 //
@@ -43,7 +44,16 @@ func signedIn(read func(http.ResponseWriter, *http.Request) (issuer.SSOSession, 
 		if !ok || session.Identity == "" {
 			return access.Principal{}, false
 		}
-		if account, ok := policy.ParseServiceAccountSubject(session.Identity); ok {
+		// Recovery by what the sign-in RECORDED when it began, never by
+		// the shape of its subject: recovery is the global operator, and a
+		// subject is whatever an identity provider said. A sign-in that
+		// was not made by recovery is a person, asked of the directory
+		// like any other, whatever its subject looks like.
+		if session.How == issuer.RecoveryHow {
+			account, ok := policy.ParseServiceAccountSubject(session.Identity)
+			if !ok {
+				return access.Principal{}, false
+			}
 			return access.Principal{
 				Subject:        session.Identity,
 				Source:         access.SourceRecovery,

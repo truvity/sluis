@@ -122,6 +122,34 @@ var Budgets = []Budget{
 			return counts
 		},
 	},
+	{
+		// The issuer's session service, by the browser's cookie: a person
+		// listing their own sessions, as the console's account page does.
+		// Measured 2026-10-07 on the memory adapter, before and after the
+		// cookie was held to the issuer's own sign-in check (the absolute
+		// limit, the directory): the same, 0 writes, 7 reads (the sign-in's
+		// cookie and record, the workspaces, the revision of the last-known
+		// groups, then the listing's two index reads and the sign-in record
+		// it shows), 1 resolution, 1 snapshot read. The check costs no read
+		// of its own: the limit is arithmetic on the record already read,
+		// and the directory's answer it asks is the one the groups were
+		// already evaluated from.
+		Grant: "session service call", MaxWrites: 0, MaxReads: 7, Resolutions: 1,
+		drive: func(t *testing.T, h *Harness) Counts {
+			if code := h.SignIn(); code == "" {
+				t.Fatal("the sign-in ended in no authorization code")
+			}
+			if _, err := h.OwnSessions(); err != nil {
+				t.Fatalf("first session service call: %v", err)
+			}
+			var err error
+			counts := h.Measure(func() { _, err = h.OwnSessions() })
+			if err != nil {
+				t.Fatalf("session service call: %v", err)
+			}
+			return counts
+		},
+	},
 }
 
 // Run measures every [Budget] and runs the guards over env, each on an
