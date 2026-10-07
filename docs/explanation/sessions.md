@@ -11,6 +11,15 @@ in at one console and opening a second is a redirect with no prompt; it honours 
 `end_session` clears it. Each per-client session points at the SSO session that parents it, so *sign out everywhere*
 is one operation on the parent.
 
+**The cookie is a secret; the sign-in id is a name.** The cookie (`access_issuer_sso`, `__Host-` prefixed when cookies
+are secure) holds a fresh 32-byte random value, base64url. The store keeps only its hash (a labelled SHA-256) as a
+pointer, `issuer:sso-cookie:<hash>`, to the sign-in's id, and the sign-in record carries the same hash. The id is
+what the console and the `sso` field of a listed session show, and it authenticates nothing: seeing one does not let
+anyone be that person. Before this, the cookie *was* the id, so an id seen in a listing was a credential. A cookie set
+by an older version is not accepted: after that upgrade every browser signs in once more. A sign-out from a browser
+still holding such a cookie only clears it; the sessions of that older sign-in end at their own expiry, by a console
+revoke, or by *sign out everywhere*.
+
 Per-client sessions are first-class too, not opaque tokens in a store: a per-identity index of client, how it was
 obtained, issued, expires, last refreshed, so they can be **listed** per identity and per client and **revoked** per
 identity, per client, or one at a time. The index lives in the **shared** store, because an index per process listed

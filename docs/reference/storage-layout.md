@@ -126,6 +126,7 @@ The logical keys the service writes are in [keys](keys.md); how the adapter cond
 | `issuer-code`, `issuer-code-session` | `<id>` | an authorization code, the session it opened |
 | `issuer-token` | `<uuid>` | a minted token's record |
 | `issuer-session`, `issuer-sso`, `issuer-sso-of` | `<id>`, `<id>`, `<identity>` | sessions and the browser's SSO session |
+| `issuer-sso-cookie` | `<hash>` | pointer from the browser's SSO cookie, hashed, to the sign-in id; the record's lifetime. The `issuer-sso` record carries the same hash as `cookie_hash` |
 | `issuer-session-token` | `<hash>` | a live refresh token; for 30 s after a rotation, `spent:<successor>` (the retry grace) |
 | `issuer-session-rotated` | `<hash>` | legacy: a spent token's successor as an older version wrote it; read for one release, never written, then removed |
 | `issuer-held` | `<identity>` | an identity's last-known directory groups, kept for the hold window (`lifetimes.hold`) |
@@ -191,6 +192,7 @@ what the legacy adapter keeps) and what it is now, for every kind:
 | `issuer:code:<id>`, `issuer:code-session:<id>` | `issuer-code`, `issuer-code-session` / `<id>` | none |
 | `issuer:token:<jti>` | `issuer-token` / `<jti>` | none |
 | `issuer:sso:<id>`, `issuer:sso-of:<identity>` | `issuer-sso`, `issuer-sso-of` | none |
+| `issuer:sso-cookie:<hash>` | `issuer-sso-cookie` / `<hash>` | none |
 | `issuer:session:<id>` | `issuer-session` / `<id>` | none |
 | `issuer:session-token:<hash>` | `issuer-session-token` / `<hash>` | none |
 | `issuer:session-rotated:<hash>` (legacy, read only) | `issuer-session-rotated` / `<hash>` | none |
