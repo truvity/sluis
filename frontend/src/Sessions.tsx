@@ -25,7 +25,11 @@ import {
     sessions as sessionsClient,
     until,
 } from "./api";
-import type { Session, SignIn } from "./gen/accessissuer/v1/session_pb";
+import {
+    SessionClass,
+    type Session,
+    type SignIn,
+} from "./gen/accessissuer/v1/session_pb";
 import { paths } from "./router";
 import { Facet, Facets, Failure, Loading, Nothing, Page, Ref } from "./ui";
 
@@ -35,6 +39,23 @@ import { Facet, Facets, Failure, Loading, Nothing, Page, Ref } from "./ui";
  *  because a person's page, a client's page and the installation-wide
  *  listing all show the same row with different columns hidden. */
 
+/** Whether a session is held by software working in the background
+ *  (docs/decisions/0040-agent-class-sessions.md): it outlives a browser
+ *  sign-out, and only a revoke or its deadline ends it. */
+export function isAgent(session: Session): boolean {
+    return session.sessionClass === SessionClass.AGENT;
+}
+
+/** The class and the deadline, as the row's caption says them: the
+ *  deadline is the latest the chain may live however often it is
+ *  refreshed, beside the sliding expiry. */
+function lifetime(session: Session): string {
+    const deadline = session.deadline
+        ? ` · ends by ${until(at(session.deadline))}`
+        : "";
+    return `${isAgent(session) ? "agent" : "interactive"}${deadline}`;
+}
+
 /** One row's worth of a session, plus the button that ends it. Shown
  *  wherever sessions show: a person's page (client only), a client's
  *  page (identity only), and the Sessions rail page (both). Sessions
@@ -43,20 +64,32 @@ import { Facet, Facets, Failure, Loading, Nothing, Page, Ref } from "./ui";
  *  console"). */
 export function SessionsPanel({
     sessions,
+    signIns,
     showIdentity,
     showClient,
     onRevoke,
+    onSignOutBrowser,
     revoking,
     empty,
 }: {
     sessions: Session[];
+    /** The sign-ins still live. A session filed under one that is not
+     *  among them was spared by a sign-out (an agent connection), and its
+     *  group says so. Undefined when the caller has none to give. */
+    signIns?: SignIn[];
     showIdentity?: boolean;
     showClient?: boolean;
     onRevoke: (session: Session) => void;
+    /** Ends one browser: its sign-in and every session filed under it,
+     *  including the agent sessions a sign-out spared. */
+    onSignOutBrowser?: (session: Session) => void;
     revoking?: string;
     empty: React.ReactNode;
 }) {
     if (sessions.length === 0) return <Nothing>{empty}</Nothing>;
+    const live = signIns
+        ? new Set(signIns.map((signIn) => signIn.id))
+        : undefined;
 
     // BY IDENTITY first, then by browser inside it.
     //
@@ -79,9 +112,14 @@ export function SessionsPanel({
             person = { identity: session.identity, groups: [] };
             byIdentity.push(person);
         }
-        const last = person.groups[person.groups.length - 1];
-        if (session.sso && last?.sso === session.sso) {
-            last.items.push(session);
+        // By SIGN-IN id, wherever in the list its sessions fall: an agent
+        // session a sign-out spared stays filed under the sign-in that
+        // ended, and belongs with the rest of that browser.
+        const same = session.sso
+            ? person.groups.find((g) => g.sso === session.sso)
+            : undefined;
+        if (same) {
+            same.items.push(session);
         } else {
             person.groups.push({ sso: session.sso, items: [session] });
         }
@@ -138,9 +176,34 @@ export function SessionsPanel({
                                             bgcolor: "transparent",
                                             lineHeight: 2.5,
                                             fontSize: "0.7rem",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 1,
                                         }}
                                     >
-                                        same browser
+                                        {live && !live.has(group.sso)
+                                            ? "signed-out browser · agent connections kept"
+                                            : "same browser"}
+                                        {onSignOutBrowser ? (
+                                            <Button
+                                                size="small"
+                                                color="warning"
+                                                disabled={
+                                                    revoking === group.sso
+                                                }
+                                                onClick={() =>
+                                                    onSignOutBrowser(
+                                                        group.items[0],
+                                                    )
+                                                }
+                                                sx={{
+                                                    ml: "auto",
+                                                    fontSize: "0.7rem",
+                                                }}
+                                            >
+                                                End this browser
+                                            </Button>
+                                        ) : null}
                                     </ListSubheader>
                                 ) : null}
                                 {group.items.map((session, ii) => (
@@ -205,7 +268,8 @@ export function SessionsPanel({
                                                             at(
                                                                 session.expiresAt,
                                                             ),
-                                                        )}
+                                                        )}{" "}
+                                                        · {lifetime(session)}
                                                     </>
                                                 }
                                                 slotProps={{
@@ -413,9 +477,19 @@ function SessionsTable({
                                 <span>Browser</span>
                             </Tooltip>
                         </TableCell>
+                        <TableCell>
+                            <Tooltip title="Agent: software that keeps its own refresh token and works in the background. A browser sign-out keeps it; a revoke or its deadline ends it.">
+                                <span>Class</span>
+                            </Tooltip>
+                        </TableCell>
                         <TableCell>Opened</TableCell>
                         <TableCell>Last used</TableCell>
                         <TableCell>Expires</TableCell>
+                        <TableCell>
+                            <Tooltip title="The latest it may live, however often it is refreshed.">
+                                <span>Deadline</span>
+                            </Tooltip>
+                        </TableCell>
                         <TableCell align="right" />
                     </TableRow>
                 </TableHead>
@@ -463,6 +537,18 @@ function SessionsTable({
                                     </Tooltip>
                                 ) : null}
                             </TableCell>
+                            <TableCell>
+                                <Typography
+                                    variant="body2"
+                                    color={
+                                        isAgent(session)
+                                            ? undefined
+                                            : "text.secondary"
+                                    }
+                                >
+                                    {isAgent(session) ? "agent" : "interactive"}
+                                </Typography>
+                            </TableCell>
                             <TableCell>{ago(at(session.issuedAt))}</TableCell>
                             <TableCell>
                                 <Typography
@@ -480,6 +566,9 @@ function SessionsTable({
                             </TableCell>
                             <TableCell>
                                 {until(at(session.expiresAt))}
+                            </TableCell>
+                            <TableCell>
+                                {until(at(session.deadline))}
                             </TableCell>
                             <TableCell align="right">
                                 <Button

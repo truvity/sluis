@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -109,6 +110,23 @@ export function Client({
     }
   };
 
+  // The incident lever: this client ended for everybody, agent
+  // connections included. Operator-only on the issuer's side too.
+  const endForEverybody = async () => {
+    if (!window.confirm(`End every session on ${id}, for everybody?`)) return;
+    setBusy("*");
+    setSessionFailure(undefined);
+    try {
+      const response = await sessions.revokeSessions({ clientId: id, everyIdentity: true });
+      onDone?.(`Ended ${response.ended} session${response.ended === 1 ? "" : "s"} on ${id}.`);
+      found.reload();
+    } catch (error) {
+      setSessionFailure(reason(error));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   const client = (policy.value?.clients ?? []).find((c) => c.id === id);
   const people = holders.value?.holders ?? [];
   const machines = (policy.value?.groups ?? [])
@@ -206,11 +224,20 @@ export function Client({
       </Section>
 
       {showSessions ? (
-        <Section title="Open sessions" hint="who is on this client right now">
+        <Section
+          title="Open sessions"
+          hint="who is on this client right now"
+          action={
+            <Button size="small" color="warning" disabled={busy === "*"} onClick={endForEverybody}>
+              End for everybody
+            </Button>
+          }
+        >
           <Loading busy={found.loading} />
           <Failure error={found.error ?? sessionFailure} />
           <SessionsPanel
             sessions={found.value?.sessions ?? []}
+            signIns={found.value?.signIns}
             showIdentity
             onRevoke={revoke}
             revoking={busy}

@@ -9,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/policy"
 )
 
 // Sign-out's three modes (docs/decisions/0040-agent-class-sessions.md,
@@ -368,4 +371,136 @@ func sortedKeys(m map[string]issuer.Session) []string {
 	slices.Sort(out)
 
 	return out
+}
+
+// The operator's lever for a client whose tokens are in doubt: one client
+// ended for every identity, agent sessions included, recorded -- and
+// nobody else's to pull, nor one that can be pulled by leaving the
+// identity out by accident.
+func TestTheOperatorEndsOneClientForEveryIdentity(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	_, id := rig.signedInBrowser(t)
+	rig.open(t, ssoEmail, "argocd", id)
+	rig.openAgent(t, ssoEmail, agentClient, id, "ada-agent", time.Now())
+	rig.openAgent(t, ssoBob, agentClient, "", "bob-agent", time.Now())
+
+	svc := rig.service()
+	operator := "op@north.example|" + policy.GroupOperators
+	everybody := &accessissuerv1.RevokeSessionsRequest{ClientId: agentClient, EveryIdentity: true}
+
+	for name, tc := range map[string]struct {
+		as      string
+		request *accessissuerv1.RevokeSessionsRequest
+		code    connect.Code
+	}{
+		"by a person":           {ssoEmail + "|", everybody, connect.CodePermissionDenied},
+		"naming no client":      {operator, &accessissuerv1.RevokeSessionsRequest{EveryIdentity: true}, connect.CodeInvalidArgument},
+		"naming an identity":    {operator, &accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail, ClientId: agentClient, EveryIdentity: true}, connect.CodeInvalidArgument},
+		"without every_identity": {operator, &accessissuerv1.RevokeSessionsRequest{ClientId: agentClient}, connect.CodeInvalidArgument},
+	} {
+		if _, err := revoke(t, svc, tc.as, tc.request); connect.CodeOf(err) != tc.code {
+			t.Errorf("%s: %v, want %s", name, err, tc.code)
+		}
+	}
+
+	if n := len(rig.listed(t, ssoEmail)) + len(rig.listed(t, ssoBob)); n != 3 {
+		t.Fatalf("a refused revoke ended something: %d sessions left of 3", n)
+	}
+
+	ended, err := revoke(t, svc, operator, everybody)
+	if err != nil || ended != 2 {
+		t.Fatalf("ended %d, %v; want the agent client's 2 sessions", ended, err)
+	}
+
+	if _, kept := rig.listed(t, ssoEmail)["argocd"]; !kept || len(rig.listed(t, ssoEmail)) != 1 || len(rig.listed(t, ssoBob)) != 0 {
+		t.Errorf("left %v and %v, want only ada's argocd", rig.listed(t, ssoEmail), rig.listed(t, ssoBob))
+	}
+
+	for _, token := range []string{"ada-agent", "bob-agent"} {
+		if status, _ := refreshAgent(t, rig.server.URL, agentClient, token); status == http.StatusOK {
+			t.Errorf("%s still refreshes", token)
+		}
+	}
+
+	revoked := rig.trail.Find("roster.session.revoked")
+	if len(revoked) != 1 || revoked[0].GetActor().GetId() != "op@north.example" ||
+		fieldOf(revoked[0], "scope") != issuer.ScopeClientEverywhere || fieldOf(revoked[0], "ended") != float64(2) ||
+		len(revoked[0].GetTargets()) != 1 || revoked[0].GetTargets()[0].GetId() != agentClient {
+		t.Errorf("revoked records = %v, want the operator ending %s everywhere", revoked, agentClient)
+	}
+}
+
+// The console's listing shows each session's class and the deadline it is
+// held to beside its sliding expiry, and keeps an agent session a sign-out
+// spared under the sign-in id that ended, which is no longer among the
+// listing's sign-ins: the console groups it as an ended sign-in.
+func TestTheListingShowsClassAndDeadline(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	b, id := rig.signedInBrowser(t)
+	authTime := time.Now().Truncate(time.Second)
+
+	agent := rig.openAgent(t, ssoEmail, agentClient, id, "agent-token", authTime)
+	if _, err := rig.iss.Sessions().Record(context.Background(), issuer.Opened{
+		Identity: ssoEmail, ClientID: "argocd", How: issuer.HowCode, Token: "argocd-token", SSO: id, AuthTime: authTime,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b.do(http.MethodGet, "/logout")
+	_, other := rig.signedInBrowser(t)
+
+	got, err := list(t, rig.service(), ssoEmail+"|", &accessissuerv1.ListSessionsRequest{Identity: ssoEmail})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got.GetSessions()) != 1 {
+		t.Fatalf("listed %v, want the spared agent session", got.GetSessions())
+	}
+
+	row := got.GetSessions()[0]
+	if row.GetSessionClass() != accessissuerv1.SessionClass_SESSION_CLASS_AGENT {
+		t.Errorf("class = %s, want agent", row.GetSessionClass())
+	}
+	if !row.GetDeadline().AsTime().Equal(agent.Deadline) || !agent.Deadline.Equal(authTime.Add(30*day)) {
+		t.Errorf("deadline = %s, want %s", row.GetDeadline().AsTime(), authTime.Add(30*day))
+	}
+	if row.GetSso() != id {
+		t.Errorf("sso = %q, want the ended sign-in %q", row.GetSso(), id)
+	}
+
+	for _, signIn := range got.GetSignIns() {
+		if signIn.GetId() == id {
+			t.Error("the ended sign-in is listed as signed in")
+		}
+	}
+	if len(got.GetSignIns()) != 1 || got.GetSignIns()[0].GetId() != other {
+		t.Errorf("sign-ins = %v, want only the live one", got.GetSignIns())
+	}
+
+	// An interactive session, listed before any sign-out, carries its class
+	// and the installation's absolute limit.
+	rig2 := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	_, id2 := rig2.signedInBrowser(t)
+	if _, err = rig2.iss.Sessions().Record(context.Background(), issuer.Opened{
+		Identity: ssoEmail, ClientID: "argocd", How: issuer.HowCode, Token: "argocd-token", SSO: id2, AuthTime: authTime,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = list(t, rig2.service(), ssoEmail+"|", &accessissuerv1.ListSessionsRequest{Identity: ssoEmail})
+	if err != nil || len(got.GetSessions()) != 1 {
+		t.Fatalf("listed %v, %v", got.GetSessions(), err)
+	}
+
+	row = got.GetSessions()[0]
+	if row.GetSessionClass() != accessissuerv1.SessionClass_SESSION_CLASS_INTERACTIVE ||
+		!row.GetDeadline().AsTime().Equal(authTime.Add(issuer.DefaultAbsoluteLifetime)) {
+		t.Errorf("class %s deadline %s, want interactive and %s", row.GetSessionClass(), row.GetDeadline().AsTime(),
+			authTime.Add(issuer.DefaultAbsoluteLifetime))
+	}
 }

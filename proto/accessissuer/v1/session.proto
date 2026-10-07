@@ -43,6 +43,21 @@ enum How {
   HOW_EXCHANGE = 3;
 }
 
+// Who holds a refresh chain (docs/decisions/0040-agent-class-sessions.md).
+// It decides how long the chain lives and whether a person's browser
+// sign-out ends it.
+enum SessionClass {
+  // A session recorded before classes existed, which is interactive.
+  SESSION_CLASS_UNSPECIFIED = 0;
+  // A person at a browser: held to the installation's lifetimes, and
+  // ended by their sign-out.
+  SESSION_CLASS_INTERACTIVE = 1;
+  // Software that keeps its own refresh token and works in the
+  // background, such as an MCP host: held to the agent class's lifetimes,
+  // and kept when the person signs a browser out. Every revoke ends it.
+  SESSION_CLASS_AGENT = 2;
+}
+
 // Session is one refresh token, described. The token itself is never
 // here: this is the index that makes them listable and revocable, and an
 // index that carried the credential would be a second place to steal it
@@ -64,8 +79,17 @@ message Session {
   // The browser (SSO) session this one was opened from, empty for a flow
   // with no browser -- a device code redeemed by a CLI, an exchange. A
   // console groups a person's sessions under this so that "this laptop"
-  // reads as one thing, and *sign out everywhere* is what ends it.
+  // reads as one thing, and *sign out everywhere* is what ends it. An
+  // agent session a sign-out spared stays filed under the sign-in that
+  // ended, which is then no longer among the listing's sign_ins.
   string sso = 8;
+  // Who holds the chain.
+  SessionClass session_class = 9;
+  // The latest the chain may live, however often it is refreshed: its
+  // auth_time plus the absolute limit its class and resource allow, as
+  // the policy and configuration stand now. Unset for a chain with no such
+  // limit (an exchange's). expires_at is the sliding end beside it.
+  google.protobuf.Timestamp deadline = 10;
 }
 
 message ListSessionsRequest {
@@ -132,9 +156,10 @@ message SignIn {
 }
 
 message RevokeSessionsRequest {
-  // The identity whose sessions to end. Required, always: revocation is
-  // about somebody, and a call that could omit them is a call that could
-  // sign out the installation by mistake.
+  // The identity whose sessions to end. Required, unless every_identity
+  // names one client for everybody: revocation is about somebody, and a
+  // call that could omit them by accident is a call that could sign out
+  // the installation by mistake.
   string identity = 1;
   // Narrow to one client, or to one session. Empty means every session
   // this identity holds — "sign out everywhere".
@@ -151,6 +176,12 @@ message RevokeSessionsRequest {
   //
   // Naming this ends the sign-in and every session under it.
   string sso = 4;
+  // End ONE CLIENT for everybody: with client_id set and identity empty,
+  // every session of that client, whoever holds it. Operator-only, and
+  // explicit rather than inferred from an empty identity, which would
+  // otherwise be the mistake the identity rule above exists to refuse.
+  // The incident lever for a client whose tokens are in doubt.
+  bool every_identity = 5;
 }
 
 message RevokeSessionsResponse {

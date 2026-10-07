@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/truvity/audit/sdk/record"
@@ -281,7 +282,7 @@ func (s *SessionsService) ListSessions(
 	}
 
 	for i := range page {
-		out.Sessions = append(out.Sessions, described(page[i]))
+		out.Sessions = append(out.Sessions, described(page[i], s.sessions.DeadlineOf(page[i])))
 	}
 
 	// The sign-ins behind them, on the FIRST page only: they are not
@@ -370,6 +371,15 @@ func (s *SessionsService) RevokeSessions(
 	}
 
 	identity := strings.TrimSpace(req.Msg.GetIdentity())
+
+	// One client for everybody: the incident lever for a client whose
+	// tokens are in doubt (docs/decisions/0040-agent-class-sessions.md,
+	// decision 7). Asked for by name, never inferred from a missing
+	// identity, and an operator's.
+	if req.Msg.GetEveryIdentity() {
+		return s.revokeClientEverywhere(ctx, who, req.Msg)
+	}
+
 	if identity == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("name the identity whose sessions to end"))
@@ -503,6 +513,44 @@ func (s *SessionsService) RevokeSessions(
 	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
 }
 
+// ScopeClientEverywhere is the scope of the revoke that ends one client's
+// sessions for every identity.
+const ScopeClientEverywhere = "one client, every identity"
+
+// revokeClientEverywhere ends every session of one client, whoever holds
+// it, for an operator: [Query] by client alone, which the
+// `issuer:sessions-for:` index already answers. Nothing about a session's
+// class is asked: it ends agent and interactive sessions alike. Nobody is
+// told by Back-Channel Logout, as for the per-client revoke of one person.
+func (s *SessionsService) revokeClientEverywhere(
+	ctx context.Context, who caller, msg *accessissuerv1.RevokeSessionsRequest,
+) (*connect.Response[accessissuerv1.RevokeSessionsResponse], error) {
+	if !who.operator {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("ending a client for everybody is an operator's"))
+	}
+
+	clientID := strings.TrimSpace(msg.GetClientId())
+	if clientID == "" || strings.TrimSpace(msg.GetIdentity()) != "" ||
+		strings.TrimSpace(msg.GetSso()) != "" || strings.TrimSpace(msg.GetSessionId()) != "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("every_identity takes a client_id and nothing else"))
+	}
+
+	ended, err := s.sessions.Revoke(ctx, Query{ClientID: clientID})
+	if err != nil {
+		// Recorded with what did end: a revocation that stops halfway
+		// has still ended those.
+		s.revoked(ctx, who.identity, "", clientID, ScopeClientEverywhere, ended)
+
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	s.revoked(ctx, who.identity, "", clientID, ScopeClientEverywhere, ended)
+
+	return connect.NewResponse(&accessissuerv1.RevokeSessionsResponse{Ended: int32(ended)}), nil
+}
+
 // withInvolved adds to the sessions held those involved clients that held
 // none in the same sign-in, so a client gets one logout token per sign-in.
 func withInvolved(held, involved []Session) []Session {
@@ -541,16 +589,26 @@ func boolToCount(gone bool) int32 {
 	return 0
 }
 
-// described puts one session on the wire.
-func described(s Session) *accessissuerv1.Session {
+// described puts one session on the wire, with its class and the deadline
+// it is held to now ([Sessions.DeadlineOf]): zero for none.
+func described(s Session, deadline time.Time) *accessissuerv1.Session {
 	out := &accessissuerv1.Session{
-		Id:        s.ID,
-		Identity:  s.Identity,
-		ClientId:  s.ClientID,
-		How:       howOf(s.How),
-		IssuedAt:  timestamppb.New(s.IssuedAt),
-		ExpiresAt: timestamppb.New(s.ExpiresAt),
-		Sso:       s.SSO,
+		Id:           s.ID,
+		Identity:     s.Identity,
+		ClientId:     s.ClientID,
+		How:          howOf(s.How),
+		IssuedAt:     timestamppb.New(s.IssuedAt),
+		ExpiresAt:    timestamppb.New(s.ExpiresAt),
+		Sso:          s.SSO,
+		SessionClass: accessissuerv1.SessionClass_SESSION_CLASS_INTERACTIVE,
+	}
+
+	if s.Agent() {
+		out.SessionClass = accessissuerv1.SessionClass_SESSION_CLASS_AGENT
+	}
+
+	if !deadline.IsZero() {
+		out.Deadline = timestamppb.New(deadline)
 	}
 
 	if !s.LastRefreshed.IsZero() {
