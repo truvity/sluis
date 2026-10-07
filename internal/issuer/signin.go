@@ -1152,6 +1152,7 @@ const pageHTML = `<!doctype html><meta charset="utf-8"><title>%s</title>
  h1{font-size:20px;margin:0 0 4px} p{margin:12px 0}
  input{width:100%%;padding:8px;border:1px solid #d9dee6;border-radius:4px;font:inherit}
  button,.btn{display:inline-block;padding:8px 14px;border:0;border-radius:4px;background:#0e7c7b;color:#fff;font:inherit;text-decoration:none;cursor:pointer}
+ button:disabled{opacity:.55;cursor:default}
  .note{font-size:14px;color:#6b7383}
  .warn{font-size:13px;color:#8a4b21;background:#fdf3e7;border:1px solid #f0d9c0;border-radius:4px;padding:8px 10px}
  pre{font-size:13px;background:#f3f5f8;border:1px solid #d9dee6;border-radius:4px;padding:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
