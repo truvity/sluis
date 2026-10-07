@@ -23,7 +23,7 @@ Add or change an audit action without stopping the service at the next start.
 
 ### 1. Edit and bump
 
-**Run** change `internal/audit/catalogue/roster.yaml` and set a new `version` (the current one is 1.7.0). Save the
+**Run** change `internal/audit/catalogue/roster.yaml` and set a new `version` (the current one is the `version` already in that file; bump it from there). Save the
 released document as `internal/audit/catalogue/testdata/released/roster-<version>.yaml`, a copy of the file as shipped.
 **Expect** the diff to hold the document, its schemas, and the fixture.
 **Verify** next step.

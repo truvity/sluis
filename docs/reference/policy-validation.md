@@ -14,10 +14,9 @@ a login. Test a file before it ships: [how-to/test-the-policy.md](../how-to/test
   `private` or `internal`.
 - A client's `display_name` or `description` that is not one bounded line; `sign_in_exchange` on a client that is not
   `public`; a confidential client without a `secret`; an empty `requires`.
-- `session: agent` on a client or on `client_documents`, in this release: agent-class sessions become available with
-  the release that adds their consent page ([policy-clients.md](policy-clients.md#agent-class-sessions)).
-- `session` on an `exchange` client, and `session: agent` together with `sign_in_exchange: true`. A `session: agent` client
-  with `signed_out` or `backchannel_logout_uri` only warns ([policy-clients.md](policy-clients.md#agent-class-sessions)).
+- `session` on an `exchange` client, and `session: agent` together with `sign_in_exchange: true`. `session: agent` on
+  its own loads, on a client or on `client_documents`; a `session: agent` client with `signed_out` or
+  `backchannel_logout_uri` only warns ([policy-clients.md](policy-clients.md#agent-class-sessions)).
 - A resource whose id is not an absolute URI without a fragment, or whose `requires` names no declared group.
 - `client_documents` with an origin carrying a scheme, a path or a wildcard, with `origins` and no `requires`, or with
   `requires` or `ttl_cap` and no `origins`.

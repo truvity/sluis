@@ -17,6 +17,10 @@ Make sluis record into an audit installation and show its Audit page in the cons
   On Kubernetes sluis sends the document and schemas itself when it registers; a writer that has no registry (a Lambda)
   must be given the whole directory, not only the YAML, or it fails every cold start and the records go to its dead-letter
   queue. See [change the audit catalogue](change-the-audit-catalogue.md).
+- **Upgrade the audit writer before the issuer when the catalogue moves.** Recording is best effort, so an issuer that
+  emits fields the writer's catalogue lacks loses those records. Catalogue 1.10.0 (agent class and deadline on
+  `roster.person.signed_in`, `spared` on `roster.session.ended`) needs the writer to hold it first: a Lambda writer
+  needs the release asset `roster-1.10.0.yaml` and its schemas.
 - **The one service account must be mapped to the source `roster`**: the controllers run as the one process and record
   with its token.
 

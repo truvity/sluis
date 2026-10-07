@@ -459,8 +459,8 @@ on the whole installation, needs the `all:access-roster:operator` group.
 
 | RPC | Auth | Request | Response | Notes |
 |---|---|---|---|---|
-| `ListSessions` | own identity; operator for any other identity, for a client alone, for the global listing, and for `contains` | `identity?`, `client_id?`, `contains?`, `page_size?`, `page_token?` | `sessions[]{id, identity, client_id, how, issued_at, expires_at, last_refreshed?, sso}`, `next_page_token`, `sign_ins[]{id, identity, how, auth_time, expires_at}` | newest first; naming neither identity nor client lists every session. `contains` reads the two filters as substrings. `how` is `HOW_CODE` (browser), `HOW_DEVICE` or `HOW_EXCHANGE`. Zero `page_size` picks 50, capped at 500. `sign_ins` (one per browser, unpaged) come on the first page only. A refused call is `permission_denied` |
-| `RevokeSessions` | own identity; operator for anyone's | `identity`, `client_id?`, `session_id?`, `sso?` | `ended` | `identity` is required (`invalid_argument` if empty). `session_id` ends one session; `sso` ends one browser's sign-in and every session under it; `client_id` ends that client's sessions and leaves the sign-in; none of the three ends everything the identity holds and its sign-ins ("sign out everywhere"). An id that is absent or belongs to someone else ends nothing and answers `ended: 0`, so ids cannot be probed. Idempotent. Audited as `roster.session.revoked` |
+| `ListSessions` | own identity; operator for any other identity, for a client alone, for the global listing, and for `contains` | `identity?`, `client_id?`, `contains?`, `page_size?`, `page_token?` | `sessions[]{id, identity, client_id, how, issued_at, expires_at, last_refreshed?, sso, session_class, deadline}`, `next_page_token`, `sign_ins[]{id, identity, how, auth_time, expires_at}` (ended sign-ins included while they hold sessions) | newest first; naming neither identity nor client lists every session. `contains` reads the two filters as substrings. `how` is `HOW_CODE` (browser), `HOW_DEVICE` or `HOW_EXCHANGE`. Zero `page_size` picks 50, capped at 500. `sign_ins` (one per browser, unpaged) come on the first page only. A refused call is `permission_denied` |
+| `RevokeSessions` | own identity; operator for anyone's | `identity`, `client_id?`, `session_id?`, `sso?`, `every_identity?` | `ended` | `identity` is required (`invalid_argument` if empty), except with `every_identity`, which with a `client_id` and no identity ends that client's sessions for every identity (operator only, audited with scope `one client, every identity`). `session_id` ends one session; `sso` ends one browser's sign-in and every session under it; `client_id` ends that client's sessions and leaves the sign-in; none of the three ends everything the identity holds and its sign-ins ("sign out everywhere"). An id that is absent or belongs to someone else ends nothing and answers `ended: 0`, so ids cannot be probed. Idempotent. Audited as `roster.session.revoked` |
 
 ## The audit trail
 
@@ -476,7 +476,7 @@ pass, and only for somebody signed in. See
 [read the audit trail](../how-to/read-the-audit-trail.md).
 The actions and what each carries are the catalogue,
 [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
-(version 1.6.0, with the `roster.slack_*` actions). The GitHub and Slack
+(its `version` is in the file, and in the [audit actions](../reference/audit-actions.md) table). The GitHub and Slack
 controllers record for themselves, each with its own service-account token.
 
 ## Installation tokens at `/token`

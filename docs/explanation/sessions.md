@@ -161,13 +161,43 @@ keeps its agent chains until they end. A chain recorded before the class existed
 during a rollout, is interactive. A client document cannot choose its class; only the installation's policy can.
 
 A token exchange of a sign-in (`sign_in_exchange`) refuses a token whose session is agent-class, whatever the client's
-row says now. Revocation never consults the class: *sign out everywhere*, a per-client revoke, removal from the
-directory and refresh-token reuse end an agent chain as they end any other.
+row says now.
 
-**Refused at load in this release.** Two parts of the design are still to come: a consent page that makes an agent
-authorization visible to the person instead of completing silently, and a browser sign-out that spares agent sessions
-(decisions 6 and 7 of the ADR). Until they ship, a policy that says `session: agent` is refused when it is loaded: the
-key is in the schema, and agent-class sessions become available with the release that adds the consent page.
+### The consent page
+
+An agent authorization never completes silently, because a month-long grant obtained without the person seeing it is
+the phishing case at its worst. After the person signs in, or from the browser's existing sign-in, they are shown a
+page once per authorization of an agent client. It names the client, the origin of a document client, the host the
+client returns to, that this is a background connection, the computed deadline (never a nominal 30 days) and who is
+signed in. The connection is made only when they press *Allow*. `prompt=none` for an agent client is answered
+`consent_required`, and the chooser is shown for one even when a single directory is configured.
+
+The page is enforced by the server, not merely shown. The accept is a POST that carries a token bound to this
+authorization request, this person, their sign-in and this browser, kept in a cookie of its own (`__Host-` prefixed
+when cookies are secure, HttpOnly, SameSite=Lax). It is checked again where every sign-in completes, and the click
+re-checks the sign-in. A start link sent to somebody else, an accept posted from another browser, or the page in a
+frame therefore completes nothing; the page is served with `frame-ancestors 'none'` and `X-Frame-Options: DENY`. The
+browser sign-in itself is still held to `lifetimes.absolute`, so the cost of the grant is about one click per 30 days
+per connection.
+
+### Sign-out keeps agent connections, and says so
+
+Three things end a sign-in, and they treat agent sessions differently:
+
+| What happens | Agent sessions |
+|---|---|
+| The person signs out (`/logout`, or `/end_session`) | kept: not revoked, no Back-Channel Logout sent to their clients, still filed under the ended sign-in |
+| The browser sign-in passes its own absolute limit | kept, like every other live chain |
+| Another person signs in in the same browser | ended, with everything else the first person opened |
+
+The signed-out page says that agent connections were kept and links to *sign out everywhere*. When `/end_session`
+names an agent client, by `client_id` or by the audience of its `id_token_hint`, that client's own sessions under the
+sign-in end too. A hint proves nothing, so the name is used only to end more, never less.
+
+Everything that revokes ignores the class: *sign out everywhere*, a per-client revoke, a per-browser revoke, removal
+from the directory and refresh-token reuse end an agent chain as they end any other. The console groups sessions under
+their sign-in, ended sign-ins included, so that revoking one browser still reaches the agent sessions its sign-out
+spared ([the console](console.md#the-sessions-page)).
 
 ## What the console asks of the SSO session
 

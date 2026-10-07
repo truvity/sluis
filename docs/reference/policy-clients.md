@@ -178,11 +178,20 @@ Refused at load: `session` on an `exchange` client, which opens no chain, and `s
 a month long in effect. Warned at start: `session: agent` on a client with `signed_out` or `backchannel_logout_uri`,
 which describe a browser-facing application.
 
-**Refused at load in this release.** The consent page that stops an agent authorization completing silently, and
-sign-out sparing agent sessions, arrive in a later release (decisions 6 and 7 of the ADR). Until then `session: agent`,
-on a client or on `client_documents`, is accepted by the schema and refused when the policy is loaded, with an error
-saying agent-class sessions become available with the release that adds the consent page. Why the class exists and how
-a chain ends:
+**The consent page.** An agent authorization never completes silently. After the person signs in they are shown a
+page, once per authorization of the client, that names the client, its origin (for a document client), the host it
+returns to, the class and the computed deadline. The connection is made only when they accept it in their own browser.
+`prompt=none` for an agent client is answered `consent_required`.
+
+**Sign-out.** A person's own sign-out (`/logout`, `/end_session`) ends their interactive sessions and keeps their agent
+sessions; the signed-out page says so. A sign-in that passes its own limit keeps every live chain, and another person
+signing in in the same browser keeps nothing. *Sign out everywhere*, a per-client revoke, the operator's revoke of one
+client for everybody, removal from the directory and refresh-token reuse end agent sessions. `/end_session` that names
+an agent client, by `client_id` or by its `id_token_hint`, ends that client's sessions too.
+
+Removing a client or an origin from the policy only stops its chains, because the client is then unknown at refresh;
+it does not end them, and they would resume within their idle window if the row came back. To end them, revoke the
+client's sessions first. Why the class exists and how a chain ends:
 [sessions](../explanation/sessions.md#agent-class-sessions).
 
 ## Groups override
