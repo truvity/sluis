@@ -734,7 +734,10 @@ func TestRotationSpendsTheOldPointerAsSpentSuccessorUntilTheSessionEnds(t *testi
 		if _, opened := mark.successor("t1"); opened {
 			t.Error("the mark's successor opened with a token other than the spent one")
 		}
-		if strings.Contains(raw, "t1") {
+		// A field of its own, not a substring: the sealed field is random
+		// base64url, and "t1" turns up in it by chance about once a hundred
+		// runs.
+		if slices.Contains(strings.Split(raw, ":"), "t1") {
 			t.Errorf("the mark %q holds the successor in plain", raw)
 		}
 		if raw, _ = e.rawPointer(t, "t1"); raw != session.ID {
