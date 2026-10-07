@@ -121,9 +121,11 @@ var (
 // DefaultPollInterval is how often a Watch lists its prefix.
 const DefaultPollInterval = time.Second
 
+// opTimeout bounds every call, whatever deadline its context carries. It is a
+// variable only so a test can shorten it.
+var opTimeout = 15 * time.Second
+
 const (
-	// opTimeout bounds a call whose context has no deadline.
-	opTimeout = 15 * time.Second
 	// tableWait bounds how long a newly created table may take to be active.
 	tableWait = 90 * time.Second
 	// maxKey is DynamoDB's limit on a sort key, in bytes.
@@ -236,8 +238,6 @@ func New(ctx context.Context, api API, cfg Config, opts ...Option) (*Store, erro
 	for _, opt := range opts {
 		opt(s)
 	}
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
 	if cfg.Create {
 		if err := s.createTable(ctx); err != nil {
 			return nil, unavailable(fmt.Errorf("table %q: %w", cfg.Table, err))
@@ -250,7 +250,8 @@ func New(ctx context.Context, api API, cfg Config, opts ...Option) (*Store, erro
 }
 
 func (s *Store) createTable(ctx context.Context) error {
-	_, err := s.api.CreateTable(ctx, &ddb.CreateTableInput{
+	cctx, cancel := withTimeout(ctx)
+	_, err := s.api.CreateTable(cctx, &ddb.CreateTableInput{
 		TableName:   &s.table,
 		BillingMode: types.BillingModePayPerRequest,
 		AttributeDefinitions: []types.AttributeDefinition{
@@ -262,13 +263,16 @@ func (s *Store) createTable(ctx context.Context) error {
 			{AttributeName: aws.String(attrSK), KeyType: types.KeyTypeRange},
 		},
 	})
+	cancel()
 	var inUse *types.ResourceInUseException
 	if err != nil && !errors.As(err, &inUse) {
 		return err
 	}
 	deadline := time.Now().Add(tableWait)
 	for {
-		out, err := s.api.DescribeTable(ctx, &ddb.DescribeTableInput{TableName: &s.table})
+		dctx, cancel := withTimeout(ctx)
+		out, err := s.api.DescribeTable(dctx, &ddb.DescribeTableInput{TableName: &s.table})
+		cancel()
 		if err == nil && out.Table != nil && out.Table.TableStatus == types.TableStatusActive {
 			break
 		}
@@ -281,7 +285,9 @@ func (s *Store) createTable(ctx context.Context) error {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	_, err = s.api.UpdateTimeToLive(ctx, &ddb.UpdateTimeToLiveInput{
+	uctx, cancel := withTimeout(ctx)
+	defer cancel()
+	_, err = s.api.UpdateTimeToLive(uctx, &ddb.UpdateTimeToLiveInput{
 		TableName:               &s.table,
 		TimeToLiveSpecification: &types.TimeToLiveSpecification{AttributeName: aws.String(attrExpires), Enabled: aws.Bool(true)},
 	})
@@ -315,10 +321,12 @@ func (s *Store) Advance(d time.Duration) { s.offset.Add(int64(d)) }
 
 func (s *Store) clock() time.Time { return s.now().Add(time.Duration(s.offset.Load())) }
 
+// withTimeout caps one call at opTimeout whatever deadline the caller's context
+// carries: context keeps the earlier of the two, so a shorter caller deadline
+// still wins, while a long one (a Lambda invocation's, say) no longer lets an
+// operation, its SDK retries or the HTTP client run on past opTimeout. A loop
+// over pages applies it to each page, not to the loop.
 func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, ok := ctx.Deadline(); ok {
-		return ctx, func() {}
-	}
 	return context.WithTimeout(ctx, opTimeout)
 }
 

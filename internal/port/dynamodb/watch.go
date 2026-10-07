@@ -13,8 +13,6 @@ import (
 
 // snapshot is every live key under the prefix and its revision.
 func (s *Store) snapshot(ctx context.Context, prefix string) (map[string]port.Revision, error) {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
 	out := map[string]port.Revision{}
 	err := s.iterate(ctx, prefix, "", 0, func(it item) bool {
 		out[it.key] = it.rev

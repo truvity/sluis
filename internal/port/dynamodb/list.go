@@ -55,7 +55,9 @@ func scanFilterState(prefix string) *ddb.ScanInput {
 func (s *Store) scan(ctx context.Context, in *ddb.ScanInput, fn func(item) bool) error {
 	in.TableName = &s.table
 	for {
-		out, err := s.api.Scan(ctx, in)
+		pctx, cancel := withTimeout(ctx)
+		out, err := s.api.Scan(pctx, in)
+		cancel()
 		if err != nil {
 			return unavailable(err)
 		}
@@ -98,7 +100,9 @@ func (s *Store) query(ctx context.Context, pk, skPrefix, prefix, after string, h
 
 func (s *Store) queryPages(ctx context.Context, in *ddb.QueryInput, fn func(item) bool) error {
 	for {
-		out, err := s.api.Query(ctx, in)
+		pctx, cancel := withTimeout(ctx)
+		out, err := s.api.Query(pctx, in)
+		cancel()
 		if err != nil {
 			return unavailable(err)
 		}
@@ -127,8 +131,6 @@ func (s *Store) List(ctx context.Context, prefix, page string, limit int) (port.
 	if limit <= 0 {
 		limit = port.DefaultPage
 	}
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
 	var out port.Page
 	err = s.iterate(ctx, prefix, after, limit+1, func(it item) bool {
 		if len(out.Records) == limit {
@@ -147,8 +149,6 @@ func (s *Store) List(ctx context.Context, prefix, page string, limit int) (port.
 // ExportState implements [port.StateExporter]: the live records under the
 // prefix with what is left of each lifetime, which `expires` holds.
 func (s *Store) ExportState(ctx context.Context, prefix string, fn func(port.Exported) error) error {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
 	var ferr error
 	err := s.iterate(ctx, prefix, "", 0, func(it item) bool {
 		ferr = fn(port.Exported{Key: it.key, Value: slices.Clone(it.value), TTL: s.remaining(it)})
