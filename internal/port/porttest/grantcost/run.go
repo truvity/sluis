@@ -115,14 +115,19 @@ var Budgets = []Budget{
 	},
 	{
 		// The same dead refresh token presented again, as a host looping on
-		// an ended chain does: refused from the issuer's in-process
+		// an ended chain does, once a second dead verdict a minute after
+		// the first has confirmed it: refused from the issuer's in-process
 		// negative cache before anything is read
-		// (docs/decisions/0040-agent-class-sessions.md, decision 10).
-		// Measured 2026-10-07 on the memory adapter and the DynamoDB fake:
-		// 0 writes, 0 reads, no resolution. It was 4 reads before.
+		// (docs/decisions/0040-agent-class-sessions.md, decision 10). Until
+		// the confirmation every presentation costs what the first does.
+		// Measured 2026-10-07 on the memory adapter, the DynamoDB fake and
+		// LocalStack: 0 writes, 0 reads, no resolution. It was 4 reads
+		// before.
 		Grant: "refresh_token (dead, repeated)", MaxWrites: 0, MaxReads: 0, Resolutions: 0,
 		drive: func(t *testing.T, h *Harness) Counts {
 			dead := deadRefreshToken(t, h)
+			wantDeadRefused(t, h.Refresh(dead))
+			h.Advance(time.Minute + time.Second)
 			wantDeadRefused(t, h.Refresh(dead))
 			var refused Tokens
 			counts := h.Measure(func() { refused = h.Refresh(dead) })

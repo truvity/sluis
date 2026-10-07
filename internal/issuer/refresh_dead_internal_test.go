@@ -11,48 +11,100 @@ import (
 // The negative cache's own rules: its bound, its fixed TTL, its key, and
 // which states [Sessions.present] calls dead.
 
-func TestTheDeadRefreshCacheIsBoundedAndEvictsTheLeastRecentlyRefused(t *testing.T) {
+// confirmedDead leaves the cache holding sum as confirmed dead: two verdicts a
+// confirmation delay apart.
+func confirmedDead(cache *deadRefreshes, clock *gcClock, sums ...[sha256.Size]byte) {
+	for _, sum := range sums {
+		cache.dead(sum)
+	}
+	clock.advance(deadRefreshConfirm)
+	for _, sum := range sums {
+		cache.dead(sum)
+	}
+}
+
+func TestTheDeadRefreshCacheIsBoundedAndEvictsTheLeastRecentlySeen(t *testing.T) {
 	t.Parallel()
 	clock := newGCClock()
-	cache := newDeadRefreshes(fingerprintKey([]byte("a-seed")), 3, deadRefreshTTL, clock.now)
+	cache := newDeadRefreshes(fingerprintKey([]byte("a-seed")), 3, deadRefreshConfirm, deadRefreshTTL, clock.now)
 	a, b, c, d := cache.sum("a"), cache.sum("b"), cache.sum("c"), cache.sum("d")
 
 	for _, sum := range [][sha256.Size]byte{a, b, c} {
-		if !cache.add(sum) {
+		if !cache.dead(sum) {
 			t.Fatal("a new entry was reported as already there")
 		}
 	}
-	if cache.add(b) {
-		t.Error("an entry added twice was reported as new twice; it would be logged twice")
+	if cache.dead(b) {
+		t.Error("a second verdict was reported as a new entry; it would be logged twice")
 	}
+	confirmedDead(cache, clock, a, b, c)
 
-	// a is refused, which makes b the least recently refused.
+	// a is refused, which makes b the least recently seen.
 	if !cache.refused(a) {
-		t.Fatal("a held entry was not refused")
+		t.Fatal("a confirmed entry was not refused")
 	}
-	cache.add(d)
+	cache.dead(d)
 	if n := cache.len(); n != 3 {
 		t.Fatalf("the cache holds %d entries, want its bound of 3", n)
 	}
 	if cache.refused(b) {
-		t.Error("the least recently refused entry survived an add past the bound")
+		t.Error("the least recently seen entry survived an add past the bound")
 	}
-	for name, sum := range map[string][sha256.Size]byte{"a": a, "c": c, "d": d} {
+	for name, sum := range map[string][sha256.Size]byte{"a": a, "c": c} {
 		if !cache.refused(sum) {
-			t.Errorf("entry %s was evicted; only the least recently refused should go", name)
+			t.Errorf("entry %s was evicted; only the least recently seen should go", name)
 		}
+	}
+}
+
+// One dead verdict is never trusted alone: the entry is refused only after
+// a second verdict at least the confirmation delay later, a verdict that is
+// not dead undoes it at any point, and a pending entry nobody confirms is
+// never refused, however long it waits.
+func TestADeadVerdictIsRefusedOnlyOnceConfirmed(t *testing.T) {
+	t.Parallel()
+	clock := newGCClock()
+	cache := newDeadRefreshes(fingerprintKey([]byte("a-seed")), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL, clock.now)
+	sum := cache.sum("dead")
+
+	cache.dead(sum)
+	clock.advance(deadRefreshConfirm - time.Second)
+	cache.dead(sum) // too soon to confirm
+	if cache.refused(sum) {
+		t.Fatal("two verdicts inside the confirmation delay confirmed the entry")
+	}
+	clock.advance(time.Hour)
+	if cache.refused(sum) {
+		t.Fatal("a pending entry nobody confirmed was refused once its delay had passed")
+	}
+
+	cache.dead(sum)
+	clock.advance(deadRefreshConfirm)
+	cache.alive(sum) // a write overtook the first verdict
+	cache.dead(sum)
+	if cache.refused(sum) {
+		t.Fatal("a verdict after one that was not dead confirmed the entry it had undone")
+	}
+	clock.advance(deadRefreshConfirm)
+	cache.dead(sum)
+	if !cache.refused(sum) {
+		t.Fatal("two dead verdicts the delay apart did not confirm the entry")
+	}
+	cache.alive(sum)
+	if cache.refused(sum) {
+		t.Error("a verdict that is not dead did not undo a confirmed entry")
 	}
 }
 
 func TestTheDeadRefreshCacheTTLIsFixedNotSliding(t *testing.T) {
 	t.Parallel()
 	clock := newGCClock()
-	cache := newDeadRefreshes(fingerprintKey([]byte("a-seed")), deadRefreshEntries, deadRefreshTTL, clock.now)
+	cache := newDeadRefreshes(fingerprintKey([]byte("a-seed")), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL, clock.now)
 	sum := cache.sum("dead")
-	cache.add(sum)
+	confirmedDead(cache, clock, sum)
 
-	// Refused all through the five minutes, and refusing it does not extend
-	// them.
+	// Refused all through the five minutes from its confirmation, and
+	// refusing it does not extend them.
 	for range 4 {
 		clock.advance(time.Minute)
 		if !cache.refused(sum) {
@@ -70,8 +122,29 @@ func TestTheDeadRefreshCacheTTLIsFixedNotSliding(t *testing.T) {
 	if n := cache.len(); n != 0 {
 		t.Errorf("an expired entry met by a lookup is still held (%d entries)", n)
 	}
-	if !cache.add(sum) {
-		t.Error("an entry added again after it expired was not reported as new; it would not be logged")
+	if !cache.dead(sum) {
+		t.Error("a verdict after the entry expired was not reported as new; it would not be logged")
+	}
+}
+
+func TestTheDeadRefreshWarningIsRateLimitedAcrossTokens(t *testing.T) {
+	t.Parallel()
+	clock := newGCClock()
+	cache := newDeadRefreshes(fingerprintKey(nil), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL, clock.now)
+
+	for i := range deadRefreshWarnings {
+		if ok, held := cache.warn(); !ok || held != 0 {
+			t.Fatalf("warning %d = %v, %d; want written, nothing held", i, ok, held)
+		}
+	}
+	for range 5 {
+		if ok, _ := cache.warn(); ok {
+			t.Fatal("a warning past the limit was written")
+		}
+	}
+	clock.advance(deadRefreshWarnWindow)
+	if ok, held := cache.warn(); !ok || held != 5 {
+		t.Errorf("the first warning of the next window = %v, %d; want written, saying 5 were held back", ok, held)
 	}
 }
 
@@ -94,7 +167,7 @@ func TestTheFingerprintKeyIsDerivedAndNeverTheSecret(t *testing.T) {
 		t.Error("with no secret, two processes drew the same key")
 	}
 
-	cache := newDeadRefreshes(key, 1, time.Minute, time.Now)
+	cache := newDeadRefreshes(key, 1, time.Minute, time.Minute, time.Now)
 	if got := fingerprint(cache.sum("token")); len(got) != 8 {
 		t.Errorf("fingerprint = %q, want 8 hex", got)
 	}
