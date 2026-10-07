@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/truvity/sluis/internal/logsafe"
 )
 
 // failoverSettle is the least a retry waits for the topology reload that
@@ -111,7 +113,7 @@ func retryAfterFailover(
 	// The key is logged by its prefix only: the rest is a request id or
 	// a token.
 	slog.WarnContext(ctx, "valkey: retrying once after a lost node",
-		"command", name, "key", keyPrefix(key), "error", err)
+		"command", name, "key", logsafe.Value(keyPrefix(key)), "error", logsafe.Error(err))
 
 	// A node that could not be dialled or that said the cluster is down
 	// is in the middle of being replaced, and a retry sent before the

@@ -1,9 +1,11 @@
 package lambdaapp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -273,5 +275,28 @@ func TestOneFunctionDispatchesAnEventToTheControllerOfItsTarget(t *testing.T) {
 	none := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
 	if _, err = none.Handle(context.Background(), json.RawMessage(`{"kind":"tick","target":"acme"}`)); err == nil {
 		t.Error("a function with no controllers ran a tick")
+	}
+}
+
+type closeFails struct{ fakePass }
+
+func (closeFails) Close() error { return errors.New("closed\nlevel=ERROR msg=forged\r") }
+
+func TestALogLineBuiltFromAnErrorWithLineBreaksIsOneRecord(t *testing.T) {
+	var out bytes.Buffer
+	c := &lambdaapp.Controller{
+		Name: "slack",
+		Open: func(context.Context) (lambdaapp.Pass, error) { return &closeFails{fakePass{ran: true}}, nil },
+		Log:  slog.New(slog.NewTextHandler(&out, nil)),
+	}
+	if _, err := handle(t, c, `{"kind":"tick","target":"acme"}`); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	if len(lines) != 2 || strings.ContainsAny(out.String(), "\r") {
+		t.Fatalf("want the warning and the done line, one record each, got %q", out.String())
+	}
+	if !strings.Contains(lines[0], "closedlevel=ERROR") || !strings.Contains(lines[1], "invocation done") {
+		t.Errorf("unexpected records: %q", lines)
 	}
 }
