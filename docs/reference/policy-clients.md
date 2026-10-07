@@ -239,5 +239,6 @@ fails that way, the last good copy is served for at most one hour past its expir
 is never served when the origin answered and the answer is refused (a document that no longer validates, a redirect, a
 4xx, an oversized body). The display name comes from the document, so it is bounded and stripped of anything that moves
 the cursor; with no name, the host is shown. The audit trail records the URL, which is the identity.
-`client_id_metadata_document_supported` appears in the discovery document only while an origin is named. Why this is
+`client_id_metadata_document_supported` appears in the discovery document, and in the RFC 8414 authorization server
+metadata at `/.well-known/oauth-authorization-server`, only while an origin is named. Why this is
 proportionate: [explanation/policy.md](../explanation/policy.md#why-a-self-described-client-is-proportionate).
