@@ -53,7 +53,7 @@ const (
 type Installation struct {
 	// APIVersion is [InstallationVersion].
 	APIVersion string `json:"apiVersion"`
-	// Instance is the installation's name (`hive`, `kernel`). Its SSM root is
+	// Instance is the installation's name (`acme`, `prod`). Its SSM root is
 	// /sluis/<instance>.
 	Instance string `json:"instance"`
 	// Shape is where it runs.

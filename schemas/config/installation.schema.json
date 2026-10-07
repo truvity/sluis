@@ -1597,7 +1597,7 @@
       "type": "object"
     },
     "instance": {
-      "description": "The installation's name (`hive`, `kernel`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private` and `export` would nest under another's tree.",
+      "description": "The installation's name (`acme`, `prod`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private` and `export` would nest under another's tree.",
       "not": {
         "enum": [
           "private",
