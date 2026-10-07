@@ -382,11 +382,32 @@ func (s *SSO) End(ctx context.Context, id string) error {
 		}
 	}
 
-	if err := s.state.Delete(ctx, ssoClientsKey(id)); err != nil {
+	if err := s.dropClients(ctx, id); err != nil {
 		return err
 	}
 
 	return s.state.Delete(ctx, ssoKey(id))
+}
+
+// dropClients empties the set of clients a sign-in involved. A set is not a
+// value: [State.Delete] removes values only, so the set goes member by member
+// through [State.Remove], which drops the set itself with its last member.
+// It costs one read and one write per client involved.
+func (s *SSO) dropClients(ctx context.Context, id string) error {
+	key := ssoClientsKey(id)
+
+	clients, err := s.state.Members(ctx, key)
+	if err != nil {
+		return err
+	}
+
+	for _, client := range clients {
+		if err = s.state.Remove(ctx, key, client); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // EndFor removes every session an identity has, and reports how many.
@@ -417,7 +438,7 @@ func (s *SSO) EndFor(ctx context.Context, identity string) (int, error) {
 			}
 		}
 
-		if err = s.state.Delete(ctx, ssoClientsKey(id)); err != nil {
+		if err = s.dropClients(ctx, id); err != nil {
 			return ended, err
 		}
 
@@ -425,8 +446,12 @@ func (s *SSO) EndFor(ctx context.Context, identity string) (int, error) {
 			return ended, err
 		}
 
-		if err = s.state.Remove(ctx, key, id); err != nil {
-			return ended, err
+		// Both indexes, as End does: the global one would otherwise hold
+		// the id until List found it dangling.
+		for _, index := range []string{ssoAllKey, key} {
+			if err = s.state.Remove(ctx, index, id); err != nil {
+				return ended, err
+			}
 		}
 
 		ended++

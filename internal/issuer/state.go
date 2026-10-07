@@ -37,7 +37,8 @@ type State interface {
 	// same short code at the same moment must not both believe they own
 	// it.
 	SetIfAbsent(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
-	// Delete removes it. Deleting what is not there is not an error.
+	// Delete removes a value. Deleting what is not there is not an error.
+	// It does not remove a set: a set is emptied through [State.Remove].
 	Delete(ctx context.Context, key string) error
 
 	// Add records a member of an unordered set, and refreshes the set's

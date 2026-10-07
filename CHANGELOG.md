@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Ending a sign-in now removes the set of clients it involved, and "sign out everywhere" removes the sign-in from the global index.** `State.Delete` removes values only, so `issuer:sso-clients:<id>` stayed in place until its lifetime ran out and `Involved` kept naming clients of a sign-in that had ended; it is now emptied member by member through the set operations, in memory and on every port adapter alike, with no change to the State or Index contract. Ending a sign-in with N involved clients makes N more operations than before (one read of the set and N removals instead of one delete). Ending all of a person's sign-ins no longer leaves each id in the global `issuer:sso` set until a listing finds it dangling: each sign-in costs N + 1 more operations (the clients set as above, and one more removal). Refresh and grant paths are unchanged.
+
 ## v1.67.0
 
 ### Changed
