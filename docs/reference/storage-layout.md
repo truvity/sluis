@@ -18,7 +18,7 @@ DynamoDB adapter and the domain stores share; the service's own *logical* keys
 ## SSM (the `ssm` Secrets adapter)
 
 The root is the installation's, `<root>` = `/sluis/<instance>` (the serve document's
-`secrets.root`; hive: `/sluis/hive`, Truvity's: `/sluis/kernel`). An instance may not
+`secrets.root`; for example `/sluis/acme`). An instance may not
 be named `private` or `export`. The IAM boundary is the first level:
 `<root>/private/*` is sluis's alone, `<root>/export/*` is what consumers' External
 Secrets Operator reads. A port path `p` is `<root>/private/<p>`, except

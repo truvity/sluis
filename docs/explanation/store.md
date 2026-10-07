@@ -9,7 +9,7 @@ removed on 2026-10-04), [ADR 0028](../decisions/0028-nothing-writes-configmaps-o
 | Platform | State | Secrets | Blobs |
 |---|---|---|---|
 | AWS (Lambda or Kubernetes) | DynamoDB, one table with per-item TTL | SSM | S3 |
-| Kubernetes, until the kernel cutover | the `legacy` adapter: ConfigMaps and, optionally, Valkey | Kubernetes Secrets the service writes | ConfigMaps or Valkey |
+| Kubernetes, until an estate's cutover | the `legacy` adapter: ConfigMaps and, optionally, Valkey | Kubernetes Secrets the service writes | ConfigMaps or Valkey |
 | tests and the demonstration | memory | memory | memory |
 
 The tables of adapters are generated in [adapters](../reference/adapters.md); the DynamoDB and SSM layouts are in

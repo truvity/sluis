@@ -172,12 +172,12 @@ config:
       settings:
         address: https://openbao.example
         caFile: /var/run/access-issuer/openbao-ca/ca.pem     # exports.openbao.caBundle
-        namespace: kernel
+        namespace: staging
         mount: kv
         root: sluis
         auth:
           method: jwt
-          mount: jwt-kernel
+          mount: jwt-staging
           role: sluis
           tokenFile: /var/run/openbao/token                  # exports.openbao.token.audience
   audit: {writer: https://audit.example:8443}
@@ -191,7 +191,7 @@ exports:
       -----BEGIN CERTIFICATE-----
       ...
       -----END CERTIFICATE-----
-    token: {audience: openbao-kernel}   # a ServiceAccount token projected for the jwt login
+    token: {audience: openbao-staging}   # a ServiceAccount token projected for the jwt login
 ```
 
 The OpenBao policy, the value layout and the per-export `namespace` are in

@@ -16,12 +16,12 @@ adapters:
     settings:
       address: https://openbao.example        # https, no path
       caFile: /var/run/access-issuer/openbao-ca/ca.pem   # the CA the server is verified against
-      namespace: kernel                       # the OpenBao namespace
+      namespace: staging                       # the OpenBao namespace
       mount: kv                               # the KV v2 mount (default kv)
       root: sluis                             # see below
       auth:
         method: jwt                           # jwt | kubernetes
-        mount: jwt-kernel                     # the auth mount (default: the method's name)
+        mount: jwt-staging                     # the auth mount (default: the method's name)
         role: sluis
         tokenFile: /var/run/openbao/token     # a projected ServiceAccount token, read again at every login
 ```
@@ -39,7 +39,7 @@ adapters:
 ## The root and the layout
 
 OpenBao namespaces already separate installations, so the recommendation is root `sluis` in the installation's own
-namespace: namespace `kernel`, mount `kv`, and
+namespace: namespace `staging`, mount `kv`, and
 
 ```text
 kv/sluis/private/config/<name>                       what an operator seeds (read only if used)
@@ -47,7 +47,7 @@ kv/sluis/private/credentials/<kind>/<id>/<ref>       what sluis writes and reads
 kv/sluis/export/<path>                               what sluis copies out, for consumers
 ```
 
-`sluis/<instance>` is the option for an OpenBao without a namespace per installation (`kv/sluis/kernel/export/...`).
+`sluis/<instance>` is the option for an OpenBao without a namespace per installation (`kv/sluis/acme/export/...`).
 Either way `private` and `export` are reserved: a root with such a segment is refused at start. `secrets.root` is not used
 by this adapter (with `source: file` it is a directory).
 

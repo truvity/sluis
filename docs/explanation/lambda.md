@@ -2,7 +2,7 @@
 
 sluis runs as ONE AWS Lambda function from one zip. Nothing is in a VPC: every dependency (DynamoDB, S3, KMS, SSM, SQS,
 Lambda) is an AWS API the function reaches over its role, and the only inbound path is an API Gateway HTTP API. The
-Kubernetes build is unchanged and stays what kernel and hive run where they run it; Lambda is the other platform
+Kubernetes build is unchanged and stays what an estate runs where it runs Kubernetes; Lambda is the other platform
 ([decision 0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)). The events, the
 environment, the role and the version rules are in the [reference](../reference/lambda.md).
 

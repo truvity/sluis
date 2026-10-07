@@ -542,7 +542,7 @@ Storage layout v2 moves DynamoDB items to a per-kind table partition, SSM config
   consistent ([storage layout](docs/reference/storage-layout.md)). A record has a
   kind and an id: DynamoDB `pk` is the kind (`directory`, `github-org`, `slack-workspace`,
   `issuer-token`, `lease`, `keyring`, ...) and `sk` its id (`google/C01ipl6j0`,
-  `stable/opwerm`), where there were three conventions in one table; a credential
+  `stable/acme`), where there were three conventions in one table; a credential
   is `/sluis/private/credentials/<kind>/<id>/<ref>`, where it was
   `/sluis/private/private/<key>/<ref>`; and the operator's secrets are
   `/sluis/private/config/...` (`config/oauth/client-id`, `client-secret`,
@@ -681,7 +681,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
 - **Removed: sluis's own OTLP Lambda extension.** `cmd/sluis-lambda` used to be the
   extension installed as `extensions/access-roster-otlp`, deprecated in v1.57.0 for
   `truvity/observability`'s `otlp-lambda` layer. Nothing in `truvity/gitops` or
-  `opwerm/nexus` deploys it, so the extension and the `sluis-lambda-layer_*` assets are
+  an estate's deploy repository deploys it, so the extension and the `sluis-lambda-layer_*` assets are
   gone and `cmd/sluis-lambda` is the function's composition root. The layer is the only
   telemetry layer; sluis ships none.
 
@@ -731,8 +731,8 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   `PutIfVersion`, `Delete`, `List`; exports under `export/`) with a `memory` adapter and
   a `porttest.RunSecrets` conformance suite. See `docs/design/ports.md`.
 
-- **The Pulumi library deploys sluis on AWS Lambda.** Both estates (Truvity and
-  hive) move sluis to Lambda, and `deploy/pulumi` now expresses it
+- **The Pulumi library deploys sluis on AWS Lambda.** Both estates (one on Kubernetes and
+  one on AWS Lambda installations) move sluis to Lambda, and `deploy/pulumi` now expresses it
   ([guide](docs/reference/pulumi-library.md#lambda)):
 
   - `NewLambda` creates three functions from one released zip (`sluis-http`,

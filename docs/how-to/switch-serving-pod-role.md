@@ -3,7 +3,7 @@
 ## Purpose
 
 Give the serving pod on EKS the role the Pulumi library creates, `<prefix>-sluis`, in place of the shared
-`kernel-access-issuer-audit` role (decision N9a).
+`acme-shared-audit` role (decision N9a).
 
 ## Preconditions
 
@@ -52,7 +52,7 @@ untouched until step 3.
 
 ### 3. Retire the old role
 
-**Run**: delete `kernel-access-issuer-audit` and its policy when the last object under its prefix has expired.
+**Run**: delete `acme-shared-audit` and its policy when the last object under its prefix has expired.
 
 **Expect**: no principal uses the role.
 
