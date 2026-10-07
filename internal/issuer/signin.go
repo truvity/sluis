@@ -1193,11 +1193,11 @@ func (s *signIn) handOver(w http.ResponseWriter, r *http.Request, who Authentica
 // way, and the old one still ends at its own lifetime.
 //
 // The same person keeps what they opened: their sessions under the old
-// sign-in are theirs, and ending the record is enough to stop the old
-// cookie. ANOTHER person's -- a shared browser -- is signed out the way
-// they would have signed out themselves: their sessions under it are
-// revoked and the clients told, because the browser no longer holds
-// anything that could end them.
+// sign-in are theirs, and are carried over to the new one (see
+// [carryOver]) so that signing out of it ends them too. ANOTHER person's
+// -- a shared browser -- is signed out the way they would have signed out
+// themselves: their sessions under it are revoked and the clients told,
+// because the browser no longer holds anything that could end them.
 func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 	previous, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err != nil {
@@ -1216,8 +1216,48 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 		return
 	}
 
+	carryOver(r.Context(), s.deps, previous, who.SSO)
+
 	if err = s.deps.SSO.End(r.Context(), previous.ID); err != nil {
 		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be ended",
+			"error", logsafe.Error(err))
+	}
+}
+
+// carryOver files what a person opened under one sign-in under the one
+// that replaces it, before the old one ends: the clients it was used at,
+// then the per-client sessions. Nothing is revoked and nobody is told.
+//
+// Without it, a step-up stranded everything opened before it: sign-out
+// ends the sessions filed under the sign-in the browser holds, and these
+// were filed under one that no longer exists, so they ran on to their own
+// end after the person signed out.
+//
+// The clients first, so that a session filed under the new sign-in is
+// never one whose client it does not list. Best effort, as the rest of
+// [signIn.endPrevious] is: a part that could not be carried is logged and
+// left where it was, which is how a step-up behaved before.
+func carryOver(ctx context.Context, deps SignInDeps, previous SSOSession, to string) {
+	clients, err := deps.SSO.Involved(ctx, previous.ID)
+	if err == nil {
+		for _, clientID := range clients {
+			if err = deps.SSO.Involve(ctx, to, clientID); err != nil {
+				break
+			}
+		}
+	}
+
+	if err != nil {
+		deps.log().WarnContext(ctx, "the clients of the browser's previous sign-in could not be carried over",
+			"error", logsafe.Error(err))
+	}
+
+	if deps.Issuer == nil {
+		return
+	}
+
+	if _, err = deps.Issuer.Sessions().Refile(ctx, previous.Identity, previous.ID, to); err != nil {
+		deps.log().WarnContext(ctx, "the sessions of the browser's previous sign-in could not be carried over",
 			"error", logsafe.Error(err))
 	}
 }

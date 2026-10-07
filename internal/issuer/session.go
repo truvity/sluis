@@ -1082,6 +1082,94 @@ func (s *Sessions) Revoke(ctx context.Context, q Query) (int, error) {
 	return ended, nil
 }
 
+// Refile moves one identity's sessions from one browser sign-in to
+// another, and reports how many it moved. Nothing is ended and nobody is
+// told: the sessions carry on exactly as they were, filed under the
+// sign-in that replaced the one they were opened under, so that ending
+// the new one ends them too.
+//
+// It is what a person signing in again in the same browser -- a step-up,
+// `prompt=login`, `max_age` -- does to what they opened: the old sign-in
+// ends, and a session still filed under it would be one no sign-out could
+// reach any more.
+//
+// Each record is written over the revision read, so a refresh or a
+// revocation racing it is never undone: a session revoked meanwhile stays
+// revoked, and a refresh that wrote first is read again. The record keeps
+// the store lifetime it had (see [Sessions.put]), so that a session at its
+// own end is still told apart from one cut at the absolute limit.
+//
+// One read of the identity's index set and one of each session in it, and
+// one write per session moved.
+func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, error) {
+	if from == "" || to == "" || from == to {
+		return 0, nil
+	}
+
+	ids, err := s.state.Members(ctx, sessionOfKey(identity))
+	if err != nil {
+		return 0, err
+	}
+
+	identity = strings.ToLower(strings.TrimSpace(identity))
+	moved := 0
+
+	for _, id := range ids {
+		done, err := s.refile(ctx, id, identity, from, to)
+		if err != nil {
+			return moved, err
+		}
+
+		if done {
+			moved++
+		}
+	}
+
+	return moved, nil
+}
+
+// refile moves one session, when it is still live and still filed under
+// from, and reports whether it did.
+func (s *Sessions) refile(ctx context.Context, id, identity, from, to string) (bool, error) {
+	for range rotatedAttempts {
+		session, version, live, err := s.byIDVersion(ctx, id)
+		if err != nil || !live || session.Identity != identity || session.SSO != from {
+			return false, err
+		}
+
+		// The horizon the last write gave it: put and writeRotated keep a
+		// record for one refresh lifetime from when they wrote it.
+		written := session.IssuedAt
+		if session.LastRefreshed.After(written) {
+			written = session.LastRefreshed
+		}
+
+		ttl := written.Add(s.lifetime).Sub(s.now())
+		if ttl <= 0 {
+			return false, nil
+		}
+
+		session.SSO = to
+
+		raw, err := json.Marshal(session)
+		if err != nil {
+			return false, fmt.Errorf("issuer: encode session %s: %w", session.ID, err)
+		}
+
+		err = replace(ctx, s.state, sessionKey(session.ID), raw, ttl, version)
+		switch {
+		case err == nil:
+			return true, nil
+		case errors.Is(err, errGone):
+			return false, nil
+		case !errors.Is(err, errMoved):
+			return false, err
+		}
+	}
+
+	return false, fmt.Errorf("issuer: session %s kept changing while it was refiled", id)
+}
+
 // RevokeID ends one session by its id, which is what "sign this one out"
 // on a person's page does. It reports whether there was one to end.
 //
