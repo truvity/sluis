@@ -240,6 +240,8 @@ The revision is a random 64-bit number drawn on every write.
   `Scan` for migration and a dotless listing, `DescribeTable`; `dynamodb:LeadingKeys`
   may restrict a role to the families it writes (`notify` and `lease` belong to
   every role that ticks).
+  A restriction that lists the issuer's kinds must include `issuer-sso-cookie` before the upgrade that
+  introduced it; without it the SSO cookie pointer cannot be written or read, and every console asks for a login again.
 - **Limits.** A key over 1 KiB, and a key with no first segment (`.x`), are
   `ErrUnsupported`; a value over 256 KiB is `ErrTooLarge` as everywhere (an item may
   hold 400 KiB). A table that is not there, throttling and the network are
