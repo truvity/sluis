@@ -811,7 +811,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 
 	// Before the request is marked done, because a request marked done is
 	// one a code can be issued for.
-	if err = s.entitled(ctx, req.Req.ClientID, req.Resource, who.Subject); err != nil {
+	if err = s.entitled(ctx, req.Req.ClientID, req.Resource, who.Subject, who.How == RecoveryHow); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
 			s.iss.record(ctx, signInEvent(who, req.Req.ClientID,
 				audit.Denied("signed in, and admitted to no group this client requires")))
@@ -1019,6 +1019,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		ClientID: clientOf(request),
 		Resource: resourceOf(request),
 		How:      how,
+		Method:   methodOf(request),
 		Token:    refresh,
 		Scopes:   request.GetScopes(),
 		SSO:      ssoOf(request),
@@ -1090,7 +1091,7 @@ func (s *Storage) SetUserinfoFromRequest(
 ) error {
 	subject := request.GetSubject()
 
-	result, given, family, err := s.resolveSubject(ctx, subject)
+	result, given, family, err := s.resolveSubject(ctx, subject, provedAsServiceAccount(request))
 	if err != nil {
 		return err
 	}
@@ -1173,6 +1174,41 @@ func authTimeOf(request op.TokenRequest) time.Time {
 	return time.Time{}
 }
 
+// methodOf is how the person behind a token request was proved: a
+// provider's kind or [RecoveryHow], as the sign-in recorded it, and
+// nothing for an exchange.
+func methodOf(request op.TokenRequest) string {
+	switch req := request.(type) {
+	case *authRequest:
+		return req.How
+	case *refreshRequest:
+		return req.session.Method
+	default:
+		return ""
+	}
+}
+
+// provedAsServiceAccount reports whether request's subject was proved as a
+// ServiceAccount -- a recovery sign-in, by the method it recorded -- and
+// is evaluated by the policy's ServiceAccount matchers rather than asked
+// of the directory. Never by the subject's shape: a subject is whatever an
+// identity provider said, and one that reads as a ServiceAccount must not
+// be granted what the policy grants that ServiceAccount.
+//
+// An exchange is not asked here: its grant was decided from the verified
+// proof ([Storage.ValidateTokenExchangeRequest]) and no subject string is
+// evaluated for it.
+func provedAsServiceAccount(request any) bool {
+	switch req := request.(type) {
+	case *authRequest:
+		return req.How == RecoveryHow
+	case *refreshRequest:
+		return req.session.serviceAccount()
+	default:
+		return false
+	}
+}
+
 // ssoOf is the browser session a token request was authorized from, and
 // nothing for a flow where no browser was involved.
 func ssoOf(request op.TokenRequest) string {
@@ -1222,6 +1258,9 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// before the library calls [Storage.SigningKey] to actually sign this
 	// same access token a moment later — see [signingAudience].
 	signingAudienceFrom(ctx).mark(accessAudienceOf(request))
+	// And how its subject was proved, for [Storage.GetPrivateClaimsFromScopes],
+	// which the library hands the subject string and nothing else.
+	signingAudienceFrom(ctx).markSubject(request.GetSubject(), provedAsServiceAccount(request))
 
 	claims, held, given, family, err := s.claimsFor(ctx, request)
 	if err != nil {
@@ -1358,7 +1397,7 @@ func (s *Storage) claimsFor(
 		return claims, held, given, family, nil
 	}
 
-	return s.identityOf(ctx, request.GetSubject())
+	return s.identityOf(ctx, request.GetSubject(), provedAsServiceAccount(request))
 }
 
 // refuseAtAbsoluteLimit ends a session that has reached its absolute limit
@@ -1513,7 +1552,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	// authorization, which meets the same gate and says why on a page.
 	// The description is deliberately plain -- the detail is in the log,
 	// and the client is not who needs telling.
-	if err = s.entitled(ctx, session.ClientID, session.Resource, session.Identity); err != nil {
+	if err = s.entitled(ctx, session.ClientID, session.Resource, session.Identity, session.serviceAccount()); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
 			s.logger().InfoContext(ctx, "refused a refresh for a client the identity is no longer entitled to",
 				"client_id", logsafe.Value(session.ClientID), "error", logsafe.Error(err))
@@ -1756,7 +1795,12 @@ func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, subject, _ str
 	// [Storage.SigningKey] does a moment after this returns: this hook is
 	// handed the subject and the scopes, never the audience, so the
 	// carrier is the only way to learn it here.
-	claims, held, given, family, err := s.identityOf(ctx, subject)
+	//
+	// How the subject was proved comes the same way, from [Storage.issue]:
+	// this hook is handed the subject string alone, and the string's shape
+	// is not a proof of anything. A carrier [Storage.issue] did not mark
+	// for this subject reads as a person, asked of the directory.
+	claims, held, given, family, err := s.identityOf(ctx, subject, signingAudienceFrom(ctx).subjectIsServiceAccount(subject))
 	if err != nil {
 		return nil, err
 	}
@@ -1818,16 +1862,17 @@ func displayName(given, family string) string {
 // is two answers that can disagree, with the grants from before a change
 // and the name from after.
 //
-// A ServiceAccount subject is a recovery sign-in, and the hub is the
+// A recovery sign-in (serviceAccount, by how it was proved -- never by
+// what its subject looks like) is a ServiceAccount, and the hub is the
 // wrong place to ask about it: it holds directories, and this is not a
 // person in one. The policy's `service_account` matchers decide, exactly
 // as they do for a workload exchanging a token -- one table, one
 // evaluation, and nothing here that a matcher did not grant. It has no
 // name, which is the truthful answer rather than a missing one.
 func (s *Storage) identityOf(
-	ctx context.Context, subject string,
+	ctx context.Context, subject string, serviceAccount bool,
 ) (claims map[string]any, held []string, given, family string, err error) {
-	result, given, family, err := s.resolveSubject(ctx, subject)
+	result, given, family, err := s.resolveSubject(ctx, subject, serviceAccount)
 	if err != nil {
 		return nil, nil, "", "", err
 	}
@@ -1839,10 +1884,19 @@ func (s *Storage) identityOf(
 // RESULT rather than the claims made from it, because two questions are
 // asked of it: what a token should say, and whether this identity may
 // have a token for a particular client at all.
+//
+// serviceAccount says the subject was PROVED as a ServiceAccount (see
+// [provedAsServiceAccount]); only then do the policy's ServiceAccount
+// matchers decide. Anybody else is asked of the directory, whatever their
+// subject looks like.
 func (s *Storage) resolveSubject(
-	ctx context.Context, subject string,
+	ctx context.Context, subject string, serviceAccount bool,
 ) (result policy.Result, given, family string, err error) {
-	if account, ok := serviceAccountSubject(subject); ok {
+	if serviceAccount {
+		account, ok := serviceAccountSubject(subject)
+		if !ok {
+			return policy.Result{}, "", "", &Refused{Reason: "a ServiceAccount sign-in whose subject names no ServiceAccount"}
+		}
 		return s.iss.Policy().Evaluate(policy.Input{ServiceAccount: &account}), "", "", nil
 	}
 
@@ -1874,7 +1928,7 @@ var ErrNotEntitled = errors.New("no group this client requires")
 // Here rather than at /authorize because there is nobody to judge until
 // the sign-in finishes: the request arrives before anyone has proved who
 // they are.
-func (s *Storage) entitled(ctx context.Context, clientID, resource, subject string) error {
+func (s *Storage) entitled(ctx context.Context, clientID, resource, subject string, serviceAccount bool) error {
 	declared, ok := s.iss.Policy().Client(clientID)
 	if !ok {
 		// A client that describes itself carries the document policy's
@@ -1889,7 +1943,7 @@ func (s *Storage) entitled(ctx context.Context, clientID, resource, subject stri
 		}
 	}
 
-	result, _, _, err := s.resolveSubject(ctx, subject)
+	result, _, _, err := s.resolveSubject(ctx, subject, serviceAccount)
 	if err != nil {
 		return err
 	}

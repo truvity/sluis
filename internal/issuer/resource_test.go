@@ -291,12 +291,12 @@ func TestBothGatesApply(t *testing.T) {
 	ctx := context.Background()
 
 	// The client alone: allowed, exactly as before resources existed.
-	if err := storage.entitled(ctx, "an-editor", "", "dev@north.example"); err != nil {
+	if err := storage.entitled(ctx, "an-editor", "", "dev@north.example", false); err != nil {
 		t.Errorf("the client's own gate refused somebody who holds its group: %v", err)
 	}
 
 	// The resource's gate refuses the same person.
-	err = storage.entitled(ctx, "an-editor", "https://mcp.example/", "dev@north.example")
+	err = storage.entitled(ctx, "an-editor", "https://mcp.example/", "dev@north.example", false)
 	if err == nil {
 		t.Fatal("a person holding the client's group but not the resource's was admitted")
 	}
@@ -308,7 +308,7 @@ func TestBothGatesApply(t *testing.T) {
 	}
 
 	// And admits somebody who holds both.
-	if err := storage.entitled(ctx, "an-editor", "https://mcp.example/", "ops@north.example"); err != nil {
+	if err := storage.entitled(ctx, "an-editor", "https://mcp.example/", "ops@north.example", false); err != nil {
 		t.Errorf("somebody holding both gates' groups was refused: %v", err)
 	}
 
@@ -319,7 +319,7 @@ func TestBothGatesApply(t *testing.T) {
 	// but the message has to say which of the two things went wrong, or it
 	// reads as "you lack a group" when the truth is "that resource is
 	// gone".
-	err = storage.entitled(ctx, "an-editor", "https://gone.example/", "ops@north.example")
+	err = storage.entitled(ctx, "an-editor", "https://gone.example/", "ops@north.example", false)
 	if err == nil {
 		t.Fatal("a resource this installation no longer declares was honoured")
 	}
