@@ -19,7 +19,7 @@ hot path.
 | `ses.<person>.<sid>` | a per-client session: identity, client, how it began, scopes, SSO session, refresh token (hashed), authentication time | issuer | the session lifetime |
 | `sid.<sid>` | pointer from a session id to `<person>`; written with the session, deleted with it | issuer | the session lifetime |
 | `rt.<hash>` | live refresh token to `<person>.<sid>` | issuer | the session lifetime |
-| `rtrot.<hash>` | a spent refresh token's successor, for the 30-second retry grace | issuer | 30 s |
+| `rtrot.<hash>` | legacy: a spent refresh token's successor, as an older version wrote it. The retry grace is now carried by `rt.<hash>` itself (`spent:<successor>`, 30 s). Still read for one release, never written, then removed | issuer | 30 s |
 | `sso.<id>` | the browser-wide SSO session and the clients it covers | issuer | the session lifetime |
 | `tok.<jti>` | a minted token's own record, for userinfo and revocation | issuer | until the token expires |
 | `keyring.<kid>` | a signing key's schedule: first seen, activation | issuer replicas | 30 days, renewed on each poll |

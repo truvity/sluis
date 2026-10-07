@@ -126,13 +126,36 @@ The logical keys the service writes are in [keys](keys.md); how the adapter cond
 | `issuer-code`, `issuer-code-session` | `<id>` | an authorization code, the session it opened |
 | `issuer-token` | `<uuid>` | a minted token's record |
 | `issuer-session`, `issuer-sso`, `issuer-sso-of` | `<id>`, `<id>`, `<identity>` | sessions and the browser's SSO session |
-| `issuer-session-token`, `issuer-session-rotated` | `<hash>` | a live refresh token, a spent one's successor |
+| `issuer-session-token` | `<hash>` | a live refresh token; for 30 s after a rotation, `spent:<successor>` (the retry grace) |
+| `issuer-session-rotated` | `<hash>` | legacy: a spent token's successor as an older version wrote it; read for one release, never written, then removed |
 | `issuer-held` | `<identity>` | an identity's last-known directory groups, kept for the hold window (`lifetimes.hold`) |
 | `issuer-guard` | `state-secret-fingerprint` | the guard that a state secret has not changed |
 | `session`, `session-pointer` | `<person>/<sid>`, `<sid>` | a session of the layout's own form |
 | `sessions-of`, `sessions-for`, `sso-clients` (Index) | `<identity or client or sso id>/<member>` | the transitional session index |
 | `sessions-index`, `sso-index` (Index) | `all/<member>` | every session, every sign-in |
 | `other` | the whole logical key | a key the layout names no kind for (a test's) |
+
+**Session records, the pointer and the held groups.** Three details of the
+issuer's refresh path decide how often it writes:
+
+- A rotation marks the spent token in its own pointer: `issuer-session-token`
+  then holds `spent:<successor>` for 30 seconds, so a retry inside the grace
+  finds the successor. The mark is written only over the revision that was read,
+  so a concurrent refresh becomes a replay and a revocation during a refresh is
+  not undone. The separate `issuer-session-rotated` record is no longer written;
+  it is still read for one release, for tokens an older version rotated, and then
+  the kind is removed.
+- An `issuer-session` record carries `IndexedUntil` (when its membership of the
+  index sets lapses) and `Involved` (its client is already recorded among the
+  sign-in's clients). A member is added with twice the refresh lifetime and added
+  again only when it would lapse; with the default lifetimes that is one `Add`
+  per twelve hours of refreshing rather than one per refresh. A record without
+  `IndexedUntil` (written before it existed) is added at once.
+- `issuer-held` is rewritten only when the groups change, when the stored record
+  is no longer this process's own write (checked by an eventually consistent
+  read of its revision, `RevisionPeeker`), or when it is older than the hold
+  window divided by eight. A hold can therefore end up to an eighth of the hold
+  window early, never late.
 
 **Listing by a prefix.** A prefix that lies in one kind (`rec.slack.channel.acme.`)
 is a `Query` on its `pk` with `begins_with(sk, "acme/")`, in key order. A prefix
@@ -169,13 +192,14 @@ what the legacy adapter keeps) and what it is now, for every kind:
 | `issuer:token:<jti>` | `issuer-token` / `<jti>` | none |
 | `issuer:sso:<id>`, `issuer:sso-of:<identity>` | `issuer-sso`, `issuer-sso-of` | none |
 | `issuer:session:<id>` | `issuer-session` / `<id>` | none |
-| `issuer:session-token:<hash>`, `issuer:session-rotated:<hash>` | `issuer-session-token`, `issuer-session-rotated` | none |
+| `issuer:session-token:<hash>` | `issuer-session-token` / `<hash>` | none |
+| `issuer:session-rotated:<hash>` (legacy, read only) | `issuer-session-rotated` / `<hash>` | none |
 | `issuer:keyring:entry:<alg>:<kid>` | `keyring` / `<alg>/<kid>` | none (a `kms-wrapped` entry also carries `wrapped`, the private key encrypted under the symmetric KMS key; never plaintext) |
 | `issuer:keyring:retired:<alg>:<kid>` | `keyring-retired` / `<alg>/<kid>` | none |
 | `issuer:keyring:index:<alg>` (Index) | `keyring-index` / `<alg>/<kid>` | none |
 | `issuer:held:<identity>` | `issuer-held` / `<identity>` | none |
 | `issuer:kms:state-secret-fingerprint` | `issuer-guard` / `state-secret-fingerprint` | none |
-| `ses.<person>.<sid>`, `sid.<sid>`, `req.`, `code.`, `tok.`, `sso.`, `rt.`, `rtrot.`, `keyring.` | the layout's dotted forms of the above | none |
+| `ses.<person>.<sid>`, `sid.<sid>`, `req.`, `code.`, `tok.`, `sso.`, `rt.`, `rtrot.` (legacy), `keyring.` | the layout's dotted forms of the above | none |
 
 ## S3 (the `s3` Blob adapter)
 

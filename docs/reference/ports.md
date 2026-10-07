@@ -82,6 +82,19 @@ migrate` ([migrating state](../how-to/migrate-state.md)) reads the issuer's
 state through them so a copied session keeps the lifetime it had; memory, DynamoDB and
 the legacy adapter have them.
 
+### Peeking a revision (optional)
+
+A State that can read a key's revision more cheaply than a value says so with
+the optional capability `RevisionPeeker`: `PeekRevision(key)` returns the
+revision as an **eventually consistent** read sees it, and never a value. A
+caller compares it with the revision of its own write and, on any other answer
+(another revision, `ErrNotFound`, an error), acts as though the record moved; a
+stale answer can only be the revision it wrote itself, for the moment the engine
+takes to converge. The issuer uses it to skip rewriting a record nobody else
+touched. DynamoDB answers with a projected, eventually consistent `GetItem`
+(half a read unit); memory with a plain read; any adapter without the capability
+is served by a consistent `Get`.
+
 ### Error mapping
 
 An adapter maps its engine's errors to the six above. Everything else is an

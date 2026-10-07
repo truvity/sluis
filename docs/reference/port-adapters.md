@@ -193,6 +193,7 @@ The revision is a random 64-bit number drawn on every write.
 | `Update(rev)` | `PutItem` with `rev = :rev AND (attribute_not_exists(expires) OR expires > :now)` |
 | `DeleteIfRevision` | `DeleteItem` with the same condition |
 | `Delete` | `DeleteItem` |
+| `PeekRevision` (optional, `port.RevisionPeeker`) | `GetItem` projecting `rev` only, not consistent (half a read unit); an expired item is `ErrNotFound` |
 | `List` | `Query` on the prefix's partition with `begins_with(sk, :p)`, consistent, filtered for expiry here, paged by a token naming the last key (`port.PageToken`); a prefix that names no one kind is a `Scan` |
 | `Watch`, Trigger | polling, below |
 | Index `Add`/`Remove`/`Members` | an item in the set's kind partition with `<set id>/<member>` as sort key and the lifetime of the `Add`, so the lifetime is the member's; `Members` is one `Query` |
