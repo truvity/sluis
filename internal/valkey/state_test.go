@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/port/porttest/grantcost"
 	"github.com/truvity/sluis/internal/valkey"
 )
 
@@ -109,4 +110,17 @@ func TestTheSharedStateRefusesAValueWithNoLifetime(t *testing.T) {
 	if _, err := state.SetIfAbsent(context.Background(), "forever", []byte("x"), 0); err == nil {
 		t.Error("a claim with no lifetime was stored")
 	}
+}
+
+// An idle agent session stays in the index sets as long as its record, and
+// every revocation still finds it, over Valkey, where a set's expiry is the
+// whole set's (docs/decisions/0040-agent-class-sessions.md).
+func TestAnIdleAgentSessionIsRevocableOverValkey(t *testing.T) {
+	t.Parallel()
+
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	grantcost.IdleAgentSessionIsRevocable(t, valkey.NewState(client, "test"), server.FastForward)
 }

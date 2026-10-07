@@ -211,6 +211,7 @@ var guards = []struct {
 	{"operator-revoke-ends-the-chain", operatorRevoke},
 	{"stale-snapshot-is-not-authoritative", staleSnapshot},
 	{"index-membership", indexMembership},
+	{"idle-agent-session-is-revocable", idleAgentSession},
 }
 
 // A spent refresh token presented again within the grace window is answered
