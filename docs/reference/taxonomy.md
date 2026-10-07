@@ -12,7 +12,7 @@ between, lowercase. *Role, on thing, in scope.*
 
 | Segment | Is | Examples |
 |---|---|---|
-| `scope` | an environment, a tenant id, or `all` | `kernel`, `prod`, `devel`, `C0north`, `all` |
+| `scope` | an environment, a tenant id, or `all` | `core`, `prod`, `devel`, `C0north`, `all` |
 | `thing` | what the role is **on**: a subsystem, a project, an application | `k8s`, `argocd`, `grafana`, `shop`, `sluis` |
 | `role` | from that thing's own ladder | `viewer`, `operator`, `admin`, `deployer`, `editor` |
 
@@ -46,13 +46,13 @@ environment through one scope that was never supposed to mean that.
 ## Sensitive scopes
 
 A [declared vocabulary](policy-vocabulary.md) marks a scope
-`sensitive` — `kernel` and `prod`, typically, the two an installation
+`sensitive` — `core` and `prod`, typically, the two an installation
 least wants reached by anything less deliberate than a scope named
 outright. It changes exactly one thing: a [mapping
 wildcard](#mapping-wildcards) never expands into it. A concrete grant
-naming a sensitive scope is unaffected — `kernel:k8s:admin` is checked and
+naming a sensitive scope is unaffected — `core:k8s:admin` is checked and
 granted exactly as `devel:k8s:admin` is; what a person can never do is
-reach `kernel` by writing `*:k8s:admin` and letting the wildcard sweep it
+reach `core` by writing `*:k8s:admin` and letting the wildcard sweep it
 in along with everything else.
 
 ## Inheritance
@@ -83,7 +83,7 @@ name it.
 
 A role's own value may restrict it to some of its thing's declared
 scopes — `ssh`'s `user` role valid on `devel` alone, even though `ssh`
-itself also declares `kernel`, `stage` and `prod` — using an object form
+itself also declares `core`, `stage` and `prod` — using an object form
 (`user: { scopes: [devel] }`) in place of the plain implies-list one
 (`admin: []`). See
 [policy-vocabulary.md#per-role-scopes](policy-vocabulary.md#per-role-scopes)
@@ -94,14 +94,14 @@ means](#what-all-means) and [sensitive
 scopes](#sensitive-scopes): the *thing*'s `scopes` says which
 environments it exists in at all, and a *role*'s own `scopes`, when
 declared, narrows that further to the ones the role itself makes sense
-on. `kernel:ssh:user` is refused even though `ssh` names `kernel`,
+on. `core:ssh:user` is refused even though `ssh` names `core`,
 because `user` does not.
 
 **Inheritance may not lose scope coverage.** A role that implies another
 must cover no more scopes than the one it implies — `admin` (valid
 everywhere) implying `user` (valid on `devel` alone) is refused at load,
-because holding `kernel:ssh:admin` would otherwise imply a `user` role
-that was never meant to reach `kernel`.
+because holding `core:ssh:admin` would otherwise imply a `user` role
+that was never meant to reach `core`.
 
 ## Mapping wildcards
 
@@ -120,7 +120,7 @@ marked sensitive](#sensitive-scopes): `*:k8s:admin` reaches every
 non-sensitive environment's Kubernetes admin group at once; `devel:*:viewer`
 reaches every thing that has both a `devel` scope and a `viewer` role;
 `*:ssh:user` reaches `devel:ssh:user` alone when `ssh`'s `user` role
-restricts itself to `devel`, silently skipping `kernel`, `stage` and
+restricts itself to `devel`, silently skipping `core`, `stage` and
 `prod` the same way it skips a thing that lacks the role entirely. Whoever
 matches the key's members or matchers is in **all** of those concrete
 groups, unioned with whatever concrete keys separately match, and then
@@ -135,9 +135,9 @@ in the file looking like it does something: `prod:*:viewer` where `prod`
 is sensitive is refused by naming the sensitive scope directly and
 pointing at a real concrete group to write instead; `devel:*:admins`
 where no declared thing has an `admins` role, `*:k8s:viewer` where every
-scope `k8s` declares happens to be sensitive, or `kernel:*:user` where
+scope `k8s` declares happens to be sensitive, or `core:*:user` where
 every thing's `user` role restricts itself to scopes that never include
-`kernel`, are refused with the generic *expands to no group* message and
+`core`, are refused with the generic *expands to no group* message and
 the specific reason.
 
 ## Examples

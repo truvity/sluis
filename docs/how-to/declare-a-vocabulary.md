@@ -34,7 +34,7 @@ Make the policy refuse a grant name that is a typo, by declaring which scopes, t
 
 ### 2. Write the table
 
-**Run**: add one file with the `vocabulary` table ([shape](../reference/policy-vocabulary.md)). Mark `kernel` and `prod`
+**Run**: add one file with the `vocabulary` table ([shape](../reference/policy-vocabulary.md)). Mark `core` and `prod`
 (or your equivalents) `sensitive: true`. Use `all` only for a thing that exists once per installation. Declare roles as
 implies lists (`admin: [operator]`); use `{ scopes: [...] }` for a role that makes sense on some scopes only.
 
