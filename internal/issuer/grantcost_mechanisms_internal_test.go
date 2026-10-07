@@ -148,6 +148,11 @@ func (s *gcState) Replace(ctx context.Context, key string, value []byte, ttl tim
 	return s.State.(versionedState).Replace(ctx, key, value, ttl, version)
 }
 
+func (s *gcState) DeleteVersion(ctx context.Context, key, version string) error {
+	s.hook("delete-version", key)
+	return s.State.(versionedDeleter).DeleteVersion(ctx, key, version)
+}
+
 func (s *gcState) held() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

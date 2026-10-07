@@ -111,6 +111,22 @@ func (s *faultState) Delete(ctx context.Context, key string) error {
 	return s.MemoryState.Delete(ctx, key)
 }
 
+// DeleteVersion is the conditional delete that ends a session: it fails while
+// failDelete names the key, and counts a write only when it succeeds.
+func (s *faultState) DeleteVersion(ctx context.Context, key, version string) error {
+	s.mu.Lock()
+	fail := s.failDelete != "" && strings.HasPrefix(key, s.failDelete)
+	s.mu.Unlock()
+	if fail {
+		return errInjected
+	}
+	err := s.MemoryState.DeleteVersion(ctx, key, version)
+	if err == nil {
+		s.writes.Add(1)
+	}
+	return err
+}
+
 func (s *faultState) Remove(ctx context.Context, key, member string) error {
 	s.writes.Add(1)
 	s.mu.Lock()
@@ -301,7 +317,7 @@ func (r *reuseRig) warnings(contains string) int {
 
 // ------------------------------------------------------------- the window
 
-func TestAReplayAt29SecondsIsAnsweredAndAReuseAt31SecondsEndsTheSession(t *testing.T) {
+func TestAReplayAt29SecondsIsAnsweredTheBandTo32SecondsEndsNothingAndAReuseAt33SecondsEndsTheSession(t *testing.T) {
 	t.Run("29 seconds", func(t *testing.T) {
 		r := newReuseRig(t, 0)
 		_, t0 := r.grant()
@@ -328,7 +344,7 @@ func TestAReplayAt29SecondsIsAnsweredAndAReuseAt31SecondsEndsTheSession(t *testi
 		if err != nil {
 			t.Fatal(err)
 		}
-		r.clock.advance(31 * time.Second)
+		r.clock.advance(33 * time.Second)
 		_, _, err = r.refresh(t0)
 		wantInvalidGrant(t, err)
 		if len(r.sessions()) != 0 {
@@ -357,7 +373,7 @@ func TestAReuseIsAuditedLoggedCountedAndKillsTheSessionsTokens(t *testing.T) {
 			t.Fatalf("userinfo before the reuse: %v", err)
 		}
 	}
-	r.clock.advance(31 * time.Second)
+	r.clock.advance(33 * time.Second)
 
 	_, _, err = r.refresh(t0)
 	wantInvalidGrant(t, err)
@@ -443,7 +459,7 @@ func TestRepeatedReuseAfterTheSessionEndedWritesAndAuditsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.clock.advance(31 * time.Second)
+	r.clock.advance(33 * time.Second)
 	_, _, err = r.refresh(t0)
 	wantInvalidGrant(t, err)
 	if len(r.revoked()) != 1 {
@@ -472,17 +488,18 @@ func TestRepeatedReuseAfterTheSessionEndedWritesAndAuditsNothing(t *testing.T) {
 
 // ------------------------------------------------- a failure to end the session
 
-// The session record is the first thing deleted. When that fails the session
-// is untouched, the grant is a server error so that the client retries, and
-// the retry meets the reuse again and ends the session.
-func TestAFailureToEndTheSessionIsAServerErrorAndTheRetryEndsIt(t *testing.T) {
+// The session record is deleted first, conditionally on the revision read.
+// When that fails the session is untouched, nothing is audited (the end did
+// not happen), the grant is a server error so that the client retries, and
+// the retry meets the reuse again and ends the session, audited once.
+func TestAFailureToEndTheSessionIsAServerErrorWithNothingRecordedAndTheRetryEndsIt(t *testing.T) {
 	r := newReuseRig(t, 0)
 	access0, t0 := r.grant()
 	access1, t1, err := r.refresh(t0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.clock.advance(31 * time.Second)
+	r.clock.advance(33 * time.Second)
 
 	r.state.arm("issuer:session:", "")
 	_, _, err = r.refresh(t0)
@@ -493,13 +510,15 @@ func TestAFailureToEndTheSessionIsAServerErrorAndTheRetryEndsIt(t *testing.T) {
 	if strings.Contains(strings.Join(r.warningAttrs(), " "), t0) {
 		t.Error("the failure line carries the token")
 	}
+	if got := r.revoked(); len(got) != 0 {
+		t.Errorf("recorded %d revocations for an end that did not happen", len(got))
+	}
 	if got := r.sessions(); len(got) != 1 {
 		t.Errorf("sessions listed = %d after a failed end, want the session untouched", len(got))
 	}
 	if err = r.userinfo(access1); err != nil {
 		t.Errorf("a failed end already refused the session's access token: %v", err)
 	}
-	failedRecords := len(r.revoked())
 
 	// The client retries: the reuse is met again and the session ends.
 	r.state.arm("", "")
@@ -516,12 +535,9 @@ func TestAFailureToEndTheSessionIsAServerErrorAndTheRetryEndsIt(t *testing.T) {
 			t.Error("userinfo answers for the ended session")
 		}
 	}
-	if len(r.revoked()) < 1 {
-		t.Errorf("recorded %v, want a roster.session.revoked for the ended session", r.trail.Actions())
+	if got := r.revoked(); len(got) != 1 {
+		t.Errorf("recorded %d revocations after the failure and its retry, want exactly 1", len(got))
 	}
-	// Not asserted: the record is written before the delete, so an outright
-	// failure followed by a retry leaves one record per attempt.
-	t.Logf("revocation records: %d after the failed attempt, %d after the retry", failedRecords, len(r.revoked()))
 
 	// Further presentations end nothing more and say nothing more.
 	after := len(r.trail.Records())
@@ -546,25 +562,25 @@ func (r *reuseRig) warningAttrs() []string {
 }
 
 // A failure after the record was deleted, while the index sets are being
-// emptied, is still a server error. The session is dead and unlisted, and
-// the retry -- which finds no live session -- writes no second audit record,
-// so the reuse is audited exactly once.
-func TestAFailureWhileEmptyingTheIndexIsAServerErrorAndIsAuditedOnce(t *testing.T) {
+// emptied, leaves the session ended -- every token resolves through the
+// record -- so it is audited once and answered as any reuse is, with
+// invalid_grant; the index ids that remain are dropped by the next listing.
+func TestAnIndexFailureAfterTheRecordIsDeletedStillEndsTheSessionAuditedOnce(t *testing.T) {
 	r := newReuseRig(t, 0)
 	_, t0 := r.grant()
 	access1, t1, err := r.refresh(t0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.clock.advance(31 * time.Second)
+	r.clock.advance(33 * time.Second)
 
 	r.state.arm("", "issuer:session")
 	_, _, err = r.refresh(t0)
-	wantServerError(t, err)
+	wantInvalidGrant(t, err)
 	r.state.arm("", "")
 
 	if got := r.sessions(); len(got) != 0 {
-		t.Errorf("sessions listed = %d after a half-ended session, want none", len(got))
+		t.Errorf("sessions listed = %d after the record was deleted, want none", len(got))
 	}
 	for i := range 3 {
 		if _, _, err = r.refresh(t1); err == nil {
@@ -575,10 +591,10 @@ func TestAFailureWhileEmptyingTheIndexIsAServerErrorAndIsAuditedOnce(t *testing.
 		}
 	}
 	if err = r.userinfo(access1); err == nil {
-		t.Error("userinfo answers for the half-ended session")
+		t.Error("userinfo answers for the ended session")
 	}
 	if got := r.revoked(); len(got) != 1 {
-		t.Errorf("revocation records = %d after a half-ended session and its retries, want exactly 1", len(got))
+		t.Errorf("revocation records = %d, want exactly 1", len(got))
 	}
 }
 
@@ -638,7 +654,7 @@ func TestAReuseDuringALegitimateRotationLeavesTheSessionEnded(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r.clock.advance(31 * time.Second)
+			r.clock.advance(33 * time.Second)
 
 			fired := false
 			r.state.mu.Lock()
@@ -702,13 +718,14 @@ func TestAReuseAfterTheAbsoluteLimitIsRefusedAsTheLimit(t *testing.T) {
 
 // ---------------------------------------------------- sso, client, logout
 
-// The record names the browser sign-in the session was opened under, which the
-// issuer leaves alone: only the record says it, so an operator can end it.
-func TestTheReuseRecordNamesTheBrowserSignInAndLeavesItAlone(t *testing.T) {
+// The record says nothing that could take over the browser sign-in: a
+// sign-in's id is the value of its cookie. The issuer ends the one client's
+// session and leaves the sign-in, and its other clients' sessions, alone.
+func TestTheReuseRecordNamesNoBrowserSignInAndLeavesItAlone(t *testing.T) {
 	r := newReuseRig(t, 0)
 	ctx := context.Background()
 	if _, err := r.iss.Sessions().Record(ctx, issuer.Opened{
-		Identity: reusePerson, ClientID: "argocd", How: issuer.HowCode, Token: "tok0", SSO: "sso-42",
+		Identity: reusePerson, ClientID: "argocd", How: issuer.HowCode, Token: "tok0", SSO: "sso-cookie-value-42",
 		Scopes: []string{"openid", "profile", "email"},
 	}); err != nil {
 		t.Fatalf("record: %v", err)
@@ -716,7 +733,7 @@ func TestTheReuseRecordNamesTheBrowserSignInAndLeavesItAlone(t *testing.T) {
 	if _, _, err := r.refresh("tok0"); err != nil {
 		t.Fatal(err)
 	}
-	r.clock.advance(31 * time.Second)
+	r.clock.advance(33 * time.Second)
 	_, _, err := r.refresh("tok0")
 	wantInvalidGrant(t, err)
 
@@ -725,18 +742,74 @@ func TestTheReuseRecordNamesTheBrowserSignInAndLeavesItAlone(t *testing.T) {
 		t.Fatalf("recorded %v, want one roster.session.revoked", r.trail.Actions())
 	}
 	fields := got[0].GetData().GetFields()
-	if fields["sso"].GetStringValue() != "sso-42" || fields["scope"].GetStringValue() != "refresh_token_reuse" ||
-		fields["ended"].GetNumberValue() != 1 || len(fields) != 3 {
-		t.Errorf("data = %v, want scope, ended and sso sso-42", got[0].GetData())
+	if _, has := fields["sso"]; has || len(fields) != 2 ||
+		fields["scope"].GetStringValue() != "refresh_token_reuse" || fields["ended"].GetNumberValue() != 1 {
+		t.Errorf("data = %v, want scope and ended only", got[0].GetData())
 	}
-	// Only this client's session was ended: the sign-in's other sessions are
-	// not, and the sign-in itself is untouched.
+	for _, rec := range r.trail.Records() {
+		if strings.Contains(rec.String(), "sso-cookie-value-42") {
+			t.Errorf("the %s record carries the sign-in's id: %v", rec.GetAction(), rec)
+		}
+	}
+	// Only this client's session was ended: the sign-in's other client's
+	// session is untouched.
 	if _, err = r.iss.Sessions().Record(ctx, issuer.Opened{
-		Identity: reusePerson, ClientID: "local-dev", How: issuer.HowCode, Token: "other0", SSO: "sso-42",
+		Identity: reusePerson, ClientID: "local-dev", How: issuer.HowCode, Token: "other0", SSO: "sso-cookie-value-42",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := r.iss.Sessions().List(ctx, issuer.Query{Identity: reusePerson}); err != nil || len(got) != 1 || got[0].ClientID != "local-dev" {
 		t.Errorf("sessions = %+v, %v; want the sign-in's other client's session still open", got, err)
+	}
+}
+
+// Several presentations of one spent token at once: exactly one ends the
+// session, one audit record, one set of writes (the record and its three
+// index sets) and one WARN line; the others are refused with invalid_grant
+// and write nothing.
+func TestConcurrentReusesOfOneSpentTokenEndTheSessionOnce(t *testing.T) {
+	for round := range 5 {
+		r := newReuseRig(t, 0)
+		_, t0 := r.grant()
+		_, t1, err := r.refresh(t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.clock.advance(33 * time.Second)
+
+		const racers = 12
+		errs := make([]error, racers)
+		writes := r.state.writes.Load()
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := range racers {
+			wg.Go(func() {
+				<-start
+				_, _, errs[i] = r.refresh(t0)
+			})
+		}
+		close(start)
+		wg.Wait()
+
+		for i, err := range errs {
+			if !isInvalidGrant(err) {
+				t.Fatalf("round %d: racer %d got %v, want invalid_grant", round, i, err)
+			}
+		}
+		if got := r.state.writes.Load() - writes; got != 4 {
+			t.Errorf("round %d: %d successful writes, want one set of 4", round, got)
+		}
+		if got := r.revoked(); len(got) != 1 {
+			t.Errorf("round %d: %d revocation records, want exactly 1", round, len(got))
+		}
+		if got := r.warnings("its session has been ended"); got != 1 {
+			t.Errorf("round %d: %d WARN lines about the end, want 1", round, got)
+		}
+		if len(r.sessions()) != 0 {
+			t.Errorf("round %d: the session is still listed", round)
+		}
+		if _, _, err = r.refresh(t1); err == nil {
+			t.Errorf("round %d: the successor refreshes", round)
+		}
 	}
 }

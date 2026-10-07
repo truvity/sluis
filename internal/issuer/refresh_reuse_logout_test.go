@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func TestAReuseSendsTheBackChannelLogoutAndLeavesTheBrowserSignInAlive(t *testin
 	}
 
 	<-skew
-	skew <- 31 * time.Second
+	skew <- 33 * time.Second
 
 	status, errName, _ := refreshAt(t, server.URL, first)
 	if status != http.StatusBadRequest || errName != "invalid_grant" {
@@ -151,5 +152,59 @@ func TestAMarkDatedAheadIsCountedAndKeepsItsGrace(t *testing.T) {
 	}
 	if got := counted(t, "access_issuer.spent_mark_ahead"); got != quiet {
 		t.Errorf("a skew of 1 s was counted (%d -> %d)", quiet, got)
+	}
+}
+
+// Concurrent reuses of one spent token tell the client once.
+func TestConcurrentReusesSendOneBackChannelLogout(t *testing.T) {
+	told := make(chan string, 16)
+	listener := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		told <- r.Form.Get("logout_token")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(listener.Close)
+
+	server, iss := signInServerWith(t, "ada@north.example", backChannelPolicy(listener.URL))
+	skew := make(chan time.Duration, 1)
+	skew <- 0
+	iss.Sessions().SetClock(func() time.Time {
+		d := <-skew
+		skew <- d
+		return time.Now().Add(d)
+	})
+	b := newBrowser(t, server)
+	b.signIn()
+	tokens := redeem(t, b, b.authorizeWith(map[string]string{"scope": "openid offline_access"}, ""))
+	first, _ := tokens["refresh_token"].(string)
+	if status, _, _ := refreshAt(t, server.URL, first); status != http.StatusOK {
+		t.Fatalf("refresh: %d", status)
+	}
+	<-skew
+	skew <- 33 * time.Second
+
+	const racers = 8
+	statuses := make([]int, racers)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range racers {
+		wg.Go(func() {
+			<-start
+			statuses[i], _, _ = refreshAt(t, server.URL, first)
+		})
+	}
+	close(start)
+	wg.Wait()
+
+	for i, status := range statuses {
+		if status != http.StatusBadRequest {
+			t.Errorf("racer %d: %d, want 400", i, status)
+		}
+	}
+	awaitLogoutToken(t, told)
+	select {
+	case <-told:
+		t.Error("concurrent reuses sent more than one logout token")
+	case <-time.After(500 * time.Millisecond):
 	}
 }
