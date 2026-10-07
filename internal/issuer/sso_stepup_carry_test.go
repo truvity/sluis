@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/truvity/sluis/internal/issuer"
 )
@@ -160,5 +161,71 @@ func TestRefileMovesOnlyThatPersonsSessionsUnderThatSignIn(t *testing.T) {
 		if !slices.Equal(clients, want.clients) {
 			t.Errorf("%s under %s = %v, want %v", want.identity, want.sso, clients, want.clients)
 		}
+	}
+}
+
+// A session that cannot be moved does not stop the others: each is tried,
+// and the failure is reported once all have been.
+func TestRefileCarriesOnPastASessionItCannotMove(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	rig := newSSORig(t, issuer.Config{})
+
+	rig.open(t, ssoEmail, "argocd", "old")
+	rig.open(t, ssoEmail, "kargo", "old")
+	rig.open(t, ssoEmail, "vault", "old")
+
+	stuck, err := rig.iss.Sessions().List(ctx, issuer.Query{Identity: ssoEmail, ClientID: "kargo"})
+	if err != nil || len(stuck) != 1 {
+		t.Fatalf("kargo = %v, %v", stuck, err)
+	}
+
+	rig.state.setFailures(false, func(key string) bool { return key == ssoSessionPrefix+stuck[0].ID })
+
+	moved, err := rig.iss.Sessions().Refile(ctx, ssoEmail, "old", "new")
+	if err == nil {
+		t.Error("a session that could not be moved was not reported")
+	}
+
+	if moved != 2 {
+		t.Errorf("moved %d, want the 2 that could be", moved)
+	}
+
+	rig.state.setFailures(false, nil)
+
+	got, err := rig.iss.Sessions().List(ctx, issuer.Query{Identity: ssoEmail, SSO: "new"})
+	if err != nil || len(got) != 2 {
+		t.Errorf("sessions under the new sign-in = %+v, %v; want argocd and vault", got, err)
+	}
+}
+
+// ssoSessionPrefix is the key of a session record.
+const ssoSessionPrefix = "issuer:session:"
+
+// unversioned is a State that keeps no revisions.
+type unversioned struct{ issuer.State }
+
+// Over a State that keeps no revisions nothing is moved: a plain write
+// there could bring back a session revoked between the read and the write.
+func TestRefileMovesNothingWithoutRevisions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	sessions := issuer.NewSessions(unversioned{issuer.NewMemoryState()}, time.Hour, 0)
+
+	if _, err := sessions.Record(ctx, issuer.Opened{
+		Identity: ssoEmail, ClientID: "argocd", How: issuer.HowCode, Token: "t-1", SSO: "old",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := sessions.Refile(ctx, ssoEmail, "old", "new")
+	if err != nil || moved != 0 {
+		t.Errorf("Refile = %d, %v; want nothing moved", moved, err)
+	}
+
+	if got, _ := sessions.List(ctx, issuer.Query{Identity: ssoEmail, SSO: "old"}); len(got) != 1 {
+		t.Errorf("sessions under the old sign-in = %+v, want the one left in place", got)
 	}
 }
