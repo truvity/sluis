@@ -1684,10 +1684,9 @@ func warnAgentClasses(ctx context.Context, set *policy.Set, absolute time.Durati
 	}
 	if resources := LengtheningResources(set, absolute); len(resources) > 0 {
 		log.WarnContext(ctx, "resources carry read_only and an absolute_cap longer than lifetimes.absolute; "+
-			"that lengthening is deprecated and a later minor release refuses it: once agent-class sessions are "+
-			"available (the release that adds their consent page), mark the clients that need a longer chain "+
-			"session: agent, then remove absolute_cap from these resources or lower it to at most "+
-			"lifetimes.absolute (docs/decisions/0040-agent-class-sessions.md)",
+			"that lengthening is deprecated and a later minor release refuses it: mark the clients that need "+
+			"a longer chain session: agent, then remove absolute_cap from these resources or lower it to at "+
+			"most lifetimes.absolute (docs/decisions/0040-agent-class-sessions.md)",
 			"resources", resources, "absolute", absolute.String())
 	}
 }

@@ -98,7 +98,7 @@ func sessionClass(whose, rule string) m {
 	return m{
 		"enum":        []string{"interactive", "agent"},
 		"default":     "interactive",
-		"description": whose + ": `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). `agent` is refused at load until the release that adds the agent consent page. " + rule,
+		"description": whose + ": `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). " + rule,
 	}
 }
 

@@ -551,33 +551,39 @@ func TestTheAgentLifetimesBlockLoadsAndIsClosed(t *testing.T) {
 	}
 }
 
-// `session: agent` is in the policy schema and refused when the policy is
-// loaded, on a declared client and on client_documents alike, until the
-// release that adds the agent consent page: a release cut in between must
-// not hand out a 30-day chain nobody consented to. `interactive` loads.
-func TestAgentClassIsRefusedAtLoadInThisRelease(t *testing.T) {
+// `session: agent` loads, on a declared client and on client_documents
+// alike, now that an agent authorization completes only on its consent page
+// and a browser sign-out spares agent sessions
+// (docs/decisions/0040-agent-class-sessions.md, decisions 6 and 7). What is
+// still refused stays refused: `session` on an exchange client, and
+// `session: agent` beside `sign_in_exchange: true`.
+func TestAgentClassLoads(t *testing.T) {
 	head := "apiVersion: " + config.APIVersion("policy") + "\n" +
 		"groups: { a: { members: [g@h.example] } }\n"
 	for name, tc := range map[string]struct {
 		body    string
-		refused bool
+		refused string
 	}{
 		"an agent client": {
-			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: agent } }\n", true,
+			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: agent } }\n", "",
 		},
 		"agent document clients": {
-			"client_documents: { origins: [hosts.example], requires: [a], session: agent }\n", true,
+			"client_documents: { origins: [hosts.example], requires: [a], session: agent }\n", "",
 		},
 		"an interactive client": {
-			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: interactive } }\n", false,
+			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: interactive } }\n", "",
+		},
+		"an agent client that trades its sign-in": {
+			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: agent, sign_in_exchange: true } }\n",
+			"sign_in_exchange",
 		},
 	} {
 		_, err := config.Load[config.PolicyDocument](write(t, head+tc.body))
 		switch {
-		case tc.refused && (err == nil || !strings.Contains(err.Error(), "agent-class sessions become available")):
-			t.Errorf("%s: %v, want it refused until the consent page ships", name, err)
-		case !tc.refused && err != nil:
+		case tc.refused == "" && err != nil:
 			t.Errorf("%s: %v, want it loaded", name, err)
+		case tc.refused != "" && (err == nil || !strings.Contains(err.Error(), tc.refused)):
+			t.Errorf("%s: %v, want it refused for %s", name, err, tc.refused)
 		}
 	}
 }
