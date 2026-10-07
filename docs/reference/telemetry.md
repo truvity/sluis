@@ -94,7 +94,7 @@ Source: the instruments in `internal/issuer/metrics.go`, `internal/rails` and th
 | `access_issuer.http.request.duration` | histogram, `s` | `route`, `status_class` | Time from a request's arrival to the handler returning. |
 | `access_issuer.tokens.issued` | counter | `client_id`, `grant_type` | Access tokens signed. `grant_type` is `authorization_code`, `refresh_token`, `token_exchange`, `client_credentials` or `console_mint`. |
 | `access_issuer.login.failures` | counter | `reason` | Sign-ins that did not complete. |
-| `access_issuer.login.successes` | counter | `method` | Sign-ins that completed: a directory's kind, `recovery` or `browser_session`. |
+| `access_issuer.login.successes` | counter | `method` | Sign-ins that completed: a directory's kind, `recovery`, `browser_session` or `agent_consent` (an agent connection accepted on the consent page). |
 | `access_issuer.reuse_detected` | counter | `kind` | A spent credential presented again: `authorization_code` or `refresh_token`. |
 | `access_issuer.dead_refresh_token_hits` | counter | none | A refresh token refused from the issuer's in-process negative cache: one read as naming no live session twice, at least 60 s apart, and presented again within 5 minutes of the second, refused with no State read. A steady rate is a client looping on an ended chain; the WARN `refused a refresh token that names no live session` names it once per cache entry, with the client id the request named (empty for `private_key_jwt`) and an 8-hex `token_fingerprint`, at most 30 such lines a minute. |
 | `access_issuer.spent_mark_ahead` | counter | none | A spent refresh token mark read that is dated more than 2 s ahead of the replica's clock. The replicas' clocks disagree, which moves the 30-second grace window. The issuer logs a WARN and keeps the grace. |
@@ -114,8 +114,9 @@ a form whose state is missing, expired, forged or not from this browser),
 `unknown_provider`, `provider_failed` (the directory's own exchange),
 `directory_refused`, `directory_unreachable`, `not_entitled` (signed in, but not
 in a group the application requires), `recovery_refused`, `unaudited` (the audit
-trail could not be written), `not_waiting` (the authorization request is gone)
-and `bad_request`.
+trail could not be written), `not_waiting` (the authorization request is gone),
+`consent_refused` (an agent connection's consent page was not accepted in the
+browser that was shown it, or its sign-in no longer stands) and `bad_request`.
 
 **`reuse_detected` has two kinds with two meanings.** An authorization code
 presented twice is a certain reuse, and the session it opened is ended. A

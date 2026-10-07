@@ -39,6 +39,11 @@ records which clients held them. The tokens go out AFTER it, because a client to
 it alive is worse than one told a moment late. Delivery failures are logged and never raised: the sign-out has
 already happened, and a relying party that cannot be reached must not turn a completed sign-out into a failed one.
 
+**What a person's own sign-out spares.** Agent-class sessions are not revoked by a person's own sign-out, so their
+clients are not told: no logout token, not even the subject-only one sent to a client that holds a spared session. An
+`end_session` that names an agent client ends that client's sessions and tells it. Another person signing in in the
+same browser ends everything and tells every client ([sessions](sessions.md#sign-out-keeps-agent-connections-and-says-so)).
+
 ## Revoking somebody else's session
 
 A revoked or suspended person is stopped separately, by the next refresh being refused, with the directory's liveness

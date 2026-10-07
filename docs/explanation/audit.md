@@ -57,3 +57,13 @@ the sign-in is refused and the refusal recorded. Recovery is the way in that byp
 that left no trace is the one gap an auditor most needs to be impossible. It does make recovery depend on the
 installation's writer, which is the price; a deployment with no installation connected does not refuse recovery,
 because it has no trail to keep it in ([recovery](recovery.md)).
+
+## The audit writer goes first
+
+Recording is best effort, so an issuer that emits a field its writer's catalogue does not know loses those records
+rather than failing. A catalogue change therefore reaches the audit installation before the issuer that emits it. This
+matters for catalogue 1.10.0: `roster.person.signed_in` gains the session's `class` and `deadline`, and
+`roster.session.ended` gains `spared`, the client ids of the agent sessions a sign-out kept running. Deploy the audit
+writer with catalogue 1.10.0 first, then the issuer. A writer on Kubernetes receives the catalogue when the service
+registers it; a Lambda writer needs the new release asset, schemas included
+([connect an audit installation](../how-to/connect-audit-installation.md#before-you-start)).

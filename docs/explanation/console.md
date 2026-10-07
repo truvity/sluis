@@ -77,6 +77,20 @@ It cannot change who is in an internal group. Operator therefore means *may conn
 *may keep Slack channel records* and *may request a pass*, each over the installation, or over the one directory that
 owns the organisation or Slack workspace concerned; everything else is a viewer.
 
+## The Sessions page
+
+A person's page lists their sessions grouped under the sign-in that opened them, one group per browser. A sign-in that
+has ended, because the person signed out, stays listed while it still holds sessions, marked as a signed-out browser:
+those are the agent connections the sign-out kept. Each row shows the client, its class (`interactive` or `agent`) and
+its deadline, the computed end of the chain, beside the sliding expiry. *End this browser* ends the sign-in and every
+session under it, spared agent sessions included; a row's own revoke ends only that session, and *sign out everywhere*
+ends everything the person holds.
+
+A client's page lists its sessions across people. Beside the per-person revoke it offers, to an operator only, *End for
+everybody*, which ends that client's sessions for every identity (`every_identity` on `RevokeSessions`) and is audited
+as `roster.session.revoked` with scope `one client, every identity`. It is the lever for one client when removing it
+from the policy would only stop its chains.
+
 ## Navigation
 
 Navigation is the model, in four clusters under *Overview*: **IDENTITY** (Directories, Directory groups, People,
