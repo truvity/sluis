@@ -262,7 +262,7 @@
         },
         "session": {
           "default": "interactive",
-          "description": "Every document client's refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). Never read from a document: admit with `agent` only an origin whose documents its vendor controls.",
+          "description": "Every document client's refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). `agent` is refused at load until the release that adds the agent consent page. Never read from a document: admit with `agent` only an origin whose documents its vendor controls.",
           "enum": [
             "interactive",
             "agent"
@@ -364,7 +364,7 @@
           },
           "session": {
             "default": "interactive",
-            "description": "Its refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). Refused on an exchange client and, as `agent`, with `sign_in_exchange`.",
+            "description": "Its refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). `agent` is refused at load until the release that adds the agent consent page. Refused on an exchange client and, as `agent`, with `sign_in_exchange`.",
             "enum": [
               "interactive",
               "agent"
