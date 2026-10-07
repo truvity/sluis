@@ -126,9 +126,12 @@ func (c caller) may(identity string) bool {
 // Unicode case folding, under which "ſ" and "s" are one letter while the
 // index holds them apart, so that "your own" means the sessions filed
 // under your own key and nobody else's.
-func sameIdentity(a, b string) bool {
-	return strings.ToLower(strings.TrimSpace(a)) == strings.ToLower(strings.TrimSpace(b))
-}
+func sameIdentity(a, b string) bool { return identityKey(a) == identityKey(b) }
+
+// identityKey is an identity as the index keys it. Not strings.EqualFold,
+// which staticcheck would suggest for the comparison spelled out: that is
+// exactly the folding this exists to avoid.
+func identityKey(identity string) string { return strings.ToLower(strings.TrimSpace(identity)) }
 
 // who establishes the caller, from either of the two ways a browser or a
 // console can prove itself here.
