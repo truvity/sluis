@@ -916,6 +916,12 @@ func (s *Storage) Pending(id string) (Pending, error) {
 
 // CreateAccessToken implements [op.AuthStorage].
 func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
+	// The library mints a refresh grant through CreateAccessAndRefreshTokens;
+	// a reused token must not mint here either, whatever path reaches it.
+	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
+		return "", time.Time{}, oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
+	}
+
 	issued, err := s.issue(ctx, request)
 	if err != nil {
 		return "", time.Time{}, err
@@ -930,6 +936,12 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 func (s *Storage) CreateAccessAndRefreshTokens(
 	ctx context.Context, request op.TokenRequest, currentRefreshToken string,
 ) (string, string, time.Time, error) {
+	// A spent token past its grace window, presented by the session's own
+	// client: the session ends here, before anything is resolved or minted.
+	if req, isRefresh := request.(*refreshRequest); isRefresh && req.presented.reused != "" {
+		return "", "", time.Time{}, s.endReuse(ctx, req.session)
+	}
+
 	issued, err := s.issue(ctx, request)
 	if err != nil {
 		return "", "", time.Time{}, err
@@ -1367,9 +1379,9 @@ func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) erro
 		"this session has reached its absolute limit and must sign in again")
 }
 
-// refuseReuse answers a refresh token spent longer ago than the grace
-// window: it ends the session the token was spent in and refuses the
-// grant with invalid_grant.
+// endReuse answers a refresh token spent longer ago than the grace window:
+// it ends the session the token was spent in and refuses the grant with
+// invalid_grant.
 //
 // Refresh token rotation exists for this (RFC 9700 section 4.14.2). A
 // token stolen and then used by both its thief and its rightful holder is
@@ -1380,31 +1392,42 @@ func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) erro
 // is a client's own burst of concurrent refreshes, and is answered
 // instead ([Sessions.replayedTo]).
 //
+// It runs here, where the library creates the tokens, and not where it
+// first reads the refresh token ([Storage.TokenRequestByRefreshToken]):
+// by now the library has authenticated the client and matched it to the
+// session's, so a spent token presented under some other client is
+// refused there with nothing ended.
+//
 // The session ends as [Sessions.RevokeID] ends one: gone from every
-// listing, every token of it dead, the access tokens naming it refused by
-// userinfo. Audited as a revocation by the system with the scope
-// `refresh_token_reuse`. A failure to end it is a server error rather than
-// a refusal, so that the client tries again and the reuse is met again.
-func (s *Storage) refuseReuse(ctx context.Context, id string) error {
+// listing, every refresh token of it dead, the access tokens naming it
+// refused by userinfo. A client that asked for back-channel logout is
+// told. The browser sign-in the session was opened under is left alone, so
+// that a false positive costs one client's session and not every one; the
+// audit record names it, for an operator who decides otherwise.
+//
+// The audit record is written before the session is deleted, and the
+// record goes first in the delete, so a delete that fails part way and is
+// retried finds no live session and writes no second record. A delete
+// that fails outright is a server error rather than a refusal, so that the
+// client tries again and the reuse is met again.
+func (s *Storage) endReuse(ctx context.Context, session Session) error {
 	recordReuse(ctx, "refresh_token")
+	s.iss.record(ctx, audit.SessionReuseRevoked(session.Identity, session.ClientID, session.SSO))
 
-	ended, gone, err := s.iss.Sessions().endReused(ctx, id)
-	if err != nil {
+	if err := s.iss.Sessions().deleteSession(ctx, session); err != nil {
 		s.logger().WarnContext(ctx, "a spent refresh token was reused and its session could not be ended",
 			"error", logsafe.Error(err))
 
 		return oidc.ErrServerError().WithDescription("%s", err)
 	}
 
-	if gone {
-		// WARN, as for a reused authorization code: a broken client or a
-		// stolen token, and both are worth seeing.
-		s.logger().WarnContext(ctx, "a spent refresh token was reused after its grace window; its session has been ended",
-			"client_id", logsafe.Value(ended.ClientID))
-		s.iss.record(ctx, audit.SessionReuseRevoked(ended.Identity, ended.ClientID))
-	}
+	// WARN, as for a reused authorization code: a broken client or a
+	// stolen token, and both are worth seeing.
+	s.logger().WarnContext(ctx, "a spent refresh token was reused after its grace window; its session has been ended",
+		"client_id", logsafe.Value(session.ClientID))
+	s.announceLogout(ctx, s.logger(), []Session{session})
 
-	return op.ErrInvalidRefreshToken
+	return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
 }
 
 // TokenRequestByRefreshToken implements [op.AuthStorage].
@@ -1421,8 +1444,11 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 
 	session := presented.session
 
-	if !ok && presented.reused != "" {
-		return nil, s.refuseReuse(ctx, presented.reused)
+	if presented.reused != "" {
+		// Not ended here: the library has yet to match the client to the
+		// session's. The request carries the session to where it has
+		// ([Storage.endReuse]), and can never mint anything.
+		return &refreshRequest{session: session, presented: presented}, nil
 	}
 
 	if !ok {
