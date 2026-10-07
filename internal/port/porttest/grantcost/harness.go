@@ -27,6 +27,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -78,6 +79,9 @@ type Harness struct {
 	Directory issuer.Directory
 	snapshots *hub.BlobSnapshots
 	cookies   map[string]string
+	// skew is how far [Harness.Advance] has moved the clocks, which the
+	// issuer's session index reads as well as the State.
+	skew atomic.Int64
 }
 
 // New assembles the issuer over env with a fresh snapshot of the directory
@@ -140,6 +144,10 @@ func New(t *testing.T, env Env) *Harness {
 		t: t, env: env, Server: server, Issuer: iss, Counter: counter, Directory: dir,
 		snapshots: snapshots, cookies: map[string]string{},
 	}
+	// The session index decides the grace window of a spent refresh token
+	// by its own clock, so time that passes for the State passes for it
+	// too.
+	iss.Sessions().SetClock(func() time.Time { return time.Now().Add(time.Duration(h.skew.Load())) })
 	h.Snapshot(time.Now())
 	counter.Reset()
 	return h
@@ -157,13 +165,14 @@ func (h *Harness) Snapshot(takenAt time.Time) {
 	}
 }
 
-// Advance moves the State's clock.
+// Advance moves the State's clock, and the issuer's session index's with it.
 func (h *Harness) Advance(d time.Duration) {
 	h.t.Helper()
 	if h.env.Advance == nil {
 		h.t.Fatal("this Env cannot advance its clock")
 	}
 	h.env.Advance(d)
+	h.skew.Add(int64(d))
 }
 
 // Measure runs step and returns what it cost.

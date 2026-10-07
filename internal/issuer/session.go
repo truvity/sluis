@@ -2,13 +2,18 @@ package issuer
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -224,22 +229,152 @@ func capEnd(now, authTime time.Time, refresh, absolute time.Duration) time.Time 
 	return end
 }
 
-// spentPrefix marks a token pointer whose token has been spent: the value
-// is the prefix and then the successor the spending refresh produced,
-// kept for [refreshGrace].
+// spentPrefix marks a token pointer whose token has been spent. The value
+// is the prefix, then when it was spent, the successor the spending
+// refresh produced -- sealed under the spent token -- and the session it
+// belonged to:
+//
+//	spent:<unix milliseconds>:<sealed successor>:<session id>
 //
 // It is the spent token's own key rather than one beside it because a
 // rotation has to do two things to that token at once -- stop it naming
 // the session, and say what it became -- and doing both in one write is
-// one write fewer on every refresh. The successor is a bearer secret held
-// in plain for those seconds, exactly as the separate key held it; a
-// value that names no session id can never be read as one.
+// one write fewer on every refresh.
+//
+// The mark is kept until the session's end as that rotation set it, not
+// for the grace window alone, so that a spent token presented after the
+// window is still KNOWN to be spent, and to be whose: that is how a reuse
+// is told apart from a token that never existed ([spentMark.inGrace]).
+// Keeping it longer is the TTL of the write the rotation already makes,
+// so it costs no request.
+//
+// The successor is a bearer secret, and it is the session's live one
+// until the next refresh. Held in plain for as long as the mark is kept,
+// anybody who can read the keyspace could use it; the token pointers hash
+// their tokens into their keys precisely so that an index that can be
+// read is not one that can be replayed. So it is sealed with a key only
+// the spent token's holder can derive ([sealSuccessor]): the replay that
+// needs it presents that token, and nothing else does. A value that names
+// no session id where a pointer does can never be read as one.
 const spentPrefix = "spent:"
 
-// successorOf reads a token pointer's value: the successor, and true, for
-// a spent token.
-func successorOf(raw []byte) (string, bool) {
-	return strings.CutPrefix(string(raw), spentPrefix)
+// spentMark is a spent token's pointer, read.
+type spentMark struct {
+	at      time.Time
+	sealed  string
+	session string
+}
+
+// isSpent reports whether a token pointer's value is the mark of a spent
+// token, well formed or not.
+func isSpent(raw []byte) bool { return strings.HasPrefix(string(raw), spentPrefix) }
+
+// readSpent reads a token pointer's value as a spent token's mark. It is
+// false for a live token's pointer and for a mark it cannot read, which
+// is then a token that resolves to nothing.
+func readSpent(raw []byte) (spentMark, bool) {
+	rest, spent := strings.CutPrefix(string(raw), spentPrefix)
+	if !spent {
+		return spentMark{}, false
+	}
+
+	parts := strings.SplitN(rest, ":", 3)
+	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
+		return spentMark{}, false
+	}
+
+	ms, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return spentMark{}, false
+	}
+
+	return spentMark{at: time.UnixMilli(ms), sealed: parts[1], session: parts[2]}, true
+}
+
+// markSpent is the value a rotation writes over the token it spends.
+func markSpent(token, successor, session string, at time.Time) ([]byte, error) {
+	mark := spentMark{at: time.UnixMilli(at.UnixMilli()), session: session}
+
+	sealed, err := sealSuccessor(token, successor, mark.bound())
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(spentPrefix + strconv.FormatInt(mark.at.UnixMilli(), 10) + ":" + sealed + ":" + session), nil
+}
+
+// bound is what the sealed successor is bound to: the rest of the mark, so
+// that a successor cannot be moved into another session's mark or another
+// time.
+func (m spentMark) bound() string {
+	return strconv.FormatInt(m.at.UnixMilli(), 10) + ":" + m.session
+}
+
+// inGrace reports whether a spent token presented at now is a replay of
+// the refresh that spent it, inside [refreshGrace]. A mark from a clock a
+// little ahead of this one reads as inside it.
+func (m spentMark) inGrace(now time.Time) bool { return now.Sub(m.at) < refreshGrace }
+
+// successor opens the successor sealed in the mark, with the spent token
+// that was presented. False when it does not open, which a mark written
+// for this token always does.
+func (m spentMark) successor(token string) (string, bool) {
+	sealed, err := base64.RawURLEncoding.DecodeString(m.sealed)
+	if err != nil {
+		return "", false
+	}
+
+	aead, err := successorCipher(token)
+	if err != nil || len(sealed) < aead.NonceSize() {
+		return "", false
+	}
+
+	nonce, box := sealed[:aead.NonceSize()], sealed[aead.NonceSize():]
+	plain, err := aead.Open(nil, nonce, box, []byte(m.bound()))
+	if err != nil {
+		return "", false
+	}
+
+	return string(plain), true
+}
+
+// sealSuccessor seals a successor under the token it replaces, bound to
+// the rest of the mark, as base64url of nonce and ciphertext.
+func sealSuccessor(token, successor, bound string) (string, error) {
+	aead, err := successorCipher(token)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, aead.NonceSize())
+	if _, err = rand.Read(nonce); err != nil {
+		return "", fmt.Errorf("issuer: seal a successor: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(aead.Seal(nonce, nonce, []byte(successor), []byte(bound))), nil
+}
+
+// successorCipher is AES-256-GCM under a key derived from a refresh token
+// with a label of its own, so that it is never the hash the token's
+// pointer is keyed by.
+func successorCipher(token string) (cipher.AEAD, error) {
+	key := sha256.Sum256([]byte("sluis/issuer/spent-successor/v1\x00" + token))
+
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, fmt.Errorf("issuer: successor cipher: %w", err)
+	}
+
+	return cipher.NewGCM(block)
+}
+
+// spentLifetime is how long a rotation keeps the mark of the token it
+// spent: until the session's end as the rotation set it, and never less
+// than the grace window. That end is at most one refresh lifetime away,
+// which is as long as the spent token itself could have lived unspent; a
+// session that has ended has nothing left for a reuse to end.
+func spentLifetime(session Session, now time.Time) time.Duration {
+	return max(session.ExpiresAt.Sub(now), refreshGrace)
 }
 
 // refreshGrace is how long a refresh token that has just been rotated
@@ -247,6 +382,9 @@ func successorOf(raw []byte) (string, bool) {
 // protocol rather than of an estate, so it is not configurable: long
 // enough to cover one page's burst of concurrent calls, short enough that
 // a stolen token is worth nothing by the time anyone could use it.
+//
+// Past it, presenting the spent token is a reuse, and it ends the session
+// ([Storage.refuseReuse]).
 const refreshGrace = 30 * time.Second
 
 // sessionAllKey is every session, for the operator's "what is open right
@@ -374,6 +512,10 @@ type presented struct {
 	// replay of the refresh that spent it, inside the grace window: the
 	// token that refresh produced, which is the answer.
 	successor string
+	// reused is set, with the answer false, when the token was spent
+	// longer ago than [refreshGrace]: the id of the session it belonged
+	// to, which a reuse ends.
+	reused string
 	// pointer and record are the revisions of the token's pointer and of
 	// the session record as read, "" from a State that keeps none.
 	pointer, record string
@@ -383,6 +525,10 @@ type presented struct {
 // -- for a token rotated within [refreshGrace] -- to the successor that
 // rotation produced. Its answer is what [Sessions.rotate] acts on, so a
 // refresh reads the token and the session once.
+//
+// A token spent longer ago than that resolves to nothing, and says which
+// session it was spent in ([presented.reused]), so that the caller can end
+// it. The read that tells is the one every refresh makes anyway.
 func (s *Sessions) present(ctx context.Context, token string) (presented, bool, error) {
 	raw, pointer, found, err := getVersion(ctx, s.state, sessionTokenKey(token))
 	if err != nil {
@@ -400,7 +546,21 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 		return s.replayedTo(ctx, token, string(raw))
 	}
 
-	if successor, spent := successorOf(raw); spent {
+	if isSpent(raw) {
+		mark, ok := readSpent(raw)
+		if !ok {
+			return presented{}, false, nil
+		}
+
+		if !mark.inGrace(s.now()) {
+			return presented{token: token, reused: mark.session}, false, nil
+		}
+
+		successor, ok := mark.successor(token)
+		if !ok {
+			return presented{}, false, nil
+		}
+
 		return s.replayedTo(ctx, token, successor)
 	}
 
@@ -425,7 +585,7 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 // intermittently and for no reason they can see.
 //
 // The window is deliberately short and does not mint anything. Outside
-// it, reuse is refused exactly as before, which is the detection this
+// it, reuse is refused and ends the session, which is the detection this
 // rotation exists for; inside it, the replay is answered with the one
 // credential already in flight rather than a second one.
 //
@@ -465,7 +625,8 @@ func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Se
 //  1. The new token's pointer. First, so that by the time anything says
 //     what the old token became, what it became already resolves.
 //  2. The old token's pointer, replaced by the mark of a spent token and
-//     its successor -- only if it is still what was read. If another
+//     its successor ([spentPrefix]), kept until the session's end so that
+//     a later reuse is known for one -- only if it is still what was read. If another
 //     refresh spent it first this one is a replay and gets that one's
 //     successor; if it was revoked or has expired, this one is refused.
 //  3. The session record, with its new end -- only over what is there
@@ -504,11 +665,16 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 		return Session{}, "", false, nil
 	}
 
-	if err := s.state.Set(ctx, sessionTokenKey(newToken), []byte(session.ID), s.lifetime); err != nil {
+	mark, err := markSpent(p.token, newToken, session.ID, now)
+	if err != nil {
 		return Session{}, "", false, err
 	}
 
-	err := replace(ctx, s.state, sessionTokenKey(p.token), []byte(spentPrefix+newToken), refreshGrace, p.pointer)
+	if err = s.state.Set(ctx, sessionTokenKey(newToken), []byte(session.ID), s.lifetime); err != nil {
+		return Session{}, "", false, err
+	}
+
+	err = replace(ctx, s.state, sessionTokenKey(p.token), mark, spentLifetime(session, now), p.pointer)
 	if errors.Is(err, errMoved) || errors.Is(err, errGone) {
 		// Lost: the new token was never handed out, so its pointer goes.
 		s.discard(ctx, newToken)
@@ -657,7 +823,7 @@ func (s *Sessions) ByToken(ctx context.Context, token string) (Session, bool, er
 		return Session{}, false, err
 	}
 
-	if _, spent := successorOf(raw); spent {
+	if isSpent(raw) {
 		return Session{}, false, nil
 	}
 
@@ -771,6 +937,27 @@ func (s *Sessions) RevokeID(ctx context.Context, id string) (bool, error) {
 	return true, s.deleteSession(ctx, session)
 }
 
+// endReused ends the session a spent token was presented for after its
+// grace window, as [Sessions.RevokeID] ends one, and returns it: who held
+// it and at which client is what the audit record of the reuse says. False
+// when there was no live session to end -- it had been ended already, by a
+// revocation, its expiry, or an earlier reuse of the same token.
+//
+// One read and four writes (the record and its three index sets), paid
+// only by a reuse; a refresh never comes here.
+func (s *Sessions) endReused(ctx context.Context, id string) (Session, bool, error) {
+	session, found, err := s.byID(ctx, id)
+	if err != nil || !found {
+		return Session{}, false, err
+	}
+
+	if err = s.deleteSession(ctx, session); err != nil {
+		return Session{}, false, err
+	}
+
+	return session, true, nil
+}
+
 // deleteSession removes a session's record and its membership in every
 // index set, given the record already in hand.
 //
@@ -807,7 +994,7 @@ func (s *Sessions) RevokeToken(ctx context.Context, token string) (bool, error) 
 
 	// A spent token holds no session of its own; what it became is
 	// revoked through the session, as it always was.
-	if _, spent := successorOf(raw); spent {
+	if isSpent(raw) {
 		return false, nil
 	}
 
@@ -969,7 +1156,7 @@ func (s *Sessions) endedByAbsoluteLimit(ctx context.Context, token string) (Sess
 		return Session{}, false, err
 	}
 
-	if _, spent := successorOf(raw); spent {
+	if isSpent(raw) {
 		return Session{}, false, nil
 	}
 

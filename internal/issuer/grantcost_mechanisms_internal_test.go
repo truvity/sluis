@@ -707,7 +707,7 @@ func TestAHeldAnswerEndsAtMostAnEighthEarlyAndNeverLate(t *testing.T) {
 
 // -------------------------------------------- 4. rotation in one write
 
-func TestRotationSpendsTheOldPointerAsSpentSuccessorForThirtySeconds(t *testing.T) {
+func TestRotationSpendsTheOldPointerAsSpentSuccessorUntilTheSessionEnds(t *testing.T) {
 	gcEachKind(t, 0, false, func(t *testing.T, e *gcEnv) {
 		session := e.open(t, "t0")
 		if raw, _ := e.rawPointer(t, "t0"); raw != session.ID {
@@ -719,8 +719,18 @@ func TestRotationSpendsTheOldPointerAsSpentSuccessorForThirtySeconds(t *testing.
 			t.Fatalf("Refreshed = %q, %v; want t1", successor, ok)
 		}
 		raw, found := e.rawPointer(t, "t0")
-		if !found || raw != "spent:t1" {
-			t.Errorf("the old pointer = %q (found %v), want spent:t1", raw, found)
+		mark, isMark := readSpent([]byte(raw))
+		if !found || !isMark || mark.session != session.ID {
+			t.Errorf("the old pointer = %q (found %v), want the mark of a token spent in %s", raw, found, session.ID)
+		}
+		if got, opened := mark.successor("t0"); !opened || got != "t1" {
+			t.Errorf("the mark's successor opened with the spent token = %q, %v; want t1", got, opened)
+		}
+		if _, opened := mark.successor("t1"); opened {
+			t.Error("the mark's successor opened with a token other than the spent one")
+		}
+		if strings.Contains(raw, "t1") {
+			t.Errorf("the mark %q holds the successor in plain", raw)
 		}
 		if raw, _ = e.rawPointer(t, "t1"); raw != session.ID {
 			t.Errorf("the new pointer = %q, want the session id", raw)
@@ -729,13 +739,10 @@ func TestRotationSpendsTheOldPointerAsSpentSuccessorForThirtySeconds(t *testing.
 			t.Error("a rotation still wrote the separate issuer:session-rotated: key")
 		}
 
-		e.advance(29 * time.Second)
+		// Kept past the grace window, so that a reuse is known for one.
+		e.advance(31 * time.Second)
 		if _, found = e.rawPointer(t, "t0"); !found {
-			t.Error("the spent pointer lapsed before 30 seconds")
-		}
-		e.advance(2 * time.Second)
-		if _, found = e.rawPointer(t, "t0"); found {
-			t.Error("the spent pointer outlived its 30 seconds")
+			t.Error("the spent pointer lapsed with the grace window")
 		}
 	})
 }
