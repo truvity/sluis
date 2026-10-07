@@ -16,9 +16,16 @@ are secure) holds a fresh 32-byte random value, base64url. The store keeps only 
 pointer, `issuer:sso-cookie:<hash>`, to the sign-in's id, and the sign-in record carries the same hash. The id is
 what the console and the `sso` field of a listed session show, and it authenticates nothing: seeing one does not let
 anyone be that person. Before this, the cookie *was* the id, so an id seen in a listing was a credential. A cookie set
-by an older version is not accepted: after that upgrade every browser signs in once more. A sign-out from a browser
-still holding such a cookie only clears it; the sessions of that older sign-in end at their own expiry, by a console
-revoke, or by *sign out everywhere*.
+by an older version signs nobody in: after that upgrade every browser signs in once more. For one release, a sign-out
+from a browser still holding such a cookie ends that old sign-in and revokes its sessions, as before; that fallback is
+removed in the next release, and it never signs anyone in.
+
+A new interactive sign-in (step-up, `prompt=login`, `max_age`, another account) ends the sign-in the browser held
+before, the sign-in only and not its per-client sessions. A sign-in that fails clears the cookie.
+
+When the store cannot be read at sign-out, `/logout` and `/end_session` answer 503 and end nothing: an HTML "Sign-out
+did not complete" page with a retry link, or JSON `temporarily_unavailable`. The cookie is kept, so the person can
+retry; clearing it and reporting success would have left the sign-in alive.
 
 Per-client sessions are first-class too, not opaque tokens in a store: a per-identity index of client, how it was
 obtained, issued, expires, last refreshed, so they can be **listed** per identity and per client and **revoked** per
