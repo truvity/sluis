@@ -1404,16 +1404,18 @@ func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) erro
 // told. The browser sign-in the session was opened under is left alone, so
 // that a false positive costs one client's session and not every one.
 //
-// Ending it is conditional on the record being the revision read when the
-// reuse was detected ([Sessions.endReused]). Several presentations of one
-// spent token at once all detect the reuse; the one whose delete lands
-// ends the session, and only it is audited and announced. The others are
-// refused as any spent token is, and write nothing. The audit record
+// Ending it is a delete of the record at the revision read
+// ([Sessions.endReused]), read again and repeated while refreshes of the
+// successor keep writing it, so holding the successor and refreshing it
+// does not dodge the revocation. Several presentations of one spent token
+// at once all detect the reuse; the one whose delete lands ends the
+// session, and only it is audited and announced. The others find the
+// record gone and are refused as any spent token is. The audit record
 // follows the delete that decides this rather than preceding it: written
 // first, every presentation would write one, and a delete that then failed
 // would leave a record of an end that did not happen. A delete that fails
-// outright is a server error rather than a refusal, so that the client
-// tries again and the reuse is met again.
+// with the session still live is a server error rather than a refusal, so
+// that the client tries again and the reuse is met again.
 func (s *Storage) endReuse(ctx context.Context, p presented) error {
 	recordReuse(ctx, "refresh_token")
 	session := p.session
@@ -1427,8 +1429,9 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 			return oidc.ErrServerError().WithDescription("%s", err)
 		}
 
-		// Another presentation of the same token ended it, or something
-		// else wrote the record since: nothing for this one to do.
+		// Another presentation of the same token ended it, or this one's
+		// own delete did and was reported missing on a retry: ended,
+		// and not this call's to audit.
 		return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
 	}
 

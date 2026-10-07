@@ -642,28 +642,90 @@ func (s *Sessions) reusedIn(ctx context.Context, token, id string) (presented, b
 	return presented{token: token, session: session, reused: session.ID, record: record}, false, nil
 }
 
-// endReused ends the session a reuse was detected in, only if its record
-// is still the revision [Sessions.reusedIn] read. It reports whether this
-// call ended it: false, with no error, when something else wrote or ended
-// the record since -- another presentation of the same spent token, most
-// likely, which is then the one that ends it and says so.
+// reuseEndAttempts bounds how many conditional deletes ending a reused
+// session makes, each at the revision just read, before it ends the
+// session unconditionally.
+const reuseEndAttempts = 3
+
+// endReused ends the session a reuse was detected in, and reports whether
+// this call is the one that ended it: the one that then audits it and
+// announces it. Of several presentations of one spent token at once,
+// exactly one is.
 //
-// The record goes first, and conditionally: that one write ends the
-// session, since every token resolves through it, and decides which of
-// several concurrent reuses is the one. The three index sets follow; a
-// failure there leaves ids the next listing drops, and the session ended.
-// Four writes in all, and none for a reuse that lost.
+// The record goes first, and conditionally, at the revision read: that one
+// write ends the session, since every token resolves through it. What
+// happens when it does not land depends on why:
+//
+//   - The record was written since (errMoved). A refresh of the live
+//     successor does that, and a thief who holds the successor and keeps
+//     refreshing it must not dodge the revocation that way. The record is
+//     read again and, while it is still live, deleted at its new revision,
+//     [reuseEndAttempts] times in all; a record that keeps moving is then
+//     deleted unconditionally, and this call is still the one that ended
+//     it. A rotation that loses to the delete is refused by its own
+//     conditional write ([Sessions.writeRotated]).
+//   - The record is gone (errGone), or read again it is gone or no longer
+//     live. Another presentation of the same token ended it -- or this
+//     request's own delete did, and a retry of it below the State reported
+//     it as missing. The two cannot be told apart. The session is ended
+//     either way, and this call reports that it did not end it: a second
+//     audit record would be worse than a missing one. It says so in a
+//     warning naming the session.
+//   - The delete failed otherwise (an unavailable store, a timeout). It may
+//     have landed. The record is read again: gone, it is the case above;
+//     still live, the error is returned and the client's retry meets the
+//     reuse again.
+//
+// The three index sets follow the record; a failure there leaves ids the
+// next listing drops, and the session ended. Four writes when nothing
+// races it; each refresh it races adds one failed conditional delete and
+// one read.
 func (s *Sessions) endReused(ctx context.Context, p presented) (bool, error) {
-	err := deleteVersion(ctx, s.state, sessionKey(p.session.ID), p.record)
-	switch {
-	case errors.Is(err, errMoved), errors.Is(err, errGone):
+	id, version := p.session.ID, p.record
+
+	for attempt := 0; ; attempt++ {
+		var err error
+		if attempt < reuseEndAttempts {
+			err = deleteVersion(ctx, s.state, sessionKey(id), version)
+		} else {
+			err = s.state.Delete(ctx, sessionKey(id))
+		}
+
+		if err == nil {
+			break
+		}
+
+		if !errors.Is(err, errMoved) && !errors.Is(err, errGone) {
+			// Ambiguous: it may have landed. Read again before saying so.
+			_, _, live, readErr := s.byIDVersion(ctx, id)
+			if readErr != nil || live {
+				return false, err
+			}
+
+			err = errGone
+		}
+
+		if errors.Is(err, errMoved) {
+			var live bool
+			_, version, live, err = s.byIDVersion(ctx, id)
+			if err != nil {
+				return false, err
+			}
+
+			if live {
+				continue
+			}
+		}
+
+		slog.WarnContext(ctx, "a reused session was already gone when it was to be ended; "+
+			"another presentation of the token, or this one's own retried delete, ended it, "+
+			"and it is not audited a second time", "session", id)
+
 		return false, nil
-	case err != nil:
-		return false, err
 	}
 
 	for _, key := range []string{sessionAllKey, sessionOfKey(p.session.Identity), sessionForKey(p.session.ClientID)} {
-		if err = s.state.Remove(ctx, key, p.session.ID); err != nil {
+		if err := s.state.Remove(ctx, key, id); err != nil {
 			return true, err
 		}
 	}
