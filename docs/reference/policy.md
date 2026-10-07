@@ -266,8 +266,17 @@ To declare one: [how-to/declare-a-vocabulary.md](../how-to/declare-a-vocabulary.
 
 A resource is declared under `resources`, a client names it with the `resource` parameter (RFC 8707), and `aud` is the
 resource. A caller must satisfy both the client's `requires` and the resource's, and the shorter `ttl_cap` wins.
-A resource that only reads may carry `read_only: true` and an `absolute_cap` up to 168h. Keys and refusals:
+A resource that only reads may carry `read_only: true` and an `absolute_cap` up to 168h (deprecated in favour of `session: agent` on the client; see
+[policy-clients.md](policy-clients.md#absolute-session-of-a-read-only-resource)). Keys and refusals:
 [policy-clients.md](policy-clients.md#resources). Why: [explanation/policy.md](../explanation/policy.md#why-a-resource-is-not-a-client).
+
+## Agent-class clients
+
+A client, or the whole `client_documents` block, may say `session: agent` for software that holds its own refresh
+token, such as MCP hosts. The class is read only from the installation's policy, never from a client document, and is
+recorded on each chain when its authorization completes. Its lifetimes are `lifetimes.agent` in the service
+configuration ([configuration.md](configuration.md)). Load refusals and warnings, the defaults and ceilings:
+[policy-clients.md](policy-clients.md#agent-class-sessions). Why: [explanation/sessions.md](../explanation/sessions.md#agent-class-sessions).
 
 ## Groups in a token (scoping)
 

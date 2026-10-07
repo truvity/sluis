@@ -130,6 +130,9 @@ global limit for the client's own audience or any resource without a cap. A sile
 ends the browser sign-in for a request that is not extended, but spares the extended chains the browser still holds,
 which end by sign-out, revocation or their own limit.
 
+A read-only resource's longer limit is deprecated in favour of the agent class below: it is still honoured and warned
+about at start, and a later minor release will refuse it.
+
 A session with no `auth_time` has nothing to measure the limit against, and none applies: it lives out its ordinary
 refresh window. That is true of a workload or a machine trading a proof through token exchange, which authenticates
 nobody, and of a per-client session recorded before the field existed. Both are unaffected on purpose: there is
@@ -137,6 +140,34 @@ nothing to cap either against.
 
 The console's own session (`config.lifetimes.session`, a fixed-duration cookie rather than a sliding one) is capped
 too, by the shorter of the two, because it is issued once at sign-in and its issue time already IS its `auth_time`.
+
+## Agent-class sessions
+
+The limits above suit a person at a browser. They do not suit software that holds a refresh token in its own credential
+store and works in the background, such as an MCP host: it would make the person sign in again every day.
+The policy can therefore mark a client `session: agent` ([ADR 0040](../decisions/0040-agent-class-sessions.md);
+[how to declare it](../reference/policy-clients.md#agent-class-sessions)). The split is by who holds the chain, not by
+what the token reaches, so it covers write-capable resources too.
+
+An agent-class chain is held to `lifetimes.agent` in place of `lifetimes.refresh` and `lifetimes.absolute`: idle for
+at most 14 days, 30 days from `auth_time` at most, and every access and ID token capped at 30 minutes. The deadline is
+`auth_time` plus the shorter of the class's absolute limit and the resource's `absolute_cap`, which for an agent chain
+is only ever a ceiling. The client's, `client_documents`' and the resource's `ttl_cap` still shorten the tokens.
+
+The class is decided once, when the authorization completes, from the installation's policy, and is recorded on the
+session with its deadline. It never changes afterwards. A later policy or configuration change can shorten a chain at
+its next refresh but cannot lengthen it past the recorded deadline, and a client moved from `agent` to `interactive`
+keeps its agent chains until they end. A chain recorded before the class existed, or rewritten by an older replica
+during a rollout, is interactive. A client document cannot choose its class; only the installation's policy can.
+
+A token exchange of a sign-in (`sign_in_exchange`) refuses a token whose session is agent-class, whatever the client's
+row says now. Revocation never consults the class: *sign out everywhere*, a per-client revoke, removal from the
+directory and refresh-token reuse end an agent chain as they end any other.
+
+**Not in this release yet.** Two parts of the design are still to come: a consent page that makes an agent
+authorization visible to the person instead of completing silently, and a browser sign-out that spares agent sessions
+(decisions 6 and 7 of the ADR). Until they ship, an agent authorization can complete silently and a sign-out ends
+agent sessions like any others, so prefer not to mark a client `session: agent` until that release is deployed.
 
 ## What the console asks of the SSO session
 
