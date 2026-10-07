@@ -164,10 +164,10 @@ A token exchange of a sign-in (`sign_in_exchange`) refuses a token whose session
 row says now. Revocation never consults the class: *sign out everywhere*, a per-client revoke, removal from the
 directory and refresh-token reuse end an agent chain as they end any other.
 
-**Not in this release yet.** Two parts of the design are still to come: a consent page that makes an agent
+**Refused at load in this release.** Two parts of the design are still to come: a consent page that makes an agent
 authorization visible to the person instead of completing silently, and a browser sign-out that spares agent sessions
-(decisions 6 and 7 of the ADR). Until they ship, an agent authorization can complete silently and a sign-out ends
-agent sessions like any others, so prefer not to mark a client `session: agent` until that release is deployed.
+(decisions 6 and 7 of the ADR). Until they ship, a policy that says `session: agent` is refused when it is loaded: the
+key is in the schema, and agent-class sessions become available with the release that adds the consent page.
 
 ## What the console asks of the SSO session
 
