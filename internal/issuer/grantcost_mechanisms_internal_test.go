@@ -90,6 +90,8 @@ type gcState struct {
 	heldSets int
 	adds     []gcAdd
 	before   func(op, key string)
+	peekErr  error
+	peeks    int
 }
 
 func (s *gcState) hook(op, key string) {
@@ -115,6 +117,26 @@ func (s *gcState) Add(ctx context.Context, key, member string, ttl time.Duration
 	s.adds = append(s.adds, gcAdd{key, ttl})
 	s.mu.Unlock()
 	return s.State.Add(ctx, key, member, ttl)
+}
+
+func (s *gcState) SetVersion(ctx context.Context, key string, value []byte, ttl time.Duration) (string, error) {
+	if strings.HasPrefix(key, "issuer:held:") {
+		s.mu.Lock()
+		s.heldSets++
+		s.mu.Unlock()
+	}
+	return s.State.(peekingState).SetVersion(ctx, key, value, ttl)
+}
+
+func (s *gcState) PeekVersion(ctx context.Context, key string) (string, bool, error) {
+	s.mu.Lock()
+	s.peeks++
+	err := s.peekErr
+	s.mu.Unlock()
+	if err != nil {
+		return "", false, err
+	}
+	return s.State.(peekingState).PeekVersion(ctx, key)
 }
 
 func (s *gcState) GetVersion(ctx context.Context, key string) ([]byte, string, bool, error) {
@@ -528,6 +550,95 @@ func TestHeldWriteIsPerProcessAndResetByForgetAndUseState(t *testing.T) {
 	if other.held() != 1 {
 		t.Errorf("a new State was not written to (%d writes)", other.held())
 	}
+}
+
+// The skip holds only while the record is still the one this process wrote:
+// another process's write, a deletion, a failed read and a State that keeps
+// no revisions all write.
+func TestHeldWriteIsSkippedOnlyWhileTheRecordIsStillOurs(t *testing.T) {
+	t.Parallel()
+	const window = 8 * time.Hour
+	ctx := context.Background()
+	setup := func() (*Resolver, *gcState, *gcDirectory, *gcClock) {
+		clock := newGCClock()
+		state := gcHeldState(clock)
+		dir := newGCDirectory()
+		dir.set(gcPerson, gcAuth("eng"))
+		r := gcResolver(window, dir, state, clock)
+		if _, err := r.Resolve(ctx, gcPerson); err != nil {
+			t.Fatal(err)
+		}
+		return r, state, dir, clock
+	}
+	again := func(r *Resolver) {
+		t.Helper()
+		if _, err := r.Resolve(ctx, gcPerson); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("untouched record is skipped, at the cost of one peek", func(t *testing.T) {
+		t.Parallel()
+		r, state, _, _ := setup()
+		again(r)
+		if state.held() != 1 || state.peeks != 1 {
+			t.Errorf("writes=%d peeks=%d, want 1 and 1", state.held(), state.peeks)
+		}
+	})
+	t.Run("another process wrote other groups", func(t *testing.T) {
+		t.Parallel()
+		r, state, _, _ := setup()
+		raw, _ := json.Marshal(heldRecord{Groups: []string{"wide"}, At: time.Now()})
+		if err := state.State.Set(ctx, heldKey(gcPerson), raw, window); err != nil {
+			t.Fatal(err)
+		}
+		again(r)
+		if state.held() != 2 {
+			t.Errorf("a record another process replaced was left in place (%d writes)", state.held())
+		}
+		got, _, _ := state.Get(ctx, heldKey(gcPerson))
+		var rec heldRecord
+		_ = json.Unmarshal(got, &rec)
+		if !slices.Equal(rec.Groups, []string{"eng"}) {
+			t.Errorf("the record holds %v, want what the directory says", rec.Groups)
+		}
+	})
+	t.Run("another process deleted it", func(t *testing.T) {
+		t.Parallel()
+		r, state, _, _ := setup()
+		if err := state.Delete(ctx, heldKey(gcPerson)); err != nil {
+			t.Fatal(err)
+		}
+		again(r)
+		if state.held() != 2 {
+			t.Errorf("a deleted record was not written again (%d writes)", state.held())
+		}
+	})
+	t.Run("the peek fails", func(t *testing.T) {
+		t.Parallel()
+		r, state, _, _ := setup()
+		state.peekErr = errors.New("unavailable")
+		again(r)
+		if state.held() != 2 {
+			t.Errorf("a failed peek skipped the write (%d writes)", state.held())
+		}
+	})
+	t.Run("a State without revisions always writes", func(t *testing.T) {
+		t.Parallel()
+		clock := newGCClock()
+		inner := NewMemoryState()
+		inner.SetClock(clock.now)
+		counting := &gcState{State: inner}
+		dir := newGCDirectory()
+		dir.set(gcPerson, gcAuth("eng"))
+		r := gcResolver(window, dir, gcPlain{counting}, clock)
+		for range 3 {
+			again(r)
+		}
+		if counting.held() != 3 {
+			t.Errorf("a State with no revisions made %d writes for 3 answers, want 3", counting.held())
+		}
+	})
 }
 
 func TestHeldWriteIsNotSkippedWhenTheClockGoesBack(t *testing.T) {

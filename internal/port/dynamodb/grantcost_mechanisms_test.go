@@ -346,6 +346,21 @@ func TestHeldWriteOverTheFake(t *testing.T) {
 	if writes() != 3 {
 		t.Errorf("changed groups made %d writes, want 3", writes())
 	}
+
+	// A record another process wrote since is not left in place: the skip
+	// holds only while the revision is still the one this process wrote.
+	other, _ := json.Marshal(map[string]any{"groups": []string{"wide"}, "at": store.clock()})
+	if _, err := store.Put(ctx, "issuer:held:"+gcPerson, other, window); err != nil {
+		t.Fatal(err)
+	}
+	resolve()
+	if writes() != 4 {
+		t.Errorf("a record replaced by another process was left in place (%d writes, want 4)", writes())
+	}
+	resolve()
+	if writes() != 4 {
+		t.Errorf("an answer already written was written again (%d writes, want 4)", writes())
+	}
 }
 
 type gcDirectory struct{ standing issuer.Standing }
