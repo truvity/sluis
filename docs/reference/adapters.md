@@ -21,7 +21,7 @@ presets and the platform fit together, see
 |---|---|---|---|---|---|---|---|---|
 | `dynamodb` | ✅ implemented | needs | — | — | ✅ | ✅ | ✅ | State, sessions included, in one DynamoDB table with per-item TTL. |
 | `kubernetes` | 💤 on request | — | needs | — | ✅ | — | — | State in a ConfigMap the service rebuilds and owns. |
-| `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | ConfigMaps and, optionally, Valkey sessions and leases; kept until the kernel cutover (ADR 0031). |
+| `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | ConfigMaps and, optionally, Valkey sessions and leases; kept until the cutover (ADR 0031). |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `postgres` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | State in a PostgreSQL table. |
 | `valkey` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | State, sessions included, in Valkey. |
@@ -31,7 +31,7 @@ presets and the platform fit together, see
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
 | `kubernetes` | 💤 on request | — | needs | — | ✅ | — | — | Dynamic secrets and exports as Kubernetes Secrets the service writes. |
-| `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Kubernetes Secrets the service writes; kept until the kernel cutover. |
+| `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Kubernetes Secrets the service writes; kept until the cutover. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `openbao` | ✅ implemented | — | — | needs | ✅ | ✅ | ✅ | Dynamic secrets and exports as KV version 2 secrets in an OpenBao mount, laid out like SSM (layout v3); logs in with a ServiceAccount or web identity JWT. |
 | `ssm` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Dynamic secrets and exports as SecureString parameters in AWS SSM Parameter Store. |
@@ -41,7 +41,7 @@ presets and the platform fit together, see
 
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
-| `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Reports and snapshots in ConfigMaps or Valkey; kept until the kernel cutover. |
+| `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Reports and snapshots in ConfigMaps or Valkey; kept until the cutover. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
 | `off` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | No blob storage: reports and snapshots are not kept. |
 | `postgres` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | Blobs in PostgreSQL large objects. |
