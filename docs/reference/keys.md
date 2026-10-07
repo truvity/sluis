@@ -18,8 +18,8 @@ hot path.
 | `codesess.<id>` | the session a redeemed code opened, for a replayed redemption | issuer | 5 min |
 | `ses.<person>.<sid>` | a per-client session: identity, client, how it began, scopes, SSO session, refresh token (hashed), authentication time | issuer | the session lifetime |
 | `sid.<sid>` | pointer from a session id to `<person>`; written with the session, deleted with it | issuer | the session lifetime |
-| `rt.<hash>` | live refresh token to `<person>.<sid>` | issuer | the session lifetime |
-| `rtrot.<hash>` | legacy: a spent refresh token's successor, as an older version wrote it. The retry grace is now carried by `rt.<hash>` itself (`spent:<successor>`, 30 s). Still read for one release, never written, then removed | issuer | 30 s |
+| `rt.<hash>` | live refresh token to `<person>.<sid>`. Once spent, the same key holds `spent:<unix ms>:<sealed successor>:<session id>`: when it was spent, the successor sealed with AES-256-GCM under a key derived from the spent token (SHA-256 of a label, a zero byte and the token), and the session it belonged to. Inside the 30-second grace a replay is answered with the successor; after it, a presentation ends that session ([sessions](../explanation/sessions.md#refresh-token-reuse)) | issuer | the session lifetime; once spent, the family's absolute deadline, `max(auth_time + absolute limit - now, 30 s)` (24 h by default), or the session's end when there is no `auth_time` or no absolute limit (at most 12 h) |
+| `rtrot.<hash>` | legacy: a spent refresh token's successor, as an older version wrote it. The spent mark is now carried by `rt.<hash>` itself (see the `rt.<hash>` row). Still read for one release, never written, then removed | issuer | 30 s |
 | `sso.<id>` | the browser-wide SSO session and the clients it covers | issuer | the session lifetime |
 | `tok.<jti>` | a minted token's own record, for userinfo and revocation | issuer | until the token expires |
 | `keyring.<kid>` | a signing key's schedule: first seen, activation | issuer replicas | 30 days, renewed on each poll |

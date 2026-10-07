@@ -29,6 +29,33 @@ the signed-out page and nothing else. A request that proves nothing ends nothing
 
 To tell the relying party that its session ended, see [back-channel logout](back-channel-logout.md).
 
+## Refresh token reuse
+
+A refresh token is single-use: a refresh spends it and returns a successor. A client that presents a spent token
+twice is either broken or has had the token stolen, and the issuer cannot tell which presentation is the thief's
+(RFC 9700 section 4.14.2). Two replicas of one proxy also race the same token, so a replay inside a 30-second grace is
+answered with the same successor, as before. After the grace, the presentation ends the session the token was spent
+in.
+
+The spent token's pointer stays so that this is detectable. It holds when the token was spent, the session id and the
+successor, sealed (AES-256-GCM) under a key derived from the spent token itself, so the store never holds a live
+refresh token in plain and a mark opens only for the token that made it. It lives until the family's absolute deadline,
+`max(auth_time + absolute - now, 30s)`, so a reuse is detected for as long as the family could live and no longer. A
+session with no `auth_time`, or a deployment with no absolute limit, keeps it until the session ends (at most
+`config.lifetimes.refresh`, 12h by default).
+
+The session is ended only after the library has authenticated the client and matched it to the session's: a spent token
+presented under another client is refused and ends nothing. A forged mark, or one that does not open with the presented
+token, is treated as an unknown token. The grant is refused with `invalid_grant`, the session leaves every listing, and
+a client that declares a `backchannel_logout_uri` is sent a logout token. The browser sign-in stays, so a false positive
+costs one client's session and not every one. JWT access tokens already issued and credentials already obtained by token
+exchange stay valid until they expire. The revocation is audited once, as `roster.session.revoked` by the system with
+the scope `refresh_token_reuse` and the sign-in's id in `sso` when there is one, so an operator can end the sign-in too.
+
+A mark dated more than 2 seconds ahead of the replica reading it means the replicas' clocks disagree, which moves the
+grace window. The issuer logs a WARN, keeps the grace and counts it in `access_issuer.spent_mark_ahead`
+([telemetry](../reference/telemetry.md)).
+
 ## The absolute session limit
 
 Everything above bounds *inactivity*: a session dies once nothing refreshes it for `config.lifetimes.refresh`.
