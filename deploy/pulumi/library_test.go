@@ -42,7 +42,7 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 		o.serveSA = "sluis"
 	}
 	return run(t, func(ctx *pulumi.Context, collect func(string, pulumi.StringInput)) error {
-		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket, Versioning: o.versioning})
+		store, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{BucketName: bucket, Versioning: o.versioning})
 		if err != nil {
 			return err
 		}
@@ -55,7 +55,7 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 		collect("bucketName", store.BucketName)
 		collect("bucketArn", store.BucketArn)
 		if !o.noState {
-			st, err := arp.NewState(ctx, "kernel", &arp.StateArgs{TableName: table, KeyArn: o.tableKey})
+			st, err := arp.NewState(ctx, "staging", &arp.StateArgs{TableName: table, KeyArn: o.tableKey})
 			if err != nil {
 				return err
 			}
@@ -63,7 +63,7 @@ func stack(t *testing.T, o opts) (*recorder, map[string]string, error) {
 			collect("tableName", st.TableName)
 			collect("tableArn", st.TableArn)
 		}
-		ids, err := arp.NewKubernetesIdentity(ctx, "kernel", id)
+		ids, err := arp.NewKubernetesIdentity(ctx, "staging", id)
 		if err != nil {
 			return err
 		}
@@ -84,22 +84,22 @@ func mustStack(t *testing.T, o opts) (*recorder, map[string]string) {
 
 func TestTheBucketIsEncryptedClosedAndProtected(t *testing.T) {
 	rec, out := mustStack(t, opts{})
-	b := rec.one(t, "aws:s3/bucket:Bucket", "kernel-bucket")
+	b := rec.one(t, "aws:s3/bucket:Bucket", "staging-bucket")
 	if prop(b, "bucket").StringValue() != bucket || prop(b, "forceDestroy").IsBool() && prop(b, "forceDestroy").BoolValue() {
 		t.Errorf("bucket inputs: %v", b.Inputs)
 	}
-	if !rec.isProtected("aws:s3/bucket:Bucket", "kernel-bucket") {
+	if !rec.isProtected("aws:s3/bucket:Bucket", "staging-bucket") {
 		t.Error("the bucket is not protected")
 	}
 	if out["bucketName"] != bucket || out["bucketArn"] != arnp+"s3:::"+bucket {
 		t.Errorf("outputs: %v", out)
 	}
-	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfigurationV2:BucketServerSideEncryptionConfigurationV2", "kernel-bucket-encryption")
+	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfigurationV2:BucketServerSideEncryptionConfigurationV2", "staging-bucket-encryption")
 	rule := prop(sse, "rules").ArrayValue()[0].ObjectValue()
 	if rule["applyServerSideEncryptionByDefault"].ObjectValue()["sseAlgorithm"].StringValue() != "AES256" {
 		t.Errorf("encryption: %v", rule)
 	}
-	pab := rec.one(t, "aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock", "kernel-bucket-public-access")
+	pab := rec.one(t, "aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock", "staging-bucket-public-access")
 	for _, k := range []string{"blockPublicAcls", "blockPublicPolicy", "ignorePublicAcls", "restrictPublicBuckets"} {
 		if !prop(pab, k).BoolValue() {
 			t.Errorf("public access block: %s is not set", k)
@@ -109,7 +109,7 @@ func TestTheBucketIsEncryptedClosedAndProtected(t *testing.T) {
 
 func TestTheBucketPolicyDeniesPlainHTTP(t *testing.T) {
 	rec, _ := mustStack(t, opts{})
-	p := rec.one(t, "aws:s3/bucketPolicy:BucketPolicy", "kernel-bucket-policy")
+	p := rec.one(t, "aws:s3/bucketPolicy:BucketPolicy", "staging-bucket-policy")
 	st := statements(t, prop(p, "policy").StringValue())
 	if len(st) != 1 || st[0]["Effect"] != "Deny" || st[0]["Principal"] != "*" || st[0]["Action"] != "s3:*" {
 		t.Fatalf("policy: %v", st)
@@ -130,7 +130,7 @@ func TestVersioningIsOptional(t *testing.T) {
 		t.Error("versioning was turned on unasked")
 	}
 	rec, _ = mustStack(t, opts{versioning: true})
-	v := rec.one(t, "aws:s3/bucketVersioningV2:BucketVersioningV2", "kernel-bucket-versioning")
+	v := rec.one(t, "aws:s3/bucketVersioningV2:BucketVersioningV2", "staging-bucket-versioning")
 	if prop(v, "versioningConfiguration").ObjectValue()["status"].StringValue() != "Enabled" {
 		t.Errorf("versioning: %v", v.Inputs)
 	}
@@ -138,7 +138,7 @@ func TestVersioningIsOptional(t *testing.T) {
 
 func TestTheTableIsTheAdaptersAndProtected(t *testing.T) {
 	rec, out := mustStack(t, opts{})
-	d := rec.one(t, "aws:dynamodb/table:Table", "kernel-table")
+	d := rec.one(t, "aws:dynamodb/table:Table", "staging-table")
 	if prop(d, "name").StringValue() != table || prop(d, "billingMode").StringValue() != "PAY_PER_REQUEST" ||
 		prop(d, "hashKey").StringValue() != "pk" || prop(d, "rangeKey").StringValue() != "sk" {
 		t.Errorf("table inputs: %v", d.Inputs)
@@ -160,7 +160,7 @@ func TestTheTableIsTheAdaptersAndProtected(t *testing.T) {
 	if prop(d, "serverSideEncryption").HasValue() {
 		t.Errorf("a key was set unasked: %v", prop(d, "serverSideEncryption"))
 	}
-	if !rec.isProtected("aws:dynamodb/table:Table", "kernel-table") {
+	if !rec.isProtected("aws:dynamodb/table:Table", "staging-table") {
 		t.Error("the table is not protected")
 	}
 	if out["tableName"] != table || out["tableArn"] != arnp+"dynamodb:eu-west-1:"+account+":table/"+table {
@@ -171,12 +171,12 @@ func TestTheTableIsTheAdaptersAndProtected(t *testing.T) {
 func TestATableTakesACustomerManagedKeyAndTheRolesMayUseItOnlyThroughDynamoDB(t *testing.T) {
 	cmk := arnp + "kms:eu-west-1:" + account + ":key/state"
 	rec, _ := mustStack(t, opts{tableKey: pulumi.String(cmk)})
-	d := rec.one(t, "aws:dynamodb/table:Table", "kernel-table")
+	d := rec.one(t, "aws:dynamodb/table:Table", "staging-table")
 	sse := prop(d, "serverSideEncryption").ObjectValue()
 	if !sse["enabled"].BoolValue() || sse["kmsKeyArn"].StringValue() != cmk {
 		t.Errorf("sse: %v", sse)
 	}
-	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	var found bool
 	for _, s := range statements(t, prop(p, "policy").StringValue()) {
 		if s["Sid"] == "SluisStateKey" {
@@ -197,7 +197,7 @@ func TestATableTakesACustomerManagedKeyAndTheRolesMayUseItOnlyThroughDynamoDB(t 
 
 func TestTheOneRoleHasItsPolicyAttachmentAndAssociation(t *testing.T) {
 	rec, out := mustStack(t, opts{})
-	role := "kernel-sluis"
+	role := "staging-sluis"
 	r := rec.one(t, "aws:iam/role:Role", role+"-role")
 	if prop(r, "name").StringValue() != role || prop(r, "permissionsBoundary").StringValue() != arnp+"iam::"+account+":policy/boundary" {
 		t.Errorf("%s: %v", role, r.Inputs)
@@ -221,14 +221,14 @@ func TestTheOneRoleHasItsPolicyAttachmentAndAssociation(t *testing.T) {
 	if n := len(rec.ofType("aws:iam/role:Role")); n != 1 {
 		t.Errorf("%d roles, want one: the controllers run in the same pod", n)
 	}
-	if out["roleArn"] != arnp+"iam::"+account+":role/kernel-sluis" || out["roleName"] != "kernel-sluis" {
+	if out["roleArn"] != arnp+"iam::"+account+":role/staging-sluis" || out["roleName"] != "staging-sluis" {
 		t.Errorf("outputs: %v", out)
 	}
 }
 
 func TestTheTrustPolicyNamesTheClusterTheNamespaceAndOneServiceAccount(t *testing.T) {
 	rec, _ := mustStack(t, opts{})
-	r := rec.one(t, "aws:iam/role:Role", "kernel-sluis-role")
+	r := rec.one(t, "aws:iam/role:Role", "staging-sluis-role")
 	st := statements(t, prop(r, "assumeRolePolicy").StringValue())
 	if len(st) != 1 || st[0]["Effect"] != "Allow" {
 		t.Fatalf("trust: %v", st)
@@ -268,7 +268,7 @@ func TestEachRoleGetsExactlyTheStorageAndTheTable(t *testing.T) {
 		"dynamodb:Scan":          {tableArn},
 		"dynamodb:DescribeTable": {tableArn},
 	}
-	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	got := grants(statements(t, prop(p, "policy").StringValue()))
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("grants:\n got %v\nwant %v", got, want)
@@ -277,7 +277,7 @@ func TestEachRoleGetsExactlyTheStorageAndTheTable(t *testing.T) {
 
 func TestWithoutStateNoRoleCarriesADynamoDBGrant(t *testing.T) {
 	rec, _ := mustStack(t, opts{noState: true})
-	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	doc := prop(p, "policy").StringValue()
 	if strings.Contains(doc, "dynamodb") {
 		t.Errorf("a DynamoDB grant without a table: %s", doc)
@@ -313,13 +313,13 @@ func TestNoGrantIsOnAWildcardResourceOrAWildcardAction(t *testing.T) {
 // trailing /*.
 func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *testing.T) {
 	key := arnp + "kms:eu-west-1:" + account + ":key/params"
-	rec, _ := mustStack(t, opts{instance: "kernel", paramKey: key})
-	p := rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy")
+	rec, _ := mustStack(t, opts{instance: "staging", paramKey: key})
+	p := rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy")
 	g := grants(statements(t, prop(p, "policy").StringValue()))
 	ssmArn := arnp + "ssm:eu-west-1:" + account + ":parameter"
-	creds := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
-	cfg := []string{ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*"}
-	export := []string{ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+	creds := []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*"}
+	cfg := []string{ssmArn + "/sluis/staging/private/config", ssmArn + "/sluis/staging/private/config/*"}
+	export := []string{ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
 	writes := append(append([]string{}, creds...), export...)
 	if got := g["ssm:PutParameter"]; !reflect.DeepEqual(got, writes) {
 		t.Errorf("writes %v, want %v", got, writes)
@@ -333,8 +333,8 @@ func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *test
 			if !ok {
 				continue
 			}
-			if !strings.HasPrefix(strings.TrimSuffix(path, "/*"), "/sluis/kernel/") || strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
-				t.Errorf("%s: %s is outside /sluis/kernel/ or has a wildcard", a, r)
+			if !strings.HasPrefix(strings.TrimSuffix(path, "/*"), "/sluis/staging/") || strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
+				t.Errorf("%s: %s is outside /sluis/staging/ or has a wildcard", a, r)
 			}
 		}
 	}
@@ -352,7 +352,7 @@ func TestWithAnInstanceTheRoleHasTheSSMGrantsOfTheLambdaRoleUnderItsRoot(t *test
 	}
 	// Without an instance, no SSM at all.
 	rec, _ = mustStack(t, opts{})
-	doc := prop(rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy"), "policy").StringValue()
+	doc := prop(rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy"), "policy").StringValue()
 	if strings.Contains(doc, "ssm:") {
 		t.Errorf("an SSM grant without an Instance: %s", doc)
 	}
@@ -454,7 +454,7 @@ func validate(t *testing.T, name string, ports map[string]any) error {
 // schemas/config fails here.
 func TestTheRenderedPortsValidateAgainstEveryBinarysSchema(t *testing.T) {
 	for _, p := range []arp.PortsArgs{
-		{BucketName: bucket, KeyID: "alias/kernel-sluis", TableName: table, Region: "eu-west-1"},
+		{BucketName: bucket, KeyID: "alias/staging-sluis", TableName: table, Region: "eu-west-1"},
 		{BucketName: bucket, KeyID: "alias/x", TableName: table},
 		{BucketName: bucket, KeyID: "alias/x", TableName: table, Adapter: "dynamodb", BlobPrefix: "/roster/"},
 		{BucketName: bucket, KeyID: "alias/x"},
@@ -473,7 +473,7 @@ func TestTheRenderedPortsValidateAgainstEveryBinarysSchema(t *testing.T) {
 }
 
 func TestThePortsNameTheBucketTheKeyTheTableAndTheRegion(t *testing.T) {
-	y, err := arp.RenderPortsYAML(arp.PortsArgs{BucketName: bucket, KeyID: "alias/kernel-sluis", TableName: table, Region: "eu-west-1"})
+	y, err := arp.RenderPortsYAML(arp.PortsArgs{BucketName: bucket, KeyID: "alias/staging-sluis", TableName: table, Region: "eu-west-1"})
 	if err != nil {
 		t.Fatal(err)
 	}

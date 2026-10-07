@@ -346,10 +346,10 @@ func TestTheTriggerCrossesStoresOnOneTable(t *testing.T) {
 func TestEveryKindIsAnItemOfItsKindAndId(t *testing.T) {
 	for _, c := range []struct{ key, pk, sk string }{
 		{"ws.dir.google.C01ipl6j0", "directory", "google/C01ipl6j0"},
-		{"gh.org.opwerm", "github-org", "opwerm"},
+		{"gh.org.acme", "github-org", "acme"},
 		{"app.gh.link", "github-app", "link"},
 		{"gh.link.299386", "github-link", "299386"},
-		{"app.gh.runner.stable.opwerm", "github-runner-app", "stable/opwerm"},
+		{"app.gh.runner.stable.acme", "github-runner-app", "stable/acme"},
 		{"ws.slack.T01", "slack-workspace", "T01"},
 		{"app.slack.cat.alerts", "slack-app", "alerts"},
 		{"rec.slack.shared.partners", "slack-shared", "partners"},

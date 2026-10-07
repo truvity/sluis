@@ -21,7 +21,7 @@ var update = flag.Bool("update", false, "rewrite the golden documents")
 // first is shaped like a Lambda estate, the second like a Kubernetes one. The
 // names are the files in testdata/: <name>.installation.yaml in,
 // <name>.sluis.yaml and <name>.policy.yaml out.
-var fixtures = []string{"hive", "truvity"}
+var fixtures = []string{"example", "truvity"}
 
 func render(t *testing.T, name string) (service, policy []byte) {
 	t.Helper()
@@ -164,7 +164,7 @@ func TestTheTruvityFixtureHasTheShapeItClaims(t *testing.T) {
 		t.Errorf("exports into the namespace devel: %d, want 1", devel)
 	}
 	service, _ := render(t, "truvity")
-	for _, want := range []string{"preset: k8s-aws", "adapter: openbao", "root: sluis", "namespace: kernel", "kmsWrapped:", "verifyOnly:", "inCluster: true"} {
+	for _, want := range []string{"preset: k8s-aws", "adapter: openbao", "root: sluis", "namespace: staging", "kmsWrapped:", "verifyOnly:", "inCluster: true"} {
 		if !strings.Contains(string(service), want) {
 			t.Errorf("the service document has no %q", want)
 		}
@@ -207,7 +207,7 @@ func TestRenderRefusesWhatTheShapeFixes(t *testing.T) {
 		"no issuer":      {func(in *config.Installation) { in.Issuer.URL = "" }, "issuer.url"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			in := installation(t, "hive")
+			in := installation(t, "example")
 			c.change(in)
 			_, _, err := config.Render(in)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -220,7 +220,7 @@ func TestRenderRefusesWhatTheShapeFixes(t *testing.T) {
 // What the policy checks across its sections is held on the installation's
 // way through: an organisation the controller may change must be bound.
 func TestRenderHoldsTheOutputsToTheLoader(t *testing.T) {
-	in := installation(t, "hive")
+	in := installation(t, "example")
 	in.Controllers.GitHub.EnabledOrgs = []string{"unbound-org"}
 	if _, _, err := config.Render(in); err == nil || !strings.Contains(err.Error(), "unbound-org") {
 		t.Errorf("a controller that may change an unbound organisation was rendered: %v", err)
@@ -235,7 +235,7 @@ func TestRenderHoldsTheOutputsToTheLoader(t *testing.T) {
 // An adapter the installation names replaces what the resources stand for, and
 // the others are still filled in.
 func TestANamedAdapterWinsOverAResource(t *testing.T) {
-	in := installation(t, "hive")
+	in := installation(t, "example")
 	in.Adapters = map[string]config.AdapterChoice{"audit": {Adapter: "log"}}
 	service, _, err := config.Render(in)
 	if err != nil {
@@ -254,7 +254,7 @@ func TestANamedAdapterWinsOverAResource(t *testing.T) {
 // naming it, before anything is rendered.
 func TestTheSchemaRefusesAnUnknownKey(t *testing.T) {
 	dir := t.TempDir()
-	raw, err := os.ReadFile(filepath.Join("testdata", "hive.installation.yaml"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "example.installation.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,26 +388,26 @@ func TestRenderRefusesAnAdapterTableThatBreaksTheRules(t *testing.T) {
 		"a nested password": {"truvity", func(in *config.Installation) {
 			in.Adapters = choice("openbao", map[string]any{"address": "https://openbao.example.test", "auth": map[string]any{"password": "x"}})
 		}, "settings.auth.password"},
-		"a secret key name": {"hive", func(in *config.Installation) {
+		"a secret key name": {"example", func(in *config.Installation) {
 			in.Adapters = map[string]config.AdapterChoice{"state": {Adapter: "dynamodb", Settings: map[string]any{"table": "t", "secretAccessKey": "x"}}}
 		}, "secretAccessKey"},
 		"an http OpenBao": {"truvity", func(in *config.Installation) {
 			in.Adapters = choice("openbao", map[string]any{"address": "http://openbao.example.test", "root": "sluis"})
 		}, "https"},
-		"secrets other than ssm on Lambda": {"hive", func(in *config.Installation) {
+		"secrets other than ssm on Lambda": {"example", func(in *config.Installation) {
 			in.Adapters = choice("openbao", map[string]any{"address": "https://openbao.example.test", "root": "sluis"})
 		}, "shape lambda keeps its secrets in ssm"},
-		"signing by file on Lambda": {"hive", func(in *config.Installation) {
+		"signing by file on Lambda": {"example", func(in *config.Installation) {
 			in.Adapters = map[string]config.AdapterChoice{"signing": {Adapter: "file"}}
 		}, "shape lambda signs with"},
-		"an OpenBao on Lambda": {"hive", func(in *config.Installation) {
+		"an OpenBao on Lambda": {"example", func(in *config.Installation) {
 			in.OpenBao = &config.OpenBao{Address: "https://openbao.example.test", Root: "sluis", Auth: config.OpenBaoLogin{Method: "jwt", Role: "r"}}
 		}, "openbao is set"},
 		"an adapter that contradicts the preset": {"truvity", func(in *config.Installation) {
 			in.Adapters = map[string]config.AdapterChoice{"state": {Adapter: "postgres"}}
 		}, "contradicts preset"},
 		"ssm secrets beside an openbao adapter": {"truvity", func(in *config.Installation) {
-			in.Secrets = &config.Secrets{Source: "ssm", Root: "/sluis/kernel"}
+			in.Secrets = &config.Secrets{Source: "ssm", Root: "/sluis/staging"}
 		}, "secrets.source is ssm"},
 	} {
 		t.Run(name, func(t *testing.T) {

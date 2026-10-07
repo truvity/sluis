@@ -89,7 +89,7 @@ func TestTheGitHubPageShowsBindingsBesideReports(t *testing.T) {
 		Tick:    status.Tick{At: time.Date(2026, 9, 12, 21, 0, 0, 0, time.UTC), Outcome: status.OutcomeDryRun, Changes: 1},
 		Teams: []status.Team{
 			{Team: "team-platform", Members: []status.Member{
-				{Email: "ada.lovelace@globex.example", Login: "excavador", Role: status.RoleMaintainer, State: status.StateSynced},
+				{Email: "ada.lovelace@globex.example", Login: "octo-admin", Role: status.RoleMaintainer, State: status.StateSynced},
 			}},
 			// No longer in the policy: the controller's last word on it.
 			{Team: "team-legacy", Members: []status.Member{

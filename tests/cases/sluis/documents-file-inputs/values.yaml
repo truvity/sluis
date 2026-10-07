@@ -13,7 +13,7 @@ documents:
       blobs:
         adapter: s3
         settings:
-          bucket: example-sluis-kernel-111122223333
+          bucket: example-sluis-staging-111122223333
           region: eu-central-1
       secrets:
         adapter: openbao
@@ -25,20 +25,20 @@ documents:
             role: sluis
             tokenFile: /var/run/openbao/token
           caFile: /var/run/access-issuer/openbao-ca/ca.pem
-          namespace: kernel
+          namespace: staging
           root: sluis
       state:
         adapter: dynamodb
         settings:
           region: eu-central-1
-          table: example-sluis-kernel
+          table: example-sluis-staging
     audit:
       audience: audit
       forwardedForTrustedHops: 2
       queryURL: http://audit-query.audit.svc:8080
       tokenFile: /var/run/audit/token
       writer: http://audit.audit.svc:8080
-    cluster: kernel
+    cluster: staging
     console:
       client: access-console
     controllers:
@@ -211,7 +211,7 @@ documents:
           - https://headlamp.example.test/callback
         requires:
           - all:headlamp:admin
-      k8s-kernel:
+      k8s-staging:
         kind: exchange
         requires:
           - all:k8s:admin
@@ -298,7 +298,7 @@ documents:
                 - all:access-roster:operator
     exchange:
       clusters:
-        - name: kernel
+        - name: staging
           issuer: https://kubernetes.default.svc
         - name: devel
           issuer: https://oidc.devel.example.test
@@ -312,7 +312,7 @@ documents:
         maxAge: 5m
         accounts:
           - account: "111122223333"
-            name: kernel
+            name: staging
             issuer: https://sts-issuer.example.test
       github:
         owners:
@@ -400,7 +400,7 @@ exports:
       MIIBexample
       -----END CERTIFICATE-----
     token:
-      audience: openbao-kernel
+      audience: openbao-staging
 signingKey:
   verifyOnly:
     - pem: |

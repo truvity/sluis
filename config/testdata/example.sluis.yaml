@@ -14,7 +14,7 @@ adapters:
     adapter: ssm
     settings:
       region: eu-central-1
-      root: /sluis/hive
+      root: /sluis/example
   state:
     adapter: dynamodb
     settings:
@@ -65,7 +65,7 @@ recovery:
 release: access-issuer
 secrets:
   region: eu-central-1
-  root: /sluis/hive
+  root: /sluis/example
   source: ssm
 secureCookies: true
 signingKey:

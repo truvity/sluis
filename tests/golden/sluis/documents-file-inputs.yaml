@@ -50,7 +50,7 @@ data:
       blobs:
         adapter: s3
         settings:
-          bucket: example-sluis-kernel-111122223333
+          bucket: example-sluis-staging-111122223333
           region: eu-central-1
       secrets:
         adapter: openbao
@@ -62,20 +62,20 @@ data:
             role: sluis
             tokenFile: /var/run/openbao/token
           caFile: /var/run/access-issuer/openbao-ca/ca.pem
-          namespace: kernel
+          namespace: staging
           root: sluis
       state:
         adapter: dynamodb
         settings:
           region: eu-central-1
-          table: example-sluis-kernel
+          table: example-sluis-staging
     audit:
       audience: audit
       forwardedForTrustedHops: 2
       queryURL: http://audit-query.audit.svc:8080
       tokenFile: /var/run/audit/token
       writer: http://audit.audit.svc:8080
-    cluster: kernel
+    cluster: staging
     console:
       client: access-console
     controllers:
@@ -284,7 +284,7 @@ data:
           - https://headlamp.example.test/callback
         requires:
           - all:headlamp:admin
-      k8s-kernel:
+      k8s-staging:
         kind: exchange
         requires:
           - all:k8s:admin
@@ -371,7 +371,7 @@ data:
                 - all:access-roster:operator
     exchange:
       clusters:
-        - name: kernel
+        - name: staging
           issuer: https://kubernetes.default.svc
         - name: devel
           issuer: https://oidc.devel.example.test
@@ -385,7 +385,7 @@ data:
         maxAge: 5m
         accounts:
           - account: "111122223333"
-            name: kernel
+            name: staging
             issuer: https://sts-issuer.example.test
       github:
         owners:
@@ -635,8 +635,8 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
-        checksum/config: 2fbff028920cbfe208d62dc1b55cde6b162dffc5a75719e50e2f01015f9e55a6
-        checksum/policy: 6ef3bf7c7c9916d796fb2a015196d9f682f10b1e046a663e8c831416d870218e
+        checksum/config: 9a1d00e8bc56c5c1310f471d45b58d9b6328127f8d058e2d0b4044334370ba31
+        checksum/policy: 1442e9cc1ed9c53fbdcaa21a1b11c09ce53dee507ea12529b2a98ab88e98c665
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
       serviceAccountName: sluis
@@ -811,7 +811,7 @@ spec:
           projected:
             sources:
               - serviceAccountToken:
-                  audience: "openbao-kernel"
+                  audience: "openbao-staging"
                   expirationSeconds: 3600
                   path: token
         # Every secret the config names, as the file <root>/<name>, so the

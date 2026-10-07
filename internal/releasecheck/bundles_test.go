@@ -94,7 +94,7 @@ func bundle(t *testing.T, id, namePrefix string) []string {
 
 // TestTheAuditCatalogueBundleHoldsExactlyWhatTheCatalogueNames: the audit
 // writer refuses to start when a schema its catalogue references is not
-// beside it, and hive's was down for a day because of exactly that. So every
+// beside it, and example's was down for a day because of exactly that. So every
 // `data_schema` of roster.yaml is in the bundle, and so is nothing else.
 func TestTheAuditCatalogueBundleHoldsExactlyWhatTheCatalogueNames(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(root, "internal", "audit", "catalogue", "roster.yaml"))

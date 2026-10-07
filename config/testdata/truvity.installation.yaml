@@ -1,15 +1,15 @@
 # A Truvity-shaped installation: sluis as a pod on Kubernetes with AWS storage
 # (preset k8s-aws), its secrets in an OpenBao under root `sluis` in the
-# namespace `kernel`, KMS-wrapped signing with a verify-only key for the
+# namespace `staging`, KMS-wrapped signing with a verify-only key for the
 # cutover from file keys, eight exports (one into the namespace `devel`),
 # twenty clients, two GitHub organisations, a Slack workspace and both
 # controllers. Every name is a placeholder; no value here is a secret.
 apiVersion: sluis.truvity.github.io/installation/v1
-instance: kernel
+instance: staging
 shape: kubernetes
 preset: k8s-aws
 release: sluis
-cluster: kernel
+cluster: staging
 
 issuer:
   url: https://access.example.test
@@ -22,13 +22,13 @@ lifetimes: {token: 1h, refresh: 12h, absolute: 24h, hold: 4h, session: 12h}
 aws:
   account: "111122223333"
   region: eu-central-1
-  table: example-sluis-kernel
-  bucket: example-sluis-kernel-111122223333
+  table: example-sluis-staging
+  bucket: example-sluis-staging-111122223333
 
 openbao:
   address: https://openbao.example.test
   caFile: /var/run/access-issuer/openbao-ca/ca.pem
-  namespace: kernel
+  namespace: staging
   root: sluis
   auth:
     method: kubernetes
@@ -67,7 +67,7 @@ audit:
 exchange:
   audience: sluis
   clusters:
-    - {name: kernel, issuer: "https://kubernetes.default.svc"}
+    - {name: staging, issuer: "https://kubernetes.default.svc"}
     - {name: devel, issuer: "https://oidc.devel.example.test", jwksUri: "https://oidc.devel.example.test/keys"}
     - {name: stage, issuer: "https://oidc.stage.example.test"}
     - {name: prod, issuer: "https://oidc.prod.example.test"}
@@ -75,7 +75,7 @@ exchange:
     audience: https://access.example.test
     maxAge: 5m
     accounts:
-      - {account: "111122223333", name: kernel, issuer: "https://sts-issuer.example.test"}
+      - {account: "111122223333", name: staging, issuer: "https://sts-issuer.example.test"}
   github:
     owners: [example-org, example-forms]
 
@@ -210,7 +210,7 @@ access:
     ci-gitlab:
       kind: exchange
       requires: [all:ci:runner]
-    k8s-kernel:
+    k8s-staging:
       kind: exchange
       requires: [all:k8s:admin]
     kargo-cli:

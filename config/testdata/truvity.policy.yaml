@@ -112,7 +112,7 @@ clients:
       - https://headlamp.example.test/callback
     requires:
       - all:headlamp:admin
-  k8s-kernel:
+  k8s-staging:
     kind: exchange
     requires:
       - all:k8s:admin
@@ -199,7 +199,7 @@ slack:
             - all:access-roster:operator
 exchange:
   clusters:
-    - name: kernel
+    - name: staging
       issuer: https://kubernetes.default.svc
     - name: devel
       issuer: https://oidc.devel.example.test
@@ -213,7 +213,7 @@ exchange:
     maxAge: 5m
     accounts:
       - account: "111122223333"
-        name: kernel
+        name: staging
         issuer: https://sts-issuer.example.test
   github:
     owners:

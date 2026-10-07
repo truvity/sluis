@@ -127,7 +127,7 @@ func (f *fake) login(w http.ResponseWriter, r *http.Request, ns, path string) {
 		reply(w, f.loginErr, map[string]any{"errors": []string{"invalid role"}})
 		return
 	}
-	if path != "auth/jwt-kernel/login" || body.Role != "sluis-writer" {
+	if path != "auth/jwt-staging/login" || body.Role != "sluis-writer" {
 		reply(w, http.StatusBadRequest, map[string]any{"errors": []string{"role could not be found"}})
 		return
 	}
@@ -237,9 +237,9 @@ func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Store
 	cfg := openbao.Config{
 		Client:    client,
 		Address:   addr,
-		Namespace: "kernel",
+		Namespace: "staging",
 		Auth: openbao.Auth{
-			Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "sluis-writer",
+			Method: openbao.MethodJWT, Mount: "jwt-staging", Role: "sluis-writer",
 			Token: func(context.Context) (string, error) { return "a-jwt", nil },
 		},
 	}
@@ -262,7 +262,7 @@ func TestConformance(t *testing.T) {
 			Read: func(_ *testing.T, target port.ExportTarget) (map[string]string, bool) {
 				ns := target.Namespace
 				if ns == "" {
-					ns = "kernel"
+					ns = "staging"
 				}
 				return f.read(ns, target.Path)
 			},
@@ -280,17 +280,17 @@ func TestAnIdenticalPutMakesNoNewVersion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if v := f.versions("kernel", "slack-apps/alerts"); v != 1 {
+	if v := f.versions("staging", "slack-apps/alerts"); v != 1 {
 		t.Fatalf("version %d after four identical puts, want 1", v)
 	}
 	// What somebody changed is put back.
 	f.mu.Lock()
-	f.secrets["kernel|slack-apps/alerts"].data["bot_token"] = "tampered"
+	f.secrets["staging|slack-apps/alerts"].data["bot_token"] = "tampered"
 	f.mu.Unlock()
 	if err := s.Put(context.Background(), target, props, port.ExportPatch); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.read("kernel", "slack-apps/alerts"); got["bot_token"] != "xoxb" {
+	if got, _ := f.read("staging", "slack-apps/alerts"); got["bot_token"] != "xoxb" {
 		t.Fatalf("the copy was not put back: %v", got)
 	}
 }
@@ -298,7 +298,7 @@ func TestAnIdenticalPutMakesNoNewVersion(t *testing.T) {
 func TestPatchUsesAMergePatchAndReplaceAPost(t *testing.T) {
 	f := newFake()
 	s := adapter(t, f, nil)
-	target := port.ExportTarget{Path: "arc/truvity"}
+	target := port.ExportTarget{Path: "arc/acme"}
 	ctx := context.Background()
 	if err := s.Put(ctx, target, map[string]string{"x": "1"}, port.ExportReplace); err != nil {
 		t.Fatal(err)
@@ -329,19 +329,19 @@ func TestOneLoginPerNamespaceIsReusedUntilTheLeaseIsMostlySpent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	put("kernel")
-	put("kernel")
+	put("staging")
+	put("staging")
 	put("devel")
 	if f.logins != 2 {
 		t.Fatalf("%d logins for two namespaces, want 2", f.logins)
 	}
 	now = now.Add(79 * time.Second)
-	put("kernel")
+	put("staging")
 	if f.logins != 2 {
 		t.Fatalf("%d logins inside the lease, want 2", f.logins)
 	}
 	now = now.Add(2 * time.Second)
-	put("kernel")
+	put("staging")
 	if f.logins != 3 {
 		t.Fatalf("%d logins past 80%% of the lease, want 3", f.logins)
 	}

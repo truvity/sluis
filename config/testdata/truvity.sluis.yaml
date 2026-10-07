@@ -3,7 +3,7 @@ adapters:
   blobs:
     adapter: s3
     settings:
-      bucket: example-sluis-kernel-111122223333
+      bucket: example-sluis-staging-111122223333
       region: eu-central-1
   secrets:
     adapter: openbao
@@ -15,20 +15,20 @@ adapters:
         role: sluis
         tokenFile: /var/run/openbao/token
       caFile: /var/run/access-issuer/openbao-ca/ca.pem
-      namespace: kernel
+      namespace: staging
       root: sluis
   state:
     adapter: dynamodb
     settings:
       region: eu-central-1
-      table: example-sluis-kernel
+      table: example-sluis-staging
 audit:
   audience: audit
   forwardedForTrustedHops: 2
   queryURL: http://audit-query.audit.svc:8080
   tokenFile: /var/run/audit/token
   writer: http://audit.audit.svc:8080
-cluster: kernel
+cluster: staging
 console:
   client: access-console
 controllers:

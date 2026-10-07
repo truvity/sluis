@@ -50,15 +50,15 @@ data:
       secrets:
         adapter: openbao
         settings:
-          address: https://openbao.kernel.truvity.private
+          address: https://openbao.staging.example.internal
           auth:
             method: jwt
-            mount: jwt-kernel
+            mount: jwt-staging
             role: sluis
             tokenFile: /var/run/openbao/token
           caFile: /var/run/access-issuer/openbao-ca/ca.pem
           mount: kv
-          namespace: kernel
+          namespace: staging
           root: sluis
     audit:
       tokenFile: /var/run/audit/token
@@ -312,7 +312,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
-        checksum/config: 164055eb518079c4644ebeb7673ebaedf5210e827f3313253b3641d177246922
+        checksum/config: 6d3182819c0d03b4d519d1a799c4990d6effddbd2db5c5ae91f4dc239121ef8f
         checksum/policy: d701135be132f9f2aab8101d30ca4bc298a282abfcd2e1eab8b0f6bcbe400e4d
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
@@ -424,7 +424,7 @@ spec:
           projected:
             sources:
               - serviceAccountToken:
-                  audience: "openbao-kernel"
+                  audience: "openbao-staging"
                   expirationSeconds: 3600
                   path: token
         # Every secret the config names, as the file <root>/<name>, so the

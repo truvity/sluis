@@ -62,7 +62,7 @@ func exportReplaceExact(t *testing.T, e ExportEnv) {
 }
 
 func exportPatchKeeps(t *testing.T, e ExportEnv) {
-	target := port.ExportTarget{Path: "arc/truvity"}
+	target := port.ExportTarget{Path: "arc/acme"}
 	mustExport(t, e, target, map[string]string{"other": "kept", "github-app-id": "1"}, port.ExportReplace)
 	mustExport(t, e, target, map[string]string{"github-app-id": "2", "github-private-key": "k"}, port.ExportPatch)
 	wantExport(t, e, target, map[string]string{"other": "kept", "github-app-id": "2", "github-private-key": "k"})
@@ -103,11 +103,11 @@ func exportRefuses(t *testing.T, e ExportEnv) {
 }
 
 func exportNamespaces(t *testing.T, e ExportEnv) {
-	kernel := port.ExportTarget{Namespace: "kernel", Path: "arc/truvity"}
-	devel := port.ExportTarget{Namespace: "devel", Path: "arc/truvity"}
-	mustExport(t, e, kernel, map[string]string{"github-app-id": "1"}, port.ExportPatch)
+	staging := port.ExportTarget{Namespace: "staging", Path: "arc/acme"}
+	devel := port.ExportTarget{Namespace: "devel", Path: "arc/acme"}
+	mustExport(t, e, staging, map[string]string{"github-app-id": "1"}, port.ExportPatch)
 	mustExport(t, e, devel, map[string]string{"github-app-id": "2"}, port.ExportPatch)
-	wantExport(t, e, kernel, map[string]string{"github-app-id": "1"})
+	wantExport(t, e, staging, map[string]string{"github-app-id": "1"})
 	wantExport(t, e, devel, map[string]string{"github-app-id": "2"})
 }
 

@@ -18,7 +18,7 @@ import (
 // fixtures, with the test account in place of its placeholder.
 func hiveInstallation(t *testing.T) *sluisconfig.Installation {
 	t.Helper()
-	in, err := sluisconfig.LoadInstallation(filepath.Join("..", "..", "config", "testdata", "hive.installation.yaml"))
+	in, err := sluisconfig.LoadInstallation(filepath.Join("..", "..", "config", "testdata", "example.installation.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestAnInstallationIsRenderedIntoTheLayerByTheRootRenderer(t *testing.T) {
 	if !strings.Contains(files["sluis/sluis.yaml"], "github: sluis-http") {
 		t.Errorf("the trigger does not invoke the installation's function:\n%s", files["sluis/sluis.yaml"])
 	}
-	f := rec.one(t, fnType, "kernel-http")
+	f := rec.one(t, fnType, "staging-http")
 	if prop(f, "name").StringValue() != "sluis-http" {
 		t.Errorf("the function is named %v, the installation's is sluis-http", prop(f, "name"))
 	}
@@ -101,10 +101,10 @@ func TestAnInstallationTakesWhatItLeavesOutFromTheArguments(t *testing.T) {
 	in := hiveInstallation(t)
 	in.Instance, in.AWS.Region, in.AWS.Account, in.AWS.FunctionName = "", "", "", ""
 	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
-		a.Instance, a.FunctionName = "kernel", "sluis-fn"
+		a.Instance, a.FunctionName = "staging", "sluis-fn"
 	}))
 	files := layerFiles(t, rec)
-	for _, want := range []string{"root: /sluis/kernel", "region: " + region, "github: sluis-fn"} {
+	for _, want := range []string{"root: /sluis/staging", "region: " + region, "github: sluis-fn"} {
 		if !strings.Contains(files["sluis/sluis.yaml"], want) {
 			t.Errorf("the service document lacks %q:\n%s", want, files["sluis/sluis.yaml"])
 		}
@@ -133,7 +133,7 @@ func TestRecoveryIsSaidOnceAcrossTheArgumentsAndTheInstallation(t *testing.T) {
 func TestTheWebIdentityAudienceIsTheConsolesWhenAnInstallationIsGiven(t *testing.T) {
 	in := hiveInstallation(t)
 	rec, _ := mustLambda(t, withInstallation(in, nil))
-	if !strings.Contains(prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue(), "https://access.example.test/console") {
+	if !strings.Contains(prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue(), "https://access.example.test/console") {
 		t.Error("the role's web identity grant does not carry the console audience")
 	}
 	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://other.example.test" })); err == nil ||

@@ -83,7 +83,7 @@ func newRig(t *testing.T, name string) *rig {
 	slacks := portstore.NewSlackCatalogueApps(base)
 	out := memory.NewExport()
 	specs, err := exports.FromConfig([]config.Export{{
-		Name: name, Source: "slack-app", App: "alerts", Namespace: "kernel", Path: "slack-apps/alerts", Interval: dur(time.Hour),
+		Name: name, Source: "slack-app", App: "alerts", Namespace: "staging", Path: "slack-apps/alerts", Interval: dur(time.Hour),
 	}}, exports.Declared{SlackApps: []string{"alerts"}})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func (r *rig) run(t *testing.T) (stop func()) {
 	}
 }
 
-var target = port.ExportTarget{Namespace: "kernel", Path: "slack-apps/alerts"}
+var target = port.ExportTarget{Namespace: "staging", Path: "slack-apps/alerts"}
 
 func eventually(t *testing.T, what string, ok func() bool) {
 	t.Helper()

@@ -15,10 +15,10 @@ import (
 // and verified addresses, invitations, teams and each team's two roles.
 func TestAnOrganisationReadsAsGitHubHoldsIt(t *testing.T) {
 	fake := githubfake.Start(t, "globex")
-	fake.AddMember("excavador", true, "ada.lovelace@globex.example")
+	fake.AddMember("octo-admin", true, "ada.lovelace@globex.example")
 	fake.AddMember("ada", false, "ada@globex.example", "ADA@Globex.example ")
 	fake.AddMember("bot", false)
-	fake.AddTeam("team-platform", "excavador*", "ada")
+	fake.AddTeam("team-platform", "octo-admin*", "ada")
 	fake.Invitations["new@globex.example"] = &githubfake.Invitation{ID: 9, Email: "new@globex.example"}
 
 	org := githubapp.Org{HTTP: fake.Client(), Login: "globex"}
@@ -32,7 +32,7 @@ func TestAnOrganisationReadsAsGitHubHoldsIt(t *testing.T) {
 	for _, m := range members {
 		byLogin[m.Login] = m
 	}
-	if !byLogin["excavador"].Owner || byLogin["ada"].Owner {
+	if !byLogin["octo-admin"].Owner || byLogin["ada"].Owner {
 		t.Errorf("owners = %+v", byLogin)
 	}
 	if !slices.Equal(byLogin["ada"].Emails, []string{"ada@globex.example", "ada@globex.example"}) {
@@ -52,7 +52,7 @@ func TestAnOrganisationReadsAsGitHubHoldsIt(t *testing.T) {
 		t.Fatalf("TeamMembers = %+v, %v", roles, err)
 	}
 	for _, m := range roles {
-		if (m.Login == "excavador") != m.Maintainer {
+		if (m.Login == "octo-admin") != m.Maintainer {
 			t.Errorf("%s maintainer = %v", m.Login, m.Maintainer)
 		}
 	}

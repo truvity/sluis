@@ -67,15 +67,15 @@ data:
       export:
         adapter: openbao
         openbao:
-          address: https://openbao.kernel.truvity.private
+          address: https://openbao.staging.example.internal
           auth:
             method: jwt
-            mount: jwt-kernel
+            mount: jwt-staging
             role: sluis-writer
             tokenFile: /var/run/openbao/token
           caFile: /var/run/access-issuer/openbao-ca/ca.pem
           mount: kv
-          namespace: kernel
+          namespace: staging
     probes:
       address: :7070
     recovery:
@@ -142,16 +142,16 @@ data:
           workspace: truvity
     exports:
     - app: alerts
-      namespace: kernel
+      namespace: staging
       path: slack-apps/alerts
       source: slack-app
     - namespace: devel
       org: truvity
-      path: arc/truvity
+      path: arc/acme
       source: runner-app
       tier: preview
     - bundle: github-apps
-      namespace: kernel
+      namespace: staging
       path: sluis-backup/github-apps
       source: bundle
     slack:
@@ -291,8 +291,8 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
-        checksum/config: dbe4e224e28aeb7c740e60e56012807666f4ff00fac2eb13cd5027b049e77c56
-        checksum/policy: f17f0038a19a4b72fe2c2ed70d5458fc8a11890925ebd6fbf1b1f539fc8b9354
+        checksum/config: 5c58699d4de9cc44e11e14c3ab9474d01d42949fabbebff0d9c0b8ca445d1cdd
+        checksum/policy: dbc221a33c183aeae2d7a2216b64af4d9a52f917e05464eb064897fac1e6e6af
     spec:
       serviceAccountName: sluis
       securityContext:

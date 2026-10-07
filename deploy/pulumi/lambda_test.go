@@ -101,7 +101,7 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 		pkgSHA = sha(t, e.pkg)
 	}
 	a := &arp.LambdaArgs{
-		Region: region, AccountID: account, Instance: "kernel",
+		Region: region, AccountID: account, Instance: "staging",
 		Package: e.pkg, PackageSHA256: pkgSHA, Config: e.config, Policy: e.policy,
 		Storage:       &arp.StorageGrant{BucketArn: pulumi.String(arnp + "s3:::" + bucket)},
 		State:         &arp.StateGrant{TableArn: pulumi.String(arnp + "dynamodb:" + region + ":" + account + ":table/" + table)},
@@ -131,7 +131,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 	t.Helper()
 	args := e.args(t)
 	return run(t, func(ctx *pulumi.Context, collect func(string, pulumi.StringInput)) error {
-		l, err := arp.NewLambda(ctx, "kernel", args)
+		l, err := arp.NewLambda(ctx, "staging", args)
 		if err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ const (
 // rolePolicy is the grants of the function's one role.
 func rolePolicy(t *testing.T, rec *recorder) map[string][]string {
 	t.Helper()
-	return grants(statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()))
+	return grants(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))
 }
 
 // packagePath is the file a function's code is: the release zip, as it is.
@@ -194,7 +194,7 @@ const layerType = "aws:lambda/layerVersion:LayerVersion"
 // layerFiles is what the configuration layer holds, by path.
 func layerFiles(t *testing.T, rec *recorder) map[string]string {
 	t.Helper()
-	return archiveFiles(t, rec.one(t, layerType, "kernel-config"))
+	return archiveFiles(t, rec.one(t, layerType, "staging-config"))
 }
 
 // archiveFiles is what an archive of assets holds, by path.
@@ -230,7 +230,7 @@ func archiveFiles(t *testing.T, f declared) map[string]string {
 	return out
 }
 
-// shape holds what is true of every estate: the Truvity one and the hive one
+// shape holds what is true of every estate: the Truvity one and the example one
 // differ in their targets, their domain and their telemetry, and in nothing here.
 func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	t.Helper()
@@ -239,7 +239,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	if n := len(rec.ofType(fnType)); n != 1 {
 		t.Fatalf("%d functions, want 1", n)
 	}
-	f := rec.one(t, fnType, "kernel-http")
+	f := rec.one(t, fnType, "staging-http")
 	if prop(f, "name").StringValue() != "sluis" || prop(f, "runtime").StringValue() != "provided.al2023" ||
 		prop(f, "handler").StringValue() != "bootstrap" {
 		t.Errorf("%v", f.Inputs)
@@ -268,7 +268,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	}
 	packagePath(t, f)
 	// Nothing of the three functions of v1.62 is left.
-	for _, n := range []string{"kernel-github", "kernel-slack"} {
+	for _, n := range []string{"staging-github", "staging-slack"} {
 		if rec.has(fnType, n) || rec.has("aws:iam/role:Role", n+"-role") || rec.has(policyType, n+"-policy") {
 			t.Errorf("%s is still declared", n)
 		}
@@ -277,7 +277,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	if got := keysOf(files); !reflect.DeepEqual(got, []string{"sluis/policy.yaml", "sluis/sluis.yaml"}) {
 		t.Errorf("the layer holds %v", got)
 	}
-	layer := rec.one(t, layerType, "kernel-config")
+	layer := rec.one(t, layerType, "staging-config")
 	if !prop(layer, "skipDestroy").BoolValue() || prop(layer, "layerName").StringValue() != "sluis-config" {
 		t.Errorf("layer: %v", layer.Inputs)
 	}
@@ -286,7 +286,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	if n := len(rec.ofType("aws:iam/role:Role")); n != 2 { // the function's and the scheduler's
 		t.Errorf("%d roles, want the function's and the scheduler's", n)
 	}
-	role := rec.one(t, "aws:iam/role:Role", "kernel-http-role")
+	role := rec.one(t, "aws:iam/role:Role", "staging-http-role")
 	if prop(role, "name").StringValue() != "sluis" {
 		t.Errorf("role: %v", role.Inputs)
 	}
@@ -305,14 +305,14 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
 	// It reads its credentials, its config and (it runs the exports, the
 	// default) the copies it wrote.
-	wantRead := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*",
-		ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*",
-		ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+	wantRead := []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*",
+		ssmArn + "/sluis/staging/private/config", ssmArn + "/sluis/staging/private/config/*",
+		ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
 	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
 		t.Errorf("reads %v", got)
 	}
 	for _, res := range g["ssm:PutParameter"] {
-		if !strings.Contains(res, "/sluis/kernel/private/credentials") && !strings.Contains(res, "/sluis/kernel/export") {
+		if !strings.Contains(res, "/sluis/staging/private/credentials") && !strings.Contains(res, "/sluis/staging/export") {
 			t.Errorf("may put %s", res)
 		}
 	}
@@ -326,7 +326,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		}
 	}
 	// The one role signs, so nothing denies it the key ring.
-	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Effect"] == "Deny" {
 			t.Errorf("the one role has a denial: %v", s)
 		}
@@ -351,7 +351,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	if len(keys) != 2 {
 		t.Fatalf("keys: %v", rec.names())
 	}
-	for name, spec := range map[string]string{"kernel-signing-key": "ECC_NIST_P384", "kernel-signing-key-rs256": "RSA_3072"} {
+	for name, spec := range map[string]string{"staging-signing-key": "ECC_NIST_P384", "staging-signing-key-rs256": "RSA_3072"} {
 		k := rec.one(t, "aws:kms/key:Key", name)
 		if prop(k, "keyUsage").StringValue() != "SIGN_VERIFY" || prop(k, "customerMasterKeySpec").StringValue() != spec {
 			t.Errorf("%s: %v", name, k.Inputs)
@@ -363,21 +363,21 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	if out["signingKeyAlias"] != "alias/sluis-signing" || out["signingKeyRS256Alias"] != "alias/sluis-signing-rs256" || out["signingKeyRS256ID"] == "" {
 		t.Errorf("aliases %q %q", out["signingKeyAlias"], out["signingKeyRS256Alias"])
 	}
-	if rec.has("aws:kms/key:Key", "kernel-sealer-key") || rec.has("aws:kms/alias:Alias", "kernel-sealer-alias") {
+	if rec.has("aws:kms/key:Key", "staging-sealer-key") || rec.has("aws:kms/alias:Alias", "staging-sealer-alias") {
 		t.Error("the sealer key is still declared")
 	}
 
 	// The API: payload 2.0, the default endpoint off, mutual TLS on the domain.
-	api := rec.one(t, "aws:apigatewayv2/api:Api", "kernel-api")
+	api := rec.one(t, "aws:apigatewayv2/api:Api", "staging-api")
 	if prop(api, "protocolType").StringValue() != "HTTP" || !prop(api, "disableExecuteApiEndpoint").BoolValue() {
 		t.Errorf("api: %v", api.Inputs)
 	}
-	integ := rec.one(t, "aws:apigatewayv2/integration:Integration", "kernel-api-integration")
+	integ := rec.one(t, "aws:apigatewayv2/integration:Integration", "staging-api-integration")
 	if prop(integ, "payloadFormatVersion").StringValue() != "2.0" || prop(integ, "integrationType").StringValue() != "AWS_PROXY" ||
 		prop(integ, "integrationUri").StringValue() != out["functionArn"] {
 		t.Errorf("integration: %v", integ.Inputs)
 	}
-	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "kernel-domain")
+	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "staging-domain")
 	if prop(dom, "domainName").StringValue() != domain {
 		t.Errorf("domain: %v", dom.Inputs)
 	}
@@ -390,7 +390,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		!strings.Contains(cfg["certificateArn"].StringValue(), "certificate/origin") {
 		t.Errorf("domain configuration: %v", cfg)
 	}
-	obj := rec.one(t, "aws:s3/bucketObjectv2:BucketObjectv2", "kernel-truststore-pem")
+	obj := rec.one(t, "aws:s3/bucketObjectv2:BucketObjectv2", "staging-truststore-pem")
 	if prop(obj, "content").StringValue() != truststore {
 		t.Errorf("truststore content: %q", prop(obj, "content").StringValue())
 	}
@@ -409,7 +409,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("export policy grants %s", a)
 		}
 		for _, r := range res {
-			if !strings.Contains(r, ":parameter/sluis/kernel/export") {
+			if !strings.Contains(r, ":parameter/sluis/staging/export") {
 				t.Errorf("export policy names %s", r)
 			}
 		}
@@ -474,13 +474,13 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		}
 	}
 	// The scheduler's role invokes the one function and nothing else.
-	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
+	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
 	if len(sp) != 1 || len(sp["lambda:InvokeFunction"]) != 1 {
 		t.Errorf("scheduler grants %v", sp)
 	}
 
 	// Telemetry: the layer and the settings on the function.
-	f := rec.one(t, fnType, "kernel-http")
+	f := rec.one(t, fnType, "staging-http")
 	if l := prop(f, "layers").ArrayValue(); len(l) != 2 || !strings.Contains(l[0].StringValue(), "otlp-lambda") {
 		t.Errorf("layers: %v", l)
 	}
@@ -491,10 +491,10 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 }
 
 func TestTheHiveShapeIsExpressible(t *testing.T) {
-	// Hive: one GitHub org, Slack none, the default tick, and the telemetry
+	// example: one GitHub org, Slack none, the default tick, and the telemetry
 	// layer not ready yet.
 	rec, out := mustLambda(t, estate{
-		orgs: []string{"opwerm"}, keepDefaultEndpoint: false,
+		orgs: []string{"acme"}, keepDefaultEndpoint: false,
 		mutate: func(a *arp.LambdaArgs) {
 			a.API.DomainName = "access.two.example.test"
 			a.SigningKeyAlias = ""
@@ -513,7 +513,7 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 		}
 	}
 	{
-		f := rec.one(t, fnType, "kernel-http")
+		f := rec.one(t, fnType, "staging-http")
 		if l := prop(f, "layers").ArrayValue(); len(l) != 1 {
 			t.Errorf("a layer beside the configuration's without Telemetry: %v", l)
 		}
@@ -533,21 +533,21 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 	if g := rolePolicy(t, rec); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
 		t.Errorf("the role grants %v", g)
 	}
-	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "kernel-domain")
+	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "staging-domain")
 	if prop(dom, "domainName").StringValue() != "access.two.example.test" || !prop(dom, "mutualTlsAuthentication").IsObject() {
 		t.Errorf("domain: %v", dom.Inputs)
 	}
-	if !prop(rec.one(t, "aws:apigatewayv2/api:Api", "kernel-api"), "disableExecuteApiEndpoint").BoolValue() {
+	if !prop(rec.one(t, "aws:apigatewayv2/api:Api", "staging-api"), "disableExecuteApiEndpoint").BoolValue() {
 		t.Error("the default endpoint is on")
 	}
-	if rec.has("aws:kms/key:Key", "kernel-sealer-key") {
+	if rec.has("aws:kms/key:Key", "staging-sealer-key") {
 		t.Error("a sealer key")
 	}
 }
 
 func TestTheDefaultEndpointStaysOnlyWhenAsked(t *testing.T) {
 	rec, _ := mustLambda(t, estate{keepDefaultEndpoint: true})
-	if prop(rec.one(t, "aws:apigatewayv2/api:Api", "kernel-api"), "disableExecuteApiEndpoint").BoolValue() {
+	if prop(rec.one(t, "aws:apigatewayv2/api:Api", "staging-api"), "disableExecuteApiEndpoint").BoolValue() {
 		t.Error("KeepDefaultEndpoint did not keep it")
 	}
 }
@@ -556,24 +556,24 @@ const stageType = "aws:apigatewayv2/stage:Stage"
 
 func TestAccessLogsAreOffUnlessAsked(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
-	if rec.has("aws:cloudwatch/logGroup:LogGroup", "kernel-api-access") {
+	if rec.has("aws:cloudwatch/logGroup:LogGroup", "staging-api-access") {
 		t.Error("an access log group exists without AccessLogs")
 	}
-	if !prop(rec.one(t, stageType, "kernel-api-stage"), "accessLogSettings").IsNull() {
+	if !prop(rec.one(t, stageType, "staging-api-stage"), "accessLogSettings").IsNull() {
 		t.Error("the stage logs without AccessLogs")
 	}
 }
 
 func TestAccessLogsLogPathAndStatusOnly(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.AccessLogs = &arp.AccessLogsArgs{} }})
-	lg := rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "kernel-api-access")
+	lg := rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "staging-api-access")
 	if got := prop(lg, "retentionInDays").NumberValue(); got != 7 {
 		t.Errorf("retention = %v, want 7", got)
 	}
 	if got := prop(lg, "name").StringValue(); got != "/aws/apigateway/sluis" {
 		t.Errorf("log group name = %q", got)
 	}
-	set := prop(rec.one(t, stageType, "kernel-api-stage"), "accessLogSettings")
+	set := prop(rec.one(t, stageType, "staging-api-stage"), "accessLogSettings")
 	if set.IsNull() {
 		t.Fatal("the stage has no access log settings")
 	}
@@ -609,7 +609,7 @@ func TestAccessLogsLogPathAndStatusOnly(t *testing.T) {
 
 func TestAccessLogsRetentionIsConfigurableAndValidated(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.AccessLogs = &arp.AccessLogsArgs{RetentionDays: 3} }})
-	if got := prop(rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "kernel-api-access"), "retentionInDays").NumberValue(); got != 3 {
+	if got := prop(rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "staging-api-access"), "retentionInDays").NumberValue(); got != 3 {
 		t.Errorf("retention = %v, want 3", got)
 	}
 	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.AccessLogs = &arp.AccessLogsArgs{RetentionDays: -1} }}); err == nil {
@@ -633,7 +633,7 @@ func TestADocumentChangesTheLayerAndNeverThePackage(t *testing.T) {
 	build := func(e estate) (string, map[string]string) {
 		e.pkg = pkg
 		rec, _ := mustLambda(t, e)
-		code := packagePath(t, rec.one(t, fnType, "kernel-http"))
+		code := packagePath(t, rec.one(t, fnType, "staging-http"))
 		return code, layerFiles(t, rec)
 	}
 	code, base := build(estate{})
@@ -675,7 +675,7 @@ func TestTheDocumentsAreTheLibrarysAndHeldToTheBinarysLoader(t *testing.T) {
 	files := layerFiles(t, rec)
 	for _, want := range []string{
 		"apiVersion: sluis.truvity.github.io/sluis/v3", "file: /opt/sluis/policy.yaml",
-		"root: /sluis/kernel", "source: ssm", "region: " + region,
+		"root: /sluis/staging", "source: ssm", "region: " + region,
 		"passwordSecret: recovery/password", "stateSecret: issuer/state-secret",
 	} {
 		if !strings.Contains(files["sluis/sluis.yaml"], want) {
@@ -758,7 +758,7 @@ func TestThePackageCanBeFetchedFromAnHTTPSURLAndItsDigestIsChecked(t *testing.T)
 	sum := sha256.Sum256(raw)
 	url := srv.URL + "/sluis-lambda_1.63.0_linux_arm64.zip"
 	rec, _ := mustLambda(t, estate{pkg: url, mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = hex.EncodeToString(sum[:]) }})
-	if got := must(os.ReadFile(packagePath(t, rec.one(t, fnType, "kernel-http")))); !bytes.Equal(got, raw) {
+	if got := must(os.ReadFile(packagePath(t, rec.one(t, fnType, "staging-http")))); !bytes.Equal(got, raw) {
 		t.Error("the fetched package is not the release, byte for byte")
 	}
 	bad := estate{pkg: url, mutate: func(a *arp.LambdaArgs) { a.PackageSHA256 = strings.Repeat("0", 64) }}
@@ -789,7 +789,7 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 	for name, mutate := range map[string]func(*arp.LambdaArgs){
 		"no region":      func(a *arp.LambdaArgs) { a.Region = "" },
 		"no instance":    func(a *arp.LambdaArgs) { a.Instance = "" },
-		"a bad instance": func(a *arp.LambdaArgs) { a.Instance = "Kernel/1" },
+		"a bad instance": func(a *arp.LambdaArgs) { a.Instance = "Staging/1" },
 		"no digest":      func(a *arp.LambdaArgs) { a.PackageSHA256 = "" },
 		"a wrong digest": func(a *arp.LambdaArgs) { a.PackageSHA256 = strings.Repeat("ab", 32) },
 		"no package":     func(a *arp.LambdaArgs) { a.Package = "" },
@@ -822,7 +822,7 @@ func TestAParameterKeyIsGrantedThroughSSMOnly(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
 	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
 	var n int
-	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Sid"] != "SluisParameterKey" {
 			continue
 		}
@@ -843,11 +843,11 @@ func TestAParameterKeyIsGrantedThroughSSMOnly(t *testing.T) {
 func TestThePodIdentityRoleSignsAndCarriesNoSealer(t *testing.T) {
 	signing := arnp + "kms:" + region + ":" + account + ":key/signing"
 	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
+		store, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{BucketName: bucket})
 		if err != nil {
 			return err
 		}
-		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
+		_, err = arp.NewKubernetesIdentity(ctx, "staging", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
 			Namespace: "sluis", ServiceAccount: "sluis",
 			Storage: store.Grant(), SigningKeyArns: []pulumi.StringInput{pulumi.String(signing), pulumi.String(signing + "-rs")},
@@ -860,7 +860,7 @@ func TestThePodIdentityRoleSignsAndCarriesNoSealer(t *testing.T) {
 	pol := func(n string) map[string][]string {
 		return grants(statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue()))
 	}
-	if g := pol("kernel-sluis-policy"); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
+	if g := pol("staging-sluis-policy"); len(g["kms:Sign"]) != 2 || len(g["kms:GetPublicKey"]) != 2 {
 		t.Errorf("the role: %v", g)
 	}
 }
@@ -888,12 +888,12 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
 	for _, k := range []string{"", key} {
 		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = k }})
-		r := rec.one(t, "random:index/randomBytes:RandomBytes", "kernel-state-secret")
+		r := rec.one(t, "random:index/randomBytes:RandomBytes", "staging-state-secret")
 		if prop(r, "length").NumberValue() != 32 || prop(r, "keepers").HasValue() {
 			t.Errorf("random bytes: %v: 32 bytes and no keepers, or an apply rotates it", r.Inputs)
 		}
-		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-state-secret")
-		if prop(p, "name").StringValue() != "/sluis/kernel/private/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
+		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret")
+		if prop(p, "name").StringValue() != "/sluis/staging/private/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		if !prop(p, "value").IsSecret() {
@@ -907,7 +907,7 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 		}
 	}
 	_, out := mustLambda(t, estate{})
-	if out["stateSecretParameter"] != "/sluis/kernel/private/config/issuer/state-secret" {
+	if out["stateSecretParameter"] != "/sluis/staging/private/config/issuer/state-secret" {
 		t.Errorf("output: %q", out["stateSecretParameter"])
 	}
 }
@@ -927,14 +927,14 @@ func TestTheRoleMayAskForAWebIdentityTokenTheControllersReadTheConsoleWith(t *te
 	if g := rolePolicy(t, rec)["sts:GetWebIdentityToken"]; len(g) == 0 {
 		t.Error("the role may not ask STS for a web identity token")
 	}
-	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Sid"] == "SluisWebIdentity" && s["Condition"] != nil {
 			t.Errorf("a condition without an audience: %v", s)
 		}
 	}
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WebIdentityAudience = "https://access.example.test" }})
 	var n int
-	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Sid"] != "SluisWebIdentity" {
 			continue
 		}
@@ -953,19 +953,19 @@ func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		a.Exports = arp.ExportsArgs{Rate: "rate(1 hour)"}
 	}})
-	s := rec.one(t, "aws:scheduler/schedule:Schedule", "kernel-exports")
+	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-exports")
 	tgt := prop(s, "target").ObjectValue()
 	if prop(s, "scheduleExpression").StringValue() != "rate(1 hour)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis") ||
 		tgt["input"].StringValue() != `{"kind":"exports"}` {
 		t.Errorf("exports schedule: %v", s.Inputs)
 	}
-	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
+	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
 	// The scheduler invokes the one function and nothing else.
 	if len(sp["lambda:InvokeFunction"]) != 1 {
 		t.Errorf("scheduler grants %v", sp)
 	}
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = true }})
-	if rec.has("aws:scheduler/schedule:Schedule", "kernel-exports") {
+	if rec.has("aws:scheduler/schedule:Schedule", "staging-exports") {
 		t.Error("a disabled exports schedule was made")
 	}
 	for name, mutate := range map[string]func(*arp.LambdaArgs){
@@ -979,13 +979,13 @@ func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
 
 func TestTheDirectoryRefreshScheduleIsOnByDefaultAndConfigurable(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
-	s := rec.one(t, "aws:scheduler/schedule:Schedule", "kernel-directory-refresh")
+	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-directory-refresh")
 	tgt := prop(s, "target").ObjectValue()
 	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis") ||
 		tgt["input"].StringValue() != `{"kind":"refresh"}` {
 		t.Errorf("directory refresh schedule: %v", s.Inputs)
 	}
-	sp := grants(statements(t, prop(rec.one(t, policyType, "kernel-scheduler-policy"), "policy").StringValue()))
+	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
 	if !slices.ContainsFunc(sp["lambda:InvokeFunction"], func(a string) bool { return strings.HasSuffix(a, ":function:sluis") }) {
 		t.Errorf("the scheduler cannot invoke the function: %v", sp)
 	}
@@ -993,7 +993,7 @@ func TestTheDirectoryRefreshScheduleIsOnByDefaultAndConfigurable(t *testing.T) {
 	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		a.DirectoryRefresh = arp.DirectoryRefreshArgs{Disabled: true}
 	}})
-	if rec.has("aws:scheduler/schedule:Schedule", "kernel-directory-refresh") {
+	if rec.has("aws:scheduler/schedule:Schedule", "staging-directory-refresh") {
 		t.Error("a disabled directory refresh schedule was made")
 	}
 	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.DirectoryRefresh.Rate = "hourly" }}); err == nil {
@@ -1021,15 +1021,15 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 	if len(keys) != 1 {
 		t.Fatalf("keys: %v", rec.names())
 	}
-	k := rec.one(t, "aws:kms/key:Key", "kernel-signing-key-wrapped")
+	k := rec.one(t, "aws:kms/key:Key", "staging-signing-key-wrapped")
 	if prop(k, "keyUsage").StringValue() != "ENCRYPT_DECRYPT" || prop(k, "customerMasterKeySpec").StringValue() != "SYMMETRIC_DEFAULT" ||
 		!prop(k, "enableKeyRotation").BoolValue() {
 		t.Errorf("key: %v", k.Inputs)
 	}
-	if !rec.isProtected("aws:kms/key:Key", "kernel-signing-key-wrapped") {
+	if !rec.isProtected("aws:kms/key:Key", "staging-signing-key-wrapped") {
 		t.Error("the wrapped signing key is not protected")
 	}
-	if prop(rec.one(t, "aws:kms/alias:Alias", "kernel-signing-alias-wrapped"), "name").StringValue() != "alias/sluis-signing-wrapped" {
+	if prop(rec.one(t, "aws:kms/alias:Alias", "staging-signing-alias-wrapped"), "name").StringValue() != "alias/sluis-signing-wrapped" {
 		t.Error("alias")
 	}
 	if out["signingKeyArn"] != "" || out["signingKeyRS256Arn"] != "" || out["wrappedSigningKeyArn"] == "" {
@@ -1048,7 +1048,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 		}
 	}
 	found := false
-	for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, st := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if st["Sid"] != "SluisWrappedSigning" {
 			continue
 		}
@@ -1103,7 +1103,7 @@ func TestWrappedSigningReplacesTheAsymmetricKeysWithOneSymmetricKey(t *testing.T
 		t.Errorf("the reserved-context denial: %v", res)
 	}
 	// The one role signs, so it is not denied the key ring.
-	for _, st := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, st := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if st["Sid"] == "SluisNoKeyringWrites" {
 			t.Errorf("the signing role is denied the key ring: %v", st)
 		}
@@ -1139,11 +1139,11 @@ func TestWrappedSigningAliasMustBeAnAlias(t *testing.T) {
 func TestThePodIdentityRoleMayUseTheWrappedKey(t *testing.T) {
 	app := arnp + "kms:" + region + ":" + account + ":key/application"
 	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
+		store, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{BucketName: bucket})
 		if err != nil {
 			return err
 		}
-		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
+		_, err = arp.NewKubernetesIdentity(ctx, "staging", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
 			Namespace: "sluis", ServiceAccount: "sluis",
 			Storage: store.Grant(), WrappedSigningKeyArn: pulumi.String(app),
@@ -1156,11 +1156,11 @@ func TestThePodIdentityRoleMayUseTheWrappedKey(t *testing.T) {
 	pol := func(n string) []map[string]any {
 		return statements(t, prop(rec.one(t, "aws:iam/policy:Policy", n), "policy").StringValue())
 	}
-	serve := grants(pol("kernel-sluis-policy"))
+	serve := grants(pol("staging-sluis-policy"))
 	if !reflect.DeepEqual(serve["kms:Decrypt"], []string{app}) || !reflect.DeepEqual(serve["kms:GenerateDataKeyPairWithoutPlaintext"], []string{app}) {
 		t.Errorf("serve: %v", serve)
 	}
-	for _, st := range pol("kernel-sluis-policy") {
+	for _, st := range pol("staging-sluis-policy") {
 		if st["Sid"] == "SluisWrappedSigning" {
 			wantWrappedCondition(t, "serve", st["Condition"])
 		}
@@ -1172,7 +1172,7 @@ func TestTheKeyPolicyNamesEverySigningRole(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
 		a.WrappedSigning = &arp.WrappedSigningArgs{AdditionalSigningRoleArns: []string{serve}}
 	}})
-	k := rec.one(t, "aws:kms/key:Key", "kernel-signing-key-wrapped")
+	k := rec.one(t, "aws:kms/key:Key", "staging-signing-key-wrapped")
 	for _, st := range statements(t, prop(k, "policy").StringValue()) {
 		if st["Sid"] == "SluisSigningContextReserved" {
 			got := st["Condition"].(map[string]any)["ArnNotEquals"]
@@ -1188,15 +1188,15 @@ func TestTheKeyPolicyNamesEverySigningRole(t *testing.T) {
 func TestThePodIdentityRoleIsNotDeniedTheKeyRing(t *testing.T) {
 	app := arnp + "kms:" + region + ":" + account + ":key/application"
 	rec, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
-		store, err := arp.NewStorage(ctx, "kernel", &arp.StorageArgs{BucketName: bucket})
+		store, err := arp.NewStorage(ctx, "staging", &arp.StorageArgs{BucketName: bucket})
 		if err != nil {
 			return err
 		}
-		st, err := arp.NewState(ctx, "kernel", &arp.StateArgs{TableName: table})
+		st, err := arp.NewState(ctx, "staging", &arp.StateArgs{TableName: table})
 		if err != nil {
 			return err
 		}
-		_, err = arp.NewKubernetesIdentity(ctx, "kernel", &arp.KubernetesIdentityArgs{
+		_, err = arp.NewKubernetesIdentity(ctx, "staging", &arp.KubernetesIdentityArgs{
 			ClusterName: cluster, ClusterArn: arnp + "eks:" + region + ":" + account + ":cluster/" + cluster, AccountID: account,
 			Namespace: "sluis", ServiceAccount: "sluis",
 			Storage: store.Grant(), State: st.Grant(), WrappedSigningKeyArn: pulumi.String(app),
@@ -1206,7 +1206,7 @@ func TestThePodIdentityRoleIsNotDeniedTheKeyRing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range statements(t, prop(rec.one(t, "aws:iam/policy:Policy", "kernel-sluis-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, "aws:iam/policy:Policy", "staging-sluis-policy"), "policy").StringValue()) {
 		if s["Effect"] == "Deny" {
 			t.Errorf("the one role signs and is denied: %v", s)
 		}
@@ -1229,7 +1229,7 @@ func TestTheSharedKeyStatementsAreTheWholeOfTheKeyPolicyBeyondTheRootStatement(t
 	}
 	// What the library creates is the root statement and exactly these.
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.WrappedSigning = &arp.WrappedSigningArgs{} }})
-	k := rec.one(t, "aws:kms/key:Key", "kernel-signing-key-wrapped")
+	k := rec.one(t, "aws:kms/key:Key", "staging-signing-key-wrapped")
 	got := statements(t, prop(k, "policy").StringValue())
 	if len(got) != 1+len(st) {
 		t.Errorf("the created key has %d statements", len(got))
@@ -1250,12 +1250,12 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
 	for _, k := range []string{"", key} {
 		rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = k }})
-		r := rec.one(t, "random:index/randomPassword:RandomPassword", "kernel-recovery-password")
+		r := rec.one(t, "random:index/randomPassword:RandomPassword", "staging-recovery-password")
 		if prop(r, "length").NumberValue() < 32 || prop(r, "special").BoolValue() || prop(r, "keepers").HasValue() {
 			t.Errorf("random password: %v: at least 32 characters, no special ones, and no keepers, or an apply rotates it", r.Inputs)
 		}
-		p := rec.one(t, "aws:ssm/parameter:Parameter", "kernel-recovery-password")
-		if prop(p, "name").StringValue() != "/sluis/kernel/private/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
+		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password")
+		if prop(p, "name").StringValue() != "/sluis/staging/private/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		value := prop(p, "value")
@@ -1275,7 +1275,7 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		}
 	}
 	rec, out := mustLambda(t, estate{})
-	if out["recoveryPasswordParameter"] != "/sluis/kernel/private/config/recovery/password" {
+	if out["recoveryPasswordParameter"] != "/sluis/staging/private/config/recovery/password" {
 		t.Errorf("output: %q", out["recoveryPasswordParameter"])
 	}
 	files := layerFiles(t, rec)
@@ -1308,7 +1308,7 @@ func TestRecoveryEnabledIsWrittenIntoTheServiceDocument(t *testing.T) {
 		t.Errorf("an operator's recovery.enabled was lost: %q", got)
 	}
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }})
-	rec.one(t, "aws:ssm/parameter:Parameter", "kernel-recovery-password")
+	rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password")
 	for name, e := range map[string]estate{
 		"disagrees": {config: "issuerURL: https://x.example\nrecovery: {enabled: true}\n",
 			mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }},
@@ -1327,9 +1327,9 @@ func TestRecoveryEnabledIsWrittenIntoTheServiceDocument(t *testing.T) {
 func TestTheOneRoleReadsConfigAndWritesOnlyCredentialsAndExports(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	cfg := []string{ssmArn + "/sluis/kernel/private/config", ssmArn + "/sluis/kernel/private/config/*"}
-	creds := []string{ssmArn + "/sluis/kernel/private/credentials", ssmArn + "/sluis/kernel/private/credentials/*"}
-	export := []string{ssmArn + "/sluis/kernel/export", ssmArn + "/sluis/kernel/export/*"}
+	cfg := []string{ssmArn + "/sluis/staging/private/config", ssmArn + "/sluis/staging/private/config/*"}
+	creds := []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*"}
+	export := []string{ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
 	writes := append(append([]string{}, creds...), export...)
 	h := rolePolicy(t, rec)
 	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
@@ -1350,7 +1350,7 @@ func TestNoGrantReachesOutsideTheInstallationsRoot(t *testing.T) {
 	for _, exportsDisabled := range []bool{false, true} {
 		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = exportsDisabled }})
 		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-		for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+		for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 			actions := strs(s["Action"])
 			ssmAction := slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, "ssm:") })
 			for _, res := range strs(s["Resource"]) {
@@ -1365,8 +1365,8 @@ func TestNoGrantReachesOutsideTheInstallationsRoot(t *testing.T) {
 				if strings.Contains(strings.TrimSuffix(path, "/*"), "*") {
 					t.Errorf("a wildcard inside an SSM resource: %s", res)
 				}
-				if !strings.HasPrefix(strings.TrimSuffix(path, "/*"), "/sluis/kernel/") {
-					t.Errorf("a grant outside the installation's root /sluis/kernel/: %s", res)
+				if !strings.HasPrefix(strings.TrimSuffix(path, "/*"), "/sluis/staging/") {
+					t.Errorf("a grant outside the installation's root /sluis/staging/: %s", res)
 				}
 			}
 		}
@@ -1383,9 +1383,9 @@ func TestTheParameterKeyIsHeldToTheRolesPrefixes(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
 	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	want := []string{ssmArn + "/sluis/kernel/private/credentials/*", ssmArn + "/sluis/kernel/export/*", ssmArn + "/sluis/kernel/private/config/*"}
+	want := []string{ssmArn + "/sluis/staging/private/credentials/*", ssmArn + "/sluis/staging/export/*", ssmArn + "/sluis/staging/private/config/*"}
 	n := 0
-	for _, s := range statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()) {
+	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Sid"] != "SluisParameterKey" {
 			continue
 		}
@@ -1398,7 +1398,7 @@ func TestTheParameterKeyIsHeldToTheRolesPrefixes(t *testing.T) {
 	if n != 1 {
 		t.Errorf("%d parameter-key statements", n)
 	}
-	if !strings.Contains(out["exportReadPolicy"], "/sluis/kernel/export/*") || strings.Contains(out["exportReadPolicy"], "private") {
+	if !strings.Contains(out["exportReadPolicy"], "/sluis/staging/export/*") || strings.Contains(out["exportReadPolicy"], "private") {
 		t.Errorf("the consumer's key condition: %s", out["exportReadPolicy"])
 	}
 }
@@ -1444,7 +1444,7 @@ func TestWhatTheLibraryRefusesToPublish(t *testing.T) {
 func TestTheCodeIsTheVerifiedCopyNotTheCallersFile(t *testing.T) {
 	pkg := zipFile(t, nil)
 	rec, _ := mustLambda(t, estate{pkg: pkg})
-	code := packagePath(t, rec.one(t, fnType, "kernel-http"))
+	code := packagePath(t, rec.one(t, fnType, "staging-http"))
 	if code == pkg {
 		t.Fatal("the code is the caller's path")
 	}
@@ -1462,16 +1462,16 @@ func TestTheCodeIsTheVerifiedCopyNotTheCallersFile(t *testing.T) {
 // replaced. The old github and slack resources are not declared.
 func TestTheFunctionNameDecidesTheNamesAndTheLogicalNamesStay(t *testing.T) {
 	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.FunctionName = "sluis-http" }})
-	if got := prop(rec.one(t, fnType, "kernel-http"), "name").StringValue(); got != "sluis-http" {
+	if got := prop(rec.one(t, fnType, "staging-http"), "name").StringValue(); got != "sluis-http" {
 		t.Errorf("function name %q", got)
 	}
-	if got := prop(rec.one(t, "aws:iam/role:Role", "kernel-http-role"), "name").StringValue(); got != "sluis-http" {
+	if got := prop(rec.one(t, "aws:iam/role:Role", "staging-http-role"), "name").StringValue(); got != "sluis-http" {
 		t.Errorf("role name %q", got)
 	}
-	if got := prop(rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "kernel-http"), "name").StringValue(); got != "/aws/lambda/sluis-http" {
+	if got := prop(rec.one(t, "aws:cloudwatch/logGroup:LogGroup", "staging-http"), "name").StringValue(); got != "/aws/lambda/sluis-http" {
 		t.Errorf("log group %q", got)
 	}
-	if got := grants(statements(t, prop(rec.one(t, policyType, "kernel-http-policy"), "policy").StringValue()))["lambda:InvokeFunction"]; len(got) != 1 ||
+	if got := grants(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))["lambda:InvokeFunction"]; len(got) != 1 ||
 		!strings.HasSuffix(got[0], ":function:sluis-http") {
 		t.Errorf("the function may invoke %v", got)
 	}

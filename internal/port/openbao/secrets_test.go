@@ -22,9 +22,9 @@ func secretsAdapter(t *testing.T, f *fake, root string) *openbao.Secrets {
 	addr, client := newServer(t, f)
 	s, err := openbao.NewSecrets(openbao.SecretsConfig{
 		Config: openbao.Config{
-			Client: client, Address: addr, Namespace: "kernel",
+			Client: client, Address: addr, Namespace: "staging",
 			Auth: openbao.Auth{
-				Method: openbao.MethodJWT, Mount: "jwt-kernel", Role: "sluis-writer",
+				Method: openbao.MethodJWT, Mount: "jwt-staging", Role: "sluis-writer",
 				Token: func(context.Context) (string, error) { return "a-jwt", nil },
 			},
 		},
@@ -55,17 +55,17 @@ func TestSecretsLayout(t *testing.T) {
 		if _, err := s.Put(ctx, p, []byte("x")); err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := f.read("kernel", want); !ok {
+		if _, ok := f.read("staging", want); !ok {
 			t.Errorf("%q: nothing at %q", p, want)
 		}
 	}
 	// A root with an instance in it is the same layout one level down.
 	g := newFake()
-	if _, err := secretsAdapter(t, g, "sluis/kernel").Put(ctx, "export/a", []byte("x")); err != nil {
+	if _, err := secretsAdapter(t, g, "sluis/staging").Put(ctx, "export/a", []byte("x")); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := g.read("kernel", "sluis/kernel/export/a"); !ok {
-		t.Error("root sluis/kernel: nothing at sluis/kernel/export/a")
+	if _, ok := g.read("staging", "sluis/staging/export/a"); !ok {
+		t.Error("root sluis/staging: nothing at sluis/staging/export/a")
 	}
 }
 
@@ -77,14 +77,14 @@ func TestSecretsValueShapes(t *testing.T) {
 	if _, err := s.Put(ctx, "config/valkey/password", []byte("pw")); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.read("kernel", "sluis/private/config/valkey/password"); len(got) != 1 || got["value"] != "pw" {
+	if got, _ := f.read("staging", "sluis/private/config/valkey/password"); len(got) != 1 || got["value"] != "pw" {
 		t.Errorf("private secret fields: %v", got)
 	}
 	// Bytes that are not text are base64.
 	if _, err := s.Put(ctx, "credentials/k/id/pem", []byte{0xff, 0x00}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.read("kernel", "sluis/private/credentials/k/id/pem"); len(got) != 1 || got["value_b64"] != "/wA=" {
+	if got, _ := f.read("staging", "sluis/private/credentials/k/id/pem"); len(got) != 1 || got["value_b64"] != "/wA=" {
 		t.Errorf("binary fields: %v", got)
 	}
 	// An export of properties is stored as them, for a consumer's ESO, and
@@ -93,7 +93,7 @@ func TestSecretsValueShapes(t *testing.T) {
 	if _, err := s.Put(ctx, "export/slack-apps/alerts", obj); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := f.read("kernel", "sluis/export/slack-apps/alerts")
+	got, _ := f.read("staging", "sluis/export/slack-apps/alerts")
 	if len(got) != 2 || got["botToken"] != "xoxb-1" || got["signingSecret"] != "<s>" {
 		t.Errorf("export fields: %v", got)
 	}
@@ -151,11 +151,11 @@ func TestSecretsPerExportNamespace(t *testing.T) {
 	if _, ok := f.read("devel", "sluis/export/github-runner-app/preview/truvity"); !ok {
 		t.Error("nothing in the devel namespace")
 	}
-	if _, ok := f.read("kernel", "sluis/export/github-runner-app/preview/truvity"); ok {
+	if _, ok := f.read("staging", "sluis/export/github-runner-app/preview/truvity"); ok {
 		t.Error("the secret also landed in the default namespace")
 	}
 	if f.logins != 1 {
-		t.Errorf("%d logins, want 1 (devel only: nothing was written in kernel)", f.logins)
+		t.Errorf("%d logins, want 1 (devel only: nothing was written in staging)", f.logins)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestSecretsErrors(t *testing.T) {
 
 func TestNewSecretsRefusesABadRoot(t *testing.T) {
 	cfg := openbao.SecretsConfig{Config: openbao.Config{Address: "https://openbao.example", Auth: openbao.Auth{Method: "kubernetes", Role: "r"}}}
-	for _, root := range []string{"sluis", "sluis/kernel"} {
+	for _, root := range []string{"sluis", "sluis/staging"} {
 		cfg.Root = root
 		if _, err := openbao.NewSecrets(cfg); err != nil {
 			t.Errorf("root %q: %v", root, err)
@@ -199,8 +199,8 @@ func TestSecretsAreRegistered(t *testing.T) {
 		t.Fatalf("secrets/openbao: %+v", d)
 	}
 	built, err := d.Factory(context.Background(), port.Settings{
-		"address": "https://openbao.example", "namespace": "kernel", "root": "sluis",
-		"auth": map[string]any{"method": "jwt", "mount": "jwt-kernel", "role": "sluis", "tokenFile": "/var/run/openbao/token"},
+		"address": "https://openbao.example", "namespace": "staging", "root": "sluis",
+		"auth": map[string]any{"method": "jwt", "mount": "jwt-staging", "role": "sluis", "tokenFile": "/var/run/openbao/token"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -231,8 +231,8 @@ func TestTheSecretsExportHonoursAnEntrysNamespace(t *testing.T) {
 	if !ok || got["github-app-id"] != "1" || got["github-private-key"] != "k" {
 		t.Errorf("devel: %v %v", got, ok)
 	}
-	if got, ok = f.read("kernel", "sluis/export/slack-apps/alerts"); !ok || got["bot_token"] != "x" {
-		t.Errorf("kernel: %v %v", got, ok)
+	if got, ok = f.read("staging", "sluis/export/slack-apps/alerts"); !ok || got["bot_token"] != "x" {
+		t.Errorf("staging: %v %v", got, ok)
 	}
 	// A patch keeps the other properties.
 	more := map[string]string{"github-installation-id": "2"}

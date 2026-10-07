@@ -115,7 +115,7 @@ func TestLambdaRefusesLegacy(t *testing.T) {
 	}
 }
 
-// A secrets adapter that nobody chose is not built, so the kernel and hive,
+// A secrets adapter that nobody chose is not built, so the staging and example,
 // which name none, run as they did; one that was chosen is the Secrets port of
 // the set.
 func TestTheSecretsConcernIsWiredFromThePlan(t *testing.T) {
@@ -250,10 +250,10 @@ func TestTheSSMRootIsTheDocumentsSecretsRoot(t *testing.T) {
 		cfg  Config
 		want string
 	}{
-		"the document's root": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/hive", sel: ssm(nil)}, ""},
-		"the same root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/hive", sel: ssm(map[string]any{"root": "/sluis/hive"})}, ""},
-		"another root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/hive",
-			sel: ssm(map[string]any{"root": "/sluis/kernel"})}, "one root"},
+		"the document's root": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example", sel: ssm(nil)}, ""},
+		"the same root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example", sel: ssm(map[string]any{"root": "/sluis/example"})}, ""},
+		"another root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example",
+			sel: ssm(map[string]any{"root": "/sluis/staging"})}, "one root"},
 		"no root at all":        {Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: ssm(nil)}, "no root"},
 		"a converted v1 config": {Config{Adapter: AdapterLegacy, Kube: KubeNone, Converted: true, sel: ssm(nil)}, ""},
 	} {

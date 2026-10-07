@@ -18,11 +18,11 @@ func TestEveryCredentialKindHasItsSecretPath(t *testing.T) {
 		{wsDirKey("google", "C01ipl6j0"), "r1", "credentials/directory/google/C01ipl6j0/r1"},
 		{wsDirKey("entra", "4b1f"), "r1", "credentials/directory/entra/4b1f/r1"},
 		{wsSlackKey("T01"), "r1", "credentials/slack-workspace/T01/r1"},
-		{ghOrgKey("opwerm"), "r1", "credentials/github-org/opwerm/r1"},
+		{ghOrgKey("acme"), "r1", "credentials/github-org/acme/r1"},
 		{ghLinkKey(299386), "r1", "credentials/github-link/299386/r1"},
 		{ghLinkAppKey, "r1", "credentials/github-app/link/r1"},
 		{ghCatalogueKey("renovate"), "r1", "credentials/github-app/renovate/r1"},
-		{runnerKey("stable", "opwerm"), "r1", "credentials/github-runner-app/stable/opwerm/r1"},
+		{runnerKey("stable", "acme"), "r1", "credentials/github-runner-app/stable/acme/r1"},
 		{slackCatalogueKey("alerts"), "r1", "credentials/slack-app/alerts/r1"},
 		{sessionKeyKey, "", "credentials/console/session-key"},
 		// A segment a secret path cannot hold is hex.
@@ -38,10 +38,10 @@ func TestEveryCredentialKindHasItsSecretPath(t *testing.T) {
 // Every record key the stores build has a kind of its own.
 func TestEveryRecordKeyHasAKind(t *testing.T) {
 	for _, key := range []string{
-		wsDirKey("google", "C01"), wsSlackKey("T01"), ghOrgKey("opwerm"), ghLinkKey(1), ghLinkAppKey,
-		ghCatalogueKey("a"), runnerKey("stable", "opwerm"), slackCatalogueKey("a"),
+		wsDirKey("google", "C01"), wsSlackKey("T01"), ghOrgKey("acme"), ghLinkKey(1), ghLinkAppKey,
+		ghCatalogueKey("a"), runnerKey("stable", "acme"), slackCatalogueKey("a"),
 		slackSharedPfx + "partners", slackChannelPfx + "acme.ops", sessionKeyKey,
-		ghConfirmKey("opwerm"), ghPassKey("opwerm"), slackConfirmKey("acme", ""), slackConfirmKey("acme", "ops"),
+		ghConfirmKey("acme"), ghPassKey("acme"), slackConfirmKey("acme", ""), slackConfirmKey("acme", "ops"),
 		slackPassKey("acme"), ghClaimPrefix + "42", shareKey("acme", "partners"), userCacheKey("acme", "U1"),
 	} {
 		if got := secretPath(key, "r"); len(got) >= 19 && got[:19] == "credentials/other/" {
