@@ -550,3 +550,34 @@ func TestTheAgentLifetimesBlockLoadsAndIsClosed(t *testing.T) {
 		}
 	}
 }
+
+// `session: agent` is in the policy schema and refused when the policy is
+// loaded, on a declared client and on client_documents alike, until the
+// release that adds the agent consent page: a release cut in between must
+// not hand out a 30-day chain nobody consented to. `interactive` loads.
+func TestAgentClassIsRefusedAtLoadInThisRelease(t *testing.T) {
+	head := "apiVersion: " + config.APIVersion("policy") + "\n" +
+		"groups: { a: { members: [g@h.example] } }\n"
+	for name, tc := range map[string]struct {
+		body    string
+		refused bool
+	}{
+		"an agent client": {
+			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: agent } }\n", true,
+		},
+		"agent document clients": {
+			"client_documents: { origins: [hosts.example], requires: [a], session: agent }\n", true,
+		},
+		"an interactive client": {
+			"clients: { mcp: { kind: public, redirects: ['http://127.0.0.1/cb'], requires: [a], session: interactive } }\n", false,
+		},
+	} {
+		_, err := config.Load[config.PolicyDocument](write(t, head+tc.body))
+		switch {
+		case tc.refused && (err == nil || !strings.Contains(err.Error(), "agent-class sessions become available")):
+			t.Errorf("%s: %v, want it refused until the consent page ships", name, err)
+		case !tc.refused && err != nil:
+			t.Errorf("%s: %v, want it loaded", name, err)
+		}
+	}
+}
