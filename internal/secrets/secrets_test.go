@@ -117,7 +117,7 @@ func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 		"/sluis/example/private/config/issuer/state-secret":                "seed",
 		"/sluis/example/private/config/providers/google/default/client-id": "id",
 		"/sluis/example/private/credentials/github-org/acme/key":           "not config",
-		"/sluis/other/private/config/issuer/state-secret":               "another installation's",
+		"/sluis/other/private/config/issuer/state-secret":                  "another installation's",
 	}}
 	now := time.Unix(0, 0)
 	src := &secrets.SSM{API: f, Root: "/sluis/example", Refresh: 5 * time.Minute, Now: func() time.Time { return now }}
