@@ -241,8 +241,8 @@ func capEnd(now, authTime time.Time, refresh, absolute time.Duration) time.Time 
 // the session, and say what it became -- and doing both in one write is
 // one write fewer on every refresh.
 //
-// The mark is kept until the session's end as that rotation set it, not
-// for the grace window alone, so that a spent token presented after the
+// The mark is kept until the family's absolute deadline
+// ([Sessions.spentLifetime]), not for the grace window alone, so that a spent token presented after the
 // window is still KNOWN to be spent, and to be whose: that is how a reuse
 // is told apart from a token that never existed ([spentMark.inGrace]).
 // Keeping it longer is the TTL of the write the rotation already makes,
@@ -369,12 +369,25 @@ func successorCipher(token string) (cipher.AEAD, error) {
 }
 
 // spentLifetime is how long a rotation keeps the mark of the token it
-// spent: until the session's end as the rotation set it, and never less
-// than the grace window. That end is at most one refresh lifetime away,
-// which is as long as the spent token itself could have lived unspent; a
-// session that has ended has nothing left for a reuse to end.
-func spentLifetime(session Session, now time.Time) time.Duration {
-	return max(session.ExpiresAt.Sub(now), refreshGrace)
+// spent: until the absolute deadline of the refresh family the token
+// belongs to -- auth_time plus the absolute limit its resource allows, the
+// same limit [capEnd] caps every end at -- and never less than the grace
+// window. A session that keeps refreshing slides its own end forward, so
+// a mark kept only until the end the rotation set would lapse while the
+// family it could end was still alive; kept until the deadline, it lasts
+// exactly as long as there is a family to end, and never longer.
+//
+// A session with no such deadline (a workload's exchange, which nobody
+// authenticated, or a deployment with no absolute limit) keeps it until
+// the end the rotation set: one refresh lifetime, as long as the spent
+// token itself could have lived unspent.
+func (s *Sessions) spentLifetime(session Session, now time.Time) time.Duration {
+	end := session.ExpiresAt
+	if absolute := s.absoluteOf(session.Resource); !session.AuthTime.IsZero() && absolute > 0 {
+		end = session.AuthTime.Add(absolute)
+	}
+
+	return max(end.Sub(now), refreshGrace)
 }
 
 // refreshGrace is how long a refresh token that has just been rotated
@@ -660,8 +673,9 @@ func (s *Sessions) Refreshed(ctx context.Context, oldToken, newToken string) (Se
 //  1. The new token's pointer. First, so that by the time anything says
 //     what the old token became, what it became already resolves.
 //  2. The old token's pointer, replaced by the mark of a spent token and
-//     its successor ([spentPrefix]), kept until the session's end so that
-//     a later reuse is known for one -- only if it is still what was read. If another
+//     its successor ([spentPrefix]), kept until the family's absolute
+//     deadline so that a later reuse is known for one -- only if it is
+//     still what was read. If another
 //     refresh spent it first this one is a replay and gets that one's
 //     successor; if it was revoked or has expired, this one is refused.
 //  3. The session record, with its new end -- only over what is there
@@ -709,7 +723,7 @@ func (s *Sessions) rotate(ctx context.Context, p presented, newToken string) (Se
 		return Session{}, "", false, err
 	}
 
-	err = replace(ctx, s.state, sessionTokenKey(p.token), mark, spentLifetime(session, now), p.pointer)
+	err = replace(ctx, s.state, sessionTokenKey(p.token), mark, s.spentLifetime(session, now), p.pointer)
 	if errors.Is(err, errMoved) || errors.Is(err, errGone) {
 		// Lost: the new token was never handed out, so its pointer goes.
 		s.discard(ctx, newToken)
