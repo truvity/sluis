@@ -14,9 +14,9 @@ import (
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
 
-// hiveInstallation is the Lambda-shaped installation of the root module's
+// exampleInstallation is the Lambda-shaped installation of the root module's
 // fixtures, with the test account in place of its placeholder.
-func hiveInstallation(t *testing.T) *sluisconfig.Installation {
+func exampleInstallation(t *testing.T) *sluisconfig.Installation {
 	t.Helper()
 	in, err := sluisconfig.LoadInstallation(filepath.Join("..", "..", "config", "testdata", "example.installation.yaml"))
 	if err != nil {
@@ -43,7 +43,7 @@ func withInstallation(in *sluisconfig.Installation, more func(*arp.LambdaArgs)) 
 // layer as it is: the library adds nothing the renderer did not write, so what
 // `sluisctl render` shows an estate is what the function reads.
 func TestAnInstallationIsRenderedIntoTheLayerByTheRootRenderer(t *testing.T) {
-	in := hiveInstallation(t)
+	in := exampleInstallation(t)
 	service, policy, err := sluisconfig.Render(in)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +86,7 @@ func TestAnInstallationAndTheArgumentsAgreeOrAreRefused(t *testing.T) {
 		}, "unbound"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			in := hiveInstallation(t)
+			in := exampleInstallation(t)
 			_, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { c.change(in, a) }))
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("error %v, want one naming %q", err, c.want)
@@ -98,7 +98,7 @@ func TestAnInstallationAndTheArgumentsAgreeOrAreRefused(t *testing.T) {
 // The library says what it takes from the arguments when the installation
 // leaves it out: the instance, the region, the account and the function name.
 func TestAnInstallationTakesWhatItLeavesOutFromTheArguments(t *testing.T) {
-	in := hiveInstallation(t)
+	in := exampleInstallation(t)
 	in.Instance, in.AWS.Region, in.AWS.Account, in.AWS.FunctionName = "", "", "", ""
 	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
 		a.Instance, a.FunctionName = "staging", "sluis-fn"
@@ -115,12 +115,12 @@ func TestAnInstallationTakesWhatItLeavesOutFromTheArguments(t *testing.T) {
 // disagreement is refused.
 func TestRecoveryIsSaidOnceAcrossTheArgumentsAndTheInstallation(t *testing.T) {
 	yes := true
-	in := hiveInstallation(t) // recovery.enabled: false
+	in := exampleInstallation(t) // recovery.enabled: false
 	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &yes} })); err == nil ||
 		!strings.Contains(err.Error(), "Recovery.Enabled") {
 		t.Errorf("a disagreement about recovery: %v", err)
 	}
-	in = hiveInstallation(t)
+	in = exampleInstallation(t)
 	in.Recovery = nil
 	rec, _ := mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &yes} }))
 	if got := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(got, "enabled: true") {
@@ -131,7 +131,7 @@ func TestRecoveryIsSaidOnceAcrossTheArgumentsAndTheInstallation(t *testing.T) {
 // An installation never leaves the web identity audience empty, which would
 // mean any audience: it is the console's, and a different one is refused.
 func TestTheWebIdentityAudienceIsTheConsolesWhenAnInstallationIsGiven(t *testing.T) {
-	in := hiveInstallation(t)
+	in := exampleInstallation(t)
 	rec, _ := mustLambda(t, withInstallation(in, nil))
 	if !strings.Contains(prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue(), "https://access.example.test/console") {
 		t.Error("the role's web identity grant does not carry the console audience")

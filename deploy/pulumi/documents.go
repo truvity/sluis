@@ -41,8 +41,9 @@ const (
 //
 // Into the service document the library writes what is its own: the apiVersion
 // (v3), `policy.file`, `secrets` (ssm, the installation's root), the recovery
-// password's and the state secret's names, `recovery.enabled`, and, for the
-// `invoke` trigger, the function it invokes. A value written in the document
+// password's and the state secret's names, `recovery.enabled`,
+// `signingKey.verifyOnly` (from VerifyOnly), and, for the `invoke` trigger, the
+// function it invokes. A value written in the document
 // that disagrees with the library's is refused, naming it.
 func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 	root := SSMRoot(a.Instance)
@@ -180,6 +181,9 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.WebIdentityAudience is %q and the installation's console audience is %q: "+
 			"leave it out, or say it once", a.WebIdentityAudience, aud)
 	}
+	if err := withVerifyOnly(&in, a.VerifyOnly); err != nil {
+		return a, err
+	}
 	service, policy, err := sluisconfig.Render(&in)
 	if err != nil {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
@@ -217,6 +221,9 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 		recovery["enabled"] = *a.Recovery.Enabled
 	}
 	if err = ownTrigger(doc, a); err != nil {
+		return err
+	}
+	if err = ownVerifyOnly(doc, a); err != nil {
 		return err
 	}
 	if signing, ok := doc["signingKey"].(map[string]any); ok && a.WrappedSigning != nil {

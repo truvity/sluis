@@ -129,8 +129,9 @@ layer list, so nothing the telemetry layer or another brings can shadow it. Lamb
 this one holds `sluis/`:
 
 ```text
-/opt/sluis/sluis.yaml    the service document (`sluis/v3`, controllers included)
-/opt/sluis/policy.yaml   the policy document `policy.file` names
+/opt/sluis/sluis.yaml               the service document (`sluis/v3`, controllers included)
+/opt/sluis/policy.yaml              the policy document `policy.file` names
+/opt/sluis/verify-keys/<index>.pem  with `VerifyOnly`, an earlier signer's public keys `signingKey.verifyOnly` names
 ```
 
 `SLUIS_CONFIG` names the service document, and `policy.file` in it names `/opt/sluis/policy.yaml`. The service document
@@ -150,7 +151,10 @@ otherwise, naming the key:
 - `apiVersion` and `policy.file`;
 - `secrets` (`{source: ssm, root: /sluis/<instance>, region}`), `recovery.passwordSecret`, `recovery.enabled` (from
   `Recovery`) and the state secret's name under `signingKey.kms` or `signingKey.kmsWrapped`;
-- with the `invoke` trigger, `adapters.trigger.settings.github` and `.slack`: this function.
+- with the `invoke` trigger, `adapters.trigger.settings.github` and `.slack`: this function;
+- `signingKey.verifyOnly`, from `VerifyOnly`: one entry per key, `file` at `/opt/sluis/verify-keys/<index>.pem`, its
+  `kid` and `alg` when given and its `until` in RFC 3339, the entries the Kubernetes shape writes. A document that names
+  `signingKey.verifyOnly` itself is refused, since the files it names are not in the layer.
 
 The documents are rendered from an `Installation` (`LambdaArgs.Installation`, see
 [the Pulumi library](pulumi-library.md#inputs-lambdaargs)); the deprecated `Config` is the service document and `Policy`

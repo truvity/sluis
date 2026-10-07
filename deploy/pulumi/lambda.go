@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/apigatewayv2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -105,7 +106,8 @@ type LambdaArgs struct {
 	// The library writes what is its own into it: the apiVersion, `policy.file`,
 	// `secrets` ({source: ssm, root: /sluis/<instance>, region}),
 	// `recovery.passwordSecret`, `recovery.enabled` (from Recovery), the state
-	// secret's name under `signingKey.kms` or `.kmsWrapped`, and, when
+	// secret's name under `signingKey.kms` or `.kmsWrapped`,
+	// `signingKey.verifyOnly` (from VerifyOnly), and, when
 	// `adapters.trigger` is `invoke`, the function it invokes for a run-now
 	// (this very function: `github` and `slack` settings). A different value
 	// written for one of them is refused.
@@ -152,6 +154,18 @@ type LambdaArgs struct {
 	// signed remotely before unprotects them (`pulumi state unprotect`) and the
 	// next apply schedules their deletion.
 	WrappedSigning *WrappedSigningArgs
+
+	// VerifyOnly are the PUBLIC keys of an earlier signer, published in the
+	// issuer's JWKS and never signed with, so that the tokens it issued keep
+	// verifying for the overlap after a cutover (an estate moving an existing
+	// issuer onto this shape publishes the old issuer's keys here). Each goes
+	// in the configuration layer at VerifyOnlyKeyPath(<index>), and the service
+	// document's `signingKey.verifyOnly` names it, as the chart's
+	// `signingKey.verifyOnly` does on Kubernetes. A private key is refused.
+	// Default none. With the arguments the library owns
+	// `signingKey.verifyOnly`: a document (or an Installation) that names it is
+	// refused.
+	VerifyOnly []VerifyOnlyKeyArgs
 
 	// FunctionNamePrefix starts the names of what is not the function: the
 	// configuration layer (`<prefix>-config`), the API, the schedules
@@ -236,11 +250,35 @@ type WrappedSigningArgs struct {
 	KeyAlias string
 }
 
+// VerifyOnlyKeyArgs is one PUBLIC key published and never signed with.
+type VerifyOnlyKeyArgs struct {
+	// PEM is the public key: one `PUBLIC KEY`, `RSA PUBLIC KEY` or
+	// `CERTIFICATE` block, an RSA or an ECDSA (P-256, P-384, P-521) key. A
+	// private key, or anything that says PRIVATE, is refused. Required.
+	PEM string
+	// KeyID is the `kid` the old tokens carry. Unset is the RFC 7638
+	// thumbprint of the key, which is what a file signer derived for it.
+	KeyID string
+	// Alg is the key's algorithm (ES384, RS256, ...). Unset follows the key;
+	// set, it must be the one the key signs with.
+	Alg string
+	// Until is the instant after which the key is no longer published: the
+	// end of the overlap. Required: a key published for good is not an
+	// overlap. An instant already past is accepted (the function publishes
+	// nothing for it and logs that).
+	Until time.Time
+}
+
 // ExportsArgs is the exports schedule: one EventBridge schedule invoking the
 // function with `{"kind":"exports"}`.
 type ExportsArgs struct {
-	// Disabled leaves the schedule out.
+	// Disabled leaves the schedule out, and the function's read of what it
+	// wrote under export/.
 	Disabled bool
+	// Paused declares the schedule DISABLED (EventBridge Scheduler's `state`)
+	// and keeps everything else, the role's export/* grants included, so that
+	// turning the exports on is this one setting. Exclusive with Disabled.
+	Paused bool
 	// Rate is the schedule expression. Default DefaultExportsSchedule.
 	Rate string
 }
@@ -259,6 +297,9 @@ const DefaultExportsSchedule = "rate(15 minutes)"
 type DirectoryRefreshArgs struct {
 	// Disabled leaves the schedule out.
 	Disabled bool
+	// Paused declares the schedule DISABLED and keeps everything else.
+	// Exclusive with Disabled.
+	Paused bool
 	// Rate is the schedule expression. Default DefaultDirectoryRefreshSchedule.
 	Rate string
 }
@@ -343,6 +384,11 @@ type ScheduleArgs struct {
 	SlackWorkspaces []string
 	// Rate is the EventBridge Scheduler expression. Default DefaultSchedule.
 	Rate string
+	// Paused declares every target's schedule DISABLED (EventBridge
+	// Scheduler's `state`) and keeps everything else, the role's grants
+	// included: an estate preparing a cutover declares the ticks and turns them
+	// on with this one setting.
+	Paused bool
 }
 
 // TelemetryArgs is the observability otlp-lambda layer, which is optional: an
@@ -530,6 +576,15 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.Function.TimeoutSeconds == 0 {
 		out.Function.TimeoutSeconds = 300
 	}
+	if out.Exports.Disabled && out.Exports.Paused {
+		return out, errors.New("sluispulumi: Exports: Disabled leaves the schedule out and Paused declares it disabled: set one")
+	}
+	if out.DirectoryRefresh.Disabled && out.DirectoryRefresh.Paused {
+		return out, errors.New("sluispulumi: DirectoryRefresh: Disabled leaves the schedule out and Paused declares it disabled: set one")
+	}
+	if err := checkVerifyOnly(out.VerifyOnly); err != nil {
+		return out, err
+	}
 	if out.Exports.Rate == "" {
 		out.Exports.Rate = DefaultExportsSchedule
 	}
@@ -713,11 +768,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		Description:             pulumi.String(name + " configuration: the service document and the policy, at " + LayerRoot),
 		CompatibleRuntimes:      pulumi.StringArray{pulumi.String("provided.al2023")},
 		CompatibleArchitectures: pulumi.StringArray{pulumi.String("arm64")},
-		Code: pulumi.NewAssetArchive(map[string]any{
-			"sluis/" + docSluis + ".yaml":  pulumi.NewStringAsset(docs[docSluis]),
-			"sluis/" + docPolicy + ".yaml": pulumi.NewStringAsset(docs[docPolicy]),
-		}),
-		SkipDestroy: pulumi.Bool(true),
+		Code:                    pulumi.NewAssetArchive(layerAssets(docs, a.VerifyOnly)),
+		SkipDestroy:             pulumi.Bool(true),
 	}, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis configuration layer: %w", err)
@@ -1172,6 +1224,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			Description:                pulumi.Sprintf("Ticks the %s controller for %s.", t.kind, t.id),
 			ScheduleExpression:         pulumi.String(a.Schedule.Rate),
 			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			State:                      scheduleState(a.Schedule.Paused),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
 				Arn:     fn.Arn,
@@ -1193,6 +1246,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			Description:                pulumi.String("Runs the exports."),
 			ScheduleExpression:         pulumi.String(a.Exports.Rate),
 			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			State:                      scheduleState(a.Exports.Paused),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
 				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"exports"}`),
@@ -1212,6 +1266,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			Description:                pulumi.String("Refreshes the directory snapshots."),
 			ScheduleExpression:         pulumi.String(a.DirectoryRefresh.Rate),
 			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			State:                      scheduleState(a.DirectoryRefresh.Paused),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
 				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
@@ -1225,6 +1280,16 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 		names = append(names, pulumi.String(rname))
 	}
 	return role, names.ToStringArrayOutput(), nil
+}
+
+// scheduleState is a schedule's `state`: DISABLED when paused, and otherwise
+// unset (EventBridge Scheduler's default, ENABLED), so that a stack that pauses
+// nothing declares its schedules exactly as before.
+func scheduleState(paused bool) pulumi.StringPtrInput {
+	if !paused {
+		return nil
+	}
+	return pulumi.String("DISABLED")
 }
 
 // telemetryVariable is whether a variable may be set through Telemetry.Env: the
