@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.69.0
+
 ### Added
 
 - **Audit catalogue 1.10.0; the audit writer deploys first.** `roster.person.signed_in` carries the `class` of the session the sign-in opens (`interactive` or `agent`) and its computed `deadline`; `roster.session.ended` carries `spared`, the client ids of the agent sessions a sign-out left running. Recording is best effort, so an audit installation must hold catalogue 1.10.0 before the issuer that emits it is deployed: one on Kubernetes registers it when the service starts; a Lambda audit writer needs the new catalogue release asset (`roster-1.10.0.yaml` and its schemas) first.
