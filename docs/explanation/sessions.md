@@ -31,6 +31,11 @@ in the same browser, the previous person's sign-in ends and so do its per-client
 clears the cookie. The console's "revoke one browser" also ends the sessions filed under a sign-in that has already
 ended.
 
+When the same person signs in again, the sessions and clients of the sign-in that ends are carried over to the new one
+first, so a later sign-out ends them too and tells their clients. The step-up itself revokes nothing and announces
+nothing, and the same person's sessions in other browsers are not touched. Carrying is best effort: a part that cannot be
+written is logged and left where it was.
+
 When the store cannot be read at sign-out, `/logout` and `/end_session` answer 503 and end nothing: an HTML "Sign-out
 did not complete" page with a retry link, or JSON `temporarily_unavailable`. The cookie is kept, so the person can
 retry; clearing it and reporting success would have left the sign-in alive.
@@ -50,6 +55,12 @@ so the refresh tokens are revoked too.
 What a sign-out reaches is scoped by what the request can PROVE, which is the cookie it carries. An `id_token_hint` is
 a hint in the specification rather than a credential (the library accepts an expired one by design), so it chooses
 the signed-out page and nothing else. A request that proves nothing ends nothing.
+
+A code is bound to the sign-in it was completed under. Redeemed after that sign-in has ended (signed out in another tab,
+or replaced by a step-up), it is refused with `invalid_grant`, so nothing is opened under a sign-in no later sign-out
+could reach; the client starts again, and the browser signs in again or completes silently under the new sign-in. A
+sign-out that falls entirely between the token endpoint's read of the sign-in and the session's write is the one
+case left.
 
 To tell the relying party that its session ended, see [back-channel logout](back-channel-logout.md).
 
@@ -144,7 +155,7 @@ Considered for an installation where MCP clients refresh every few minutes, the
 issuer's State traffic per grant is a cost to keep small. Measured in State
 operations, a `refresh_token` grant makes 4 writes and 4 reads, one of the reads
 eventually consistent ([`RevisionPeeker`](../reference/ports.md#peeking-a-revision-optional)),
-and asks the directory once; an `authorization_code` grant makes 9 writes and 4
+and asks the directory once; an `authorization_code` grant makes 9 writes and 5
 reads. The saving comes from not rewriting what has not changed: one directory
 resolution per request, the access-token record written once, the spent refresh
 token marked in its own pointer, and the index sets and the last-known groups
