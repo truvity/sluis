@@ -464,7 +464,7 @@ func TestSilentAuthEndsAnSSOSessionPastTheAbsoluteLimit(t *testing.T) {
 	b.signIn()
 	iss.SSO().SetClock(time.Now)
 
-	ssoID := b.cookies[issuer.SSOCookieName]
+	ssoID := b.signInID(iss.SSO())
 	if ssoID == "" {
 		t.Fatal("signing in left no browser session cookie")
 	}

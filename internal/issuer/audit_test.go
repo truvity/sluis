@@ -222,7 +222,7 @@ func TestARefusedRecoveryEndsTheBrowserSessionItBegan(t *testing.T) {
 		if cookie.Value == "" {
 			continue
 		}
-		if _, live, _ := sso.Get(ctx, cookie.Value); live {
+		if _, live, _ := sso.Resolve(ctx, cookie.Value); live {
 			t.Errorf("the refused recovery left a live browser session behind: %s", cookie.Name)
 		}
 	}

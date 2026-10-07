@@ -64,14 +64,14 @@ func TestLogoutEndsTheSignIn(t *testing.T) {
 	state := issuer.NewMemoryState()
 	sso := issuer.NewSSO(state, time.Hour)
 
-	session, err := sso.Begin(ctx, "ada@north.example", "google")
+	session, cookie, err := sso.Begin(ctx, "ada@north.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 
 	handler := signInHandler(t, sso)
 
-	requestLogout(t, handler, sso, session.ID, http.MethodGet)
+	requestLogout(t, handler, sso, session.ID, cookie, http.MethodGet)
 }
 
 // The console sends POST, because its own sign-out was a POST. A
@@ -84,21 +84,21 @@ func TestLogoutAcceptsThePostTheConsoleSends(t *testing.T) {
 	state := issuer.NewMemoryState()
 	sso := issuer.NewSSO(state, time.Hour)
 
-	session, err := sso.Begin(ctx, "ada@north.example", "google")
+	session, cookie, err := sso.Begin(ctx, "ada@north.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 
-	requestLogout(t, signInHandler(t, sso), sso, session.ID, http.MethodPost)
+	requestLogout(t, signInHandler(t, sso), sso, session.ID, cookie, http.MethodPost)
 }
 
 // requestLogout signs out with one method and checks the whole of what
 // sign-out must do: redirect, end the record, clear the cookie.
-func requestLogout(t *testing.T, handler http.Handler, sso *issuer.SSO, id, method string) {
+func requestLogout(t *testing.T, handler http.Handler, sso *issuer.SSO, id, cookie, method string) {
 	t.Helper()
 
 	request := httptest.NewRequest(method, "/logout", nil)
-	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: id})
+	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
@@ -189,7 +189,7 @@ func TestSignOutEndsWhatTheBrowserOpened(t *testing.T) {
 	sso := issuer.NewSSO(state, time.Hour)
 	sessions := issuer.NewSessions(state, time.Hour, 0)
 
-	session, err := sso.Begin(ctx, "ada@north.example", "google")
+	session, cookie, err := sso.Begin(ctx, "ada@north.example", "google")
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestSignOutEndsWhatTheBrowserOpened(t *testing.T) {
 	})
 
 	request := httptest.NewRequest(http.MethodPost, "/logout", nil)
-	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: session.ID})
+	request.AddCookie(&http.Cookie{Name: issuer.SSOCookieName, Value: cookie})
 	mux.ServeHTTP(httptest.NewRecorder(), request)
 
 	left, err := sessions.List(ctx, issuer.Query{Identity: "ada@north.example"})

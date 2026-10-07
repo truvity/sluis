@@ -687,8 +687,12 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 		return
 	}
 
-	if id := SSOFromRequest(r, deps.Secure); id != "" {
-		record, live, err := deps.SSO.Get(r.Context(), id)
+	if cookie := SSOFromRequest(r, deps.Secure); cookie != "" {
+		record, live, err := deps.SSO.Resolve(r.Context(), cookie)
+		// The sign-in's id, never the cookie: what names it in the
+		// session index and the store. Empty when the cookie proves
+		// nothing, and then there is nothing here to end.
+		id := record.ID
 		if deps.Issuer != nil && err == nil && live {
 			// Read before revoking: once they are gone there is nothing
 			// left to say WHICH clients held them, and the clients that
@@ -748,9 +752,11 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 			}
 		}
 
-		if err := deps.SSO.End(r.Context(), id); err != nil {
-			deps.log().WarnContext(r.Context(), "sign-out could not end the session",
-				"error", logsafe.Error(err))
+		if id != "" {
+			if err := deps.SSO.End(r.Context(), id); err != nil {
+				deps.log().WarnContext(r.Context(), "sign-out could not end the session",
+					"error", logsafe.Error(err))
+			}
 		}
 	}
 
@@ -859,7 +865,7 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 		return false
 	}
 
-	session, live, err := s.deps.SSO.Get(r.Context(), SSOFromRequest(r, s.deps.Secure))
+	session, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err != nil || !live {
 		return false
 	}
@@ -1016,7 +1022,7 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 		return who
 	}
 
-	session, err := s.deps.SSO.Begin(r.Context(), identity, how)
+	session, secret, err := s.deps.SSO.Begin(r.Context(), identity, how)
 	if err != nil {
 		// A sign-in that worked must not fail because the browser session
 		// could not be filed. The person is authenticated either way; the
@@ -1027,7 +1033,10 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 		return who
 	}
 
-	http.SetCookie(w, s.deps.SSO.Cookie(session.ID, s.deps.Secure))
+	// The secret, not the id: the id is shown to operators and carried by
+	// every session opened under this sign-in, and must not sign anybody
+	// in.
+	http.SetCookie(w, s.deps.SSO.Cookie(secret, s.deps.Secure))
 	who.AuthTime, who.SSO = session.AuthTime, session.ID
 
 	return who
@@ -1046,7 +1055,7 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 func (s *signIn) account(w http.ResponseWriter, r *http.Request) {
 	to := s.deps.ConsoleMount + "/"
 
-	session, live, err := s.deps.SSO.Get(r.Context(), SSOFromRequest(r, s.deps.Secure))
+	session, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err == nil && live && session.Identity != "" {
 		// The console routes in the FRAGMENT, so the path is the console
 		// itself and the page is what follows the hash.

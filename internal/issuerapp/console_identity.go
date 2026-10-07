@@ -32,7 +32,7 @@ func signedIn(iss *issuer.Issuer, secure bool) func(*http.Request) (access.Princ
 		return nil
 	}
 	return func(r *http.Request) (access.Principal, bool) {
-		session, live, err := sso.Get(r.Context(), issuer.SSOFromRequest(r, secure))
+		session, live, err := sso.Resolve(r.Context(), issuer.SSOFromRequest(r, secure))
 		if err != nil || !live || session.Identity == "" {
 			return access.Principal{}, false
 		}
