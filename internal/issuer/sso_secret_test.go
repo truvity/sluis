@@ -412,7 +412,14 @@ func (g *ssoRig) told() []issuer.Session {
 func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 	t.Helper()
 
-	declared, err := policy.Parse([]byte(demo.Policy))
+	return newSSORigWith(t, cfg, demo.Policy)
+}
+
+// newSSORigWith is [newSSORig] under a policy of the test's own.
+func newSSORigWith(t *testing.T, cfg issuer.Config, text string) *ssoRig {
+	t.Helper()
+
+	declared, err := policy.Parse([]byte(text))
 	if err != nil {
 		t.Fatalf("parse the policy: %v", err)
 	}

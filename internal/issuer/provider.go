@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -374,7 +375,7 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 		held := &heldResponse{ResponseWriter: w}
 		next.ServeHTTP(held, r)
 		if held.succeeded() {
-			if err := SignOut(signIn, w, r); err != nil {
+			if err := signOut(signIn, w, r, spareAgents, endSessionNames(r)); err != nil {
 				// The library's answer is dropped: it would say the
 				// person is signed out, and they are not. Including
 				// what it set on the real header map before its status
@@ -387,6 +388,49 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 		}
 		held.release(r)
 	})
+}
+
+// endSessionNames are the clients an `/end_session` request names: its
+// `client_id`, and the audience (and `azp`) of its `id_token_hint`. Their
+// sessions under the sign-in are ended even when they are agent-class
+// (docs/decisions/0040-agent-class-sessions.md, decision 7): the relying
+// party that sent the person here is signing ITSELF out too.
+//
+// The hint's payload is read without verifying it, on purpose: a name
+// here can only end more of the sessions this browser's own sign-out is
+// already ending, never fewer, and never anything outside this sign-in.
+// Whether the library accepted the hint is decided before this runs.
+func endSessionNames(r *http.Request) []string {
+	var names []string
+
+	if clientID := strings.TrimSpace(r.Form.Get("client_id")); clientID != "" {
+		names = append(names, clientID)
+	}
+
+	parts := strings.Split(r.Form.Get("id_token_hint"), ".")
+	if len(parts) != 3 {
+		return names
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return names
+	}
+
+	var claims struct {
+		Audience oidc.Audience `json:"aud"`
+		AZP      string        `json:"azp"`
+	}
+	if json.Unmarshal(payload, &claims) != nil {
+		return names
+	}
+
+	names = append(names, claims.Audience...)
+	if claims.AZP != "" {
+		names = append(names, claims.AZP)
+	}
+
+	return names
 }
 
 // refusedAuthorize renders `/authorize`'s refusals as a page.
