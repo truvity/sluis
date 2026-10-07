@@ -333,4 +333,53 @@ func TestYourOwnIsTheIndexKeyNotACaseFold(t *testing.T) {
 	if len(rig.listed(t, "sam@north.example")) != 1 {
 		t.Error("ſam ended sam's session")
 	}
+
+	// Nor by naming sam's session or sam's browser under ſam's own
+	// identity: the record each names is read and compared the same way.
+	sam := rig.openAgent(t, "sam@north.example", "another-agent", "", "sam-agent-2", time.Now())
+	signIn, _, err := rig.iss.SSO().Begin(context.Background(), "sam@north.example", "google")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, request := range map[string]*accessissuerv1.RevokeSessionsRequest{
+		"sam's session by id": {Identity: "\u017fam@north.example", SessionId: sam.ID},
+		"sam's browser":       {Identity: "\u017fam@north.example", Sso: signIn.ID},
+	} {
+		if ended, err := revoke(t, rig.service(), "\u017fam@north.example|", request); err != nil || ended != 0 {
+			t.Errorf("ſam revoking %s: ended %d, %v; want nothing ended", name, ended, err)
+		}
+	}
+
+	if len(rig.listed(t, "sam@north.example")) != 2 {
+		t.Error("ſam ended sam's session by its id")
+	}
+	if _, live, err := rig.iss.SSO().Get(context.Background(), signIn.ID); err != nil || !live {
+		t.Errorf("ſam ended sam's browser sign-in (live %v, %v)", live, err)
+	}
+}
+
+// "Sign out everything" that fails partway still leaves its audit record,
+// with what did end: the sign-ins it ended and the sessions it revoked
+// before the failure are not unrecorded because the rest could not be.
+func TestAPartialSignOutEverythingIsStillRecorded(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORigWith(t, issuer.Config{}, consentPolicy())
+	_, id := rig.signedInBrowser(t)
+	stuck := rig.openAgent(t, ssoEmail, agentClient, id, "agent-token", time.Now())
+	rig.state.setReadFailure(func(key string) bool { return key == "issuer:session:"+stuck.ID })
+
+	if _, err := revoke(t, rig.service(), ssoEmail+"|", &accessissuerv1.RevokeSessionsRequest{Identity: ssoEmail}); err == nil {
+		t.Fatal("the revoke succeeded; the test proves nothing")
+	}
+
+	revoked := rig.trail.Find("roster.session.revoked")
+	if len(revoked) != 1 || fieldOf(revoked[0], "scope") != audit.ScopeEverywhere {
+		t.Fatalf("records = %v, want the partial sign-out everything recorded", revoked)
+	}
+
+	if _, live, _ := rig.iss.SSO().Get(context.Background(), id); live {
+		t.Error("the sign-in survived: the record would say more than happened")
+	}
 }
