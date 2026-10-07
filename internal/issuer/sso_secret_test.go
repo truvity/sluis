@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -57,6 +58,26 @@ type recState struct {
 	writes int
 	ttl    map[string]time.Duration
 	seen   []string
+
+	// failGet makes every read fail; failSet makes the writes it names fail.
+	failGet bool
+	failSet func(key string) bool
+}
+
+var errStoreDown = errors.New("the store is down")
+
+func (r *recState) setFailures(get bool, set func(string) bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.failGet, r.failSet = get, set
+}
+
+func (r *recState) failing(get bool, key string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return (get && r.failGet) || (!get && r.failSet != nil && r.failSet(key))
 }
 
 func newRecState() *recState {
@@ -82,6 +103,10 @@ func (r *recState) note(read bool, ttl time.Duration, strs ...string) {
 }
 
 func (r *recState) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	if r.failing(true, key) {
+		return nil, false, errStoreDown
+	}
+
 	r.note(true, 0)
 
 	return r.State.Get(ctx, key)
@@ -94,6 +119,10 @@ func (r *recState) Members(ctx context.Context, key string) ([]string, error) {
 }
 
 func (r *recState) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if r.failing(false, key) {
+		return errStoreDown
+	}
+
 	r.note(false, ttl, key, string(value))
 
 	return r.State.Set(ctx, key, value, ttl)
@@ -182,6 +211,16 @@ type ssoRig struct {
 	state  *recState
 	dir    *fakeDirectory
 	logs   *lockedBuffer
+
+	mu        sync.Mutex
+	announced []issuer.Session
+}
+
+func (g *ssoRig) told() []issuer.Session {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return append([]issuer.Session(nil), g.announced...)
 }
 
 func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
@@ -202,6 +241,7 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 	}}
 	state := newRecState()
 	logs := &lockedBuffer{}
+	rig := &ssoRig{state: state, dir: dir, logs: logs}
 
 	cfg.URL, cfg.AllowInsecure = "http://issuer.example", true
 	iss := issuer.New(cfg, set, dir, state)
@@ -216,6 +256,12 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 		State:        access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
 		ConsoleMount: "/console",
 		Log:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Announce: func(_ context.Context, sessions []issuer.Session) {
+			rig.mu.Lock()
+			defer rig.mu.Unlock()
+
+			rig.announced = append(rig.announced, sessions...)
+		},
 	})
 	if err != nil {
 		t.Fatalf("handler: %v", err)
@@ -224,7 +270,9 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	return &ssoRig{server: server, iss: iss, state: state, dir: dir, logs: logs}
+	rig.server, rig.iss = server, iss
+
+	return rig
 }
 
 // signedInBrowser is a browser that has signed in once, with the id of its
