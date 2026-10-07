@@ -50,6 +50,7 @@ required=(
     'TestConformance/trigger/notify'
     'TestGrantCostOnDynamoDB'
     'TestReuseCostOnDynamoDB'
+    'TestSSOCookieOnDynamoDB'
     'TestAMissingTableIsUnavailableNotNotFound'
     'TestCreatingAnExistingTableIsHarmless'
     'TestTheTableHasTTLOnExpires'
