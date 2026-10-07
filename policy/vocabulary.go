@@ -22,7 +22,7 @@ import (
 // scope from a real grant, at load."
 type Vocabulary struct {
 	// Scopes are the environments and tenant shapes an installation
-	// recognises: `kernel`, `prod`, `devel`, `stage`, or `all` for a thing
+	// recognises: `staging`, `prod`, `devel`, `stage`, or `all` for a thing
 	// that exists once per installation rather than once per environment.
 	Scopes map[string]ScopeSpec `yaml:"scopes,omitempty"`
 	// Things are the subsystems, projects and applications a role is held
@@ -34,7 +34,7 @@ type Vocabulary struct {
 // ScopeSpec is one declared scope.
 type ScopeSpec struct {
 	// Sensitive marks a scope a mapping wildcard must never reach —
-	// `kernel` and `prod`, typically. A wildcard key still expands freely
+	// `staging` and `prod`, typically. A wildcard key still expands freely
 	// across every OTHER scope a thing declares; see [Vocabulary.expand].
 	// It has no effect on a concrete grant, which names its scope outright
 	// and is checked like any other.
@@ -321,7 +321,7 @@ func (v *Vocabulary) checkWildcard(scope, thing, role string) error {
 // A thing, a (thing, scope) pair, or a (thing, scope) pair the ROLE
 // itself does not cover, that does not have the role is skipped rather
 // than refused: `devel:*:viewer` reaching a thing with no `viewer` role,
-// or `kernel:*:user` skipping a thing whose `user` role names `scopes:
+// or `staging:*:user` skipping a thing whose `user` role names `scopes:
 // [devel]`, is exactly what "expands across everything that fits" means,
 // not an error about the things that do not.
 func (v *Vocabulary) expand(scope, thing, role string) []string {

@@ -17,7 +17,7 @@
 //
 // A key is a record KIND and an ID (internal/port/keys.go, storage layout v2,
 // docs/reference/storage-layout.md): pk is the kind (`directory`, `github-org`,
-// `issuer-token`) and sk the id, slash-separated when compound (`stable/opwerm`).
+// `issuer-token`) and sk the id, slash-separated when compound (`stable/acme`).
 // A prefix that lies in one kind (`ses.ada.`, `ws.dir.google.`) is a Query on that
 // partition with begins_with on sk, which returns the keys in key order and
 // pages by LastEvaluatedKey. A prefix that names no one kind (`ws.`, “, a legacy

@@ -16,7 +16,7 @@ import (
 //
 //   - a key is a record KIND (a readable noun: `workspace`, `github-org`,
 //     `issuer-token`) and an ID within it, slash-separated when it is
-//     compound (`stable/opwerm`);
+//     compound (`stable/acme`);
 //   - DynamoDB stores the kind as `pk` and the id as `sk`;
 //   - the Secrets of a credential live under `credentials/<kind>/<id>/<ref>`,
 //     which the ssm adapter puts at `/sluis/private/credentials/...`.

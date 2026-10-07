@@ -59,7 +59,7 @@ func installationSchema() m {
 
 	props := m{
 		"apiVersion": m{"const": Group + "/installation/v1", "description": "Which version of which document this is. " + Group + "/installation/v1 is what this build reads and writes."},
-		"instance":   m{"type": "string", "pattern": `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "not": m{"enum": []string{"private", "export"}}, "description": "The installation's name (`hive`, `kernel`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private` and `export` would nest under another's tree."},
+		"instance":   m{"type": "string", "pattern": `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "not": m{"enum": []string{"private", "export"}}, "description": "The installation's name (`acme`, `prod`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private` and `export` would nest under another's tree."},
 		"shape":      enum("Where the installation runs: `lambda` (one AWS Lambda function), `kubernetes` (one Deployment) or `server` (one process). It fixes the paths the documents name and what is derived.", "", "lambda", "kubernetes", "server"),
 		"preset":     presetSchema(),
 		"release":    strDefault("The name the installation's objects carry (the service document's `release`). On Kubernetes, the release's full name.", "sluis"),

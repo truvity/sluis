@@ -63,7 +63,7 @@ type KubernetesIdentityArgs struct {
 	// Optional.
 	WrappedSigningKeyArn pulumi.StringInput
 
-	// Instance, when set, is the installation's name (`hive`, `kernel`) and gives
+	// Instance, when set, is the installation's name (`acme`, `prod`) and gives
 	// the role the SSM grants the Lambda role has under `/sluis/<instance>`
 	// (layout v3), for a pod whose `secrets` or Secrets adapter is `ssm`: read and
 	// write under private/credentials/* and export/*, read under private/config/*,

@@ -63,7 +63,7 @@ type LambdaArgs struct {
 	// roles' policies. Required.
 	Region    string
 	AccountID string
-	// Instance is the installation's name (`hive`, `kernel`): its SSM root is
+	// Instance is the installation's name (`acme`, `prod`): its SSM root is
 	// `/sluis/<instance>` (layout v3), so two installations share an account.
 	// Lower-case letters, digits and dashes. Required.
 	Instance string
