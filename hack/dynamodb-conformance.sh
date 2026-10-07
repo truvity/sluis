@@ -49,6 +49,7 @@ required=(
     'TestConformance/index/members'
     'TestConformance/trigger/notify'
     'TestGrantCostOnDynamoDB'
+    'TestSSOCookieOnDynamoDB'
     'TestAMissingTableIsUnavailableNotNotFound'
     'TestCreatingAnExistingTableIsHarmless'
     'TestTheTableHasTTLOnExpires'
