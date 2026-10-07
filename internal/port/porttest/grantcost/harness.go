@@ -78,7 +78,14 @@ type Harness struct {
 	Counter   *Counter
 	Directory issuer.Directory
 	snapshots *hub.BlobSnapshots
-	cookies   map[string]string
+	// storage, set and hub are what the console in front of this issuer
+	// is assembled from ([Harness.Console]): the issuer's own storage, the
+	// policy in force and the counted hub.
+	storage *issuer.Storage
+	set     *policy.Set
+	hub     Resolver
+	console http.Handler
+	cookies map[string]string
 	// skew is how far [Harness.Advance] has moved the clocks, which the
 	// issuer's session index reads as well as the State.
 	skew atomic.Int64
@@ -123,7 +130,8 @@ func New(t *testing.T, env Env) *Harness {
 		t.Fatalf("policy set: %v", err)
 	}
 
-	dir := hublocal.New(counter.Directory(directory), 0)
+	asked := counter.Directory(directory)
+	dir := hublocal.New(asked, 0)
 	state := issuer.NewPortState(counted.State, counted.Index)
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, dir, state)
 	storage, err := issuer.NewStorage(iss, issuer.Verifiers{}, nil, nil, nil, state)
@@ -143,6 +151,7 @@ func New(t *testing.T, env Env) *Harness {
 	h := &Harness{
 		t: t, env: env, Server: server, Issuer: iss, Counter: counter, Directory: dir,
 		snapshots: snapshots, cookies: map[string]string{},
+		storage: storage, set: set, hub: asked,
 	}
 	// The session index decides the grace window of a spent refresh token
 	// by its own clock, so time that passes for the State passes for it

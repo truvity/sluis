@@ -208,6 +208,9 @@ func New(cfg Config, set *policy.Set, dir Directory, state State) *Issuer {
 // been used for these resources: the installation's, or the shortest limit
 // any of them carries. See [policy.EffectiveAbsolute].
 func (i *Issuer) absoluteForResources(touched []string) time.Duration {
+	if i.set == nil {
+		return i.cfg.AbsoluteLifetime
+	}
 	return i.set.EffectiveAbsolute(i.cfg.AbsoluteLifetime, touched)
 }
 

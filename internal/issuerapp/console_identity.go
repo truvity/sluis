@@ -26,14 +26,21 @@ import (
 // address, and it has to survive this: recovery exists for the day
 // nothing else works, and the console is where the operator then
 // connects the first directory.
-func signedIn(iss *issuer.Issuer, secure bool) func(*http.Request) (access.Principal, bool) {
-	sso := iss.SSO()
-	if sso == nil {
+//
+// It asks the issuer's own question, not a narrower one. Reading the
+// cookie alone admitted a sign-in for as long as the sign-in lived -- up
+// to its whole lifetime after the absolute limit had passed, or after the
+// directory suspended the person -- to the one surface where client
+// secrets are rotated and sessions revoked. read is
+// [issuer.SignedInReader]: the same decisions the issuer's silent sign-in
+// makes, from the same function, and what does not stand is ended.
+func signedIn(read func(http.ResponseWriter, *http.Request) (issuer.SSOSession, bool)) func(http.ResponseWriter, *http.Request) (access.Principal, bool) {
+	if read == nil {
 		return nil
 	}
-	return func(r *http.Request) (access.Principal, bool) {
-		session, live, err := sso.Resolve(r.Context(), issuer.SSOFromRequest(r, secure))
-		if err != nil || !live || session.Identity == "" {
+	return func(w http.ResponseWriter, r *http.Request) (access.Principal, bool) {
+		session, ok := read(w, r)
+		if !ok || session.Identity == "" {
 			return access.Principal{}, false
 		}
 		if account, ok := policy.ParseServiceAccountSubject(session.Identity); ok {

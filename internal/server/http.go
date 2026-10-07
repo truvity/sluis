@@ -69,7 +69,7 @@ type ConsoleServer struct {
 	bearer     *forwardedBearer
 	log        *slog.Logger
 	consoleUI  fs.FS
-	signedIn   func(*http.Request) (access.Principal, bool)
+	signedIn   func(http.ResponseWriter, *http.Request) (access.Principal, bool)
 	workloads  func(*http.Request) (access.Principal, bool)
 	entry      func() string
 	// issuerURL is the issuer this console shares an origin with, when
@@ -153,8 +153,13 @@ type ConsoleServerDeps struct {
 	// package answers questions about a directory and should not have to
 	// know what an issuer is.
 	//
+	// It is handed the response as well as the request because a sign-in
+	// can be ENDED by asking -- past the absolute limit, or for a person
+	// the directory no longer admits -- and the browser's cookie is then
+	// cleared on the way out, as the issuer's own pages clear it.
+	//
 	// Nil is the split deployment, where a gateway forwards a bearer.
-	SignedIn func(*http.Request) (access.Principal, bool)
+	SignedIn func(http.ResponseWriter, *http.Request) (access.Principal, bool)
 	// Mount is where this console sits on its origin: "/console" when it
 	// shares the issuer's hostname, empty when it has an origin of its
 	// own. It is not a route — the prefix is stripped before any of these
@@ -212,7 +217,7 @@ func NewConsoleServer(deps ConsoleServerDeps) *ConsoleServer {
 // — the issuer is handed a door to it — so the issuer does not exist yet
 // when this console is built. It must be called before anything is
 // served; [ConsoleServer.principal] reads it per request.
-func (s *ConsoleServer) UseSignedIn(read func(*http.Request) (access.Principal, bool)) {
+func (s *ConsoleServer) UseSignedIn(read func(http.ResponseWriter, *http.Request) (access.Principal, bool)) {
 	s.signedIn = read
 }
 
@@ -364,12 +369,19 @@ func (s *ConsoleServer) index(w http.ResponseWriter, r *http.Request) {
 // none, and the handler that needs one says so.
 func (s *ConsoleServer) withIdentity(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		principal, ok := s.principal(r)
+		// One directory answer for the whole of identifying the caller:
+		// the issuer's check that the browser's sign-in still stands and
+		// the authorizer's role ask about the same person, and answering
+		// both from one resolution halves what a console request costs
+		// and keeps the two from disagreeing. Only for this step: what a
+		// handler asks afterwards is asked afresh.
+		identifying := r.WithContext(hub.WithOneAnswer(r.Context()))
+		principal, ok := s.principal(w, identifying)
 		if !ok {
 			next.ServeHTTP(w, r)
 			return
 		}
-		id, err := s.authz.Authorize(r.Context(), principal)
+		id, err := s.authz.Authorize(identifying.Context(), principal)
 		if err != nil {
 			// The address is the point of the line — an audit record that
 			// does not say who was refused is not one — and it is safe to
@@ -385,14 +397,16 @@ func (s *ConsoleServer) withIdentity(next http.Handler) http.Handler {
 }
 
 // principal reads whichever source established the caller.
-func (s *ConsoleServer) principal(r *http.Request) (access.Principal, bool) {
+func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (access.Principal, bool) {
 	// The issuer's own session first, where there is one: the console is
 	// served by the same process on the same origin, so the browser's
-	// issuer cookie is the strongest thing available and costs nothing to
-	// read. It is what lets somebody who signed in at another console
-	// reach this one with no second session.
+	// issuer cookie is the strongest thing available. Reading it applies
+	// the issuer's own checks of the sign-in (the absolute limit and the
+	// directory), whose directory answer the authorizer then shares. It
+	// is what lets somebody who signed in at another console reach this
+	// one with no second session.
 	if s.signedIn != nil {
-		if p, ok := s.signedIn(r); ok {
+		if p, ok := s.signedIn(w, r); ok {
 			return p, true
 		}
 	}
