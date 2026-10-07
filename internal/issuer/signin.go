@@ -2,7 +2,6 @@ package issuer
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -535,7 +534,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	// victim then works in a session somebody else chose and can watch.
 	// The cookie is SameSite=Lax, so a cross-site POST never carries it.
 	state := r.PostFormValue("state")
-	if !startedHere(r, state, s.deps.Secure) {
+	if !access.LoginStartedHere(r, state, s.deps.Secure) {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
 		return
@@ -590,18 +589,6 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 
-// startedHere reports whether the browser holds the login cookie bound to
-// state: whether this is the browser a sign-in step was handed to, rather
-// than one somebody else's page posted or redirected into it. Compared in
-// constant time, because the cookie is the half of the pair an attacker
-// does not have.
-func startedHere(r *http.Request, state string, secure bool) bool {
-	cookie, err := r.Cookie(access.CookieNameFor(access.LoginCookieName, secure))
-
-	return err == nil && cookie.Value != "" && state != "" &&
-		subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) == 1
-}
-
 // callback finishes it: the provider says who, the hub says whether we
 // serve them, and the authorization request is completed with the address.
 func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
@@ -612,7 +599,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := r.URL.Query().Get("state")
-	if !startedHere(r, state, s.deps.Secure) {
+	if !access.LoginStartedHere(r, state, s.deps.Secure) {
 		recordLoginFailure(r.Context(), LoginBadState)
 		http.Error(w, "this sign-in did not start in this browser", http.StatusBadRequest)
 		return
