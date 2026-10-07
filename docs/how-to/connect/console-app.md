@@ -45,6 +45,17 @@ IDENTITY, ACCESS, SYSTEMS with GitHub and Slack, ADMIN) are described in
 [the design](../../explanation/console.md) and in
 [Slack](slack-workspace.md) and [GitHub](github-organisation.md).
 
+The directory console holds the same sign-in to the same standard as any
+other client, on every request. A sign-in past the installation's absolute
+limit, or one whose person the directory reports suspended or not found, is
+refused and ended, and the browser must sign in again. If the directory is
+unreachable, the last-known answer admits for the hold window (4 hours by
+default) and the sign-in ends past it. A recovery (ServiceAccount) sign-in
+skips the directory and keeps the absolute limit. Losing a console role does
+not end the sign-in: the console refuses those calls by role. See
+[what the console asks of the SSO
+session](../../explanation/sessions.md#what-the-console-asks-of-the-sso-session).
+
 ## What you write
 
 - **Backend in Go**: wrap everything in `identity.Middleware(issuer)` and

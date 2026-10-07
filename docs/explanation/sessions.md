@@ -119,6 +119,32 @@ nothing to cap either against.
 The console's own session (`config.lifetimes.session`, a fixed-duration cookie rather than a sliding one) is capped
 too, by the shorter of the two, because it is issued once at sign-in and its issue time already IS its `auth_time`.
 
+## What the console asks of the SSO session
+
+The directory console is mounted on the issuer's origin and reads the SSO session directly rather than redeeming a
+code. It used to accept any live sign-in for the rest of that sign-in's own lifetime, so a sign-in past the absolute
+limit, or one whose person the directory had since suspended, still opened the most privileged surface while every
+other client was refusing it. On every request it now asks the same function the silent `/authorize` asks
+(`standingSignIn`), so the two cannot drift:
+
+- **Past the absolute limit** (`auth_time` plus the installation's limit) the request is refused and the sign-in
+  ended, with the cascade a silent `/authorize` runs: clients signed in under it without a refresh token are sent a
+  back-channel logout token, chains still inside their own limit are spared, and the browser's cookie is cleared.
+  Nothing is audited.
+- **A person the directory no longer admits** (suspended, not found, or not vouched for with nothing held for them) is
+  refused, the sign-in is ended and the cookie cleared, with the same warning in the log (`browser session is no
+  longer admitted`).
+- **A directory that cannot be reached** is answered from the issuer's hold window, as for a silent sign-in
+  ([directory model](directory-model.md)): an admitted person keeps the console for the window (4 hours by default),
+  and the sign-in ends past it, or for someone nothing is held for.
+- **A recovery sign-in** (a ServiceAccount) has no directory to ask and is held to the absolute limit only.
+- **Losing a console role** does not end the sign-in. The console refuses those calls by role, as before, as a
+  silent sign-in to a client the person is not entitled to also keeps the sign-in.
+
+A console request makes 4 State reads and no writes, one more than before: the eventually consistent revision read of
+the last-known groups that every refresh already pays. It still makes one directory resolution and one snapshot read,
+because the issuer's check and the console's authorizer share one answer per request.
+
 ## Who may open which console
 
 A client's `requires` names the internal groups any one of which admits somebody to it. It is checked in three

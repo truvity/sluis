@@ -142,7 +142,10 @@ deliberately no stale fallback.
 `/.well-known/openid-configuration` at an origin root. The console is
 mounted under `/console/`, same-origin with the issuer, so its session
 pages call the issuer with the browser's own cookie and no bearer in
-JavaScript.
+JavaScript. Each console request is checked against the SSO session with the
+same function the silent sign-in uses: the absolute limit and the directory's
+answer, [the hold window](directory-model.md) included
+([sessions](sessions.md#what-the-console-asks-of-the-sso-session)).
 
 **What each store holds, and what losing it costs.** Where each one lives is the adapter's choice
 ([ports](ports.md), [adapters](../reference/adapters.md)): `dynamodb` for State with SSM or OpenBao for Secrets and S3
