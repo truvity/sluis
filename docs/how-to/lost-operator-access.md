@@ -23,9 +23,10 @@ Each of these is a refusal that has been mistaken for something else.
 - **Outside a cluster, `429 too many attempts`**: ten wrong passwords stop the password answering for a minute, the
   correct one included, so the limit is no hint about which guess was close. Wait, then try once.
 - **`400 this sign-in did not start in this browser`**: the recovery form must be posted from the browser that loaded
-  the sign-in page, which sets a login cookie bound to the form's state. A form loaded before an upgrade, or in an older
-  tab, is refused once; reload `/login` and paste again. With two sign-in tabs open, only the last one loaded can
-  recover.
+  the sign-in page, which sets a recovery cookie (`__Host-access_roster_recovery`) bound to the form's state. A form
+  loaded before an upgrade is refused once; reload `/login` and paste again. Opening another sign-in page or following a
+  provider button does not break a recovery form already open, but two recovery forms share the one cookie, so only the
+  last one loaded can recover. A body over 16 KiB is answered 413.
 - **Recovery disabled** (`config.recovery.enabled: false`): there is no password to recover, only RBAC to hold. Step 1
   turns it back on.
 - **Behind a gateway that fronts the console with its own cookie**, sign-out has to run the whole chain (the proxy's
