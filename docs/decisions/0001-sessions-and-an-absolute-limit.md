@@ -3,6 +3,14 @@
 **Status:** Accepted; amended by [0033](0033-a-longer-absolute-limit-for-read-only-resources.md)
 **Date:** 2026-09-25
 
+> **Amended (2026-10-07).** The limit also governs the directory console's
+> requests, not only its own client's refreshes. The console used to accept
+> any live browser sign-in for the sign-in's own lifetime; it now applies the
+> same check as a silent `/authorize` on every request, and a sign-in past the
+> limit is refused and ended with the same cascade
+> ([sessions.md](../explanation/sessions.md#what-the-console-asks-of-the-sso-session)).
+> The decision below stands as it was taken.
+
 ## Context
 
 Three things get called a session here, and each has exactly one owner.

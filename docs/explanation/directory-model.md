@@ -43,5 +43,10 @@ A failure to reach a directory is an error and never an empty answer. The hold w
 identity keeps its last-known groups for a bounded time only while "I could not ask" can be told from "the directory
 says nothing".
 
+The window applies to the console as it does to a silent sign-in. While a directory cannot be reached, a person it
+last admitted keeps console access for the window (4 hours by default) and the sign-in ends past it; a person the
+directory says is suspended or not found is refused at once and the sign-in ended
+([sessions](sessions.md#what-the-console-asks-of-the-sso-session)).
+
 The groups, the flat membership and the live flag of every account are kept as one snapshot per workspace:
 [freshness](freshness.md) says how it is read and refreshed.
