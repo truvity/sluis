@@ -30,6 +30,8 @@ type (
 	Log = internal.Log
 	// Lifetimes is `lifetimes`: how long what the issuer hands out lives.
 	Lifetimes = internal.Lifetimes
+	// AgentLifetimes is `lifetimes.agent`: the agent session class's own.
+	AgentLifetimes = internal.AgentLifetimes
 	// Freshness is `freshness`: how the directory's snapshot is kept current.
 	Freshness = internal.Freshness
 	// Secrets is `secrets`: how the secrets a document names are delivered.

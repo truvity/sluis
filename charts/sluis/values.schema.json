@@ -1631,6 +1631,28 @@
               "default": "24h",
               "description": "A session, at most. Positive, and at least `token`: a session has to end SOMETIME after sign-in, and an access token cannot outlive the session that grants it."
             },
+            "agent": {
+              "additionalProperties": false,
+              "description": "The refresh chains of clients the policy marks `session: agent`, such as MCP hosts (docs/decisions/0040). Their chains are held to these instead of `refresh` and `absolute`.",
+              "properties": {
+                "absolute": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "720h",
+                  "description": "An agent chain, at most, from `auth_time`. Positive, and at most 2160h (90 days)."
+                },
+                "access": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "30m",
+                  "description": "The longest an agent client's access or ID token lives. Positive, and at most 1h."
+                },
+                "refresh": {
+                  "$ref": "#/definitions/config-sluis.duration",
+                  "default": "336h",
+                  "description": "An agent chain's idle limit. Positive, and at most `absolute`."
+                }
+              },
+              "type": "object"
+            },
             "hold": {
               "$ref": "#/definitions/config-sluis.duration",
               "default": "4h",

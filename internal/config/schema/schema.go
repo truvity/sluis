@@ -273,6 +273,11 @@ func serveSchema() m {
 			"absolute": duration("A session, at most. Positive, and at least `token`: a session has to end SOMETIME after sign-in, and an access token cannot outlive the session that grants it.", "24h"),
 			"hold":     duration("How long a removal is held before it takes effect.", "4h"),
 			"session":  duration("The console's own session cookie, capped at `absolute`.", "12h"),
+			"agent": obj("The refresh chains of clients the policy marks `session: agent`, such as MCP hosts (docs/decisions/0040). Their chains are held to these instead of `refresh` and `absolute`.", m{
+				"refresh":  duration("An agent chain's idle limit. Positive, and at most `absolute`.", "336h"),
+				"absolute": duration("An agent chain, at most, from `auth_time`. Positive, and at most 2160h (90 days).", "720h"),
+				"access":   duration("The longest an agent client's access or ID token lives. Positive, and at most 1h.", "30m"),
+			}),
 		}),
 		"freshness": obj("How the directory's snapshot is kept current.", m{
 			"refreshInterval": duration("How often a snapshot is refreshed.", "15m"),

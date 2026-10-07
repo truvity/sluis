@@ -66,6 +66,19 @@ type (
 		Absolute *Duration `json:"absolute,omitempty"`
 		Hold     *Duration `json:"hold,omitempty"`
 		Session  *Duration `json:"session,omitempty"`
+		// Agent is `lifetimes.agent`: how long the refresh chains of clients
+		// the policy marks `session: agent` live.
+		Agent *AgentLifetimes `json:"agent,omitempty"`
+	}
+
+	// AgentLifetimes are the agent class's own lifetimes
+	// (docs/decisions/0040-agent-class-sessions.md): its idle limit, its
+	// absolute limit from `auth_time`, and the mandatory cap on its access
+	// and ID tokens. A pointer is "not set", which is the default.
+	AgentLifetimes struct {
+		Refresh  *Duration `json:"refresh,omitempty"`
+		Absolute *Duration `json:"absolute,omitempty"`
+		Access   *Duration `json:"access,omitempty"`
 	}
 
 	// Freshness is how the directory's snapshot is kept current.
