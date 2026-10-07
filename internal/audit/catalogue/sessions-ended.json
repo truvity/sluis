@@ -8,6 +8,17 @@
       "description": "How many client sessions ended with it.",
       "x-audit-class": "shared",
       "x-audit-pii": "none"
+    },
+    "spared": {
+      "type": "array",
+      "description": "The client ids of the agent-class sessions the sign-out left running, one per session. Absent when it spared none.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
     }
   }
 }

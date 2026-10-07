@@ -91,6 +91,21 @@ func SignedIn(actor Actor, client, how string, o Outcome) *record.Record {
 		subjectOf(actor), []*record.Target{targetClient(client)}, data{"how": how})
 }
 
+// SignedInSession is a person signing in to a client at the issuer, with
+// the class of the chain the sign-in opens and its computed deadline
+// (docs/decisions/0040-agent-class-sessions.md, decision 8): `agent` for a
+// background host that keeps its own refresh token, `interactive` for a
+// person at a browser. An empty class or a zero deadline is left out, as for
+// a refusal that decided neither.
+func SignedInSession(actor Actor, client, how, class string, deadline time.Time, o Outcome) *record.Record {
+	d := data{"how": how, "class": class}
+	if !deadline.IsZero() {
+		d["deadline"] = deadline.UTC().Format(time.RFC3339)
+	}
+	return build("roster.person.signed_in", actor, o,
+		subjectOf(actor), []*record.Target{targetClient(client)}, d)
+}
+
 // RecoverySignedIn is a sign-in by recovery, which bypasses the directory.
 // The catalogue declares it block: it is kept before it succeeds.
 func RecoverySignedIn(actor Actor, client, how string, o Outcome) *record.Record {
@@ -135,9 +150,12 @@ func GitHubTokenMinted(actor Actor, app string, t GitHubToken, o Outcome) *recor
 
 // ------------------------------------------------------------------ sessions
 
-// SessionEnded is a person signing out, ending their sessions.
-func SessionEnded(actor Actor, ended int) *record.Record {
-	return build("roster.session.ended", actor, Succeeded(), subjectOf(actor), nil, data{"ended": ended})
+// SessionEnded is a person signing out, ending their sessions. spared are
+// the client ids of the agent-class sessions the sign-out left running
+// (docs/decisions/0040-agent-class-sessions.md, decision 7), one per
+// session, sorted; none is left out of the record.
+func SessionEnded(actor Actor, ended int, spared []string) *record.Record {
+	return build("roster.session.ended", actor, Succeeded(), subjectOf(actor), nil, data{"ended": ended, "spared": spared})
 }
 
 // SessionRevoked is somebody revoking a person's sessions: at one client, or

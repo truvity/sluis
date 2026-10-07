@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "locales": [
     "en"
   ],
@@ -195,7 +195,7 @@ export const roster: Sentences = {
       }
     },
     "roster.person.signed_in": {
-      "summary": "A person signed in to a client, or was refused.",
+      "summary": "A person signed in to a client, or was refused; at the issuer, with the class of the session it opens (interactive or agent) and that session's deadline.",
       "message": {
         "en": "{outcome, select, success {{actor} signed in to {targets_0_id}} denied {{actor} was refused sign-in to {targets_0_id}} other {{actor} could not sign in to {targets_0_id}}}"
       }
@@ -225,7 +225,7 @@ export const roster: Sentences = {
       }
     },
     "roster.session.ended": {
-      "summary": "A person signed out, ending their sessions.",
+      "summary": "A person signed out, ending their sessions, except the agent-class sessions it spared (by client id in `spared`), which keep running until revoked or their own end.",
       "message": {
         "en": "{actor} signed out, ending {data_ended, plural, one {# session} other {# sessions}}"
       }
