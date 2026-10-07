@@ -178,10 +178,11 @@ Refused at load: `session` on an `exchange` client, which opens no chain, and `s
 a month long in effect. Warned at start: `session: agent` on a client with `signed_out` or `backchannel_logout_uri`,
 which describe a browser-facing application.
 
-**Not yet complete in this release.** The consent page that stops an agent authorization completing silently, and
-sign-out sparing agent sessions, arrive in a later release (decisions 6 and 7 of the ADR). Until then an agent
-authorization can complete silently and a browser sign-out ends agent sessions as it ends any other, so prefer not to
-mark a client `session: agent` until that release is deployed. Why the class exists and how a chain ends:
+**Refused at load in this release.** The consent page that stops an agent authorization completing silently, and
+sign-out sparing agent sessions, arrive in a later release (decisions 6 and 7 of the ADR). Until then `session: agent`,
+on a client or on `client_documents`, is accepted by the schema and refused when the policy is loaded, with an error
+saying agent-class sessions become available with the release that adds the consent page. Why the class exists and how
+a chain ends:
 [sessions](../explanation/sessions.md#agent-class-sessions).
 
 ## Groups override
