@@ -762,7 +762,7 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 			}
 			if preUpgrade {
 				audited = func(ended int) *auditrecord.Record {
-					return audit.SessionRevoked(audit.Anonymous(), record.Identity, "", preUpgradeScope, ended)
+					return audit.SessionRevoked(audit.Anonymous(), record.Identity, "", audit.ScopePreUpgradeCookie, ended)
 				}
 			}
 			endSignIn(r.Context(), deps, record, sparingLive, audited)
@@ -776,12 +776,6 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 
 	return nil
 }
-
-// preUpgradeScope is the audit scope of a sign-out by a pre-upgrade
-// cookie: the presenter held an id, which proves nothing about who they
-// are, so the record says so instead of naming the person as the actor.
-// Goes with [SSO.preUpgrade].
-const preUpgradeScope = "pre-upgrade sign-in cookie"
 
 // endSignIn ends one sign-in and everything opened under it: the
 // per-client sessions, Back-Channel Logout to the clients that held them,
@@ -1178,7 +1172,7 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 
 	if !strings.EqualFold(previous.Identity, strings.TrimSpace(who.Subject)) {
 		endSignIn(r.Context(), s.deps, previous, false, func(ended int) *auditrecord.Record {
-			return audit.SessionRevoked(audit.Identified(who.Subject), previous.Identity, "", replacedScope, ended)
+			return audit.SessionRevoked(audit.Identified(who.Subject), previous.Identity, "", audit.ScopeSignInReplaced, ended)
 		})
 		return
 	}
@@ -1188,10 +1182,6 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 			"error", logsafe.Error(err))
 	}
 }
-
-// replacedScope is the audit scope of a sign-in ended because another
-// person signed in in the same browser.
-const replacedScope = "replaced by another sign-in in the same browser"
 
 // account sends an old bookmark to the console's page for the person.
 //

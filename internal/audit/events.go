@@ -156,6 +156,20 @@ func SessionRevoked(actor Actor, person, client, scope string, ended int) *recor
 // tokens was presented after the grace window.
 const ScopeRefreshTokenReuse = "refresh_token_reuse"
 
+// ScopePreUpgradeCookie is the scope of a [SessionRevoked] record the
+// issuer writes when a browser signs out with a cookie set before the
+// cookie had a secret of its own: the cookie held the sign-in's id, which
+// proves nothing about who presented it, so the actor is [Anonymous]
+// rather than the person. It goes when that sign-out path does, one
+// release after it was added.
+const ScopePreUpgradeCookie = "pre_upgrade_cookie"
+
+// ScopeSignInReplaced is the scope of a [SessionRevoked] record the
+// issuer writes when another person signs in in a browser that held a
+// live sign-in: the earlier person's sign-in and the sessions opened
+// under it are ended, with the new person as the actor.
+const ScopeSignInReplaced = "sign_in_replaced"
+
 // SessionReuseRevoked is the issuer ending one of a person's sessions at a
 // client because a refresh token already spent in it was presented again
 // (RFC 9700 section 4.14.2).
