@@ -1099,6 +1099,11 @@ func (s *Sessions) Revoke(ctx context.Context, q Query) (int, error) {
 // the store lifetime it had (see [Sessions.put]), so that a session at its
 // own end is still told apart from one cut at the absolute limit.
 //
+// A session that cannot be moved does not stop the others: each is tried,
+// and the errors are returned together once all have been. A State that
+// keeps no revisions moves nothing, since a plain write there could bring
+// back a session revoked between the read and the write.
+//
 // One read of the identity's index set and one of each session in it, and
 // one write per session moved.
 func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, error) {
@@ -1114,10 +1119,14 @@ func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, 
 	identity = strings.ToLower(strings.TrimSpace(identity))
 	moved := 0
 
+	var errs []error
+
 	for _, id := range ids {
 		done, err := s.refile(ctx, id, identity, from, to)
 		if err != nil {
-			return moved, err
+			errs = append(errs, fmt.Errorf("session %s: %w", id, err))
+
+			continue
 		}
 
 		if done {
@@ -1125,7 +1134,7 @@ func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, 
 		}
 	}
 
-	return moved, nil
+	return moved, errors.Join(errs...)
 }
 
 // refile moves one session, when it is still live and still filed under
@@ -1133,7 +1142,7 @@ func (s *Sessions) Refile(ctx context.Context, identity, from, to string) (int, 
 func (s *Sessions) refile(ctx context.Context, id, identity, from, to string) (bool, error) {
 	for range rotatedAttempts {
 		session, version, live, err := s.byIDVersion(ctx, id)
-		if err != nil || !live || session.Identity != identity || session.SSO != from {
+		if err != nil || !live || session.Identity != identity || session.SSO != from || version == "" {
 			return false, err
 		}
 
