@@ -232,7 +232,7 @@ func TestARefreshAtTheAbsoluteLimitIsRefusedAndAudited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func TestAccessTokenExpiryIsCappedByTheAbsoluteLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +440,7 @@ func TestSilentAuthEndsAnSSOSessionPastTheAbsoluteLimit(t *testing.T) {
 	// rather than relying on HandlerWithSignIn's own wiring, so this test
 	// can see WHICH sessions it was told to tell.
 	var announced []issuer.Session
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{
 		Providers:    []issuer.SignIn{oneProvider{email: email}},
 		State:        access.NewStateCodec([]byte("a-test-key-for-signing-state-ab"), 0),
 		ConsoleMount: "/console",

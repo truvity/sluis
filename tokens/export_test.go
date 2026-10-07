@@ -4,7 +4,12 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+// stsMu serialises the swap of stsEndpoint: parallel tests each move the one
+// package variable, and the others would read it mid-swap.
+var stsMu sync.Mutex
 
 // AssumeAt is AssumeRoleWithWebIdentity against a stand-in for STS. The
 // endpoint is a constant in the production path on purpose — an
@@ -14,6 +19,8 @@ import (
 func AssumeAt(
 	ctx context.Context, endpoint string, client *http.Client, roleARN, sessionName, token string,
 ) (Credentials, error) {
+	stsMu.Lock()
+	defer stsMu.Unlock()
 	previous := stsEndpoint
 	stsEndpoint = strings.TrimSuffix(endpoint, "/") + "/"
 	defer func() { stsEndpoint = previous }()

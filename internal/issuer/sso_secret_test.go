@@ -297,7 +297,7 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 		t.Fatalf("storage: %v", err)
 	}
 
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{
 		Providers:    []issuer.SignIn{who},
 		State:        access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
 		ConsoleMount: "/console",

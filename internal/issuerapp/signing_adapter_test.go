@@ -17,7 +17,6 @@ import (
 // starts with the keys `signingKey.kms` names: it used to fail with "the kms
 // adapter needs keys and stateSecretFile".
 func TestABareKMSSigningAdapterUsesSigningKeyKMS(t *testing.T) {
-	t.Parallel()
 	a, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	plan := port.Table{port.ConcernSigning: {Adapter: "kms"}}
 	app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"alias/a": a}, Stores: &store.Stores{Plan: plan, Secrets: testSecrets}},
@@ -28,7 +27,6 @@ func TestABareKMSSigningAdapterUsesSigningKeyKMS(t *testing.T) {
 }
 
 func TestABareKMSWrappedSigningAdapterUsesSigningKeyKMSWrapped(t *testing.T) {
-	t.Parallel()
 	fake := kmsfake.New()
 	plan := port.Table{port.ConcernSigning: {Adapter: "kms-wrapped"}}
 	app := bootDeps(t, issuerapp.Deps{Directory: nobody{}, KMSWrapped: fake, Stores: &store.Stores{Plan: plan, Secrets: testSecrets}},

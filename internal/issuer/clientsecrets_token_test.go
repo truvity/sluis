@@ -44,7 +44,7 @@ func TestTheClientSecretsEndpointChecksTheRealTokensAudience(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{})
+	handler, err := handlerWithSignIn(iss, storage, issuer.SignInDeps{})
 	if err != nil {
 		t.Fatal(err)
 	}

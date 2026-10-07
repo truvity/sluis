@@ -42,7 +42,7 @@ func serveCLIIssuer(t *testing.T) (*httptest.Server, *issuer.Issuer) {
 		t.Fatalf("storage: %v", err)
 	}
 
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
