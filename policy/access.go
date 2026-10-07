@@ -183,6 +183,7 @@ type AccessClient struct {
 	SignInExchange    bool           `yaml:"signInExchange,omitempty"`
 	Requires          []string       `yaml:"requires,omitempty"`
 	Groups            GroupsOverride `yaml:"groups,omitempty"`
+	Session           string         `yaml:"session,omitempty"`
 
 	Hostname string `yaml:"hostname,omitempty"`
 	Prefix   string `yaml:"prefix,omitempty"`
@@ -198,6 +199,7 @@ type AccessClientDocuments struct {
 	Requires []string       `yaml:"requires,omitempty"`
 	TTLCap   Duration       `yaml:"ttlCap,omitempty"`
 	Groups   GroupsOverride `yaml:"groups,omitempty"`
+	Session  string         `yaml:"session,omitempty"`
 }
 
 // AccessResource is one resource (RFC 8707).
@@ -315,7 +317,9 @@ func (a Access) policy() (Policy, error) {
 		return Policy{}, err
 	}
 	if cd := a.ClientDocuments; cd != nil {
-		out.ClientDocuments = ClientDocuments{Origins: cd.Origins, Requires: cd.Requires, TTLCap: cd.TTLCap, Groups: cd.Groups}
+		out.ClientDocuments = ClientDocuments{
+			Origins: cd.Origins, Requires: cd.Requires, TTLCap: cd.TTLCap, Groups: cd.Groups, Session: cd.Session,
+		}
 	}
 	if len(a.Resources) > 0 {
 		out.Resources = make(map[string]Resource, len(a.Resources))
@@ -460,7 +464,7 @@ func (a Access) clients() (map[string]Client, error) {
 			Kind: c.Kind, DisplayName: c.DisplayName, Description: c.Description, Secret: ClientSecret{Name: c.Secret},
 			Redirects: c.Redirects, SignedOut: c.SignedOut, Requires: c.Requires, TTLCap: c.TTLCap,
 			SignInExchange: c.SignInExchange, BackChannelLogout: c.BackchannelLogout, SigningAlg: c.SigningAlg,
-			Groups: c.Groups, GroupsDelimiter: c.GroupsDelimiter,
+			Groups: c.Groups, GroupsDelimiter: c.GroupsDelimiter, Session: c.Session,
 		}
 	}
 	return out, nil

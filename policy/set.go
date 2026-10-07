@@ -133,6 +133,31 @@ func (s *Set) EffectiveAbsolute(global time.Duration, touched []string) time.Dur
 	return EffectiveAbsolute(global, touched, s.Resource)
 }
 
+// AgentAbsolute is the absolute limit of an agent-class chain that has been
+// used for the given resources, against the class's own limit. See
+// [AgentAbsolute].
+func (s *Set) AgentAbsolute(class time.Duration, touched []string) time.Duration {
+	return AgentAbsolute(class, touched, s.Resource)
+}
+
+// BrowserFacingAgents lists, sorted, the declared clients that say
+// `session: agent` and also declare `signed_out` or
+// `backchannel_logout_uri`, which describe an application a person uses in
+// a browser. Not refused: the service warns at start, because an agent
+// class there is more likely a mistake than a choice.
+func (s *Set) BrowserFacingAgents() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []string
+	for _, id := range slices.Sorted(maps.Keys(s.declared.Clients)) {
+		c := s.declared.Clients[id]
+		if c.Agent() && (len(c.SignedOut) > 0 || c.BackChannelLogout != "") {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // ClientDocuments returns the document-client policy in force.
 func (s *Set) ClientDocuments() ClientDocuments {
 	s.mu.RLock()

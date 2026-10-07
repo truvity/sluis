@@ -101,6 +101,14 @@
               },
               "type": "array"
             },
+            "session": {
+              "default": "interactive",
+              "description": "Every document client's refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). Never read from a document: admit with `agent` only an origin whose documents its vendor controls.",
+              "enum": [
+                "interactive",
+                "agent"
+              ]
+            },
             "ttl_cap": {
               "$ref": "#/$defs/duration",
               "description": "The longest a token lives."
@@ -193,6 +201,14 @@
                     ],
                     "type": "object"
                   }
+                ]
+              },
+              "session": {
+                "default": "interactive",
+                "description": "Its refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). Refused on an exchange client and, as `agent`, with `sign_in_exchange`.",
+                "enum": [
+                  "interactive",
+                  "agent"
                 ]
               },
               "sign_in_exchange": {
@@ -502,7 +518,7 @@
                 "type": "string"
               },
               "read_only": {
-                "description": "It only reads: an absolute cap past the installation's may be honoured.",
+                "description": "It only reads: an absolute cap past the installation's may be honoured. Deprecated as a lengthening (docs/decisions/0040): mark the clients `session: agent` instead; a lengthening row is warned about at start.",
                 "type": "boolean"
               },
               "requires": {

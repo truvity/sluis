@@ -54,7 +54,20 @@ type ClientDocuments struct {
 	// shape and the same validation as [Client.Groups] and
 	// [Resource.Groups], one row over: see [Policy.ScopeGroups].
 	Groups GroupsOverride `yaml:"groups,omitempty"`
+	// Session is the class of the refresh chains EVERY document client
+	// opens, as `session` is on a declared client: [SessionInteractive]
+	// (absent) or [SessionAgent]. It is the installation's grant and never
+	// the document's: the issuer reads no class from a fetched document. An
+	// installation that needs one document client interactive and another
+	// agent declares one of them as a client row, and an origin admitted
+	// with `session: agent` must serve only documents its vendor controls,
+	// because every document on it gets the class. See
+	// docs/decisions/0040-agent-class-sessions.md.
+	Session string `yaml:"session,omitempty"`
 }
+
+// Agent reports whether every document client's chains are agent-class.
+func (d ClientDocuments) Agent() bool { return d.Session == SessionAgent }
 
 // Enabled reports whether any document client may be admitted.
 func (d ClientDocuments) Enabled() bool { return len(d.Origins) > 0 }
@@ -82,10 +95,13 @@ func (d ClientDocuments) validate(p Policy) error {
 	if !d.Enabled() {
 		// Off, and the rest is then inert rather than wrong -- except
 		// that writing it means somebody expected it to apply.
-		if len(d.Requires) > 0 || d.TTLCap.Duration() != 0 || !d.Groups.empty() {
-			return fmt.Errorf("client_documents declares requires, ttl_cap or groups and no origins, so none of it applies")
+		if len(d.Requires) > 0 || d.TTLCap.Duration() != 0 || !d.Groups.empty() || d.Session != "" {
+			return fmt.Errorf("client_documents declares requires, ttl_cap, groups or session and no origins, so none of it applies")
 		}
 		return nil
+	}
+	if !validSession(d.Session) {
+		return fmt.Errorf("client_documents: session %q is not %q or %q", d.Session, SessionInteractive, SessionAgent)
 	}
 	if len(d.Requires) == 0 {
 		return fmt.Errorf("client_documents lists origins and requires no group, which would admit every person who can sign in")

@@ -53,6 +53,12 @@ type Resource struct {
 	// change anything, and never beyond [MaxAbsoluteCap]. Unset means
 	// the installation's own limit. See [EffectiveAbsolute] for how it
 	// combines when one session has touched several resources.
+	//
+	// The lengthening half is deprecated
+	// (docs/decisions/0040-agent-class-sessions.md): a client that needs a
+	// longer chain says `session: agent`. It is still honoured, with a
+	// warning at start ([Resource.LengthensAbsolute]). For an agent-class
+	// chain the cap is only ever a ceiling ([AgentAbsolute]).
 	AbsoluteCap Duration `yaml:"absolute_cap,omitempty"`
 	// ReadOnly declares that this resource only reads: a token for it
 	// can observe the estate and cannot change it. It is the one thing
@@ -236,6 +242,42 @@ func EffectiveAbsolute(global time.Duration, touched []string, lookup func(id st
 		}
 		if out == 0 || limit < out {
 			out = limit
+		}
+	}
+	return out
+}
+
+// LengthensAbsolute reports whether this resource's `absolute_cap` makes a
+// chain longer than the installation's `lifetimes.absolute`: the read-only
+// exception of docs/decisions/0033-a-longer-absolute-limit-for-read-only-resources.md,
+// which docs/decisions/0040-agent-class-sessions.md deprecates in favour of
+// `session: agent` on the clients that need a longer chain. Still honoured
+// in this release; the service warns at start for every row it is true of.
+func (r Resource) LengthensAbsolute(global time.Duration) bool {
+	return r.ReadOnly && global > 0 && r.AbsoluteCap.Duration() > global
+}
+
+// AgentAbsolute is the absolute limit of an AGENT-class refresh chain that
+// has been used for the given resources: the class's own limit
+// (`lifetimes.agent.absolute`), shortened by any `absolute_cap` among them.
+//
+// For an agent chain a resource's cap is only ever a ceiling. Unlike
+// [EffectiveAbsolute] it never lengthens anything, read-only or not, and the
+// client's own audience (an empty id) or a resource that is not declared
+// contributes nothing: the class's limit already bounds them. See
+// docs/decisions/0040-agent-class-sessions.md.
+func AgentAbsolute(class time.Duration, touched []string, lookup func(id string) (Resource, bool)) time.Duration {
+	out := class
+	for _, id := range touched {
+		if id == "" || lookup == nil {
+			continue
+		}
+		r, ok := lookup(id)
+		if !ok {
+			continue
+		}
+		if capped := r.AbsoluteCap.Duration(); capped > 0 && (out <= 0 || capped < out) {
+			out = capped
 		}
 	}
 	return out
