@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	accessissuerv1 "github.com/truvity/sluis/gen/accessissuer/v1"
 	"github.com/truvity/sluis/internal/access"
+	"github.com/truvity/sluis/internal/audit/audittest"
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/policy"
@@ -37,6 +39,7 @@ const (
 	ssoPointerPrefix = "issuer:sso-cookie:"
 	ssoRecordPrefix  = "issuer:sso:"
 	ssoEmail         = "ada@north.example"
+	ssoBob           = "bob@north.example"
 )
 
 // ssoHash is the pointer's hash as the issuer defines it, written out here
@@ -61,7 +64,9 @@ type recState struct {
 
 	// failGet makes every read fail; failSet makes the writes it names fail.
 	failGet bool
-	failSet func(key string) bool
+	// failGetKey makes the reads of the keys it names fail.
+	failGetKey func(key string) bool
+	failSet    func(key string) bool
 }
 
 var errStoreDown = errors.New("the store is down")
@@ -73,11 +78,18 @@ func (r *recState) setFailures(get bool, set func(string) bool) {
 	r.failGet, r.failSet = get, set
 }
 
+func (r *recState) setReadFailure(keys func(string) bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.failGetKey = keys
+}
+
 func (r *recState) failing(get bool, key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return (get && r.failGet) || (!get && r.failSet != nil && r.failSet(key))
+	return (get && (r.failGet || (r.failGetKey != nil && r.failGetKey(key)))) || (!get && r.failSet != nil && r.failSet(key))
 }
 
 func newRecState() *recState {
@@ -203,6 +215,34 @@ func (l *lockedBuffer) String() string {
 	return l.buf.String()
 }
 
+// whoProvider is the directory's sign-in, whoever the test says is at the
+// keyboard.
+type whoProvider struct {
+	mu    sync.Mutex
+	email string
+}
+
+func (*whoProvider) Kind() string { return "google" }
+
+func (*whoProvider) URL(state string) (string, error) {
+	return "https://idp.example/authorize?state=" + url.QueryEscape(state), nil
+}
+
+func (p *whoProvider) Identify(context.Context, string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.email, nil
+}
+
+// as makes the next sign-in this person's.
+func (g *ssoRig) as(email string) {
+	g.who.mu.Lock()
+	defer g.who.mu.Unlock()
+
+	g.who.email = email
+}
+
 // ssoRig is the issuer with its sign-in pages, over a recording State, a
 // directory the test can change its mind about, and a log it can read.
 type ssoRig struct {
@@ -211,6 +251,8 @@ type ssoRig struct {
 	state  *recState
 	dir    *fakeDirectory
 	logs   *lockedBuffer
+	trail  *audittest.Recorder
+	who    *whoProvider
 
 	mu        sync.Mutex
 	announced []issuer.Session
@@ -241,10 +283,14 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 	}}
 	state := newRecState()
 	logs := &lockedBuffer{}
-	rig := &ssoRig{state: state, dir: dir, logs: logs}
+	trail := audittest.New(t)
+	who := &whoProvider{email: ssoEmail}
+	rig := &ssoRig{state: state, dir: dir, logs: logs, trail: trail, who: who}
+	dir.standing[ssoBob] = issuer.Standing{Found: true, Authoritative: true, Groups: []string{"engineering@north.example"}}
 
 	cfg.URL, cfg.AllowInsecure = "http://issuer.example", true
 	iss := issuer.New(cfg, set, dir, state)
+	iss.UseAudit(trail)
 
 	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
@@ -252,7 +298,7 @@ func newSSORig(t *testing.T, cfg issuer.Config) *ssoRig {
 	}
 
 	handler, err := issuer.HandlerWithSignIn(iss, storage, issuer.SignInDeps{
-		Providers:    []issuer.SignIn{oneProvider{email: ssoEmail}},
+		Providers:    []issuer.SignIn{who},
 		State:        access.NewStateCodec([]byte("a-test-key-for-signing-state"), 0),
 		ConsoleMount: "/console",
 		Log:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
