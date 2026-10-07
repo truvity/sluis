@@ -226,7 +226,14 @@ func TestARefusedRecoveryEndsTheBrowserSessionItBegan(t *testing.T) {
 			t.Errorf("the refused recovery left a live browser session behind: %s", cookie.Name)
 		}
 	}
-	if cookies := response.Result().Cookies(); len(cookies) == 0 || cookies[len(cookies)-1].Value != "" {
-		t.Errorf("cookies = %v, want the session cookie taken back last", cookies)
+	// The new sign-in's cookie is never handed over, and the browser's
+	// cookie is not touched: whatever it held before survives the refusal.
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == issuer.SSOCookieName {
+			t.Errorf("the refused recovery set the session cookie: %v", cookie)
+		}
+	}
+	if open, err := sso.List(ctx, ""); err != nil || len(open) != 0 {
+		t.Errorf("sign-ins after a refused recovery = %v, %v; want none", open, err)
 	}
 }

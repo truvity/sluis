@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	auditrecord "github.com/truvity/audit/sdk/record"
+
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/logsafe"
@@ -531,13 +533,16 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	who := s.established(w, r, subject, RecoveryHow)
+	who, secret := s.established(w, r, subject, RecoveryHow)
 	if err = s.deps.Storage.Complete(r.Context(), request, who); err != nil {
 		if errors.Is(err, ErrUnaudited) {
 			// The browser session this recovery began goes with it: a
 			// session that never had its record is not one to sign in
-			// from silently later.
-			s.unestablish(w, r, who)
+			// from silently later. It was never handed to the browser,
+			// so whatever sign-in the browser held before is untouched.
+			s.unestablish(r, who)
+		} else {
+			s.handOver(w, r, who, secret)
 		}
 		if s.refuseUnentitled(w, r, err, request) || s.refuseUnaudited(w, r, err) {
 			return
@@ -548,6 +553,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	s.handOver(w, r, who, secret)
 	recordLoginSuccess(r.Context(), "recovery")
 	// WARN, not INFO: this is the way in that bypasses the directory, and
 	// it should be as loud in a log as it is rare.
@@ -612,7 +618,13 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = s.deps.Storage.Complete(r.Context(), request, s.established(w, r, email, provider.Kind())); err != nil {
+	who, secret := s.established(w, r, email, provider.Kind())
+	err = s.deps.Storage.Complete(r.Context(), request, who)
+	// Handed over whatever the request's fate: the person authenticated,
+	// and a request that is no longer waiting, or a client they are not
+	// entitled to, does not undo that.
+	s.handOver(w, r, who, secret)
+	if err != nil {
 		if s.refuseUnentitled(w, r, err, request) {
 			return
 		}
@@ -721,7 +733,9 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 
 	if cookie := SSOFromRequest(r, deps.Secure); cookie != "" {
 		record, live, err := deps.SSO.Resolve(r.Context(), cookie)
+		preUpgrade := false
 		if err == nil && !live {
+			preUpgrade = true
 			// A cookie set before the cookie had a secret of its own
 			// holds the sign-in's id. It signs nobody in any more, but
 			// for one release it can still sign its own browser OUT, so
@@ -739,74 +753,19 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 
 			return errSignOutUnresolved
 		}
-		// The sign-in's id, never the cookie: what names it in the
-		// session index and the store. Empty when the cookie proves
-		// nothing, and then there is nothing here to end.
-		id := record.ID
-		if deps.Issuer != nil && live {
-			// Read before revoking: once they are gone there is nothing
-			// left to say WHICH clients held them, and the clients that
-			// asked to be told are told by name.
-			held, _ := deps.Issuer.Sessions().List(r.Context(),
-				Query{Identity: record.Identity, SSO: id})
-			// Sparing the live ones means not telling them either: a
-			// Back-Channel Logout would end a session that is still
-			// inside its limit, at the relying party's end.
-			announce := held
-			if sparingLive {
-				announce = nil
+		if live {
+			// Who the record names is what the cookie PROVED, except for
+			// a pre-upgrade cookie: an id anyone may have seen, so the
+			// end is not recorded as that person signing out.
+			audited := func(ended int) *auditrecord.Record {
+				return audit.SessionEnded(audit.Identified(record.Identity), ended)
 			}
-
-			// And the clients that were signed in under this browser
-			// WITHOUT a refresh token -- `openid` alone -- which the
-			// session index knows nothing about. They hold a session with
-			// this issuer all the same, and are told by subject: there
-			// is no session id to name because their ID token carried
-			// none.
-			if involved, err := deps.SSO.Involved(r.Context(), id); err == nil {
-				seen := map[string]bool{}
-				for i := range held {
-					seen[held[i].ClientID] = true
-				}
-				for _, clientID := range involved {
-					if !seen[clientID] {
-						announce = append(announce, Session{ClientID: clientID, Identity: record.Identity, SSO: id})
-					}
+			if preUpgrade {
+				audited = func(ended int) *auditrecord.Record {
+					return audit.SessionRevoked(audit.Anonymous(), record.Identity, "", preUpgradeScope, ended)
 				}
 			}
-
-			ended := 0
-			var err error
-			if !sparingLive {
-				ended, err = deps.Issuer.Sessions().Revoke(r.Context(),
-					Query{Identity: record.Identity, SSO: id})
-			}
-
-			// After revoking, not before: a client told its session ended
-			// and then finding it alive is worse than one told a moment
-			// late. Best effort, because the sign-out has happened either
-			// way (OIDC Back-Channel Logout 1.0).
-			if deps.Announce != nil {
-				deps.Announce(r.Context(), announce)
-			}
-			switch {
-			case err != nil:
-				deps.log().WarnContext(r.Context(), "sign-out could not end what this browser opened",
-					"error", logsafe.Error(err))
-			case ended > 0:
-				deps.log().InfoContext(r.Context(), "sign-out ended the sessions this browser opened",
-					"ended", ended)
-			}
-			if err == nil && !sparingLive {
-				deps.Issuer.record(r.Context(), audit.SessionEnded(audit.Identified(record.Identity), ended))
-			}
-		}
-
-		if id != "" {
-			if err := deps.SSO.End(r.Context(), id); err != nil {
-				deps.log().WarnContext(r.Context(), "sign-out could not end the session",
-					"error", logsafe.Error(err))
-			}
+			endSignIn(r.Context(), deps, record, sparingLive, audited)
 		}
 	}
 
@@ -816,6 +775,82 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, sparingLiv
 	http.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
 
 	return nil
+}
+
+// preUpgradeScope is the audit scope of a sign-out by a pre-upgrade
+// cookie: the presenter held an id, which proves nothing about who they
+// are, so the record says so instead of naming the person as the actor.
+// Goes with [SSO.preUpgrade].
+const preUpgradeScope = "pre-upgrade sign-in cookie"
+
+// endSignIn ends one sign-in and everything opened under it: the
+// per-client sessions, Back-Channel Logout to the clients that held them,
+// the audit record, and the sign-in itself. sparingLive leaves the
+// per-client sessions alone and tells nobody (see [signOut]); audited
+// builds the record from how many sessions ended.
+func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, sparingLive bool, audited func(ended int) *auditrecord.Record) {
+	id := signIn.ID
+	if deps.Issuer != nil {
+		// Read before revoking: once they are gone there is nothing
+		// left to say WHICH clients held them, and the clients that
+		// asked to be told are told by name.
+		held, _ := deps.Issuer.Sessions().List(ctx, Query{Identity: signIn.Identity, SSO: id})
+		// Sparing the live ones means not telling them either: a
+		// Back-Channel Logout would end a session that is still
+		// inside its limit, at the relying party's end.
+		announce := held
+		if sparingLive {
+			announce = nil
+		}
+
+		// And the clients that were signed in under this browser
+		// WITHOUT a refresh token -- `openid` alone -- which the
+		// session index knows nothing about. They hold a session with
+		// this issuer all the same, and are told by subject: there
+		// is no session id to name because their ID token carried
+		// none.
+		if involved, err := deps.SSO.Involved(ctx, id); err == nil {
+			seen := map[string]bool{}
+			for i := range held {
+				seen[held[i].ClientID] = true
+			}
+			for _, clientID := range involved {
+				if !seen[clientID] {
+					announce = append(announce, Session{ClientID: clientID, Identity: signIn.Identity, SSO: id})
+				}
+			}
+		}
+
+		ended := 0
+		var err error
+		if !sparingLive {
+			ended, err = deps.Issuer.Sessions().Revoke(ctx, Query{Identity: signIn.Identity, SSO: id})
+		}
+
+		// After revoking, not before: a client told its session ended
+		// and then finding it alive is worse than one told a moment
+		// late. Best effort, because the sign-out has happened either
+		// way (OIDC Back-Channel Logout 1.0).
+		if deps.Announce != nil {
+			deps.Announce(ctx, announce)
+		}
+		switch {
+		case err != nil:
+			deps.log().WarnContext(ctx, "sign-out could not end what this browser opened",
+				"error", logsafe.Error(err))
+		case ended > 0:
+			deps.log().InfoContext(ctx, "sign-out ended the sessions this browser opened",
+				"ended", ended)
+		}
+		if err == nil && !sparingLive {
+			deps.Issuer.record(ctx, audited(ended))
+		}
+	}
+
+	if err := deps.SSO.End(ctx, id); err != nil {
+		deps.log().WarnContext(ctx, "sign-out could not end the session",
+			"error", logsafe.Error(err))
+	}
 }
 
 // log is the deps' logger, or the default one. SignOut is reached from
@@ -1054,27 +1089,29 @@ func (s *signIn) refuseUnaudited(w http.ResponseWriter, r *http.Request, err err
 	return true
 }
 
-// unestablish ends the browser session [signIn.established] began, and
-// takes its cookie back.
-func (s *signIn) unestablish(w http.ResponseWriter, r *http.Request, who Authenticated) {
+// unestablish ends the browser session [signIn.established] began. Its
+// cookie was never handed over ([signIn.handOver]), so there is nothing
+// to take back, and the browser keeps whatever sign-in it held.
+func (s *signIn) unestablish(r *http.Request, who Authenticated) {
 	if s.deps.SSO == nil || who.SSO == "" {
 		return
 	}
 	if err := s.deps.SSO.End(r.Context(), who.SSO); err != nil {
 		s.deps.log().WarnContext(r.Context(), "a refused recovery's browser session could not be ended", "error", logsafe.Error(err))
 	}
-	http.SetCookie(w, s.deps.SSO.Cookie("", s.deps.Secure))
 }
 
-// established records a fresh authentication as a browser session and
-// hands the browser its cookie.
+// established records a fresh authentication as a browser session, and
+// returns the cookie's secret for [signIn.handOver]. The cookie is not set
+// here: a sign-in that is then refused (a recovery whose audit record
+// could not be written) must leave the browser as it found it.
 //
 // A deployment with no SSO store still signs people in; it just asks the
 // provider every time, which is what this issuer did before it had one.
-func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, how string) Authenticated {
+func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, how string) (Authenticated, string) {
 	who := Authenticated{Subject: identity, AuthTime: time.Now(), How: how}
 	if s.deps.SSO == nil {
-		return who
+		return who, ""
 	}
 
 	session, secret, err := s.deps.SSO.Begin(r.Context(), identity, how)
@@ -1090,38 +1127,71 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 		// complete silently as them right after this person signed in.
 		http.SetCookie(w, s.deps.SSO.Cookie("", s.deps.Secure))
 
-		return who
+		return who, ""
 	}
 
-	// The sign-in this browser held before -- a step-up, `prompt=login`,
-	// `max_age`, another account -- ends now. The new cookie replaces it
-	// in the browser, and a sign-in no browser holds would otherwise stay
-	// valid, listed and usable by anyone who had copied its cookie, until
-	// it expired.
-	s.endPrevious(r, session.ID)
+	who.AuthTime, who.SSO = session.AuthTime, session.ID
+
+	return who, secret
+}
+
+// handOver gives the browser the cookie of the sign-in [signIn.established]
+// began, and ends the one it held before.
+//
+// The previous sign-in -- a step-up, `prompt=login`, `max_age`, another
+// account -- ends because the new cookie replaces it in the browser, and
+// a sign-in no browser holds would otherwise stay valid, listed and
+// usable by anyone who had copied its cookie, until it expired.
+func (s *signIn) handOver(w http.ResponseWriter, r *http.Request, who Authenticated, cookie string) {
+	if s.deps.SSO == nil || cookie == "" {
+		return
+	}
+
+	s.endPrevious(r, who)
 
 	// The secret, not the id: the id is shown to operators and carried by
 	// every session opened under this sign-in, and must not sign anybody
 	// in.
-	http.SetCookie(w, s.deps.SSO.Cookie(secret, s.deps.Secure))
-	who.AuthTime, who.SSO = session.AuthTime, session.ID
-
-	return who
+	http.SetCookie(w, s.deps.SSO.Cookie(cookie, s.deps.Secure))
 }
 
 // endPrevious ends the sign-in the request's cookie proves, unless it is
 // the one just begun. Best effort: the new sign-in has happened either
 // way, and the old one still ends at its own lifetime.
-func (s *signIn) endPrevious(r *http.Request, current string) {
+//
+// The same person keeps what they opened: their sessions under the old
+// sign-in are theirs, and ending the record is enough to stop the old
+// cookie. ANOTHER person's -- a shared browser -- is signed out the way
+// they would have signed out themselves: their sessions under it are
+// revoked and the clients told, because the browser no longer holds
+// anything that could end them.
+func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 	previous, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
-	if err == nil && live && previous.ID != current {
-		err = s.deps.SSO.End(r.Context(), previous.ID)
-	}
 	if err != nil {
+		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be read",
+			"error", logsafe.Error(err))
+		return
+	}
+	if !live || previous.ID == who.SSO {
+		return
+	}
+
+	if !strings.EqualFold(previous.Identity, strings.TrimSpace(who.Subject)) {
+		endSignIn(r.Context(), s.deps, previous, false, func(ended int) *auditrecord.Record {
+			return audit.SessionRevoked(audit.Identified(who.Subject), previous.Identity, "", replacedScope, ended)
+		})
+		return
+	}
+
+	if err = s.deps.SSO.End(r.Context(), previous.ID); err != nil {
 		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be ended",
 			"error", logsafe.Error(err))
 	}
 }
+
+// replacedScope is the audit scope of a sign-in ended because another
+// person signed in in the same browser.
+const replacedScope = "replaced by another sign-in in the same browser"
 
 // account sends an old bookmark to the console's page for the person.
 //
