@@ -46,6 +46,9 @@ type SessionsService struct {
 	// issuer's token, verified against this issuer's key: the one caller
 	// whose identity it can establish without asking anyone.
 	verify func(ctx context.Context, bearer string) (identity string, groups []string, err error)
+	// announce tells clients their sign-in ended (Back-Channel Logout).
+	// It is the announcer the sign-out path uses; nil tells nobody.
+	announce func(context.Context, []Session)
 }
 
 var _ accessissuerv1connect.SessionServiceHandler = (*SessionsService)(nil)
@@ -460,8 +463,21 @@ func (s *SessionsService) RevokeSessions(
 	// half-sign-out that looks exactly like a whole one. Naming a client
 	// is narrower on purpose and leaves the sign-in alone.
 	if clientID == "" && s.sso != nil {
-		if _, err = s.sso.EndFor(ctx, identity); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+		_, involved, endErr := s.sso.EndForInvolving(ctx, identity)
+
+		// The clients signed in under these browsers without a refresh
+		// token (`openid` alone) hold no session the revoke above could
+		// name, so only the sign-in knows them. Best effort, as at
+		// sign-out: the sign-ins have ended either way, and whatever was
+		// collected before a failure is still told, because a retry
+		// cannot find what was already dropped. Every live chain was
+		// just revoked, so there is none to spare.
+		if s.announce != nil && len(involved) > 0 {
+			s.announce(ctx, involved)
+		}
+
+		if endErr != nil {
+			return nil, connect.NewError(connect.CodeInternal, endErr)
 		}
 	}
 
