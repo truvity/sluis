@@ -251,7 +251,8 @@ func TestTheSSMRootIsTheDocumentsSecretsRoot(t *testing.T) {
 		want string
 	}{
 		"the document's root": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example", sel: ssm(nil)}, ""},
-		"the same root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example", sel: ssm(map[string]any{"root": "/sluis/example"})}, ""},
+		"the same root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example",
+			sel: ssm(map[string]any{"root": "/sluis/example"})}, ""},
 		"another root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example",
 			sel: ssm(map[string]any{"root": "/sluis/staging"})}, "one root"},
 		"no root at all":        {Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: ssm(nil)}, "no root"},
