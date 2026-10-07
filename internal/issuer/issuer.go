@@ -45,6 +45,11 @@ type Config struct {
 	// HoldWindow is how long an identity keeps its last-known groups while
 	// the hub cannot be vouched for.
 	HoldWindow time.Duration
+	// Agent are the lifetimes of agent-class chains, in place of
+	// RefreshLifetime and AbsoluteLifetime for them: `lifetimes.agent`.
+	// Zero fields take the defaults ([DefaultAgentRefresh] and the rest);
+	// [CheckAgentLifetimes] is what refuses a value at load.
+	Agent AgentLifetimes
 	// AllowInsecure permits an http:// issuer URL. The library refuses
 	// one by default and is right to: every token this service signs is
 	// bearer credential, and an issuer reached over plaintext can be
@@ -129,6 +134,7 @@ func (c Config) withDefaults() Config {
 	if c.GroupsScoping == "" {
 		c.GroupsScoping = GroupsScopingReport
 	}
+	c.Agent = c.Agent.withDefaults()
 	return c
 }
 

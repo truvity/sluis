@@ -524,3 +524,29 @@ func TestTheOneServiceDocumentNamesThePolicy(t *testing.T) {
 		t.Error("the policy the document names was not read")
 	}
 }
+
+// lifetimes.agent is a closed block of three durations: it loads into the
+// document as written, and a key it does not have fails the file, so a
+// misspelt agent lifetime cannot silently become the default.
+func TestTheAgentLifetimesBlockLoadsAndIsClosed(t *testing.T) {
+	head := "apiVersion: " + config.APIVersion("serve") + "\n" + minimalIssuer
+	doc, err := config.Load[config.Serve](write(t, head+
+		"lifetimes: {agent: {refresh: 48h, absolute: 96h, access: 10m}}\n"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	agent := doc.Lifetimes.Agent
+	if agent == nil || agent.Refresh.D() != 48*time.Hour || agent.Absolute.D() != 96*time.Hour || agent.Access.D() != 10*time.Minute {
+		t.Errorf("lifetimes.agent = %+v, want refresh 48h, absolute 96h, access 10m", agent)
+	}
+
+	for name, extra := range map[string]string{
+		"an unknown key":                 "lifetimes: {agent: {idle: 48h}}\n",
+		"a duration that is not one":     "lifetimes: {agent: {absolute: a month}}\n",
+		"a zero agent absolute lifetime": "lifetimes: {agent: {absolute: 0}}\n",
+	} {
+		if _, err := config.Load[config.Serve](write(t, head+extra)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}

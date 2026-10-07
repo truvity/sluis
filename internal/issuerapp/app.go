@@ -108,6 +108,9 @@ type Config struct {
 	refreshLifetime  time.Duration
 	absoluteLifetime time.Duration
 	holdWindow       time.Duration
+	// agentLifetimes are `lifetimes.agent`, held to
+	// [issuer.CheckAgentLifetimes] at load.
+	agentLifetimes issuer.AgentLifetimes
 
 	// keyActivationDelay, keyOverlap and keyPollInterval govern live
 	// signing-key rotation; see [issuer.KeyRingConfig] and
@@ -245,6 +248,20 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 			"lifetimes.absolute (%s) must be at least lifetimes.token (%s): "+
 				"an access token cannot outlive the session that grants it",
 			c.absoluteLifetime, c.tokenLifetime)
+	}
+	// The agent class's own. Unset is the default; a value the file states
+	// is checked as stated, so a zero is refused rather than defaulted.
+	agent := l.Agent
+	if agent == nil {
+		agent = &config.AgentLifetimes{}
+	}
+	c.agentLifetimes = issuer.AgentLifetimes{
+		Refresh:  dur(agent.Refresh, issuer.DefaultAgentRefresh),
+		Absolute: dur(agent.Absolute, issuer.DefaultAgentAbsolute),
+		Access:   dur(agent.Access, issuer.DefaultAgentAccess),
+	}
+	if err = issuer.CheckAgentLifetimes(c.agentLifetimes); err != nil {
+		return Config{}, err
 	}
 	k := f.SigningKey
 	if k == nil {
@@ -504,6 +521,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 			return nil, err
 		}
 	}
+	warnAgentClasses(ctx, set, cfg.absoluteLifetime, log)
 
 	directory := deps.Directory
 	if directory == nil {
@@ -527,6 +545,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		RefreshLifetime:  cfg.refreshLifetime,
 		AbsoluteLifetime: cfg.absoluteLifetime,
 		HoldWindow:       cfg.holdWindow,
+		Agent:            cfg.agentLifetimes,
 		AllowInsecure:    cfg.allowInsecure,
 		GroupsScoping:    cfg.groupsScoping,
 	}, set, directory, shared)
@@ -1636,6 +1655,38 @@ func warnBroadAWSMatchers(ctx context.Context, set *policy.Set, log *slog.Logger
 	if broad := BroadAWSMatchers(set); len(broad) > 0 {
 		log.WarnContext(ctx, "aws matchers with no role (or a bare *) admit EVERY role of the account, "+
 			"including roles created later: name the role unless that is meant", "groups", broad)
+	}
+}
+
+// LengtheningResources lists, sorted, the resources whose `absolute_cap`
+// lengthens the installation's `lifetimes.absolute` under the read-only
+// exception that docs/decisions/0040-agent-class-sessions.md deprecates.
+func LengtheningResources(set *policy.Set, absolute time.Duration) []string {
+	var out []string
+	for _, row := range set.Resources() {
+		if row.LengthensAbsolute(absolute) {
+			out = append(out, row.ID)
+		}
+	}
+	return out
+}
+
+// warnAgentClasses says at start what the policy declares about session
+// classes that is accepted but probably not meant: an agent client that
+// also describes a browser-facing application, and a read-only resource
+// still lengthening the absolute limit, which agent class replaces.
+func warnAgentClasses(ctx context.Context, set *policy.Set, absolute time.Duration, log *slog.Logger) {
+	if clients := set.BrowserFacingAgents(); len(clients) > 0 {
+		log.WarnContext(ctx, "clients declare session: agent and also signed_out or backchannel_logout_uri, "+
+			"which describe an application a person uses in a browser: an agent chain lives a month and "+
+			"is meant for software that holds its own refresh token", "clients", clients)
+	}
+	if resources := LengtheningResources(set, absolute); len(resources) > 0 {
+		log.WarnContext(ctx, "resources carry read_only and an absolute_cap longer than lifetimes.absolute; "+
+			"that lengthening is deprecated and a later minor release refuses it: mark the clients that need "+
+			"a longer chain session: agent, then remove absolute_cap from these resources or lower it to at "+
+			"most lifetimes.absolute (docs/decisions/0040-agent-class-sessions.md)",
+			"resources", resources, "absolute", absolute.String())
 	}
 }
 
