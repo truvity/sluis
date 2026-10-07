@@ -1512,3 +1512,84 @@ func TestEverySchedulePointsAtTheOneFunction(t *testing.T) {
 		t.Errorf("%d invoke configs, want one: a pass that failed is the next tick's", n)
 	}
 }
+
+// A paused schedule is declared, DISABLED, and everything else stays: its
+// expression, its target, the scheduler's role and the function's grants (the
+// export/* write the exports need included), so that turning it on is one
+// setting and no grant changes with it.
+func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T) {
+	const scheduleType = "aws:scheduler/schedule:Schedule"
+	targets := estate{orgs: []string{"acme", "github:links"}, workspaces: []string{"T1"}}
+	running, _ := mustLambda(t, targets)
+	all := targets
+	all.mutate = func(a *arp.LambdaArgs) {
+		a.Schedule.Paused, a.Exports.Paused, a.DirectoryRefresh.Paused = true, true, true
+	}
+	paused, _ := mustLambda(t, all)
+
+	if got, want := schedules(t, paused), schedules(t, running); !reflect.DeepEqual(got, want) || len(got) != 5 {
+		t.Errorf("paused schedules %v, want the running ones %v", got, want)
+	}
+	for _, s := range running.ofType(scheduleType) {
+		if v := prop(s, "state"); !v.IsNull() {
+			t.Errorf("%s: a running schedule declares state %v: it is left to the default, as before", s.Name, v)
+		}
+	}
+	for _, s := range paused.ofType(scheduleType) {
+		if v := prop(s, "state"); !v.IsString() || v.StringValue() != "DISABLED" {
+			t.Errorf("%s: state %v, want DISABLED", s.Name, v)
+		}
+	}
+	if got, want := rolePolicy(t, paused), rolePolicy(t, running); !reflect.DeepEqual(got, want) {
+		t.Errorf("pausing changed the function's grants:\n%v\n--- want ---\n%v", got, want)
+	}
+	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
+	export := []string{ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
+	for _, action := range []string{"ssm:PutParameter", "ssm:GetParametersByPath"} {
+		for _, arn := range export {
+			if !slices.Contains(rolePolicy(t, paused)[action], arn) {
+				t.Errorf("with the exports paused the role lost %s on %s", action, arn)
+			}
+		}
+	}
+	sp := func(rec *recorder) string {
+		return prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()
+	}
+	if sp(paused) != sp(running) {
+		t.Errorf("pausing changed the scheduler's role: %s", sp(paused))
+	}
+
+	// Each kind pauses on its own.
+	for name, c := range map[string]struct {
+		pause    func(*arp.LambdaArgs)
+		disabled []string
+	}{
+		"ticks": {func(a *arp.LambdaArgs) { a.Schedule.Paused = true },
+			[]string{"sluis-github-acme", "sluis-github-github-links", "sluis-slack-T1"}},
+		"exports":           {func(a *arp.LambdaArgs) { a.Exports.Paused = true }, []string{"sluis-exports"}},
+		"directory refresh": {func(a *arp.LambdaArgs) { a.DirectoryRefresh.Paused = true }, []string{"sluis-directory-refresh"}},
+	} {
+		e := targets
+		e.mutate = c.pause
+		rec, _ := mustLambda(t, e)
+		var got []string
+		for _, s := range rec.ofType(scheduleType) {
+			if v := prop(s, "state"); v.IsString() && v.StringValue() == "DISABLED" {
+				got = append(got, prop(s, "name").StringValue())
+			}
+		}
+		if !reflect.DeepEqual(sortedCopy(got), sortedCopy(c.disabled)) {
+			t.Errorf("%s: disabled %v, want %v", name, got, c.disabled)
+		}
+	}
+
+	// Disabled leaves a schedule out and Paused declares it: one or the other.
+	for name, mutate := range map[string]func(*arp.LambdaArgs){
+		"exports":           func(a *arp.LambdaArgs) { a.Exports.Disabled, a.Exports.Paused = true, true },
+		"directory refresh": func(a *arp.LambdaArgs) { a.DirectoryRefresh.Disabled, a.DirectoryRefresh.Paused = true, true },
+	} {
+		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil || !strings.Contains(err.Error(), "set one") {
+			t.Errorf("%s disabled and paused: %v", name, err)
+		}
+	}
+}

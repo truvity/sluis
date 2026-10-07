@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library's Lambda shape publishes an earlier signer's public keys as verify-only: `LambdaArgs.VerifyOnly`.** An estate moving an existing issuer onto the Lambda shape can keep the tokens the old issuer signed verifying for the overlap after the switch, as the chart's `signingKey.verifyOnly` does on Kubernetes. Each `VerifyOnlyKeyArgs` is a `PEM` (one `PUBLIC KEY`, `RSA PUBLIC KEY` or `CERTIFICATE` block, RSA or ECDSA), an optional `KeyID` and `Alg`, and a required `Until`. The configuration layer holds each at `/opt/sluis/verify-keys/<index>.pem` (`VerifyOnlyKeyPath`), and the library writes `signingKey.verifyOnly` into the service document naming them, with `kid`, `alg` and `until` in RFC 3339, whether the document is rendered from an `Installation` or given as `Config`. A private key (or anything that says PRIVATE), two keys in one PEM, the same key or `kid` twice, an `Alg` the key does not sign with and a zero `Until` are refused before anything is published, and the error never quotes the key. `signingKey.verifyOnly` is the library's on Lambda: a `Config` or an `Installation` that names it is refused, since the files it names are not in the layer. A stack that sets no `VerifyOnly` publishes the same layer as before.
+- **The Lambda shape's schedules can be declared paused: `Schedule.Paused`, `Exports.Paused`, `DirectoryRefresh.Paused`.** A paused schedule is declared with EventBridge Scheduler's `state: DISABLED`, and everything else stays: its expression and target, the scheduler's role and the function's grants, the `export/*` read and write included. An estate preparing a cutover deploys the destination with its controllers' ticks, the exports and the directory refresh paused, and turns them on with one setting whose preview changes only each schedule's state. Unset, a schedule declares no state (the default, enabled), so an existing stack shows no change. `Paused` with `Disabled` is refused.
+
 ## v1.69.0
 
 ### Added

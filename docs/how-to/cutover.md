@@ -36,6 +36,17 @@ preset (DynamoDB for State, SSM for secrets, S3 for the controllers' reports), w
   `signingKey.activationDelay`; token requests fail closed until then. For the cutover's Lambda configuration set it to
   its minimum, equal to the poll interval (for example `30s`). Expect about 30 to 60 seconds with no new tokens after the
   switch.
+- **Tokens the old issuer signed with a key that does not move.** `sluis migrate` carries a file key ring's schedule, so
+  its public half stays published. A key it does not carry (an issuer whose keys stay where they are, a key ring the
+  destination does not read) is published with `LambdaArgs.VerifyOnly` instead: the old public keys, each with the
+  `kid` its tokens carry and an `Until` at least the switch plus the longest token lifetime plus a verifier's JWKS cache.
+  The library puts them in the configuration layer and names them in `signingKey.verifyOnly`, as the chart does
+  ([the Pulumi library](../reference/pulumi-library.md#inputs-lambdaargs)). Only public keys: a private one is refused.
+  Remove them after `Until`; past it they are not published anyway.
+- **Declare the schedules paused.** Until the switch the old installation's controllers and exports are the ones that
+  run. Deploy the destination with `Schedule.Paused`, `Exports.Paused` and `DirectoryRefresh.Paused` set: every
+  schedule exists, disabled, with the scheduler's role and the function's grants (the `export/*` write included), and
+  turning them on in step 6 is one setting whose preview changes only each schedule's state.
 - **A first smoke start of the new installation writes `console/session-key`.** The real run then needs `--overwrite`.
 - **The Pulumi library's require pin is automatic.** Nobody bumps `deploy/pulumi/go.mod` by hand before a tag
   ([CONTRIBUTING](../../CONTRIBUTING.md), `hack/pin-pulumi-require.sh`); do not do it for a cutover either.
@@ -106,11 +117,12 @@ Add `--overwrite` only when the destination holds a value the source's must repl
 
 ### 6. Switch
 
-**Run** point DNS at the new origin.
+**Run** point DNS at the new origin, then unset the schedules' `Paused` and apply.
 **Expect** people sign in again; a token issued before the cutover still verifies; the first new tokens come after the
 activation delay.
-**Verify** sign in, `accessctl login` or your own client, and the [health page](check-health.md).
-**Rollback**: point DNS back and scale the old Deployment up. The legacy data does not have what the new installation
+**Verify** sign in, `accessctl login` or your own client, and the [health page](check-health.md); the preview of the
+schedules' apply changes their state and nothing else.
+**Rollback**: set `Paused` again and apply, point DNS back and scale the old Deployment up. The legacy data does not have what the new installation
 wrote since the switch; to carry it back, freeze the new writers and run `sluis migrate` the other way round with
 `--overwrite` ([rollback](migrate-state.md#rollback)).
 
