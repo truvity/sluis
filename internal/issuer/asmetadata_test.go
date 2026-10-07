@@ -33,7 +33,7 @@ func asMetadataHandler(t *testing.T, issuerURL string, documents bool) http.Hand
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
-	handler, err := issuer.Handler(iss, storage)
+	handler, err := handler(iss, storage)
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
