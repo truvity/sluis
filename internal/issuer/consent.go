@@ -1,11 +1,14 @@
 package issuer
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/logsafe"
@@ -66,11 +69,35 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 		return true
 	}
 
+	nonce, err := scriptNonce()
+	if err != nil {
+		s.deps.log().ErrorContext(r.Context(), "a consent page's script nonce could not be drawn", "error", logsafe.Error(err))
+		http.Error(w, "the sign-in could not be completed", http.StatusInternalServerError)
+
+		return true
+	}
+
 	http.SetCookie(w, access.AgentConsentCookie(token, s.deps.Secure, signInWindow))
 	noFraming(w)
-	s.page(w, "Allow a background connection?", agentConsentBody(s.pendingOf(request), who, token))
+	// The page's one script is its own, by nonce; nothing else runs here.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; script-src 'nonce-"+nonce+"'")
+	s.page(w, "Allow a background connection?", agentConsentBody(s.pendingOf(request), who, token, nonce))
 
 	return true
+}
+
+// allowArmDelay is how long the consent page must have been visible before
+// its Allow button takes a click.
+const allowArmDelay = 500 * time.Millisecond
+
+// scriptNonce is a fresh nonce for one page's inline script.
+func scriptNonce() (string, error) {
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+
+	return base64.RawStdEncoding.EncodeToString(raw), nil
 }
 
 // noFraming refuses to let the page be shown inside another one: a
@@ -85,7 +112,14 @@ func noFraming(w http.ResponseWriter) {
 // back to, that it is a background connection, the computed deadline and
 // who is signed in. Every word comes from the policy, the pending request
 // and the sign-in, none from the query string.
-func agentConsentBody(pending Pending, who Authenticated, token string) string {
+//
+// The Allow button is inert until the page has been VISIBLE for
+// [allowArmDelay] (DoubleClickjacking: a page that opens this one under the
+// person's cursor between the two clicks of a double-click would otherwise
+// have the second click land on Allow). It is disabled in the markup, so
+// keyboard and pointer alike wait, and the script disables it again
+// whenever the page is hidden.
+func agentConsentBody(pending Pending, who Authenticated, token, nonce string) string {
 	name := html.EscapeString(pending.Client.Title(pending.ClientID))
 
 	var out strings.Builder
@@ -123,10 +157,14 @@ func agentConsentBody(pending Pending, who Authenticated, token string) string {
 	fmt.Fprintf(&out, `<p class="note">Signed in as <strong>%s</strong></p>`, html.EscapeString(who.Subject))
 	fmt.Fprintf(&out, `<form method="post" action="%s">
 		<input type="hidden" name="state" value="%s">
-		<p><button type="submit">Allow</button></p>
+		<p><button type="submit" id="allow" disabled>Allow</button></p>
 	</form>
-	<p class="note">If you did not just start this, close this page. To end a connection later, use the console's Sessions page or sign out everywhere.</p>`,
-		agentConsentPath, html.EscapeString(token))
+	<noscript><p class="warn">Allowing a background connection needs JavaScript in this browser.</p></noscript>
+	<script nonce="%s">(function(){var b=document.getElementById("allow"),armed=0;
+	function arm(){var mine=++armed;b.disabled=true;if(document.visibilityState==="visible"){setTimeout(function(){if(mine===armed&&document.visibilityState==="visible"){b.disabled=false;}},%d);}}
+	document.addEventListener("visibilitychange",arm);arm();})();</script>
+	<p class="note">If you did not just start this, close this page. To end a connection later, use the console's Sessions page or <em>Disconnect all agents</em>.</p>`,
+		agentConsentPath, html.EscapeString(token), nonce, allowArmDelay.Milliseconds())
 
 	return out.String()
 }

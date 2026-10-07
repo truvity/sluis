@@ -296,7 +296,7 @@ func TestTheConsentPageRefusesToBeFramed(t *testing.T) {
 	token := tokenOn(t, page)
 
 	check := func(what string, header http.Header) {
-		if got := header.Get("Content-Security-Policy"); got != "frame-ancestors 'none'" {
+		if got := header.Get("Content-Security-Policy"); !strings.HasPrefix(got, "frame-ancestors 'none'") {
 			t.Errorf("%s: Content-Security-Policy = %q, want frame-ancestors 'none'", what, got)
 		}
 		if got := header.Get("X-Frame-Options"); got != "DENY" {
@@ -518,5 +518,46 @@ func TestTheSignInRecordCarriesTheClassAndDeadline(t *testing.T) {
 		if want := time.Now().Add(lasts); deadline.Before(want.Add(-time.Minute)) || deadline.After(want.Add(time.Minute)) {
 			t.Errorf("the %s sign-in's deadline is %s, want about %s", class, deadline, want)
 		}
+	}
+}
+
+// DoubleClickjacking: the Allow button is disabled in the markup and armed
+// only by the page's own script, half a second after the page is visible,
+// and disarmed whenever it is hidden; the script runs by a nonce the
+// page's Content-Security-Policy names, so no other script runs there.
+func TestTheAllowButtonIsInertUntilThePageHasBeenVisible(t *testing.T) {
+	t.Parallel()
+
+	server, _ := signInServerWith(t, "ada@north.example", consentPolicy())
+	b := newBrowser(t, server)
+
+	request, _, _, _ := agentAuthorize(b, "")
+	_, _, page, header := providerRoundTrip(b, request)
+	tokenOn(t, page)
+
+	if !strings.Contains(page, `<button type="submit" id="allow" disabled>`) {
+		t.Errorf("the Allow button is not disabled in the markup: %s", page)
+	}
+
+	nonce := regexp.MustCompile(`<script nonce="([^"]+)">`).FindStringSubmatch(page)
+	if nonce == nil {
+		t.Fatalf("no nonce'd script on the page: %s", page)
+	}
+
+	if got, want := header.Get("Content-Security-Policy"), "frame-ancestors 'none'; script-src 'nonce-"+nonce[1]+"'"; got != want {
+		t.Errorf("Content-Security-Policy = %q, want %q", got, want)
+	}
+
+	for _, want := range []string{`visibilitychange`, `document.visibilityState==="visible"`, `b.disabled=false`, `},500);`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the script does not arm on visibility after 500 ms (%q): %s", want, page)
+		}
+	}
+
+	// A fresh nonce on every page.
+	request, _, _, _ = agentAuthorize(b, "")
+	_, _, again, _ := b.send(http.MethodGet, "/login?auth="+url.QueryEscape(request), nil)
+	if other := regexp.MustCompile(`<script nonce="([^"]+)">`).FindStringSubmatch(again); other == nil || other[1] == nonce[1] {
+		t.Errorf("the nonce was reused: %v", other)
 	}
 }
