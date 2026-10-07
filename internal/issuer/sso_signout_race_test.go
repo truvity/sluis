@@ -1,9 +1,11 @@
 package issuer_test
 
 import (
+	"context"
 	"maps"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/truvity/sluis/internal/issuer"
@@ -74,5 +76,89 @@ func TestACodeCompletedUnderASignInThatHasSinceEndedOpensNothing(t *testing.T) {
 				t.Errorf("%d sessions opened under a sign-in that had ended (%d before the sign-out)", n, opened)
 			}
 		})
+	}
+}
+
+// A sign-out ends the sign-in BEFORE it revokes and announces. It used to
+// end it last, so the sign-in stood through the revocation and every
+// Back-Channel Logout -- seconds each -- and a code redeemed in that
+// window opened a session after the revocation had listed them, which no
+// sign-out could reach any more.
+func TestACodeRedeemedWhileASignOutIsAnnouncingOpensNothing(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORig(t, issuer.Config{})
+	b, _ := rig.signedInBrowser(t)
+
+	sentTo := b.authorizeWith(map[string]string{"scope": "openid offline_access"}, "")
+	if strings.Contains(sentTo, "/login/") {
+		t.Fatalf("the silent sign-in went to %q", sentTo)
+	}
+
+	var (
+		once   sync.Once
+		status int
+		body   map[string]any
+	)
+
+	rig.mu.Lock()
+	rig.duringAnnounce = func() {
+		once.Do(func() { status, body = redeemAnswer(t, b, sentTo) })
+	}
+	rig.mu.Unlock()
+
+	tab := newBrowser(t, rig.server)
+	tab.cookies = maps.Clone(b.cookies)
+
+	if code, _, _ := tab.do(http.MethodGet, "/logout"); code != http.StatusFound {
+		t.Fatalf("sign-out: %d", code)
+	}
+
+	if status == 0 {
+		t.Fatal("the sign-out announced nothing, so the code was never redeemed during it")
+	}
+
+	if status != http.StatusBadRequest || body["error"] != "invalid_grant" {
+		t.Errorf("redeeming while the sign-out announced = %d %v, want 400 invalid_grant", status, body["error"])
+	}
+
+	if n := rig.sessionsOf(ssoEmail); n != 0 {
+		t.Errorf("%d sessions outlived the sign-out they were opened during", n)
+	}
+}
+
+// A code redeemed while its sign-in ends is held to the sign-in AFTER its
+// session is filed: one that ends between the code's first look and the
+// session's write is found ended by the second, and the session goes.
+func TestASignInEndingWhileTheSessionIsFiledLeavesNoSession(t *testing.T) {
+	t.Parallel()
+
+	rig := newSSORig(t, issuer.Config{})
+	b, id := rig.signedInBrowser(t)
+
+	sentTo := b.authorizeWith(map[string]string{"scope": "openid offline_access"}, "")
+	if strings.Contains(sentTo, "/login/") {
+		t.Fatalf("the silent sign-in went to %q", sentTo)
+	}
+
+	var once sync.Once
+
+	rig.state.setOnWrite(func(key string) {
+		if strings.HasPrefix(key, "issuer:session:") {
+			once.Do(func() {
+				if err := rig.iss.SSO().End(context.Background(), id); err != nil {
+					t.Errorf("end the sign-in: %v", err)
+				}
+			})
+		}
+	})
+
+	status, body := redeemAnswer(t, b, sentTo)
+	if status != http.StatusBadRequest || body["error"] != "invalid_grant" {
+		t.Errorf("redeeming as the sign-in ended = %d %v, want 400 invalid_grant", status, body["error"])
+	}
+
+	if n := rig.sessionsOf(ssoEmail); n != 0 {
+		t.Errorf("%d sessions filed under a sign-in that ended as they were written", n)
 	}
 }

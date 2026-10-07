@@ -742,53 +742,56 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 		return nil, err
 	}
 
-	if err = s.signInStands(ctx, request); err != nil {
-		return nil, err
-	}
-
 	return request, nil
 }
 
 // errSignInEnded refuses a code whose request was completed under a
-// browser sign-in that has ended since.
-var errSignInEnded = errors.New("the sign-in this code was issued under has ended")
+// browser sign-in that has ended since. A fresh error each time: the
+// library's errors are pointers it may annotate.
+func errSignInEnded() error {
+	return oidc.ErrInvalidGrant().WithDescription("the sign-in this code was issued under has ended")
+}
 
-// signInStands refuses a code completed under a browser sign-in that is no
-// longer there, before anything is opened from it.
+// signInEnded reports whether the browser sign-in a code was completed
+// under has ended, read AFTER what the code opens has been written.
 //
 // A silent sign-in reads the browser's sign-in and then completes the
 // request; a sign-out in another tab can land in between, or anywhere
-// before the relying party redeems the code. Sign-out ends the sessions
-// filed under the sign-in and then the sign-in itself, so a session this
-// code opened afterwards would be filed under a sign-in nothing can end
-// any more: it would outlive the sign-out the person just made, and no
-// later sign-out would reach it. Here is where every completion, silent
-// or interactive, becomes a session or an ID token, so this is the one
-// place to ask.
+// before the relying party redeems the code. What the code opens after
+// the sign-out has listed the sessions would be filed under a sign-in
+// nothing can end any more: it would outlive the sign-out the person just
+// made, and no later sign-out would reach it.
 //
-// One read per code redemption under a sign-in, and none on a refresh:
-// a session that exists was filed while its sign-in stood, and sign-out
-// reaches it. What is left is the moment between this read and the
-// session's write, against a sign-out that has to fall entirely inside
-// it.
-func (s *Storage) signInStands(ctx context.Context, request *authRequest) error {
-	if request.SSO == "" || s.iss.SSO() == nil {
-		return nil
+// So the order is what closes it, on both sides. Sign-out ends the sign-in
+// first and then lists and revokes its sessions ([endSignIn]); a code
+// writes its session first and then reads the sign-in. Either this read
+// comes after the end, and the code ends what it wrote, or it comes
+// before, and so did the write, which the sign-out's listing then finds.
+// A read BEFORE the write would leave the write after a sign-out that had
+// read it as live. The same for a client that asked for `openid` alone:
+// the client is recorded among the sign-in's first, then the sign-in is
+// read, and only a sign-out whose two adjacent store calls (reading the
+// clients, ending the sign-in) straddle both goes untold.
+//
+// One read per code redemption under a sign-in, and none on a refresh: a
+// session that exists was filed while its sign-in stood, and sign-out
+// reaches it.
+func (s *Storage) signInEnded(ctx context.Context, sso, clientID string) (bool, error) {
+	if sso == "" || s.iss.SSO() == nil {
+		return false, nil
 	}
 
-	_, live, err := s.iss.SSO().Get(ctx, request.SSO)
+	_, live, err := s.iss.SSO().Get(ctx, sso)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if !live {
 		s.logger().InfoContext(ctx, "refused an authorization code: the sign-in it was completed under has ended",
-			"client", request.Req.ClientID)
-
-		return errSignInEnded
+			"client", clientID)
 	}
 
-	return nil
+	return !live, nil
 }
 
 // revokeCodeSession ends the session one authorization code opened, on
@@ -1076,6 +1079,21 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
 	}
 
+	// The sign-in it was opened under, read once the session is filed
+	// ([Storage.signInEnded]): a session filed under a sign-in that has
+	// ended since is ended here, by the only thing that knows it exists.
+	ended, err := s.signInEnded(ctx, session.SSO, session.ClientID)
+	if err != nil || ended {
+		if _, revokeErr := s.iss.Sessions().RevokeID(ctx, session.ID); revokeErr != nil {
+			s.logger().WarnContext(ctx, "a session opened under an ended sign-in could not be ended",
+				"error", logsafe.Error(revokeErr))
+		}
+		if err != nil {
+			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
+		}
+		return "", "", time.Time{}, errSignInEnded()
+	}
+
 	// The ACCESS token names it too, so that revoking the session stops
 	// `userinfo` answering with a token already in circulation. Written
 	// after the session exists, because that is when its id does -- and
@@ -1165,6 +1183,20 @@ func (s *Storage) SetUserinfoFromRequest(
 	if sso := ssoOf(request); sso != "" && s.iss.SSO() != nil && !involvedAhead(request) {
 		if err = s.iss.SSO().Involve(ctx, sso, request.GetClientID()); err != nil {
 			return err
+		}
+
+		// A code that opened no session -- `openid` alone -- is held to
+		// its sign-in here, once the client is recorded among its clients
+		// ([Storage.signInEnded]). The access token minted a moment ago
+		// is never handed out: the whole response is refused.
+		if opened, ok := request.(*authRequest); ok && opened.Session == "" {
+			ended, err := s.signInEnded(ctx, sso, opened.Req.ClientID)
+			if err != nil {
+				return err
+			}
+			if ended {
+				return errSignInEnded()
+			}
 		}
 	}
 
