@@ -49,6 +49,7 @@ required=(
     'TestConformance/index/members'
     'TestConformance/trigger/notify'
     'TestGrantCostOnDynamoDB'
+    'TestReuseCostOnDynamoDB'
     'TestAMissingTableIsUnavailableNotNotFound'
     'TestCreatingAnExistingTableIsHarmless'
     'TestTheTableHasTTLOnExpires'
