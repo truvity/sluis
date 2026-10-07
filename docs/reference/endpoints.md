@@ -13,7 +13,7 @@ endpoints, and discovery advertises each in its own field.
 |---|---|---|
 | `/.well-known/openid-configuration`, `/keys` | OIDC discovery, JWKS | what relying parties read |
 | `/authorize`, `/token`, `/userinfo`, `/end_session` | OIDC | login, tokens, RP-initiated logout |
-| `/logout` | ours | the same sign-out for a person rather than a relying party, on GET and on POST. It needs no `id_token_hint`. The console's sign-out button points here |
+| `/logout` | ours | the same sign-out for a person rather than a relying party, on GET and on POST. It needs no `id_token_hint`. The console's sign-out button points here. When the store cannot be read, `/logout` and `/end_session` answer 503 (an HTML retry page, or JSON `temporarily_unavailable`), keep the cookie and end nothing |
 | `/token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` | RFC 8693 | CI and workload exchange; the requested `audience` is a client, gated by its `requires` |
 | `/token`, the same exchange with `requested_token_type=urn:access-roster:params:oauth:token-type:github-installation-token` and `audience=github-app:<id>` | RFC 8693 | a GitHub App installation token of a catalogue App, under its grants ([contract](contracts.md#installation-tokens-at-token)) |
 | `/revoke` | RFC 7009 | revokes a refresh token; what Revoke and "sign out everywhere" call underneath |
