@@ -47,6 +47,15 @@ cross:
 test: console
     go test ./... -coverprofile=coverage.out
 
+# The whole module under the race detector. Not part of `check`: -race
+# needs cgo and recompiles every package instrumented, which makes the
+# run several times slower than `test`, and a push should not pay that;
+# CI runs it as its own job. devbox forces CGO_ENABLED=0 and the race
+# detector refuses to run without cgo, so it is switched back on here
+# (gcc is in devbox). `console` first for the same reason as `test`.
+test-race: console
+    env CGO_ENABLED=1 go test -race ./...
+
 # The LocalStack the S3 Blob and DynamoDB State adapters are tested against. Pinned
 # by digest, and the community 4.x line: LocalStack's `latest` and `stable` now
 # resolve to a licensed build that exits without a token, which would fail every
