@@ -119,6 +119,14 @@ type authRequest struct {
 	// can find everything opened from it.
 	SSO string `json:"sso,omitempty"`
 
+	// Class is the class of the chain this request opens, decided ONCE
+	// from the policy when the request is completed ([Storage.Complete])
+	// and taken from here at code redemption ([Sessions.Record]), never
+	// from the policy then: a policy change between the two cannot open a
+	// chain of a class the completion did not decide. Empty, as a request
+	// completed before classes existed has it, is interactive.
+	Class SessionClass `json:"class,omitempty"`
+
 	// Session is the session this request opened, learned when the code
 	// is redeemed and used one step later to put `sid` in the ID token.
 	// It is not written down with the rest: the library hands the SAME
@@ -874,6 +882,10 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// is the one claim that has to say so — it is what a
 	// re-authenticate-for-this-action rule reads.
 	req.AuthTime, req.SSO, req.How = authTime, who.SSO, who.How
+	// The class of the chain this request opens is decided here, once,
+	// from the policy as it stands now, and travels on the request to the
+	// code's redemption (docs/decisions/0040-agent-class-sessions.md).
+	req.Class = s.classOf(req.Req.ClientID)
 
 	// A recovery sign-in is written down durably before the request is
 	// marked done — a request marked done is one a code can be issued for —
@@ -906,6 +918,51 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 // ErrUnaudited is a recovery sign-in refused because its record could not
 // be written.
 var ErrUnaudited = errors.New("the audit trail could not be written")
+
+// classOf is the session class the policy gives a client NOW: its own row's
+// `session`, or, for a client that describes itself and is admitted by an
+// origin, `client_documents.session`. Never anything a document says about
+// itself: the class is a grant of time the installation makes, not one a
+// client takes. Anything unknown is interactive.
+func (s *Storage) classOf(clientID string) SessionClass {
+	set := s.iss.Policy()
+	if set == nil {
+		return ClassInteractive
+	}
+
+	if declared, ok := set.Client(clientID); ok {
+		if declared.Agent() {
+			return ClassAgent
+		}
+
+		return ClassInteractive
+	}
+
+	documents := set.ClientDocuments()
+	if target, err := documentURL(clientID); err == nil && documents.Enabled() && documents.Permits(target) && documents.Agent() {
+		return ClassAgent
+	}
+
+	return ClassInteractive
+}
+
+// classOfRequest is the class a token request's chain was recorded with:
+// the completed authorization's for a code, the session's for a refresh,
+// and interactive for anything else (an exchange opens no agent chain).
+func classOfRequest(request op.TokenRequest) SessionClass {
+	switch req := request.(type) {
+	case *authRequest:
+		if req.Class == ClassAgent {
+			return ClassAgent
+		}
+	case *refreshRequest:
+		if req.session.Agent() {
+			return ClassAgent
+		}
+	}
+
+	return ClassInteractive
+}
 
 // signInEvent is a completed or refused sign-in at one client. A recovery
 // sign-in is its own kind, because it is the way in that bypasses the
@@ -1097,6 +1154,8 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 		SSO:      ssoOf(request),
 		AuthTime: authTimeOf(request),
 		Involved: involved,
+		// From the completed request, never from the policy now.
+		Class: classOfRequest(request),
 	})
 	if err != nil {
 		return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)

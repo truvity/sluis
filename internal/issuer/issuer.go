@@ -206,8 +206,21 @@ func New(cfg Config, set *policy.Set, dir Directory, state State) *Issuer {
 	if set != nil {
 		i.sessions.SetAbsoluteResolver(i.absoluteForResources)
 	}
+	// And agent-class chains are held to the class's own lifetimes, with a
+	// resource's absolute_cap only ever a ceiling, read the same way.
+	i.sessions.SetAgentLifetimes(cfg.Agent, i.agentAbsoluteForResources)
 
 	return i
+}
+
+// agentAbsoluteForResources is the absolute limit of an agent-class chain
+// that has been used for these resources: lifetimes.agent.absolute, or the
+// shortest absolute_cap among them. See [policy.AgentAbsolute].
+func (i *Issuer) agentAbsoluteForResources(touched []string) time.Duration {
+	if i.set == nil {
+		return i.cfg.Agent.Absolute
+	}
+	return i.set.AgentAbsolute(i.cfg.Agent.Absolute, touched)
 }
 
 // absoluteForResources is the absolute session limit of a chain that has
