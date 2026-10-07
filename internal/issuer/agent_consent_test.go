@@ -522,10 +522,10 @@ func TestTheSignInRecordCarriesTheClassAndDeadline(t *testing.T) {
 }
 
 // DoubleClickjacking: the Allow button is disabled in the markup and armed
-// only by the page's own script, half a second after the page is visible,
-// and disarmed whenever it is hidden; the script runs by a nonce the
+// only by the page's own script, half a second after the page is visible
+// and focused, and disarmed whenever it is hidden or loses focus; the script runs by a nonce the
 // page's Content-Security-Policy names, so no other script runs there.
-func TestTheAllowButtonIsInertUntilThePageHasBeenVisible(t *testing.T) {
+func TestTheAllowButtonIsInertUntilThePageHasBeenVisibleAndFocused(t *testing.T) {
 	t.Parallel()
 
 	server, _ := signInServerWith(t, "ada@north.example", consentPolicy())
@@ -548,9 +548,15 @@ func TestTheAllowButtonIsInertUntilThePageHasBeenVisible(t *testing.T) {
 		t.Errorf("Content-Security-Policy = %q, want %q", got, want)
 	}
 
-	for _, want := range []string{`visibilitychange`, `document.visibilityState==="visible"`, `b.disabled=false`, `},500);`} {
+	for _, want := range []string{
+		`document.visibilityState==="visible"&&document.hasFocus()`, // visible AND focused, checked at load too
+		`addEventListener("visibilitychange",arm)`,
+		`addEventListener("focus",arm)`, // re-armed, the delay started over
+		`addEventListener("blur",arm)`,  // disarmed
+		`b.disabled=true`, `b.disabled=false`, `},500);`,
+	} {
 		if !strings.Contains(page, want) {
-			t.Errorf("the script does not arm on visibility after 500 ms (%q): %s", want, page)
+			t.Errorf("the script does not arm 500 ms after the page is visible and focused (%q): %s", want, page)
 		}
 	}
 

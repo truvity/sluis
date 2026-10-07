@@ -86,8 +86,8 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 	return true
 }
 
-// allowArmDelay is how long the consent page must have been visible before
-// its Allow button takes a click.
+// allowArmDelay is how long the consent page must have been visible and
+// focused before its Allow button takes a click.
 const allowArmDelay = 500 * time.Millisecond
 
 // scriptNonce is a fresh nonce for one page's inline script.
@@ -113,12 +113,13 @@ func noFraming(w http.ResponseWriter) {
 // who is signed in. Every word comes from the policy, the pending request
 // and the sign-in, none from the query string.
 //
-// The Allow button is inert until the page has been VISIBLE for
+// The Allow button is inert until the page has been VISIBLE AND FOCUSED for
 // [allowArmDelay] (DoubleClickjacking: a page that opens this one under the
 // person's cursor between the two clicks of a double-click would otherwise
 // have the second click land on Allow). It is disabled in the markup, so
 // keyboard and pointer alike wait, and the script disables it again
-// whenever the page is hidden.
+// whenever the page is hidden or loses focus, and starts the delay over
+// when it is visible and focused again (document.hasFocus() at load).
 func agentConsentBody(pending Pending, who Authenticated, token, nonce string) string {
 	name := html.EscapeString(pending.Client.Title(pending.ClientID))
 
@@ -161,10 +162,11 @@ func agentConsentBody(pending Pending, who Authenticated, token, nonce string) s
 	</form>
 	<noscript><p class="warn">Allowing a background connection needs JavaScript in this browser.</p></noscript>
 	<script nonce="%s">(function(){var b=document.getElementById("allow"),armed=0;
+	function ready(){return document.visibilityState==="visible"&&document.hasFocus();}
 	function arm(){var mine=++armed;b.disabled=true;
-	if(document.visibilityState==="visible"){setTimeout(function(){
-	if(mine===armed&&document.visibilityState==="visible"){b.disabled=false;}},%d);}}
-	document.addEventListener("visibilitychange",arm);arm();})();</script>
+	if(ready()){setTimeout(function(){if(mine===armed&&ready()){b.disabled=false;}},%d);}}
+	document.addEventListener("visibilitychange",arm);
+	window.addEventListener("focus",arm);window.addEventListener("blur",arm);arm();})();</script>
 	<p class="note">If you did not just start this, close this page. To end a connection later, use the console's
 	Sessions page or <em>Disconnect all agents</em>.</p>`,
 		agentConsentPath, html.EscapeString(token), nonce, allowArmDelay.Milliseconds())
