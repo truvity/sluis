@@ -97,6 +97,40 @@ var Budgets = []Budget{
 		},
 	},
 	{
+		// A refresh token whose session has ended -- here by the operator's
+		// revoke of the person, which deletes the record and leaves the
+		// token's pointer -- presented for the first time: the pointer and
+		// the record it names are read, and that is all. Measured
+		// 2026-10-07 on the memory adapter: 4 reads before the negative
+		// cache (the same two again, to tell an absolute-limit refusal
+		// apart), 2 after; the dead state needs no second look.
+		Grant: "refresh_token (dead)", MaxWrites: 0, MaxReads: 2, Resolutions: 0,
+		drive: func(t *testing.T, h *Harness) Counts {
+			dead := deadRefreshToken(t, h)
+			var refused Tokens
+			counts := h.Measure(func() { refused = h.Refresh(dead) })
+			wantDeadRefused(t, refused)
+			return counts
+		},
+	},
+	{
+		// The same dead refresh token presented again, as a host looping on
+		// an ended chain does: refused from the issuer's in-process
+		// negative cache before anything is read
+		// (docs/decisions/0040-agent-class-sessions.md, decision 10).
+		// Measured 2026-10-07 on the memory adapter and the DynamoDB fake:
+		// 0 writes, 0 reads, no resolution. It was 4 reads before.
+		Grant: "refresh_token (dead, repeated)", MaxWrites: 0, MaxReads: 0, Resolutions: 0,
+		drive: func(t *testing.T, h *Harness) Counts {
+			dead := deadRefreshToken(t, h)
+			wantDeadRefused(t, h.Refresh(dead))
+			var refused Tokens
+			counts := h.Measure(func() { refused = h.Refresh(dead) })
+			wantDeadRefused(t, refused)
+			return counts
+		},
+	},
+	{
 		// One request to the console on this issuer's origin from a browser
 		// already signed in, in steady state. The console decides whether
 		// the browser's sign-in still stands with the issuer's own checks
@@ -157,6 +191,25 @@ var Budgets = []Budget{
 			return counts
 		},
 	},
+}
+
+// deadRefreshToken is a refresh token whose session the operator has ended:
+// its pointer is still stored, the record it names is gone.
+func deadRefreshToken(t *testing.T, h *Harness) string {
+	t.Helper()
+	first := h.Grant()
+	if n, err := h.Issuer.Revoke(context.Background(), Person); err != nil || n != 1 {
+		t.Fatalf("Revoke(person) = %d, %v; want 1 session ended", n, err)
+	}
+	return first.Refresh
+}
+
+// wantDeadRefused is a dead refresh token's answer: invalid_grant.
+func wantDeadRefused(t *testing.T, refused Tokens) {
+	t.Helper()
+	if refused.Status == http.StatusOK || refused.Error != "invalid_grant" {
+		t.Fatalf("a dead refresh token: %d %q, want invalid_grant", refused.Status, refused.Error)
+	}
 }
 
 // Run measures every [Budget] and runs the guards over env, each on an
