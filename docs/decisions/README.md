@@ -60,6 +60,7 @@ is not edited.
 | [0037](0037-one-process-everywhere.md) | One process everywhere: one Lambda function, one Deployment, one service document | Accepted; refined by [0038](0038-estates-render-through-sluis.md); amends [0036](0036-configuration-is-immutable-per-instance.md) (three documents and three Deployments → one unified process) |
 | [0038](0038-estates-render-through-sluis.md) | Estates render their documents through sluis | Accepted; refines [0036](0036-configuration-is-immutable-per-instance.md) (who writes the documents an instance is started with) and [0037](0037-one-process-everywhere.md) (one service document, one policy document) |
 | [0039](0039-the-issuer-generates-confidential-client-secrets.md) | The issuer generates confidential client secrets | Accepted; extends [0038](0038-estates-render-through-sluis.md) (what an estate declares for a client) and refines the client table of the policy document |
+| [0040](0040-agent-class-sessions.md) | Agent-class sessions: a longer chain by client class, not by resource | Proposed; amends [0001](0001-sessions-and-an-absolute-limit.md) (agent-class chains are not held to the installation's absolute limit) and deprecates the lengthening half of [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) |
 <!-- /generated -->
 
 ## Template
