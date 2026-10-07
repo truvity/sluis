@@ -1810,6 +1810,15 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 			return nil, oidc.ErrInvalidGrant().WithDescription("this identity is not admitted to this client")
 		}
 
+		// The directory said, and could vouch for it, that the person is
+		// suspended or gone: a removal, which ends the chain here rather
+		// than leaving it to idle out. A refusal it cannot vouch for is an
+		// outage, which ends nothing and asks the client to try again.
+		var refused *Refused
+		if errors.As(err, &refused) && refused.Authoritative {
+			return nil, s.refuseNotLive(ctx, presented)
+		}
+
 		return nil, oidc.ErrServerError().WithDescription("%s", err)
 	}
 
@@ -1832,6 +1841,47 @@ func (s *Storage) refuseDead(ctx context.Context, sum [sha256.Size]byte, dead bo
 		"client_id", logsafe.Value(presentedClientFrom(ctx)),
 		"token_fingerprint", fingerprint(sum),
 		"remembered", dead)
+}
+
+// refuseNotLive ends a session whose person the directory authoritatively
+// reports suspended or not found, at the refresh that found out: the
+// record, its index membership and the presented token's pointer go, the
+// refusal is audited, and the client is told invalid_grant
+// (docs/decisions/0040-agent-class-sessions.md, decision 5). Every class
+// alike: nothing that ends a session consults it.
+//
+// The pointer of a grace-window replay's successor goes too: it is the
+// chain's live token.
+func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
+	session := p.session
+
+	if err := s.iss.Sessions().deleteSession(ctx, session); err != nil {
+		// Not ended: a server error, so that the client tries again and
+		// the removal is met again.
+		s.logger().WarnContext(ctx, "a session whose person the directory no longer has could not be ended",
+			"client_id", logsafe.Value(session.ClientID), "error", logsafe.Error(err))
+
+		return oidc.ErrServerError().WithDescription("%s", err)
+	}
+
+	for _, token := range []string{p.token, p.successor} {
+		if token == "" {
+			continue
+		}
+
+		if err := s.iss.Sessions().state.Delete(ctx, sessionTokenKey(token)); err != nil {
+			// Ended all the same: every token resolves through the record.
+			s.logger().WarnContext(ctx, "an ended session's refresh token pointer could not be removed",
+				"error", logsafe.Error(err))
+		}
+	}
+
+	s.logger().InfoContext(ctx, "refused a refresh: the directory says the person is not live; the session has been ended",
+		"client_id", logsafe.Value(session.ClientID))
+	s.iss.record(ctx, audit.SessionRefreshRefused(session.Identity, session.ClientID,
+		"the directory says this account is not live"))
+
+	return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
 }
 
 // refreshRequest is a live session presented for renewal.
