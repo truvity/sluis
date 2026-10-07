@@ -348,8 +348,7 @@ func proves(b *browser) bool {
 
 // service is the session contract over this rig's stores.
 func (g *ssoRig) service() *issuer.SessionsService {
-	return issuer.NewSessionsServiceForCookieTest(g.iss.Sessions(), g.iss.SSO(), verifier(),
-		func(context.Context, string) ([]string, error) { return nil, nil })
+	return issuer.NewSessionsServiceForCookieTest(g.iss, verifier())
 }
 
 // 1. After sign-in the cookie value is not the sign-in id, is at least 43
