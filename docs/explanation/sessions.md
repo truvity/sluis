@@ -86,3 +86,20 @@ browser session stands, and the next console they are entitled to costs them no 
 The third check is why the second is not enough on its own. A grant removed after a token was issued would otherwise
 keep working for as long as the refresh token lives; re-checking at renewal ends it at the next refresh instead,
 which for a proxied console is its `ttl_cap`.
+
+## What a refresh costs
+
+Considered for an installation where MCP clients refresh every few minutes, the
+issuer's State traffic per grant is a cost to keep small. Measured in State
+operations, a `refresh_token` grant makes 4 writes and 4 reads, one of the reads
+eventually consistent ([`RevisionPeeker`](../reference/ports.md#peeking-a-revision-optional)),
+and asks the directory once; an `authorization_code` grant makes 9 writes and 4
+reads. The saving comes from not rewriting what has not changed: one directory
+resolution per request, the access-token record written once, the spent refresh
+token marked in its own pointer, and the index sets and the last-known groups
+touched only when needed ([storage layout](../reference/storage-layout.md)).
+
+There is one trade-off. The last-known groups behind the hold window are rewritten
+only when they change, when the stored record is not this process's own write, or
+when it is older than the hold window divided by eight, so a hold can end up to
+an eighth of the hold window early, never late.
