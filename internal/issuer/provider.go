@@ -387,7 +387,11 @@ func endSession(signIn SignInDeps, next http.Handler) http.Handler {
 		if held.succeeded() {
 			if err := SignOut(signIn, w, r); err != nil {
 				// The library's answer is dropped: it would say the
-				// person is signed out, and they are not.
+				// person is signed out, and they are not. Including
+				// what it set on the real header map before its status
+				// was held: a 503 must carry no redirect.
+				w.Header().Del("Location")
+				w.Header().Del("Content-Length")
 				signOutFailed(w, r)
 				return
 			}
