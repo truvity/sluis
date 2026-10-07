@@ -12,7 +12,7 @@ import (
 func TestTheClustersBecomeVerifiers(t *testing.T) {
 	t.Parallel()
 	federation := verify.Federation{Clusters: []verify.FederatedCluster{
-		{Name: "mgmt", Issuer: "https://oidc.eks.example/id/KERNEL"},
+		{Name: "mgmt", Issuer: "https://oidc.eks.example/id/STAGING"},
 		{Name: "devel", Issuer: "https://api.devel.example", JWKSURI: "https://api.devel.example/openid/v1/jwks"},
 	}}
 	verifiers := federation.Verifiers("access-issuer", nil)

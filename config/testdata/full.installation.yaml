@@ -6,7 +6,7 @@ instance: full
 shape: kubernetes
 preset: k8s-aws
 release: sluis
-cluster: kernel
+cluster: staging
 policyFile: /var/run/access-issuer/policy/policy.yaml
 issuer:
   url: https://access.example.test
@@ -29,7 +29,7 @@ openbao:
   address: https://openbao.example.test
   caFile: /var/run/access-issuer/openbao-ca/ca.pem
   mount: secret
-  namespace: kernel
+  namespace: staging
   root: sluis
   auth: {method: kubernetes, mount: kubernetes, role: sluis, tokenFile: /var/run/openbao/token}
 adapters:
@@ -53,12 +53,12 @@ audit: {writer: http://audit.example.svc:8080, tokenFile: /var/run/audit/token, 
 exchange:
   audience: sluis
   clusters:
-    - {name: kernel, issuer: "https://kubernetes.default.svc", jwksUri: "https://kernel.example.test/keys"}
+    - {name: staging, issuer: "https://kubernetes.default.svc", jwksUri: "https://staging.example.test/keys"}
   aws:
     audience: https://access.example.test
     maxAge: 5m
     accounts:
-      - {account: "111122223333", name: kernel, issuer: "https://sts.example.test", jwksUri: "https://sts.example.test/keys", orgId: o-example, algs: [ES384]}
+      - {account: "111122223333", name: staging, issuer: "https://sts.example.test", jwksUri: "https://sts.example.test/keys", orgId: o-example, algs: [ES384]}
   github:
     owners: [example-org]
 apps:
@@ -82,7 +82,7 @@ controllers:
     interval: 15m
     enabledWorkspaces: [example]
 exports:
-  - {name: alerts, source: slack-app, app: alerts, namespace: kernel, path: slack-apps/alerts, interval: 1h}
+  - {name: alerts, source: slack-app, app: alerts, namespace: staging, path: slack-apps/alerts, interval: 1h}
 access:
   groups:
     all:access-roster:operator:

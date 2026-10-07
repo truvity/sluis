@@ -14,7 +14,7 @@ import (
 // is optional in v1beta1, which defaults it, and MANDATORY in v1, so
 // kubectl refused every context this tool had ever written:
 //
-//	error: interactiveMode must be specified for accessctl:hive to use
+//	error: interactiveMode must be specified for accessctl:example to use
 //	exec authentication plugin
 //
 // It refuses before running the plugin, so no amount of looking at tokens
@@ -58,8 +58,8 @@ func TestCredentialArgsInteractiveModeMatchesTheAPIVersion(t *testing.T) {
 func TestCredentialArgsCarriesTheExchangeInputs(t *testing.T) {
 	const (
 		binary   = "/opt/bin/sluisctl"
-		audience = "k8s:hive"
-		issuer   = "https://access.excavador.xyz"
+		audience = "k8s:example"
+		issuer   = "https://access.example.com"
 	)
 	args := credentialArgs(binary, audience, issuer)
 

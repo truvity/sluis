@@ -16,7 +16,7 @@ groups:
   all:grafana:admin:
     members:
       - admin@example.test
-  hive:k8s:admin:
+  example:k8s:admin:
     members:
       - admin@example.test
 lifetimes:

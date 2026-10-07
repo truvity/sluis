@@ -23,7 +23,7 @@ func TestAReportReadsBackAsWritten(t *testing.T) {
 		Teams: []status.Team{{
 			Team: "team-platform",
 			Members: []status.Member{
-				{Email: "ada.lovelace@globex.example", Login: "excavador", Role: status.RoleMaintainer, State: status.StateSynced},
+				{Email: "ada.lovelace@globex.example", Login: "octo-admin", Role: status.RoleMaintainer, State: status.StateSynced},
 				{Email: "a.joiner@globex.example", Role: status.RoleMember, State: status.StatePending, Action: status.ActionInvite},
 				{Email: "a.leaver@globex.example", Login: "leaver", Role: status.RoleMember, State: status.StateHeld,
 					Action: status.ActionRemove, Reason: "the directory cannot vouch for globex.example"},

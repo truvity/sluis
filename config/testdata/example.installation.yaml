@@ -1,9 +1,9 @@
-# A small installation on AWS Lambda, as the opwerm estate's hive is: one
+# A small installation on AWS Lambda, as the acme estate's example is: one
 # function, DynamoDB state, an S3 bucket, SSM secrets, KMS-wrapped signing,
 # the GitHub controller for one organisation and one export. Every name is a
 # placeholder; no value here is a secret.
 apiVersion: sluis.truvity.github.io/installation/v1
-instance: hive
+instance: example
 shape: lambda
 preset: aws-hybrid
 release: access-issuer
@@ -72,7 +72,7 @@ access:
       matchers: [{email_domain: example.test}]
     all:audit:security:
       members: [admin@example.test]
-    hive:k8s:admin:
+    example:k8s:admin:
       members: [admin@example.test]
     all:grafana:admin:
       members: [admin@example.test]

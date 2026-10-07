@@ -14,17 +14,17 @@ import (
 const vocab = `
 vocabulary:
   scopes:
-    kernel: { sensitive: true }
+    core: { sensitive: true }
     prod:   { sensitive: true }
     devel: {}
     stage: {}
     all:   {}
   things:
     k8s:
-      scopes: [kernel, devel, stage, prod]
+      scopes: [core, devel, stage, prod]
       roles: { viewer: [], operator: [viewer], admin: [operator] }
     argocd:
-      scopes: [kernel, devel, stage, prod]
+      scopes: [core, devel, stage, prod]
       roles: { viewer: [], deployer: [viewer], operator: [viewer], admin: [deployer, operator] }
     grafana:
       scopes: [all]
@@ -186,11 +186,11 @@ groups:
 	refusedWith(t, "a wildcard where every one of a thing's scopes is sensitive", `version: 1
 vocabulary:
   scopes:
-    kernel: { sensitive: true }
+    core: { sensitive: true }
     prod:   { sensitive: true }
   things:
     k8s:
-      scopes: [kernel, prod]
+      scopes: [core, prod]
       roles: { viewer: [] }
 groups:
   "*:k8s:viewer": { members: [a@b.example] }
@@ -268,7 +268,7 @@ groups:
 }
 
 // TestWildcardExcludesSensitiveScopes proves the running example: a
-// caller matched by `*:k8s:admin` is in devel and stage, never kernel or
+// caller matched by `*:k8s:admin` is in devel and stage, never core or
 // prod, which are marked sensitive.
 func TestWildcardExcludesSensitiveScopes(t *testing.T) {
 	t.Parallel()
@@ -292,7 +292,7 @@ groups:
 			t.Errorf("groups = %v, missing %q", got.Groups, want)
 		}
 	}
-	for _, sensitive := range []string{"kernel:k8s:admin", "prod:k8s:admin"} {
+	for _, sensitive := range []string{"core:k8s:admin", "prod:k8s:admin"} {
 		if got.Has(sensitive) {
 			t.Errorf("groups = %v, a wildcard reached the sensitive scope in %q", got.Groups, sensitive)
 		}
@@ -505,13 +505,13 @@ clients:
 const sshVocab = `
 vocabulary:
   scopes:
-    kernel: {}
+    core: {}
     devel: {}
     stage: {}
     prod: {}
   things:
     ssh:
-      scopes: [kernel, devel, stage, prod]
+      scopes: [core, devel, stage, prod]
       roles:
         admin: []
         user: { scopes: [devel] }
@@ -591,15 +591,15 @@ groups:
 vocabulary:
   scopes:
     devel: {}
-    kernel: {}
+    core: {}
   things:
     ssh:
       scopes: [devel]
       roles:
-        user: { scopes: [kernel] }
+        user: { scopes: [core] }
 groups:
   devel:ssh:user: { members: [a@b.example] }
-`, `role "user" names scope "kernel", which is not among its own scopes`)
+`, `role "user" names scope "core", which is not among its own scopes`)
 
 	refusedWith(t, "role scopes declared empty", `version: 1
 vocabulary:
@@ -615,20 +615,20 @@ groups:
 `, `role "user" declares an empty scopes list`)
 }
 
-// TestConcreteGrantOutsideRoleScope proves rule 3: `kernel:ssh:user` is
+// TestConcreteGrantOutsideRoleScope proves rule 3: `core:ssh:user` is
 // refused when `user` names `scopes: [devel]`, even though `ssh` itself
-// declares `kernel` — the thing has the scope, but this role does not.
+// declares `core` — the thing has the scope, but this role does not.
 func TestConcreteGrantOutsideRoleScope(t *testing.T) {
 	t.Parallel()
 	refusedWith(t, "concrete grant outside the role's own scopes", `version: 1
 `+sshVocab+`
 groups:
-  kernel:ssh:user: { members: [a@b.example] }
+  core:ssh:user: { members: [a@b.example] }
 `, `role "user" of thing "ssh" is valid only on scopes [devel]`)
 }
 
 // TestWildcardRespectsRoleScopes proves rule 4: `*:ssh:user` expands to
-// `devel:ssh:user` alone — never `kernel`, `stage` or `prod`, which `ssh`
+// `devel:ssh:user` alone — never `core`, `stage` or `prod`, which `ssh`
 // declares but `user` does not.
 func TestWildcardRespectsRoleScopes(t *testing.T) {
 	t.Parallel()
@@ -650,7 +650,7 @@ groups:
 	if !got.Has("devel:ssh:user") {
 		t.Errorf("groups = %v, missing devel:ssh:user", got.Groups)
 	}
-	for _, excluded := range []string{"kernel:ssh:user", "stage:ssh:user", "prod:ssh:user"} {
+	for _, excluded := range []string{"core:ssh:user", "stage:ssh:user", "prod:ssh:user"} {
 		if got.Has(excluded) {
 			t.Errorf("groups = %v, %q should not appear: user is scoped to devel only", got.Groups, excluded)
 		}
@@ -660,8 +660,8 @@ groups:
 // TestRoleScopeInheritanceMismatchRefused proves rule 5's chosen half: an
 // `implies` edge whose target does not cover every scope its source does
 // is refused AT LOAD, not silently skipped at evaluation. `admin` (valid
-// on both kernel and devel, the default) implying `user` (valid on devel
-// alone) leaves kernel uncovered, which is exactly the mistake this
+// on both core and devel, the default) implying `user` (valid on devel
+// alone) leaves core uncovered, which is exactly the mistake this
 // refusal exists to catch — see
 // docs/decisions/0012-per-role-scopes-in-the-vocabulary.md.
 func TestRoleScopeInheritanceMismatchRefused(t *testing.T) {
@@ -669,24 +669,24 @@ func TestRoleScopeInheritanceMismatchRefused(t *testing.T) {
 	refusedWith(t, "an implies edge that loses scope coverage", `version: 1
 vocabulary:
   scopes:
-    kernel: {}
+    core: {}
     devel: {}
   things:
     ssh:
-      scopes: [kernel, devel]
+      scopes: [core, devel]
       roles:
         admin: [user]
         user: { scopes: [devel] }
 groups:
   devel:ssh:admin: { members: [a@b.example] }
-`, `role "admin" implies "user", but "user" is not valid on scope "kernel", which "admin" is`)
+`, `role "admin" implies "user", but "user" is not valid on scope "core", which "admin" is`)
 }
 
 // TestExplainReportsTheChainWithRoleScopes proves rule 6's why-chain
 // still works once a role restricts its own scopes: `*:ssh:user`
 // matching alice records Key="*:ssh:user" on the ONE concrete group it is
 // allowed to reach (devel), and reaches no held entry at all for a scope
-// the role does not cover (kernel) — the wildcard skips it rather than
+// the role does not cover (core) — the wildcard skips it rather than
 // exploding.
 func TestExplainReportsTheChainWithRoleScopes(t *testing.T) {
 	t.Parallel()
@@ -714,26 +714,26 @@ groups:
 	if len(user) != 1 || user[0].Key != "*:ssh:user" {
 		t.Fatalf("devel:ssh:user held = %+v, want one direct hold via the wildcard key", user)
 	}
-	if _, ok := byGroup["kernel:ssh:user"]; ok {
-		t.Errorf("held = %v, kernel:ssh:user should never appear: user is scoped to devel only", got.Groups)
+	if _, ok := byGroup["core:ssh:user"]; ok {
+		t.Errorf("held = %v, core:ssh:user should never appear: user is scoped to devel only", got.Groups)
 	}
 }
 
 // TestWildcardEmptiedByRoleScopeRefused proves the "wildcard that expands
 // to no group is refused" rule (docs/reference/taxonomy.md#mapping-wildcards) still
 // holds, and explains itself, when the reason is rule 3 rather than a
-// role that does not exist at all: `kernel:*:user` has a concrete scope
+// role that does not exist at all: `core:*:user` has a concrete scope
 // and a role every declared thing recognizes, but `ssh` is the only thing
-// with a `user` role and its `user` never covers `kernel` — so the
+// with a `user` role and its `user` never covers `core` — so the
 // generic "expands to no group" refusal must fire, and name that reason
 // specifically rather than folding it into "no thing with role user
-// declares scope kernel" (a different, already-existing message for a
+// declares scope core" (a different, already-existing message for a
 // different cause).
 func TestWildcardEmptiedByRoleScopeRefused(t *testing.T) {
 	t.Parallel()
 	refusedWith(t, "a wildcard emptied entirely by a role's own scope restriction", `version: 1
 `+sshVocab+`
 groups:
-  "kernel:*:user": { members: [a@b.example] }
-`, `role "user" is not valid on scope "kernel" for any thing that declares it`)
+  "core:*:user": { members: [a@b.example] }
+`, `role "user" is not valid on scope "core" for any thing that declares it`)
 }

@@ -58,7 +58,7 @@ func TestRefusals(t *testing.T) {
 	if err := e.Put(ctx, port.ExportTarget{Path: "a"}, nil, port.ExportPatch); !errors.Is(err, port.ErrNoProperties) {
 		t.Errorf("no properties: %v", err)
 	}
-	if err := e.Put(ctx, port.ExportTarget{Namespace: "kernel", Path: "a"}, map[string]string{"a": "b"}, port.ExportPatch); !errors.Is(err, port.ErrUnsupported) {
+	if err := e.Put(ctx, port.ExportTarget{Namespace: "staging", Path: "a"}, map[string]string{"a": "b"}, port.ExportPatch); !errors.Is(err, port.ErrUnsupported) {
 		t.Errorf("a namespace: %v", err)
 	}
 	if err := e.Put(ctx, port.ExportTarget{Path: "a b"}, map[string]string{"a": "b"}, port.ExportPatch); !errors.Is(err, port.ErrUnsupported) {

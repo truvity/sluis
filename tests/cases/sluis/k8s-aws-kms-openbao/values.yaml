@@ -1,4 +1,4 @@
-# Truvity's kernel shape: sluis as a pod on EKS with AWS storage (DynamoDB, S3),
+# Truvity's staging shape: sluis as a pod on EKS with AWS storage (DynamoDB, S3),
 # KMS-wrapped token signing and OpenBao as the Secrets port. The inputs arrive
 # as files (External Secrets), so `secrets.source` stays `file`; the openbao
 # adapter holds the credentials sluis writes and the exports. No Certificate is
@@ -32,14 +32,14 @@ config:
     secrets:
       adapter: openbao
       settings:
-        address: https://openbao.kernel.truvity.private
+        address: https://openbao.staging.example.internal
         caFile: /var/run/access-issuer/openbao-ca/ca.pem
-        namespace: kernel
+        namespace: staging
         mount: kv
         root: sluis
         auth:
           method: jwt
-          mount: jwt-kernel
+          mount: jwt-staging
           role: sluis
           tokenFile: /var/run/openbao/token
   audit:
@@ -67,7 +67,7 @@ exports:
       MIIBexample
       -----END CERTIFICATE-----
     token:
-      audience: openbao-kernel
+      audience: openbao-staging
 signingKey:
   verifyOnly:
     - pem: |

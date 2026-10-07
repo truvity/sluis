@@ -114,13 +114,13 @@ func sortStrings(s []string) []string {
 // when its copy is older than the refresh; a read that fails keeps the copy.
 func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 	f := &fakeSSM{params: map[string]string{
-		"/sluis/hive/private/config/issuer/state-secret":                "seed",
-		"/sluis/hive/private/config/providers/google/default/client-id": "id",
-		"/sluis/hive/private/credentials/github-org/acme/key":           "not config",
+		"/sluis/example/private/config/issuer/state-secret":                "seed",
+		"/sluis/example/private/config/providers/google/default/client-id": "id",
+		"/sluis/example/private/credentials/github-org/acme/key":           "not config",
 		"/sluis/other/private/config/issuer/state-secret":               "another installation's",
 	}}
 	now := time.Unix(0, 0)
-	src := &secrets.SSM{API: f, Root: "/sluis/hive", Refresh: 5 * time.Minute, Now: func() time.Time { return now }}
+	src := &secrets.SSM{API: f, Root: "/sluis/example", Refresh: 5 * time.Minute, Now: func() time.Time { return now }}
 	ctx := context.Background()
 	if v, err := src.Get(ctx, "issuer/state-secret"); err != nil || v != "seed" {
 		t.Fatalf("%q %v", v, err)
@@ -134,7 +134,7 @@ func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 	if _, err := src.Get(ctx, "credentials/github-org/acme/key"); !errors.Is(err, secrets.ErrNotFound) {
 		t.Errorf("a credential is not configuration: %v", err)
 	}
-	f.params["/sluis/hive/private/config/issuer/state-secret"] = "rotated"
+	f.params["/sluis/example/private/config/issuer/state-secret"] = "rotated"
 	if v, _ := src.Get(ctx, "issuer/state-secret"); v != "seed" {
 		t.Errorf("read again before the refresh: %q", v)
 	}
@@ -182,9 +182,9 @@ func TestALegacySourceReadsWhereV1SaidFirst(t *testing.T) {
 // A failed read is not tried again for a while, and a copy that cannot be read
 // again is served only for so long: then the source fails closed.
 func TestTheSSMSourceBacksOffAndFailsClosedWhenTooStale(t *testing.T) {
-	f := &fakeSSM{params: map[string]string{"/sluis/hive/private/config/a": "1"}}
+	f := &fakeSSM{params: map[string]string{"/sluis/example/private/config/a": "1"}}
 	now := time.Unix(0, 0)
-	src := &secrets.SSM{API: f, Root: "/sluis/hive", Refresh: time.Minute, MaxStale: time.Hour, Now: func() time.Time { return now }}
+	src := &secrets.SSM{API: f, Root: "/sluis/example", Refresh: time.Minute, MaxStale: time.Hour, Now: func() time.Time { return now }}
 	ctx := context.Background()
 	if _, err := src.Get(ctx, "a"); err != nil {
 		t.Fatal(err)
