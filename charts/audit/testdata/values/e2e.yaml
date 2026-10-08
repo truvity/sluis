@@ -1,0 +1,158 @@
+# The kind tier's own install: what e2e/fixture/apply.sh provisions to stand
+# in for a real platform, by the EXACT names this file gives the chart.
+#
+# This is the ONE file both sides read — e2e/fixture (which provisions the
+# database, the two roles, the stream and the bucket under these names) and
+# `helm upgrade --install` (which renders this chart against them) — so
+# there is nothing for the two to agree about by convention alone. See
+# e2e/fixture/names.go and e2e/fixture/drift_test.go, which renders THIS
+# file and fails if the chart stops honouring a name it names.
+#
+# `mode: stream` — a product's shape, and the one with the most to prove: a
+# receiver publishes to JetStream, a pool of writers consumes it, an indexer
+# follows the archive into the index, and the writer's, the indexer's and the
+# query service's database roles are separate from one another and from the
+# owner's. See audit/docs/decisions/0011 and
+# 0014 for why direct mode and stream mode are otherwise configured alike.
+mode: stream
+
+# `security` (composed by default) pseudonymises identifiers from outside the
+# organisation, and with no key provider the writer refuses to start rather
+# than write one in clear. This tier's own emitted identifiers (e2e/suite's
+# actor id) are ones THIS suite minted, not a real external party's — the same
+# shape audit/docs/decisions/0013 describes.
+externalIdentifiersAreOpaque: true
+
+profiles:
+  security:
+    presets: [security]
+
+# What the receiver and the writers share, written once and reused below.
+# The writer's role: the deduplication table and the registry, none of the
+# index. The tables' OWNER is the migration's, and nothing else connects as it.
+x-database: &database
+  url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=require
+  passwordEnv: AUDIT_DATABASE_PASSWORD
+x-database-secret: &database-secret
+  - name: AUDIT_DATABASE_PASSWORD
+    secretName: audit-e2e-database
+    key: password
+x-stream: &stream
+  nats:
+    url: nats://nats.nats.svc:4222
+  name: AUDIT
+  consumer: audit-writer
+# The box's S3 stand-in (see truvity/policy's hack/kind/localstack.yaml) has
+# no Object Lock support worth proving against — LocalStack Community's is
+# partial — so this tier writes with no lock at all. `security` (composed
+# above) is one of the presets whose framework does not demand one
+# (presets/security.yaml: integrity.object_lock_mode: none); a profile that
+# demanded compliance or governance could not run here, and audit/docs/how-to/test-the-kind-tier.md
+# says so.
+x-bucket: &bucket
+  name: audit-e2e-archive
+  region: us-east-1
+  endpoint: http://s3.object-store.svc:4566
+  pathStyle: true
+  credentialsEnv:
+    accessKeyID: AUDIT_S3_ACCESS_KEY_ID
+    secretAccessKey: AUDIT_S3_SECRET_ACCESS_KEY
+x-archive: &archive
+  bucket: *bucket
+  lockMode: none
+x-archive-secret: &archive-secret
+  - name: AUDIT_S3_ACCESS_KEY_ID
+    secretName: audit-e2e-s3-credentials
+    key: AWS_ACCESS_KEY_ID
+  - name: AUDIT_S3_SECRET_ACCESS_KEY
+    secretName: audit-e2e-s3-credentials
+    key: AWS_SECRET_ACCESS_KEY
+
+receiver:
+  config:
+    mode: receiver
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    database: *database
+    stream: *stream
+  secretEnv: *database-secret
+
+writer:
+  consumers: 3
+  config:
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    replicas: 3
+    archive: *archive
+    database: *database
+    stream: *stream
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-e2e-database
+      key: password
+    - name: AUDIT_S3_ACCESS_KEY_ID
+      secretName: audit-e2e-s3-credentials
+      key: AWS_ACCESS_KEY_ID
+    - name: AUDIT_S3_SECRET_ACCESS_KEY
+      secretName: audit-e2e-s3-credentials
+      key: AWS_SECRET_ACCESS_KEY
+
+migrate:
+  enabled: true
+  config:
+    database:
+      url: postgres://audit_e2e_owner@postgres.postgres.svc:5432/audit_e2e?sslmode=require
+      passwordEnv: AUDIT_DATABASE_PASSWORD
+    # What the migration grants each part's role: the writer the deduplication
+    # table and the registry, the indexer the index, the query service a read.
+    writer: audit_e2e_writer
+    observe: audit_e2e_observe
+    reader: audit_e2e_query
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-e2e-owner-database
+      key: password
+
+# The indexer follows the archive into the index. The settle window is short
+# here so that the suite does not wait minutes for what a real installation
+# would: a put cannot take ten seconds on this box.
+observe:
+  enabled: true
+  config:
+    archive:
+      bucket: *bucket
+    database:
+      url: postgres://audit_e2e_observe@postgres.postgres.svc:5432/audit_e2e?sslmode=require
+      passwordEnv: AUDIT_OBSERVE_DATABASE_PASSWORD
+    settle: 10s
+    interval: 5s
+  secretEnv:
+    - name: AUDIT_OBSERVE_DATABASE_PASSWORD
+      secretName: audit-e2e-observe-database
+      key: password
+    - name: AUDIT_S3_ACCESS_KEY_ID
+      secretName: audit-e2e-s3-credentials
+      key: AWS_ACCESS_KEY_ID
+    - name: AUDIT_S3_SECRET_ACCESS_KEY
+      secretName: audit-e2e-s3-credentials
+      key: AWS_SECRET_ACCESS_KEY
+
+query:
+  enabled: false
+
+jobs:
+  verify:
+    config:
+      deployment: /etc/audit/deployment.yaml
+      archive:
+        bucket: *bucket
+      sink:
+        url: http://audit-e2e:8080
+    secretEnv: *archive-secret
+  purge:
+    enabled: false
+  clockSync:
+    # The box has no route to a real NTP server, and the schedule matters
+    # nothing to this tier — nothing here waits for a CronJob to fire on its
+    # own clock. Off rather than left to fail on egress it does not have.
+    enabled: false

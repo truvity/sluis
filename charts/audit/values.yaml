@@ -1,0 +1,665 @@
+# The audit write path. Names follow audit/docs/reference/configuration.md.
+#
+# WHAT IS A VALUE AND WHAT IS CONFIGURATION. Each component's configuration is
+# one `config:` block, rendered as it stands into a ConfigMap, mounted as
+# /etc/audit/config.yaml and validated by values.schema.json against the
+# schema its binary validates it against at start-up (schemas/config/). The
+# chart translates none of it: a key under `config:` is the binary's key, and
+# audit/docs/reference/configuration.md lists them. Everything else here is the
+# platform's: how many pods, which image, which service account, which
+# Secrets reach which pod. A secret is never in `config:`: the file names an
+# environment variable, and `secretEnv` below puts a Secret's key there.
+#
+# Where the chart mounts what, which a `config:` block names by path:
+#
+#   /etc/audit/config.yaml       the component's own configuration
+#   /etc/audit/deployment.yaml   the profile configuration (`profiles` below)
+#   /etc/audit/workloads.yaml    the issuers and workloads (`workloadIdentity`)
+#   /etc/audit/grants.yaml       the query service's grants (`query.grants`)
+#   /etc/audit/catalogues/       the catalogues (`catalogues`)
+#   /etc/audit/trust/<key>       the CA bundle (`trust`)
+#   /var/lib/audit/keys          the local key directory (`keysVolume`)
+#
+# Anything else a config names, such as a token or a key file, is mounted by
+# the component's `secretMounts` or `tokens`, at the path you give them.
+
+# The images, digest-pinned. Nothing here is set by hand: packaging the chart
+# (helmctl package --manifest, as the release does, and as the kind tier does
+# with the images it has just built) writes the registry, the repository, the
+# tag and the digest of what the build published, and a pinned image wins over
+# `image` below. A chart installed from this directory has none, and uses
+# `image`. The keys are the last path segment of each image's repository.
+images:
+  audit-writer:
+    registry: ""
+    repository: ""
+    tag: ""
+    digest: ""
+  audit-query:
+    registry: ""
+    repository: ""
+    tag: ""
+    digest: ""
+  audit-notary:
+    registry: ""
+    repository: ""
+    tag: ""
+    digest: ""
+  audit-observe:
+    registry: ""
+    repository: ""
+    tag: ""
+    digest: ""
+  audit:
+    registry: ""
+    repository: ""
+    tag: ""
+    digest: ""
+
+image:
+  # One image per binary, as ko builds them: the writer runs in the
+  # Deployment, the toolchain in the jobs. Both are distroless and have no
+  # shell, which is why every job below is a command with arguments.
+  writer:
+    repository: ghcr.io/truvity/audit/audit-writer
+    tag: ""        # defaults to the chart's appVersion
+  cli:
+    repository: ghcr.io/truvity/audit/audit
+    tag: ""
+  query:
+    repository: ghcr.io/truvity/audit/audit-query
+    tag: ""
+  # The notary has an image of its own: it is a part of the system that signs,
+  # and it holds nothing else.
+  notary:
+    repository: ghcr.io/truvity/audit/audit-notary
+    tag: ""
+  observe:
+    repository: ghcr.io/truvity/audit/audit-observe
+    tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# What this release renders.
+#
+#   app         the write path: everything above and below (the default).
+#   alerts      ONLY the alert rules (`alerts` below), as VMRule objects. For a
+#               second install beside the app's, in the namespace the metrics
+#               store's ruler reads rules from: the rules belong to the
+#               platform that runs the ruler, the write path to the product.
+#   dashboards  ONLY the Grafana dashboard ConfigMaps (`dashboards` below),
+#               labelled for Grafana's sidecar, for the cluster Grafana reads.
+#
+# In `alerts` and `dashboards` mode nothing else is validated or rendered: no
+# `profiles`, no `writer.config`. See audit/docs/reference/telemetry.md. This is not
+# `mode`, which is how the write path is arranged (direct or stream).
+renders: app
+
+# Alert rules, rendered only with `renders: alerts`. Every threshold and the
+# reason for it is in audit/docs/reference/telemetry.md and in the rule's comment in
+# templates/alerts.yaml. The series are what the writer, the receiver and the
+# emitters publish over OTLP (OTEL_EXPORTER_OTLP_ENDPOINT on the pods).
+alerts:
+  # The object's name. Empty: <release>-alerts.
+  name: ""
+  # Where the rule object goes: the namespace the ruler selects rules from.
+  # Empty: the release's.
+  objectNamespace: ""
+  # `vmrule` (operator.victoriametrics.com) or `prometheusrule`.
+  format: vmrule
+  # Labels on the rule object, for a ruler that selects objects by label.
+  labels: {}
+  # Labels added to EVERY rule, for the Alertmanager routing tree: set the
+  # cluster once here, as the openbao-ops chart does.
+  #   ruleLabels:
+  #     k8s_cluster_name: prod
+  ruleLabels: {}
+  interval: 1m
+  # The label that names the cluster on a store that holds several. Every
+  # aggregation keeps it.
+  clusterLabel: k8s_cluster_name
+  # The namespace the audit write path runs in, whose own series the writer
+  # rules read. Empty: the release's namespace. In an alerts-only release in
+  # another namespace, set it.
+  namespace: ""
+  # Extra matchers for the writer's series, e.g. `k8s_cluster_name="prod"`.
+  selector: ""
+  # The namespaces the emitters run in: a regex, because an emitter's series
+  # carry the application's namespace, not the writer's. Default: every one.
+  emitterNamespace: ".+"
+  emitterSelector: ""
+  # Where an alert's runbook entry is. The alert's name, lower-cased, is the
+  # anchor.
+  runbookBaseUrl: https://github.com/truvity/sluis/blob/master/audit/docs/how-to/respond-to-alerts.md
+  rules:
+    deadLettered:
+      enabled: true
+      severity: critical
+      for: 0m
+      labels: {}
+    emitterDrops:
+      enabled: true
+      severity: critical
+      for: 0m
+      labels: {}
+    indexLag:
+      enabled: true
+      severity: warning
+      # p99 of the time from an object in the archive to its rows in the index.
+      # The indexer's settle window (default 2m) is the floor of that time, so
+      # the threshold has to be well above it: raise this with `settle`.
+      thresholdSeconds: 600
+      for: 10m
+      labels: {}
+    indexDeferred:
+      enabled: true
+      severity: warning
+      for: 0m
+      labels: {}
+    writerRejections:
+      enabled: true
+      severity: warning
+      # The share of records refused, over 15m, and the fewest refusals that
+      # count: one bad record in a quiet hour is not a page.
+      ratio: 0.05
+      minRecords: 10
+      for: 10m
+      labels: {}
+    consumerFailing:
+      enabled: true
+      severity: critical
+      for: 15m
+      labels: {}
+    sealStale:
+      enabled: true
+      severity: critical
+      # 3h: the notary runs hourly and seals an hour once it has ended and
+      # settled, so a healthy newest seal is at most about 1h20m old and one
+      # missed run leaves it near 2h20m. Three hours fires on the second miss,
+      # when a gap in the chain has opened that a later seal cannot close.
+      maxAgeSeconds: 10800
+      for: 10m
+      labels: {}
+
+# Grafana dashboards, rendered only with `renders: dashboards`: one ConfigMap
+# per file in dashboards/, labelled for Grafana's sidecar. Install it into the
+# cluster Grafana runs on.
+dashboards:
+  # Grafana's namespace. Empty: the release's.
+  namespace: ""
+  # The Grafana folder, when the sidecar is set to read the folder annotation.
+  folder: Audit
+  # The label Grafana's sidecar selects ConfigMaps by (its
+  # `sidecar.dashboards.label`, and `labelValue`).
+  sidecarLabel: grafana_dashboard
+  sidecarLabelValue: "1"
+  labels: {}
+
+# How the write path is arranged.
+#
+#   direct  one Deployment: the front door and the write path in one process.
+#           It serves the sink, puts every batch it takes before it answers,
+#           and needs no stream. For an internal service, or any cluster
+#           without one. Configured by `writer.config`.
+#   stream  two: a receiver (`receiver.config`, `mode: receiver`) that serves
+#           the sink and publishes to JetStream, holding neither the bucket
+#           nor a key, and `writer.consumers` writers (`writer.config`) that
+#           read the stream and put the objects. For a product.
+#
+# The application is configured the same way either side of the choice: the
+# Service keeps its name and the front door keeps the `writer` component label,
+# because it is the address records are written to and that should not move
+# when a deployment changes shape.
+mode: direct
+
+# Pods of the front door: the writer in direct mode, the receiver in stream
+# mode. More than one needs a shared deduplication table (`database` in the
+# writer's config), which the binary refuses to start without.
+replicas: 1
+
+# What the three kinds of pod take from the platform beyond their `config`:
+#
+#   secretFiles    a Secret's keys as files under /etc/audit/secrets, one
+#                  for each name the config holds in a `...Secret` field
+#                  (`passwordSecret`, `credentialsSecret`, `tokenSecret`),
+#                  with `secrets: {source: file, root: /etc/audit/secrets}`
+#                  in the config.
+#                    - name: database-password
+#                      secretName: audit-db
+#                      key: password
+#   secretEnv      DEPRECATED, for a version-1 config: environment variables
+#                  from a Secret's keys, which the config names as the holder
+#                  of a secret (`passwordEnv`, `credentialsEnv`, `tokenEnv`).
+#                    - name: AUDIT_DATABASE_PASSWORD
+#                      secretName: audit-db
+#                      key: password
+#   secretMounts   a Secret mounted as a directory, for a key or a root a
+#                  config names by path.
+#                    - secretName: audit-keys
+#                      mountPath: /etc/audit/keys
+#   tokens         a projected service-account token of the given audience,
+#                  read afresh by whatever names it (`tokenFile`, `jwtFile`),
+#                  because the kubelet replaces it before it expires.
+#                    - audience: audit
+#                      mountPath: /var/run/audit      # the file is token
+#                      expirationSeconds: 3600
+#
+# Each component below has the same three, and `config`.
+
+writer:
+  # Host the write path in this release. Set false when the writer runs
+  # elsewhere, typically the AWS Lambda behind SQS that deploy/pulumi builds
+  # (cmd/audit-writer-lambda): the chart then renders no writer, no receiver, no
+  # stream consumers and no writer Service, and `serviceAccount` (the writer's
+  # identity), `keysVolume`, `workloadIdentity` and `mode: stream` do not apply.
+  # Everything in this release that records (the query service's reads, the
+  # notary, verify and clock-sync jobs) then needs a `sink` that reaches the
+  # external writer: `sink: {sqs: {queueUrl, region}}`, the pod's own identity
+  # being the credential (`sqs:SendMessage` on the queue), or the URL of an
+  # external front door. The chart refuses a sink that names this release's own
+  # front door. Observe, query, the migration and the jobs run as before and
+  # still need Postgres; see audit/docs/explanation/levels.md.
+  enabled: true
+  # In stream mode, how many writers consume the stream. They scale with the
+  # record rate; the receivers (`replicas`) with the application's request rate.
+  consumers: 3
+  # The audit-writer configuration: schemas/config/audit-writer.schema.json.
+  # In direct mode this is the one writer; in stream mode, the consumers.
+  #
+  # The writer puts v1 objects, `records/<profile>/<tenant>/<yyyy>/<mm>/<dd>/
+  # <hh>/<ULID>`, and the catalogues at `catalogue/<app>/<version>`
+  # (audit/docs/reference/bucket-contract.md). The chart creates no bucket, so the
+  # bucket's lifecycle is yours and is written against those prefixes, one rule
+  # per profile on `records/<profile>/`: Glacier Instant Retrieval at 30 days
+  # and Deep Archive at 1 year (audit/docs/decisions/0023, audit/docs/reference/archive-prefixes-and-iam.md).
+  config: {}
+  secretEnv: []
+  secretMounts: []
+  tokens: []
+
+# Stream mode only: the receiver's configuration, with `mode: receiver`.
+receiver:
+  # The front door publishes and holds nothing of the archive: it must not run
+  # as the writer. The chart refuses a receiver and a writer with one name.
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  config: {}
+  secretEnv: []
+  secretMounts: []
+  tokens: []
+
+# The profiles this deployment keeps, as the document `deployment` in a config
+# names (/etc/audit/deployment.yaml). Each is composed from the presets the
+# library ships. Adding a profile here is additive: Helm merges maps, so a
+# values file that names one profile gets this one as well. Name every profile
+# the installation should keep.
+#
+# `security` is composed everywhere; see audit/docs/explanation/which-profiles-to-compose.md for
+# which of the others a deployment should compose, and what each costs.
+profiles:
+  security:
+    presets: [security]
+
+# Whether the identifiers this installation receives for people outside the
+# organisation are already opaque — ones an application minted, which name
+# nobody without that application's own database. Where they are, a profile
+# asking for a pseudonym gets the identifier in clear instead, because
+# encrypting an opaque identifier a second time adds a key to lose and tells a
+# reader of the archive nothing new; and the writer refuses a record whose
+# external identifier looks direct, an address say. It is part of the profile
+# document, so it reaches every component that reads one.
+#
+# An installation with no key provider must set this or compose only profiles
+# that keep nobody: see audit/docs/decisions/0013-no-pseudonymisation-keys-by-default.md.
+externalIdentifiersAreOpaque: false
+
+# The query service: search, facets, get, export, tail and resolve, behind the
+# grants below. Every read it serves is recorded through the writer: its
+# `config.sink` is `{url: <the front door>}` or, for a writer that runs
+# elsewhere (`writer.enabled: false`), `{sqs: {queueUrl, region}}`. The SQS
+# sink takes the pod's identity: annotate `serviceAccount` below (IRSA) or bind
+# it (Pod Identity) to a role with `sqs:SendMessage` on the queue.
+query:
+  enabled: false
+  replicas: 2
+  service:
+    port: 8080
+  # The audit-query configuration: schemas/config/audit-query.schema.json.
+  config: {}
+  secretEnv: []
+  secretMounts: []
+  tokens: []
+  # The grants file (`grants` in the config names /etc/audit/grants.yaml): the
+  # issuers trusted to sign callers in, presets, and rules. See
+  # audit/docs/how-to/read-the-trail.md#access. Without an issuer nobody can sign in, and the
+  # service refuses to start.
+  grants: {}
+  #  issuers:
+  #    - url: https://id.example.com
+  #      audience: audit
+  #  presets:
+  #    - name: access-roster
+  #      issuer: https://id.example.com
+  # Mount the writer's key directory read-only, so that resolve can open what
+  # the writer sealed with the local key provider. Needs `keysVolume` with
+  # ReadWriteMany: the query service runs beside the writer, not in its place.
+  keysVolume: false
+  # Its own identity: read on the archive, write on the exports bucket, and —
+  # with transit — decrypt. None of the writer's rights.
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  # Publish the query service through Gateway API. An installation needs a
+  # public name only when the application console that calls its query service
+  # runs outside the cluster; otherwise leave this off and let the console reach
+  # the Service in-cluster. Needs `query.enabled`, `parentRefs` and `hostnames`.
+  # The gateway's namespace must be allowed by `networkPolicy.queryIngressFrom`
+  # when that policy is on.
+  route:
+    enabled: false
+    # Gateways or ListenerSets, passed through. Write group, kind, name,
+    # namespace and sectionName out in full: the API server defaults what is
+    # left out and a GitOps tool then shows a diff for ever.
+    parentRefs: []
+    #  - group: gateway.networking.k8s.io
+    #    kind: Gateway
+    #    name: public
+    #    namespace: gateway
+    #    sectionName: https
+    hostnames: []
+    #  - audit.example.com
+    # Publish under a path (`/myapp`: `audit.example.com/myapp`, or
+    # `app.example.com/audit`). The route strips it before the service sees the
+    # request. Empty matches `/`, with no rewrite.
+    pathPrefix: ""
+    annotations: {}
+    # When set, an Envoy Gateway SecurityPolicy is rendered with this as its
+    # `spec` and `targetRefs` set to the HTTPRoute, for a gateway that requires
+    # every route to carry one. `targetRefs`, `targetRef` and `targetSelectors` are refused: the chart
+    # attaches the policy to this route and to nothing else.
+    securityPolicy: {}
+    #  jwt:
+    #    providers: [...]
+
+# The indexer: follows the archive by listing, keeps a cursor per profile and
+# tenant in Postgres, and writes the index the query service reads
+# (audit/docs/decisions/0020). It is its own Deployment, with its own ServiceAccount
+# and its own database role, because it holds the index's WRITE credential and
+# the writer must not: the writer's role has the deduplication table and the
+# registry and none of the index, and the query service's can only read it.
+# The chart refuses an observer that runs as the writer's or the query
+# service's ServiceAccount or connects as their database role.
+#
+# It is not on the write path: absent, paused or rolling, ingest does not notice
+# and the index catches up from its cursors. Several replicas are safe and one
+# is enough. Without it nothing feeds the index, and search answers nothing.
+observe:
+  enabled: false
+  replicas: 1
+  # The audit-observe configuration: schemas/config/audit-observe.schema.json.
+  # `archive` is read only (no lock mode), `database` is the role
+  # `migrate.config.observe` granted, `settle` is the settle window and `wake`
+  # an optional subject or queue of bucket notifications that only shortens the
+  # poll.
+  config: {}
+  secretEnv: []
+  secretMounts: []
+  tokens: []
+  # Its own identity: get and list on the archive, and nothing else. Pod
+  # Identity or IRSA binds here.
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+# Who is calling the writer.
+#
+# A workload presents its projected service-account token, and the writer
+# verifies it against the cluster's own OIDC issuer. The subject is the service
+# account, which the kubelet vouches for and the workload cannot choose. The
+# writer stamps it on every record as the observer, and the mapping below is
+# how it decides whose catalogue a registration is. This is the document the
+# writer's config names as `workloads` (/etc/audit/workloads.yaml); the jobs
+# and the query service present their own tokens (`tokens`).
+workloadIdentity:
+  # The issuers trusted to name a workload, exactly as their tokens' iss claim
+  # reads — on EKS, the cluster's OIDC provider URL. Discovery is fetched from
+  # each at start-up, so it must be reachable from the pods over HTTPS.
+  issuers: []
+  #  - url: https://oidc.example.com/id/CLUSTER
+  # The audience an issuer entry takes when it names none.
+  audience: audit
+  # Which service account speaks for which source. The writer accepts a
+  # catalogue at start-up (RegisterCatalogue, beside the sink — there is no
+  # registry service), and takes whose it is from here and never from the
+  # document. A workload not listed cannot register a catalogue at all, which
+  # is why an installation that keeps an index and verifies callers must fill
+  # this in.
+  workloads: []
+  #  - subject: system:serviceaccount:wallet:wallet-api
+  #    source: wallet
+
+# What a product switches on in its own installation. Both are projections of
+# records the installation already keeps, and neither is in the request path.
+# Both render nothing yet: the work that fills them is scheduled, and the
+# toggles are here so that a deployment's values do not have to change when it
+# lands.
+extensions:
+  # Rollups at index time and a monthly immutable statement. Needs a profile
+  # composed from a metering preset, or there is no copy to compute from.
+  billing:
+    enabled: false
+  # A usage consumer counting into a cache, an hourly reconciler, and the
+  # decision point in front of the application. Needs `mode: stream`: without
+  # a stream there is nothing for a second consumer to read.
+  quotas:
+    enabled: false
+
+# Catalogues mounted for the writer at start-up, as name -> document, for the
+# `catalogues` key of its config (/etc/audit/catalogues). The common catalogue
+# is built in and needs no entry here. Most deployments leave this empty: the
+# application registers its own over RegisterCatalogue.
+catalogues: {}
+
+# The schema, applied by a hook Job before the parts roll, and what each part's
+# database role is granted. The parts refuse to start against a schema version
+# they do not know, and must never migrate themselves: several replicas would
+# race. Turn it on with a database.
+migrate:
+  enabled: false
+  # The `audit migrate` configuration: schemas/config/audit-migrate.schema.json.
+  # `database` is the OWNER of the tables, a role of its own: an owner is bound
+  # by no grant and no row-level security, so none of the parts connects as it.
+  # The roles each part connects as, which must exist, are named here and
+  # granted what the part needs and nothing else:
+  #   writer    the deduplication table, the registry, the key directory
+  #   observe   the index and its cursors (read and write)
+  #   reader    select on the index, bound by row-level security (the query)
+  #   purge     delete from the index and the deduplication table
+  config: {}
+  secretEnv: []
+
+# Pseudonymisation keys held in a directory (the `local` provider). Data keys
+# are random, not derived from the root, so the directory they are wrapped into
+# is the only copy. Losing it re-keys every tenant silently: the same person
+# gets a new pseudonym and the trail before the restart stops linking to the
+# trail after it. Mounted at /var/lib/audit/keys on every pod that writes, and
+# on the query service with `query.keysVolume`. The transit provider needs no
+# volume, and is the one for more than one replica.
+keysVolume:
+  enabled: false
+  size: 1Gi
+  storageClass: ""
+  # ReadWriteMany is what lets several replicas agree about a tenant's key.
+  # With ReadWriteOnce this chart renders one writer only.
+  accessModes: [ReadWriteOnce]
+  existingClaim: ""
+  # Acknowledge that a disposable install keeps its keys in an emptyDir, so that
+  # pseudonyms change on every restart and the trail stops linking across one.
+  # Without a volume and without this, the chart refuses the local provider.
+  ephemeralIsAcceptable: false
+
+# A CA bundle trusted beside the system roots — typically trust-manager's
+# ConfigMap of a private chain — mounted on every pod at /etc/audit/trust, for
+# the `caFile` and `ca` keys of the configs and a Postgres URL's `sslrootcert`
+# to name.
+trust:
+  configMap: ""
+  key: ca.crt
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# How a writer pod stops. audit-writer takes up to 30s to stop accepting records
+# and write what it holds, so the grace period must be longer than that plus the
+# front door's preStop sleep, and the chart refuses one that is not. The sleep
+# (the front door only; 0 turns it off) keeps the pod answering while the
+# endpoints and the clients' connections drain, which happen after it is told to
+# stop and not before.
+terminationGracePeriodSeconds: 45
+preStopSleepSeconds: 5
+
+# The scheduled jobs. Each is `audit <job> --config`, and each records what it
+# did through the writer's own sink, so each needs to reach it (`sink` in its
+# config, and a token if the writer verifies callers).
+jobs:
+  # Hourly. Seals every closed and settled hour since the last seal, per
+  # profile and tenant, into a signed chain (audit/docs/decisions/0019-seals.md): the
+  # one part that signs. It runs as `audit-notary --config`, in an image of its
+  # own, and as an identity of its own: whoever can write the archive and can
+  # also sign for it can choose what to sign, so the chart refuses a notary that
+  # runs as the writer. Built and tested, not yet run live, so it is off until
+  # you give it a key.
+  notary:
+    enabled: false
+    # Seventeen minutes past: an hour is sealed ten minutes after it ends (the
+    # config's `settle`), and the job then has seven minutes of slack.
+    schedule: "17 * * * *"
+    # Its own identity: read the records, put seals/ and keys/, and use the
+    # seal key. Nothing the writer has. Bind the cloud role (Pod Identity, IRSA)
+    # or the OpenBAO role here; `create: false` is refused, because the job
+    # would then run as the writer.
+    serviceAccount:
+      create: true
+      name: ""
+      annotations: {}
+    # schemas/config/audit-notary.schema.json. Its `signer` is an AWS KMS key
+    # (ECC_NIST_P384: the private half never leaves KMS), an OpenBAO transit
+    # key (ecdsa-p384), or a P-384 key file for development.
+    config: {}
+    secretEnv: []
+    secretMounts: []
+    tokens: []
+  verify:
+    enabled: true
+    schedule: "23 3 * * *"
+    # Credentials that read the archive and nothing else.
+    serviceAccount:
+      create: true
+      name: ""
+      annotations: {}
+    # schemas/config/audit-verify.schema.json. One job checks every profile it
+    # names, or every profile the deployment composes, over the objects ingested
+    # in the last `last` (default 24h). With `seals.roots` it checks the seals
+    # too, against the root thumbprints it pins and nothing else.
+    config: {}
+    secretEnv: []
+    secretMounts: []
+    tokens: []
+  purge:
+    enabled: true
+    schedule: "41 4 * * *"
+    # Its own identity, `<fullname>-purge`. Purging deletes from the archive, so
+    # bind the role it needs here; `create: false` runs as the release's own
+    # `serviceAccount`, which is what it did before it had one.
+    serviceAccount:
+      create: true
+      name: ""
+      annotations: {}
+    # schemas/config/audit-purge.schema.json.
+    config: {}
+    secretEnv: []
+    secretMounts: []
+  clockSync:
+    enabled: true
+    schedule: "13 2 * * *"
+    # Its own identity, `<fullname>-clock-sync`. Clock sync needs no cloud
+    # rights. `create: false` runs as the release's own `serviceAccount`, which
+    # is what it did before it had one.
+    serviceAccount:
+      create: true
+      name: ""
+      annotations: {}
+    # schemas/config/audit-clock-sync.schema.json.
+    config: {}
+    secretEnv: []
+    secretMounts: []
+    tokens: []
+
+# The writer's identity: the one pod in direct mode, the consumers in stream
+# mode. It is the one identity that writes the archive, and the account every
+# other component falls back to with `create: false` (except observe and the
+# receiver, which the chart refuses to run as it). Each other component has
+# its own `serviceAccount` beside its configuration.
+serviceAccount:
+  create: true
+  # Pod Identity or IRSA goes here.
+  annotations: {}
+  name: ""
+
+# Who may reach each component. The writer's sink takes this release's own
+# pods (the jobs and the query service record through it) and
+# whatever `ingressFrom` adds — the namespaces of the workloads that emit.
+# The query service takes `queryIngressFrom`, normally the gateway in front of
+# it; empty leaves it open inside the cluster, because a read path nobody can
+# reach is not a safe default but a broken one.
+networkPolicy:
+  enabled: false
+  # Selectors for what may reach the writer's sink.
+  ingressFrom: []
+  # Selectors for what may reach the query service.
+  queryIngressFrom: []
+
+# Telemetry is the OpenTelemetry SDK's own environment (ADR 0021), never the
+# config file. With `otlp.endpoint` set, every pod this chart renders gets
+# OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL and an
+# OTEL_SERVICE_NAME of its own (`audit-writer` for the front door, the receiver
+# and the consumers, `audit-query`, `audit-observe`, `audit-notary`, and `audit`
+# for the toolchain's jobs), then each `extraEnv` entry. Unset, nothing is
+# rendered and the pods export nothing.
+telemetry:
+  otlp:
+    # The collector or metrics gateway, an http(s) URL, for example
+    # http://gateway.observability.svc:4318. Empty: no export.
+    endpoint: ""
+    # `http/protobuf` (the estate's convention) or `http/json`. The exporters
+    # here are OTLP/HTTP; gRPC is not one of them.
+    protocol: http/protobuf
+    # Other OpenTelemetry SDK variables, OTEL_* only, such as
+    # OTEL_METRIC_EXPORT_INTERVAL or OTEL_TRACES_SAMPLER. Values are strings.
+    extraEnv: {}
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

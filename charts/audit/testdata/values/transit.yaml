@@ -1,0 +1,119 @@
+# Several writers on the transit key provider: no key directory, no volume and
+# no ReadWriteMany, because every replica asks the same engine. The replicas
+# still need the database, for deduplication across them.
+#
+# OpenBAO as the estate runs it: a namespace per environment, each component
+# signing in with its own projected token on the cluster's JWT mount, and a
+# server certificate from a private chain that trust-manager distributes.
+mode: direct
+replicas: 3
+trust:
+  configMap: private-ca-bundle
+x-database: &database
+  url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
+  passwordEnv: AUDIT_DATABASE_PASSWORD
+x-archive: &archive
+  bucket:
+    name: audit-archive
+writer:
+  config:
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    replicas: 3
+    archive: *archive
+    database: *database
+    keys:
+      provider: transit
+      transit:
+        openbao:
+          address: https://openbao.example:8200
+          namespace: devel
+          caFile: /etc/audit/trust/ca.crt
+          login:
+            mount: jwt-devel
+            role: audit-writer
+            jwtFile: /var/run/openbao/token
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-database
+      key: password
+  tokens:
+    - audience: openbao
+      mountPath: /var/run/openbao
+      expirationSeconds: 600
+migrate:
+  enabled: true
+  config:
+    database:
+      url: postgres://audit_owner@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
+      passwordEnv: AUDIT_DATABASE_PASSWORD
+    writer: audit_writer
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-owner-database
+      key: password
+jobs:
+  # The notary signs with a transit key under a role of its own, which is not
+  # the writer's.
+  notary:
+    enabled: true
+    config:
+      archive: *archive
+      signer:
+        transit:
+          key: audit-seal
+          openbao:
+            address: https://openbao.example:8200
+            namespace: devel
+            caFile: /etc/audit/trust/ca.crt
+            login:
+              mount: jwt-devel
+              role: audit-notary
+              jwtFile: /var/run/openbao/token
+    tokens:
+      - audience: openbao
+        mountPath: /var/run/openbao
+        expirationSeconds: 600
+  verify:
+    config:
+      deployment: /etc/audit/deployment.yaml
+      archive: *archive
+  purge:
+    enabled: false
+  clockSync:
+    config:
+      ntp: [time.cloudflare.com]
+query:
+  enabled: true
+  grants:
+    issuers:
+      - url: https://id.example.com
+        audience: audit
+  config:
+    deployment: /etc/audit/deployment.yaml
+    grants: /etc/audit/grants.yaml
+    sink:
+      url: http://audit:8080
+    database:
+      url: postgres://audit_query@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
+      passwordEnv: AUDIT_QUERY_DATABASE_PASSWORD
+    archive: *archive
+    keys:
+      provider: transit
+      transit:
+        openbao:
+          address: https://openbao.example:8200
+          namespace: devel
+          caFile: /etc/audit/trust/ca.crt
+          login:
+            mount: jwt-devel
+            role: audit-resolve
+            jwtFile: /var/run/openbao/token
+  secretEnv:
+    - name: AUDIT_QUERY_DATABASE_PASSWORD
+      secretName: audit-query-database
+      key: password
+  tokens:
+    - audience: openbao
+      mountPath: /var/run/openbao
+      expirationSeconds: 600

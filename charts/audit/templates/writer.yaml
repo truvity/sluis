@@ -1,0 +1,29 @@
+{{- if and (eq .Values.renders "app") .Values.writer.enabled -}}
+{{/*
+The front door: in direct mode the writer itself, in stream mode a receiver
+that publishes and holds neither the bucket nor a key. It keeps the same name
+and the same component label in both, because it is the address an application
+writes to, and that address should not move when a deployment changes shape.
+*/}}
+{{- if eq .Values.mode "stream" }}
+{{ include "audit.deployment" (dict "root" . "role" "receiver") }}
+---
+{{ include "audit.deployment" (dict "root" . "role" "consumer") }}
+{{- else }}
+{{ include "audit.deployment" (dict "root" . "role" "writer") }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "audit.fullname" . }}
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "audit.writerSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http{{ end }}

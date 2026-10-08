@@ -1,0 +1,14 @@
+exempt:
+  C13:
+    - checks: [region]
+      paths: [audit/internal/s3test/**]
+      reason: audit/internal/s3test is a test-only helper; its region is a fixture of the live-S3 tests, never a default that ships
+    - checks: [region]
+      paths: [audit/sink/sqssink/integration_test.go]
+      reason: the LocalStack SQS test signs requests for a region the fake accepts; it is a fixture of that test, never a default that ships
+    - checks: [domain]
+      paths: [audit/sdk/catalogue/schemaid.go]
+      reason: audit/sdk/catalogue.schemaid maps the legacy schema base URL to preserve archived record readability
+    - checks: [domain]
+      paths: [audit/deploy/pulumi/catalogues.go]
+      reason: the Pulumi library mirrors audit/sdk/catalogue.CanonicalID (the legacy schema base URL) to check a catalogue's schema references as the writer does, without depending on the SDK

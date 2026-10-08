@@ -1,0 +1,75 @@
+{{- if eq .Values.renders "app" -}}
+{{- if .Values.migrate.enabled }}
+# The identity this Job runs as, created as a hook of its own so that it
+# exists before the Job that names it. A pre-install hook runs BEFORE the
+# release's ordinary resources, so a hook Pod cannot name a ServiceAccount
+# the release has not created yet: the Job would be admitted and then never
+# get a Pod, with "serviceaccount not found" on the Job and a release that
+# waits for a hook that can never run. The same is true of its configuration.
+#
+# It is the migration's own, not the writer's, and it carries no cloud
+# annotations. This Job talks to Postgres; it has no business holding the
+# credentials that write the archive. A lower weight than the Job so it is
+# applied first.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "audit.fullname" . }}-migrate
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+{{ include "audit.configMap" (dict "root" . "name" "migrate" "config" .Values.migrate.config "hook" true) }}
+---
+# The index schema, applied before the writer rolls.
+#
+# A hook rather than something the writer does at start-up: several replicas
+# migrating at once is a race, and a schema change to the index should be a step
+# an operator can see happen. The writer refuses to start against a version it
+# does not know, so this Job failing stops the release rather than producing a
+# writer that will not run.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "audit.fullname" . }}-migrate
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "audit.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "audit.fullname" . }}-migrate
+      {{- include "audit.podDefaults" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ include "audit.cliImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - migrate
+            - --config=/etc/audit/config.yaml
+          {{- with include "audit.env" (dict "root" . "comp" .Values.migrate "service" "audit") }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- include "audit.configMount" . | nindent 12 }}
+            {{- include "audit.trustMount" . | nindent 12 }}
+            {{- include "audit.extraMounts" .Values.migrate | nindent 12 }}
+      volumes:
+        {{- include "audit.configVolume" (dict "root" . "name" "migrate") | nindent 8 }}
+        {{- include "audit.trustVolume" . | nindent 8 }}
+        {{- include "audit.extraVolumes" .Values.migrate | nindent 8 }}
+{{- end }}{{ end }}

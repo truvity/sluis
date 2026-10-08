@@ -1,0 +1,395 @@
+{{- define "audit.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "audit.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "audit.labels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "audit.selectorLabels" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{- define "audit.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "audit.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/* An image: the digest-pinned one packaging wrote into `images`, else the
+one `image` names, at the chart's appVersion unless given a tag. Takes (dict
+"root" $ "name" <key in images> "image" <the matching entry of image>). */}}
+{{- define "audit.image" -}}
+{{- $pinned := index .root.Values.images .name | default dict -}}
+{{- if $pinned.digest -}}
+{{ with $pinned.registry }}{{ . }}/{{ end }}{{ $pinned.repository }}:{{ $pinned.tag }}@{{ $pinned.digest }}
+{{- else -}}
+{{ .image.repository }}:{{ .image.tag | default .root.Chart.AppVersion }}
+{{- end -}}
+{{- end -}}
+
+{{- define "audit.writerImage" -}}
+{{ include "audit.image" (dict "root" . "name" "audit-writer" "image" .Values.image.writer) }}
+{{- end -}}
+
+{{- define "audit.queryImage" -}}
+{{ include "audit.image" (dict "root" . "name" "audit-query" "image" .Values.image.query) }}
+{{- end -}}
+
+{{- define "audit.notaryImage" -}}
+{{ include "audit.image" (dict "root" . "name" "audit-notary" "image" .Values.image.notary) }}
+{{- end -}}
+
+{{- define "audit.observeImage" -}}
+{{ include "audit.image" (dict "root" . "name" "audit-observe" "image" .Values.image.observe) }}
+{{- end -}}
+
+{{/* The writer's pods. Every component carries the release's labels, so the
+writer names itself too: a selector of the release's labels alone would take
+the query service's and the jobs' pods into the writer's Service. */}}
+{{- define "audit.writerSelectorLabels" -}}
+{{ include "audit.selectorLabels" . }}
+app.kubernetes.io/component: writer
+{{- end -}}
+
+{{/* The consumer's pods, in stream mode. Nothing calls them, so they are not
+in any Service; the label is what a deployment greps for. */}}
+{{- define "audit.consumerSelectorLabels" -}}
+{{ include "audit.selectorLabels" . }}
+app.kubernetes.io/component: consumer
+{{- end -}}
+
+{{- define "audit.cliImage" -}}
+{{ include "audit.image" (dict "root" . "name" "audit" "image" .Values.image.cli) }}
+{{- end -}}
+
+{{- define "audit.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+{{- default (include "audit.fullname" .) .Values.serviceAccount.name -}}
+{{- else -}}
+{{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+{{- end -}}
+
+{{/* One component's service account. Takes a dict: root, comp (the values
+block that holds its `serviceAccount`) and suffix. Created, it is
+`<fullname>-<suffix>` unless `name` says otherwise. Not created, it is `name`
+or, when that is empty, the release's own: the identity the component ran as
+before it had one of its own. */}}
+{{- define "audit.componentServiceAccountName" -}}
+{{- $sa := .comp.serviceAccount | default dict -}}
+{{- if $sa.create -}}
+{{- default (printf "%s-%s" (include "audit.fullname" .root) .suffix) $sa.name -}}
+{{- else -}}
+{{- default (include "audit.serviceAccountName" .root) $sa.name -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "audit.queryServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.query "suffix" "query") -}}
+{{- end -}}
+
+{{/* The indexer's. It holds the index's write credential and reads the
+archive: it must not be the writer's identity, which writes the archive. */}}
+{{- define "audit.observeServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.observe "suffix" "observe") -}}
+{{- end -}}
+
+{{- define "audit.notaryServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.jobs.notary "suffix" "notary") -}}
+{{- end -}}
+
+{{- define "audit.verifyServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.jobs.verify "suffix" "verify") -}}
+{{- end -}}
+
+{{- define "audit.purgeServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.jobs.purge "suffix" "purge") -}}
+{{- end -}}
+
+{{- define "audit.clockSyncServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.jobs.clockSync "suffix" "clock-sync") -}}
+{{- end -}}
+
+{{/* The receiver's, in stream mode. It publishes and holds nothing of the
+archive, so on AWS it must not be the writer's identity. */}}
+{{- define "audit.receiverServiceAccountName" -}}
+{{- include "audit.componentServiceAccountName" (dict "root" . "comp" .Values.receiver "suffix" "receiver") -}}
+{{- end -}}
+
+{{- define "audit.podDefaults" -}}
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+securityContext:
+  {{- toYaml .Values.podSecurityContext | nindent 2 }}
+{{- with .Values.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.affinity }}
+affinity:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{/* The trust bundle: a CA the configs name by path, mounted on every pod. */}}
+{{- define "audit.trustMount" -}}
+{{- if .Values.trust.configMap }}
+- name: trust
+  mountPath: /etc/audit/trust
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{- define "audit.trustVolume" -}}
+{{- if .Values.trust.configMap }}
+- name: trust
+  configMap:
+    name: {{ .Values.trust.configMap }}
+{{- end }}
+{{- end -}}
+
+
+{{/* The pods that answer the sink: the writer in direct mode, the receiver in
+stream mode. Their configuration is the front door's. */}}
+{{- define "audit.frontName" -}}
+{{- if eq .Values.mode "stream" -}}receiver{{- else -}}writer{{- end -}}
+{{- end -}}
+
+{{/* The container port a component listens on, read from its own
+configuration, because that is where the address is chosen: the chart derives
+the port from the file rather than asking for it twice. Takes the component's
+`config`. */}}
+{{- define "audit.port" -}}
+{{- $cfg := . | default dict -}}
+{{- regexFind "[0-9]+$" (dig "listen" "address" ":8080" $cfg) -}}
+{{- end -}}
+
+{{/* A component's configuration is a ConfigMap of its own, rendered as it
+stands: toYaml of the `config` block and nothing else. Takes (dict "root" $
+"name" "writer" "config" <the block>). */}}
+{{- define "audit.configName" -}}
+{{ include "audit.fullname" .root }}-{{ .name }}-config
+{{- end -}}
+
+{{- define "audit.configMap" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "audit.configName" . }}
+  labels:
+    {{- include "audit.labels" .root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
+  {{- with .hook }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  {{- end }}
+data:
+  # What the binary reads with --config: validated against
+  # schemas/config/ at start-up, and by this chart's values.schema.json before
+  # it renders.
+  config.yaml: |
+    {{- toYaml .config | nindent 4 }}
+{{- end -}}
+
+{{- define "audit.configMount" -}}
+- name: config
+  mountPath: /etc/audit/config.yaml
+  subPath: config.yaml
+  readOnly: true
+{{- end -}}
+
+{{- define "audit.configVolume" -}}
+- name: config
+  configMap:
+    name: {{ include "audit.configName" . }}
+{{- end -}}
+
+{{/* What a component takes from the platform beyond its configuration. Each
+takes the component's values: `secretFiles` projects a Secret's key as the file
+a `...Secret` name of the config stands for (`secrets.source: file`, root
+/etc/audit/secrets), `secretEnv` puts a Secret's key in the variable a version-1
+`...Env` field names (deprecated), `secretMounts` mounts a Secret as a
+directory, and `tokens` projects a service-account token. */}}
+{{- define "audit.secretEnv" -}}
+{{- range .secretEnv }}
+- name: {{ .name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: {{ .key }}
+      {{- if .optional }}
+      optional: true
+      {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/* The OpenTelemetry SDK environment of one pod, as list items, or nothing when
+no endpoint is set: a process exports only when a collector is named (ADR 0021,
+policy 0006), so an empty `telemetry.otlp.endpoint` renders nothing and a
+release that never set it is byte-identical to one before the value existed.
+Takes (dict "root" $ "service" "<service.name>"), the name the binary reports
+itself as (internal/telemetry): audit-writer for the front door, the receiver
+and the consumers, audit-query, audit-observe, audit-notary, and `audit` for the
+toolchain's jobs, which export nothing and carry the variables for
+uniformity. `extraEnv` comes last, sorted, so the file is stable. */}}
+{{- define "audit.otelEnv" -}}
+{{- $o := (.root.Values.telemetry | default dict).otlp | default dict -}}
+{{- if $o.endpoint }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ $o.endpoint | quote }}
+- name: OTEL_EXPORTER_OTLP_PROTOCOL
+  value: {{ $o.protocol | default "http/protobuf" | quote }}
+- name: OTEL_SERVICE_NAME
+  value: {{ .service | quote }}
+{{- range $name := keys ($o.extraEnv | default dict) | sortAlpha }}
+- name: {{ $name }}
+  value: {{ get $o.extraEnv $name | toString | quote }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/* Everything a container's `env` holds: the component's secrets, then the
+telemetry environment. Takes (dict "root" $ "comp" <the component's values>
+"service" "<service.name>"). Empty, so that the caller omits `env`, when both
+are. */}}
+{{- define "audit.env" -}}
+{{- include "audit.secretEnv" .comp -}}
+{{- include "audit.otelEnv" (dict "root" .root "service" .service) -}}
+{{- end -}}
+
+{{- define "audit.extraMounts" -}}
+{{- if .secretFiles }}
+- name: secret-files
+  mountPath: /etc/audit/secrets
+  readOnly: true
+{{- end }}
+{{- range $i, $m := .secretMounts }}
+- name: secret-{{ $i }}
+  mountPath: {{ $m.mountPath }}
+  readOnly: true
+{{- end }}
+{{- range $i, $t := .tokens }}
+- name: token-{{ $i }}
+  mountPath: {{ $t.mountPath }}
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{- define "audit.extraVolumes" -}}
+{{- if .secretFiles }}
+- name: secret-files
+  projected:
+    # Readable by the owner and the pod's fsGroup and by nobody else.
+    defaultMode: 0440
+    sources:
+      {{- range .secretFiles }}
+      - secret:
+          name: {{ .secretName }}
+          items:
+            - key: {{ .key }}
+              path: {{ .name }}
+          {{- if .optional }}
+          optional: true
+          {{- end }}
+      {{- end }}
+{{- end }}
+{{- range $i, $m := .secretMounts }}
+- name: secret-{{ $i }}
+  secret:
+    secretName: {{ $m.secretName }}
+{{- end }}
+{{- range $i, $t := .tokens }}
+- name: token-{{ $i }}
+  projected:
+    sources:
+      - serviceAccountToken:
+          path: {{ $t.path | default "token" }}
+          audience: {{ $t.audience | quote }}
+          expirationSeconds: {{ $t.expirationSeconds | default 3600 }}
+{{- end }}
+{{- end -}}
+
+{{/* The profile document as the ConfigMap holds it, in full. The pods' checksum
+hashes THIS and not a part of the values that feed it, so that every key the
+document has (profiles, externalIdentifiersAreOpaque, and whatever it gains)
+moves the pod that reads it. */}}
+{{- define "audit.deploymentDocument" -}}
+external_identifiers_are_opaque: {{ .Values.externalIdentifiersAreOpaque }}
+profiles:
+  {{- toYaml .Values.profiles | nindent 2 }}
+{{- end -}}
+
+{{/* The profile document, which every component that reads profiles mounts. */}}
+{{- define "audit.deploymentMount" -}}
+- name: deployment
+  mountPath: /etc/audit/deployment.yaml
+  subPath: deployment.yaml
+  readOnly: true
+{{- end -}}
+
+{{- define "audit.deploymentVolume" -}}
+- name: deployment
+  configMap:
+    name: {{ include "audit.fullname" . }}-deployment
+{{- end -}}
+
+{{/* The claim the local key directory lives in. */}}
+{{- define "audit.keysClaim" -}}
+{{ .Values.keysVolume.existingClaim | default (printf "%s-keys" (include "audit.fullname" .)) }}
+{{- end -}}
+
+{{/* Who an OpenBAO client signs in as: its role on the JWT mount, the file its
+token is read from, or the Secret the variable it names comes from. Takes
+(dict "bao" <the openbao block> "env" <the component's secretEnv> "files" <its secretFiles>). Empty when
+there is none to compare. */}}
+{{- define "audit.baoIdentity" -}}
+{{- $bao := .bao | default dict -}}
+{{- if dig "login" "role" "" $bao -}}
+role:{{ dig "login" "mount" "" $bao }}/{{ dig "login" "role" "" $bao }}
+{{- else if dig "tokenFile" "" $bao -}}
+file:{{ dig "tokenFile" "" $bao }}
+{{- else if dig "tokenEnv" "" $bao -}}
+{{- $name := dig "tokenEnv" "" $bao -}}
+{{- range .env -}}{{- if eq .name $name -}}secret:{{ .secretName }}/{{ .key }}{{- end -}}{{- end -}}
+{{- else if dig "tokenSecret" "" $bao -}}
+{{- $name := dig "tokenSecret" "" $bao -}}
+{{- range .files -}}{{- if eq .name $name -}}secret:{{ .secretName }}/{{ .key }}{{- end -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The role a database URL connects as. */}}
+{{- define "audit.databaseUser" -}}
+{{- regexReplaceAll "^[a-z]+://([^:@/]*).*$" (. | default "") "${1}" -}}
+{{- end -}}
+
+{{- /* Alert mode. A rule's labels: the routing labels the caller sets for every rule, then
+the rule's own severity, then anything the rule's `labels` adds. */ -}}
+{{- define "audit.ruleLabels" -}}
+{{- $l := mergeOverwrite (deepCopy (.root.Values.alerts.ruleLabels | default dict)) (dict "severity" .cfg.severity) (deepCopy (.cfg.labels | default dict)) -}}
+{{- toYaml $l -}}
+{{- end -}}
+{{- define "audit.runbook" -}}
+{{- with .root.Values.alerts.runbookBaseUrl -}}
+runbook_url: {{ printf "%s#%s" . (lower $.alert) | quote }}
+{{- end -}}
+{{- end -}}

@@ -17,7 +17,10 @@
     "protoc-gen-go":         "1.36.12",
     "kubectl":               "1.37.0",
     "git-filter-repo":       "2.47.0",
-    "yq-go":                 "4.53.3"
+    "yq-go":                 "4.53.3",
+    "nodejs":                "26.8.1",
+    "openssl":               "3.6.0",
+    "postgresql":            "17"
   },
   "env": {
     "CGO_ENABLED":  "0",

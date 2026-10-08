@@ -1,0 +1,28 @@
+apiVersion: audit.truvity.github.io/audit-writer-lambda/v2
+secrets:
+  source: ssm
+  root: /audit/main/private/config
+deployment: /var/task/deployment.yaml
+catalogues: /var/task/catalogues
+archive:
+  bucket:
+    name: audit-archive
+    region: eu-central-1
+  prefix: app
+  lockMode: governance
+  kmsKey: alias/audit-archive
+keys:
+  provider: transit
+  transit:
+    prefix: audit
+    openbao:
+      address: https://openbao.example.test:8200
+      mount: transit
+      tokenSecret: openbao/token
+forgetIdentities: true
+dedupe:
+  dynamodb:
+    table: audit-dedupe
+    region: eu-central-1
+    window: 336h0m0s
+require: archived

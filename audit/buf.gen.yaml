@@ -1,0 +1,34 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/truvity/sluis/audit/sdk/gen
+plugins:
+  # Local plugins (installed via devbox: protoc-gen-go, protoc-gen-connect-go)
+  # to avoid BSR rate limits. The Go types are the SDK module's (sdk/), so they
+  # are written there; the JSON Schema stays at the root, where the writer
+  # embeds it.
+  - local: protoc-gen-go
+    out: sdk/gen
+    opt: paths=source_relative
+  - local: protoc-gen-connect-go
+    out: sdk/gen
+    opt: paths=source_relative
+  # The record's JSON Schema, with the proto's comments as descriptions. Run
+  # here and not in the binary, because only the plugin sees the comments.
+  - local: [go, run, ./cmd/protoc-gen-audit-jsonschema]
+    out: gen/jsonschema
+    strategy: all
+  # TypeScript: protobuf-es v2 emits message schemas and service descriptors;
+  # @connectrpc/connect v2 consumes them via createClient.
+  # Pinned to the @bufbuild/protobuf runtime locked in ts/package-lock.json: an
+  # unpinned plugin stamps new headers and drift-ts fails on master.
+  - remote: buf.build/bufbuild/es:v2.15.0
+    out: ts/src/gen
+    # Relative imports carry .js, which Node's ESM resolution requires of the
+    # compiled package: without it `./record_pb` resolves in a bundler and
+    # nowhere else.
+    opt:
+      - target=ts
+      - import_extension=js

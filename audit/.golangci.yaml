@@ -1,0 +1,109 @@
+version: "2"
+
+linters:
+  enable:
+    - depguard
+    - errcheck
+    - gocritic
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - revive
+    - staticcheck
+    - unused
+
+  # v2 schema: settings live UNDER linters. A top-level `linters-settings:`
+  # block is accepted silently by `run`; only `golangci-lint config verify`
+  # rejects it, which is why the lint recipe runs verify first. Otherwise a
+  # settings block in the wrong place spends releases doing nothing.
+  settings:
+    # Copied from truvity/policy lint/golangci-depguard.yaml. A copy
+    # because golangci-lint v2 cannot extend a configuration from a URL;
+    # kept in step by hand, as every consumer's is.
+    depguard:
+      rules:
+        main:
+          deny:
+            # Wiring. docs/decisions/0001-no-di-containers.md — a container turns
+            # a missing dependency into a run-time failure in an environment
+            # where nobody is watching, and takes the shape of the program out of
+            # the program.
+            - pkg: github.com/samber/do
+              desc: "construct dependencies in main and pass them as arguments (policy: contracts/service.md §2)"
+            - pkg: go.uber.org/fx
+              desc: "construct dependencies in main and pass them as arguments (policy: contracts/service.md §2)"
+            - pkg: github.com/google/wire
+              desc: "construct dependencies in main and pass them as arguments (policy: contracts/service.md §2)"
+
+            # Configuration. docs/decisions/0002-config-file-plus-env.md — a
+            # mapping library silently drops what it was not told about, so the
+            # service starts on a default nobody chose.
+            - pkg: github.com/knadh/koanf
+              desc: "one configuration file validated against a schema: github.com/truvity/policy/config"
+            - pkg: github.com/spf13/viper
+              desc: "one configuration file validated against a schema: github.com/truvity/policy/config"
+
+            # Libraries the canon retired. docs/canon/go.md.
+            - pkg: gopkg.in/yaml.v2
+              desc: "go.yaml.in/yaml/v3 — the maintained continuation"
+            - pkg: gopkg.in/yaml.v3
+              desc: "go.yaml.in/yaml/v3 — the archived module's maintained continuation, a drop-in"
+            - pkg: github.com/golang-jwt/jwt
+              desc: "github.com/lestrrat-go/jwx"
+            - pkg: github.com/pkg/errors
+              desc: "stdlib error wrapping with %w"
+            - pkg: github.com/gofiber/fiber/v2
+              desc: "github.com/gofiber/fiber/v3"
+        # audit lives in the sluis repository and is used without it: it
+        # never imports sluis. These are the root module's packages; the
+        # complete guard is internal/independence, which fails on any other.
+        sluis:
+          deny:
+            - pkg: github.com/truvity/sluis/backend
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/cmd
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/config
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/gen
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/identity
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/internal
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/policy
+              desc: "audit never imports sluis (internal/independence)"
+            - pkg: github.com/truvity/sluis/tokens
+              desc: "audit never imports sluis (internal/independence)"
+    lll:
+      line-length: 160
+    gocritic:
+      settings:
+        rangeValCopy:
+          # A catalogue value is read-mostly configuration, walked once per
+          # validation. Ranging by key to save a copy of it would make the code
+          # worse for a cost nothing measures.
+          sizeThreshold: 512
+      enabled-checks:
+        # Opt-in (performance tag); the diagnostics tag — which already
+        # carries exitAfterDefer — is on by default, so listing that one
+        # here only earns a "no need to enable" warning.
+        - rangeValCopy
+
+  exclusions:
+    # gen/ is buf output, committed for `go get`-ability but never hand-edited.
+    paths:
+      - gen
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - gen
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
