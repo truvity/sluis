@@ -77,6 +77,11 @@ func OpenArchiveFrom(ctx context.Context, a config.Archive, secrets *config.Secr
 	if err != nil {
 		return nil, err
 	}
+	// A process that only reads names no lock mode; at an endpoint of its own the
+	// archive has none, and a reader sends no lock header either way.
+	if a.LockMode == "" && a.Bucket.Endpoint != "" {
+		lock = s3store.None
+	}
 	cfg, err := awsConfig(ctx, a.Bucket, a.Credentials, secrets)
 	if err != nil {
 		return nil, err

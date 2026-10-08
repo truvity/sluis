@@ -67,6 +67,11 @@ func NewArchiveFlags(fs *flag.FlagSet, lookup func(name, fallback string) string
 // has none to give and answers compliance, which nothing it does depends on.
 func (a *ArchiveFlags) Lock() (s3store.LockMode, error) {
 	if a.lock == nil {
+		// A reader sends no lock header. At an endpoint of its own the archive has
+		// no lock to speak of, and compliance there would be refused.
+		if *a.Endpoint != "" {
+			return s3store.None, nil
+		}
 		return s3store.Compliance, nil
 	}
 	return s3store.ParseLockMode(*a.lock)
