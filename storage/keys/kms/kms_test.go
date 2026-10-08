@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -87,7 +88,7 @@ func newKey(t *testing.T, c *awskms.Client, spec types.KeySpec, usage types.KeyU
 func TestConformance(t *testing.T) {
 	c := client(t)
 	conformance.Run(t, conformance.Subject{
-		Backend:        kms.New(c, kms.WithWrappedStore(&memStore{})),
+		Backend:        kms.New(c, kms.WithWrappedStore(kms.FromState(memory.New()))),
 		Symmetric:      newKey(t, c, types.KeySpecSymmetricDefault, types.KeyUsageTypeEncryptDecrypt),
 		OtherSymmetric: newKey(t, c, types.KeySpecSymmetricDefault, types.KeyUsageTypeEncryptDecrypt),
 		Signing:        newKey(t, c, types.KeySpecEccNistP384, types.KeyUsageTypeSignVerify),
@@ -175,6 +176,51 @@ func TestMACOverStateStore(t *testing.T) {
 	id := "mac/pseudonym/" + base64.RawURLEncoding.EncodeToString([]byte("tenant/1"))
 	if _, err := st.Get(t.Context(), id); err != nil {
 		t.Fatalf("the wrapped key is not in the state store: %v", err)
+	}
+}
+
+// Erasure over the state store: the wrapped key is gone from the store with
+// the tombstone in its place, another process refuses too, and a tenant that
+// was never used is refused after Destroy rather than minted.
+func TestDestroyOverStateStore(t *testing.T) {
+	c := client(t)
+	alias := newKey(t, c, types.KeySpecSymmetricDefault, types.KeyUsageTypeEncryptDecrypt)
+	st := memory.New().Child("wrapped")
+	ctx := t.Context()
+	a := kms.New(c, kms.WithWrappedStore(kms.FromState(st)))
+	b := kms.New(c, kms.WithWrappedStore(kms.FromState(st)))
+	if _, err := a.MAC(ctx, alias, keys.Pseudonym, "t1", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	id := "mac/pseudonym/" + base64.RawURLEncoding.EncodeToString([]byte("t1"))
+	if err := a.DestroyTenant(ctx, alias, keys.Pseudonym, "t1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Get(ctx, id); err == nil {
+		t.Fatal("the wrapped key is still in the state store")
+	}
+	if _, err := st.Get(ctx, "destroyed/"+id); err != nil {
+		t.Fatalf("no tombstone: %v", err)
+	}
+	for _, x := range []*kms.Backend{a, b} {
+		if _, err := x.MAC(ctx, alias, keys.Pseudonym, "t1", []byte("x")); !errors.Is(err, keys.ErrDestroyed) {
+			t.Fatalf("MAC after Destroy: %v", err)
+		}
+	}
+	if _, err := st.Get(ctx, id); err == nil {
+		t.Fatal("MAC of a destroyed tenant created a new wrapped key")
+	}
+}
+
+// A store that cannot keep a tombstone cannot destroy: not a silent no-op.
+func TestDestroyNeedsAnErasableStore(t *testing.T) {
+	for name, b := range map[string]*kms.Backend{
+		"no store":    kms.New(nil),
+		"plain store": kms.New(nil, kms.WithWrappedStore(&memStore{})),
+	} {
+		if err := b.DestroyTenant(t.Context(), "alias/x", keys.Pseudonym, "t"); !errors.Is(err, keys.ErrUnsupported) {
+			t.Errorf("%s: got %v, want ErrUnsupported", name, err)
+		}
 	}
 }
 

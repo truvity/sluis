@@ -88,6 +88,23 @@
 // Rotating the key changes nothing while version 1 is kept, which is why it
 // is pinned.
 //
+// # Erasing a tenant
+//
+// This backend does not erase a tenant: keys.Key.Destroy returns
+// keys.ErrUnsupported. The pseudonym key here is one transit key for the
+// installation, and every tenant's HMAC is computed under it. Erasure needs a
+// key per tenant that can be deleted, and that would mean creating a transit
+// key on first use, setting deletion_allowed and deleting it on Destroy:
+// rights to create and delete keys that the writer's policy deliberately does
+// not have (it may call hmac on a key and nothing else), plus a key per
+// tenant to back up and count. That trade is not made silently here.
+//
+// An installation that must erase tenants configures the pseudonym purpose on
+// the kms backend (the wrapped secret per tenant lives in the state store and
+// is deleted from there), or runs a transit Backend of its own per tenant, as
+// above, and deletes that key itself. The other purposes can stay on
+// transit.
+//
 // # Policy
 //
 // See the storage module's documentation for the ACL policies and for what

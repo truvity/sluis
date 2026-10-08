@@ -26,6 +26,10 @@ type Subject struct {
 	Signing        string // an ECC P-384 signing key
 	// NoMAC skips the MAC tests for a backend without keys.MACBackend.
 	NoMAC bool
+	// NoDestroy is for a backend that cannot erase a tenant: the suite then
+	// checks that Destroy says keys.ErrUnsupported and changes nothing,
+	// instead of the erasure tests.
+	NoDestroy bool
 }
 
 // Run runs the suite.
@@ -221,6 +225,68 @@ func Run(t *testing.T, s Subject) {
 		}
 		if _, err := p.MAC(ctx, "", []byte("x")); err == nil {
 			t.Fatal("MAC accepted an empty tenant")
+		}
+	})
+
+	t.Run("destroy", func(t *testing.T) {
+		if s.NoMAC {
+			t.Skip("backend has no MAC")
+		}
+		ks := open(t, "inst-a")
+		p := must(t, ks, keys.Pseudonym)
+		if s.NoDestroy {
+			if _, err := p.MAC(ctx, "tenant-keep", []byte("alice")); err != nil {
+				t.Fatal(err)
+			}
+			if err := p.Destroy(ctx, "tenant-keep"); !errors.Is(err, keys.ErrUnsupported) {
+				t.Fatalf("Destroy: got %v, want ErrUnsupported", err)
+			}
+			if _, err := p.MAC(ctx, "tenant-keep", []byte("alice")); err != nil {
+				t.Fatalf("a refused Destroy changed MAC: %v", err)
+			}
+			return
+		}
+		if _, err := p.MAC(ctx, "tenant-gone", []byte("alice")); err != nil {
+			t.Fatal(err)
+		}
+		keep, err := p.MAC(ctx, "tenant-stay", []byte("alice"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gone, err := p.Destroyed(ctx, "tenant-gone"); err != nil || gone {
+			t.Fatalf("Destroyed before Destroy: %v, %v", gone, err)
+		}
+		if err := p.Destroy(ctx, "tenant-gone"); err != nil {
+			t.Fatalf("Destroy: %v", err)
+		}
+		if gone, err := p.Destroyed(ctx, "tenant-gone"); err != nil || !gone {
+			t.Fatalf("Destroyed after Destroy: %v, %v", gone, err)
+		}
+		// Not the same Key value only: a new Keys over the same backend.
+		for _, k := range []*keys.Key{p, must(t, open(t, "inst-a"), keys.Pseudonym)} {
+			if _, err := k.MAC(ctx, "tenant-gone", []byte("alice")); !errors.Is(err, keys.ErrDestroyed) {
+				t.Fatalf("MAC after Destroy: got %v, want ErrDestroyed", err)
+			}
+		}
+		if after, err := p.MAC(ctx, "tenant-stay", []byte("alice")); err != nil || !bytes.Equal(after, keep) {
+			t.Fatalf("another tenant changed: %v", err)
+		}
+		if err := p.Destroy(ctx, "tenant-gone"); err != nil {
+			t.Fatalf("a second Destroy: %v", err)
+		}
+		// A tenant never used can be destroyed in advance, and stays destroyed.
+		if err := p.Destroy(ctx, "tenant-never"); err != nil {
+			t.Fatalf("Destroy of an unused tenant: %v", err)
+		}
+		if _, err := p.MAC(ctx, "tenant-never", []byte("x")); !errors.Is(err, keys.ErrDestroyed) {
+			t.Fatalf("MAC of a tenant destroyed before use: got %v", err)
+		}
+		// Another purpose's material for the same tenant name is its own.
+		if _, err := must(t, ks, keys.Archive).MAC(ctx, "tenant-gone", []byte("alice")); err != nil && !errors.Is(err, keys.ErrUnsupported) {
+			t.Fatalf("destroying the pseudonym tenant reached another purpose: %v", err)
+		}
+		if err := p.Destroy(ctx, ""); err == nil {
+			t.Fatal("Destroy accepted an empty tenant")
 		}
 	})
 

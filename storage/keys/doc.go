@@ -76,6 +76,29 @@
 // data key wrapped under the purpose's key with context {purpose, tenant},
 // cached in memory, its wrapped form stored by the caller).
 //
+// # Erasing a tenant
+//
+// Key.Destroy ends a tenant's pseudonyms: the secret behind MAC for (purpose,
+// tenant) is removed and a tombstone is left, so that afterwards MAC for the
+// tenant returns ErrDestroyed rather than minting a new secret (which would
+// give the person a second, unrelated pseudonym). Destroy is idempotent,
+// touches no other tenant, and cannot be undone. Pseudonyms already written
+// stay and can never be recomputed. It is the optional capability
+// DestroyBackend; a backend without it returns ErrUnsupported, which is not
+// "destroyed".
+//
+//   - kms: needs the wrapped store to be a kms.ErasableStore (kms.FromState
+//     is one). The tombstone is written first, then the wrapped key is
+//     deleted with all its versions. Another process holding the plaintext
+//     stops within kms.DefaultMACKeyTTL.
+//   - local: remembered in the backend's memory only; for tests.
+//   - transit: unsupported, see the transit package.
+//
+// Only MAC has material per tenant. Encrypt, Decrypt and Sign work under one
+// key for the installation, so there is nothing of a tenant's in them to
+// destroy; to make a tenant's ciphertexts unreadable, wrap a data key per
+// tenant (GenerateDataKey) and destroy that.
+//
 // # Backends
 //
 // keys/local (tests; refuses weak roots), keys/kms (AWS KMS: aliases only;
