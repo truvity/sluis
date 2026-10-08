@@ -259,6 +259,7 @@ func (in *Installation) secrets(s *internal.Sluis) error {
 			return errors.Join(errs...)
 		}
 		want.Endpoint, want.Refresh, want.KMSKeyID = got.Endpoint, got.Refresh, got.KMSKeyID
+		want.Layout, want.Grace = got.Layout, got.Grace
 	}
 	s.Secrets = &want
 	if s.Recovery == nil {

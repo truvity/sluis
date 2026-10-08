@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	yaml "go.yaml.in/yaml/v3"
 
@@ -199,6 +200,30 @@ func TestRenderRefusesWhatTheShapeFixes(t *testing.T) {
 				t.Errorf("error %v, want one naming %q", err, c.want)
 			}
 		})
+	}
+}
+
+// A Lambda installation keeps the layout and the grace of its secrets: the
+// shape fixes the source, the root and the region, not the storage layout.
+func TestRenderKeepsTheSecretsLayoutAndGraceOnLambda(t *testing.T) {
+	in := installation(t, "example")
+	grace := config.Duration(12 * time.Hour)
+	in.Secrets = &config.Secrets{Layout: "v4", Grace: &grace}
+	service, _, err := config.Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Secrets map[string]any `yaml:"secrets"`
+	}
+	if err := yaml.Unmarshal(service, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Secrets["layout"] != "v4" || doc.Secrets["grace"] != "12h0m0s" && doc.Secrets["grace"] != "12h" {
+		t.Errorf("secrets %v, want layout v4 and grace 12h\n%s", doc.Secrets, service)
+	}
+	if doc.Secrets["source"] != "ssm" || doc.Secrets["root"] != "/sluis/example" {
+		t.Errorf("secrets %v lost what the shape fixes", doc.Secrets)
 	}
 }
 

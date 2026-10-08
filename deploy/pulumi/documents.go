@@ -14,6 +14,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	sluisconfig "github.com/truvity/sluis/config"
+	"github.com/truvity/sluis/storage/keys"
 )
 
 // The documents of the configuration layer, by the name each has in it.
@@ -116,7 +117,9 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 	added := false
 	if a.Keys != nil {
-		if _, set := doc["keys"]; set {
+		// A document rendered from an Installation already carries the library's
+		// own block (withKeys), and that alone may be there.
+		if cur, set := doc["keys"]; set && !(a.Installation != nil && reflect.DeepEqual(cur, a.Keys.keysBlock())) {
 			return false, errors.New("sluispulumi: LambdaArgs.Config names keys and LambdaArgs.Keys is set: leave it out, the library writes it")
 		}
 		doc["keys"] = a.Keys.keysBlock()
@@ -249,6 +252,9 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 		sec.KMSKeyID = k.Secrets
 		in.Secrets = &sec
 	}
+	if err := withKeys(&in, a.Keys); err != nil {
+		return a, err
+	}
 	if a.ParameterKeyArn != "" {
 		sec := sluisconfig.Secrets{}
 		if in.Secrets != nil {
@@ -275,6 +281,28 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	}
 	a.Config, a.Policy = string(service), string(policy)
 	return a, nil
+}
+
+// withKeys makes the installation carry exactly the keys the library supplies
+// (LambdaArgs.Keys). Without it the renderer would default `keys.sign` for a
+// kmsWrapped signer that names no key, and the default would differ from the
+// estate's. An installation that names another `keys.sign` is refused; one that
+// names more than the library writes is left as it is, and refused with the
+// document it renders.
+func withKeys(in *sluisconfig.Installation, k *KeysArgs) error {
+	if k == nil {
+		return nil
+	}
+	if c := in.Keys; c != nil {
+		if got := c.Keys[keys.Sign].Key; got != "" && got != k.Sign {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Keys.Sign is %q and the installation's keys.sign is %q: say it once", k.Sign, got)
+		}
+		if len(c.Keys) > 1 {
+			return nil
+		}
+	}
+	in.Keys = &keys.Config{Adapter: "kms", Keys: map[keys.Purpose]keys.Entry{keys.Sign: {Key: k.Sign}}}
+	return nil
 }
 
 // ownServe writes the service document's library-owned keys.
