@@ -39,7 +39,8 @@ func resolvePreset(a *Args) (profile.Preset, []destination, error) {
 	}
 	if strings.TrimSpace(a.Writer.DeploymentYAML) == "" {
 		if !a.Ingest.Disabled {
-			return "", nil, errors.New("auditpulumi: Writer.DeploymentYAML is required: the profile configuration, which the preset is derived from (or set Ingest.Disabled)")
+			return "", nil, errors.New("auditpulumi: Writer.DeploymentYAML is required: the profile configuration, " +
+				"which the preset is derived from (or set Ingest.Disabled)")
 		}
 		if explicit == "" {
 			return profile.Operational, nil, nil

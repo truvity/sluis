@@ -421,7 +421,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 		want                 want
 	}{
 		"both": {false, false, want{
-			resources: 42,
+			resources: 41,
 			roles:     []string{"audit-notary", "audit-observe-reader", "audit-scheduler", "audit-writer"},
 			keys:      nil, functions: []string{"audit-notary", "audit-writer"},
 			queues: []string{"audit-ingest", "audit-ingest-dlq"},
@@ -430,7 +430,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 			table: true, schedule: true, mapping: true, topic: true,
 		}},
 		"ingest only (a self-hosted notary runs elsewhere)": {false, true, want{
-			resources: 30,
+			resources: 29,
 			roles:     []string{"audit-observe-reader", "audit-writer"},
 			keys:      nil, functions: []string{"audit-writer"},
 			queues: []string{"audit-ingest", "audit-ingest-dlq"},
@@ -438,14 +438,14 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 			table:  true, mapping: true, topic: true,
 		}},
 		"notary only": {true, false, want{
-			resources: 25,
+			resources: 24,
 			roles:     []string{"audit-notary", "audit-observe-reader", "audit-scheduler"},
 			keys:      nil, functions: []string{"audit-notary"},
 			alarms:   []string{"notary-errors", "notary-silent", "notary-throttles"},
 			schedule: true, topic: true,
 		}},
 		"the archive alone (kernel K5b)": {true, true, want{
-			resources: 11,
+			resources: 10,
 			roles:     []string{"audit-observe-reader"},
 		}},
 	}

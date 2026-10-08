@@ -76,3 +76,11 @@ func TestAnAttestedDestinationIsRefusedAnArchiveThatWritesNoLock(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestADestinationKeyAliasIsRefusedOnAnS3CompatibleEndpoint(t *testing.T) {
+	_, err := PlanDestinations(config.Archive{Bucket: config.Bucket{Name: "b", Endpoint: "https://r2.example.test"}},
+		composedDestinations(t, "profiles:\n  security:\n    frameworks: [security]\n    key_alias: alias/audit-security\n"))
+	if err == nil || !strings.Contains(err.Error(), "destination security names key_alias") {
+		t.Fatalf("got %v", err)
+	}
+}
