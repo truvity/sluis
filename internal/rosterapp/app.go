@@ -385,6 +385,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			a.Close()
 			return nil, err
 		}
+		directory.ConsoleServer().UseCloudflare(a.cloudflare)
 	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory", "controllers", len(a.consoles))

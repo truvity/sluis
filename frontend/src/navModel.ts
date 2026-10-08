@@ -11,7 +11,7 @@ export type NavCluster = { heading?: string; hint?: string; entries: NavEntry[] 
 /** What the rail may show to this caller. Sessions exist only once an
  *  issuer shares this console's origin and are operator-only; Audit only
  *  once an installation is connected. */
-export type NavOptions = { sessions: boolean; audit: boolean };
+export type NavOptions = { sessions: boolean; audit: boolean; cloudflare?: boolean };
 
 /** The navigation is the model: Overview, then four clusters:
  *
@@ -55,6 +55,7 @@ export function clusters(options: NavOptions): NavCluster[] {
       entries: [
         { value: "github", label: "GitHub", to: paths.github() },
         { value: "slack", label: "Slack", to: paths.slack() },
+        ...(options.cloudflare ? [{ value: "cloudflare", label: "Cloudflare", to: paths.cloudflare() }] : []),
       ],
     },
     {

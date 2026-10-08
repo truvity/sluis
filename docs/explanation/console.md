@@ -100,7 +100,7 @@ from the policy would only stop its chains.
 
 Navigation is the model, in four clusters under *Overview*: **IDENTITY** (Directories, Directory groups, People,
 Rules); **ACCESS** (Internal groups, Clients, Sessions); **SYSTEMS** (GitHub, Slack, one entry each, with tabs of
-their own); **ADMIN** (Audit, Settings).
+their own, and Cloudflare where the service document has a `cloudflare` section); **ADMIN** (Audit, Settings).
 
 **GitHub** is a page on the internal side, beside clients, because a GitHub team consumes internal groups the way a
 client does. Four tabs, in the order the work happens. *Overview* says what needs attention next: a card per
@@ -121,6 +121,20 @@ selection is in the address query, so a filtered view is a link. Channel states 
 invalid and not reported. **A channel has a page**: where it comes from (every source a link), the state of every
 person in it and why, each side of a Slack Connect channel, and its history, which is the audit trail narrowed to the
 channel's target.
+
+**Cloudflare** is one page with two parts. *Your presets* is for anyone signed in: the presets the policy's
+`cloudflare.grants` give your groups, each with **Get a token** (or **Get credentials** for R2). The credential is
+minted for you on the spot, named for you in Cloudflare and in the audit trail, shown once with a copy button and
+held only in the dialog; closing it forgets it, and the page writes it nowhere in the browser. The command-line way
+(`sluisctl cloudflare token`, `sluisctl cloudflare r2`, `sluisctl aws-config`) renews on its own and is the better
+home for a long-lived use. The administrator's part is for viewers and shows the accounts (ids by their last four
+characters), and per preset its lifetime and rotation, the **prototype and what sluis finds in it now**
+(*disabled ✓*, *ACTIVE*, *forbidden permission* or missing, with the reason; an active or forbidden prototype
+cannot be rotated or minted from), the stored token (id, minted, expires, and a warning once it is older than the
+rotation and an error past twice the rotation, the alert's threshold) and the tokens minted on demand that are still
+live. An operator can **Rotate now** (mint the stored token before it is due) and **Revoke** a live token by id;
+each asks to confirm and is recorded under the operator's name. No page, response or log of the console carries
+the value of a kept token. See [mint short-lived Cloudflare tokens](../how-to/cloudflare-tokens.md).
 
 The reverse edges are drawn from the same reports and records, with no call of their own: a directory group's page
 lists the Slack channels it feeds, per workspace, and the GitHub teams it feeds through the internal groups; a

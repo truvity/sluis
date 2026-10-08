@@ -30,6 +30,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import ShieldIcon from "@mui/icons-material/Shield";
 import AppsIcon from "@mui/icons-material/Apps";
 import RuleIcon from "@mui/icons-material/Rule";
+import CloudIcon from "@mui/icons-material/Cloud";
 
 import { issuerIsSameOrigin, mounted, personName, whoami, type Me } from "./api";
 import { useAsync } from "./hooks";
@@ -49,6 +50,7 @@ import { SessionsPage } from "./Sessions";
 import { SlackHub } from "./SlackHub";
 import { AuditPage } from "./Audit";
 import { SettingsView } from "./Settings";
+import { CloudflarePage } from "./Cloudflare";
 
 const drawerWidth = 236;
 
@@ -67,6 +69,7 @@ const icons: Record<string, React.ReactNode> = {
   sessions: <KeyIcon fontSize="small" />,
   github: <GitHubIcon fontSize="small" />,
   slack: <TagIcon fontSize="small" />,
+  cloudflare: <CloudIcon fontSize="small" />,
   audit: <HistoryIcon fontSize="small" />,
   settings: <SettingsIcon fontSize="small" />,
 };
@@ -184,7 +187,7 @@ export function App() {
         </Typography>
       </Box>
       <List dense disablePadding sx={{ pb: 1 }}>
-        {clusters({ sessions: operator && issuerIsSameOrigin(identityInfo?.issuerUrl), audit: Boolean(identityInfo?.audit) }).map((cluster) => (
+        {clusters({ sessions: operator && issuerIsSameOrigin(identityInfo?.issuerUrl), audit: Boolean(identityInfo?.audit), cloudflare: Boolean(identityInfo?.cloudflare) }).map((cluster) => (
           <Box key={cluster.heading ?? "start"}>
             {cluster.heading ? (
               <ListSubheader disableSticky sx={{ mt: 1.5, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "0.7rem", lineHeight: "32px" }} title={cluster.hint}>
@@ -322,6 +325,8 @@ function PageFor({
       return <GitHubPage section={id} rest={rest} onDone={onDone} />;
     case "slack":
       return <SlackHub section={id} rest={rest} query={query} auditConnected={Boolean(me?.audit)} onDone={onDone} />;
+    case "cloudflare":
+      return <CloudflarePage me={me} operator={operator} onDone={onDone} />;
     case "sessions":
       return <SessionsPage operator={operator} />;
     case "audit":
