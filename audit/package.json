@@ -1,7 +1,7 @@
 {
   "name": "@truvity/audit",
   "version": "0.0.0",
-  "description": "Read an audit trail from TypeScript: the query client and contract, the qualifier box compiled to the typed filter, records as their catalogues' sentences, and React hooks with a default MUI view. Published to GitHub Packages at each release tag's version.",
+  "description": "Read an audit trail from TypeScript: the query client and contract, the qualifier box compiled to the typed filter, and records as their catalogues' sentences. Framework-free; the React hooks and view are @truvity/audit-react. Published to GitHub Packages at each release tag's version.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -17,14 +17,7 @@
     ".": {
       "types": "./ts/dist/index.d.ts",
       "import": "./ts/dist/index.js"
-    },
-    "./react": {
-      "types": "./ts/dist/react/index.d.ts",
-      "import": "./ts/dist/react/index.js"
     }
-  },
-  "scripts": {
-    "prepare": "cd ts && npm ci --no-audit --no-fund && npm run build"
   },
   "files": [
     "ts/dist/**"
@@ -37,13 +30,5 @@
     "@bufbuild/protobuf": "^2.15.0",
     "@connectrpc/connect": "^2.1.2",
     "intl-messageformat": "^11.0.0"
-  },
-  "peerDependencies": {
-    "@mui/material": ">=7",
-    "react": ">=19"
-  },
-  "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "@mui/material": { "optional": true }
   }
 }

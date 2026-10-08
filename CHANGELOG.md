@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Breaking (audit): `@truvity/audit/react` is the package `@truvity/audit-react` (ADR 0042 §10).** The hooks (`AuditProvider`, `useSearch`, `useTail`, `useAccess`, `useFacets`, `useRecord`, `useAudit`) and the default MUI `AuditView` move out of `@truvity/audit`, whose `./react` export and optional `react` and `@mui/material` peer dependencies are gone: it is now a framework-free query client. `@truvity/audit-react` (sources in `audit/react/`) depends on `@truvity/audit` at exactly the same version, has `react` (>=19), `@mui/material` (>=7), `@bufbuild/protobuf` and `@connectrpc/connect` as peer dependencies, and is published to GitHub Packages with the other two TypeScript packages at each release tag's version. Replace `import { AuditProvider, AuditView } from "@truvity/audit/react"` with `from "@truvity/audit-react"` and add the package. The console installs `@truvity/audit` and `@truvity/audit-react` from the checkout instead of the `truvity/audit` v0.6.1 git dependency, and `just deps` builds the three TypeScript packages before installing it.
+
 ## v1.74.0-rc.1
 
 ### Added

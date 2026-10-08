@@ -419,19 +419,25 @@ golden:
 deps: tidy
     go mod download
     cd ts && npm ci
+    cd ts && npx tsc -p tsconfig.build.json
+    cd audit/ts && npm ci --no-audit --no-fund
+    cd audit/ts && npx tsc -p tsconfig.build.json
+    cd audit/react && npm ci --no-audit --no-fund
+    cd audit/react && npx tsc -p tsconfig.build.json
     cd frontend && npm ci
 
-# Build the TypeScript package into ts/dist.
+# The TypeScript packages the console installs, built into their dist/ by
+# `deps`.
 #
-# NOT committed, and FIRST: the console's package.json depends on it as
-# `file:../ts`, and resolves through the root manifest's `main`, which
-# points into ts/dist. Build the console before this and it resolves an
-# import to a directory that is not there yet.
-#
-# The release builds it the same way and publishes the root package to
-# GitHub Packages; nothing builds it on install.
+# NOT committed, and BEFORE the console's `npm ci`: the console installs
+# them as copies (frontend/.npmrc, `install-links`), so that each resolves
+# @bufbuild/protobuf and @connectrpc/connect from the console like a published
+# install does, and a copy taken before the build has no dist/ in it. `deps`
+# builds ts/, audit/ts and audit/react in that order, then installs the
+# console. The release builds the same way and publishes the three packages
+# (sluis, audit, audit-react) to GitHub Packages; nothing builds them on
+# install.
 ts-package: deps
-    cd ts && npx tsc -p tsconfig.build.json
 
 # Typecheck and test the TypeScript package.
 ts: ts-package
@@ -876,11 +882,17 @@ audit-ts:
     cd ts && npx tsc --noEmit
     cd ts && npx vitest run
     cd ts && rm -rf dist && npx tsc -p tsconfig.build.json
-    # What a publish from the root would ship: the compiled package, and no
-    # test or test helper. The root's prepare script is what builds the
-    # package when it is installed from a git commit; it has just run above.
-    npm pack --dry-run --ignore-scripts --json | grep -q '"path": "ts/dist/react/index.js"'
-    ! npm pack --dry-run --ignore-scripts --json | grep -E '"path": "ts/dist/.*(test|testing)'
+    # audit-react installs @truvity/audit from the checkout, so ts/dist comes first.
+    cd react && npm ci --no-audit --no-fund
+    cd react && npx tsc --noEmit
+    cd react && npx vitest run
+    cd react && rm -rf dist && npx tsc -p tsconfig.build.json
+    # What a publish would ship: the compiled packages, no test or test helper,
+    # and no React in the framework-free one.
+    npm pack --dry-run --ignore-scripts --json | grep -q '"path": "ts/dist/index.js"'
+    ! npm pack --dry-run --ignore-scripts --json | grep -E '"path": "ts/dist/(react|.*(test|testing))'
+    cd react && npm pack --dry-run --ignore-scripts --json | grep -q '"path": "dist/index.js"'
+    cd react && ! npm pack --dry-run --ignore-scripts --json | grep -E '"path": "dist/.*(test|testing)'
 
 # Build everything a release would, locally and unpublished: the archives and,
 # through ko, the two images the chart deploys. Not part of `check`: it builds

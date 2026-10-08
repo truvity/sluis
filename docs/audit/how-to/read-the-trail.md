@@ -214,9 +214,11 @@ it to the end, and reads one record with its provenance.
 
 `@truvity/audit` is the client, the typed contract, the qualifier box compiled
 to the typed filter, and records rendered as their catalogues' sentences.
-`@truvity/audit/react` adds hooks and a default MUI view. The package is built
-from `ts/` and consumed from a release tag — `github:truvity/audit#vX.Y.Z` in
-a `package.json` — not from a registry.
+It has no UI dependency. The hooks and a default MUI view are the separate
+package `@truvity/audit-react`, below. Both are built from `ts/` and `react/`
+and published to GitHub Packages at each release tag's version (the same
+version for both): `npm install @truvity/audit @truvity/audit-react` with the
+`@truvity` scope pointed at `https://npm.pkg.github.com`.
 
 ```ts
 import { createConnectTransport } from "@connectrpc/connect-web";
@@ -239,12 +241,12 @@ for (const r of page.items) console.log(words.sentence(r));
 
 ### The page
 
-`@truvity/audit/react` has the view that goes in the **application's own
+`@truvity/audit-react` has the view that goes in the **application's own
 console**. It takes a client over the host's transport, so the console's own
 sign-in is what authenticates it, and it holds no credentials:
 
 ```tsx
-import { AuditProvider, AuditView } from "@truvity/audit/react";
+import { AuditProvider, AuditView } from "@truvity/audit-react";
 
 <AuditProvider client={audit} sentences={[myCatalogue]}>
   <AuditView permalink={(p, id) => `/audit/${p}/${id}`} />

@@ -1,4 +1,4 @@
-import { AuditProvider, AuditView } from "@truvity/audit/react";
+import { AuditProvider, AuditView } from "@truvity/audit-react";
 
 import { audit } from "./api";
 import { roster } from "./auditSentences";

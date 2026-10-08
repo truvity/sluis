@@ -27,8 +27,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { Fragment, useMemo, useState } from "react";
 
-import { Outcome_Result, RecordSchema, type Record as AuditRecord } from "../gen/audit/v1/record_pb.js";
-import { compileQualifiers, qualifier } from "../qualifiers.js";
+import { compileQualifiers, Outcome_Result, qualifier, RecordSchema, type Record as AuditRecord } from "@truvity/audit";
 import { useAccess, useAudit, useFacets, useRecord, useSearch, useTail } from "./hooks.js";
 
 export interface AuditViewProps {

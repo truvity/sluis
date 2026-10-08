@@ -1,4 +1,4 @@
-// @truvity/audit/react: hooks over the query client, and a default MUI view.
+// @truvity/audit-react: hooks over the query client, and a default MUI view.
 //
 // The host passes a client over its own transport — its own credentials — to
 // <AuditProvider>; nothing here signs anybody in.

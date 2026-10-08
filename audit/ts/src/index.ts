@@ -2,7 +2,7 @@
 //
 // The client and the typed contract, the qualifier box compiled to the typed
 // filter, and records rendered as the sentences their catalogues declare.
-// React hooks and a default MUI view are under "@truvity/audit/react".
+// React hooks and a default MUI view are the package "@truvity/audit-react".
 
 export { createQueryClient, type QueryClient } from "./client.js";
 export { compileQualifiers, qualifier, qualifierNames, type Compiled } from "./qualifiers.js";

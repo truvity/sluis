@@ -5,7 +5,8 @@
 #   audit    audit: the same, from audit/.goreleaser.yaml, added to the SAME
 #            GitHub release (the shared workflow runs one goreleaser config, so
 #            the second product is a job of its own beside it)
-#   npm      the TypeScript package
+#   npm      the TypeScript packages: @truvity/sluis, @truvity/audit and
+#            @truvity/audit-react, all at the tag's version
 #   modules  every other Go module (hack/modules.py finds them), tagged
 #            <dir>/vX.Y.Z at the release commit, which `just release-pin`
 #            made: every go.mod already requires this release
@@ -120,7 +121,7 @@ jobs:
           flake-dir: ${{ runner.temp }}/nix-flakes
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # The TypeScript package, to GitHub Packages, at the tag's version. Built
+  # The TypeScript packages, to GitHub Packages, at the tag's version. Built
   # here rather than on install: a git dependency builds itself through
   # `prepare`, and a package manager is free to pack it without running that
   # (yarn 4 did, and a consumer received a package with no ts/dist).
@@ -158,6 +159,17 @@ jobs:
           npm pkg set name="@truvity/access-roster" \
             description="DEPRECATED: renamed to @truvity/sluis, the same code under its new name. Install @truvity/sluis."
           npm publish --tag "$dist"
+          # The audit packages, from audit/. @truvity/audit is the framework-free
+          # query client; @truvity/audit-react is the hooks and the MUI view over
+          # it. Both are built and tested first (audit-react installs the first
+          # from the checkout, so audit/ts/dist must exist), and both are
+          # published at the tag's version: audit-react depends on exactly the
+          # @truvity/audit published with it, which the checkout spells file:..
+          (cd audit/ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
+          (cd audit/react && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
+          (cd audit && npm version "${TAG#v}" --no-git-tag-version --allow-same-version && npm publish --tag "$dist")
+          (cd audit/react && npm version "${TAG#v}" --no-git-tag-version --allow-same-version \
+            && npm pkg set "dependencies.@truvity/audit=${TAG#v}" && npm publish --tag "$dist")
 
   # The modules other than the root, once the release itself succeeded.
   #

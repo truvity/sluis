@@ -236,7 +236,7 @@ neither puts anything new in the request path.
 | key providers `local` and OpenBAO `transit`; AWS KMS envelope designed | built, and off by default |
 | one configuration file per binary, validated against a schema ([0063](../../decisions/0063-one-validated-configuration-file.md)) | built; the chart passes it through |
 | the chart, instantiated per application: `mode`, receiver, writer, query service, the four jobs, the extension toggles | built; a golden per shape, and every documented example rendered |
-| `@truvity/audit`: query client, sentences, React hooks and view | built; published to GitHub Packages at each release tag |
+| `@truvity/audit`: query client, sentences; `@truvity/audit-react`: React hooks and view | built; published to GitHub Packages at each release tag |
 | TypeScript emitter | designed, not built |
 | billing statement, usage consumer, reconciler | designed, not built |
 | exporters (OCSF, ECS, Parquet), adapters | designed, not built |

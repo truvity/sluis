@@ -62,7 +62,8 @@ in [Getting started on Kubernetes](../docs/audit/getting-started/kubernetes.md).
 | Pulumi library | `github.com/truvity/sluis/audit/deploy/pulumi` ([reference](../docs/audit/reference/aws-pulumi-library.md)) |
 | Go SDK: record, catalogue, emitter, sink | `github.com/truvity/sluis/audit/sdk` |
 | `audit` CLI (verify, hold, reindex, migrate, ...) | the GitHub release archives |
-| `@truvity/audit`: query client, sentences, React view | GitHub Packages, at each release tag |
+| `@truvity/audit`: query client, sentences | GitHub Packages, at each release tag |
+| `@truvity/audit-react`: React hooks and the MUI view | GitHub Packages, at each release tag, the version of `@truvity/audit` |
 | JSON Schemas of the record, the catalogue and every configuration file | `https://truvity.github.io/audit/schemas/` ([`schemas/`](schemas/README.md)) |
 
 ## Consumers
