@@ -19,7 +19,8 @@
 // backend refuses anything else with [ErrNotObject].
 //
 // Backends: [github.com/truvity/sluis/storage/state/memory] (tests and
-// single-process use). The conformance suite in
+// single-process use), state/ssm, state/s3 and
+// [github.com/truvity/sluis/storage/state/openbao] (KV version 2). The conformance suite in
 // [github.com/truvity/sluis/storage/state/conformance] is what every backend
 // must pass.
 //
