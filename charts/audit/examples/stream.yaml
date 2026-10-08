@@ -204,7 +204,7 @@ jobs:
     enabled: true
     config:
       apiVersion: audit.truvity.github.io/audit-clock-sync/v2
-      ntp: ["169.254.169.123"]
+      ntp: ["pool.ntp.org"]
       sink:
         url: http://audit:8080
         tokenFile: /var/run/audit/token
