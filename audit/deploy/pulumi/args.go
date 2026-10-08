@@ -572,6 +572,9 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		}
 		c.Artifacts = &norm
 	}
+	if err := c.checkAdopted(); err != nil {
+		return nil, err
+	}
 
 	in := &c.Ingest
 	setInt(&in.MaxReceiveCount, 5)
