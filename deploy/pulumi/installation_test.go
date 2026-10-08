@@ -12,6 +12,7 @@ import (
 
 	sluisconfig "github.com/truvity/sluis/config"
 	arp "github.com/truvity/sluis/deploy/pulumi"
+	"github.com/truvity/sluis/storage/keys"
 )
 
 // exampleInstallation is the Lambda-shaped installation of the root module's
@@ -172,5 +173,31 @@ func TestTheLibraryImportsNothingInternal(t *testing.T) {
 				t.Errorf("%s imports %s: use the public config package", f, path)
 			}
 		}
+	}
+}
+
+// The estate supplies the keys: an installation whose kmsWrapped signer names
+// no key renders the library's `keys.sign`, not the renderer's default, and is
+// not refused for it. An installation that names another sign key is.
+func TestAnInstallationTakesItsKeysFromTheLibrary(t *testing.T) {
+	supplied := func(in *sluisconfig.Installation) estate {
+		return withInstallation(in, func(a *arp.LambdaArgs) {
+			a.WrappedSigning = nil
+			a.Keys = &arp.KeysArgs{Sign: "alias/x"}
+		})
+	}
+	in := exampleInstallation(t)
+	in.Keys = nil
+	in.SigningKey.KMSWrapped.KeyID = ""
+	rec, _ := mustLambda(t, supplied(in))
+	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
+	if !strings.Contains(doc, "sign: alias/x") || strings.Contains(doc, "alias/sluis-example-sign") {
+		t.Errorf("the document does not carry the library's keys:\n%s", doc)
+	}
+
+	in = exampleInstallation(t)
+	in.Keys.Keys["sign"] = keys.Entry{Key: "alias/other"}
+	if _, _, err := buildLambda(t, supplied(in)); err == nil || !strings.Contains(err.Error(), "keys.sign") {
+		t.Errorf("error %v, want one naming keys.sign", err)
 	}
 }
