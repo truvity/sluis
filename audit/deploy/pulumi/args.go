@@ -256,11 +256,11 @@ type IngestArgs struct {
 	RetentionDays int
 }
 
-// ArtifactsArgs and ReleaseArgs are the shared types of the artifact package.
-type (
-	ArtifactsArgs = artifact.Args
-	ReleaseArgs   = artifact.Release
-)
+// ArtifactsArgs is where the library puts the files it ships (see artifact.Args).
+type ArtifactsArgs = artifact.Args
+
+// ReleaseArgs is how a missing digest or package is found (see artifact.Release).
+type ReleaseArgs = artifact.Release
 
 // WriterArgs is the writer function.
 type WriterArgs struct {
@@ -876,4 +876,4 @@ func refuseSecrets(path string, v any) error {
 
 // resolvesDigests is whether an empty PackageSHA256 is read from the release's
 // checksums.txt.
-func (c *Args) resolvesDigests() bool { return c.Release != nil && c.Release.ResolveChecksums }
+func (a *Args) resolvesDigests() bool { return a.Release != nil && a.Release.ResolveChecksums }

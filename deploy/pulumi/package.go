@@ -149,12 +149,11 @@ func readZip(raw []byte) (map[string]zipEntry, error) {
 	return out, nil
 }
 
-// ArtifactsArgs and ReleaseArgs are the artifact package's types, shared with
-// the audit library.
-type (
-	ArtifactsArgs = artifact.Args
-	ReleaseArgs   = artifact.Release
-)
+// ArtifactsArgs is where the library puts the files it ships (see artifact.Args).
+type ArtifactsArgs = artifact.Args
+
+// ReleaseArgs is how a missing digest or package is found (see artifact.Release).
+type ReleaseArgs = artifact.Release
 
 // uploadArtifact is the verified release zip in the artifacts bucket.
 func uploadArtifact(ctx *pulumi.Context, resName string, art *ArtifactsArgs, p *releasePackage, opts ...pulumi.ResourceOption) (*artifact.Object, error) {
