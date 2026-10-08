@@ -23,8 +23,8 @@ adapters:
   trigger:
     adapter: invoke
     settings:
-      github: sluis-http
-      slack: sluis-http
+      github: sluis-http:live
+      slack: sluis-http:live
 audit:
   audience: audit
   queryURL: https://audit.example.test/sluis

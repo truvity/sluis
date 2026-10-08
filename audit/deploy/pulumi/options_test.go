@@ -422,7 +422,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 		want                 want
 	}{
 		"both": {false, false, want{
-			resources: 41,
+			resources: 43,
 			roles:     []string{"audit-notary", "audit-observe-reader", "audit-scheduler", "audit-writer"},
 			keys:      nil, functions: []string{"audit-notary", "audit-writer"},
 			queues: []string{"audit-ingest", "audit-ingest-dlq"},
@@ -431,7 +431,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 			table: true, schedule: true, mapping: true, topic: true,
 		}},
 		"ingest only (a self-hosted notary runs elsewhere)": {false, true, want{
-			resources: 29,
+			resources: 30,
 			roles:     []string{"audit-observe-reader", "audit-writer"},
 			keys:      nil, functions: []string{"audit-writer"},
 			queues: []string{"audit-ingest", "audit-ingest-dlq"},
@@ -439,7 +439,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 			table:  true, mapping: true, topic: true,
 		}},
 		"notary only": {true, false, want{
-			resources: 24,
+			resources: 25,
 			roles:     []string{"audit-notary", "audit-observe-reader", "audit-scheduler"},
 			keys:      nil, functions: []string{"audit-notary"},
 			alarms:   []string{"notary-errors", "notary-silent", "notary-throttles"},

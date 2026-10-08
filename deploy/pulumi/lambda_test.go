@@ -145,6 +145,8 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("wrappedSigningKeyAlias", l.WrappedSigningKeyAlias)
 		collect("functionArn", l.FunctionArn)
 		collect("functionName", l.FunctionName)
+		collect("liveAliasArn", l.LiveAliasArn)
+		collect("liveVersion", l.LiveVersion)
 		collect("codeMatches", l.CodeSha256Matches.ApplyT(strconv.FormatBool).(pulumi.StringOutput))
 		collect("roleArn", l.RoleArn)
 		collect("apiUrl", l.APIURL)
@@ -321,7 +323,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 			t.Errorf("may put %s", res)
 		}
 	}
-	if got := g["lambda:InvokeFunction"]; !reflect.DeepEqual(got, []string{arnp + "lambda:" + region + ":" + account + ":function:sluis"}) {
+	if got := g["lambda:InvokeFunction"]; !reflect.DeepEqual(got, []string{arnp + "lambda:" + region + ":" + account + ":function:sluis:live"}) {
 		t.Errorf("may invoke %v: itself only", got)
 	}
 	wantKeys := []string{out["signingKeyArn"], out["signingKeyRS256Arn"]}
@@ -379,7 +381,7 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 	}
 	integ := rec.one(t, "aws:apigatewayv2/integration:Integration", "staging-api-integration")
 	if prop(integ, "payloadFormatVersion").StringValue() != "2.0" || prop(integ, "integrationType").StringValue() != "AWS_PROXY" ||
-		prop(integ, "integrationUri").StringValue() != out["functionArn"] {
+		prop(integ, "integrationUri").StringValue() != out["functionArn"]+":live" {
 		t.Errorf("integration: %v", integ.Inputs)
 	}
 	dom := rec.one(t, "aws:apigatewayv2/domainName:DomainName", "staging-domain")
@@ -432,11 +434,11 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	shape(t, rec, out, "access.one.example.test")
 
 	want := map[string]string{
-		"sluis-github-truvity":      `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
-		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
-		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
-		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
-		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
+		"sluis-github-truvity":      `{"kind":"tick","target":"truvity"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
+		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis:live",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("schedules:\n got %v\nwant %v", got, want)
@@ -1017,12 +1019,12 @@ func TestTheDirectoryRefreshScheduleIsOnByDefaultAndConfigurable(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-directory-refresh")
 	tgt := prop(s, "target").ObjectValue()
-	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis") ||
+	if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis:live") ||
 		tgt["input"].StringValue() != `{"kind":"refresh"}` {
 		t.Errorf("directory refresh schedule: %v", s.Inputs)
 	}
 	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
-	if !slices.ContainsFunc(sp["lambda:InvokeFunction"], func(a string) bool { return strings.HasSuffix(a, ":function:sluis") }) {
+	if !slices.ContainsFunc(sp["lambda:InvokeFunction"], func(a string) bool { return strings.HasSuffix(a, ":function:sluis:live") }) {
 		t.Errorf("the scheduler cannot invoke the function: %v", sp)
 	}
 
@@ -1526,7 +1528,7 @@ func TestTheFunctionNameDecidesTheNamesAndTheLogicalNamesStay(t *testing.T) {
 		t.Errorf("log group %q", got)
 	}
 	if got := grants(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))["lambda:InvokeFunction"]; len(got) != 1 ||
-		!strings.HasSuffix(got[0], ":function:sluis-http") {
+		!strings.HasSuffix(got[0], ":function:sluis-http:live") {
 		t.Errorf("the function may invoke %v", got)
 	}
 	if out["functionName"] != "sluis-http" {
@@ -1546,7 +1548,7 @@ func TestTheInvokeTriggerNamesTheOneFunction(t *testing.T) {
 	trigger := "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke%s}}\n"
 	rec, _ := mustLambda(t, estate{config: strings.Replace(trigger, "%s", "", 1)})
 	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
-	if !strings.Contains(doc, "github: sluis\n") || !strings.Contains(doc, "slack: sluis\n") {
+	if !strings.Contains(doc, "github: sluis:live\n") || !strings.Contains(doc, "slack: sluis:live\n") {
 		t.Errorf("the trigger does not name the function:\n%s", doc)
 	}
 	if _, _, err := buildLambda(t, estate{config: strings.Replace(trigger, "%s", ", settings: {github: sluis-github}", 1)}); err == nil {
@@ -1558,7 +1560,7 @@ func TestTheInvokeTriggerNamesTheOneFunction(t *testing.T) {
 func TestEverySchedulePointsAtTheOneFunction(t *testing.T) {
 	rec, out := mustLambda(t, estate{orgs: []string{"acme", "github:links"}, workspaces: []string{"T1"}})
 	for name, v := range schedules(t, rec) {
-		if !strings.HasSuffix(v, " "+out["functionArn"]) && !strings.HasSuffix(v, ":function:sluis") {
+		if !strings.HasSuffix(v, " "+out["functionArn"]+":live") && !strings.HasSuffix(v, ":function:sluis:live") {
 			t.Errorf("%s: %s", name, v)
 		}
 	}

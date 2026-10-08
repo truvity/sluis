@@ -147,7 +147,7 @@ type Issuer struct {
 type AWS struct {
 	Account string `json:"account,omitempty"`
 	Region  string `json:"region,omitempty"`
-	// FunctionName is the Lambda function the `invoke` trigger names. Unset is
+	// FunctionName is the Lambda function the `invoke` trigger names (through its `live` alias). Unset is
 	// `sluis`.
 	FunctionName string `json:"functionName,omitempty"`
 	// Table is the DynamoDB table of the `dynamodb` state adapter.
