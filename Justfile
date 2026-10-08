@@ -141,6 +141,7 @@ pulumi-test:
 # runs the same `check`.
 release-chain:
     hack/test-modules.sh
+    hack/test-release-pin.sh
     hack/modules.py check v9.9.9 > /dev/null
 
 # Test the storage module (storage/). Like deploy/pulumi it is a module of its
@@ -198,12 +199,12 @@ release-check tag="": console
     goreleaser check
     goreleaser build --snapshot --clean --single-target
 
-# The release commit's one edit: the root go.mod's requires of the repository's
-# own modules (storage, audit/sdk) set to the release, the replaces kept. Then
-# commit it and tag THAT commit (`git tag vX.Y.Z`); the release workflow pins the
-# other modules itself. `just release-pin v1.74.0-rc.1`.
+# The release commit's one edit: EVERY go.mod's requires of the repository's own
+# modules set to the release, the replaces kept, so that the commit builds and
+# tests as it stands and every module is tagged at it. Then commit it and tag
+# THAT commit (`git tag vX.Y.Z`). `just release-pin v1.74.0-rc.1`.
 release-pin version:
-    ./hack/modules.py pin-root {{version}}
+    ./hack/modules.py pin-all {{version}}
     ./hack/modules.py check {{version}} --release
 
 # The cheap half of release-check, for `check`: it reads a file and
