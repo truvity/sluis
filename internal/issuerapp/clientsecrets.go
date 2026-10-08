@@ -68,7 +68,7 @@ func checkGeneratedSecrets(ids []string, st *store.Stores) error {
 // replicas rotate one client one at a time (ssm's conditional write is a read
 // and then a write, and does not exclude a second writer by itself).
 func newClientSecretManager(
-	set *policy.Set, st *store.Stores, creds *clientcreds.Resolver, changed func(context.Context, string), log *slog.Logger,
+	set *policy.Set, st *store.Stores, creds *clientcreds.Resolver, log *slog.Logger,
 ) (*clientcreds.Manager, *rails.Leases) {
 	state, _ := st.LeaseState()
 	leases := &rails.Leases{State: state, Holder: rails.NewHolder(), Log: log}
@@ -81,8 +81,7 @@ func newClientSecretManager(
 			c, ok := set.Client(id)
 			return ok && c.SecretGenerated()
 		},
-		Changed: changed,
-		Log:     log,
+		Log: log,
 	}, leases
 }
 

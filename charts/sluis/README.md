@@ -73,16 +73,11 @@ named in
 Secrets `PushSecret` for the ones nothing upstream can re-deliver. Copying the
 rest is the deployment's job.
 
-`config.exports` copies the secrets the console keeps (a Slack App's bot token, the
-runner and catalogue Apps, the seven recovery bundles) into OpenBao, written by the
-service itself and never a dependency
-([0034](../../docs/decisions/0034-exports-go-to-openbao-directly.md)); `config.ports.export`
-says which OpenBao and how to log in, and `exports.openbao.caBundle` and
-`exports.openbao.token.audience` mount the CA and project the token the login
-presents. On a State adapter this replaces the `push` values, which stay for the
-`legacy` storage and are deprecated. See
-[docs/reference/configuration.md](../../docs/reference/exports.md).
-`alerts.rules.exportFailing` and `exportStale` and a dashboard row cover it.
+The exports are retired ([0041](../../docs/decisions/0041-the-secret-contract.md)): a consumer
+reads the typed document at `external/<kind>/<id>` itself (see
+[secrets](../../docs/reference/secrets.md#the-external-documents)). `exports.openbao.caBundle` and
+`exports.openbao.token.audience` stay: they mount the CA and project the token the `openbao`
+secrets adapter's login presents.
 
 `telemetry.otlp.endpoint` sets the OpenTelemetry SDK environment on every pod:
 `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` (`protocol`,
@@ -146,8 +141,8 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis \
 The `k8s-aws` preset (the former `aws-eks`) is DynamoDB state, S3 blobs, KMS-wrapped signing and an
 in-process ticker; the secrets are SSM, or OpenBao as here. The inputs (the signing state secret, a
 client's secret) arrive as files, so `secrets.source` stays `file`; the openbao adapter holds what
-sluis writes and the exports. OpenBao scopes by namespace, so the root is `sluis` in the
-installation's own namespace (`kv/sluis/private/credentials/...`, `kv/sluis/export/...`).
+sluis writes. OpenBao scopes by namespace, so the root is `sluis` in the
+installation's own namespace (`kv/sluis/private/credentials/...` on layout v3, `kv/sluis/internal/...` and `kv/sluis/external/...` on v4).
 With KMS signing the chart renders no Certificate and mounts no signing Secret; the chart's default
 `config.signingKey.file` is dropped with a `null`. The pod's AWS role comes from EKS Pod Identity
 (nothing to render) or, with `serviceAccount.awsIdentity: irsa`, from the annotation of `awsRoleArn`.
@@ -194,7 +189,7 @@ exports:
     token: {audience: openbao-staging}   # a ServiceAccount token projected for the jwt login
 ```
 
-The OpenBao policy, the value layout and the per-export `namespace` are in
+The OpenBao policy and the value layout are in
 [configuration](../../docs/reference/openbao-secrets-adapter.md); to keep tokens
 issued by the old file keys valid across the cutover, see `signingKey.verifyOnly` and its
 [cutover note](../../docs/how-to/cut-over-to-kms-wrapped-signing.md).

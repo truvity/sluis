@@ -99,7 +99,7 @@ helm install sluis-dashboards oci://ghcr.io/truvity/charts/sluis --version X.Y.Z
 
 **Verify** the dashboard `access-roster overview - $cluster` appears in the `Access` folder. Its rows: is it healthy; the
 issuer's requests, errors and latency by route; tokens, sign-ins and keys; the controllers' ticks and leases; the storage
-ports; the exports; GitHub rate limits and seats. It holds to truvity/observability's dashboard contract (a `datasource`
+ports; GitHub rate limits and seats. It holds to truvity/observability's dashboard contract (a `datasource`
 variable every panel uses, `cluster` and `namespace` variables, `$cluster` in the title and every query, no datasource UID).
 
 **Rollback** `helm uninstall sluis-dashboards -n monitoring`.

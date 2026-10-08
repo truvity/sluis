@@ -192,22 +192,6 @@ outcome is the call rate, the error rate and the **compare-and-swap conflicts**
 (`outcome="conflict"`): a lost conflict is a lease or a session rotation
 working, and is not an error.
 
-### The exports
-
-| Metric | Type | Labels | What it says |
-|---|---|---|---|
-| `access_roster.export.attempts` | counter | `export`, `outcome` | Export attempts ([0034](../decisions/0034-exports-go-to-openbao-directly.md)). `outcome` is `ok` (the copy is in the store: written, or already as it should be), `failed` (retried with backoff; the copy is stale) or `skipped` (the source has nothing to copy yet: an App created and not installed, an empty bundle). |
-| `access_roster.export.duration` | histogram, `s` | `outcome` | How long an attempt took. |
-| `access_roster.export.last_success_timestamp` | gauge, `s` | `export` | When the export last had its copy in the store (Unix seconds). |
-| `access_roster.export.contended` | counter | `export` | Attempts another replica held the lease for. The normal answer of the replica that did not win. |
-
-`export` is the export's name, which the deployment declares (`slack-app.alerts`,
-`runner-app.stable.truvity`, `bundle.github-apps`), so the label is bounded by the
-configuration and never carries a path, a namespace or a value. An attempt is also a
-span (`export`, with the target kind and the outcome). The log names the export and
-the target on every failure and never a value.
-
-
 ### No workspace or organisation label on the issuer's series
 
 Nothing on the issuer's or the ports' series is labelled by workspace,
@@ -227,7 +211,7 @@ aggregation keeps the cluster label, since one store holds many clusters.
 
 <!-- generated: telemetry-alerts -->
 
-Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (12 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
+Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (10 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
 
 | Alert | Severity | For | What it says | Default expression |
 |---|---|---|---|---|
@@ -241,8 +225,6 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `AccessRosterGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
 | `AccessRosterSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
 | `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
-| `AccessRosterExportFailing` | warning | 15m | The copy of this secret into OpenBao failed 3 or more times within 30m, so what a consumer reads there is stale. | `sum by (k8s_cluster_name, namespace, export) (increase(access_roster_export_attempts_total{namespace="sluis",outcome="failed"}[30m])) >= 3` |
-| `AccessRosterExportStale` | warning | 10m | This export has not had its copy in the store for longer than 10800s. | `time() - max by (k8s_cluster_name, namespace, export) (last_over_time(access_roster_export_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 10800` |
 <!-- /generated -->
 
 A rule whose series is absent does not fire: whether the issuer or the
@@ -333,28 +315,6 @@ namespace's ConfigMaps and Secrets with the legacy store; blobs are S3, or the r
 `unavailable` is the store being down (check its own health and the
 NetworkPolicy to it); `error` is anything else, and the log line beside it names
 the call. Lost conflicts and missing keys are not counted.
-
-#### AccessRosterExportFailing
-
-An export's copy into OpenBao failed three times in half an hour, held for fifteen
-minutes. What a consumer reads there is stale; nothing live is affected, which is why
-this is a warning. The log line "an export failed, so the copy is stale" names the
-export, the target and the error. A `403` naming `permission denied` on `log in` is a
-role that does not exist or is not bound to this workload's identity; on a path it is a
-policy that lacks `read`, `create`, `update` or `patch` on `kv/data/<prefix>/*` in that
-namespace; `unavailable` is OpenBao being down, sealed or unreachable, or its
-certificate not trusted (`ports.export.openbao.caFile`). An export that fails from the
-first attempt has no last-success series, which is why this rule exists beside the next.
-
-#### AccessRosterExportStale
-
-An export has not had its copy in the store for three hours, with an interval of one.
-It catches what the failure counter cannot: the service is not running its exports
-(`exports` is empty, or the process is down), nobody can take the export's lease
-(`lease.export:<name>` is held by a replica that is gone; it expires on its own), or a
-loop hangs. A source that has nothing to copy is `skipped` and stamps nothing: an App
-that is declared in `exports` and not yet installed fires this rule once it has once
-been copied and is then removed, and not before.
 
 ## Installing the modes
 

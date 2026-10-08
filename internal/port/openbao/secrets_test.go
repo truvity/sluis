@@ -14,22 +14,22 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/openbao"
 	"github.com/truvity/sluis/internal/port/porttest"
-	"github.com/truvity/sluis/internal/port/secretsexport"
 )
 
-func secretsAdapter(t *testing.T, f *fake, root string) *openbao.Secrets {
+func secretsAdapter(t *testing.T, f *fake, root string, mutate ...func(*openbao.Config)) *openbao.Secrets {
 	t.Helper()
 	addr, client := newServer(t, f)
-	s, err := openbao.NewSecrets(openbao.SecretsConfig{
-		Config: openbao.Config{
-			Client: client, Address: addr, Namespace: "staging",
-			Auth: openbao.Auth{
-				Method: openbao.MethodJWT, Mount: "jwt-staging", Role: "sluis-writer",
-				Token: func(context.Context) (string, error) { return "a-jwt", nil },
-			},
+	cfg := openbao.Config{
+		Client: client, Address: addr, Namespace: "staging",
+		Auth: openbao.Auth{
+			Method: openbao.MethodJWT, Mount: "jwt-staging", Role: "sluis-writer",
+			Token: func(context.Context) (string, error) { return "a-jwt", nil },
 		},
-		Root: root,
-	})
+	}
+	for _, m := range mutate {
+		m(&cfg)
+	}
+	s, err := openbao.NewSecrets(openbao.SecretsConfig{Config: cfg, Root: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,31 +134,6 @@ func TestSecretsCompareAndSwapIsTheServers(t *testing.T) {
 	}
 }
 
-func TestSecretsPerExportNamespace(t *testing.T) {
-	f := newFake()
-	s := secretsAdapter(t, f, "sluis")
-	ns, ok := port.Secrets(s).(port.NamespacedSecrets)
-	if !ok {
-		t.Fatal("the openbao secrets adapter has no namespaces")
-	}
-	devel, err := ns.In("devel")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = devel.Put(context.Background(), "export/github-runner-app/preview/truvity", []byte(`{"a":"1"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := f.read("devel", "sluis/export/github-runner-app/preview/truvity"); !ok {
-		t.Error("nothing in the devel namespace")
-	}
-	if _, ok := f.read("staging", "sluis/export/github-runner-app/preview/truvity"); ok {
-		t.Error("the secret also landed in the default namespace")
-	}
-	if f.logins != 1 {
-		t.Errorf("%d logins, want 1 (devel only: nothing was written in staging)", f.logins)
-	}
-}
-
 func TestSecretsErrors(t *testing.T) {
 	f := newFake()
 	s := secretsAdapter(t, f, "sluis")
@@ -213,37 +188,6 @@ func TestSecretsAreRegistered(t *testing.T) {
 	}
 }
 
-// The default export destination (no ports.export) honours an export entry's
-// namespace on this adapter: the runner App of the preview tier lands in the
-// devel namespace as properties a consumer reads, and the rest in the default.
-func TestTheSecretsExportHonoursAnEntrysNamespace(t *testing.T) {
-	f := newFake()
-	e := secretsexport.New(secretsAdapter(t, f, "sluis"))
-	ctx := context.Background()
-	props := map[string]string{"github-app-id": "1", "github-private-key": "k"}
-	if err := e.Put(ctx, port.ExportTarget{Namespace: "devel", Path: "github-runner-app/preview/truvity"}, props, port.ExportPatch); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.Put(ctx, port.ExportTarget{Path: "slack-apps/alerts"}, map[string]string{"bot_token": "x"}, port.ExportPatch); err != nil {
-		t.Fatal(err)
-	}
-	got, ok := f.read("devel", "sluis/export/github-runner-app/preview/truvity")
-	if !ok || got["github-app-id"] != "1" || got["github-private-key"] != "k" {
-		t.Errorf("devel: %v %v", got, ok)
-	}
-	if got, ok = f.read("staging", "sluis/export/slack-apps/alerts"); !ok || got["bot_token"] != "x" {
-		t.Errorf("staging: %v %v", got, ok)
-	}
-	// A patch keeps the other properties.
-	more := map[string]string{"github-installation-id": "2"}
-	if err := e.Put(ctx, port.ExportTarget{Namespace: "devel", Path: "github-runner-app/preview/truvity"}, more, port.ExportPatch); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ = f.read("devel", "sluis/export/github-runner-app/preview/truvity"); len(got) != 3 {
-		t.Errorf("after a patch: %v", got)
-	}
-}
-
 func TestPutUnderACasRequiredMountIsARefusalNotAConflict(t *testing.T) {
 	f := newFake()
 	f.casRequired = true
@@ -280,15 +224,6 @@ func TestAWrongMountOrNamespaceIsLoudOnListAndDelete(t *testing.T) {
 	}
 	if err := t2.Delete(ctx, "credentials/a"); err != nil {
 		t.Errorf("absent delete: %v", err)
-	}
-}
-
-func TestANamespaceIsChecked(t *testing.T) {
-	s := secretsAdapter(t, newFake(), "sluis")
-	for _, ns := range []string{"", "a b", "../x", "-x"} {
-		if _, err := s.In(ns); err == nil {
-			t.Errorf("namespace %q accepted", ns)
-		}
 	}
 }
 

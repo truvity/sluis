@@ -1,7 +1,7 @@
 # Truvity's staging shape: sluis as a pod on EKS with AWS storage (DynamoDB, S3),
 # KMS-wrapped token signing and OpenBao as the Secrets port. The inputs arrive
 # as files (External Secrets), so `secrets.source` stays `file`; the openbao
-# adapter holds the credentials sluis writes and the exports. No Certificate is
+# adapter holds the credentials sluis writes. No Certificate is
 # rendered and no signing Secret is mounted.
 replicaCount: 2
 config:
@@ -52,12 +52,6 @@ policy:
   apps:
     github:
       runnerTiers: [preview, stable]
-  exports:
-    - source: runner-app
-      tier: preview
-      org: truvity
-      namespace: devel
-      path: github-runner-app/preview/truvity
 serviceAccount:
   awsIdentity: pod-identity
 exports:

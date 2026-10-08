@@ -138,9 +138,6 @@ func TestTheTruvityFixtureHasTheShapeItClaims(t *testing.T) {
 	var doc struct {
 		Clients map[string]any `yaml:"clients"`
 		GitHub  map[string]any `yaml:"github"`
-		Exports []struct {
-			Namespace string `yaml:"namespace"`
-		} `yaml:"exports"`
 	}
 	if err := yaml.Unmarshal(policy, &doc); err != nil {
 		t.Fatal(err)
@@ -150,18 +147,6 @@ func TestTheTruvityFixtureHasTheShapeItClaims(t *testing.T) {
 	}
 	if len(doc.GitHub) != 2 {
 		t.Errorf("github organisations: %d, want 2", len(doc.GitHub))
-	}
-	if len(doc.Exports) != 8 {
-		t.Errorf("exports: %d, want 8", len(doc.Exports))
-	}
-	devel := 0
-	for _, e := range doc.Exports {
-		if e.Namespace == "devel" {
-			devel++
-		}
-	}
-	if devel != 1 {
-		t.Errorf("exports into the namespace devel: %d, want 1", devel)
 	}
 	service, _ := render(t, "truvity")
 	for _, want := range []string{"preset: k8s-aws", "adapter: openbao", "root: sluis", "namespace: staging", "kmsWrapped:", "verifyOnly:", "inCluster: true"} {
@@ -224,11 +209,6 @@ func TestRenderHoldsTheOutputsToTheLoader(t *testing.T) {
 	in.Controllers.GitHub.EnabledOrgs = []string{"unbound-org"}
 	if _, _, err := config.Render(in); err == nil || !strings.Contains(err.Error(), "unbound-org") {
 		t.Errorf("a controller that may change an unbound organisation was rendered: %v", err)
-	}
-	in = installation(t, "truvity")
-	in.Exports = append(in.Exports, in.Exports[0])
-	if _, _, err := config.Render(in); err == nil {
-		t.Error("two exports to one path were rendered")
 	}
 }
 

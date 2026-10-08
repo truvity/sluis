@@ -169,45 +169,6 @@ func TestATargetMustLookLikeALoginOrAKey(t *testing.T) {
 	}
 }
 
-func exportsHandler(res lambdaapp.ExportsResult, err error, calls *int) *lambdaapp.HTTP {
-	return lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).WithExports(func(context.Context) (lambdaapp.ExportsResult, error) {
-		*calls++
-		return res, err
-	})
-}
-
-func TestAnExportsEventRunsOnePassAndAnAPIGatewayEventIsStillServed(t *testing.T) {
-	calls := 0
-	h := exportsHandler(lambdaapp.ExportsResult{Kind: "exports", Outcome: "ran", Exports: 2, Done: 2}, nil, &calls)
-	out, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`))
-	if err != nil || calls != 1 {
-		t.Fatalf("%v, %d runs", err, calls)
-	}
-	if res := out.(lambdaapp.ExportsResult); res.Done != 2 || res.Outcome != "ran" {
-		t.Errorf("%+v", res)
-	}
-	// A request does not run exports.
-	request := json.RawMessage(`{"version":"2.0","rawPath":"/","requestContext":{"http":{"method":"GET"}}}`)
-	if _, err = h.Handle(context.Background(), request); err != nil || calls != 1 {
-		t.Errorf("a request: %v, %d runs", err, calls)
-	}
-}
-
-func TestAnExportsEventThatLeavesACopyStaleIsAnErrorAndAnUnknownKindIsRefused(t *testing.T) {
-	calls := 0
-	failing := exportsHandler(lambdaapp.ExportsResult{Exports: 2, Done: 1, Failed: 1}, nil, &calls)
-	if _, err := failing.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`)); err == nil {
-		t.Error("a stale copy was reported as success")
-	}
-	if _, err := failing.Handle(context.Background(), json.RawMessage(`{"kind":"reboot"}`)); err == nil {
-		t.Error("an unknown kind was accepted")
-	}
-	none := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
-	if _, err := none.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`)); err == nil {
-		t.Error("a function that owns no exports ran them")
-	}
-}
-
 func TestARefreshEventRunsOneDirectoryPassAndAFailedWorkspaceIsAnError(t *testing.T) {
 	calls := 0
 	res := lambdaapp.RefreshResult{Kind: "refresh", Workspaces: 2, Ran: 2}
@@ -298,5 +259,13 @@ func TestALogLineBuiltFromAnErrorWithLineBreaksIsOneRecord(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], "closedlevel=ERROR") || !strings.Contains(lines[1], "invocation done") {
 		t.Errorf("unexpected records: %q", lines)
+	}
+}
+
+// The exports event is retired: the function takes it for an unknown kind.
+func TestTheRetiredExportsEventIsRefused(t *testing.T) {
+	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil)
+	if _, err := h.Handle(context.Background(), json.RawMessage(`{"kind":"exports"}`)); err == nil {
+		t.Error("the retired exports event was accepted")
 	}
 }

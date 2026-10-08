@@ -33,9 +33,6 @@ type HTTP struct {
 	// settle is called when a request is over, for the work it left running
 	// after its response: a frozen process would never finish it.
 	settle func()
-	// exports runs one pass of the exports (the {"kind":"exports"} event); nil
-	// when this function owns none.
-	exports func(context.Context) (ExportsResult, error)
 	// refresh runs one pass of the directory refresh (the {"kind":"refresh"}
 	// event); nil when this function has no directory.
 	refresh func(context.Context) (RefreshResult, error)
@@ -59,12 +56,6 @@ func (h *HTTP) WithControllers(kindOf func(target string) string, controllers ma
 // WithRefresh makes the function answer {"kind":"refresh"} events with run.
 func (h *HTTP) WithRefresh(run func(context.Context) (RefreshResult, error)) *HTTP {
 	h.refresh = run
-	return h
-}
-
-// WithExports makes the function answer {"kind":"exports"} events with run.
-func (h *HTTP) WithExports(run func(context.Context) (ExportsResult, error)) *HTTP {
-	h.exports = run
 	return h
 }
 

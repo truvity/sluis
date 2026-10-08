@@ -24,7 +24,7 @@ func secretsOf(t *testing.T, doc string) map[string]any {
 	return m.Secrets
 }
 
-// The function writes its credentials and exports itself, so the key is in the
+// The function writes its credentials itself, so the key is in the
 // document it reads (secrets.kmsKeyId), from a Config and from an Installation.
 func TestParameterKeyArnIsWrittenIntoTheServiceDocument(t *testing.T) {
 	withKey := func(a *arp.LambdaArgs) { a.ParameterKeyArn = paramKey }

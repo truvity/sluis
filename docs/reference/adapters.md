@@ -30,11 +30,11 @@ presets and the platform fit together, see
 
 | Adapter | Status | AWS | Kubernetes | OpenBao | kubernetes | lambda | process | What it is |
 |---|---|---|---|---|---|---|---|---|
-| `kubernetes` | 💤 on request | — | needs | — | ✅ | — | — | Dynamic secrets and exports as Kubernetes Secrets the service writes. |
+| `kubernetes` | 💤 on request | — | needs | — | ✅ | — | — | Dynamic secrets as Kubernetes Secrets the service writes. |
 | `legacy` | ✅ implemented | — | needs | — | ✅ | — | ✅ | Kubernetes Secrets the service writes; kept until the cutover. |
 | `memory` | ✅ implemented | — | — | — | ✅ | ✅ | ✅ | In this process's memory; a restart loses it. For tests and the demonstration. |
-| `openbao` | ✅ implemented | — | — | needs | ✅ | ✅ | ✅ | Dynamic secrets and exports as KV version 2 secrets in an OpenBao mount, laid out like SSM (layout v3); logs in with a ServiceAccount or web identity JWT. |
-| `ssm` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Dynamic secrets and exports as SecureString parameters in AWS SSM Parameter Store. |
+| `openbao` | ✅ implemented | — | — | needs | ✅ | ✅ | ✅ | Dynamic secrets as KV version 2 secrets in an OpenBao mount, laid out like SSM (layout v3); logs in with a ServiceAccount or web identity JWT. |
+| `ssm` | ✅ implemented | needs | — | — | ✅ | ✅ | — | Dynamic secrets as SecureString parameters in AWS SSM Parameter Store. |
 | `store` | 💤 on request | — | — | — | ✅ | ✅ | ✅ | Secrets in the service's own encrypted store, for a platform with no secret store. |
 
 ## blobs

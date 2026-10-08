@@ -476,7 +476,7 @@ holds none of the trail. Both take (dict "root" $ "cfg" <the component's config>
 {{- end -}}
 
 {{/*
-What the exports need on the pod (docs/decisions/0034): the CA that signs
+What the OpenBao connection needs on the pod: the CA that signs
 OpenBao's certificate, and the projected token the `jwt` login presents. Both
 are optional and independent. Takes the root.
 */}}
@@ -648,9 +648,5 @@ Takes the parsed service document.
 {{- if $bad -}}
 {{- fail (printf "documents.service: %s names a credential: a document carries the NAME of a secret (...Secret) or a file (...File), never a value (documents come from `sluisctl render`, which refuses it)" ($bad | replace "\n" ", ")) -}}
 {{- end -}}
-{{- end -}}
-{{- $ports := dig "ports" "export" "openbao" dict . -}}
-{{- if and $ports.address (not (hasPrefix "https://" $ports.address)) -}}
-{{- fail "documents.service: ports.export.openbao.address must be an https URL: a login token crosses this connection" -}}
 {{- end -}}
 {{- end }}

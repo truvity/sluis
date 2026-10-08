@@ -591,3 +591,25 @@ func TestAgentClassLoads(t *testing.T) {
 		}
 	}
 }
+
+// The exports are retired (ADR 0041): a document that still has them is
+// refused with where the contract moved, never ignored.
+func TestRetiredExportsAreRefusedAndPointToTheExternalContract(t *testing.T) {
+	policy := "apiVersion: sluis.truvity.github.io/policy/v2\nexports: [{source: slack-app, app: alerts, path: a/b}]\n"
+	_, err := config.Load[config.PolicyDocument](write(t, policy))
+	if err == nil || !strings.Contains(err.Error(), "external/") {
+		t.Errorf("policy exports: %v", err)
+	}
+	for name, doc := range map[string]string{
+		"serve exports":      minimalIssuer + "exports: [{source: slack-app, app: a, path: a/b}]\n",
+		"serve ports.export": minimalIssuer + "ports: {export: {adapter: memory}}\n",
+	} {
+		if _, err := config.Load[config.Serve](write(t, doc)); err == nil || !strings.Contains(err.Error(), "external/") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	sluis := "apiVersion: sluis.truvity.github.io/sluis/v3\n" + minimalIssuer + "ports: {export: {adapter: memory}}\n"
+	if _, err := config.Load[config.Sluis](write(t, sluis)); err == nil || !strings.Contains(err.Error(), "external/") {
+		t.Errorf("sluis ports.export: %v", err)
+	}
+}

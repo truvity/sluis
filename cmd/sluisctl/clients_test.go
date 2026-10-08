@@ -274,9 +274,8 @@ func TestClientsPurge(t *testing.T) {
 	if err != nil || !strings.Contains(out, "deleted the stored secret of gone") {
 		t.Errorf("%q, %v", out, err)
 	}
-	// What a purge does not do is said: the input and the exported copy are the
-	// operator's.
-	if !strings.Contains(out, "clients/gone/secret") || !strings.Contains(out, "exported copy") {
+	// What a purge does not do is said: the input is the operator's.
+	if !strings.Contains(out, "clients/gone/secret") {
 		t.Errorf("the purge does not say what is left to do: %q", out)
 	}
 	if issuer.paths[0] != "POST /.access/client-secrets/purge" || issuer.bodies[0]["client"] != "gone" {

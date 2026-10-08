@@ -81,14 +81,12 @@ it is deliberately a different object.
 
 ### Projecting one App to a secret store
 
-> **On a State adapter, use an export.** `push` is **deprecated**: it renders a
+> **On a State adapter, read the document.** `push` is **deprecated**: it renders a
 > PushSecret over the Kubernetes Secret only the `legacy` storage writes. With
-> `ports.adapter` other than `legacy` the service copies the App itself, with
-> `exports: [{source: github-app, app: <id>, path: <path>}]` into an OpenBao KV
-> mount, written as `app_id`, `installation_id` and `private_key`, the properties
-> `push` wrote
-> ([configuration reference](../../reference/exports.md),
-> [0034](../../decisions/0034-exports-go-to-openbao-directly.md)).
+> `ports.adapter` other than `legacy` and layout v4 the installed App is the `github/v1` document at
+> `external/github/<id>`, which the consumer reads with its own grant
+> ([secrets](../../reference/secrets.md#the-external-documents),
+> [0041](../../decisions/0041-the-secret-contract.md)).
 
 Some consumers cannot ask the issuer at the moment they run. The one this
 was built for is the program that manages the estate — a Pulumi or

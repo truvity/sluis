@@ -21,7 +21,7 @@ import (
 //   - a policy file of v1 (`version: 1`): tables;
 //   - an access document (`access:` and `overlay:`), reshaped into tables;
 //   - a policy document fragment (`apiVersion: sluis.truvity.github.io/policy/v2`): tables and any of the
-//     sections, `exchange`, `apps`, `controllers`, `exports`.
+//     sections, `exchange`, `apps`, `controllers`.
 //
 // Tables merge by key and a key declared twice is an error naming the file, as
 // they always have. Of the sections, a list concatenates and a list of names
@@ -142,7 +142,6 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 			d.Controllers.Slack.EnabledWorkspaces = union(d.Controllers.Slack.EnabledWorkspaces, c.Slack.EnabledWorkspaces)
 		}
 	}
-	d.Exports = append(d.Exports, layer.Exports...)
 	return nil
 }
 

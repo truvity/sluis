@@ -82,8 +82,6 @@ controllers:
     consoleURL: http://sluis.example.svc:8080/console
     interval: 15m
     enabledWorkspaces: [example]
-exports:
-  - {name: alerts, source: slack-app, app: alerts, namespace: staging, path: slack-apps/alerts, interval: 1h}
 access:
   groups:
     all:access-roster:operator:

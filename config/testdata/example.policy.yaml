@@ -55,9 +55,3 @@ controllers:
   github:
     enabledOrgs:
       - example-org
-exports:
-  - name: arc-runner-app
-    source: runner-app
-    tier: stable
-    org: example-org
-    path: github-runner-app/stable/example-org

@@ -9,7 +9,6 @@ metadata:
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-
 ---
 # Source: sluis/templates/serviceaccount.yaml
 # The account a recovery token is minted for. Deliberately bound to
@@ -136,9 +135,8 @@ data:
 
 ---
 # Source: sluis/templates/openbao-ca-configmap.yaml
-# The authorities that sign OpenBao's certificate, for the service's exports
-# (docs/decisions/0034). A certificate, never a secret: it is mounted where
-# config.ports.export.openbao.caFile says.
+# The authorities that sign OpenBao's certificate, for the service's OpenBao connection
+# A certificate, never a secret: it is mounted where the adapter's caFile says.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -427,43 +425,6 @@ data:
       slack:
         enabledWorkspaces:
           - example
-    exports:
-      - name: arc-runner-stable
-        source: runner-app
-        tier: stable
-        org: example-org
-        path: github-runner-app/stable/example-org
-      - name: arc-runner-large
-        source: runner-app
-        tier: large
-        org: example-org
-        path: github-runner-app/large/example-org
-      - name: arc-runner-canary
-        source: runner-app
-        tier: canary
-        org: example-forms
-        path: github-runner-app/canary/example-forms
-      - name: release-app
-        source: github-app
-        app: release
-        path: github-apps/release
-      - name: slack-alerts
-        source: slack-app
-        app: alerts
-        path: slack-apps/alerts
-      - name: slack-deadman
-        source: slack-app
-        app: deadman
-        namespace: devel
-        path: slack-apps/deadman
-      - name: backup-github-apps
-        source: bundle
-        bundle: github-apps
-        path: sluis-backup/github-apps
-      - name: backup-slack-credentials
-        source: bundle
-        bundle: slack-credentials
-        path: sluis-backup/slack-credentials
 
 ---
 # Source: sluis/templates/verify-keys.yaml
@@ -514,7 +475,6 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
-
 ---
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -534,7 +494,6 @@ subjects:
   - kind: ServiceAccount
     name: sluis
     namespace: sluis
-
 ---
 # Source: sluis/templates/controllers.yaml
 # What the controllers in this process may do to the cluster, bound to the
@@ -567,7 +526,6 @@ rules:
     resources: ["secrets"]
     resourceNames: ["sluis-github-links"]
     verbs: ["get", "update"]
-
 ---
 # Source: sluis/templates/controllers.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -636,7 +594,7 @@ spec:
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
         checksum/config: 9a1d00e8bc56c5c1310f471d45b58d9b6328127f8d058e2d0b4044334370ba31
-        checksum/policy: 1442e9cc1ed9c53fbdcaa21a1b11c09ce53dee507ea12529b2a98ab88e98c665
+        checksum/policy: 6f89444cb6466f1e298af5e6a84ed94e91b4e91228d283041b1e26eba32ad325
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
       serviceAccountName: sluis
@@ -893,7 +851,6 @@ spec:
     name: "internal-ca"
     kind: "ClusterIssuer"
     group: cert-manager.io
-
 ---
 # Source: sluis/templates/httproute.yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -921,7 +878,6 @@ spec:
           - group: ""
             kind: Secret
             name: sluis-tls
-
 ---
 # Source: sluis/templates/httproute.yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -952,7 +908,6 @@ spec:
           name: sluis
           port: 8080
           weight: 1
-
 ---
 # Source: sluis/templates/httproute.yaml
 # The console's own route, and the reason it is a SEPARATE object rather

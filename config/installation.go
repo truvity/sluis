@@ -82,7 +82,7 @@ type Installation struct {
 
 	// AWS is the account and the resources the installation is built on.
 	AWS *AWS `json:"aws,omitempty"`
-	// OpenBao is the OpenBao the secrets and the exports are kept in.
+	// OpenBao is the OpenBao the secrets are kept in.
 	OpenBao *OpenBao `json:"openbao,omitempty"`
 	// Adapters name single concerns over what the preset and the resources
 	// above give.
@@ -107,8 +107,6 @@ type Installation struct {
 	Apps *Apps `json:"apps,omitempty"`
 	// Controllers are the controllers that run, and what each may change.
 	Controllers *Controllers `json:"controllers,omitempty"`
-	// Exports are the secrets the service copies out of itself.
-	Exports []Export `json:"exports,omitempty"`
 	// Access is the access model's tables: groups, clients, resources and the
 	// GitHub and Slack bindings.
 	Access *Access `json:"access,omitempty"`

@@ -8,8 +8,8 @@
 //     GitHub controller's organisations and `github:links`, the Slack
 //     controller's workspaces). `tick` is what an EventBridge Scheduler
 //     schedule sends, `run` what a console request sends (internal/port/invoke);
-//   - {"kind":"refresh"} and {"kind":"exports"}: the directory refresh and the
-//     exports pass, which have no loop to run in on Lambda.
+//   - {"kind":"refresh"}: the directory refresh, which has no loop to run in on
+//     Lambda.
 //
 // This package assembles the function from the same pieces the Kubernetes
 // process is assembled from (internal/rosterapp and the controllers' apps), and
@@ -181,17 +181,7 @@ func open(ctx context.Context, file string) (*Function, error) {
 				service.ReconcileClientSecrets(ctx)
 				res, err := service.RefreshDirectory(ctx)
 				return RefreshResult{Kind: KindRefresh, Workspaces: res.Workspaces, Ran: res.Ran, Contended: res.Contended, Failed: res.Failed}, err
-			}).WithExports(func(ctx context.Context) (ExportsResult, error) {
-			res, declared := service.ExportsPass(ctx)
-			out := ExportsResult{Kind: KindExports, Outcome: "ran", Exports: res.Exports, Done: res.Done, Contended: res.Contended, Failed: res.Failed}
-			switch {
-			case !declared:
-				out.Outcome = "none"
-			case res.Failed > 0:
-				out.Outcome = "failed"
-			}
-			return out, nil
-		}),
+			}),
 		Flush: func(ctx context.Context) {
 			// Before the invocation returns: the records still queued for the audit
 			// sink would otherwise wait for the next one.

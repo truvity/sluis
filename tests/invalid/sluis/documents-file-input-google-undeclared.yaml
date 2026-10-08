@@ -353,43 +353,6 @@ documents:
       slack:
         enabledWorkspaces:
           - example
-    exports:
-      - name: arc-runner-stable
-        source: runner-app
-        tier: stable
-        org: example-org
-        path: github-runner-app/stable/example-org
-      - name: arc-runner-large
-        source: runner-app
-        tier: large
-        org: example-org
-        path: github-runner-app/large/example-org
-      - name: arc-runner-canary
-        source: runner-app
-        tier: canary
-        org: example-forms
-        path: github-runner-app/canary/example-forms
-      - name: release-app
-        source: github-app
-        app: release
-        path: github-apps/release
-      - name: slack-alerts
-        source: slack-app
-        app: alerts
-        path: slack-apps/alerts
-      - name: slack-deadman
-        source: slack-app
-        app: deadman
-        namespace: devel
-        path: slack-apps/deadman
-      - name: backup-github-apps
-        source: bundle
-        bundle: github-apps
-        path: sluis-backup/github-apps
-      - name: backup-slack-credentials
-        source: bundle
-        bundle: slack-credentials
-        path: sluis-backup/slack-credentials
 serviceAccount:
   awsIdentity: pod-identity
 exports:

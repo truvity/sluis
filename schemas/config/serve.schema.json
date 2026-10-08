@@ -112,7 +112,7 @@
         },
         "secrets": {
           "additionalProperties": false,
-          "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
+          "description": "The adapter for secrets (dynamic secrets), replacing the preset's.",
           "properties": {
             "adapter": {
               "description": "The adapter's name, as the compatibility matrix lists it.",
@@ -1067,126 +1067,6 @@
             "table"
           ],
           "type": "object"
-        },
-        "export": {
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "adapter": {
-                    "const": "openbao"
-                  }
-                }
-              },
-              "then": {
-                "required": [
-                  "openbao"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "auth": {
-                    "properties": {
-                      "method": {
-                        "const": "jwt"
-                      }
-                    }
-                  }
-                }
-              },
-              "then": {
-                "properties": {
-                  "auth": {
-                    "required": [
-                      "tokenFile"
-                    ]
-                  }
-                }
-              }
-            }
-          ],
-          "description": "The store the copies of `exports` are written to (docs/decisions/0034). Absent, nothing is copied out of the service, and `exports` must be empty.",
-          "properties": {
-            "adapter": {
-              "description": "`openbao` writes to a KV version 2 mount of an OpenBao. `memory` keeps the copies in this process and is for a test or the demonstration.",
-              "enum": [
-                "openbao",
-                "memory"
-              ]
-            },
-            "openbao": {
-              "additionalProperties": false,
-              "description": "The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency.",
-              "properties": {
-                "address": {
-                  "description": "The server, https only and with no path: `https://openbao.example`. A token and a login JWT cross this connection.",
-                  "pattern": "^https://[^\\s/?#@]+/?$",
-                  "type": "string"
-                },
-                "auth": {
-                  "additionalProperties": false,
-                  "description": "How the service logs in, inside each namespace it writes to. The `kubernetes` and `jwt` methods take the same request (`auth/<mount>/login` with a role and a JWT) and differ in the mount they default to and where the JWT comes from.",
-                  "properties": {
-                    "method": {
-                      "description": "`kubernetes`: the Kubernetes auth method, with this pod's ServiceAccount token. `jwt`: the JWT/OIDC method, with a token the platform projects (a ServiceAccount token of another audience, or, on AWS Lambda, the web identity token of outbound federation) from `tokenFile`.",
-                      "enum": [
-                        "kubernetes",
-                        "jwt"
-                      ]
-                    },
-                    "mount": {
-                      "description": "The auth method's mount path in each namespace. Absent, the method's name.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "role": {
-                      "description": "The role the login asks for. It must be bound to this workload's identity and carry a policy that reads, creates, updates and patches only the paths `exports` names.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "tokenFile": {
-                      "description": "Where the JWT is read from, afresh on every login. Absent with `kubernetes`, the pod's ServiceAccount token; required with `jwt`.",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "method",
-                    "role"
-                  ],
-                  "type": "object"
-                },
-                "caFile": {
-                  "description": "A PEM bundle of the authorities that sign the server's certificate, in place of the system's.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "mount": {
-                  "default": "kv",
-                  "description": "The KV version 2 mount.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "namespace": {
-                  "description": "The OpenBao namespace an export that names none is written to.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "address",
-                "auth"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "adapter"
-          ],
-          "type": "object"
         }
       },
       "type": "object"
@@ -1314,13 +1194,13 @@
           "description": "`ssm`, layout `transition` or `v4`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
         },
         "kmsKeyId": {
-          "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+          "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
           "minLength": 1,
           "type": "string"
         },
         "layout": {
           "default": "v3",
-          "description": "`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/` and the exports controller's copies under `<root>/export/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.",
+          "description": "`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.",
           "enum": [
             "v3",
             "transition",

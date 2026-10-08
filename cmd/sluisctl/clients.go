@@ -158,8 +158,7 @@ func clientsPurge(args []string) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "deleted the stored secret of %s\n", f.id)
-	_, _ = fmt.Fprintf(stdout, "still to do by hand: delete the input secret clients/%s/secret if it is still there, "+
-		"and the exported copy at the target the removed export wrote to\n", f.id)
+	_, _ = fmt.Fprintf(stdout, "still to do by hand: delete the input secret clients/%s/secret if it is still there\n", f.id)
 	return nil
 }
 

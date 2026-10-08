@@ -59,7 +59,6 @@ hold none; they are SSM parameters read by path.
   and sign-in failed after 30 minutes: [CHANGELOG](../../CHANGELOG.md).)
 - The service (issuer and console) is assembled once per execution environment and kept across invocations. A controller
   is assembled per invocation, as `sluis tick` does.
-- The exports' runner, a background loop, is not started: the `exports` event makes the copies on a schedule instead.
 - The binary is built without the Kubernetes and Valkey clients, so they are not 30 MB of cold start
   ([how it is held](../reference/lambda.md#building-and-checking-the-binary)).
 

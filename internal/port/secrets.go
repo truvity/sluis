@@ -11,9 +11,10 @@ import (
 // headroom for none. Larger content is a blob.
 const MaxSecret = 8 << 10
 
-// ExportPrefix is where the copies of secrets made OUT of the service live
-// (ADR 0034): `export/<path>`. A secrets adapter treats it as any other
-// prefix; the layout is a convention the callers share.
+// ExportPrefix is where layout v3 kept the copies of secrets made out of the
+// service (ADR 0034, retired by ADR 0041): `export/<path>`. Nothing writes it
+// any more; the v3 adapters still address it, so a migration can read and
+// delete what an earlier release left.
 const ExportPrefix = "export/"
 
 // Secret is a secret as read.
@@ -24,7 +25,7 @@ type Secret struct {
 	Version string
 }
 
-// Secrets is the store of dynamic secrets and of the exports: whole values
+// Secrets is the store of dynamic secrets: whole values
 // under slash-separated paths, each with a version. It is NOT State: a value
 // here is a credential, so a listing returns names and never values, and an
 // adapter is a store that protects what it holds (see [Descriptor.SecretStore]).
@@ -47,17 +48,6 @@ type Secrets interface {
 	// prefix is a whole number of segments (`export` and `export/` are the
 	// same); the empty prefix lists everything.
 	List(ctx context.Context, prefix string) ([]string, error)
-}
-
-// NamespacedSecrets is a Secrets that can be seen from another namespace of
-// its store: an OpenBao namespace. The export of a secret into a namespace of
-// its own (an export entry's `namespace`) asks for it; an adapter that is not
-// namespaced (ssm) does not have it, and such an export is refused.
-type NamespacedSecrets interface {
-	Secrets
-	// In returns the same installation's Secrets in the namespace. The
-	// connection and the credentials are shared.
-	In(namespace string) (Secrets, error)
 }
 
 // CheckSecretPath refuses a path that is empty, begins or ends with a slash,

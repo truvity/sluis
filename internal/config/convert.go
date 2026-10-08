@@ -29,7 +29,6 @@ type legacyPolicy struct {
 	runnerTiers         []string
 	enabledOrgs         []string
 	enabledWorkspaces   []string
-	exports             []Export
 
 	// secrets is where each secret v1 named by a variable or a file is, by
 	// the name v2 gives it; clientDir is v1's clientSecretsDir.
@@ -89,9 +88,11 @@ func convertV1(name string, doc map[string]any) (*legacyPolicy, error) {
 			l.slackCatalogueFile = str(s["catalogueFile"])
 		}
 		if e, ok := pop(doc, "exports").([]any); ok && len(e) > 0 {
-			raw, _ := json.Marshal(e)
-			if err := json.Unmarshal(raw, &l.exports); err != nil {
-				return nil, fmt.Errorf("exports: %w", err)
+			return nil, fmt.Errorf("exports: %s", retiredExports)
+		}
+		if ports, ok := doc["ports"].(map[string]any); ok {
+			if _, has := ports["export"]; has {
+				return nil, fmt.Errorf("ports.export: %s", retiredExports)
 			}
 		}
 		if x, ok := doc["exchange"].(map[string]any); ok {
@@ -303,7 +304,6 @@ func (l *legacyPolicy) document(fallback *policy.Policy) (*PolicyDocument, error
 	if controllers.GitHub != nil || controllers.Slack != nil {
 		d.Controllers = &controllers
 	}
-	d.Exports = l.exports
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}

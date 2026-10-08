@@ -11,7 +11,6 @@ import (
 
 	yaml "go.yaml.in/yaml/v3"
 
-	"github.com/truvity/sluis/internal/exportspec"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/policy"
@@ -29,7 +28,6 @@ import (
 //	apps         what an operator may make: runner tiers, the GitHub and Slack
 //	             App catalogues
 //	controllers  what each controller may change (the dry-run gate)
-//	exports      what the service copies out of itself
 //
 // It is rendered, never layered at run time: `sluisctl policy render` (and the
 // Pulumi library) merge a directory of layers, access documents and fragments
@@ -47,9 +45,6 @@ type PolicyDocument struct {
 	Apps *PolicyApps `yaml:"apps,omitempty"`
 	// Controllers is what each controller may change.
 	Controllers *PolicyControllers `yaml:"controllers,omitempty"`
-	// Exports are the copies of secrets the service makes out of itself, into
-	// the secret store `ports.export` (or the secrets adapter) names.
-	Exports []Export `yaml:"exports,omitempty"`
 }
 
 type (
@@ -153,14 +148,13 @@ type (
 
 // The sections the policy document adds to the access model's tables, as the
 // file spells them.
-var policySections = []string{"exchange", "apps", "controllers", "exports"}
+var policySections = []string{"exchange", "apps", "controllers"}
 
 // policySectionsDoc is the part of a policy document beside the tables.
 type policySectionsDoc struct {
 	Exchange    *PolicyExchange    `yaml:"exchange,omitempty"`
 	Apps        *PolicyApps        `yaml:"apps,omitempty"`
 	Controllers *PolicyControllers `yaml:"controllers,omitempty"`
-	Exports     []Export           `yaml:"exports,omitempty"`
 }
 
 // NewPolicyDocument is a v2 document holding only the access model's tables.
@@ -216,7 +210,7 @@ func decodePolicyDocument(raw []byte) (*PolicyDocument, error) {
 	}
 	return &PolicyDocument{
 		APIVersion: APIVersion("policy"), Policy: p,
-		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers, Exports: s.Exports,
+		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers,
 	}, nil
 }
 
@@ -258,7 +252,7 @@ func (d PolicyDocument) MarshalYAML() (any, error) {
 		}
 	}
 	var sections yaml.Node
-	if err = sections.Encode(policySectionsDoc{Exchange: d.Exchange, Apps: d.Apps, Controllers: d.Controllers, Exports: d.Exports}); err != nil {
+	if err = sections.Encode(policySectionsDoc{Exchange: d.Exchange, Apps: d.Apps, Controllers: d.Controllers}); err != nil {
 		return nil, err
 	}
 	out.Content = append(out.Content, sections.Content...)
@@ -381,9 +375,6 @@ func (d *PolicyDocument) Validate() error {
 	}
 	errs = append(errs, d.validateApps()...)
 	errs = append(errs, d.validateControllers()...)
-	if err := d.validateExports(); err != nil {
-		errs = append(errs, err)
-	}
 	return errors.Join(errs...)
 }
 
@@ -431,36 +422,6 @@ func (d *PolicyDocument) validateControllers() []error {
 		}
 	}
 	return errs
-}
-
-func (d *PolicyDocument) validateExports() error {
-	if len(d.Exports) == 0 {
-		return nil
-	}
-	_, err := exportspec.FromConfig(d.Exports, d.DeclaredForExports())
-	return err
-}
-
-// DeclaredForExports is what an export's source is held to: the Apps of both
-// catalogues, the runner tiers and the policy's clients.
-func (d *PolicyDocument) DeclaredForExports() exportspec.Declared {
-	declared := exportspec.Declared{
-		SlackApps:   []string{},
-		GitHubApps:  []string{},
-		RunnerTiers: append([]string{}, d.RunnerTiers()...),
-		Clients:     map[string]bool{},
-	}
-	for id := range d.Policy.Clients {
-		declared.Clients[id] = d.Policy.Clients[id].SecretGenerated()
-	}
-	for _, a := range d.SlackCatalogue().Apps {
-		declared.SlackApps = append(declared.SlackApps, a.ID)
-	}
-	github := d.GitHubCatalogue()
-	for i := range github.Apps {
-		declared.GitHubApps = append(declared.GitHubApps, github.Apps[i].ID)
-	}
-	return declared
 }
 
 // validateClusters refuses a row that would verify nothing, and two rows for

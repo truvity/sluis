@@ -89,7 +89,7 @@
         },
         "secrets": {
           "additionalProperties": false,
-          "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
+          "description": "The adapter for secrets (dynamic secrets), replacing the preset's.",
           "properties": {
             "adapter": {
               "description": "The adapter's name, as the compatibility matrix lists it.",

@@ -126,7 +126,7 @@ func NewClient(cfg Config) (*Client, error) {
 	if mount == "" {
 		mount = DefaultMount
 	}
-	if err = port.CheckExportPath(mount); err != nil {
+	if err = checkPath(mount); err != nil {
 		return nil, fmt.Errorf("openbao: mount %q is not a mount path", mount)
 	}
 	auth := cfg.Auth
@@ -141,7 +141,7 @@ func NewClient(cfg Config) (*Client, error) {
 	if auth.Mount == "" {
 		auth.Mount = auth.Method
 	}
-	if err = port.CheckExportPath(auth.Mount); err != nil {
+	if err = checkPath(auth.Mount); err != nil {
 		return nil, fmt.Errorf("openbao: auth.mount %q is not a mount path", auth.Mount)
 	}
 	token := auth.Token
@@ -285,7 +285,7 @@ func (s *Client) login(ctx context.Context, ns string, force bool) (string, erro
 		return "", err
 	}
 	if status != http.StatusOK {
-		return "", answer("log in", port.ExportTarget{Namespace: ns, Path: path}, status, raw)
+		return "", answer("log in", target{Namespace: ns, Path: path}, status, raw)
 	}
 	var out struct {
 		Auth struct {

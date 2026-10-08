@@ -30,8 +30,7 @@ Two platforms are supported permanently, so every port has an adapter for each:
 | State | records, sessions, tokens, leases, gates, caches, counters (no credential) | `legacy` (ConfigMaps, Valkey), DynamoDB | DynamoDB |
 | Blob | status reports, directory snapshots | S3 | S3 |
 | Trigger | a change becomes a tick | DynamoDB (polling watch), in-process | asynchronous `lambda:Invoke` |
-| Secrets | dynamic secrets (the credentials of the domain stores) and the exports | OpenBao, SSM, memory, `legacy` | SSM, OpenBao |
-| Export | copies a secret out of the service, into a store a consumer reads | OpenBao KV | OpenBao KV |
+| Secrets | dynamic secrets (the credentials of the domain stores) | OpenBao, SSM, memory, `legacy` | SSM, OpenBao |
 | Inputs | policy, configuration, operator-managed secrets | mounted ConfigMaps and Secrets | the configuration layer, or a parameter store |
 | Identity | proves a workload to the issuer, and the service to the cloud | ServiceAccount token, AWS federation | the same |
 | Audit sink | records what the service did | `connect`, `log` | `sqs` |
@@ -50,8 +49,6 @@ The table is a summary; [adapters](../reference/adapters.md) is the registry's o
 - **DynamoDB has no cheap change feed**, so `Watch` and the Trigger poll the prefix: a stream needs a consumer, a second
   IAM surface and shard handling, and the port's contract (at-least-once, reconcile by listing) allows it.
 - **A notification is a hint.** The lease and the backstop schedule make a duplicate or a lost one harmless.
-- **Export is the reverse of State**: a copy of a secret for a program that cannot ask the service
-  ([0034](../decisions/0034-exports-go-to-openbao-directly.md)). Nothing is read back and nothing depends on it.
 - **The `legacy` adapter is temporary.** It wraps today's ConfigMaps, Secrets and Valkey and is deleted when the
   migration of [0031](../decisions/0031-a-generic-migration-tool.md) has run.
 - **One suite, every adapter.** The conformance suite is the gate for adding or changing an adapter and for the
@@ -61,7 +58,7 @@ The table is a summary; [adapters](../reference/adapters.md) is the registry's o
 ## Adapters, presets and the platform
 
 An adapter is chosen by name, **per concern**. The concerns are `state` (sessions are State under `ses.`, with a
-lifetime), `secrets` (dynamic secrets, and the exports under `export/`), `blobs`, `signing`, `trigger`, `schedule` and
+lifetime), `secrets` (dynamic secrets), `blobs`, `signing`, `trigger`, `schedule` and
 `audit`. Each adapter registers a descriptor in `internal/port` (`port.Register`): its name and concern, what it needs
 (AWS, Kubernetes, OpenBao), the runtimes it works on (`kubernetes`, `lambda`, `process`), its status (`implemented` or
 `on-request`) and a factory from its settings. `port.Catalogue` lists the adapters that are planned and not built;

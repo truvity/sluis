@@ -611,7 +611,7 @@
     "exports": {
       "type": "object",
       "additionalProperties": false,
-      "description": "What the chart mounts for the service's exports (docs/decisions/0034): the CA that signs OpenBao's certificate and the projected token the login presents. What is copied and where (`config.exports`), and the OpenBao it is copied to and how the service logs in to it (`config.ports.export`), are the `config`'s.",
+      "description": "What the chart mounts for the service's OpenBao connection (the `openbao` secrets adapter): the CA that signs OpenBao's certificate and the projected token the login presents. The address and how the service logs in are the `config`'s (`config.adapters.secrets`). The key keeps the name it had when the exports used the same mounts.",
       "properties": {
         "openbao": {
           "type": "object",
@@ -619,7 +619,7 @@
           "properties": {
             "caBundle": {
               "type": "string",
-              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.ports.export.openbao.caFile` and `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted."
+              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted."
             },
             "token": {
               "type": "object",
@@ -627,7 +627,7 @@
               "properties": {
                 "audience": {
                   "type": "string",
-                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.ports.export.openbao.auth.tokenFile` and `config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token."
+                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token."
                 },
                 "expirationSeconds": {
                   "type": "integer",
@@ -1289,70 +1289,6 @@
                   "type": "integer",
                   "minimum": 1,
                   "description": "The fewest failures in the window that count."
-                }
-              }
-            },
-            "exportFailing": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "An export's copy keeps failing.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "severity": {
-                  "type": "string",
-                  "description": "The severity label."
-                },
-                "for": {
-                  "type": "string",
-                  "description": "How long the condition holds before the alert fires, as a duration."
-                },
-                "labels": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "description": "Labels added to this rule only."
-                },
-                "failures": {
-                  "type": "integer",
-                  "minimum": 1,
-                  "description": "Failed attempts of one export within `window`."
-                },
-                "window": {
-                  "type": "string",
-                  "description": "The window, as a duration."
-                }
-              }
-            },
-            "exportStale": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "An export has not had its copy in the store for `maxAgeSeconds`.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "severity": {
-                  "type": "string",
-                  "description": "The severity label."
-                },
-                "for": {
-                  "type": "string",
-                  "description": "How long the condition holds before the alert fires, as a duration."
-                },
-                "labels": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "description": "Labels added to this rule only."
-                },
-                "maxAgeSeconds": {
-                  "type": "integer",
-                  "minimum": 1,
-                  "description": "The age, in seconds."
                 }
               }
             }

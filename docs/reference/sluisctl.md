@@ -157,13 +157,13 @@ of them read in name order:
 - a policy file of v1 (`version: 1`);
 - an access document (`access:` and `overlay:`), reshaped into tables;
 - a policy document fragment (`apiVersion: sluis.truvity.github.io/policy/v2`):
-  tables and any of the sections `exchange`, `apps`, `controllers` and `exports`.
+  tables and any of the sections `exchange`, `apps` and `controllers`.
 
 Tables merge by key, and a key declared twice is an error naming the file. Of the
 sections, a list concatenates and a list of names unions; a scalar declared by two
 layers is an error. The result is held to every check the service runs at start
 (a catalogue grant naming an undeclared group, an enabled organisation the policy
-does not bind, an export of an undeclared App, and the rest), so a document this
+does not bind, and the rest), so a document this
 writes is one the service accepts, and the same layers give the same bytes.
 
 `-o <file>` writes the document there; without it, it goes to stdout. Name the
@@ -286,8 +286,8 @@ sluisctl clients purge <id>                    # delete the record of a client n
 
 The id and the flags may come in either order; all three take `--issuer` and `--client`. `--overlap` is a duration from
 `0` to `168h` (default `24h`; `0` cuts the old secret at once). The caller must be an operator, with a token issued to
-`accessctl` or `console`. `rotate` and `purge` print what they did; `purge` also says to delete `clients/<id>/secret` and
-the exported copy by hand. How: [rotate a client secret](../how-to/rotate-a-client-secret.md). Endpoints:
+`accessctl` or `console`. `rotate` and `purge` print what they did; `purge` also says to delete
+`clients/<id>/secret` by hand. How: [rotate a client secret](../how-to/rotate-a-client-secret.md). Endpoints:
 [`/.access/client-secrets`](endpoints.md#client-secrets).
 
 These commands exit `2` for a bad command line or overlap, `3` when not signed in (a `401`), `4` when refused (a `403`:

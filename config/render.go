@@ -103,8 +103,8 @@ func (in *Installation) check() error {
 	if in.APIVersion != "" && in.APIVersion != InstallationVersion {
 		errs = append(errs, fmt.Errorf("apiVersion is %q: this build reads %s", in.APIVersion, InstallationVersion))
 	}
-	if !instancePattern.MatchString(in.Instance) || in.Instance == "private" || in.Instance == "export" {
-		errs = append(errs, fmt.Errorf("instance %q is not lower-case letters, digits and dashes, or is `private` or `export`", in.Instance))
+	if !instancePattern.MatchString(in.Instance) || in.Instance == "private" || in.Instance == "export" || in.Instance == "internal" || in.Instance == "external" {
+		errs = append(errs, fmt.Errorf("instance %q is not lower-case letters, digits and dashes, or is `private`, `export`, `internal` or `external`", in.Instance))
 	}
 	switch in.Shape {
 	case ShapeLambda, ShapeKubernetes, ShapeServer:
@@ -425,9 +425,6 @@ func (in *Installation) policyDocument() (*internal.PolicyDocument, error) {
 		if pc.GitHub != nil || pc.Slack != nil {
 			doc.Controllers = pc
 		}
-	}
-	for i := range in.Exports {
-		doc.Exports = append(doc.Exports, *copyOf(&in.Exports[i]))
 	}
 	return doc, nil
 }

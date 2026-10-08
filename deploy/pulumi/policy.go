@@ -30,6 +30,7 @@ const (
 	ssmGetParameter        = "ssm:GetParameter"
 	ssmGetParameters       = "ssm:GetParameters"
 	ssmGetParametersByPath = "ssm:GetParametersByPath"
+	ssmGetParameterHistory = "ssm:GetParameterHistory"
 	ssmPutParameter        = "ssm:PutParameter"
 	ssmDeleteParameter     = "ssm:DeleteParameter"
 	lambdaInvokeFunction   = "lambda:InvokeFunction"
@@ -241,16 +242,17 @@ const (
 	sidSigning        = "SluisSigning"
 	sidLogs           = "SluisLogs"
 	sidPrivate        = "SluisPrivateParameters"
-	sidExport         = "SluisExportParameters"
+	sidExternal       = "SluisExternalParameters"
 	sidParamKy        = "SluisParameterKey"
 	sidInvoke         = "SluisRunAPass"
 	sidAudit          = "SluisAuditIngest"
 	sidWebID          = "SluisWebIdentity"
 )
 
-// SSM layout v3 (docs/decisions/0036): one root per installation,
-// `/sluis/<instance>`; under it `private` is sluis's alone and `export` is what
-// consumers read.
+// SSM layout v3 (docs/decisions/0036) and v4 (docs/decisions/0041): one root
+// per installation, `/sluis/<instance>`. In v3 `private` is sluis's alone; in v4
+// `internal` is, and `external` is the typed documents consumers read, each
+// granted on its own side.
 
 // PrivateParameterPrefix is where sluis keeps its own secrets.
 func PrivateParameterPrefix(instance string) string { return SSMRoot(instance) + "/private" }
@@ -271,8 +273,13 @@ func CredentialsParameterPrefix(instance string) string {
 	return PrivateParameterPrefix(instance) + "/credentials"
 }
 
-// ExportParameterPrefix is where sluis writes what consumers read.
-func ExportParameterPrefix(instance string) string { return SSMRoot(instance) + "/export" }
+// InternalParameterPrefix is where sluis keeps its own secrets on layout v4.
+func InternalParameterPrefix(instance string) string { return SSMRoot(instance) + "/internal" }
+
+// ExternalParameterPrefix is where sluis keeps the typed documents consumers
+// read on layout v4 (external/<kind>/<id>). A consumer is granted its exact
+// addresses on its own side, never this prefix.
+func ExternalParameterPrefix(instance string) string { return SSMRoot(instance) + "/external" }
 
 // parameterArns is the ARNs a read of a path names: the path itself, which
 // GetParametersByPath is authorised against, and everything under it.
@@ -324,12 +331,9 @@ type functionPolicyIn struct {
 	keys               *keyGrants
 	webIdentityAud     string
 	// webIdentityExtra are audiences after webIdentityAud; used only with it.
-	webIdentityExtra []string
-	parameterKeyArn  string
-	instance         string
-	// exports is whether the function runs the exports: only then does it read
-	// what it wrote under export/ (a copy that is already there writes nothing).
-	exports            bool
+	webIdentityExtra   []string
+	parameterKeyArn    string
+	instance           string
 	logGroupArn        string
 	invokeFunctionArns []string
 }
@@ -342,15 +346,12 @@ type functionPolicyIn struct {
 //   - private/config/*: read only (the secrets its document names: the recovery
 //     password, the state secret, the OAuth client, the declared clients and
 //     workspaces); config/* is the operator's and the stack's;
-//   - export/*: write, and with exports (the pass that reads back what it wrote)
-//     read too;
+//   - layout v4: internal/credentials/* and external/*, read and write (with
+//     the parameters' history, which the rotation reads), internal/config/*
+//     read only;
 //   - with a customer-managed parameter key, its use through SSM only, for the
 //     parameters under those prefixes.
 func ssmStatements(region, account, instance, parameterKeyArn string) []statement {
-	return ssmStatementsFor(region, account, instance, parameterKeyArn, true)
-}
-
-func ssmStatementsFor(region, account, instance, parameterKeyArn string, exports bool) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
 	st := []statement{{
 		"Sid":      sidPrivate,
@@ -363,17 +364,27 @@ func ssmStatementsFor(region, account, instance, parameterKeyArn string, exports
 		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
 		"Resource": parameterArns(region, account, ConfigParameterPrefix(instance)),
 	}}
-	exportActions := []string{ssmPutParameter, ssmDeleteParameter}
-	if exports {
-		exportActions = all
-	}
+	withHistory := append(append([]string{}, all...), ssmGetParameterHistory)
 	st = append(st, statement{
-		"Sid":      sidExport,
+		"Sid":      sidPrivate + "V4",
 		"Effect":   "Allow",
-		"Action":   exportActions,
-		"Resource": parameterArns(region, account, ExportParameterPrefix(instance)),
+		"Action":   withHistory,
+		"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/credentials"),
+	}, statement{
+		"Sid":      sidPrivate + "V4Config",
+		"Effect":   "Allow",
+		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
+		"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/config"),
+	}, statement{
+		"Sid":      sidExternal,
+		"Effect":   "Allow",
+		"Action":   withHistory,
+		"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)),
 	})
-	prefixes := []string{CredentialsParameterPrefix(instance), ExportParameterPrefix(instance), ConfigParameterPrefix(instance)}
+	prefixes := []string{
+		CredentialsParameterPrefix(instance), ConfigParameterPrefix(instance),
+		InternalParameterPrefix(instance), ExternalParameterPrefix(instance),
+	}
 	return append(st, parameterKeyStatements(parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
 		parameterArnsUnder(region, account, prefixes...))...)
 }
@@ -396,7 +407,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		st = append(st, credentialsStatements(in.external, in.region, in.account, in.instance, in.parameterKeyArn)...)
 	}
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
-	st = append(st, ssmStatementsFor(in.region, in.account, in.instance, in.parameterKeyArn, in.exports)...)
+	st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn)...)
 	st = append(st, statement{
 		"Sid":      sidAudit,
 		"Effect":   "Allow",
@@ -439,19 +450,4 @@ func webIdentityStatement(audience string, extra []string) statement {
 		}
 	}
 	return st
-}
-
-// ExportReadPolicy is the IAM policy document a consumer's External Secrets
-// Operator role attaches: read on /sluis/<instance>/export/* and nothing else
-// (and, with a customer-managed parameter key, its decryption through SSM only).
-func ExportReadPolicy(region, account, instance, parameterKeyArn string) (string, error) {
-	st := []statement{{
-		"Sid":      sidExport,
-		"Effect":   "Allow",
-		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-		"Resource": parameterArns(region, account, ExportParameterPrefix(instance)),
-	}}
-	st = append(st, parameterKeyStatements(parameterKeyArn, []string{kmsDecrypt},
-		parameterArnsUnder(region, account, ExportParameterPrefix(instance)))...)
-	return document(st)
 }

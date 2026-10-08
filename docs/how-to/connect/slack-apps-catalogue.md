@@ -149,13 +149,12 @@ error message or an audit record.
 
 ## Projecting one App's bot token to a secret store
 
-> **On a State adapter, use an export.** `push` is **deprecated**: it renders a
+> **On a State adapter, read the document.** `push` is **deprecated**: it renders a
 > PushSecret over the Kubernetes Secret only the `legacy` storage writes. With
-> `ports.adapter` other than `legacy` the service copies the token itself, with
-> `exports: [{source: slack-app, app: <id>, path: slack-apps/<id>}]` into an
-> OpenBao KV mount, written as `bot_token`, the property `push` wrote
-> ([configuration reference](../../reference/exports.md),
-> [0034](../../decisions/0034-exports-go-to-openbao-directly.md)).
+> `ports.adapter` other than `legacy` and layout v4 the installed App is the `slack/v1` document at
+> `external/slack/<id>`, which the consumer reads with its own grant
+> ([secrets](../../reference/secrets.md#the-external-documents),
+> [0041](../../decisions/0041-the-secret-contract.md)).
 
 `push` makes External Secrets copy **one key**, the bot token, to a store
 and path the entry names: a program that acts in the workspace as the bot

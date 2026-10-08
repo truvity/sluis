@@ -66,7 +66,8 @@ type KubernetesIdentityArgs struct {
 	// Instance, when set, is the installation's name (`acme`, `prod`) and gives
 	// the role the SSM grants the Lambda role has under `/sluis/<instance>`
 	// (layout v3), for a pod whose `secrets` or Secrets adapter is `ssm`: read and
-	// write under private/credentials/* and export/*, read under private/config/*,
+	// write under private/credentials/* (and, on layout v4, internal/credentials/*
+	// and external/*), read under private/config/* and internal/config/*,
 	// all scoped to that root. Needs Region. Unset, the role has no SSM grant.
 	Instance string
 	// ParameterKeyArn is the customer-managed key SecureString parameters under

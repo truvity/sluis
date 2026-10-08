@@ -240,8 +240,6 @@ func policyControllersSchema() m {
 }
 
 func policySchema() m {
-	exports := exportsSchema()
-	exports["description"] = "The secrets the service copies out of itself into the store its `ports.export` (or its secrets adapter) names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. An unknown source, a source this document does not declare and two exports that would write one key are refused before anything starts."
 	props := m{
 		"apiVersion":       apiVersion("policy"),
 		"vocabulary":       vocabularySchema(),
@@ -257,7 +255,6 @@ func policySchema() m {
 		"exchange":         policyExchangeSchema(),
 		"apps":             policyAppsSchema(),
 		"controllers":      policyControllersSchema(),
-		"exports":          exports,
 	}
 	return document("policy", "sluis policy",
 		"The policy document: what an installation decides, read by every process of it. The access model's tables (docs/reference/policy.md) and beside them whom the exchange trusts, what an operator may make, what each controller may change and what is copied out. Rendered by `sluisctl policy render` from layers; a process reads exactly one. Nothing here is a secret.",

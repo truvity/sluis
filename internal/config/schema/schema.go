@@ -237,8 +237,8 @@ func secretsSchema() m {
 		"region":   str("`ssm`: the region. Unset follows the AWS SDK's own resolution."),
 		"endpoint": url("`ssm`: overrides the SSM address, for LocalStack."),
 		"refresh":  duration("`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it.", "5m"),
-		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
-		"layout":   enum("`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/` and the exports controller's copies under `<root>/export/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.", "v3", "v3", "transition", "v4"),
+		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
+		"layout":   enum("`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.", "v3", "v3", "transition", "v4"),
 		"grace":    duration("`ssm`, layout `transition` or `v4`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
 	}, "source")
 	s["allOf"] = []any{
@@ -264,7 +264,7 @@ func serveSchema() m {
 		"log":           logLevel(),
 		"store": enum("Where what an operator connected is kept: `memory` keeps nothing (a restart is a fresh installation), `kubernetes` keeps it in this namespace.", "memory",
 			"memory", "kubernetes"),
-		"ports":         portsSchema(true),
+		"ports":         portsSchema(),
 		"platform":      platformSchema(),
 		"preset":        presetSchema(),
 		"adapters":      adaptersSchema(),
@@ -423,70 +423,18 @@ func controllerProps(tokenDefault, recordsDefault, dirKey, dirDescription, dirDe
 	}
 }
 
-// portsSchema is the `ports` section both kinds of file share. Only the
-// service copies secrets out of itself, so only its file may name an Export.
-func portsSchema(export bool) m {
+// portsSchema is the `ports` section both kinds of file share.
+func portsSchema() m {
 	o := obj("The adapters behind the storage ports (docs/explanation/ports.md).", m{
 		"adapter": enum("`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.", "legacy",
 			"legacy", "memory", "dynamodb"),
 		"blob":     portsBlobSchema(),
 		"dynamodb": portsDynamoDBSchema(),
 	})
-	if export {
-		o["properties"].(m)["export"] = portsExportSchema()
-	}
 	o["allOf"] = []any{
 		m{"if": m{"properties": m{"adapter": m{"const": "dynamodb"}}, "required": []string{"adapter"}}, "then": m{"required": []string{"dynamodb"}}},
 	}
 	return o
-}
-
-// portsExportSchema is `ports.export`: where the copies of `exports` go.
-func portsExportSchema() m {
-	s := obj("The store the copies of `exports` are written to (docs/decisions/0034). Absent, nothing is copied out of the service, and `exports` must be empty.", m{
-		"adapter": enum("`openbao` writes to a KV version 2 mount of an OpenBao. `memory` keeps the copies in this process and is for a test or the demonstration.", "", "openbao", "memory"),
-		"openbao": obj("The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency.", m{
-			"address":   m{"type": "string", "pattern": `^https://[^\s/?#@]+/?$`, "description": "The server, https only and with no path: `https://openbao.example`. A token and a login JWT cross this connection."},
-			"caFile":    str("A PEM bundle of the authorities that sign the server's certificate, in place of the system's."),
-			"mount":     strDefault("The KV version 2 mount.", "kv"),
-			"namespace": str("The OpenBao namespace an export that names none is written to."),
-			"auth": obj("How the service logs in, inside each namespace it writes to. The `kubernetes` and `jwt` methods take the same request (`auth/<mount>/login` with a role and a JWT) and differ in the mount they default to and where the JWT comes from.", m{
-				"method":    enum("`kubernetes`: the Kubernetes auth method, with this pod's ServiceAccount token. `jwt`: the JWT/OIDC method, with a token the platform projects (a ServiceAccount token of another audience, or, on AWS Lambda, the web identity token of outbound federation) from `tokenFile`.", "", "kubernetes", "jwt"),
-				"mount":     str("The auth method's mount path in each namespace. Absent, the method's name."),
-				"role":      str("The role the login asks for. It must be bound to this workload's identity and carry a policy that reads, creates, updates and patches only the paths `exports` names."),
-				"tokenFile": str("Where the JWT is read from, afresh on every login. Absent with `kubernetes`, the pod's ServiceAccount token; required with `jwt`."),
-			}, "method", "role"),
-		}, "address", "auth"),
-	}, "adapter")
-	s["allOf"] = []any{
-		m{"if": m{"properties": m{"adapter": m{"const": "openbao"}}}, "then": m{"required": []string{"openbao"}}},
-		m{"if": m{"properties": m{"auth": m{"properties": m{"method": m{"const": "jwt"}}}}}, "then": m{"properties": m{"auth": m{"required": []string{"tokenFile"}}}}},
-	}
-	return s
-}
-
-// exportsSchema is `exports`: the copies of secrets made out of the service.
-func exportsSchema() m {
-	item := obj("One copy: what is copied (`source` and the field that names it) and where it goes (`path`, in `namespace`).", m{
-		"name":       str("Identifies the export in the log, the metrics and its lease: lower-case letters, digits, '.', '_' and '-'. Absent, the source and what it names, e.g. `slack-app.alerts`."),
-		"source":     enum("What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `oidc-client`: a confidential client's id and the secret the issuer generated for it (`client`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).", "", "slack-app", "github-app", "runner-app", "oidc-client", "bundle"),
-		"app":        str("The catalogue id, for `slack-app` and `github-app`. It must be declared in the catalogue."),
-		"tier":       str("A runner tier, for `runner-app`. It must be one of `github.runnerTiers`."),
-		"org":        str("The organisation, for `runner-app`."),
-		"client":     str("The id of a policy client, for `oidc-client`. It must be confidential with `secret: {generate: true}`."),
-		"bundle":     enum("The bundle, for `bundle`: each is what the Kubernetes Secret of that name held, one JSON document per entry. Written with `replace`: the key holds exactly the bundle.", "", "workspace-credentials", "github-apps", "github-links", "github-runner-apps", "github-catalogue-apps", "slack-credentials", "slack-records"),
-		"namespace":  str("The OpenBao namespace. Absent, `ports.export.openbao.namespace`."),
-		"path":       str("The key under the KV mount: `slack-apps/alerts`. No leading or trailing slash."),
-		"properties": m{"type": "object", "additionalProperties": m{"type": "string", "minLength": 1}, "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App; `client-id`, `client-secret` for an `oidc-client` (the current secret only, never the previous one), which is written with `replace`: the key holds exactly its properties. Otherwise a property export is a PATCH: other properties of the key are left as they are. Not for `bundle`."},
-		"interval":   duration("How often the copy is made again with nothing changed, to put back what somebody altered. A change is copied at once; this is the backstop.", "1h"),
-	}, "source", "path")
-	item["allOf"] = []any{
-		m{"if": m{"properties": m{"source": m{"enum": []string{"slack-app", "github-app"}}}}, "then": m{"required": []string{"app"}}},
-		m{"if": m{"properties": m{"source": m{"const": "runner-app"}}}, "then": m{"required": []string{"tier", "org"}}},
-		m{"if": m{"properties": m{"source": m{"const": "oidc-client"}}}, "then": m{"required": []string{"client"}}},
-		m{"if": m{"properties": m{"source": m{"const": "bundle"}}}, "then": m{"required": []string{"bundle"}}},
-	}
-	return m{"type": "array", "items": item, "description": "The secrets this service copies out of itself into the store `ports.export` names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. Validated at start; an unknown source, a source this deployment does not declare and two exports that would write one key stop the service before it serves."}
 }
 
 // portsDynamoDBSchema is `ports.dynamodb`: the table of the `dynamodb` adapter.
@@ -539,7 +487,7 @@ func rosterProps(kind, mountDefault, recordsDefault string) m {
 		"recordsDir": strDefault("The console's records, mounted.", recordsDefault),
 		"interval":   duration("How long between passes. Positive.", "15m"),
 		"log":        logLevel(),
-		"ports":      portsSchema(false),
+		"ports":      portsSchema(),
 		"platform":   platformSchema(),
 		"preset":     presetSchema(),
 		"adapters":   adaptersSchema(),
@@ -627,7 +575,7 @@ func adaptersSchema() m {
 	}
 	return obj("Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.", m{
 		"state":    choice("state, sessions included"),
-		"secrets":  choice("secrets (dynamic secrets, exports under `export/`)"),
+		"secrets":  choice("secrets (dynamic secrets)"),
 		"blobs":    choice("blobs"),
 		"signing":  choice("token signing"),
 		"trigger":  choice("the \"run a pass now\" trigger"),

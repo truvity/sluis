@@ -1,11 +1,12 @@
 # A caFile the chart mounts nothing at fails the render, naming the value that mounts it.
-# error: config.ports.export.openbao.caFile is "/etc/ca.pem" and the chart renders nothing there: set exports.openbao.caBundle
+# error: config.adapters.secrets.settings.caFile is "/etc/ca.pem" and the chart renders nothing there: set exports.openbao.caBundle
 config:
   issuerURL: https://issuer.example
-  ports:
-    export:
+  adapters:
+    secrets:
       adapter: openbao
-      openbao:
+      settings:
         address: https://openbao.example
+        root: sluis
         caFile: /etc/ca.pem
         auth: {method: kubernetes, role: r}

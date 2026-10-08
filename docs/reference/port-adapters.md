@@ -10,11 +10,9 @@ the registry); the physical layout is [storage layout](storage-layout.md); the s
 `internal/port/openbao` (`adapters.secrets.adapter: openbao`) keeps each secret as
 a KV version 2 secret in an OpenBao mount, laid out as SSM is (layout v3, see
 [configuration](openbao-secrets-adapter.md)). It
-shares the client of the Export adapter: the same login (`jwt` or `kubernetes`,
-the token file read again at every login), the same per-namespace token and the
-same TLS-verified connection. Compare-and-swap is KV's own `cas`, atomic on the
-server, which SSM's is not. It also implements `port.NamespacedSecrets`, so an
-export entry's `namespace` is honoured on the default destination.
+logs in with `jwt` or `kubernetes` (the token file read again at every login), keeps a token per
+namespace and uses a TLS-verified connection. Compare-and-swap is KV's own `cas`, atomic on the
+server, which SSM's is not.
 
 ## The SSM adapter
 
@@ -28,9 +26,9 @@ or alias; unset is the AWS-managed `alias/aws/ssm`), `region`, `endpoint`
 (LocalStack).
 
 **Layout:** [storage layout](storage-layout.md#ssm-the-ssm-secrets-adapter) has every path. A consumer's External
-Secrets Operator reads `<root>/export/*` and nothing else.
+Secrets Operator reads the exact `<root>/external/<kind>/<id>` addresses it is granted (layout v4) and nothing else.
 
-**Values:** a text value is stored as it is, so an export reads as the secret itself;
+**Values:** a text value is stored as it is;
 a value that is not text (control bytes, not UTF-8) or that begins with `sluis-b64:`
 is stored as that marker and its base64 (so a binary value is at most about 6 KiB).
 The tier is Intelligent-Tiering: standard (4 KiB, free) until a value needs more,
@@ -59,7 +57,7 @@ package pins the documented outcome.
   ],
   "Resource": [
     "<the SSM parameter ARNs of /sluis/<instance>/private/credentials/*>",
-    "<the SSM parameter ARNs of /sluis/<instance>/export/*>"
+    "<the SSM parameter ARNs of /sluis/<instance>/internal/credentials/* and /external/*>"
   ]
 }
 ```
@@ -69,9 +67,10 @@ of each tree. The function that serves the console adds read-only `GetParameter`
 `GetParameters` and `GetParametersByPath` on `/sluis/<instance>/private/config/*`, the
 secrets its document names; a controller is denied that tree.) With
 `kmsKeyId` set, add `kms:Decrypt` and `kms:Encrypt` on that key; the AWS-managed
-key needs nothing beyond the parameter permissions. **Consumers' ESO must read ONLY
-`/sluis/<instance>/export/*`** (`ssm:GetParameter` and `ssm:GetParametersByPath` there, and
-`kms:Decrypt` if a customer key is set), never `/sluis/<instance>/private/*`.
+key needs nothing beyond the parameter permissions. **A consumer's ESO must read ONLY
+the exact `/sluis/<instance>/external/<kind>/<id>` parameters it needs** (`ssm:GetParameter` there, and `kms:Decrypt`
+if a customer key is set), never `/sluis/<instance>/private/*` or `/internal/*`. Layout v4 also needs
+`ssm:GetParameterHistory` for the service's role.
 
 ## The `sqs` adapter
 
