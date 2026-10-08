@@ -152,16 +152,12 @@ func TestAttestedLocksTheArchiveInComplianceMode(t *testing.T) {
 	if mode := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); mode != "COMPLIANCE" {
 		t.Errorf("lock mode = %s", mode)
 	}
-	// The governance trial of the lock is allowed; no lock is not.
-	if _, _, err = build(t, func(a *auditpulumi.Args) { attested(a); a.Archive.ObjectLockMode = auditpulumi.Governance }); err != nil {
-		t.Errorf("governance under attested: %v", err)
-	}
-	_, _, err = build(t, func(a *auditpulumi.Args) {
-		attested(a)
-		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.None, 0
-	})
-	if err == nil || !strings.Contains(err.Error(), "ObjectLockMode is NONE and the preset is attested") {
-		t.Errorf("no lock under attested: %v", err)
+	// Compliance is the only lock an attested destination is kept under.
+	for _, mode := range []string{auditpulumi.Governance, auditpulumi.None} {
+		_, _, err = build(t, func(a *auditpulumi.Args) { attested(a); a.Archive.ObjectLockMode = mode })
+		if err == nil || !strings.Contains(err.Error(), "ObjectLockMode is "+mode+" and the archive has an attested destination") {
+			t.Errorf("%s under attested: %v", mode, err)
+		}
 	}
 }
 

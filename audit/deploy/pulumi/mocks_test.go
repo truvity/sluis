@@ -350,12 +350,12 @@ func layerFiles(t *testing.T, r *recorder, function string) map[string]string {
 }
 
 // attested makes the installation one that keeps a destination under Object Lock
-// (a pci-dss destination beside security), in the governance trial with a
+// (a pci-dss destination beside security), under compliance with a
 // 30-day floor, and then applies edit. Object Lock is the attested preset's alone.
 func attested(edit func(*auditpulumi.Args)) func(*auditpulumi.Args) {
 	return func(a *auditpulumi.Args) {
 		a.Writer.DeploymentYAML = "profiles:\n  security:\n    frameworks: [security]\n  pay:\n    frameworks: [pci-dss]\n"
-		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.Governance, 30
+		a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = auditpulumi.Compliance, true, 30
 		if edit != nil {
 			edit(a)
 		}
