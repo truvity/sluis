@@ -65,7 +65,8 @@ func (c *Args) checkAWSArchive() error {
 		}
 	}
 	if len(ar.Profiles) == 0 {
-		return errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix (or give Writer.DeploymentYAML, whose profiles they are)")
+		return errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix " +
+			"(or give Writer.DeploymentYAML, whose profiles they are)")
 	}
 	if err := checkArchiveProfiles(ar.Profiles); err != nil {
 		return err

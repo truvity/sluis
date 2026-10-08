@@ -119,6 +119,11 @@ func TestAnS3CompatibleStoreRefusesWhatIsAnAWSBucketsSetting(t *testing.T) {
 		"encryption":     {func(a *auditpulumi.Args) { onR2(a); a.Archive.Encryption = auditpulumi.EncryptionS3 }, "Archive.Encryption"},
 		"retention":      {func(a *auditpulumi.Args) { onR2(a); a.Archive.DefaultRetentionDays = 30 }, "DefaultRetentionDays"},
 		"an archive key": {func(a *auditpulumi.Args) { onR2(a); a.Keys.Archive = "alias/x" }, "Keys.Archive"},
+		"a destination key": {func(a *auditpulumi.Args) {
+			onR2(a)
+			a.Archive.Profiles = nil
+			a.Writer.DeploymentYAML = "profiles:\n  activity:\n    frameworks: [history]\n    key_alias: alias/acme-activity\n"
+		}, "names key_alias"},
 		"observe": {func(a *auditpulumi.Args) {
 			onR2(a)
 			a.Observe = &auditpulumi.ObserveArgs{IRSA: irsa("audit", "o")}

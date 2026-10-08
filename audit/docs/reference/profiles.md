@@ -105,7 +105,10 @@ profiles:
 - `key_alias` is the alias of the key the destination's objects are encrypted under. The estate
   creates it; the Pulumi library creates no key, looks the alias up and grants every role that reads
   or writes the archive the key behind it, conditioned on the encryption context the storage KMS
-  backend uses (`instance`, and `purpose: archive`). Unset is the archive's key.
+  backend uses (`instance`, which is `Keys.Instance` or the component's name, and `purpose: archive`).
+  Unset is the archive's key. The alias is resolved by the same lookup as the `Keys` aliases. On an
+  archive at an S3-compatible endpoint, which is not encrypted under a KMS key (and has no
+  `Keys.Archive`), a `key_alias` is refused, by the library and by the writer at start.
 - Retention is the destination's framework profiles' (`retention`): the Pulumi library writes an S3
   lifecycle rule per prefix that expires its objects when a fixed retention ends, with the
   Glacier steps before it.
