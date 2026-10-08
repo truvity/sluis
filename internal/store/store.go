@@ -194,16 +194,7 @@ func FromServe(f *config.Serve) (Config, error) {
 
 		Converted: f.Converted(),
 	}
-	if s := f.Secrets; s != nil && s.Source == "ssm" {
-		c.SecretsRoot = s.Root
-		c.SecretsKMSKey = s.KMSKeyID
-		c.SecretsLayout = s.Layout
-		c.SecretsRegion = s.Region
-		c.SecretsEndpoint = s.Endpoint
-		if s.Grace != nil {
-			c.SecretsGrace = s.Grace.D()
-		}
-	}
+	c.SetSecrets(f.Secrets)
 	var err error
 	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
 		return Config{}, fmt.Errorf("ports.adapter: %s holds the shared state, so it cannot be combined with valkey.address", c.Adapter)
@@ -227,6 +218,24 @@ func FromServe(f *config.Serve) (Config, error) {
 		c.Kube = KubeNone
 	}
 	return c, nil
+}
+
+// SetSecrets carries the service document's `secrets` section (the `ssm`
+// source: root, KMS key, layout, region, endpoint, grace) into the config. A
+// controller assembled from the service document calls it too, so it sees the
+// same layout the service does. Any other source sets nothing.
+func (c *Config) SetSecrets(s *config.Secrets) {
+	if s == nil || s.Source != "ssm" {
+		return
+	}
+	c.SecretsRoot = s.Root
+	c.SecretsKMSKey = s.KMSKeyID
+	c.SecretsLayout = s.Layout
+	c.SecretsRegion = s.Region
+	c.SecretsEndpoint = s.Endpoint
+	if s.Grace != nil {
+		c.SecretsGrace = s.Grace.D()
+	}
 }
 
 // FromRoster reads what the two controllers share. A controller's reports
