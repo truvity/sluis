@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,17 +57,141 @@ type Session struct {
 	Issuer string `json:"issuer,omitempty"`
 }
 
-// configDir is where both live.
+// configDir is where both live: <OS config dir>/sluisctl.
 //
 // Under the OS config directory rather than the home directory, so it
 // sits beside every other tool's and is covered by whatever already
 // backs that up or excludes it.
+//
+// The directory was called accessctl before the rename to sluis, and the
+// deprecated accessctl name of the binary uses this same one. The first
+// call that finds the new directory without state while the old one has
+// some copies it across; see migrateLegacyConfigDir.
 func configDir() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("find the configuration directory: %w", err)
 	}
-	return filepath.Join(base, "accessctl"), nil
+	dir := filepath.Join(base, "sluisctl")
+	migrateLegacyConfigDir(filepath.Join(base, "accessctl"), dir, os.Stderr)
+	return dir, nil
+}
+
+// legacyMigratedMarker is written into the new directory once a migration
+// has run, so that a later sign-out that empties the directory is not
+// undone by copying the old state back.
+const legacyMigratedMarker = ".migrated-from-accessctl"
+
+// migrateLegacyConfigDir copies the state in oldDir to newDir, once.
+//
+// It runs only when newDir holds nothing (absent or empty) and oldDir
+// holds something. Every file is written under a temporary name and then
+// linked into place, which fails if the name is taken: a file a concurrent
+// sluisctl (or a newer one) already wrote is never replaced. Modes are
+// kept but never widened beyond 0600 for files and 0700 for directories.
+// oldDir is left as it is. Failure is not fatal: the tool starts without
+// the old state, as a fresh laptop would, and says why on w.
+func migrateLegacyConfigDir(oldDir, newDir string, w io.Writer) {
+	if entries, err := os.ReadDir(newDir); err == nil && len(entries) > 0 {
+		return
+	}
+	if entries, err := os.ReadDir(oldDir); err != nil || len(entries) == 0 {
+		return
+	}
+	if err := os.MkdirAll(newDir, 0o700); err != nil {
+		_, _ = fmt.Fprintf(w, "sluisctl: could not migrate %s to %s: %v\n", oldDir, newDir, err)
+		return
+	}
+	copied, err := copyTreeNoClobber(oldDir, newDir)
+	if err != nil {
+		_, _ = fmt.Fprintf(w, "sluisctl: migrating %s to %s was incomplete: %v\n", oldDir, newDir, err)
+	}
+	_ = os.WriteFile(filepath.Join(newDir, legacyMigratedMarker), nil, 0o600)
+	if copied > 0 {
+		_, _ = fmt.Fprintf(w, "sluisctl: copied its saved state from %s to %s (the old directory is left in place)\n", oldDir, newDir)
+	}
+}
+
+// copyTreeNoClobber copies the regular files and directories under src to
+// dst and returns how many files it placed. Anything else (a symlink, a
+// socket) is skipped.
+func copyTreeNoClobber(src, dst string) (int, error) {
+	copied := 0
+	var firstErr error
+	note := func(err error) {
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			note(walkErr)
+			return nil
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		switch {
+		case d.IsDir():
+			if err := os.MkdirAll(target, 0o700); err != nil {
+				note(err)
+				return filepath.SkipDir
+			}
+		case d.Type().IsRegular():
+			ok, err := copyFileNoClobber(path, target)
+			note(err)
+			if ok {
+				copied++
+			}
+		}
+		return nil
+	})
+	note(err)
+	return copied, firstErr
+}
+
+// copyFileNoClobber copies src to dst with mode capped at 0600, unless dst
+// exists. It reports whether it placed the file.
+func copyFileNoClobber(src, dst string) (bool, error) {
+	if _, err := os.Lstat(dst); err == nil {
+		return false, nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return false, err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return false, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".migrate-*")
+	if err != nil {
+		return false, err
+	}
+	defer os.Remove(tmp.Name())
+	// CreateTemp is 0600; only ever narrow it further.
+	if err = tmp.Chmod(info.Mode().Perm() & 0o600); err != nil {
+		tmp.Close()
+		return false, err
+	}
+	if _, err = io.Copy(tmp, in); err != nil {
+		tmp.Close()
+		return false, err
+	}
+	if err = tmp.Close(); err != nil {
+		return false, err
+	}
+	// Link, not rename: a rename would replace a file written meanwhile.
+	if err = os.Link(tmp.Name(), dst); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func configPath() (string, error) {
