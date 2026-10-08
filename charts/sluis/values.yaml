@@ -142,6 +142,15 @@ alerts:
       window: 1h
       for: 0m
       labels: {}
+    cloudflareRotationStale:
+      enabled: true
+      severity: critical
+      # The stored credential of a Cloudflare preset is older than this many
+      # of its own `rotation`s: the schedule is not rotating it, and the
+      # credential consumers read expires within `lifetime`.
+      factor: 2
+      for: 5m
+      labels: {}
     rateLimitLow:
       enabled: true
       severity: warning

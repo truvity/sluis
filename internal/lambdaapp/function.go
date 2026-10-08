@@ -8,6 +8,8 @@
 //     GitHub controller's organisations and `github:links`, the Slack
 //     controller's workspaces). `tick` is what an EventBridge Scheduler
 //     schedule sends, `run` what a console request sends (internal/port/invoke);
+//   - {"kind":"cloudflare"}: the rotation of the Cloudflare credentials that are
+//     due (the `cloudflare` section), which has no loop to run in on Lambda;
 //   - {"kind":"refresh"}: the directory refresh, which has no loop to run in on
 //     Lambda.
 //
@@ -171,8 +173,15 @@ func open(ctx context.Context, file string) (*Function, error) {
 	// request that finds one due refreshes it, and a schedule does so between
 	// requests ({"kind":"refresh"}).
 	service.UseRequestRefresh(hub.DefaultRequestRefreshTimeout)
+	http := NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers)
+	if service.Cloudflare() != nil {
+		http.WithCloudflare(func(ctx context.Context) (int, string, error) {
+			res, err := service.TickCloudflare(ctx)
+			return res.Failed(), res.Summary(), err
+		})
+	}
 	return &Function{
-		Handler: NewHTTP(service.Handler(), service.Settle, log).WithControllers(kindOf, controllers).
+		Handler: http.
 			WithRefresh(func(ctx context.Context) (RefreshResult, error) {
 				// The issuer's generated client secrets are looked after on the
 				// same schedule: there is no loop on Lambda and no schedule of

@@ -148,6 +148,78 @@ func GitHubTokenMinted(actor Actor, app string, t GitHubToken, o Outcome) *recor
 		subjectOf(actor), []*record.Target{{Type: "github_app", Id: app}}, d)
 }
 
+// ---------------------------------------------------------------- Cloudflare
+
+// The variants of a minted Cloudflare token.
+const (
+	// CloudflareStored is the token sluis mints on its schedule and keeps at
+	// external/cloudflare/<preset>.
+	CloudflareStored = "stored"
+	// CloudflareOnDemand is a token minted for one caller.
+	CloudflareOnDemand = "on_demand"
+)
+
+// CloudflareToken is what a mint did. Never the value.
+type CloudflareToken struct {
+	// Variant is [CloudflareStored] or [CloudflareOnDemand].
+	Variant string
+	// R2 says the preset hands out R2 (S3) credentials.
+	R2        bool
+	Account   string
+	TokenID   string
+	ExpiresOn time.Time
+}
+
+func targetCloudflarePreset(preset string) *record.Target {
+	return &record.Target{Type: "cloudflare_preset", Id: preset}
+}
+
+func cloudflareKind(r2 bool) string {
+	if r2 {
+		return "r2"
+	}
+	return "token"
+}
+
+// CloudflareTokenMinted is a Cloudflare token minted from a preset's prototype:
+// for the preset's stored document by sluis (System), or on demand for a
+// caller.
+func CloudflareTokenMinted(actor Actor, preset string, t CloudflareToken) *record.Record {
+	d := data{"variant": t.Variant, "kind": cloudflareKind(t.R2), "account": t.Account, "credential_id": t.TokenID}
+	if !t.ExpiresOn.IsZero() {
+		d["expires_on"] = rfc3339(t.ExpiresOn)
+	}
+	return build("roster.cloudflare.token.minted", actor, Succeeded(), subjectOf(actor),
+		[]*record.Target{targetCloudflarePreset(preset)}, d)
+}
+
+// CloudflareTokenRefused is a token not minted. reason is a short word
+// (not_granted, lifetime_too_long, unknown_preset, prototype_active,
+// prototype_forbidden, prototype_missing, minter_missing, cloudflare_error,
+// store_error); detail says what the check found, never a value. A caller who
+// was not granted the preset is Denied, anything else Failed.
+func CloudflareTokenRefused(actor Actor, preset, variant, reason, detail string, denied bool) *record.Record {
+	o := Failed(reason)
+	if denied {
+		o = Denied(reason)
+	}
+	return build("roster.cloudflare.token.refused", actor, o, subjectOf(actor),
+		[]*record.Target{targetCloudflarePreset(preset)}, data{"variant": variant, "reason": reason, "detail": detail})
+}
+
+// CloudflareTokensSwept is sluis deleting the expired tokens it minted for a
+// preset: only names that carry its own prefix.
+func CloudflareTokensSwept(preset, account string, ids []string) *record.Record {
+	return build("roster.cloudflare.tokens.swept", System(), Succeeded(), nil,
+		[]*record.Target{targetCloudflarePreset(preset)}, data{"account": account, "credential_ids": ids})
+}
+
+// CloudflareTokenRevoked is somebody deleting a live token of a preset.
+func CloudflareTokenRevoked(actor Actor, preset, account, tokenID string) *record.Record {
+	return build("roster.cloudflare.token.revoked", actor, Succeeded(), subjectOf(actor),
+		[]*record.Target{targetCloudflarePreset(preset)}, data{"account": account, "credential_id": tokenID})
+}
+
 // ------------------------------------------------------------------ sessions
 
 // SessionEnded is a person signing out, ending their sessions. spared are

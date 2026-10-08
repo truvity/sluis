@@ -14,6 +14,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/truvity/sluis/internal/cloudflare/cfapi"
+	"github.com/truvity/sluis/internal/cloudflare/minter"
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
@@ -85,6 +87,15 @@ type Config struct {
 	// Nil is that backend.
 	OpenState secretstore.Opener
 
+	// Cloudflare and Instance are the service document's `cloudflare` section
+	// and the instance name; the Blob mints its own R2 credentials from a
+	// preset of it (`ports.blob.s3.credentials.preset`). Nil when the blob uses
+	// a static document, which needs neither.
+	Cloudflare *config.Cloudflare
+	Instance   string
+	// CloudflareDial opens a Cloudflare account; nil is the real client.
+	CloudflareDial minter.Dialer
+
 	// v4 is where secretsOf leaves the v4 stores it built, for [Stores.V4].
 	v4 *v4Holder
 	// Converted is a document converted from v1: an `ssm` secrets adapter
@@ -112,6 +123,21 @@ func (c Config) validatePorts() error {
 		}
 		if b.S3 == nil || b.S3.Bucket == "" {
 			return errors.New("ports.blob.s3.bucket: required with ports.blob.adapter: s3")
+		}
+		if b.S3.CredentialsRef != "" && b.S3.Credentials != nil {
+			return errors.New("ports.blob.s3: credentialsRef and credentials are exclusive")
+		}
+		if cr := b.S3.Credentials; cr != nil {
+			if b.S3.Endpoint == "" {
+				return errors.New("ports.blob.s3.credentials: needs ports.blob.s3.endpoint")
+			}
+			p, ok := c.Cloudflare.PresetOf(cr.Preset)
+			if !ok {
+				return fmt.Errorf("ports.blob.s3.credentials.preset: %q is not in cloudflare.presets", cr.Preset)
+			}
+			if !p.R2() {
+				return fmt.Errorf("ports.blob.s3.credentials.preset: %q has no endpoint, so it is not an R2 preset", cr.Preset)
+			}
 		}
 		if ref := b.S3.CredentialsRef; ref != "" {
 			if _, err := secretstore.CheckInternalRef(ref); err != nil {
@@ -179,7 +205,53 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 			return s3blob.Credentials{AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey}, nil
 		}
 	}
+	if b.Credentials != nil {
+		if c.v4 == nil || c.v4.stores == nil {
+			return nil, errors.New("credentials.preset needs the installation's secrets on layout v4 or transition (secrets.layout), where the minter credential is")
+		}
+		m, err := minter.New(minter.Config{
+			Instance: c.Instance, Cloudflare: c.Cloudflare, Layout: c.v4.stores.Layout,
+			Internal: c.v4.stores.Internal, External: c.v4.stores.External, Dial: c.dial(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		prov, err := m.Provider(b.Credentials.Preset)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.Region == "" {
+			cfg.Region = "auto"
+		}
+		cfg.Credentials = presetCredentials(prov)
+	}
 	return s3blob.New(ctx, cfg)
+}
+
+func (c Config) dial() minter.Dialer {
+	if c.CloudflareDial != nil {
+		return c.CloudflareDial
+	}
+	return cfapi.Dial()
+}
+
+// presetCredentials reads the pair a Provider keeps. The blob adapter reads
+// again when the pair expires (at the renewal point) and after a 403; a read
+// that finds the pair still valid can only be the 403's, so it mints a new one.
+func presetCredentials(p *minter.Provider) s3blob.CredentialsFunc {
+	return func(ctx context.Context) (s3blob.Credentials, error) {
+		var got *minter.Minted
+		var err error
+		if p.Valid() {
+			got, err = p.Remint(ctx)
+		} else {
+			got, err = p.Current(ctx)
+		}
+		if err != nil {
+			return s3blob.Credentials{}, err
+		}
+		return s3blob.Credentials{AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey, Expires: got.RenewAt}, nil
+	}
 }
 
 // FromServe reads the configuration of `sluis serve`.
@@ -195,6 +267,9 @@ func FromServe(f *config.Serve) (Config, error) {
 		Converted: f.Converted(),
 	}
 	c.SetSecrets(f.Secrets)
+	if f.Ports != nil && f.Ports.Blob != nil && f.Ports.Blob.S3 != nil && f.Ports.Blob.S3.Credentials != nil {
+		c.Cloudflare, c.Instance = f.Cloudflare, orDefault(f.Instance, orDefault(f.Release, "sluis"))
+	}
 	var err error
 	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
 		return Config{}, fmt.Errorf("ports.adapter: %s holds the shared state, so it cannot be combined with valkey.address", c.Adapter)

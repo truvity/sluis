@@ -1,3 +1,4 @@
+//nolint:lll // messages and fixtures are prose and one-line tables
 package audit_test
 
 import (
@@ -77,6 +78,10 @@ func every() []*record.Record {
 			time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC), true),
 		audit.ClientSecretOrphaned("grafana", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)),
 		audit.ClientSecretDeleted(person, "grafana"),
+		audit.CloudflareTokenMinted(person, "dns", audit.CloudflareToken{Variant: audit.CloudflareOnDemand, Account: "main", TokenID: "id1", ExpiresOn: time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)}),
+		audit.CloudflareTokenRefused(person, "dns", audit.CloudflareOnDemand, "not_granted", "", true),
+		audit.CloudflareTokensSwept("dns", "main", []string{"id1", "id2"}),
+		audit.CloudflareTokenRevoked(person, "dns", "main", "id1"),
 		audit.ClientSecretDenied(person, "grafana", "rotate", "busy", nil),
 		audit.WorkspaceConnected(person, "ws-1", "google", "consent"),
 		audit.WorkspaceReconnected(person, "ws-1", "google", "consent"),

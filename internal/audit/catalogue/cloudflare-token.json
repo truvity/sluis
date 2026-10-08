@@ -1,0 +1,73 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/cloudflare-token.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "variant": {
+      "type": "string",
+      "description": "Whether the token was minted for the preset's stored document (sluis on its schedule) or on demand for the caller.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "stored",
+        "on_demand"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "description": "What the preset hands out: an API token, or R2 (S3) credentials.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "token",
+        "r2"
+      ]
+    },
+    "account": {
+      "type": "string",
+      "description": "The preset's Cloudflare account, by the name the service document gives it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "credential_id": {
+      "type": "string",
+      "description": "The minted (or revoked) token's id in Cloudflare; for R2 it is the access key id. Never the value.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "credential_ids": {
+      "type": "array",
+      "description": "The ids of the Cloudflare tokens swept.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "items": {
+        "type": "string",
+        "x-audit-class": "shared",
+        "x-audit-pii": "none"
+      }
+    },
+    "expires_on": {
+      "type": "string",
+      "description": "When Cloudflare stops accepting the token (RFC 3339).",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "format": "date-time"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why nothing was minted: not_granted, lifetime_too_long, unknown_preset, prototype_active, prototype_forbidden, prototype_missing, minter_missing, cloudflare_error or store_error.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "detail": {
+      "type": "string",
+      "description": "What the check found, for a refused prototype (the permission group names); never a value.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

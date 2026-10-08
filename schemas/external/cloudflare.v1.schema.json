@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truvity/sluis/schemas/external/cloudflare.v1.schema.json",
+  "title": "cloudflare/v1",
+  "description": "A preset's current Cloudflare credential, at <root>/external/cloudflare/<preset>, rewritten at every rotation. A token preset holds `token`; an R2 preset holds `access_key_id`, `secret_access_key` and `endpoint` (the access key is the token's id, the secret the hex SHA-256 of its value, which is how R2 derives S3 credentials from an API token). Every field is a string. Adding a field is not breaking; removing, renaming or re-typing one is, and takes a new address, cloudflare.v2/<preset>.",
+  "type": "object",
+  "required": ["schema", "expires_on"],
+  "properties": {
+    "schema": { "const": "cloudflare/v1" },
+    "token": { "type": "string", "minLength": 1, "description": "A token preset: the account API token's value, to send as `Authorization: Bearer`." },
+    "access_key_id": { "type": "string", "minLength": 1, "description": "An R2 preset: the S3 access key id (the token's id)." },
+    "secret_access_key": { "type": "string", "minLength": 1, "description": "An R2 preset: the S3 secret access key (the hex SHA-256 of the token's value)." },
+    "endpoint": { "type": "string", "minLength": 1, "description": "An R2 preset: the S3 endpoint URL, for AWS_ENDPOINT_URL_S3." },
+    "expires_on": { "type": "string", "format": "date-time", "description": "When Cloudflare stops accepting the credential (RFC 3339, UTC). A consumer that reads the file on a schedule refreshes before it." }
+  },
+  "oneOf": [
+    { "required": ["token"], "not": { "anyOf": [{ "required": ["access_key_id"] }, { "required": ["secret_access_key"] }, { "required": ["endpoint"] }] } },
+    { "required": ["access_key_id", "secret_access_key", "endpoint"], "not": { "required": ["token"] } }
+  ]
+}
