@@ -158,6 +158,24 @@ Required inputs are marked. Anything not listed has the default stated.
 | `ArchiveWriter` | nil | `IRSA` (the same block) and `Prefixes` (default `seals/`, `keys/`): a write role for a workload outside AWS |
 <!-- /generated -->
 
+## Artifacts bucket and the library's own release
+
+By default the library uploads the function's code with the function. Set `Artifacts` and the verified zip is instead uploaded **as it is** (a file asset, never repacked) to the estate's versioned S3 bucket, and the function and the configuration layer are created from that object version.
+
+| input | default | meaning |
+|---|---|---|
+| `Artifacts.Bucket` | unset (direct upload) | The estate's artifacts bucket. It must be **versioned**: the function names the object version, and an unversioned bucket (the upload returns no version id) fails the apply with a message saying so. |
+| `Artifacts.Prefix` | `audit/` | Starts every key: `<prefix><version>/<sha256>-<file name>`. The digest is in the key, so a key never holds two contents and a re-run uploads nothing new. |
+| `Release.ResolveChecksums` | false | Reads an empty `Writer.PackageSHA256` / `Notary.PackageSHA256` from `<BaseURL>/v<version>/checksums.txt`; a digest that is given is used as it is. |
+| `Release.Version` | from the file name | The release, when the name does not say; names the release when `Writer.Package` / `Notary.Package` is empty. `(devel)` and empty are refused. |
+| `Release.BaseURL` | the project's GitHub releases | Where the release is published, for a mirror. |
+
+The function gets `S3Bucket`, `S3Key`, `S3ObjectVersion` and `SourceCodeHash` (the zip's SHA-256, base64). The configuration layer is built as a zip whose bytes are the same on every run (sorted names, no timestamps), uploaded under the same prefix and used the same way.
+
+**No package named.** With `Writer.Package` / `Notary.Package` empty the library deploys its own release: the version of its module in the program's build information (or `Release.Version`), fetched from `<BaseURL>/v<version>/audit-<writer|notary>-lambda_<version>_linux_arm64.zip`, with its digest from that release's `checksums.txt` unless `Writer.PackageSHA256` / `Notary.PackageSHA256` pins one. A pinned digest always wins; bytes that do not have it are refused. A development build (`(devel)`), a pseudo-version, a module replaced by a local copy and a program without build information have no release and are refused with a message naming `Writer.Package` / `Notary.Package` and `Release.Version`.
+
+Downloads are cached by SHA-256 under the user cache directory (`os.UserCacheDir()/sluis/artifacts`), so a preview does not download again; `GITHUB_TOKEN`, when set, is sent to github.com. After the deploy, `WriterCodeSha256Matches` / `NotaryCodeSha256Matches` is true when the code Lambda reports has the SHA-256 of the zip the library verified.
+
 ## Outputs
 
 <!-- generated: aws-library-outputs -->

@@ -39,6 +39,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sqs"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
 	"github.com/truvity/sluis/audit/profile"
 )
 
@@ -72,6 +73,12 @@ type Audit struct {
 	// WriterFunctionArn and NotaryFunctionArn are the functions.
 	WriterFunctionArn pulumi.StringOutput
 	NotaryFunctionArn pulumi.StringOutput
+	// WriterCodeSha256Matches and NotaryCodeSha256Matches are true when the code
+	// Lambda reports for the function has the SHA-256 of the release zip the
+	// library verified, which is the assurance that what runs is what the
+	// release's checksums name. False for a function that is not installed.
+	WriterCodeSha256Matches pulumi.BoolOutput
+	NotaryCodeSha256Matches pulumi.BoolOutput
 	// WriterRoleArn and NotaryRoleArn are the roles the functions run as: the
 	// ARNs a roster or gitops grant names, and the identities the OTLP door
 	// sees. Every output of a part that is turned off (Ingest.Disabled,
@@ -214,7 +221,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	var writerLayer, notaryLayer map[string]string
 	pkgs := map[string]*releasePackage{}
 	if ingest {
-		if writerPkg, err = loadPackage("Writer", a.Writer.Package, a.Writer.PackageSHA256, "audit-writer-lambda"); err != nil {
+		if writerPkg, err = loadPackage("Writer", a.Writer.Package, a.Writer.PackageSHA256, "audit-writer-lambda", a.Release); err != nil {
 			return nil, err
 		}
 		pkgs["Writer"] = writerPkg
@@ -223,7 +230,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 	}
 	if notary {
-		if notaryPkg, err = loadPackage("Notary", a.Notary.Package, a.Notary.PackageSHA256, "audit-notary-lambda"); err != nil {
+		if notaryPkg, err = loadPackage("Notary", a.Notary.Package, a.Notary.PackageSHA256, "audit-notary-lambda", a.Release); err != nil {
 			return nil, err
 		}
 		pkgs["Notary"] = notaryPkg
@@ -477,6 +484,13 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	out.DedupeTableName = pick(ingest, func() pulumi.StringOutput { return table.Name })
 	out.WriterFunctionArn = pick(ingest, func() pulumi.StringOutput { return writerFn.Arn })
 	out.NotaryFunctionArn = pick(notary, func() pulumi.StringOutput { return notaryFn.Arn })
+	out.WriterCodeSha256Matches, out.NotaryCodeSha256Matches = pulumi.Bool(false).ToBoolOutput(), pulumi.Bool(false).ToBoolOutput()
+	if ingest {
+		out.WriterCodeSha256Matches = artifact.Matches(writerFn.CodeSha256, writerPkg.CodeSHA256)
+	}
+	if notary {
+		out.NotaryCodeSha256Matches = artifact.Matches(notaryFn.CodeSha256, notaryPkg.CodeSHA256)
+	}
 	out.WriterRoleArn = pick(ingest, func() pulumi.StringOutput { return writerRole.Arn })
 	out.NotaryRoleArn = pick(notary, func() pulumi.StringOutput { return notaryRole.Arn })
 	out.ObserveReaderRoleArn, out.ArchiveWriterRoleArn, out.QueryRoleArn = observeArn, archiveWriterArn, queryArn
@@ -498,6 +512,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		"queueUrl": out.QueueURL, "queueArn": out.QueueArn, "dlqUrl": out.DlqURL, "dlqArn": out.DlqArn,
 		"dedupeTableName":   out.DedupeTableName,
 		"writerFunctionArn": out.WriterFunctionArn, "notaryFunctionArn": out.NotaryFunctionArn,
+		"writerCodeSha256Matches": out.WriterCodeSha256Matches, "notaryCodeSha256Matches": out.NotaryCodeSha256Matches,
 		"writerRoleArn": out.WriterRoleArn, "notaryRoleArn": out.NotaryRoleArn, "observeReaderRoleArn": out.ObserveReaderRoleArn,
 		"archiveWriterRoleArn": out.ArchiveWriterRoleArn, "queryRoleArn": out.QueryRoleArn,
 		"secretsRoot": out.SecretsRoot, "archiveCredentialsPaths": out.ArchiveCredentialsPaths,
@@ -822,21 +837,52 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 	if err != nil {
 		return nil, nil, err
 	}
-	layerFiles := map[string]any{}
-	for path, body := range s.Config {
-		layerFiles[layerRoot+"/"+path] = pulumi.NewStringAsset(body)
-	}
-	config, err := lambda.NewLayerVersion(ctx, s.Name+"-config", &lambda.LayerVersionArgs{
+	layerArgs := &lambda.LayerVersionArgs{
 		LayerName:               pulumi.String(s.Name + "-config"),
 		Description:             pulumi.String("The configuration of " + s.Name + ", at /opt/" + layerRoot + "/. Immutable: a change is a new version."),
-		Code:                    pulumi.NewAssetArchive(layerFiles),
 		CompatibleArchitectures: pulumi.StringArray{pulumi.String("arm64")},
 		CompatibleRuntimes:      pulumi.StringArray{pulumi.String("provided.al2023")},
 		// Not destroyed on replacement: an older function version, or a rollback,
 		// points at the version it ran with, and the version is the evidence of
 		// what that configuration was.
 		SkipDestroy: pulumi.Bool(true),
-	}, opts...)
+	}
+	var code *artifact.Object
+	if a.Artifacts != nil {
+		// The artifacts bucket: the package as it is, and the layer as a zip of
+		// its own, byte for byte the same on every run so that its key is.
+		var err error
+		if code, err = uploadPackage(ctx, s.Name+"-code", a.Artifacts, s.Package, opts...); err != nil {
+			return nil, nil, err
+		}
+		files := map[string][]byte{}
+		for path, body := range s.Config {
+			files[layerRoot+"/"+path] = []byte(body)
+		}
+		layerZip, err := artifact.Zip(files)
+		if err != nil {
+			return nil, nil, err
+		}
+		sum := artifact.Sum(layerZip)
+		local, err := artifact.WriteTemp("audit-layer-", "config.zip", layerZip)
+		if err != nil {
+			return nil, nil, err
+		}
+		obj, err := artifact.Upload(ctx, s.Name+"-config-code", *a.Artifacts,
+			a.Artifacts.Key(s.Package.Version, sum, s.Name+"-config.zip"), local, sum, opts...)
+		if err != nil {
+			return nil, nil, err
+		}
+		layerArgs.S3Bucket, layerArgs.S3Key, layerArgs.S3ObjectVersion = pulumi.String(obj.Bucket), pulumi.String(obj.Key), obj.VersionID
+		layerArgs.SourceCodeHash = pulumi.String(obj.CodeSHA256)
+	} else {
+		layerFiles := map[string]any{}
+		for path, body := range s.Config {
+			layerFiles[layerRoot+"/"+path] = pulumi.NewStringAsset(body)
+		}
+		layerArgs.Code = pulumi.NewAssetArchive(layerFiles)
+	}
+	config, err := lambda.NewLayerVersion(ctx, s.Name+"-config", layerArgs, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -853,7 +899,6 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 		Runtime:       pulumi.String("provided.al2023"),
 		Handler:       pulumi.String("bootstrap"),
 		Architectures: pulumi.StringArray{pulumi.String("arm64")},
-		Code:          pulumi.NewFileArchive(s.Package.Path),
 		// What Lambda reports for the code, so that the plan names the release's
 		// bytes and a refresh finds nothing to change.
 		SourceCodeHash: pulumi.String(s.Package.CodeSHA256),
@@ -868,6 +913,11 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 		// No VpcConfig: the functions run outside a VPC (a decision of the AWS design). They
 		// reach S3, DynamoDB, SQS and KMS over the public regional endpoints with
 		// the role's credentials, and the OTLP door over the internet.
+	}
+	if code != nil {
+		args.S3Bucket, args.S3Key, args.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID
+	} else {
+		args.Code = pulumi.NewFileArchive(s.Package.Path)
 	}
 	fn, err := lambda.NewFunction(ctx, s.Name, args, append([]pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{logs, config})}, opts...)...)
 	if err != nil {
@@ -1083,4 +1133,9 @@ func newArchiveWriter(ctx *pulumi.Context, name string, a *Args, refs []bucketRe
 		}
 	}
 	return role, nil
+}
+
+// uploadPackage puts the verified release zip in the artifacts bucket, as it is.
+func uploadPackage(ctx *pulumi.Context, resName string, art *ArtifactsArgs, p *releasePackage, opts ...pulumi.ResourceOption) (*artifact.Object, error) {
+	return artifact.Upload(ctx, resName, *art, art.Key(p.Version, p.SHA256, p.Name), p.Path, p.SHA256, opts...)
 }

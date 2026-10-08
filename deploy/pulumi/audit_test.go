@@ -327,7 +327,7 @@ func TestAuditArgumentsAreRefusedWhenTheyDisagree(t *testing.T) {
 		},
 		"nothing to install with": {
 			audit: func(*testing.T) *arp.AuditArgs { return &arp.AuditArgs{} },
-			want:  "WriterPackage",
+			want:  "CatalogueDir",
 		},
 		"use and disabled": {
 			audit: func(*testing.T) *arp.AuditArgs {

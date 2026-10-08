@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +36,10 @@ type recorder struct {
 	// archived is what the archive bucket already holds of the catalogues, by key,
 	// as the sha256 metadata the writer put on each. A key not here is not there.
 	archived map[string]string
+	// unversioned makes the artifacts bucket answer an upload with no version id,
+	// as a bucket without versioning does; wrongCode makes Lambda report other
+	// code than the function was given.
+	unversioned, wrongCode bool
 }
 
 // mockCall is an invoke the library made: its token, and the provider it was made
@@ -78,6 +83,18 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		set("keyId", a.Name)
 	case "aws:lambda/function:Function":
 		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+physical)
+		if h, ok := a.Inputs["sourceCodeHash"]; ok && h.IsString() {
+			set("codeSha256", h.StringValue())
+		}
+		if r.wrongCode {
+			set("codeSha256", "bogus")
+		}
+	case "aws:s3/bucketObjectv2:BucketObjectv2":
+		if r.unversioned {
+			set("versionId", "")
+		} else {
+			set("versionId", "ver-"+a.Name)
+		}
 	case "aws:cloudwatch/logGroup:LogGroup":
 		set("arn", arnp+"logs:eu-west-1:"+account+":log-group:"+physical)
 	case "aws:dynamodb/table:Table":
@@ -178,6 +195,9 @@ func (r *recorder) names() []string {
 	return out
 }
 
+// mockSetup, when set by a test, configures the next mock before the program runs.
+var mockSetup func(*recorder)
+
 // outputs are the component's outputs, resolved.
 type outputs map[string]string
 
@@ -231,6 +251,9 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 		edit(args)
 	}
 	rec := &recorder{archived: archived}
+	if mockSetup != nil {
+		mockSetup(rec)
+	}
 	got := outputs{}
 	var wg sync.WaitGroup
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
@@ -281,6 +304,16 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 				return v
 			})
 		}
+		for k, o := range map[string]pulumi.BoolOutput{"writerCodeMatches": a.WriterCodeSha256Matches, "notaryCodeMatches": a.NotaryCodeSha256Matches} {
+			wg.Add(1)
+			o.ApplyT(func(v bool) bool {
+				defer wg.Done()
+				rec.mu.Lock()
+				got[k] = strconv.FormatBool(v)
+				rec.mu.Unlock()
+				return v
+			})
+		}
 		wg.Add(1)
 		a.Presets.ApplyT(func(v []string) []string {
 			defer wg.Done()
@@ -291,7 +324,9 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 		})
 		return nil
 	}, pulumi.WithMocks("audit-test", "test", rec))
-	wg.Wait()
+	if err == nil { // outputs of a failed program never resolve
+		wg.Wait()
+	}
 	return rec, got, err
 }
 
