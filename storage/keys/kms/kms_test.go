@@ -19,6 +19,7 @@ import (
 	"github.com/truvity/sluis/storage/keys"
 	"github.com/truvity/sluis/storage/keys/conformance"
 	"github.com/truvity/sluis/storage/keys/kms"
+	"github.com/truvity/sluis/storage/state/memory"
 )
 
 // EnvURL names a LocalStack (or any KMS endpoint). Unset, the tests that need
@@ -154,6 +155,26 @@ func TestMACWrappedKeys(t *testing.T) {
 	}
 	if _, err := kms.New(c, kms.WithWrappedStore(other)).MAC(ctx, alias, keys.Pseudonym, "tenant-2", nil); err == nil {
 		t.Fatal("tenant-2 unwrapped tenant-1's key")
+	}
+}
+
+func TestMACOverStateStore(t *testing.T) {
+	c := client(t)
+	alias := newKey(t, c, types.KeySpecSymmetricDefault, types.KeyUsageTypeEncryptDecrypt)
+	st := memory.New().Child("wrapped")
+	a := kms.New(c, kms.WithWrappedStore(kms.FromState(st)))
+	b := kms.New(c, kms.WithWrappedStore(kms.FromState(st)))
+	m1, err := a.MAC(t.Context(), alias, keys.Pseudonym, "tenant/1", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := b.MAC(t.Context(), alias, keys.Pseudonym, "tenant/1", []byte("x"))
+	if err != nil || !bytes.Equal(m1, m2) {
+		t.Fatalf("%x vs %x, %v", m1, m2, err)
+	}
+	id := "mac/pseudonym/" + base64.RawURLEncoding.EncodeToString([]byte("tenant/1"))
+	if _, err := st.Get(t.Context(), id); err != nil {
+		t.Fatalf("the wrapped key is not in the state store: %v", err)
 	}
 }
 
