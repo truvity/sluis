@@ -3,7 +3,7 @@
 ```text
 product (sluis, audit)
    │  asks by purpose / by path
-   ├── storage/keys    Key: Sign, Encrypt, Decrypt, GenerateDataKey, MAC, PublicKey
+   ├── storage/keys    Key: Encrypt, Decrypt, GenerateDataKey, MAC, PublicKey, Sign (direct signing is deprecated)
    │      backends:    kms · transit · local (tests)
    └── storage/state   Store, Value[T]: versioned JSON objects
           backends:    ssm · s3 · openbao (KV v2) · memory (tests)
@@ -12,7 +12,7 @@ storage/openbao   one client (JWT login, namespace, CA bundle) shared by state/o
 ```
 
 **state** is a small versioned key-value store for what a service keeps between runs: signing keys, issued credentials,
-rotation state. Every value is a JSON object, every write returns a revision, and a write is conditional on the revision
+rotation state. A `Value[T]` is a typed handle on one key, and `Rotating(grace)` also returns the value it replaced for a grace period. Every value is a JSON object, every write returns a revision, and a write is conditional on the revision
 the caller last saw, so a lost race is an error and never a silent overwrite. The store knows nothing about what it
 holds; each product puts its own typed layer on top (an internal view for what only the service reads and writes, an
 external view for what it publishes or receives).

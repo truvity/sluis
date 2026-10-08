@@ -16,7 +16,7 @@ keys:
 ```
 
 A purpose maps to a string (the key's alias, or its transit name, with the default context) or to `{key, context}`.
-The purposes are `sign` (sluis: token signing, asymmetric), `seal` (audit: sealing the trail), `pseudonym` (audit:
+The purposes are `sign` (sluis: the key that wraps the signing key ring), `seal` (audit: sealing the trail), `pseudonym` (audit:
 per-tenant pseudonyms), `conceal` (audit: values that must be recoverable) and `archive` (audit: long-term storage).
 Several purposes may share a key; the context keeps their ciphertexts apart, though not their fates (disabling a shared
 key stops every purpose that uses it).
@@ -33,6 +33,11 @@ is for tests). Which of them a product accepts in a given shape is that shape's 
 products take these blocks directly is decided in [0041](../../decisions/0041-the-secret-contract.md) and is being
 carried out, so a product may still read the older keys that the block replaces. Check the product's own configuration
 reference for what it accepts today.
+
+Secrets and what a product publishes sit at addresses of one layout (`<root>/internal/...` and
+`<root>/external/<kind>/<id>`, one versioned JSON document per address; [layout v4](../../reference/storage-layout.md)).
+sluis selects it with `secrets.layout` (`v3`, `transition`, `v4`; `v3` remains the default for now) and moves an
+installation with `sluis migrate secrets-layout`.
 
 ## Why a block and not an adapter per call site
 

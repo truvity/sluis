@@ -49,7 +49,7 @@ every read.
 
 The catalogue is the contract between the application and its trail. It names
 every action the application records and, for each one, what kind of operation
-it is, what frameworks call it, which profiles keep a copy, what it is about,
+it is, what frameworks call it, its `category` (which destinations keep a copy; the per-action `profiles` list is deprecated), what it is about,
 who may act, the schema of its data, its delivery, and how it reads as a
 sentence. It lives beside the code that emits it, so the two change together,
 and writing it is most of the work of integrating.
@@ -72,7 +72,7 @@ actions:
     summary: A customer placed an order.
     operation: create                     # create, access, modify, remove, authentication, transfer, restore
     categories: [data_change]             # what frameworks call it
-    profiles: [security]                  # which copies are kept
+    category: security                    # which destinations keep a copy (profiles: is deprecated)
     target_types: [order]
     delivery: async                       # block or async: see below
     data_schema: https://schemas.example.com/shop/order-placed.json

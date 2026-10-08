@@ -68,7 +68,7 @@ actions:
     summary: A customer placed an order.
     operation: create
     categories: [data_change]
-    profiles: [security]
+    category: security                    # the per-action `profiles` list is deprecated
     target_types: [order]
     delivery: block
     data_schema: https://schemas.example.com/shop/order-placed.json

@@ -1,7 +1,7 @@
 # Audit actions
 
 Every action sluis records, from the catalogue [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
-(the version and the number of actions are in the table below). All are kept under the `security` profile in the installation's tenant `@platform`.
+(the version and the number of actions are in the table below). Each action declares one `category`: `security` (sign-in, recovery, token exchange and minting, sessions, client secrets, confirmed removals, Slack shared and console channels) or `activity` (directory and workspace, GitHub and Slack apps, organisation connections, links, members, channels). The installation's destinations take records by category, in its tenant `@platform`; sluis's actions no longer carry the deprecated `profiles` list.
 Delivery `async` goes on a bounded queue in the process; `block` is recorded before the action completes and refuses
 it when it cannot be. Why the trail is shaped this way: [audit](../explanation/audit.md).
 

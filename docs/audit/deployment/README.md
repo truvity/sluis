@@ -13,6 +13,8 @@ serves one application ([0053](../../decisions/0053-one-installation-per-service
 | Kubernetes with OpenBao | *planned* | the chart behind the cluster's gateway; keys on OpenBao transit; State on OpenBao KV | below |
 | AWS Lambda behind an edge module | *planned* | audit's front door from the sluis edge modules | below |
 
+**Where the archive lives** is the same in every shape: one store per install preset (`operational`, `standard`, `attested`), each with its own bucket, prefix, region, endpoint (empty is AWS S3, set is R2 or another S3-compatible store), optional key alias and credentials. Each profile lands on the preset derived from its frameworks, and Object Lock COMPLIANCE is written only on an attested preset's S3 bucket ([0068](../../decisions/0068-storage-is-configured-per-preset.md), [profiles](../reference/profiles.md#presets-and-their-storage)).
+
 The explanations behind the choice: [deployment shapes](../explanation/deployment-shapes.md),
 [direct mode](../explanation/direct-mode.md), [stream mode](../explanation/stream-mode.md),
 [AWS Lambda](../explanation/aws-lambda.md). A sluis installation connects to audit by installing it beside it

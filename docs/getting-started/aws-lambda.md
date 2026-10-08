@@ -1,7 +1,8 @@
 # Tutorial: sluis on AWS Lambda
 
 By the end you have one sluis function on AWS Lambda behind a mutual-TLS custom domain, with its state in DynamoDB,
-its blobs in S3, its secrets in SSM and its tokens signed under a KMS-wrapped key. You write the facts of the
+its blobs in S3, its secrets in SSM and its tokens signed by key pairs the function generates and wraps under a KMS
+key you supply. You write the facts of the
 installation once, in an installation file, and the Pulumi library does the rest. This is the preset `aws-hybrid`
 (`aws-serverless` differs only in having no Kubernetes beside it). Allow about an hour, most of it waiting for AWS.
 
@@ -13,14 +14,30 @@ Not here: why it is built this way ([ports](../explanation/ports.md)), every lib
 - An AWS account and credentials that can create IAM, Lambda, API Gateway, DynamoDB, S3, KMS, SSM and EventBridge
   resources; the account id and a region (`111122223333` and `eu-central-1` below), and the ARN of the IAM role you apply
   with (`applyRoleArn` below): only it may write the truststore.
+- A symmetric KMS key with the alias `alias/demo-sluis-sign` (step 0 creates it). The library creates no key: it looks
+  the alias up and grants on the key behind it.
 - An ACM certificate in that region for the host you will serve (`access.example.test` below), and its ARN. You supply
   it; the library does not issue one.
-- An SQS ingest queue of an audit installation ([truvity/audit](https://github.com/truvity/audit)), and its ARN. The
-  function sends every audit record to it.
+- An SQS ingest queue of an existing audit installation, its URL and its ARN, so the tutorial sends the function's
+  audit records to it (`Audit.Use`, v1.74 or later). Left out, the library installs audit beside the function by default (operational,
+  with its own archive bucket); that takes the audit release's writer package and catalogue, see
+  [Audit](../reference/pulumi-library.md#audit).
 - Go, `pulumi` logged in to a backend, `gh`, `openssl`, `curl`.
 - `sluisctl` of the release you deploy, from the release's `sluisctl_<version>_<os>_<arch>` archive.
 
 All names below are placeholders; replace them.
+
+## 0. Create the signing key
+
+The estate owns the key that wraps the function's signing keys, so it exists before the stack that grants on it. A
+symmetric key with an alias is enough; the key policy is the account's default (IAM policies govern it), which lets the
+function's role use the key once the library grants it, only under the context `{instance, purpose: sign}`.
+
+```sh
+KEY=$(aws kms create-key --description "demo sluis: wraps the signing keys" --query KeyMetadata.KeyId --output text)
+aws kms enable-key-rotation --key-id "$KEY"
+aws kms create-alias --alias-name alias/demo-sluis-sign --target-key-id "$KEY"
+```
 
 ## 1. Write the installation
 
@@ -42,11 +59,9 @@ aws:
   region: eu-central-1
   table: demo-sluis
   bucket: demo-sluis-111122223333
-  auditQueueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/demo-audit-ingest
 
 signingKey:
-  kmsWrapped:
-    keyId: alias/sluis-signing-wrapped   # the library's default alias for the key it creates
+  kmsWrapped: {}                         # the key is LambdaArgs.Keys.Sign (step 4), written as keys.sign
 
 recovery: {enabled: true}                # the way in before any directory is connected
 console: {client: access-console}
@@ -133,7 +148,8 @@ const (
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
 	applyRoleArn = "<the ARN of the IAM role you apply with>"
-	auditQueue   = "<the audit ingest queue ARN>"
+	auditQueueURL = "<the audit ingest queue URL>"
+	auditQueueArn = "<the audit ingest queue ARN>"
 )
 
 func main() {
@@ -172,8 +188,8 @@ func main() {
 			PackageSHA256:  lambdaSHA256,
 			Storage:        store.Grant(),
 			State:          state.Grant(),
-			AuditQueueArn:  pulumi.String(auditQueue),
-			WrappedSigning: &sluispulumi.WrappedSigningArgs{}, // the library creates the symmetric key
+			Audit: &sluispulumi.AuditArgs{Use: &sluispulumi.AuditUse{QueueURL: auditQueueURL, QueueArn: auditQueueArn}},
+			Keys:           &sluispulumi.KeysArgs{Sign: "alias/demo-sluis-sign"}, // the key from step 0, by alias
 		}, withAWS)
 		if err != nil {
 			return err
@@ -206,7 +222,7 @@ refuses one that disagrees with the arguments, naming the argument. It replaces 
 pulumi preview
 ```
 
-Read it. Expect the bucket, the table, the KMS key and its alias, the function, its role and layer, the HTTP API, the
+Read it. Expect the bucket, the table, the function, its role and layer, the HTTP API, the
 custom domain with the truststore object, the SSM parameters for the recovery password and the state secret, and the schedules, all as
 creates and nothing else. Then:
 
@@ -253,7 +269,7 @@ audit trail of the attempt: [Recovery on Lambda](../how-to/recover-on-lambda.md)
 
 - one function `sluis` from the released zip, byte for byte, with the installation's two documents in an immutable
   layer: a change to `installation.yaml` is a `pulumi up` that publishes a new layer version;
-- DynamoDB state, S3 blobs, SSM secrets under `/sluis/demo`, and tokens signed under a key KMS wraps;
+- DynamoDB state, S3 blobs, SSM secrets under `/sluis/demo`, and tokens signed by key pairs the function generates and wraps under your KMS key;
 - an issuer that answers its discovery document, and a console you can sign in to.
 
 Next: connect a directory ([Google Workspace](../how-to/connect/google-workspace.md)), then each thing that trusts the

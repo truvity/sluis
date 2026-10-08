@@ -1,9 +1,14 @@
 # Sign with AWS KMS
 
+> **Deprecated.** Direct KMS signing (`signingKey.kms`) logs a warning at start. New installations use the signing ring:
+> sluis generates the key pairs and wraps them under a symmetric key named by `keys.sign`
+> ([signing on AWS](../explanation/signing-on-aws.md#the-sign-key-and-moving-between-signers) says how to move). This page
+> stays for installations that have not moved.
+
 ## Purpose
 
 Keep the issuer's signing key in AWS KMS (`signingKey.kms`), so the estate's master key is never in a pod, a Secret or a
-backup. For key pairs that KMS generates and wraps, see `signingKey.kmsWrapped` in
+backup. For the ring, see `signingKey.kmsWrapped` and `keys.sign` in
 [configuration](../reference/configuration.md#the-service-document).
 
 ## Preconditions

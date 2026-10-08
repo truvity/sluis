@@ -25,6 +25,7 @@ tenant asks for erasure.
 
 ## Before you start
 
+
 - **Check holds.** The command checks them itself and refuses while one covers the
   tenant's copies, naming the hold and why it was placed; `audit hold list` is still how
   you look before you start. Crypto-shredding a tenant under legal hold destroys

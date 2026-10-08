@@ -375,7 +375,7 @@ presets they need. Each preset is one of:
   on that same store; the bucket and the credentials stay the installation's own, and naming the blob bucket is refused.
 
 `deploy/pulumi/go.mod` requires `github.com/truvity/sluis/audit/deploy/pulumi` (a `replace` to the module beside it, at
-`v0.0.0`, until a release pins it with the root module's require: `hack/pin-pulumi-require.sh`). A stack that installed
+`v0.0.0`, until a release pins it with the root module's require: `just release-pin vX.Y.Z`; one version for every module, and releases are cut by hand). A stack that installed
 audit itself keeps working: leave `Audit` out and keep `AuditQueueArn` and the queue URL in the installation; to move, set
 `Audit.Use` (the library then writes the URL), or import the estate's installation under the new component and set `Audit`
 without `Use` ([the audit library's resources are named by `Name`](../audit/how-to/archive-on-r2.md)).

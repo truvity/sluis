@@ -1,5 +1,9 @@
 # Cut over to KMS-wrapped signing without signing everyone out
 
+> The key that wraps the ring is now named `keys.sign` (an alias; an ARN or key id is refused), and `signingKey.kmsWrapped.keyId`
+> is its deprecated spelling. Where this page says `kmsWrapped.keyId`, set `keys.sign` instead. The ring generates its key
+> pairs locally and wraps them under `{instance, purpose: sign}`; see [signing on AWS](../explanation/signing-on-aws.md).
+
 ## Purpose
 
 Move an installation's signing from cert-manager file keys to `signingKey.kmsWrapped` while every token the old keys
