@@ -209,6 +209,10 @@ func (in *Installation) service() (*internal.Sluis, error) {
 	s.OAuthClient = copyOf(in.OAuthClient)
 	s.Valkey = copyOf(in.Valkey)
 	s.Audit = copyOf(in.Audit)
+	if in.Cloudflare != nil {
+		c := in.Cloudflare.Cloudflare
+		s.Cloudflare = &c
+	}
 	s.Recovery = copyOf(in.Recovery)
 	s.SigningKey = copyOf(in.SigningKey)
 	s.Keys = copyOf(in.Keys)
@@ -427,6 +431,9 @@ func (in *Installation) policyDocument() (*internal.PolicyDocument, error) {
 			doc.Controllers = pc
 		}
 	}
+	if c := in.Cloudflare; c != nil && len(c.Grants) > 0 {
+		doc.CloudflareGrants = &internal.PolicyCloudflare{Grants: slices.Clone(c.Grants)}
+	}
 	return doc, nil
 }
 
@@ -559,15 +566,23 @@ func verify(service, policy []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err := internal.Load[internal.Sluis](svcFile); err != nil {
+	svc, err := internal.Load[internal.Sluis](svcFile)
+	if err != nil {
 		errs = append(errs, fmt.Errorf("the service document: %w", err))
 	}
 	polFile, err := write("policy.yaml", policy)
 	if err != nil {
 		return err
 	}
-	if _, err := internal.Load[internal.PolicyDocument](polFile); err != nil {
+	pol, err := internal.Load[internal.PolicyDocument](polFile)
+	if err != nil {
 		errs = append(errs, fmt.Errorf("the policy document: %w", err))
+	}
+	if svc != nil && pol != nil {
+		// A grant for a preset nobody declared would read as a right nobody can use.
+		if err := internal.CheckCloudflare(svc.Cloudflare, pol); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
 }

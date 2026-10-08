@@ -168,6 +168,13 @@ API for 5 minutes) and 500 account tokens per account. At a 15 minute lifetime a
 5 minute rotation a preset has about three live tokens and costs a few calls per
 rotation.
 
+With the Pulumi library, declare the section as `Installation.Cloudflare`: the
+library writes both documents, adds the one-minute `{"kind":"cloudflare"}`
+schedule, and grants the function's role read on `internal/cloudflare/*`, read
+and write on `internal/cloudflare-minted/*` and write on `external/cloudflare/*`
+(see [the Pulumi library](../reference/pulumi-library.md)). It creates no
+minter parameter: that is the owner's to put (step 1).
+
 ## On demand and revoke
 
 A granted caller (a person signed in to the console or `sluisctl`, or a CI job

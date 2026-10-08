@@ -74,6 +74,11 @@ type KubernetesIdentityArgs struct {
 	// /sluis are encrypted with; with Instance, the role may use it through SSM
 	// only, for the parameters under its own prefixes. Optional.
 	ParameterKeyArn string
+	// Cloudflare adds the grants of the Cloudflare minter, with Instance: the
+	// minter credentials read-only, the record of minted ids and the stored
+	// credentials read and write. Set it when the service document declares
+	// `cloudflare` presets.
+	Cloudflare bool
 	// State is the DynamoDB table of the State port. Nil when State is not in
 	// DynamoDB (it is in ConfigMaps or memory), and the roles then carry no DynamoDB grant.
 	State *StateGrant
@@ -229,7 +234,7 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 			st = append(st, wrappedSigningStatement(v[3].(string)))
 		}
 		if a.Instance != "" {
-			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn)...)
+			st = append(st, ssmStatements(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn, a.Cloudflare)...)
 		}
 		return document(st)
 	}).(pulumi.StringOutput)

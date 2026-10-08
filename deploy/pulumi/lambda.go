@@ -227,6 +227,10 @@ type LambdaArgs struct {
 	Schedule ScheduleArgs
 	// DirectoryRefresh is the schedule that refreshes the directory's snapshots.
 	DirectoryRefresh DirectoryRefreshArgs
+	// CloudflareRotation is the schedule that rotates the Cloudflare credentials
+	// that are due (`{"kind":"cloudflare"}`). It exists only when the
+	// Installation declares `cloudflare` presets; Disabled leaves it out.
+	CloudflareRotation CloudflareRotationArgs
 	// WebIdentityAudience restricts the audience of the outbound web identity
 	// token the function's role may ask STS for (`sts:IdentityTokenAudience`),
 	// normally the console's URL. Empty allows any audience. The role holds
@@ -332,6 +336,31 @@ type DirectoryRefreshArgs struct {
 	Paused bool
 	// Rate is the schedule expression. Default DefaultDirectoryRefreshSchedule.
 	Rate string
+}
+
+// CloudflareRotationArgs is the Cloudflare rotation schedule: one EventBridge
+// schedule invoking the function with `{"kind":"cloudflare"}`. A pass that finds
+// nothing due costs one read of the secrets store, so the schedule's granularity
+// (a minute) is the rotation's.
+type CloudflareRotationArgs struct {
+	// Disabled leaves the schedule out.
+	Disabled bool
+	// Paused declares the schedule DISABLED and keeps everything else.
+	// Exclusive with Disabled.
+	Paused bool
+	// Rate is the schedule expression. Default DefaultCloudflareRotationSchedule.
+	Rate string
+}
+
+// DefaultCloudflareRotationSchedule is the rotation's tick when
+// CloudflareRotationArgs.Rate is empty: EventBridge Scheduler's finest.
+const DefaultCloudflareRotationSchedule = "rate(1 minute)"
+
+// cloudflare reports whether the installation declares Cloudflare presets: the
+// schedule and the function's grants on the minter and the stored credentials
+// exist only then.
+func (a *LambdaArgs) cloudflare() bool {
+	return a.Installation != nil && a.Installation.Cloudflare.Declared()
 }
 
 // DefaultDirectoryRefreshSchedule is the directory refresh's tick when
@@ -708,6 +737,15 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	if err := checkVerifyOnly(out.VerifyOnly); err != nil {
 		return out, err
+	}
+	if out.CloudflareRotation.Disabled && out.CloudflareRotation.Paused {
+		return out, errors.New("sluispulumi: CloudflareRotation: Disabled leaves the schedule out and Paused declares it disabled: set one")
+	}
+	if out.CloudflareRotation.Rate == "" {
+		out.CloudflareRotation.Rate = DefaultCloudflareRotationSchedule
+	}
+	if r := out.CloudflareRotation.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
+		return out, fmt.Errorf("sluispulumi: CloudflareRotation.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	if out.DirectoryRefresh.Rate == "" {
 		out.DirectoryRefresh.Rate = DefaultDirectoryRefreshSchedule
@@ -1196,6 +1234,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			invokeFunctionArns: []string{selfArn},
 			webIdentityAud:     a.WebIdentityAudience,
 			webIdentityExtra:   a.AdditionalWebIdentityAudiences,
+			cloudflare:         a.cloudflare(),
 		})
 	}).(pulumi.StringOutput)
 	if _, err := iam.NewRolePolicy(ctx, name+"-http-policy", &iam.RolePolicyArgs{
@@ -1438,6 +1477,26 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			return nil, none, fmt.Errorf("sluis directory refresh schedule: %w", err)
 		}
 		names = append(names, pulumi.String(rname))
+	}
+	if a.cloudflare() && !a.CloudflareRotation.Disabled {
+		cname := a.FunctionNamePrefix + "-cloudflare-rotation"
+		if _, err := scheduler.NewSchedule(ctx, name+"-cloudflare-rotation", &scheduler.ScheduleArgs{
+			Name:                       pulumi.String(cname),
+			Description:                pulumi.String("Rotates the Cloudflare credentials that are due."),
+			ScheduleExpression:         pulumi.String(a.CloudflareRotation.Rate),
+			ScheduleExpressionTimezone: pulumi.String("UTC"),
+			State:                      scheduleState(a.CloudflareRotation.Paused),
+			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
+			Target: &scheduler.ScheduleTargetArgs{
+				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"cloudflare"}`),
+				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
+					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
+				},
+			},
+		}, opts...); err != nil {
+			return nil, none, fmt.Errorf("sluis cloudflare rotation schedule: %w", err)
+		}
+		names = append(names, pulumi.String(cname))
 	}
 	return role, names.ToStringArrayOutput(), nil
 }

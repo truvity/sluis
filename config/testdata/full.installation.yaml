@@ -99,3 +99,19 @@ access:
       example:
         channels:
           ops: {private: true, from: [all:access-roster:operator]}
+cloudflare:
+  forbiddenPermissionGroups: [Workers Scripts Write]
+  accounts:
+    main:
+      id: 0123456789abcdef0123456789abcdef
+      minter: internal/cloudflare/main/minter
+  presets:
+    dns-example:
+      account: main
+      prototype: 9d3b1c7a5e2f4b8a9c0d1e2f3a4b5c6d
+      description: DNS edits on example.com for the release job
+      lifetime: 15m
+      rotation: 5m
+  grants:
+    - group: all:infra:dns-editors
+      presets: [dns-example]

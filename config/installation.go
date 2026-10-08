@@ -100,6 +100,10 @@ type Installation struct {
 	Valkey      *Valkey      `json:"valkey,omitempty"`
 	Directory   *Directory   `json:"directory,omitempty"`
 	Audit       *Audit       `json:"audit,omitempty"`
+	// Cloudflare is sluis as the STS for Cloudflare tokens and R2 credentials:
+	// the accounts and presets go to the service document's `cloudflare`, the
+	// grants to the policy document's.
+	Cloudflare *Cloudflare `json:"cloudflare,omitempty"`
 
 	// Exchange is how the token exchange verifies workloads and whom it trusts.
 	Exchange *Exchange `json:"exchange,omitempty"`
@@ -111,6 +115,18 @@ type Installation struct {
 	// GitHub and Slack bindings.
 	Access *Access `json:"access,omitempty"`
 }
+
+// Cloudflare is the service document's `cloudflare` section and, beside it, the
+// grants the policy document's `cloudflare` holds.
+type Cloudflare struct {
+	internal.Cloudflare
+	// Grants say which group or CI job may ask for which preset.
+	Grants []internal.CloudflareGrant `json:"grants,omitempty"`
+}
+
+// Declared reports whether the installation declares any preset: the library
+// then schedules the rotation and grants the function what it needs.
+func (c *Cloudflare) Declared() bool { return c != nil && len(c.Presets) > 0 }
 
 // Issuer is the issuer and where a browser reaches the console.
 type Issuer struct {
