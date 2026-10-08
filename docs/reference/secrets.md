@@ -91,7 +91,7 @@ whoever wrote it, and is granted to each consumer on its exact addresses. `inter
 value from its external address, so what a consumer reads is what sluis uses.
 
 `secrets.layout` says which layout an installation is on: `v3` (the default), `transition` (read v4 first and fall back to
-v3; every write goes to v4 and then to v3) or `v4`. It is changed by `sluis migrate secrets-layout`, never by a start-time
+v3; every write goes to v4 and then to v3) or `v4`. It is changed by `sluis migrate secrets-layout` ([the steps](../how-to/migrate-secrets-layout.md)), never by a start-time
 upgrade. The key is accepted by the `ssm` source only.
 
 ### The external documents

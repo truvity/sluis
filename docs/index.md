@@ -25,7 +25,7 @@ The pages follow what the reader is doing. Pick the column that matches.
   [day-two tasks](how-to/day-two.md), [high availability](how-to/high-availability.md),
   [telemetry](how-to/install-telemetry.md), [back up and restore](how-to/back-up-and-restore.md)
 - Upgrade: [v1.62](how-to/upgrade/v1.62.md), [v1.63](how-to/upgrade/v1.63.md), [v1.64](how-to/upgrade/v1.64.md)
-- Migrate: [the State](how-to/migrate-state.md), [cut over an installation](how-to/cutover.md),
+- Migrate: [the State](how-to/migrate-state.md), [the secrets layout](how-to/migrate-secrets-layout.md), [cut over an installation](how-to/cutover.md),
   [from the three-image chart](how-to/migrate-from-the-access-issuer-chart.md),
   [from environment variables](how-to/migrate-from-environment-variables.md),
   [from an IdP](how-to/migrate-from-an-idp.md), [from google-group-sync](how-to/migrate-from-google-group-sync.md)

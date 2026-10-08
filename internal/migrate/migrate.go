@@ -100,6 +100,9 @@ type Side struct {
 	// BlobID identifies where this side keeps blobs, so that two sides that
 	// share a place are known to; empty is "nowhere shared".
 	BlobID string
+	// SecretsLayout is the `secrets.layout` of an ssm secrets source (v3, the
+	// default, transition or v4); empty when the secrets are not in ssm.
+	SecretsLayout string
 }
 
 // Options is how a run behaves.
@@ -126,6 +129,10 @@ type Options struct {
 	// ReportBlob, when set, is a Blob name the report is also written to on
 	// the destination (not by a dry run).
 	ReportBlob string
+	// ExportedGitHubApp says which catalogue GitHub Apps of the destination have
+	// `export: true` (layout v4). Nil exports none; a runner App is always
+	// exported.
+	ExportedGitHubApp func(id string) bool
 	// Log receives progress. Nil is silent.
 	Log *slog.Logger
 	// Now is the clock the copied lifetimes are measured against; nil is
@@ -303,11 +310,11 @@ func Run(ctx context.Context, from, to Side, opt Options) (*Report, error) {
 		From: from.Name, To: to.Name, FromAdapter: from.Stores.Adapter, ToAdapter: to.Stores.Adapter,
 		DryRun: opt.DryRun, Overwrite: opt.Overwrite, StartedAt: time.Now().UTC(),
 	}}
-	srcDomains, err := OpenDomains(ctx, from.Stores, false)
+	srcDomains, err := OpenDomainsExporting(ctx, from.Stores, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("source: %w", err)
 	}
-	dstDomains, err := OpenDomains(ctx, to.Stores, !opt.DryRun)
+	dstDomains, err := OpenDomainsExporting(ctx, to.Stores, !opt.DryRun, opt.ExportedGitHubApp)
 	if err != nil {
 		return nil, fmt.Errorf("destination: %w", err)
 	}
@@ -359,6 +366,19 @@ func (r *run) steps(from, to Side) []step {
 	if !r.opt.Sessions {
 		r.note("the issuer's sessions, refresh tokens, codes in flight and Index sets are not copied: " +
 			"people sign in again (--with-sessions copies them); the key ring's schedule is")
+	}
+	switch to.SecretsLayout {
+	case "v3":
+		r.note("DEPRECATED: the destination is on secrets layout v3, which is written for this release only; " +
+			"set secrets.layout: v4 in the destination's installation document, so the secrets are written " +
+			"to internal/ and external/ (docs/how-to/migrate-secrets-layout.md)")
+		r.log.Warn("the destination is on secrets layout v3, which is deprecated: set secrets.layout: v4")
+	case "v4":
+		r.note("the secrets are written straight into layout v4 (internal/ and external/) under the destination's key alias")
+	}
+	if !contains(r.opt.Skip, DomainIssuer) {
+		r.note("the signing ring is copied as it is: each entry keeps the context it was wrapped under; " +
+			"a destination that is given no ring starts one fresh under its own context")
 	}
 	var kept []step
 	for _, s := range out {

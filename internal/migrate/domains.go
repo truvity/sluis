@@ -131,8 +131,17 @@ func (k portKey) Put(ctx context.Context, key []byte) error { return k.b.PutSess
 // Secrets. A source is opened as it is; a destination (create) also makes the
 // objects a legacy store needs to exist, as the service does at its start.
 func OpenDomains(ctx context.Context, st *store.Stores, create bool) (*Domains, error) {
+	return OpenDomainsExporting(ctx, st, create, nil)
+}
+
+// OpenDomainsExporting is [OpenDomains] for a side that may be on layout v4: an
+// installed runner App, and a catalogue App for which exported says true, is
+// the document external/github/<app> there and not an internal credential, and
+// a Slack App's bot token is external/slack/<app> (ADR 0041). exported may be
+// nil (no catalogue App is exported). On layout v3 it changes nothing.
+func OpenDomainsExporting(ctx context.Context, st *store.Stores, create bool, exported func(id string) bool) (*Domains, error) {
 	if st.Adapter != store.AdapterLegacy {
-		base := portstore.New(st.Ports)
+		base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(exported)
 		if err := base.CheckSecrets(ctx); err != nil {
 			return nil, fmt.Errorf("ports.adapter %s: %w", st.Adapter, err)
 		}
