@@ -9,6 +9,7 @@ import (
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/port/ssm"
 )
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -320,5 +321,48 @@ func TestAStatedPlatformWithoutOpenBaoRefusesTheOpenBaoAdapter(t *testing.T) {
 	_, _, err = Config{sel: selection{Preset: "k8s-aws", Adapters: over}}.plan(context.Background(), quiet)
 	if err != nil && strings.Contains(err.Error(), "platform.openbao") {
 		t.Fatalf("a preset alone refused the explicit adapter: %v", err)
+	}
+}
+
+// The serve document's secrets.kmsKeyId reaches the ssm adapter's KMSKeyID: the
+// adapter may name it again, naming another is refused, and unset changes
+// nothing.
+func TestTheSSMKeyIsTheDocumentsSecretsKMSKeyID(t *testing.T) {
+	const key = "arn:aws:kms:eu-west-1:111122223333:key/example"
+	for name, tc := range map[string]struct {
+		cfg      Config
+		settings port.Settings
+		want     string
+		err      string
+	}{
+		"the document's key":     {cfg: Config{SecretsKMSKey: key}, want: key},
+		"the same key named":     {cfg: Config{SecretsKMSKey: key}, settings: port.Settings{"kmsKeyId": key}, want: key},
+		"another key named":      {cfg: Config{SecretsKMSKey: key}, settings: port.Settings{"kmsKeyId": "alias/other"}, err: "one key"},
+		"no key in the document": {cfg: Config{}, settings: port.Settings{"kmsKeyId": "alias/own"}, want: "alias/own"},
+		"no key at all":          {cfg: Config{}},
+	} {
+		got, err := tc.cfg.ssmKey(tc.settings)
+		if tc.err != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.err) {
+				t.Errorf("%s: %v, want %q", name, err, tc.err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		var cfg ssm.Config
+		if err := got.Decode(&cfg); err != nil {
+			t.Fatalf("%s: the adapter does not take the settings: %v", name, err)
+		}
+		if cfg.KMSKeyID != tc.want {
+			t.Errorf("%s: ssm.Config.KMSKeyID = %q, want %q", name, cfg.KMSKeyID, tc.want)
+		}
+	}
+	f := &config.Serve{Secrets: &config.Secrets{Source: "ssm", Root: "/sluis/example", KMSKeyID: key}}
+	c, err := FromServe(f)
+	if err != nil || c.SecretsKMSKey != key {
+		t.Errorf("FromServe: key %q, %v", c.SecretsKMSKey, err)
 	}
 }

@@ -316,6 +316,9 @@ type (
 		Region   string    `json:"region,omitempty"`
 		Endpoint string    `json:"endpoint,omitempty"`
 		Refresh  *Duration `json:"refresh,omitempty"`
+		// KMSKeyID is `ssm`'s customer-managed key for the parameters the
+		// service writes (credentials, exports). Unset is the AWS-managed key.
+		KMSKeyID string `json:"kmsKeyId,omitempty"`
 	}
 
 	// PolicyRef names the one policy document a process decides by: the

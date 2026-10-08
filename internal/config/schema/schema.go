@@ -235,9 +235,11 @@ func secretsSchema() m {
 		"region":   str("`ssm`: the region. Unset follows the AWS SDK's own resolution."),
 		"endpoint": url("`ssm`: overrides the SSM address, for LocalStack."),
 		"refresh":  duration("`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it.", "5m"),
+		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
 	}, "source")
 	s["allOf"] = []any{
 		m{"if": m{"properties": m{"source": m{"enum": []string{"file", "ssm"}}}}, "then": m{"required": []string{"root"}}},
+		m{"if": m{"properties": m{"source": m{"enum": []string{"env", "file"}}}}, "then": m{"not": m{"required": []string{"kmsKeyId"}}}},
 	}
 	return s
 }

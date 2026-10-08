@@ -882,6 +882,25 @@
               "root"
             ]
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "enum": [
+                  "env",
+                  "file"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "kmsKeyId"
+              ]
+            }
+          }
         }
       ],
       "description": "How the secrets this document names are delivered (truvity/policy config.md section 5). Absent is `env`.",
@@ -889,6 +908,11 @@
         "endpoint": {
           "$ref": "#/$defs/url",
           "description": "`ssm`: overrides the SSM address, for LocalStack."
+        },
+        "kmsKeyId": {
+          "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+          "minLength": 1,
+          "type": "string"
         },
         "refresh": {
           "$ref": "#/$defs/duration",

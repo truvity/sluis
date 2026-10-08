@@ -149,7 +149,7 @@ outlives the deploy that made it. Into the service document it writes what is it
 otherwise, naming the key:
 
 - `apiVersion` and `policy.file`;
-- `secrets` (`{source: ssm, root: /sluis/<instance>, region}`), `recovery.passwordSecret`, `recovery.enabled` (from
+- `secrets` (`{source: ssm, root: /sluis/<instance>, region}`, and `kmsKeyId: <ParameterKeyArn>` when `ParameterKeyArn` is set: the key the function's own writes, its credentials and exports, are encrypted with; a document that names another is refused, the same is accepted), `recovery.passwordSecret`, `recovery.enabled` (from
   `Recovery`) and the state secret's name under `signingKey.kms` or `signingKey.kmsWrapped`;
 - with the `invoke` trigger, `adapters.trigger.settings.github` and `.slack`: this function;
 - `signingKey.verifyOnly`, from `VerifyOnly`: one entry per key, `file` at `/opt/sluis/verify-keys/<index>.pem`, its
@@ -231,7 +231,7 @@ is granted on `*` but the one action that takes no resource, `sts:GetWebIdentity
 | DynamoDB: `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table; with a customer key, its use through DynamoDB only |
 | SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` on `<root>/private/credentials/*` and `<root>/export/*`, for the secrets adapter (`ssm`) that keeps the service's credentials and exports |
 | SSM: `GetParameter`, `GetParameters`, `GetParametersByPath` on `<root>/private/config/*`: the secrets the document names, read by path, never written |
-| `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn`, through SSM only and only for the parameters under the role's own prefixes (when a customer key is set) |
+| `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn` (the key the parameters the library creates and the ones the function writes use), through SSM only and only for the parameters under the role's own prefixes (when a customer key is set) |
 | `sqs:SendMessage` on the audit ingest queue |
 | `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not declared with `WrappedSigning`) |
 | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` on the symmetric key under the context `purpose=sluis-signing` (`WrappedSigning`; the conditions are in [the signing key policy](aws-signing-key.md)) |

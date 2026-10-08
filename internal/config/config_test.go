@@ -241,6 +241,8 @@ func TestTheSchemaRefusesWhatTheEnvironmentWasTrustedWith(t *testing.T) {
 		"a listener that is not an address":   "listen: {address: '8080'}\n",
 		"a negative trusted hop count":        "audit: {writer: 'http://a:1', forwardedForTrustedHops: -1}\n",
 		"a signing key list that is a string": "signingKey: {additionalFiles: /k}\n",
+		"a kms key that is not a string":      "secrets: {source: ssm, root: /sluis/example, kmsKeyId: [a]}\n",
+		"a kms key on a file source":          "secrets: {source: file, root: /run/secrets, kmsKeyId: alias/example}\n",
 	} {
 		if _, err := config.Load[config.Serve](write(t, minimalIssuer+extra)); err == nil {
 			t.Errorf("%s was accepted", name)

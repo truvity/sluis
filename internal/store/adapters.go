@@ -257,6 +257,26 @@ func (c Config) ssmRoot(settings port.Settings) (port.Settings, error) {
 	return out, nil
 }
 
+// ssmKey is the ssm Secrets adapter's settings with its key: the serve
+// document's `secrets.kmsKeyId`, which the adapter may name again as `kmsKeyId`;
+// naming another is refused. Unset leaves the settings as they are.
+func (c Config) ssmKey(settings port.Settings) (port.Settings, error) {
+	want := c.SecretsKMSKey
+	if want == "" {
+		return settings, nil
+	}
+	named, _ := settings["kmsKeyId"].(string)
+	if named != "" && named != want {
+		return nil, fmt.Errorf("adapters.secrets: the ssm adapter's kmsKeyId %q is not secrets.kmsKeyId %q: an installation has one key", named, want)
+	}
+	out := port.Settings{"kmsKeyId": want}
+	for k, v := range settings {
+		out[k] = v
+	}
+	out["kmsKeyId"] = want
+	return out, nil
+}
+
 // secretsOf builds the Secrets port the plan chose, nil when none was chosen.
 func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if c.secrets == nil {
@@ -270,6 +290,9 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if c.secrets.Adapter == "ssm" {
 		var err error
 		if settings, err = c.ssmRoot(settings); err != nil {
+			return nil, err
+		}
+		if settings, err = c.ssmKey(settings); err != nil {
 			return nil, err
 		}
 	}
