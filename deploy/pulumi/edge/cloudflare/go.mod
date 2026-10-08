@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.48.0
 	github.com/pulumi/pulumi/sdk/v3 v3.267.0
-	github.com/truvity/sluis/deploy/pulumi v1.63.0
+	github.com/truvity/sluis/deploy/pulumi v1.74.0-rc.1
 )
 
 require (
@@ -87,11 +87,11 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
 	github.com/truvity/policy v1.45.0 // indirect
-	github.com/truvity/sluis v1.63.0 // indirect
-	github.com/truvity/sluis/audit v0.0.0 // indirect
-	github.com/truvity/sluis/audit/deploy/pulumi v0.0.0 // indirect
-	github.com/truvity/sluis/audit/sdk v0.0.0 // indirect
-	github.com/truvity/sluis/storage v0.0.0 // indirect
+	github.com/truvity/sluis v1.74.0-rc.1 // indirect
+	github.com/truvity/sluis/audit v1.74.0-rc.1 // indirect
+	github.com/truvity/sluis/audit/deploy/pulumi v1.74.0-rc.1 // indirect
+	github.com/truvity/sluis/audit/sdk v1.74.0-rc.1 // indirect
+	github.com/truvity/sluis/storage v1.74.0-rc.1 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
