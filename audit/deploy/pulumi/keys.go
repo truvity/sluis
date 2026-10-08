@@ -32,8 +32,10 @@ import (
 type KeysArgs struct {
 	// Archive is the key the archive's objects are encrypted with (SSE-KMS):
 	// the writer, the notary and the readers are granted GenerateDataKey and
-	// Decrypt on it. Required with Archive.Encryption "kms" (the default) unless
-	// Archive.KeyArn is given; refused otherwise. The grant has no encryption-context
+	// Decrypt on it. It is the key of every AWS preset that names no KeyAlias of its
+	// own. Required with Archive.Encryption "kms" (the default) for a bucket the
+	// library creates that names none, unless Archive.KeyArn is given; refused
+	// otherwise, and when every preset is at an endpoint. The grant has no encryption-context
 	// condition: S3 binds its own context (the object's bucket), not the port's.
 	Archive string
 	// Seal is the P-384 key seals are signed with, SIGN_VERIFY (ES384). Required
@@ -97,9 +99,9 @@ func checkAlias(field, alias string) error {
 	return nil
 }
 
-// checkKeys holds Keys to the preset and the profiles: which purposes the
-// installation provisions, and which it must be given.
-func (a *Args) checkKeys(preset profile.Preset) error {
+// checkKeys holds Keys to the configured presets and the profiles: which
+// purposes the installation provisions, and which it must be given.
+func (a *Args) checkKeys() error {
 	k := &a.Keys
 	for field, alias := range map[string]string{
 		"Keys.Archive": k.Archive, "Keys.Seal": k.Seal, "Keys.Pseudonym": k.Pseudonym, "Keys.Conceal": k.Conceal,
@@ -114,11 +116,12 @@ func (a *Args) checkKeys(preset profile.Preset) error {
 	if k.Instance != "" && !instanceRE.MatchString(k.Instance) {
 		return fmt.Errorf("auditpulumi: Keys.Instance %q must be letters, digits, . _ and - (it is bound into ciphertexts)", k.Instance)
 	}
-	f := preset.Features()
+	f := a.features
 	switch {
 	case k.Seal != "" && a.Notary.Disabled:
-		return fmt.Errorf("auditpulumi: Keys.Seal is set and the installation has no notary (the preset is %s): nothing signs with it. "+
-			"Set Preset to %s to have the notary and its seal key, or leave Keys.Seal out", preset, profile.Standard)
+		return fmt.Errorf("auditpulumi: Keys.Seal is set and the installation has no notary (Notary.Disabled, or no configured preset "+
+			"provisions one): nothing signs with it. Configure Presets[%q] to have the notary and its seal key, or leave Keys.Seal out",
+			profile.Standard)
 	case k.Seal == "" && !a.Notary.Disabled:
 		return errors.New("auditpulumi: Keys.Seal is required with the notary: the library creates no key, so name the " +
 			"estate's P-384 signing key by alias (alias/<name>), with a key policy that lets the notary's role sign (SealKeyPolicy)")
@@ -129,9 +132,9 @@ func (a *Args) checkKeys(preset profile.Preset) error {
 			return err
 		}
 		if !f.PseudonymKeys && len(profiles) == 0 {
-			return fmt.Errorf("auditpulumi: Keys.Pseudonym and Keys.Conceal are for an installation that pseudonymises: the preset is %s, "+
-				"which provisions no pseudonym keys, and no profile of Writer.DeploymentYAML replaces an identity with a pseudonym. "+
-				"Set Preset to %s, or compose a profile that pseudonymises", preset, profile.Attested)
+			return fmt.Errorf("auditpulumi: Keys.Pseudonym and Keys.Conceal are for an installation that pseudonymises: no configured preset "+
+				"provisions pseudonym keys, and no profile of Writer.DeploymentYAML replaces an identity with a pseudonym. "+
+				"Configure Presets[%q], or compose a profile that pseudonymises", profile.Attested)
 		}
 		if a.Ingest.Disabled {
 			return errors.New("auditpulumi: Keys.Pseudonym and Keys.Conceal are the writer's, and Ingest.Disabled leaves the writer out")
@@ -153,18 +156,14 @@ var instanceRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
 // identity with a pseudonym, which are the ones that need the pseudonym key. An
 // installation without a document has none.
 func pseudonymProfiles(a *Args) ([]string, error) {
-	if strings.TrimSpace(a.Writer.DeploymentYAML) == "" {
+	if !a.hasDocument {
 		return nil, nil
-	}
-	d, err := profile.ParseDeployment([]byte(a.Writer.DeploymentYAML))
-	if err != nil {
-		return nil, fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
 	}
 	frameworks, err := profile.Builtin()
 	if err != nil {
 		return nil, fmt.Errorf("auditpulumi: the framework profiles: %w", err)
 	}
-	names, err := d.PseudonymProfiles(frameworks)
+	names, err := a.deployment.PseudonymProfiles(frameworks)
 	if err != nil {
 		return nil, fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
 	}
@@ -258,8 +257,9 @@ func writerKeyStatements(k resolvedKeys, instance string) []statement {
 
 // ---- the installation's state store
 
-// credentialsAddress is where the archive's credentials are, below the state
-// root, unless Archive.CredentialsAddress says otherwise.
+// defaultCredentialsAddress is where the credentials of the preset's store at an
+// endpoint are, below the state root, unless Presets[...].CredentialsAddress says
+// otherwise: <default>/<preset>.
 const (
 	defaultCredentialsAddress = "internal/archive"
 	pseudonymStateAddress     = "internal/pseudonym"
@@ -328,12 +328,12 @@ func (g *stateGrant) statements() []statement {
 	return st
 }
 
-// checkEndpoint holds Archive.Endpoint to an https URL with a host and no path.
-func checkEndpoint(endpoint string) error {
+// checkEndpoint holds an endpoint to an https URL with a host and no path.
+func checkEndpoint(field, endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
-		return fmt.Errorf("auditpulumi: Archive.Endpoint %q must be an https URL with a host and no path or credentials: "+
-			"the credentials are kept in the state store, and a request to the store crosses this URL", endpoint)
+		return fmt.Errorf("auditpulumi: %s %q must be an https URL with a host and no path or credentials: "+
+			"the credentials are kept in the state store, and a request to the store crosses this URL", field, endpoint)
 	}
 	return nil
 }

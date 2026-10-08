@@ -193,14 +193,17 @@ component contract (`postgres.json`, `bucket.json`, `listen.json`,
 | `pathStyle` | boolean | false | address the bucket as a path rather than a host, for a certificate that does not cover a bucket subdomain |
 | `credentialsSecret.accessKeyID`, `.secretAccessKey` | strings, both required if the block is present | none: the SDK's ambient credentials, which is what a workload identity provides | secret by reference: the names of the secrets holding static credentials |
 
-**`archive`** (where the archive is, and how it is written)
+**`archive`** (what the process adds to the deployment's presets). Where the archive is -- the bucket, prefix,
+region and endpoint of each install preset -- and the Object Lock it is written under (compliance for the
+`attested` preset, none for the others) are the **deployment document's `presets`**
+([0026](../decisions/0026-storage-is-configured-per-preset.md), [profiles](profiles.md#presets-and-their-storage)).
+The process names the deployment (`deployment`) and may carry:
 
 | key | type | default | meaning |
 |---|---|---|---|
-| `bucket` | `bucket`, required | | the archive's bucket |
-| `prefix` | string | none | the prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two apart |
-| `lockMode` | `compliance`, `governance` or `none` | `compliance` | the Object Lock mode every object is written in; `none` is for a store without Object Lock or profiles that demand none ([0014](../decisions/0014-lock-modes-and-store-tiers.md)). A process refuses to start when a profile demands a stricter mode. `audit-query` and `audit verify` read; `audit-query` has no `lockMode` |
-| `kmsKey` | string | the bucket's default encryption | the key objects are encrypted with. Only `audit-writer` has it |
+| `stateRoot` | string | none | the root of the installation's state store, below which a preset's `credentials` address is read. Needed when a preset is at an endpoint with `credentials` |
+| `ca` | path | the system trust store | a CA bundle for a store whose certificate is not signed by a public root |
+| `kmsKey` | string | the bucket's default encryption | the key objects are encrypted with where a preset names no `key_alias`. Only the writer and the notary have it |
 
 **`listen`**: `address` (string, `host:port` such as `:8080`, required when the
 block is present). Both servers default it to `:8080`.
@@ -281,14 +284,11 @@ After the schema, the binaries refuse:
 - `replicas` above 1 with local keys and no `keys.local.dir`: each replica
   would mint its own keys and the same person would get a different pseudonym
   on each;
-- an `exports.bucket` that is the archive's bucket on the same endpoint: an
-  export is an unlocked copy meant to be cleared, and the archive's policy
-  denies every delete;
 - `keys` on the query service without `archive`, or with the local provider and
   no `keys.local.dir`: resolve opens what the writer sealed in the archive;
 - a `database.url` that does not parse;
-- a profile that demands a stricter `lockMode` than the archive's: the writer
-  refuses at start-up, naming the profile and both modes;
+- a profile that demands a stricter Object Lock than its preset's bucket gives, or whose preset is
+  not configured under `presets`: the writer refuses at start-up, naming the profile and the preset;
 - a profile whose name contains `/`: it is a key component.
 
 The grants file has refusals of its own, listed with it under [Query service](configuration-observe-query.md#query-service).

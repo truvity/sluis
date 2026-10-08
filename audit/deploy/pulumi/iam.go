@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"strings"
 )
 
 // A policy document is built from ARNs that exist only once the resources do, so
@@ -30,12 +29,39 @@ func allow(actions []string, resources []string, condition map[string]any) state
 	return s
 }
 
-func under(bucketArn string, prefixes ...string) []string {
+// bucketGrant is one AWS preset's bucket as the policies grant it: the bucket,
+// the prefix every key of the preset lives under, and whether the bucket is under
+// Object Lock (which adds the retention permissions).
+type bucketGrant struct {
+	Arn    string
+	Prefix string
+	Locked bool
+}
+
+// under names the objects below the given prefixes of the preset's own prefix.
+func (b bucketGrant) under(prefixes ...string) []string {
 	out := make([]string, len(prefixes))
 	for i, p := range prefixes {
-		out[i] = bucketArn + "/" + p + "*"
+		out[i] = b.Arn + "/" + b.Prefix + p + "*"
 	}
 	return out
+}
+
+// list is s3:ListBucket on the bucket, scoped to the preset's prefix when it has
+// one (or to the given prefixes below it).
+func (b bucketGrant) list(prefixes ...string) statement {
+	var cond map[string]any
+	switch {
+	case len(prefixes) > 0:
+		like := make([]string, len(prefixes))
+		for i, p := range prefixes {
+			like[i] = b.Prefix + p + "*"
+		}
+		cond = map[string]any{"StringLike": map[string]any{"s3:prefix": like}}
+	case b.Prefix != "":
+		cond = map[string]any{"StringLike": map[string]any{"s3:prefix": []string{b.Prefix + "*"}}}
+	}
+	return allow([]string{"s3:ListBucket"}, []string{b.Arn}, cond)
 }
 
 // The prefixes of the bucket contract (docs/reference/bucket-contract.md) a part
@@ -73,7 +99,8 @@ func webIdentityStatement(audience string) statement {
 	})
 }
 
-// writerPolicy is what the writer function may do, and no more.
+// writerPolicy is what the writer function may do, and no more, on each AWS
+// preset's bucket (scoped to its prefix).
 //
 // PutObjectRetention and PutObjectLegalHold are needed by PutObject itself: S3
 // refuses a put that carries an Object Lock header unless the caller also holds
@@ -82,23 +109,24 @@ func webIdentityStatement(audience string) statement {
 // bucket for the last two. It has no delete, no access to seals/ or keys/, and
 // no KMS Sign: whoever can write the archive and can also sign for it can choose
 // what to sign (ADR 0019). When its configuration names secrets it may read the
-// SSM parameters under its root and decrypt them, and read nothing else of SSM. With no Object Lock (locked false) the writer sends
-// no lock header, so it is granted neither permission. On an S3-compatible
-// store (bucketArn empty) there is no S3 statement at all: the store is reached
-// with the credentials in the state store, which extra grants the reading of.
+// SSM parameters under its root and decrypt them, and read nothing else of SSM.
+// Only the attested preset's bucket is locked (bucketGrant.Locked); the writer
+// sends no lock header to any other, so it is granted neither permission there.
+// A preset at an endpoint has no S3 statement at all: the store is reached with
+// the credentials in the state store, which extra grants the reading of.
 // extra is the grants on the installation's keys and state store.
-func writerPolicy(bucketArn, archiveKeyArn, tableArn, queueArn, logGroupArn string, audience string, locked bool,
+func writerPolicy(buckets []bucketGrant, archiveKeyArns []string, tableArn, queueArn, logGroupArn string, audience string,
 	secrets *secretGrant, extra []statement) string {
 	var st []statement
-	if bucketArn != "" {
+	for _, b := range buckets {
 		put := []string{"s3:PutObject"}
-		if locked {
+		if b.Locked {
 			put = append(put, "s3:PutObjectRetention", "s3:PutObjectLegalHold")
 		}
 		st = append(st,
-			allow(put, under(bucketArn, writerPrefixes...), nil),
-			allow([]string{"s3:GetObject"}, under(bucketArn, append(append([]string{}, writerPrefixes...), "holds/")...), nil),
-			allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
+			allow(put, b.under(writerPrefixes...), nil),
+			allow([]string{"s3:GetObject"}, b.under(append(append([]string{}, writerPrefixes...), "holds/")...), nil),
+			b.list(),
 		)
 	}
 	st = append(st,
@@ -107,7 +135,7 @@ func writerPolicy(bucketArn, archiveKeyArn, tableArn, queueArn, logGroupArn stri
 			[]string{queueArn}, nil),
 		logsStatement(logGroupArn),
 	)
-	st = append(st, archiveKeyStatements(archiveKeyArn, "kms:GenerateDataKey", "kms:Decrypt")...)
+	st = append(st, archiveKeyStatements(archiveKeyArns, "kms:GenerateDataKey", "kms:Decrypt")...)
 	st = append(st, secrets.statements()...)
 	st = append(st, extra...)
 	if audience != "" {
@@ -116,65 +144,41 @@ func writerPolicy(bucketArn, archiveKeyArn, tableArn, queueArn, logGroupArn stri
 	return policyJSON(st...)
 }
 
-// archiveKeyStatements is the grant on the archive key, and nothing when there is
-// no key (Archive.Encryption "s3": the empty ARN).
-//
-// The argument is one ARN, or several joined with commas: the archive key and the
-// keys behind the destinations' aliases. A destination's key is marked by
-// destGrant, and its grant is conditioned on the encryption context the
-// storage KMS backend uses for it: this installation's instance, and the purpose
-// `archive`. The archive key's grant is not.
-func archiveKeyStatements(archiveKeyArn string, actions ...string) []statement {
-	if archiveKeyArn == "" {
+// archiveKeyStatements is the grant on the archive keys, and nothing when there
+// are none (Archive.Encryption "s3", the AWS-managed key, or every preset at an
+// endpoint). The keys are the archive key and the keys behind the presets'
+// aliases, each once. S3 binds its own encryption context (the object's bucket),
+// not the storage port's, so the grant has no encryption-context condition.
+func archiveKeyStatements(arns []string, actions ...string) []statement {
+	arns = dedupe(arns)
+	if len(arns) == 0 {
 		return nil
 	}
-	var plain []string
-	var st []statement
-	for _, item := range strings.Split(archiveKeyArn, ",") {
-		if rest, ok := strings.CutPrefix(item, destMark); ok {
-			instance, arn, _ := strings.Cut(rest, "|")
-			st = append(st, allow(actions, []string{arn}, map[string]any{"StringEquals": map[string]any{
-				"kms:EncryptionContext:instance": instance,
-				"kms:EncryptionContext:purpose":  "archive",
-			}}))
-			continue
-		}
-		plain = append(plain, item)
-	}
-	if len(plain) > 0 {
-		st = append([]statement{allow(actions, plain, nil)}, st...)
-	}
-	return st
+	return []statement{allow(actions, arns, nil)}
 }
-
-// destMark marks a destination key among the comma-joined ARNs.
-const destMark = "dest|"
-
-// destGrant marks the key behind a destination's alias, for this instance.
-func destGrant(instance, arn string) string { return destMark + instance + "|" + arn }
 
 // notaryPolicy is what the notary function may do: read the records it seals and
 // the seals it chains to, put seals and keys/roots.jwks, and sign with the seal
 // key and with nothing else. It cannot put a record, which is what makes a
 // compromised writer unable to seal what it wrote.
-func notaryPolicy(bucketArn, archiveKeyArn, sealKeyArn, logGroupArn string, audience string, locked bool, extra []statement) string {
+func notaryPolicy(buckets []bucketGrant, archiveKeyArns []string, sealKeyArn, logGroupArn string, audience string, extra []statement) string {
 	var st []statement
-	if bucketArn != "" {
+	for _, b := range buckets {
 		put := []string{"s3:PutObject"}
-		if locked {
+		if b.Locked {
 			put = append(put, "s3:PutObjectRetention")
 		}
 		st = append(st,
-			allow([]string{"s3:GetObject"}, under(bucketArn, "records/", "seals/", "keys/"), nil),
-			allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
-			allow(put, under(bucketArn, sealPrefixes...), nil),
+			allow([]string{"s3:GetObject"}, b.under("records/", "seals/", "keys/"), nil),
+			b.list(),
+			allow(put, b.under(sealPrefixes...), nil),
 		)
 	}
 	st = append(st,
 		allow([]string{"kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"}, []string{sealKeyArn}, nil),
 		logsStatement(logGroupArn),
 	)
-	st = append(st, archiveKeyStatements(archiveKeyArn, "kms:GenerateDataKey", "kms:Decrypt")...)
+	st = append(st, archiveKeyStatements(archiveKeyArns, "kms:GenerateDataKey", "kms:Decrypt")...)
 	st = append(st, extra...)
 	if audience != "" {
 		st = append(st, webIdentityStatement(audience))
@@ -184,55 +188,56 @@ func notaryPolicy(bucketArn, archiveKeyArn, sealKeyArn, logGroupArn string, audi
 
 // observeReaderPolicy is what audit-observe reads the archive with, across the
 // accounts or from a cluster: list and get on records/, catalogue/, schema/,
-// seals/ and keys/, and decrypt under the archive key when there is one. It
-// writes nothing, which is what ADR 0020 means by observe following the bucket.
-func observeReaderPolicy(bucketArn, archiveKeyArn string) string {
-	return policyJSON(readStatements(bucketArn, archiveKeyArn)...)
+// seals/ and keys/ of every AWS preset's bucket, and decrypt under the archive
+// keys. It writes nothing, which is what ADR 0020 means by observe following the
+// bucket.
+func observeReaderPolicy(buckets []bucketGrant, archiveKeyArns []string) string {
+	return policyJSON(readStatements(buckets, archiveKeyArns)...)
 }
 
 // queryPolicy is what audit-query may do: the read of observeReaderPolicy, and,
 // when queueArn is not empty, sqs:SendMessage on it and nothing else of SQS (the
 // service records every read of the trail through the ingest queue).
-func queryPolicy(bucketArn, archiveKeyArn, queueArn string) string {
-	st := readStatements(bucketArn, archiveKeyArn)
+func queryPolicy(buckets []bucketGrant, archiveKeyArns []string, queueArn string) string {
+	st := readStatements(buckets, archiveKeyArns)
 	if queueArn != "" {
 		st = append(st, allow([]string{"sqs:SendMessage"}, []string{queueArn}, nil))
 	}
 	return policyJSON(st...)
 }
 
-func readStatements(bucketArn, archiveKeyArn string) []statement {
+func readStatements(buckets []bucketGrant, archiveKeyArns []string) []statement {
 	prefixes := []string{"records/", "catalogue/", "schema/", "seals/", "keys/"}
-	lists := make([]string, len(prefixes))
-	for i, p := range prefixes {
-		lists[i] = p + "*"
+	var st []statement
+	for _, b := range buckets {
+		st = append(st,
+			allow([]string{"s3:GetObject"}, b.under(prefixes...), nil),
+			b.list(prefixes...),
+		)
 	}
-	st := []statement{
-		allow([]string{"s3:GetObject"}, under(bucketArn, prefixes...), nil),
-		allow([]string{"s3:ListBucket"}, []string{bucketArn}, map[string]any{
-			"StringLike": map[string]any{"s3:prefix": lists},
-		}),
-	}
-	return append(st, archiveKeyStatements(archiveKeyArn, "kms:Decrypt")...)
+	return append(st, archiveKeyStatements(archiveKeyArns, "kms:Decrypt")...)
 }
 
 // archiveWriterPolicy is what a workload outside AWS that writes part of the
 // archive may do: put under the given prefixes only (with the retention
-// permission when the bucket is locked), read what it must chain to or compare
-// (records/ and the prefixes it writes), list, and use the archive key. It has no
-// delete, no legal hold, no seal key, and no queue or table.
-func archiveWriterPolicy(bucketArn, archiveKeyArn string, prefixes []string, locked bool) string {
-	put := []string{"s3:PutObject"}
-	if locked {
-		put = append(put, "s3:PutObjectRetention")
+// permission in a locked bucket), read what it must chain to or compare
+// (records/ and the prefixes it writes), list, and use the archive keys. It has
+// no delete, no legal hold, no seal key, and no queue or table.
+func archiveWriterPolicy(buckets []bucketGrant, archiveKeyArns []string, prefixes []string) string {
+	var st []statement
+	for _, b := range buckets {
+		put := []string{"s3:PutObject"}
+		if b.Locked {
+			put = append(put, "s3:PutObjectRetention")
+		}
+		reads := append([]string{"records/"}, prefixes...)
+		st = append(st,
+			allow(put, b.under(prefixes...), nil),
+			allow([]string{"s3:GetObject"}, b.under(dedupe(reads)...), nil),
+			b.list(),
+		)
 	}
-	reads := append([]string{"records/"}, prefixes...)
-	st := []statement{
-		allow(put, under(bucketArn, prefixes...), nil),
-		allow([]string{"s3:GetObject"}, under(bucketArn, dedupe(reads)...), nil),
-		allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
-	}
-	st = append(st, archiveKeyStatements(archiveKeyArn, "kms:GenerateDataKey", "kms:Decrypt")...)
+	st = append(st, archiveKeyStatements(archiveKeyArns, "kms:GenerateDataKey", "kms:Decrypt")...)
 	return policyJSON(st...)
 }
 

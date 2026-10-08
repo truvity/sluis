@@ -5,18 +5,15 @@ mode: direct
 externalIdentifiersAreOpaque: true
 writer:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
-    archive:
-      bucket:
-        name: audit-archive
 jobs:
   notary:
     enabled: true
     config:
-      archive:
-        bucket:
-          name: audit-archive
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      deployment: /etc/audit/deployment.yaml
       signer:
         kms:
           key: alias/audit-seal
@@ -24,21 +21,24 @@ jobs:
         url: http://audit:8080
   verify:
     config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
       deployment: /etc/audit/deployment.yaml
-      archive:
-        bucket:
-          name: audit-archive
       sink:
         url: http://audit:8080
   purge:
     enabled: false
   clockSync:
     config:
+      apiVersion: audit.truvity.github.io/audit-clock-sync/v2
       ntp: [time.cloudflare.com]
       sink:
         url: http://audit:8080
 
 # The notary is the standard preset's, which `security` asks for.
+presets:
+  standard:
+    bucket: audit-archive
+    region: eu-example-1
 profiles:
   security:
     frameworks: [security]

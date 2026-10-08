@@ -1,4 +1,4 @@
-# refuse: the install preset is operational, which has no notary
+# refuse: no configured preset has a notary or a seal key
 # base: operational-base
 jobs:
   notary:

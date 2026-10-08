@@ -788,8 +788,8 @@ audit-chart:
         > ../tests/golden/audit/stream.yaml
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/transit.yaml \
         > ../tests/golden/audit/transit.yaml
-    # The attested tier on an S3-compatible store: no lock, an endpoint, path
-    # style, static credentials, and an exports bucket on a store of its own.
+    # Two presets (operational, standard) on an S3-compatible store: an endpoint, path
+    # style, credentials from the state store, and an exports bucket on a store of its own.
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/attested.yaml \
         > ../tests/golden/audit/attested.yaml
     # The two shapes the deployment pages document, rendered from the very

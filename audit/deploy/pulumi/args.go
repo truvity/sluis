@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/truvity/sluis/audit/profile"
 )
 
 // Lock modes of the archive bucket. NONE is a bucket with no Object Lock at all,
@@ -79,18 +81,22 @@ type Args struct {
 	// is the platform's copy.
 	LogRetentionDays int
 
-	// Preset is the install preset: "operational" (the writer, the archive,
-	// deduplication and the queue intake), "standard" (adds the notary with its
-	// seal key, and the alarms) or "attested" (adds compliance Object Lock and
-	// the pseudonym keys). Optional, and best left unset: it is derived as the
-	// lowest preset every profile in Writer.DeploymentYAML can be kept under, each
-	// framework profile stating its own minimum (`min_preset`), and nothing chosen
-	// is operational. Set, it may be stronger than that and is refused when
-	// weaker, naming the profile that needs more. What the preset leaves out is
-	// not created: under operational there is no notary, no seal key, no schedule
-	// and no alarm, and asking for one (Notary.Package, Alerts.EndpointURL) is
-	// refused.
-	Preset string
+	// Presets is the storage of each install preset the installation uses, by
+	// preset name: "operational" (the writer, the archive, deduplication and the
+	// queue intake), "standard" (adds the notary with its seal key, and the alarms)
+	// and "attested" (adds compliance Object Lock on that preset's bucket and the
+	// pseudonym keys). Required: a profile is kept under the preset its framework
+	// profiles need (each stating its minimum as `min_preset`, or the stronger one
+	// the profile asks for), and a profile whose preset is not configured here is
+	// refused, naming both. What the configured presets leave out is not created:
+	// with no standard or attested preset there is no notary, no seal key, no
+	// schedule and no alarm, and asking for one (Notary.Package,
+	// Alerts.EndpointURL) is refused.
+	//
+	// The library renders the deployment document the functions read from
+	// Writer.DeploymentYAML (the profiles) and these presets; the document must not
+	// have a `presets:` block of its own beside them.
+	Presets map[string]PresetStorage
 
 	// Keys are the installation's keys by purpose, named by KMS alias. The
 	// library creates none: see KeysArgs.
@@ -100,9 +106,14 @@ type Args struct {
 	// pseudonyms. See StateArgs.
 	State StateArgs
 
-	// destinations are the profiles of Writer.DeploymentYAML as destinations of
-	// the archive, filled in by withDefaults.
-	destinations []destination
+	// What resolvePresets decided: the presets with their defaults, strongest
+	// last; the deployment document the functions read and its parse; whether the
+	// user's document carried profiles; and what the presets provision.
+	stores         []presetStore
+	deployment     *profile.Deployment
+	deploymentYAML string
+	hasDocument    bool
+	features       profile.Features
 
 	Archive   ArchiveArgs
 	Ingest    IngestArgs
@@ -127,50 +138,18 @@ type Args struct {
 	Guards GuardArgs
 }
 
-// ArchiveArgs is the archive bucket and its keys.
+// ArchiveArgs is the tuning shared by every bucket the library creates (a
+// preset with Create, see PresetStorage), and the archive's keys. Where a preset
+// is at an endpoint, or is an existing bucket, the encryption, the lifecycle and
+// the lock are its owner's and the settings that are of a created bucket are
+// refused.
 type ArchiveArgs struct {
-	// BucketName is the bucket's name. Required: it is in the functions'
-	// configuration, so it has to be known before anything is created, and a
-	// bucket name is global.
-	BucketName string
-
-	// Endpoint, when set, puts the archive on an S3-compatible store that is not
-	// AWS (Cloudflare R2 is the one this has been measured against): an https URL
-	// with a host and no path. The bucket is then the store's, made there by the
-	// estate: the library creates no bucket, no lifecycle rule and no encryption
-	// setting, and the roles it creates have no S3 or archive-key statements.
-	// Object Lock is an AWS S3 guarantee another store does not make, so the
-	// lock mode is NONE and an attested installation (which keeps the archive
-	// under compliance Object Lock) is refused; Encryption, KeyArn, Keys.Archive,
-	// DefaultRetentionDays, GlacierIRDays and DeepArchiveDays are the AWS
-	// bucket's and are refused. Observe, Query and ArchiveWriter are roles over
-	// an AWS bucket and are refused. The store's credentials are read by the
-	// functions from the installation's state store (State), at
-	// CredentialsAddress; no secret is here or in the stack's state.
-	Endpoint string
-	// StoreRegion is the region the store is addressed with. Default "auto",
-	// which is what R2 signs with. Only with Endpoint.
-	StoreRegion string
-	// PathStyle addresses the bucket as endpoint/bucket/key instead of
-	// bucket.endpoint/key, for a store whose certificate does not cover a bucket
-	// subdomain. Only with Endpoint.
-	PathStyle bool
-	// CredentialsAddress is where the store's credentials are, below State.Root:
-	// a JSON object {"accessKeyID": ..., "secretAccessKey": ...} written by the
-	// operator as a SecureString. Default "internal/archive". Only with Endpoint.
-	CredentialsAddress string
-
-	// ObjectLockMode is NONE, GOVERNANCE or COMPLIANCE. Unset, it is what the
-	// preset says: COMPLIANCE for attested, NONE for the presets below it. The
-	// attested preset refuses a weaker mode; a lower one accepts a stricter mode
-	// set here (the governance trial of the lock).
-	//
-	// NONE creates no Object Lock configuration and renders `lockMode: none` for
-	// the functions, which then send no retention or legal-hold header and are
-	// not granted the permissions for one. The bucket is versioned all the same,
-	// so that the lock can be turned on later: moving to GOVERNANCE adds the
-	// Object Lock configuration to the existing bucket and replaces nothing.
-	// Objects written before that stay unlocked.
+	// ObjectLockMode is the lock of the attested preset's bucket, when the library
+	// creates it (Presets["attested"] with Create): GOVERNANCE or COMPLIANCE.
+	// Default COMPLIANCE. It is refused where there is no such bucket: Object Lock
+	// is the attested preset's alone, and a bucket the library does not create is
+	// locked (or not) by its owner. The functions write compliance retention for
+	// the attested preset in either mode.
 	//
 	// GOVERNANCE is the trial of the lock: a role holding
 	// s3:BypassGovernanceRetention can shorten it. COMPLIANCE cannot be shortened
@@ -219,15 +198,7 @@ type ArchiveArgs struct {
 	// "kms" one of Keys.Archive and KeyArn is required: the library creates no key.
 	KeyArn string
 
-	// Profiles are the deployment's profile names, the destinations of the
-	// archive. Optional: unset, they are the profiles of Writer.DeploymentYAML. On
-	// an AWS S3 bucket the library creates, a lifecycle rule is written for each
-	// `records/<profile>/` prefix (with an Endpoint the lifecycle is the store's,
-	// and none is written); the profile is the first component of the key for
-	// exactly that reason (ADR 0018). Where the destination's framework profiles
-	// fix a retention, the rule expires the prefix's objects when it ends.
-	Profiles []string
-	// GlacierIRDays is when a record object moves to Glacier Instant Retrieval:
+	// GlacierIRDays is when a record object of a created bucket moves to Glacier Instant Retrieval:
 	// still readable by observe's reindex and by `audit verify` without a
 	// restore. Default 30.
 	GlacierIRDays int
@@ -241,8 +212,9 @@ type IngestArgs struct {
 	// Disabled leaves out the whole ingest side: the queue and its dead-letter
 	// queue, the deduplication table, the writer function with its role, log
 	// group and event source mapping, and the writer's and queue's alarms. For a
-	// deployment whose writer runs elsewhere. Writer.Package and
-	// Writer.DeploymentYAML are then not required and are ignored.
+	// deployment whose writer runs elsewhere. Writer.Package is then not required
+	// and is ignored. Writer.DeploymentYAML is still the profiles the notary and the
+	// presets are held to: it is required while the notary is on.
 	Disabled bool
 	// Senders are the principals (role or user ARNs) allowed to send to the
 	// queue, typically the receivers' roles or the application's. **Required**
@@ -286,7 +258,11 @@ type WriterArgs struct {
 	PackageSHA256 string
 	// DeploymentYAML is the profile configuration (`deployment:` in the
 	// function's configuration), which framework profiles each profile is composed from.
-	// Required, and the same document the chart renders.
+	// Required, and the same document the chart renders, without its `presets:`:
+	// the library adds the presets it builds from Args.Presets and ships the result
+	// to the functions (Audit.DeploymentYAML). A document that already has `presets:`
+	// is refused together with Args.Presets, and used as it is without them (its
+	// buckets are then existing ones, which the library only grants).
 	DeploymentYAML string
 	// Catalogues are the application catalogues the writer registers at start-up,
 	// by file name (`catalogue.yaml`, `catalogue-<name>.yaml`). The common
@@ -527,6 +503,8 @@ var keyArn = regexp.MustCompile(`^arn:[a-z-]+:kms:[a-z0-9-]+:[0-9]+:key/[A-Za-z0
 
 var keyComponent = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
+var bucketNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+
 var bucketPrefixRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,40}$`)
 
 // withDefaults fills what the arguments leave unset, and refuses what cannot
@@ -547,11 +525,10 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		return nil, fmt.Errorf("auditpulumi: AccountID %q must be the 12 digits of an AWS account id", c.AccountID)
 	}
 
-	preset, dests, err := resolvePreset(&c)
-	if err != nil {
+	if err := resolvePresets(&c); err != nil {
 		return nil, err
 	}
-	if err := applyPreset(&c, preset, dests); err != nil {
+	if err := applyFeatures(&c); err != nil {
 		return nil, err
 	}
 
@@ -565,27 +542,8 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		return nil, fmt.Errorf("auditpulumi: State.KeyArn %q must be the ARN of a KMS key", c.State.KeyArn)
 	}
 
-	ar := &c.Archive
-	if ar.BucketName == "" {
-		return nil, errors.New("auditpulumi: Archive.BucketName is required")
-	}
-	if len(ar.Profiles) == 0 {
-		for _, d := range c.destinations {
-			ar.Profiles = append(ar.Profiles, d.Name)
-		}
-	}
-	if ar.Endpoint != "" {
-		if err := c.checkExternalArchive(); err != nil {
-			return nil, err
-		}
-	} else {
-		if ar.StoreRegion != "" || ar.PathStyle || ar.CredentialsAddress != "" {
-			return nil, errors.New("auditpulumi: Archive.StoreRegion, Archive.PathStyle and Archive.CredentialsAddress are for a store at " +
-				"Archive.Endpoint; on AWS S3 the roles are the credential")
-		}
-		if err := c.checkAWSArchive(); err != nil {
-			return nil, err
-		}
+	if err := c.checkArchive(); err != nil {
+		return nil, err
 	}
 
 	in := &c.Ingest
@@ -620,6 +578,10 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		if strings.TrimSpace(w.DeploymentYAML) == "" {
 			return nil, errors.New("auditpulumi: Writer.DeploymentYAML is required: the profile configuration (or set Ingest.Disabled)")
 		}
+	}
+	if !c.Notary.Disabled && !c.hasDocument {
+		return nil, errors.New("auditpulumi: Writer.DeploymentYAML is required for the notary too, which reads the profile configuration " +
+			"(`deployment:` in its configuration): give it, or set Notary.Disabled")
 	}
 	if len(w.CataloguePaths) > 0 {
 		merged := make(map[string]string, len(w.Catalogues)+len(w.CataloguePaths))
@@ -699,7 +661,7 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 	if n.TimeoutSeconds > 900 {
 		return nil, errors.New("auditpulumi: Notary.TimeoutSeconds is at most 900")
 	}
-	if err := c.checkKeys(preset); err != nil {
+	if err := c.checkKeys(); err != nil {
 		return nil, err
 	}
 

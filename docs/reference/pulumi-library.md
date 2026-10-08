@@ -344,11 +344,12 @@ names another queue or adapter is refused: the fact is stated once.
 The installation is **operational** unless the profiles ask for more. `Profiles` maps each destination (the profile names
 sluis's catalogue puts on its actions: `security`) to the framework profiles it is composed from; the default is
 `security: [history]` (`DefaultAuditProfiles`), whose minimum is `operational`: the writer, the archive, deduplication and the queue
-intake, with no notary, seal key, alarm or Object Lock. The preset is derived from the profiles with the audit library's
-own rule (the lowest preset that satisfies every profile); `Preset` may name a stronger one and a weaker one is refused,
-naming the profile that needs more. Above operational the audit library asks for its own inputs, passed through:
+intake, with no notary, seal key, alarm or Object Lock. A profile's preset is derived with the audit
+library's own rule (the highest `min_preset` of its framework profiles, or the stronger one the profile asks for), and must
+be one of the `Presets` the installation configures, each with a store of its own. Above operational the audit library asks for its own inputs, passed through:
 `Notary`, `Keys` (the seal key), `Alerts`, `Telemetry`, `Observe`. `DeploymentYAML` is the whole deployment document for
-what `Profiles` cannot say (categories, `key_alias`, a preset per destination); it is exclusive with `Profiles`.
+what `Profiles` cannot say (categories, a preset per profile); it names the profiles and not the storage, which is `Presets`.
+It is exclusive with `Profiles`, which needs `Presets` named unless it is the default.
 
 Inputs to install, all required: `WriterPackage` and `WriterPackageSHA256` (the audit release's
 `audit-writer-lambda_<version>_linux_arm64.zip` and its digest, as for `Package`; the audit library holds it to the
@@ -358,16 +359,20 @@ so the roster catalogue and every schema it references go into the writer's conf
 (its version bumped) redeploys the writer on the next apply. An install with any of them missing is refused before anything
 is created, naming `Use` and `Enabled: false` as the other ways.
 
-**The archive** is the audit library's own and is never the blob bucket (`AuditArchiveArgs`):
+**The archive** is one store per install preset (`Presets`, `AuditPreset`) and is never the blob bucket. Unset with the
+default profiles it is the operational preset on a bucket the library creates; with `Profiles` or `DeploymentYAML`, name the
+presets they need. Each preset is one of:
 
-- An AWS S3 bucket it creates (the default), named `<name>-<account>-<region>` unless `BucketName` is set. Without an
-  archive key (`Keys.Archive`) it is encrypted with SSE-S3 (`Encryption: kms`, `s3` or `aws-managed` to choose); Object
-  Lock (`ObjectLockMode`, `AcknowledgeCompliance`, `DefaultRetentionDays`) is the attested preset's.
-- An S3-compatible store (`Endpoint`: R2) the estate made: the library creates no bucket, `BucketName` is required, the
+- An AWS S3 bucket the library creates (`Create: true`), named `<name>-<account>-<region>-<preset>` unless `Bucket` is
+  set, with an optional `Prefix` (`standard/`) the keys live under and a `KeyAlias` looked up (never created). Without an
+  archive key (`Keys.Archive`) it is encrypted with SSE-S3 (`Archive.Encryption`: `kms`, `s3` or `aws-managed` to choose);
+  Object Lock (`Archive.ObjectLockMode`, `AcknowledgeCompliance`, `DefaultRetentionDays`) is the attested preset's bucket alone.
+- An existing AWS bucket (`Create: false`): only grants.
+- An S3-compatible store (`Endpoint`: R2) the estate made: the library creates no bucket, `Bucket` is required, the
   store's credentials are read from the installation's own state store (`State.Root`, `CredentialsAddress`, default
-  `internal/archive`; written by the operator, never an input), and Object Lock is not available (so no attested preset).
-  `ReuseBlobStore` takes `Endpoint`, `StoreRegion` and `PathStyle` from `StorageArgs.Blobs` when the blobs are on that same
-  store; the bucket and the credentials stay the installation's own, and naming the blob bucket is refused.
+  `internal/archive/<preset>`; written by the operator, never an input), and Object Lock is not available (so no
+  attested preset). `ReuseBlobStore` takes `Endpoint`, `Region` and `PathStyle` from `StorageArgs.Blobs` when the blobs are
+  on that same store; the bucket and the credentials stay the installation's own, and naming the blob bucket is refused.
 
 `deploy/pulumi/go.mod` requires `github.com/truvity/sluis/audit/deploy/pulumi` (a `replace` to the module beside it, at
 `v0.0.0`, until a release pins it with the root module's require: `hack/pin-pulumi-require.sh`). A stack that installed

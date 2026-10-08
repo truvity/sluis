@@ -46,13 +46,13 @@ func TestEveryFrameworkProfileStatesAMinimum(t *testing.T) {
 }
 
 const (
-	hiveLike = `
+	endpointLike = `
 presets:
-  operational: {bucket: hive-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials: internal/audit/r2}
+  operational: {bucket: edge-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials: internal/audit/r2}
 profiles:
   history: {frameworks: [history], categories: [activity]}
 `
-	truvityLike = `
+	standardLike = `
 presets:
   standard: {bucket: example-audit, prefix: standard/, region: eu-central-1, key_alias: alias/audit-archive}
 profiles:
@@ -70,7 +70,7 @@ profiles:
 
 func TestEveryProfilesPresetMustBeConfigured(t *testing.T) {
 	fw := builtin(t)
-	for name, doc := range map[string]string{"hive": hiveLike, "truvity": truvityLike, "mixed": mixed} {
+	for name, doc := range map[string]string{"endpoint": endpointLike, "standard": standardLike, "mixed": mixed} {
 		if err := deployment(t, doc).CheckStorage(fw); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -134,8 +134,8 @@ func TestFeaturesAreWhatAnyConfiguredPresetNeeds(t *testing.T) {
 		doc  string
 		want Features
 	}{
-		"hive":    {hiveLike, Features{}},
-		"truvity": {truvityLike, Features{Notary: true, Alarms: true}},
+		"endpoint":    {endpointLike, Features{}},
+		"standard": {standardLike, Features{Notary: true, Alarms: true}},
 		"mixed":   {mixed, Features{Notary: true, Alarms: true, ObjectLock: true, PseudonymKeys: true}},
 	} {
 		if got := deployment(t, c.doc).Features(); got != c.want {

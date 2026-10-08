@@ -184,9 +184,10 @@ The chart takes references; it creates none of these.
 
 | thing | value |
 |---|---|
-| a bucket belonging to the environment: with Object Lock in compliance mode for a profile that demands it, or without a lock where none does ([0014](../../audit/docs/decisions/0014-lock-modes-and-store-tiers.md)) | `writer.config.archive.bucket`, `.lockMode` |
-| **only on an S3-compatible store that is not AWS**: its endpoint, whether its certificate covers a bucket subdomain, and the names of the variables holding static keys if it has no pod identity | `archive.bucket.endpoint`, `.pathStyle`, `.credentialsSecret` with `secretFiles` |
-| **a prefix of its own within it**, required wherever the bucket is shared: it is what keeps two applications' archives apart, and what each role's IAM is scoped to | `archive.prefix` |
+| **a bucket for each install preset the profiles use**, belonging to the environment: the attested preset's with Object Lock in compliance mode (S3 only), the others without a lock ([0014](../../audit/docs/decisions/0014-lock-modes-and-store-tiers.md), [0026](../../audit/docs/decisions/0026-storage-is-configured-per-preset.md)) | `presets.<operational\|standard\|attested>.bucket` |
+| **only on an S3-compatible store that is not AWS**: its endpoint, whether its certificate covers a bucket subdomain, and the address, below `archive.stateRoot` in the state store, of the static keys if it has no pod identity | `presets.<name>.endpoint`, `.path_style`, `.credentials`, with `archive.stateRoot` in each process's config |
+| **a prefix of its own within the bucket**, required wherever the bucket is shared: it is what keeps two applications' archives apart, and what each role's IAM is scoped to | `presets.<name>.prefix` |
+| **on AWS S3, a KMS key alias** per preset, a name and never a key id or ARN | `presets.<name>.key_alias` (or `archive.kmsKey` in the writer's and notary's config for every preset that names none) |
 | a writer role that may put objects with a legal hold on (`s3:PutObjectLegalHold`), read and lengthen their retention (`s3:GetObjectRetention`, `s3:PutObjectRetention`), and read `records/`, `catalogue/` and `holds/` | the writer's ServiceAccount annotation |
 | a reference clock the clock-synchronisation job can reach | `jobs.clockSync.config.ntp` |
 | **a database in the application's existing Postgres**, owned by a role of the migration's own and used by no part. It holds the index, its cursors and the rollups (rebuildable by following the archive again, so no backup) and the writer's dedupe table and registry | `migrate.config.database` and `passwordSecret`, with `migrate.secretFiles` |
@@ -269,6 +270,15 @@ password in a database URL, a value from before the file such as a top-level
 
 - `mode` is `direct` or `stream` and nothing else, and `profiles` is not
   empty;
+- every profile is kept under a preset `presets` configures: the one its
+  framework profiles need (or the stronger one the profile asks for with its own
+  `preset`), refused otherwise naming both, as is a profile that asks for a
+  weaker preset than its framework profiles need. Each preset needs a `bucket`;
+  `key_alias` is an alias and never an ARN; `credentials` and `path_style` need
+  an `endpoint`; and the attested preset is refused on an `endpoint`, because
+  Object Lock is S3 only. `jobs.notary.enabled` is refused when no configured
+  preset has a notary (the standard or the attested one), as is `renders: alerts`
+  when none has alarms;
 - `writer.config.replicas` is the number of writer pods the chart renders
   (`replicas` in direct mode, `writer.consumers` in stream mode), because the
   writer cannot count them itself, and more than one needs a `database` in
@@ -294,9 +304,8 @@ password in a database URL, a value from before the file such as a top-level
   without a metering profile, `extensions.quotas` without `mode: stream`.
 
 The binaries refuse the rest at start-up, naming the key: `stream.ackWait` not
-longer than `roll.interval`, a profile that demands a stricter lock than
-`archive.lockMode` (`pci-dss` composed on `lockMode: none`, refused by the
-writer), and OpenBAO configured with none or more than one way to sign in.
+longer than `roll.interval`, a bucket the attested preset names that has no
+Object Lock (the writer checks the bucket it writes to), and OpenBAO configured with none or more than one way to sign in.
 
 ## Checking it
 

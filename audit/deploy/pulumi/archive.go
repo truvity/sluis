@@ -3,40 +3,111 @@ package auditpulumi
 import (
 	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/truvity/sluis/audit/profile"
 )
 
-// checkAWSArchive holds an archive on an AWS S3 bucket the library creates to
-// what that bucket can be.
-func (c *Args) checkAWSArchive() error {
+// checkArchive holds the shared tuning of the archive (ArchiveArgs) to the
+// presets: it applies to the buckets the library creates and to the key objects
+// are encrypted with, so it is refused where no preset has anything for it to
+// apply to.
+func (c *Args) checkArchive() error {
 	ar := &c.Archive
-	switch ar.ObjectLockMode {
-	case None, Governance, Compliance:
-	default:
-		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode %q must be NONE, GOVERNANCE or COMPLIANCE", ar.ObjectLockMode)
+	created := c.created()
+	aws := c.awsStores()
+
+	// Object Lock is the attested preset's bucket alone, and only the library's
+	// own bucket is configured by it.
+	var lockedHere bool
+	for _, s := range created {
+		if s.Locked {
+			lockedHere = true
+		}
 	}
-	if ar.ObjectLockMode == Compliance && !ar.AcknowledgeCompliance {
-		return errors.New("auditpulumi: Archive.ObjectLockMode is COMPLIANCE and Archive.AcknowledgeCompliance is false: " +
-			"compliance retention cannot be shortened by anyone, including the account's root, and a retention wrong in the long " +
-			"direction is paid for until it expires. Run the governance trial first, sign off the retentions, then set " +
-			"AcknowledgeCompliance on a NEW bucket (docs/decisions/0023-archive-retention-and-lifecycle.md)")
+	if ar.ObjectLockMode != "" {
+		if err := CheckLockMode(ar.ObjectLockMode); err != nil {
+			return err
+		}
+	}
+	if !lockedHere {
+		for field, set := range map[string]bool{
+			"Archive.ObjectLockMode":        ar.ObjectLockMode != "",
+			"Archive.AcknowledgeCompliance": ar.AcknowledgeCompliance,
+			"Archive.DefaultRetentionDays":  ar.DefaultRetentionDays != 0,
+		} {
+			if set {
+				return fmt.Errorf("auditpulumi: %s is set and no preset is the attested preset with Create: Object Lock is configured for "+
+					"the attested preset's bucket the library creates (Presets[%q] with Create), and is written for no other. "+
+					"Leave it out, or create the attested bucket", field, profile.Attested)
+			}
+		}
+	} else {
+		switch ar.ObjectLockMode {
+		case "":
+			ar.ObjectLockMode = Compliance
+		case None:
+			return errors.New("auditpulumi: Archive.ObjectLockMode is NONE and Presets[\"attested\"] is a bucket the library creates: " +
+				"the attested preset is kept under Object Lock. Use GOVERNANCE for the trial of the lock, or COMPLIANCE")
+		}
+		if ar.ObjectLockMode == Compliance && !ar.AcknowledgeCompliance {
+			return errors.New("auditpulumi: the attested preset's bucket is under COMPLIANCE (Archive.ObjectLockMode) and " +
+				"Archive.AcknowledgeCompliance is false: compliance retention cannot be shortened by anyone, including the account's root, " +
+				"and a retention wrong in the long direction is paid for until it expires. Run the governance trial first, sign off the " +
+				"retentions, then set AcknowledgeCompliance on a NEW bucket (docs/decisions/0023-archive-retention-and-lifecycle.md)")
+		}
+		if ar.DefaultRetentionDays <= 0 {
+			return fmt.Errorf("auditpulumi: Archive.DefaultRetentionDays is required with Archive.ObjectLockMode %s: "+
+				"a lock with no default rule leaves an object put without its own retention unprotected (set it, as the floor)", ar.ObjectLockMode)
+		}
 	}
 	if ar.DefaultRetentionDays < 0 {
 		return errors.New("auditpulumi: Archive.DefaultRetentionDays is not negative")
 	}
-	if ar.ObjectLockMode != None && ar.DefaultRetentionDays == 0 {
-		return fmt.Errorf("auditpulumi: Archive.DefaultRetentionDays is required with Archive.ObjectLockMode %s: "+
-			"a lock with no default rule leaves an object put without its own retention unprotected (set it, as the floor)", ar.ObjectLockMode)
+
+	if len(created) == 0 {
+		for field, set := range map[string]bool{
+			"Archive.GlacierIRDays":   ar.GlacierIRDays != 0,
+			"Archive.DeepArchiveDays": ar.DeepArchiveDays != 0,
+		} {
+			if set {
+				return fmt.Errorf("auditpulumi: %s is set and no preset has Create: it is a setting of a bucket the library creates, "+
+					"and the lifecycle of any other is its owner's", field)
+			}
+		}
 	}
-	if ar.ObjectLockMode == None && ar.DefaultRetentionDays > 0 {
-		return errors.New("auditpulumi: Archive.DefaultRetentionDays needs a lock: Archive.ObjectLockMode is NONE")
+	setInt(&ar.GlacierIRDays, 30)
+	setInt(&ar.DeepArchiveDays, 365)
+	if ar.DeepArchiveDays <= ar.GlacierIRDays {
+		return fmt.Errorf("auditpulumi: Archive.DeepArchiveDays (%d) must be after GlacierIRDays (%d)", ar.DeepArchiveDays, ar.GlacierIRDays)
 	}
+
 	switch ar.Encryption {
 	case "":
-		ar.Encryption = EncryptionKMS
+		if len(aws) > 0 {
+			ar.Encryption = EncryptionKMS
+		}
 	case EncryptionKMS, EncryptionS3, EncryptionAWSManaged:
 	default:
 		return fmt.Errorf("auditpulumi: Archive.Encryption %q must be %q (the default), %q or %q",
 			ar.Encryption, EncryptionKMS, EncryptionAWSManaged, EncryptionS3)
+	}
+	if len(aws) == 0 {
+		for field, set := range map[string]bool{
+			"Archive.Encryption": ar.Encryption != "",
+			"Archive.KeyArn":     ar.KeyArn != "",
+			"Keys.Archive":       c.Keys.Archive != "",
+		} {
+			if set {
+				var at []string
+				for _, s := range c.endpointStores() {
+					at = append(at, s.Endpoint)
+				}
+				return fmt.Errorf("auditpulumi: %s is set and every preset is on a store at an endpoint (%s): it is a setting of an AWS S3 "+
+					"bucket, and such a store's encryption is its own", field, strings.Join(at, ", "))
+			}
+		}
+		return nil
 	}
 	if ar.KeyArn != "" {
 		if ar.Encryption != EncryptionKMS {
@@ -47,99 +118,33 @@ func (c *Args) checkAWSArchive() error {
 				"an alias ARN cannot be granted in IAM", ar.KeyArn)
 		}
 	}
+	for _, s := range aws {
+		if s.KeyAlias != "" && ar.Encryption != EncryptionKMS {
+			return fmt.Errorf("auditpulumi: Presets[%q].KeyAlias is set and Archive.Encryption is %q: a preset's key is a KMS key, "+
+				"so the archive's encryption must be %q", s.Preset, ar.Encryption, EncryptionKMS)
+		}
+	}
 	switch {
 	case c.Keys.Archive != "" && ar.Encryption != EncryptionKMS:
 		return fmt.Errorf("auditpulumi: Keys.Archive is only for Archive.Encryption %q, not %q: the other encryptions use no key of yours",
 			EncryptionKMS, ar.Encryption)
 	case c.Keys.Archive != "" && ar.KeyArn != "":
 		return errors.New("auditpulumi: Keys.Archive and Archive.KeyArn both name the archive key: use Keys.Archive (by alias)")
-	case c.Keys.Archive == "" && ar.KeyArn == "" && ar.Encryption == EncryptionKMS:
-		return errors.New("auditpulumi: Keys.Archive is required with Archive.Encryption \"kms\": the library creates no key, so name the " +
-			"estate's archive key by alias (alias/<name>), or choose Archive.Encryption \"aws-managed\" or \"s3\"")
 	}
-	for _, d := range c.destinations {
-		if d.KeyAlias != "" {
-			if err := checkAlias("destination "+d.Name+" key_alias", d.KeyAlias); err != nil {
-				return err
+	if ar.Encryption == EncryptionKMS && c.Keys.Archive == "" && ar.KeyArn == "" {
+		for _, s := range created {
+			if s.KeyAlias == "" {
+				return fmt.Errorf("auditpulumi: Keys.Archive is required with Archive.Encryption \"kms\" for the bucket of Presets[%q], which names "+
+					"no KeyAlias: the library creates no key, so name the estate's archive key by alias (alias/<name>), give the preset a KeyAlias, "+
+					"or choose Archive.Encryption \"aws-managed\" or \"s3\"", s.Preset)
 			}
 		}
 	}
-	if len(ar.Profiles) == 0 {
-		return errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix " +
-			"(or give Writer.DeploymentYAML, whose profiles they are)")
-	}
-	if err := checkArchiveProfiles(ar.Profiles); err != nil {
-		return err
-	}
-	setInt(&ar.GlacierIRDays, 30)
-	setInt(&ar.DeepArchiveDays, 365)
-	if ar.DeepArchiveDays <= ar.GlacierIRDays {
-		return fmt.Errorf("auditpulumi: Archive.DeepArchiveDays (%d) must be after GlacierIRDays (%d)", ar.DeepArchiveDays, ar.GlacierIRDays)
-	}
 	return nil
 }
 
-func checkArchiveProfiles(profiles []string) error {
-	seen := map[string]bool{}
-	for _, p := range profiles {
-		if err := CheckProfile(p); err != nil {
-			return err
-		}
-		if seen[p] {
-			return fmt.Errorf("auditpulumi: Archive.Profiles names %q twice", p)
-		}
-		seen[p] = true
-	}
-	return nil
-}
-
-// external reports whether the archive is on an S3-compatible store.
-func (c *Args) external() bool { return c.Archive.Endpoint != "" }
-
-// checkExternalArchive holds an archive on an S3-compatible store to what such
-// a store gives: the bucket, its lifecycle, its encryption and its lock are the
-// store's, not the library's.
-func (c *Args) checkExternalArchive() error {
-	ar := &c.Archive
-	if err := checkEndpoint(ar.Endpoint); err != nil {
-		return err
-	}
-	// The preset has already refused a lock (applyPreset); this holds what it
-	// leaves: settings of an AWS bucket.
-	for field, set := range map[string]bool{
-		"Archive.Encryption":            ar.Encryption != "",
-		"Archive.KeyArn":                ar.KeyArn != "",
-		"Keys.Archive":                  c.Keys.Archive != "",
-		"Archive.DefaultRetentionDays":  ar.DefaultRetentionDays != 0,
-		"Archive.AcknowledgeCompliance": ar.AcknowledgeCompliance,
-		"Archive.GlacierIRDays":         ar.GlacierIRDays != 0,
-		"Archive.DeepArchiveDays":       ar.DeepArchiveDays != 0,
-	} {
-		if set {
-			return fmt.Errorf("auditpulumi: %s is set with Archive.Endpoint: it is a setting of an AWS S3 bucket, and this archive is on "+
-				"the store at %s, whose encryption, lifecycle and lock are its own", field, ar.Endpoint)
-		}
-	}
-	for _, d := range c.destinations {
-		if d.KeyAlias != "" {
-			return fmt.Errorf("auditpulumi: destination %s names key_alias %s and the archive is on the store at %s: a store at an endpoint "+
-				"is not encrypted under a KMS key of the account (the same reason Keys.Archive is refused). Leave key_alias out of the "+
-				"deployment document, or keep the archive on AWS S3", d.Name, d.KeyAlias, ar.Endpoint)
-		}
-	}
-	if c.Observe != nil || c.Query != nil || c.ArchiveWriter != nil {
-		return errors.New("auditpulumi: Observe, Query and ArchiveWriter are IAM roles over an AWS S3 bucket, and the archive is on " +
-			"a store at Archive.Endpoint: those workloads read it with the credentials in the state store, not with a role")
-	}
-	if ar.StoreRegion == "" {
-		ar.StoreRegion = "auto"
-	}
-	if ar.CredentialsAddress == "" {
-		ar.CredentialsAddress = defaultCredentialsAddress
-	}
-	if !addressRE.MatchString(ar.CredentialsAddress) {
-		return fmt.Errorf("auditpulumi: Archive.CredentialsAddress %q must be below internal/ (internal/archive): the library's own "+
-			"parameters are there, and the grant is on that address only", ar.CredentialsAddress)
-	}
-	return checkArchiveProfiles(ar.Profiles)
+// defaultKey reports whether a default archive key is in use: Keys.Archive or
+// Archive.KeyArn with Encryption "kms".
+func (c *Args) defaultKey() bool {
+	return c.Archive.Encryption == EncryptionKMS && (c.Keys.Archive != "" || c.Archive.KeyArn != "")
 }

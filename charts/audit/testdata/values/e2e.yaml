@@ -23,6 +23,13 @@ mode: stream
 # shape audit/docs/decisions/0013 describes.
 externalIdentifiersAreOpaque: true
 
+presets:
+  standard:
+    bucket: audit-e2e-archive
+    region: us-east-1
+    endpoint: http://s3.object-store.svc:4566
+    path_style: true
+    credentials: audit-e2e/s3
 profiles:
   security:
     frameworks: [security]
@@ -32,7 +39,7 @@ profiles:
 # index. The tables' OWNER is the migration's, and nothing else connects as it.
 x-database: &database
   url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=require
-  passwordEnv: AUDIT_DATABASE_PASSWORD
+  passwordSecret: AUDIT_DATABASE_PASSWORD
 x-database-secret: &database-secret
   - name: AUDIT_DATABASE_PASSWORD
     secretName: audit-e2e-database
@@ -54,12 +61,9 @@ x-bucket: &bucket
   region: us-east-1
   endpoint: http://s3.object-store.svc:4566
   pathStyle: true
-  credentialsEnv:
+  credentialsSecret:
     accessKeyID: AUDIT_S3_ACCESS_KEY_ID
     secretAccessKey: AUDIT_S3_SECRET_ACCESS_KEY
-x-archive: &archive
-  bucket: *bucket
-  lockMode: none
 x-archive-secret: &archive-secret
   - name: AUDIT_S3_ACCESS_KEY_ID
     secretName: audit-e2e-s3-credentials
@@ -70,6 +74,7 @@ x-archive-secret: &archive-secret
 
 receiver:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     mode: receiver
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
@@ -80,10 +85,10 @@ receiver:
 writer:
   consumers: 3
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     replicas: 3
-    archive: *archive
     database: *database
     stream: *stream
   secretEnv:
@@ -100,9 +105,10 @@ writer:
 migrate:
   enabled: true
   config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
       url: postgres://audit_e2e_owner@postgres.postgres.svc:5432/audit_e2e?sslmode=require
-      passwordEnv: AUDIT_DATABASE_PASSWORD
+      passwordSecret: AUDIT_DATABASE_PASSWORD
     # What the migration grants each part's role: the writer the deduplication
     # table and the registry, the indexer the index, the query service a read.
     writer: audit_e2e_writer
@@ -119,11 +125,11 @@ migrate:
 observe:
   enabled: true
   config:
-    archive:
-      bucket: *bucket
+    apiVersion: audit.truvity.github.io/audit-observe/v2
+    deployment: /etc/audit/deployment.yaml
     database:
       url: postgres://audit_e2e_observe@postgres.postgres.svc:5432/audit_e2e?sslmode=require
-      passwordEnv: AUDIT_OBSERVE_DATABASE_PASSWORD
+      passwordSecret: AUDIT_OBSERVE_DATABASE_PASSWORD
     settle: 10s
     interval: 5s
   secretEnv:
@@ -143,9 +149,8 @@ query:
 jobs:
   verify:
     config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
       deployment: /etc/audit/deployment.yaml
-      archive:
-        bucket: *bucket
       sink:
         url: http://audit-e2e:8080
     secretEnv: *archive-secret

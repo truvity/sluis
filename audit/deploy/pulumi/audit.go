@@ -12,7 +12,9 @@
 // not in the root module's dependency graph.
 //
 //	a, err := auditpulumi.New(ctx, "audit", &auditpulumi.Args{
-//		Archive: auditpulumi.ArchiveArgs{BucketName: "acme-audit", Profiles: []string{"security"}},
+//		Presets: map[string]auditpulumi.PresetStorage{
+//			"standard": {Bucket: "acme-audit-standard", Prefix: "standard/", Create: true},
+//		},
 //		Writer:  auditpulumi.WriterArgs{Package: writerZip, PackageSHA256: writerSHA, DeploymentYAML: deployment},
 //		Notary:  auditpulumi.NotaryArgs{Package: notaryZip, PackageSHA256: notarySHA},
 //	})
@@ -24,7 +26,6 @@ package auditpulumi
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -37,6 +38,8 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sns"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sqs"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/truvity/sluis/audit/profile"
 )
 
 // ComponentType is the Pulumi type token of the component.
@@ -46,10 +49,11 @@ const ComponentType = "truvity:audit:Audit"
 type Audit struct {
 	pulumi.ResourceState
 
-	// BucketName and BucketArn are the archive bucket. On an S3-compatible store
-	// (Archive.Endpoint) BucketArn is empty: the bucket is the store's.
-	BucketName pulumi.StringOutput
-	BucketArn  pulumi.StringOutput
+	// BucketNames are the preset's buckets by preset name, every configured
+	// preset's. BucketArns are the AWS presets' (a preset at an endpoint has none:
+	// the bucket is the store's).
+	BucketNames pulumi.StringMapOutput
+	BucketArns  pulumi.StringMapOutput
 	// ArchiveKeyArn is the symmetric key objects are encrypted with; SealKeyArn
 	// is the P-384 key seals are signed with, and SealKeyAlias its alias, which
 	// is what the notary's configuration names. Both are the estate's keys
@@ -81,19 +85,21 @@ type Audit struct {
 	ArchiveWriterRoleArn pulumi.StringOutput
 	// QueryRoleArn is the Pod Identity role of audit-query, empty without Args.Query.
 	QueryRoleArn pulumi.StringOutput
-	// ArchiveCredentialsPath is the SSM parameter the functions read the
-	// S3-compatible store's credentials from: write a SecureString there, a JSON
-	// object {"accessKeyID": ..., "secretAccessKey": ...}, before the first record
-	// (docs/how-to/archive-on-r2.md). Empty on AWS S3, where the roles are the
-	// credential.
-	ArchiveCredentialsPath pulumi.StringOutput
+	// ArchiveCredentialsPaths are the SSM parameters the functions read the
+	// credentials of each preset at an endpoint from, by preset name: write a
+	// SecureString there, a JSON object {"accessKeyID": ..., "secretAccessKey": ...},
+	// before the first record (docs/how-to/archive-on-r2.md). A preset on AWS S3
+	// has none: the roles are the credential.
+	ArchiveCredentialsPaths pulumi.StringMapOutput
 	// SecretsRoot is the SSM parameter path the writer reads the secrets its
 	// configuration names from: create the SecureStrings under it. Empty when the
 	// configuration names none (see WriterArgs.Secrets).
 	SecretsRoot pulumi.StringOutput
-	// Preset is the install preset the installation runs: the one derived from its
-	// profiles, or the stronger one it asked for.
-	Preset pulumi.StringOutput
+	// Presets are the install presets the installation configures, weakest first.
+	Presets pulumi.StringArrayOutput
+	// DeploymentYAML is the deployment document the functions read: the profiles
+	// of Writer.DeploymentYAML and the presets built from Args.Presets.
+	DeploymentYAML pulumi.StringOutput
 	// AlarmTopicArn is the SNS topic every alarm publishes to.
 	AlarmTopicArn pulumi.StringOutput
 	// ScheduleArn is the notary's schedule.
@@ -115,7 +121,6 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	child := pulumi.Parent(out)
 	tags := pulumi.ToStringMap(a.Tags)
 	ingest, notary := !a.Ingest.Disabled, !a.Notary.Disabled
-	external := a.external()
 	// The library creates no key. The estate's keys are looked up by alias, as
 	// invokes made through the component's own provider, and their ARNs are what
 	// the policies name.
@@ -126,7 +131,8 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	// What the installation keeps in its state store: the archive's credentials on
 	// an S3-compatible store (read by every function that opens the archive), and
 	// the per-tenant secrets behind pseudonyms (the writer's, which creates them).
-	needState := (external && (ingest || notary)) || (a.Keys.Pseudonym != "" && ingest)
+	endpoints := a.endpointStores()
+	needState := (len(endpoints) > 0 && (ingest || notary)) || (a.Keys.Pseudonym != "" && ingest)
 
 	// The account is looked up through the component's own provider: the invoke
 	// has the component as its parent, so it resolves the provider the caller
@@ -165,21 +171,22 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 			}
 			region = r.Region
 		}
-		credentials := a.State.Root + "/" + a.Archive.CredentialsAddress
+		var credentials []string
+		for _, e := range endpoints {
+			credentials = append(credentials, e.credentialsPath(a.State.Root))
+		}
 		base := stateGrant{Region: region, Account: accountID, KeyArn: a.State.KeyArn}
 		if ingest {
 			g := base
-			if external {
-				g.Read = append(g.Read, credentials)
-			}
+			g.Read = append(g.Read, credentials...)
 			if a.Keys.Pseudonym != "" {
 				g.Write = append(g.Write, a.State.Root+"/"+pseudonymStateAddress+"/*")
 			}
 			writerState = &g
 		}
-		if notary && external {
+		if notary && len(credentials) > 0 {
 			g := base
-			g.Read = append(g.Read, credentials)
+			g.Read = append(g.Read, credentials...)
 			notaryState = &g
 		}
 	}
@@ -232,65 +239,68 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 	}
 
-	// ---- the archive's key and the seal key are the estate's, looked up by alias
-	// A destination that names a key alias is encrypted under the key behind it. The
+	// ---- the archive's keys and the seal key are the estate's, looked up by alias
+	// A preset that names a key alias is encrypted under the key behind it. The
 	// library creates no key for it (ADR 0041): the alias is the estate's, and it is
 	// resolved with the same lookup as Keys (lookupAlias), so that the roles are
-	// granted the key it points at. With Archive.Endpoint a destination names none
-	// (the store has no KMS to encrypt under: refused by withDefaults).
-	destKeys := map[string]string{}
-	for _, d := range a.destinations {
-		if d.KeyAlias == "" {
+	// granted the key it points at. A preset at an endpoint names none (the store
+	// has no KMS to encrypt under: refused by withDefaults).
+	presetKeys := map[profile.Preset]string{}
+	for _, st := range a.awsStores() {
+		if st.KeyAlias == "" {
 			continue
 		}
-		arn, err := lookupAlias(ctx, "destination "+d.Name+" key_alias", d.KeyAlias, child)
+		arn, err := lookupAlias(ctx, "Presets["+string(st.Preset)+"].KeyAlias", st.KeyAlias, child)
 		if err != nil {
 			return nil, err
 		}
-		destKeys[d.Name] = arn
+		presetKeys[st.Preset] = arn
 	}
-	// archiveKeyArn is the key's ARN (Keys.Archive's, or Archive.KeyArn), or the
-	// empty string with SSE-S3, with the AWS-managed key and on an S3-compatible
-	// store, which is what every policy builder reads as "no key": none needs an
-	// IAM grant.
-	archiveKeyArn := pulumi.String("").ToStringOutput()
+	// defaultKeyArn is the archive key (Keys.Archive's, or Archive.KeyArn), or the
+	// empty string with SSE-S3, with the AWS-managed key and for every preset at an
+	// endpoint: none needs an IAM grant.
+	defaultKeyArn := ""
 	switch {
+	case a.Archive.Encryption != EncryptionKMS:
 	case keyArns.Archive != "":
-		archiveKeyArn = pulumi.String(keyArns.Archive).ToStringOutput()
+		defaultKeyArn = keyArns.Archive
 	case a.Archive.KeyArn != "":
-		archiveKeyArn = pulumi.String(a.Archive.KeyArn).ToStringOutput()
+		defaultKeyArn = a.Archive.KeyArn
 	}
-
-	// grantKeys is every key the archive's objects are under, comma-joined for the
-	// policy builders (an ARN has no comma): the archive key, and the keys behind
-	// the destinations' aliases, marked so their grants carry the encryption
-	// context the storage KMS backend uses (see destGrant).
-	grantKeys := archiveKeyArn
-	if len(destKeys) > 0 {
-		var granted []string
-		for _, d := range a.destinations {
-			if arn, ok := destKeys[d.Name]; ok {
-				granted = append(granted, destGrant(a.instance(name), arn))
-			}
+	// grantKeys is every key the archive's objects are under: the archive key where
+	// an AWS preset names none of its own, and the keys behind the presets' aliases.
+	var grantKeys []string
+	for _, st := range a.awsStores() {
+		if arn, ok := presetKeys[st.Preset]; ok {
+			grantKeys = append(grantKeys, arn)
+		} else if defaultKeyArn != "" {
+			grantKeys = append(grantKeys, defaultKeyArn)
 		}
-		grantKeys = archiveKeyArn.ApplyT(func(arn string) string {
-			if arn == "" {
-				return strings.Join(granted, ",")
-			}
-			return strings.Join(append([]string{arn}, granted...), ",")
-		}).(pulumi.StringOutput)
 	}
+	grantKeys = dedupe(grantKeys)
 
-	// ---- the archive
-	bucketName := pulumi.String(a.Archive.BucketName).ToStringOutput()
-	bucketArn := pulumi.String("").ToStringOutput()
-	var bucket *s3.Bucket
-	if !external {
-		bucket, err = newArchive(ctx, name, a, archiveKeyArn, tags, child)
-		if err != nil {
-			return nil, err
+	// ---- the archive: a bucket for each preset the library creates
+	var refs []bucketRef
+	bucketNames, bucketArns := pulumi.StringMap{}, pulumi.StringMap{}
+	for _, st := range a.stores {
+		bucketNames[string(st.Preset)] = pulumi.String(st.Bucket)
+		if st.external() {
+			continue
 		}
-		bucketName, bucketArn = bucket.Bucket, bucket.Arn
+		var arn pulumi.StringInput = pulumi.String(bucketARN(st.Bucket))
+		if st.Create {
+			key := presetKeys[st.Preset]
+			if key == "" {
+				key = defaultKeyArn
+			}
+			bucket, err := newArchive(ctx, name, a, st, pulumi.String(key).ToStringOutput(), tags, child)
+			if err != nil {
+				return nil, err
+			}
+			arn = bucket.Arn
+		}
+		bucketArns[string(st.Preset)] = arn
+		refs = append(refs, bucketRef{Arn: arn, Prefix: st.Prefix, Locked: st.Locked})
 	}
 
 	// ---- the queue, its dead-letter queue and the deduplication table
@@ -315,7 +325,6 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 	}
 
-	locked := a.Archive.ObjectLockMode != None
 	audience := ""
 	if a.Telemetry != nil {
 		audience = a.Telemetry.STSAudience
@@ -337,10 +346,10 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		writerLogsGroup = writerLogs
 		if _, err := iam.NewRolePolicy(ctx, name+"-writer", &iam.RolePolicyArgs{
 			Role: writerRole.Name,
-			Policy: pulumi.All(bucketArn, grantKeys, table.Arn, queue.Arn, writerLogs.Arn).ApplyT(func(v []any) string {
-				return writerPolicy(v[0].(string), v[1].(string), v[2].(string), v[3].(string), v[4].(string), audience, locked, grant,
+			Policy: applyPolicy(refs, []any{table.Arn, queue.Arn, writerLogs.Arn}, func(b []bucketGrant, v []any) string {
+				return writerPolicy(b, grantKeys, v[0].(string), v[1].(string), v[2].(string), audience, grant,
 					append(writerKeyStatements(keyArns, a.instance(name)), writerState.statements()...))
-			}).(pulumi.StringOutput),
+			}),
 		}, child); err != nil {
 			return nil, err
 		}
@@ -373,9 +382,9 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 		if _, err := iam.NewRolePolicy(ctx, name+"-notary", &iam.RolePolicyArgs{
 			Role: notaryRole.Name,
-			Policy: pulumi.All(bucketArn, grantKeys, notaryLogs.Arn).ApplyT(func(v []any) string {
-				return notaryPolicy(v[0].(string), v[1].(string), keyArns.Seal, v[2].(string), audience, locked, notaryState.statements())
-			}).(pulumi.StringOutput),
+			Policy: applyPolicy(refs, []any{notaryLogs.Arn}, func(b []bucketGrant, v []any) string {
+				return notaryPolicy(b, grantKeys, keyArns.Seal, v[0].(string), audience, notaryState.statements())
+			}),
 		}, child); err != nil {
 			return nil, err
 		}
@@ -388,7 +397,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	// The operational preset has none: nobody is paged for an installation that
 	// asked for no more than the write path.
 	var topic *sns.Topic
-	if a.features().Alarms {
+	if a.features.Alarms {
 		topic, err = newAlarms(ctx, name, a, alarmTargets{
 			Queue: queue, Dlq: dlq, Writer: writerFn, Notary: notaryFn, WriterLogs: writerLogsGroup,
 		}, tags, child)
@@ -401,7 +410,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	empty := pulumi.String("").ToStringOutput()
 	observeArn, archiveWriterArn := empty, empty
 	if a.Observe != nil {
-		role, err := newObserveReader(ctx, name, a, bucket, grantKeys, tags, child)
+		role, err := newObserveReader(ctx, name, a, refs, grantKeys, tags, child)
 		if err != nil {
 			return nil, err
 		}
@@ -413,14 +422,14 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		if ingest {
 			qa = queue.Arn
 		}
-		role, err := newQuery(ctx, name, a, bucket, grantKeys, qa, tags, child)
+		role, err := newQuery(ctx, name, a, refs, grantKeys, qa, tags, child)
 		if err != nil {
 			return nil, err
 		}
 		queryArn = role.Arn
 	}
 	if a.ArchiveWriter != nil {
-		role, err := newArchiveWriter(ctx, name, a, bucket, grantKeys, tags, child)
+		role, err := newArchiveWriter(ctx, name, a, refs, grantKeys, tags, child)
 		if err != nil {
 			return nil, err
 		}
@@ -434,14 +443,17 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 		return o()
 	}
-	out.BucketName, out.BucketArn = bucketName, bucketArn
-	out.ArchiveKeyArn = archiveKeyArn
+	out.BucketNames, out.BucketArns = bucketNames.ToStringMapOutput(), bucketArns.ToStringMapOutput()
+	out.ArchiveKeyArn = pulumi.String(defaultKeyArn).ToStringOutput()
 	out.SealKeyArn = pick(notary, func() pulumi.StringOutput { return pulumi.String(keyArns.Seal).ToStringOutput() })
 	out.SealKeyAlias = pick(notary, func() pulumi.StringOutput { return pulumi.String(a.Keys.Seal).ToStringOutput() })
-	out.ArchiveCredentialsPath = pulumi.String("").ToStringOutput()
-	if external && (ingest || notary) {
-		out.ArchiveCredentialsPath = pulumi.String(a.State.Root + "/" + a.Archive.CredentialsAddress).ToStringOutput()
+	credentialsPaths := pulumi.StringMap{}
+	if ingest || notary {
+		for _, e := range endpoints {
+			credentialsPaths[string(e.Preset)] = pulumi.String(e.credentialsPath(a.State.Root))
+		}
 	}
+	out.ArchiveCredentialsPaths = credentialsPaths.ToStringMapOutput()
 	out.QueueURL = pick(ingest, func() pulumi.StringOutput { return queue.Url })
 	out.QueueArn = pick(ingest, func() pulumi.StringOutput { return queue.Arn })
 	out.DlqURL = pick(ingest, func() pulumi.StringOutput { return dlq.Url })
@@ -456,19 +468,24 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	if grant != nil {
 		out.SecretsRoot = pulumi.String(grant.Root).ToStringOutput()
 	}
-	out.Preset = pulumi.String(a.Preset).ToStringOutput()
+	presetNames := pulumi.StringArray{}
+	for _, st := range a.stores {
+		presetNames = append(presetNames, pulumi.String(st.Preset))
+	}
+	out.Presets = presetNames.ToStringArrayOutput()
+	out.DeploymentYAML = pulumi.String(a.deploymentYAML).ToStringOutput()
 	out.AlarmTopicArn = pick(topic != nil, func() pulumi.StringOutput { return topic.Arn })
 	out.ScheduleArn = pick(notary, func() pulumi.StringOutput { return schedule.Arn })
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
-		"bucketName": out.BucketName, "bucketArn": out.BucketArn,
+		"bucketNames": out.BucketNames, "bucketArns": out.BucketArns,
 		"archiveKeyArn": out.ArchiveKeyArn, "sealKeyArn": out.SealKeyArn, "sealKeyAlias": out.SealKeyAlias,
 		"queueUrl": out.QueueURL, "queueArn": out.QueueArn, "dlqUrl": out.DlqURL, "dlqArn": out.DlqArn,
 		"dedupeTableName":   out.DedupeTableName,
 		"writerFunctionArn": out.WriterFunctionArn, "notaryFunctionArn": out.NotaryFunctionArn,
 		"writerRoleArn": out.WriterRoleArn, "notaryRoleArn": out.NotaryRoleArn, "observeReaderRoleArn": out.ObserveReaderRoleArn,
 		"archiveWriterRoleArn": out.ArchiveWriterRoleArn, "queryRoleArn": out.QueryRoleArn,
-		"secretsRoot": out.SecretsRoot, "archiveCredentialsPath": out.ArchiveCredentialsPath,
-		"preset": out.Preset, "alarmTopicArn": out.AlarmTopicArn, "scheduleArn": out.ScheduleArn,
+		"secretsRoot": out.SecretsRoot, "archiveCredentialsPaths": out.ArchiveCredentialsPaths,
+		"presets": out.Presets, "deploymentYaml": out.DeploymentYAML, "alarmTopicArn": out.AlarmTopicArn, "scheduleArn": out.ScheduleArn,
 	}); err != nil {
 		return nil, err
 	}
@@ -481,26 +498,58 @@ func newRole(ctx *pulumi.Context, name, path, assume string, tags pulumi.StringM
 	}, opts...)
 }
 
-// newArchive is the bucket: versioned in every mode, with Object Lock in the
-// given mode unless it is NONE, encrypted under the archive key, closed to the
-// public and to plain HTTP, with the lifecycle of ADR 0023 written per profile
-// prefix.
+// bucketRef is an AWS preset's bucket as the roles are granted it. The ARN is
+// the created bucket's, or, for an existing bucket, built from its name.
+type bucketRef struct {
+	Arn    pulumi.StringInput
+	Prefix string
+	Locked bool
+}
+
+// bucketARN is the ARN of an existing bucket.
+func bucketARN(bucket string) string { return "arn:" + "aws:s3:::" + bucket }
+
+// applyPolicy builds a policy from the buckets' ARNs, which exist only once the
+// buckets do, and the other outputs it names.
+func applyPolicy(refs []bucketRef, others []any, build func([]bucketGrant, []any) string) pulumi.StringOutput {
+	all := make([]any, 0, len(refs)+len(others))
+	for _, r := range refs {
+		all = append(all, r.Arn)
+	}
+	all = append(all, others...)
+	return pulumi.All(all...).ApplyT(func(v []any) string {
+		b := make([]bucketGrant, len(refs))
+		for i, r := range refs {
+			b[i] = bucketGrant{Arn: v[i].(string), Prefix: r.Prefix, Locked: r.Locked}
+		}
+		return build(b, v[len(refs):])
+	}).(pulumi.StringOutput)
+}
+
+// resourceName is the name of a preset's bucket resource and its parts.
+func archiveResource(name string, st presetStore) string {
+	return name + "-archive-" + string(st.Preset)
+}
+
+// newArchive is a preset's bucket: versioned in every case, with Object Lock for
+// the attested preset (in the mode ArchiveArgs says), encrypted under the
+// preset's key or the archive key, closed to the public and to plain HTTP, with
+// the lifecycle of ADR 0023 written per profile prefix.
 //
 // The bucket's own `objectLockEnabled` is never set: it is ForceNew, so a bucket
 // created with it off could only get the lock by being replaced. Object Lock is
-// a separate resource instead, which S3 accepts on an existing versioned bucket,
-// so moving NONE -> GOVERNANCE adds that resource and touches nothing else.
-func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringOutput, tags pulumi.StringMap,
+// a separate resource instead, which S3 accepts on an existing versioned bucket.
+func newArchive(ctx *pulumi.Context, name string, a *Args, st presetStore, keyArn pulumi.StringOutput, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*s3.Bucket, error) {
 	ar := a.Archive
-	// The bucket is protected from a stack's own destroy in every mode, NONE
-	// included: Pulumi refuses to delete it until the protection is lifted by
-	// hand, which is a decision and not an accident. It is cheap insurance for a
-	// trial bucket and the only thing between a COMPLIANCE bucket and a destroy
+	res := archiveResource(name, st)
+	// The bucket is protected from a stack's own destroy: Pulumi refuses to delete
+	// it until the protection is lifted by hand, which is a decision and not an
+	// accident. It is the only thing between a COMPLIANCE bucket and a destroy
 	// that S3 would refuse later anyway.
 	bopts := append([]pulumi.ResourceOption{pulumi.Protect(true)}, opts...)
-	bucket, err := s3.NewBucket(ctx, name+"-archive", &s3.BucketArgs{
-		Bucket: pulumi.String(ar.BucketName),
+	bucket, err := s3.NewBucket(ctx, res, &s3.BucketArgs{
+		Bucket: pulumi.String(st.Bucket),
 		// A bucket with objects in it cannot be emptied by a destroy; never offer to.
 		ForceDestroy: pulumi.Bool(false),
 		Tags:         tags,
@@ -508,14 +557,14 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 	if err != nil {
 		return nil, err
 	}
-	versioning, err := s3.NewBucketVersioning(ctx, name+"-archive", &s3.BucketVersioningArgs{
+	versioning, err := s3.NewBucketVersioning(ctx, res, &s3.BucketVersioningArgs{
 		Bucket:                  bucket.ID(),
 		VersioningConfiguration: &s3.BucketVersioningVersioningConfigurationArgs{Status: pulumi.String("Enabled")},
 	}, opts...)
 	if err != nil {
 		return nil, err
 	}
-	if ar.ObjectLockMode != None {
+	if st.Locked {
 		lock := &s3.BucketObjectLockConfigurationArgs{
 			Bucket: bucket.ID(), ObjectLockEnabled: pulumi.String("Enabled"),
 		}
@@ -526,12 +575,12 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 				},
 			}
 		}
-		if _, err := s3.NewBucketObjectLockConfiguration(ctx, name+"-archive", lock,
+		if _, err := s3.NewBucketObjectLockConfiguration(ctx, res, lock,
 			append([]pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{versioning})}, opts...)...); err != nil {
 			return nil, err
 		}
 	}
-	// SSE-KMS under the archive key (created, or Archive.KeyArn), SSE-KMS under
+	// SSE-KMS under the preset's key or the archive key (Keys.Archive, or Archive.KeyArn), SSE-KMS under
 	// the AWS-managed key aws/s3 (no KmsMasterKeyId: S3 uses it), or SSE-S3
 	// (Archive.Encryption "s3"): then there is no key, and a bucket key has
 	// nothing to amortise.
@@ -554,13 +603,13 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 			BucketKeyEnabled: pulumi.Bool(true),
 		}
 	}
-	if _, err := s3.NewBucketServerSideEncryptionConfiguration(ctx, name+"-archive", &s3.BucketServerSideEncryptionConfigurationArgs{
+	if _, err := s3.NewBucketServerSideEncryptionConfiguration(ctx, res, &s3.BucketServerSideEncryptionConfigurationArgs{
 		Bucket: bucket.ID(),
 		Rules:  s3.BucketServerSideEncryptionConfigurationRuleArray{sse},
 	}, opts...); err != nil {
 		return nil, err
 	}
-	if _, err := s3.NewBucketPublicAccessBlock(ctx, name+"-archive", &s3.BucketPublicAccessBlockArgs{
+	if _, err := s3.NewBucketPublicAccessBlock(ctx, res, &s3.BucketPublicAccessBlockArgs{
 		Bucket:                bucket.ID(),
 		BlockPublicAcls:       pulumi.Bool(true),
 		BlockPublicPolicy:     pulumi.Bool(true),
@@ -569,13 +618,13 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 	}, opts...); err != nil {
 		return nil, err
 	}
-	if _, err := s3.NewBucketOwnershipControls(ctx, name+"-archive", &s3.BucketOwnershipControlsArgs{
+	if _, err := s3.NewBucketOwnershipControls(ctx, res, &s3.BucketOwnershipControlsArgs{
 		Bucket: bucket.ID(),
 		Rule:   &s3.BucketOwnershipControlsRuleArgs{ObjectOwnership: pulumi.String("BucketOwnerEnforced")},
 	}, opts...); err != nil {
 		return nil, err
 	}
-	if _, err := s3.NewBucketPolicy(ctx, name+"-archive", &s3.BucketPolicyArgs{
+	if _, err := s3.NewBucketPolicy(ctx, res, &s3.BucketPolicyArgs{
 		Bucket: bucket.ID(),
 		Policy: bucket.Arn.ApplyT(func(arn string) string {
 			return policyJSON(statement{
@@ -591,23 +640,20 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 	// ADR 0023: Glacier Instant Retrieval after GlacierIRDays, which observe's
 	// reindex and `audit verify` read without a restore; Deep Archive after
 	// DeepArchiveDays, for what nobody expects to read before its retention ends.
-	// A rule per profile, because the profile is the first component of the key
-	// so that lifecycle can differ by it. Objects below the storage class's
+	// A rule per profile of the preset, because the profile is the first component
+	// of the key (below the preset's prefix) so that lifecycle can differ by it. Objects below the storage class's
 	// minimum billable size stay where they are (the S3 default).
 	rules := s3.BucketLifecycleConfigurationRuleArray{}
-	retention := map[string]int{}
-	for _, d := range a.destinations {
-		retention[d.Name] = d.RetentionDays
-	}
-	for _, p := range ar.Profiles {
+	for _, lp := range st.Profiles {
+		p := lp.Name
 		rule := &s3.BucketLifecycleConfigurationRuleArgs{
 			Id:     pulumi.String("records-" + p),
 			Status: pulumi.String("Enabled"),
-			Filter: &s3.BucketLifecycleConfigurationRuleFilterArgs{Prefix: pulumi.String("records/" + p + "/")},
+			Filter: &s3.BucketLifecycleConfigurationRuleFilterArgs{Prefix: pulumi.String(st.key("records/" + p + "/"))},
 		}
-		// A transition must come before the expiration the destination's
-		// retention sets; one that would not is left out.
-		days := retention[p]
+		// A transition must come before the expiration the profile's retention
+		// sets; one that would not is left out.
+		days := lp.RetentionDays
 		transitions := s3.BucketLifecycleConfigurationRuleTransitionArray{}
 		for _, t := range []struct {
 			after int
@@ -631,12 +677,12 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 	rules = append(rules, &s3.BucketLifecycleConfigurationRuleArgs{
 		Id:     pulumi.String("abort-incomplete-multipart-uploads"),
 		Status: pulumi.String("Enabled"),
-		Filter: &s3.BucketLifecycleConfigurationRuleFilterArgs{Prefix: pulumi.String("")},
+		Filter: &s3.BucketLifecycleConfigurationRuleFilterArgs{Prefix: pulumi.String(st.Prefix)},
 		AbortIncompleteMultipartUpload: &s3.BucketLifecycleConfigurationRuleAbortIncompleteMultipartUploadArgs{
 			DaysAfterInitiation: pulumi.Int(7),
 		},
 	})
-	if _, err := s3.NewBucketLifecycleConfiguration(ctx, name+"-archive", &s3.BucketLifecycleConfigurationArgs{
+	if _, err := s3.NewBucketLifecycleConfiguration(ctx, res, &s3.BucketLifecycleConfigurationArgs{
 		Bucket: bucket.ID(), Rules: rules,
 	}, append([]pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{versioning})}, opts...)...); err != nil {
 		return nil, err
@@ -822,7 +868,7 @@ func writerFiles(name string, a *Args) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	files := map[string]string{configFile: string(cfg), deploymentFile: a.Writer.DeploymentYAML}
+	files := map[string]string{configFile: string(cfg), deploymentFile: a.deploymentYAML}
 	catalogues, err := catalogueLayerFiles(&a.Writer)
 	if err != nil {
 		return nil, err
@@ -838,7 +884,7 @@ func notaryFiles(name string, a *Args) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]string{configFile: string(cfg)}, nil
+	return map[string]string{configFile: string(cfg), deploymentFile: a.deploymentYAML}, nil
 }
 
 // newSchedule invokes the notary on a schedule, with a role of its own that may
@@ -882,7 +928,7 @@ func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function,
 // newObserveReader is the role audit-observe assumes to follow the archive: from
 // another account (a principal), from a Kubernetes workload (IRSA or EKS Pod
 // Identity), or any of them that are given.
-func newObserveReader(ctx *pulumi.Context, name string, a *Args, bucket *s3.Bucket, archiveKeyArn pulumi.StringOutput, tags pulumi.StringMap,
+func newObserveReader(ctx *pulumi.Context, name string, a *Args, refs []bucketRef, archiveKeyArns []string, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	o := a.Observe
 	principal := pulumi.String("").ToStringOutput()
@@ -915,13 +961,17 @@ func newObserveReader(ctx *pulumi.Context, name string, a *Args, bucket *s3.Buck
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicy(ctx, name+"-observe-reader", &iam.RolePolicyArgs{
-		Role: role.Name,
-		Policy: pulumi.All(bucket.Arn, archiveKeyArn).ApplyT(func(v []any) string {
-			return observeReaderPolicy(v[0].(string), v[1].(string))
-		}).(pulumi.StringOutput),
-	}, opts...); err != nil {
-		return nil, err
+	// A policy with no statement is invalid: with every preset at an endpoint the
+	// role has nothing to be granted.
+	if len(refs) > 0 {
+		if _, err := iam.NewRolePolicy(ctx, name+"-observe-reader", &iam.RolePolicyArgs{
+			Role: role.Name,
+			Policy: applyPolicy(refs, nil, func(b []bucketGrant, _ []any) string {
+				return observeReaderPolicy(b, archiveKeyArns)
+			}),
+		}, opts...); err != nil {
+			return nil, err
+		}
 	}
 	if o.PodIdentity != nil {
 		if err := newPodIdentityAssociation(ctx, name+"-observe", o.PodIdentity, role, opts...); err != nil {
@@ -934,7 +984,7 @@ func newObserveReader(ctx *pulumi.Context, name string, a *Args, bucket *s3.Buck
 // newQuery is the role audit-query runs as on EKS, `<name>-query`: the observe
 // reader's rights, plus the queue when RecordReads, bound to its ServiceAccount
 // by a Pod Identity association.
-func newQuery(ctx *pulumi.Context, name string, a *Args, bucket *s3.Bucket, archiveKeyArn pulumi.StringOutput, queueArn pulumi.StringOutput,
+func newQuery(ctx *pulumi.Context, name string, a *Args, refs []bucketRef, archiveKeyArns []string, queueArn pulumi.StringOutput,
 	tags pulumi.StringMap, opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	q := a.Query
 	role, err := iam.NewRole(ctx, name+"-query", &iam.RoleArgs{
@@ -951,17 +1001,19 @@ func newQuery(ctx *pulumi.Context, name string, a *Args, bucket *s3.Bucket, arch
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicy(ctx, name+"-query", &iam.RolePolicyArgs{
-		Role: role.Name,
-		Policy: pulumi.All(bucket.Arn, archiveKeyArn, queueArn).ApplyT(func(v []any) string {
-			qa := ""
-			if q.RecordReads {
-				qa = v[2].(string)
-			}
-			return queryPolicy(v[0].(string), v[1].(string), qa)
-		}).(pulumi.StringOutput),
-	}, opts...); err != nil {
-		return nil, err
+	if len(refs) > 0 || q.RecordReads {
+		if _, err := iam.NewRolePolicy(ctx, name+"-query", &iam.RolePolicyArgs{
+			Role: role.Name,
+			Policy: applyPolicy(refs, []any{queueArn}, func(b []bucketGrant, v []any) string {
+				qa := ""
+				if q.RecordReads {
+					qa = v[0].(string)
+				}
+				return queryPolicy(b, archiveKeyArns, qa)
+			}),
+		}, opts...); err != nil {
+			return nil, err
+		}
 	}
 	if err := newPodIdentityAssociation(ctx, name+"-query", &q.PodIdentity, role, opts...); err != nil {
 		return nil, err
@@ -992,7 +1044,7 @@ func newPodIdentityAssociation(ctx *pulumi.Context, prefix string, p *PodIdentit
 
 // newArchiveWriter is the role a workload outside AWS assumes (IRSA) to write the
 // archive prefixes it is given: `<name>-archive-writer`.
-func newArchiveWriter(ctx *pulumi.Context, name string, a *Args, bucket *s3.Bucket, archiveKeyArn pulumi.StringOutput, tags pulumi.StringMap,
+func newArchiveWriter(ctx *pulumi.Context, name string, a *Args, refs []bucketRef, archiveKeyArns []string, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	w := a.ArchiveWriter
 	role, err := iam.NewRole(ctx, name+"-archive-writer", &iam.RoleArgs{
@@ -1004,14 +1056,15 @@ func newArchiveWriter(ctx *pulumi.Context, name string, a *Args, bucket *s3.Buck
 	if err != nil {
 		return nil, err
 	}
-	locked := a.Archive.ObjectLockMode != None
-	if _, err := iam.NewRolePolicy(ctx, name+"-archive-writer", &iam.RolePolicyArgs{
-		Role: role.Name,
-		Policy: pulumi.All(bucket.Arn, archiveKeyArn).ApplyT(func(v []any) string {
-			return archiveWriterPolicy(v[0].(string), v[1].(string), w.Prefixes, locked)
-		}).(pulumi.StringOutput),
-	}, opts...); err != nil {
-		return nil, err
+	if len(refs) > 0 {
+		if _, err := iam.NewRolePolicy(ctx, name+"-archive-writer", &iam.RolePolicyArgs{
+			Role: role.Name,
+			Policy: applyPolicy(refs, nil, func(b []bucketGrant, _ []any) string {
+				return archiveWriterPolicy(b, archiveKeyArns, w.Prefixes)
+			}),
+		}, opts...); err != nil {
+			return nil, err
+		}
 	}
 	return role, nil
 }

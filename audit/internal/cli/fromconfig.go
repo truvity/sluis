@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -101,7 +102,10 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 			return nil, err
 		}
 		plan := PresetPlan{Preset: name, Storage: st, Options: s3store.Options{
-			Bucket: st.Bucket, Prefix: st.Prefix, Lock: lock,
+			Bucket: st.Bucket,
+			// The preset's prefix ends in a slash; the store joins its prefix and a key
+			// with one, so the layout stays <prefix>records/<profile>/... .
+			Prefix: strings.TrimSuffix(st.Prefix, "/"), Lock: lock,
 			Endpoint: st.Endpoint, PathStyle: st.PathStyle,
 		}}
 		switch {

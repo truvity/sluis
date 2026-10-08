@@ -8,6 +8,7 @@ require (
 	github.com/truvity/policy v1.45.0
 	github.com/truvity/sluis/audit v0.0.0
 	go.yaml.in/yaml/v3 v3.0.5
+	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
@@ -124,7 +125,6 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
 // The profile derivation is the audit module's (profile.Deployment.Derive), the

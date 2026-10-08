@@ -71,9 +71,7 @@ audit:
       deployment: /etc/audit/deployment.yaml
       workloads: /etc/audit/workloads.yaml
       replicas: 2
-      archive:
-        bucket: {name: audit-eu-example-1, region: eu-example-1}
-        prefix: audit/app
+      archive: {}
       database: {url: "postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full", passwordSecret: database-password}
     secretFiles: [{name: database-password, secretName: audit-db, key: password}]
   # observe, query, and the verify, purge and clock-sync jobs follow the same pattern:
@@ -106,7 +104,7 @@ number of writer pods. Each refusal says why
 ([the chart README](../../../charts/audit/README.md)).
 
 One refusal the chart cannot make is the binaries': a profile whose framework profiles demand a
-lock stricter than `archive.lockMode` (`pci-dss` on `lockMode: none`, say). The writer refuses to
+lock stricter than its preset's bucket gives (`pci-dss` on a `standard` preset, say). The writer refuses to
 **start**, naming the profile and both modes, so the first rollout is where it shows.
 
 ## 4. Check that it works

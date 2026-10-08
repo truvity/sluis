@@ -4,11 +4,9 @@ mode: direct
 externalIdentifiersAreOpaque: true
 writer:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
-    archive:
-      bucket:
-        name: audit-archive
     keys:
       provider: transit
       transit:
@@ -29,6 +27,10 @@ jobs:
     enabled: false
 
 # The notary is the standard preset's, which `security` asks for.
+presets:
+  standard:
+    bucket: audit-archive
+    region: eu-example-1
 profiles:
   security:
     frameworks: [security]

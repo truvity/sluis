@@ -1,6 +1,8 @@
 # refuse: every rule disabled
 renders: alerts
-preset: standard
+presets:
+  standard:
+    bucket: audit-archive
 alerts:
   rules:
     deadLettered: {enabled: false}

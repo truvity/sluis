@@ -51,8 +51,8 @@ recommended; no delete permission on any component; and an administrative no-del
 
 Which tier a deployment may run on is the profiles' decision. Every framework profile says the least lock its
 framework demands (`compliance` for `pci-dss`, `nen-7513`, `dora` and `evidence-etsi`; `none` for `security`,
-`history` and `billing-nl`), and the writer refuses to start when the deployment's
-`archive.lockMode` is weaker than any composed profile demands.
+`history` and `billing-nl`), and the writer refuses to start when the Object Lock of a profile's preset (compliance for `attested`, none for the others)
+is weaker than the profile demands.
 
 ## Who holds the key
 

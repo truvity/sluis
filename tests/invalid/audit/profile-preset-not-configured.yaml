@@ -1,0 +1,5 @@
+# refuse: profile security is kept under the standard preset and `presets` configures only operational
+# base: operational-base
+profiles:
+  security:
+    frameworks: [security]

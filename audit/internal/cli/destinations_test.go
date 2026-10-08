@@ -18,16 +18,16 @@ func deploymentFor(t *testing.T, doc string) *profile.Deployment {
 	return d
 }
 
-// hive-like: the operational preset on an S3-compatible store.
-const hiveLike = `
+// endpoint-like: the operational preset on an S3-compatible store.
+const endpointLike = `
 presets:
-  operational: {bucket: hive-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials: internal/audit/r2}
+  operational: {bucket: edge-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials: internal/audit/r2}
 profiles:
   activity: {frameworks: [history], categories: [activity]}
 `
 
-// Truvity-like: the standard preset on S3, with a key of its own.
-const truvityLike = `
+// standard-like: the standard preset on S3, with a key of its own.
+const standardLike = `
 presets:
   standard: {bucket: example-audit, prefix: standard/, region: eu-central-1, key_alias: alias/audit-archive}
 profiles:
@@ -47,12 +47,12 @@ profiles:
 func TestEachPresetIsOpenedInItsOwnStore(t *testing.T) {
 	a := config.Archive{StateRoot: "/audit/main", KMSKey: "alias/audit-default"}
 
-	plans, err := PlanPresets(deploymentFor(t, hiveLike), a)
+	plans, err := PlanPresets(deploymentFor(t, endpointLike), a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := plans[profile.Operational]
-	if p.Options.Bucket != "hive-audit" || p.Options.Prefix != "operational/" || p.Options.Lock != s3store.None ||
+	if p.Options.Bucket != "edge-audit" || p.Options.Prefix != "operational" || p.Options.Lock != s3store.None ||
 		p.Options.Endpoint != "https://acct.r2.cloudflarestorage.com" || p.Options.KMSKeyID != "" {
 		t.Errorf("operational on R2: %+v", p.Options)
 	}
@@ -60,7 +60,7 @@ func TestEachPresetIsOpenedInItsOwnStore(t *testing.T) {
 		t.Errorf("credentials: %+v", p.Credentials)
 	}
 
-	plans, err = PlanPresets(deploymentFor(t, truvityLike), a)
+	plans, err = PlanPresets(deploymentFor(t, standardLike), a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,14 +82,14 @@ func TestEachPresetIsOpenedInItsOwnStore(t *testing.T) {
 }
 
 func TestCredentialsNeedTheStateRoot(t *testing.T) {
-	_, err := PlanPresets(deploymentFor(t, hiveLike), config.Archive{})
+	_, err := PlanPresets(deploymentFor(t, endpointLike), config.Archive{})
 	if err == nil || !strings.Contains(err.Error(), "archive.stateRoot") {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestAProfileNeedsAConfiguredPreset(t *testing.T) {
-	d := deploymentFor(t, truvityLike+"  payments: {frameworks: [pci-dss]}\n")
+	d := deploymentFor(t, standardLike+"  payments: {frameworks: [pci-dss]}\n")
 	fw, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
@@ -98,5 +98,32 @@ func TestAProfileNeedsAConfiguredPreset(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "profile payments") || !strings.Contains(err.Error(), "attested") ||
 		!strings.Contains(err.Error(), "standard") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// The preset's prefix is prepended to the layout every reader expects
+// (records/<profile>/..., seals/<profile>/..., keys/, catalogue/, schema/, dlq/),
+// and an empty prefix writes the keys an installation always wrote.
+func TestThePresetPrefixIsPrependedToTheBucketLayout(t *testing.T) {
+	for prefix, want := range map[string]string{
+		"":          "records/security/acme/2026/10/08/12/01",
+		"standard/": "standard/records/security/acme/2026/10/08/12/01",
+		"a/b/":      "a/b/records/security/acme/2026/10/08/12/01",
+	} {
+		doc := "presets:\n  standard: {bucket: b"
+		if prefix != "" {
+			doc += ", prefix: " + prefix
+		}
+		doc += "}\nprofiles:\n  security: {frameworks: [security]}\n"
+		plans, err := PlanPresets(deploymentFor(t, doc), config.Archive{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := s3store.KeyFor(plans[profile.Standard].Options, "records/security/acme/2026/10/08/12/01"); got != want {
+			t.Errorf("prefix %q: key %q, want %q", prefix, got, want)
+		}
+		if got := s3store.KeyFor(plans[profile.Standard].Options, "seals/security/acme/2026/10/08/12.jws"); got != strings.TrimSuffix(want, "records/security/acme/2026/10/08/12/01")+"seals/security/acme/2026/10/08/12.jws" {
+			t.Errorf("prefix %q: seal key %q", prefix, got)
+		}
 	}
 }

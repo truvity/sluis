@@ -28,46 +28,30 @@ const (
 	apiVersionPrefix = "audit.truvity.github.io/"
 )
 
-// archiveConfig is the `archive` block of both functions: the bucket the library
-// created (or, on an S3-compatible store, the one the estate made, with its
-// endpoint, region and where its credentials are), the lock mode, and the key
-// objects are encrypted with, which is named by alias so that the file is known
-// before the key is looked up.
+// archiveConfig is the `archive` block of both functions: what the process adds
+// to the deployment's presets (the bucket, endpoint, lock and per-preset key are
+// in the deployment document). The state root, when any preset is at an endpoint,
+// is where those stores' credentials are read from; the key objects are encrypted
+// with where a preset names none, by alias (or by ARN) so that the file is known
+// before the key is looked up. It is nil when there is nothing to say.
 func archiveConfig(a *Args) map[string]any {
-	if a.external() {
-		return map[string]any{
-			"bucket": map[string]any{
-				"name": a.Archive.BucketName, "endpoint": a.Archive.Endpoint,
-				"region": a.Archive.StoreRegion, "pathStyle": a.Archive.PathStyle,
-			},
-			"lockMode":    "none",
-			"credentials": map[string]any{"root": a.State.Root, "address": a.Archive.CredentialsAddress},
-		}
-	}
-	out := map[string]any{
-		"bucket":   map[string]any{"name": a.Archive.BucketName},
-		"lockMode": lowerMode(a.Archive.ObjectLockMode),
+	out := map[string]any{}
+	if len(a.endpointStores()) > 0 {
+		out["stateRoot"] = a.State.Root
 	}
 	// With SSE-S3 and the AWS-managed key there is no key to name: the bucket's
-	// default encryption applies. The estate's key is named by alias; a key given
-	// by ARN is named by that.
+	// default encryption applies.
 	if a.Archive.Encryption == EncryptionKMS {
-		out["kmsKey"] = a.Keys.Archive
 		if a.Archive.KeyArn != "" {
 			out["kmsKey"] = a.Archive.KeyArn
+		} else if a.Keys.Archive != "" {
+			out["kmsKey"] = a.Keys.Archive
 		}
 	}
-	return out
-}
-
-func lowerMode(m string) string {
-	switch m {
-	case Compliance:
-		return "compliance"
-	case None:
-		return "none"
+	if len(out) == 0 {
+		return nil
 	}
-	return "governance"
+	return out
 }
 
 func dedupeTable(name string) string { return name + "-dedupe" }
@@ -85,9 +69,11 @@ func writerConfig(name string, a *Args) ([]byte, error) {
 	doc := map[string]any{
 		"apiVersion": apiVersionPrefix + "audit-writer-lambda/v2",
 		"deployment": configRoot + "/" + deploymentFile,
-		"archive":    archiveConfig(a),
 		"dedupe":     map[string]any{"dynamodb": dyn},
 		"require":    "archived",
+	}
+	if ac := archiveConfig(a); ac != nil {
+		doc["archive"] = ac
 	}
 	if len(a.Writer.Catalogues) > 0 {
 		doc["catalogues"] = configRoot + "/" + cataloguesDir
@@ -125,9 +111,12 @@ func writerConfig(name string, a *Args) ([]byte, error) {
 func notaryConfig(name string, a *Args) ([]byte, error) {
 	doc := map[string]any{
 		"apiVersion": apiVersionPrefix + "audit-notary/v2",
-		"archive":    archiveConfig(a),
+		"deployment": configRoot + "/" + deploymentFile,
 		"keys":       map[string]any{"adapter": "kms", "instance": a.instance(name), "seal": a.Keys.Seal},
 		"settle":     a.Notary.Settle,
+	}
+	if ac := archiveConfig(a); ac != nil {
+		doc["archive"] = ac
 	}
 	if len(a.Notary.Profiles) > 0 {
 		doc["profiles"] = a.Notary.Profiles

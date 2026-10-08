@@ -106,14 +106,12 @@ Required inputs are marked. Anything not listed has the default stated.
 | `AccountID` | looked up | the account; empty looks it up through the component's provider, see [the AWS provider](#the-aws-provider) |
 | `RolePath` | `/audit/` | the IAM path of every role the library creates |
 | `LogRetentionDays` | 30 | each function's log group |
-| `Archive.BucketName` | **required** | the bucket; it is in the functions' configuration, so it has to be known before anything is created |
-| `Preset` | derived | `operational`, `standard` or `attested` ([install presets](profiles.md#install-presets)). Unset, it is the lowest preset the profiles in `Writer.DeploymentYAML` can be kept under; set, it may be stronger and is refused when weaker. Under `operational` there is no notary, seal key, schedule or alarm, and `Notary.Package` and `Alerts.EndpointURL` are refused. Without a writer here (`Ingest.Disabled`) there are no profiles to derive from: set it |
-| `Archive.ObjectLockMode` | the preset's | `NONE`, `GOVERNANCE` or `COMPLIANCE`; unset is `COMPLIANCE` under `attested` (which refuses every other mode); below `attested` only `NONE` is accepted, because Object Lock is written only for an attested destination. See [the lock modes](../explanation/aws-lambda.md#the-lock-modes) |
+| `Presets` | **required** | the install presets the installation uses, by name (`operational`, `standard`, `attested`), each `PresetStorage{Bucket, Prefix, Region, Endpoint, PathStyle, CredentialsAddress, KeyAlias, Create}`: its own store ([install presets](profiles.md#presets-and-their-storage), [0026](../decisions/0026-storage-is-configured-per-preset.md)). `Bucket` is required (`PresetBucketName` builds a default name); `Prefix` ends in `/`; `Endpoint` is an S3-compatible store (no bucket is created, `CredentialsAddress` is read from the state store, default `internal/archive/<preset>`); `KeyAlias` is looked up, never created; `Create` makes the AWS bucket (versioned, a lifecycle rule per `<Prefix>records/<profile>/`, compliance Object Lock for `attested`) and otherwise the bucket is used as it is. Every profile of `Writer.DeploymentYAML` must be kept under a preset configured here, and the library renders the final deployment document with them. Notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them: under `operational` alone there are none, and `Notary.Package` and `Alerts.EndpointURL` are refused |
+| `Archive.ObjectLockMode` | `COMPLIANCE` | the lock of the `attested` preset's created bucket alone: `GOVERNANCE` (the trial) or `COMPLIANCE`; refused when no attested preset has `Create`. See [the lock modes](../explanation/aws-lambda.md#the-lock-modes) |
 | `Archive.AcknowledgeCompliance` | false | the deliberate step before `COMPLIANCE`; without it the library builds nothing |
 | `Archive.DefaultRetentionDays` | **required** (> 0) with `GOVERNANCE` and `COMPLIANCE` | the bucket's default retention, a floor: the writer sets each object's own. 0 is refused with a lock (a lock with no default rule is a trap), and any value with `NONE` |
 | `Archive.Encryption` | `kms` | `kms` (SSE-KMS under an archive key), `aws-managed` (SSE-KMS under `aws/s3`) or `s3` (SSE-S3); the last two create no key and grant no `kms` on one; see [encryption](#encryption) |
 | `Archive.KeyArn` | empty | an existing KMS key ARN for `Encryption: kms`: no key is created and the roles are granted it; refused with the other modes |
-| `Archive.Profiles` | **required** | one lifecycle rule per `records/<profile>/` prefix |
 | `Archive.GlacierIRDays`, `.DeepArchiveDays` | 30, 365 | [0023](../decisions/0023-archive-retention-and-lifecycle.md) |
 | `Region` | looked up | the region, for the ARN of the SSM parameters; looked up like `AccountID`, and only when there are secrets to grant |
 | `Writer.Secrets.Root`, `.KeyArn` | `/audit/<name>/private/config`, none | where the writer reads the secrets `Writer.Keys` names, and the customer-managed key they are encrypted with; see [secrets](../how-to/aws-store-secrets-in-ssm.md). Unset and `Writer.Keys` naming no secret: no SSM access at all |
@@ -358,10 +356,10 @@ credentials at `Root/internal/archive` and the pseudonym secrets under
 secret's value); the writer creates the pseudonym secrets, ciphertext under the
 pseudonym key, and may create but never replace them.
 
-`Archive.Endpoint` puts the archive on an S3-compatible store: no bucket, no
-lifecycle, no encryption setting and no S3 or archive-key statement is created;
-the lock mode is `NONE` and an attested installation is refused; `Observe`,
-`Query` and `ArchiveWriter` are refused (they are roles over an AWS bucket). The
+A preset with an `Endpoint` (`Presets[...]`) is an S3-compatible store: no bucket,
+lifecycle, encryption setting or S3 or archive-key statement is created for it;
+an `attested` preset there is refused (Object Lock is S3 only); `Observe`, `Query`
+and `ArchiveWriter` get nothing for it (they are roles over AWS buckets). The
 writer, and the notary when there is one, are granted `ssm:GetParameter` on the
-credentials parameter and nothing else of SSM. See
+preset's credentials parameter and nothing else of SSM. See
 [archive on R2](../how-to/archive-on-r2.md).

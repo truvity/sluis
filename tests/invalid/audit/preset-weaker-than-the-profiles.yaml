@@ -1,2 +1,6 @@
-# refuse: preset operational is weaker than the profiles need: profile security (framework profile security) needs standard
-preset: operational
+# refuse: profile security asks for the operational preset and its framework profiles security need standard
+# base: stream
+profiles:
+  security:
+    frameworks: [security]
+    preset: operational

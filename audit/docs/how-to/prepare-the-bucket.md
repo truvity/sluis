@@ -42,10 +42,10 @@ The bucket is on one of two tiers
 ([0014](../decisions/0014-lock-modes-and-store-tiers.md)), and which one is the
 profiles' decision, not the operator's:
 
-| tier | `archive.lockMode` | the store must answer | enough for |
+| tier | the preset | the store must answer | enough for |
 |---|---|---|---|
-| **record** | `compliance` (the default; `governance` for a non-production bucket) | `PutObject` with the Object Lock headers, `PutObjectRetention`, `PutObjectLegalHold`, `GetObject`, `HeadObject`, `ListObjectsV2`, presigned `GetObject` | every profile |
-| **attested** | `none` | `PutObject`, `GetObject`, `HeadObject`, `ListObjectsV2`, presigned `GetObject` | profiles composed only from framework profiles that demand no lock: `security`, `history`, `billing-nl` |
+| **record** | `attested` (compliance Object Lock; `governance` only for the trial of the lock) | `PutObject` with the Object Lock headers, `PutObjectRetention`, `PutObjectLegalHold`, `GetObject`, `HeadObject`, `ListObjectsV2`, presigned `GetObject` | every profile |
+| **no lock** | `operational` or `standard` | `PutObject`, `GetObject`, `HeadObject`, `ListObjectsV2`, presigned `GetObject` | profiles composed only from framework profiles that demand no lock: `security`, `history`, `billing-nl` |
 
 ### Create the bucket
 
@@ -57,8 +57,8 @@ aws s3api create-bucket --bucket example-audit \
   --object-lock-enabled-for-bucket
 ```
 
-On the attested tier, the same without `--object-lock-enabled-for-bucket`, and
-`archive.lockMode: none` in the writer's configuration.
+On the no-lock tier, the same without `--object-lock-enabled-for-bucket`: it is the
+bucket of an `operational` or `standard` preset in the deployment document.
 
 The bucket needs:
 
@@ -88,13 +88,12 @@ compliance retention cannot.
 
 ### Give the installation a prefix
 
-Each installation is told its prefix once, as `archive.prefix` of its components'
-configuration:
+Each installation is told its prefix once per preset, as `prefix` of the preset in the
+deployment document its components read:
 
 ```yaml
-archive:
-  bucket: {name: audit-eu-example-1, region: eu-example-1}
-  prefix: audit/<application>
+presets:
+  standard: {bucket: audit-eu-example-1, region: eu-example-1, prefix: audit/<application>/}
 ```
 
 Under that prefix the layout is the same for every installation, which is what
@@ -114,8 +113,7 @@ append-only).
 
 The same archive, the same keys under the same prefix — on a store that holds no lock. Either the store has no Object Lock API,
 which is most S3-compatible stores, or the deployment composes only profiles
-that demand none and chooses not to lock. The writer is told with
-`archive.lockMode: none` (the interactive commands' `--lock-mode none`), sends no lock header on
+that demand none and chooses not to lock. The preset is not `attested` (the interactive commands' `--lock-mode none`); the writer sends no lock header on
 any put, and answers a retention extension or a legal hold with
 `store.ErrNotLockable`: the extension is recorded in the trail as not made,
 and `audit hold place` is refused and records the attempt.
@@ -145,39 +143,30 @@ one, an object with no lock is `INVALID`.
 
 ### S3-compatible stores
 
-Any store that speaks the S3 API takes the archive on the attested tier, and
-on the record tier if it implements Object Lock. Three things differ from
-AWS, and every component that touches the archive takes all three from the
-`bucket` block of its configuration (`endpoint`, `pathStyle`,
-`credentialsSecret`; the interactive commands take `--endpoint` and
-`--path-style`, with credentials from the environment):
+Any store that speaks the S3 API takes the `operational` or `standard` preset, and the
+`attested` one only if it is AWS S3 (the lock is an AWS guarantee). Three things differ from
+AWS, and each is a key of the preset in the deployment document (`endpoint`, `path_style`,
+`credentials`):
 
 ```yaml
-secrets: {source: file, root: /etc/audit/secrets}
-archive:
-  bucket:
-    name: audit-example
+presets:
+  operational:
+    bucket: audit-example
     region: auto
     endpoint: https://s3.example.test
-    pathStyle: true
-    credentialsSecret:
-      accessKeyID: s3-access-key-id          # the names of the secrets, not values
-      secretAccessKey: s3-secret-access-key
+    path_style: true
+    credentials: internal/audit/main      # below the process's archive.stateRoot
 ```
 
-- **The endpoint.** `bucket.endpoint`. Unset is the SDK's own resolution for
-  the region, which is AWS.
-- **Path-style addressing**, when the store's certificate does not cover a
-  bucket subdomain: `bucket.pathStyle` sends `endpoint/bucket/key` rather than
-  `bucket.endpoint/key`.
-- **Static credentials**, when the store has no pod identity:
-  `bucket.credentialsSecret` names the two secrets that hold the access key id
-  and the secret, found through the file's `secrets` block (on Kubernetes, the
-  component's `secretFiles` puts a Secret's keys there). Unset, the SDK's
-  ambient credentials are used, which is what a workload identity provides.
-- **A private CA.** `bucket.ca` is the path to a bundle trusted for the
-  endpoint, mounted by the platform (the chart's `trust` puts one at
-  `/etc/audit/trust/<key>`).
+- **The endpoint.** `endpoint`. Unset is the SDK's own resolution for the region, which is AWS.
+- **Path-style addressing**, when the store's certificate does not cover a bucket subdomain:
+  `path_style` sends `endpoint/bucket/key` rather than `bucket.endpoint/key`.
+- **Static credentials**, when the store has no pod identity: `credentials` is the address, in
+  the installation's state store below `archive.stateRoot`, of a JSON object
+  `{accessKeyID, secretAccessKey}`, read with the process's own identity. No secret is in a
+  file. Unset, the SDK's ambient credentials are used, which is what a workload identity provides.
+- **A private CA.** `archive.ca` is the path to a bundle trusted for the endpoint, mounted by
+  the platform (the chart's `trust` puts one at `/etc/audit/trust/<key>`).
 
 With an endpoint set, the SDK's default CRC32 request checksum — which AWS
 answers and other stores may refuse — is sent only where an operation

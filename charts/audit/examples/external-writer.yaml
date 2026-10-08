@@ -17,6 +17,13 @@
 writer:
   enabled: false
 
+# Where each install preset keeps its copies, which this release reads (the
+# Lambda writes them). `security` needs the standard preset.
+presets:
+  standard:
+    bucket: audit-eu-example-1
+    region: eu-west-1
+    prefix: audit/app/
 profiles:
   security:
     frameworks: [security]
@@ -50,15 +57,11 @@ observe:
     annotations:
       eks.amazonaws.com/role-arn: ROLE-ARN-OF-THE-OBSERVE-ROLE
   config:
+    deployment: /etc/audit/deployment.yaml
     apiVersion: audit.truvity.github.io/audit-observe/v2
     secrets:
       source: file
       root: /etc/audit/secrets
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
     database:
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
       passwordSecret: observe-database-password
@@ -96,11 +99,6 @@ query:
     database:
       url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
       passwordSecret: query-database-password
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
   secretFiles:
     - name: query-database-password
       secretName: audit-db-query
@@ -118,12 +116,8 @@ jobs:
         # Read on the archive, put on seals/ and keys/, and sqs:SendMessage.
         eks.amazonaws.com/role-arn: ROLE-ARN-OF-THE-NOTARY-ROLE
     config:
+      deployment: /etc/audit/deployment.yaml
       apiVersion: audit.truvity.github.io/audit-notary/v2
-      archive:
-        bucket:
-          name: audit-eu-example-1
-          region: eu-west-1
-        prefix: audit/app
       require: queued
       sink:
         sqs:

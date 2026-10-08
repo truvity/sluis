@@ -27,6 +27,7 @@ spec:
         app.kubernetes.io/component: observe
       annotations:
         checksum/config: {{ toYaml .Values.observe.config | sha256sum }}
+        checksum/deployment: {{ include "audit.deploymentDocument" . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -62,12 +63,14 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             {{- include "audit.configMount" . | nindent 12 }}
+            {{- include "audit.deploymentMount" . | nindent 12 }}
             {{- include "audit.trustMount" . | nindent 12 }}
             {{- include "audit.extraMounts" .Values.observe | nindent 12 }}
             - name: tmp
               mountPath: /tmp
       volumes:
         {{- include "audit.configVolume" (dict "root" . "name" "observe") | nindent 8 }}
+        {{- include "audit.deploymentVolume" . | nindent 8 }}
         {{- include "audit.trustVolume" . | nindent 8 }}
         {{- include "audit.extraVolumes" .Values.observe | nindent 8 }}
         - name: tmp

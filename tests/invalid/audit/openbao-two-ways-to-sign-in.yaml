@@ -6,5 +6,5 @@ writer:
       transit:
         openbao:
           address: https://openbao.example.test:8200
-          tokenEnv: BAO_TOKEN
+          tokenSecret: bao-token
           tokenFile: /var/run/token

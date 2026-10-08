@@ -131,6 +131,12 @@ data:
       security:
         frameworks:
         - security
+    presets:
+      standard:
+        bucket: audit-eu-example-1
+        key_alias: alias/audit-archive
+        prefix: audit/app/
+        region: eu-example-1
   # The document a writer's config names as `workloads`: the issuers trusted to
   # name a calling workload, and the source each speaks for.
   workloads.yaml: |
@@ -160,12 +166,6 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-writer/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-example-1
-      kmsKey: alias/audit-archive
-      prefix: audit/app
     database:
       passwordSecret: database-password
       url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
@@ -202,12 +202,7 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-notary/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-example-1
-      kmsKey: alias/audit-archive
-      prefix: audit/app
+    deployment: /etc/audit/deployment.yaml
     settle: 10m
     signer:
       kms:
@@ -242,11 +237,6 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-verify/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-example-1
-      prefix: audit/app
     deployment: /etc/audit/deployment.yaml
     seals:
       roots:
@@ -332,14 +322,10 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-observe/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-example-1
-      prefix: audit/app
     database:
       passwordSecret: observe-database-password
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
+    deployment: /etc/audit/deployment.yaml
     interval: 30s
     secrets:
       root: /etc/audit/secrets
@@ -386,11 +372,6 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-query/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-example-1
-      prefix: audit/app
     database:
       passwordSecret: query-database-password
       url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
@@ -482,7 +463,8 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: observe
       annotations:
-        checksum/config: 6bd3aeb51aa5e5470963abc7980b1ce139692f7440f2fa29c5fb9c7ad4d98bf0
+        checksum/config: f2f156f20962ea77a87e78e4d45a612501e8ef9d175655ba06f71519d3981afa
+        checksum/deployment: 14aa6b3fb3973c27c9373300afe0cdc0d17e8050696ee327884cd71815369de5
     spec:
       serviceAccountName: audit-observe
       
@@ -524,6 +506,10 @@ spec:
               mountPath: /etc/audit/config.yaml
               subPath: config.yaml
               readOnly: true
+            - name: deployment
+              mountPath: /etc/audit/deployment.yaml
+              subPath: deployment.yaml
+              readOnly: true
             
             
             - name: secret-files
@@ -535,6 +521,9 @@ spec:
         - name: config
           configMap:
             name: audit-observe-config
+        - name: deployment
+          configMap:
+            name: audit-deployment
         
         
         - name: secret-files
@@ -581,11 +570,11 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: query
       annotations:
-        checksum/config: 9bd925b273f69b7e30878de714521aa92b811d3612bd7b06f2d31b6a1ee3c61d
+        checksum/config: 47aa415bdc1927aadf65c2e88dd75a056518f8917eb9e29c0aa746d0c4f79a8f
         checksum/grants: 7f48a15941aab33e17f624a4c1f9d6346580b5355ef2ce805b2e3aa316273ca2
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
+        checksum/deployment: 14aa6b3fb3973c27c9373300afe0cdc0d17e8050696ee327884cd71815369de5
     spec:
       serviceAccountName: audit-query
       
@@ -705,10 +694,10 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: c81307bebd98da0b4aa99678265b87e722e99c5da89c630e3b22907befaba875
+        checksum/config: e4e874b21b670f00becca048aaa053029a793c9e70c34468f3781fcededb521a
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
+        checksum/deployment: 14aa6b3fb3973c27c9373300afe0cdc0d17e8050696ee327884cd71815369de5
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:
@@ -827,7 +816,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: 84ac59f03f788ca75a7bcaba1616cd8fdd78cc6dc534be3e8fcf5358a76c1ce9
+            checksum/config: 20dbb23d2838d885aa05b9fbce6eb734e7b25c1c89b7410ffda1bc43af7d9530
+            checksum/deployment: 14aa6b3fb3973c27c9373300afe0cdc0d17e8050696ee327884cd71815369de5
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -855,6 +845,10 @@ spec:
                   mountPath: /etc/audit/config.yaml
                   subPath: config.yaml
                   readOnly: true
+                - name: deployment
+                  mountPath: /etc/audit/deployment.yaml
+                  subPath: deployment.yaml
+                  readOnly: true
                 
                 
                 - name: token-0
@@ -864,6 +858,9 @@ spec:
             - name: config
               configMap:
                 name: audit-notary-config
+            - name: deployment
+              configMap:
+                name: audit-deployment
             
             
             - name: token-0
@@ -900,7 +897,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: 7c04c7d62c1a5fb10ec40ca3484ea423e46178d26bdc22e814e67ba4d9bf1030
+            checksum/config: 505dfb568d43aff99beb70af79bd65809a41451e4b345e5bb8977734fd46da67
+            checksum/deployment: 14aa6b3fb3973c27c9373300afe0cdc0d17e8050696ee327884cd71815369de5
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify
@@ -982,6 +980,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 51fdfa0a65d12745d9ac4324c6f68c9027ac1a34140c426b117efe162b42ffb5
+            checksum/deployment: 14aa6b3fb3973c27c9373300afe0cdc0d17e8050696ee327884cd71815369de5
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-purge

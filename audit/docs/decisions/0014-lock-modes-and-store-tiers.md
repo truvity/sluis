@@ -1,6 +1,6 @@
 # 0014. Lock modes and store tiers: the lock is demanded where a framework demands it
 
-- Status: accepted
+- Status: accepted; refined by [0026](0026-storage-is-configured-per-preset.md) (the lock is a property of the install preset's bucket, not a setting of the process)
 - Date: 2026-09-23
 
 [0003](0003-s3-object-lock-as-the-record.md) stands for the `record` tier

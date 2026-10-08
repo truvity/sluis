@@ -62,28 +62,79 @@ framework profile and not a grant preset.
 | `standard` | adds the notary and its seal key, and the alarms |
 | `attested` | adds compliance Object Lock and the pseudonym keys |
 
-The preset is derived. Each framework profile states the lowest preset it can be kept under as
-`min_preset` (`history` is `operational`; `security` and `billing-nl` are `standard`; `dora`,
-`pci-dss`, `nen-7513` and `evidence-etsi` are `attested`), and the installation's preset is the
-highest minimum over every profile it composes. With nothing chosen it is `operational`. A
-deployment may set `preset:` (the chart's `preset`, the Pulumi library's `Args.Preset`) to a
-stronger one; a weaker one is refused, naming the profile and the framework profiles that need
-more. The rule is `profile.Deployment.ResolvePreset`; the writer and every job apply it when they
-compose the deployment document, the Pulumi library calls it, and the chart uses a table
-generated from the `min_preset` lines (`just audit-config-schemas`).
+A profile's preset is derived. Each framework profile states the lowest preset it can be kept
+under as `min_preset` (`history` is `operational`; `security` and `billing-nl` are `standard`;
+`dora`, `pci-dss`, `nen-7513` and `evidence-etsi` are `attested`), and a profile's preset is the
+highest minimum over the framework profiles it is composed from. A profile may ask for a stronger
+one with `preset:`; a weaker one is refused, naming the profile and the framework profiles that
+need more (`profile.Deployment.ProfileNeeds`).
+
+An installation configures **the presets it uses**, and each preset has a store of its own. A
+profile's preset must be one of them: a profile whose preset is not configured is refused, naming
+both. The notary, seal key, alarms and pseudonym keys are provisioned when **any** configured preset
+needs them (`profile.Deployment.Features`); Object Lock is a property of the preset's bucket
+([0026](../decisions/0026-storage-is-configured-per-preset.md)).
+
+## Presets and their storage
+
+```yaml
+apiVersion: audit.truvity.github.io/audit-deployment/v2
+presets:
+  operational:
+    bucket: example-audit
+    prefix: operational/
+    region: auto
+    endpoint: https://<account>.r2.cloudflarestorage.com   # S3-compatible: set it; AWS S3: leave it out
+    credentials: internal/audit/r2                         # address below the state root; endpoint only
+  standard:
+    bucket: example-audit-main
+    prefix: standard/
+    region: eu-central-1
+    key_alias: alias/audit-archive                         # AWS S3 only; a name, never a key id or ARN
+  attested:
+    bucket: example-audit-locked
+    prefix: attested/
+    region: eu-central-1
+profiles:
+  security: {frameworks: [security], categories: [security]}
+  history:  {frameworks: [history],  categories: [activity]}
+```
+
+| key | meaning |
+|---|---|
+| `bucket` | the bucket (required) |
+| `prefix` | every key of this preset lives under it; ends in `/`; required wherever the bucket is shared |
+| `region` | the bucket's region; `auto` for a store at an endpoint |
+| `endpoint` | the URL of an S3-compatible store that is not AWS; empty is AWS S3 |
+| `path_style` | address the bucket as `endpoint/bucket/key`; with `endpoint` only |
+| `credentials` | the address, below the process's `archive.stateRoot`, of the store's static credentials; with `endpoint` only |
+| `key_alias` | the KMS key alias the preset's objects are encrypted under; AWS S3 only; empty is the process's `archive.kmsKey` or the bucket's default |
+
+- **Object Lock is the `attested` preset's bucket alone**: compliance mode on S3. An `attested`
+  preset with an `endpoint` is refused, and so is a profile whose framework profiles demand a stricter
+  lock than its preset's bucket gives. Every other preset is written without a lock, so it writes
+  nothing it cannot clear.
+- The deployment document needs at least one preset; `audit validate` and `audit profile explain`
+  read documents that have none, the writer, the notary, the indexer and the query service do not.
+- The process configuration keeps only `archive: {stateRoot, ca, kmsKey}`; where the archive is,
+  is this document's.
+- A profile's records, seals and recorded compositions are in its preset's store. The catalogues and
+  extension schemas that describe the records are in every store, so that each bucket can be read
+  without the others. Legal holds, sealed identities, dead letters and the notary's key
+  delegations are in the store of the strongest configured preset.
+- Readers (the indexer, the query service, `audit verify`) read every configured preset's store.
 
 ## Destinations
 
-An installation has one archive bucket, and each profile of its deployment document is a
-**destination**: a prefix of it (`records/<profile>/`) with its own framework profiles, its own
-retention, optionally its own key, and its own projection of every record.
+Each profile of the deployment document is a **destination**: a prefix of its preset's bucket
+(`records/<profile>/`) with its own framework profiles, its own retention, and its own projection of
+every record.
 
 ```yaml
 profiles:
   security:
     frameworks: [security]
     categories: [security]
-    key_alias: alias/acme-security
   activity:
     frameworks: [history]
     categories: [activity]
@@ -102,21 +153,13 @@ profiles:
   action still names destinations directly. A category nobody takes is reported once per action.
 - `categories` are lower-case names. A destination that lists none keeps only the actions that
   name it in `profiles`.
-- `key_alias` is the alias of the key the destination's objects are encrypted under. The estate
-  creates it; the Pulumi library creates no key, looks the alias up and grants every role that reads
-  or writes the archive the key behind it, conditioned on the encryption context the storage KMS
-  backend uses (`instance`, which is `Keys.Instance` or the component's name, and `purpose: archive`).
-  Unset is the archive's key. The alias is resolved by the same lookup as the `Keys` aliases. On an
-  archive at an S3-compatible endpoint, which is not encrypted under a KMS key (and has no
-  `Keys.Archive`), a `key_alias` is refused, by the library and by the writer at start.
+- The encryption key is the **preset's** `key_alias` (the estate creates the key; the Pulumi library
+  creates none, looks the alias up and grants every role that reads or writes the preset's bucket the
+  key behind it, conditioned on the encryption context the storage KMS backend uses). A profile has no
+  key of its own.
 - Retention is the destination's framework profiles' (`retention`): the Pulumi library writes an S3
   lifecycle rule per prefix that expires its objects when a fixed retention ends, with the
   Glacier steps before it.
-- Each destination has its own install preset (the highest `min_preset` of its framework profiles,
-  or a stronger `preset:` it asks for). **Object Lock is written only for a destination whose preset is
-  attested**, and only on S3: an attested destination on an S3-compatible endpoint, or on an archive that
-  writes no lock, is refused when the writer starts, naming the destination. The others write objects
-  they can clear, whatever the bucket's default retention says.
 
 ## What a copy carries
 

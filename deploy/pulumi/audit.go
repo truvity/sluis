@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -63,15 +64,24 @@ type AuditArgs struct {
 	// preset is derived from them. Exclusive with DeploymentYAML.
 	Profiles map[string][]string
 	// DeploymentYAML is the full deployment document, for what Profiles cannot
-	// say (categories, key_alias, a preset per destination). Exclusive with
-	// Profiles.
+	// say (categories, a preset per profile). It names the profiles, not the
+	// storage: that is Presets. Exclusive with Profiles.
 	DeploymentYAML string
-	// Preset may name a stronger install preset than the profiles need. Optional.
-	Preset string
 
-	// Archive is where the records are kept. Separate from the blob store: the
-	// audit library expects its own bucket (an AWS one it creates, or one the
-	// estate made on an S3-compatible store).
+	// Presets are the install presets this installation uses, each with a store
+	// of its own (operational, standard, attested): the same map as
+	// auditpulumi.Args.Presets, which the library passes through. Every profile's
+	// preset (the highest min_preset of its framework profiles, or the stronger
+	// one it asks for) must be one of them. Separate from the blob store: each is
+	// a bucket of its own, an AWS one the library creates (Create) or uses, or one
+	// the estate made on an S3-compatible store.
+	//
+	// Unset with the default Profiles, it is the operational preset on a bucket
+	// the library creates (`<name>-<account>-<region>-operational`). With
+	// Profiles or DeploymentYAML given, name the presets they need.
+	Presets map[string]AuditPreset
+	// Archive is the tuning of the AWS buckets the library creates: encryption,
+	// the attested bucket's lock and the lifecycle steps.
 	Archive AuditArchiveArgs
 	// Keys are the estate's keys by alias (the library creates none). The
 	// archive's own key is Keys.Archive; leave it out and set nothing else and
@@ -81,8 +91,7 @@ type AuditArgs struct {
 	State auditpulumi.StateArgs
 
 	// Notary, Alerts, Telemetry and Observe are the audit library's own; they
-	// are for the presets above operational, which the profiles or Preset ask
-	// for. Leave them out under operational (the library refuses them there).
+	// are for the presets above operational, which the profiles ask for. Leave them out under operational (the library refuses them there).
 	Notary    auditpulumi.NotaryArgs
 	Alerts    auditpulumi.AlertsArgs
 	Telemetry *auditpulumi.TelemetryArgs
@@ -93,39 +102,26 @@ type AuditArgs struct {
 	Guards auditpulumi.GuardArgs
 }
 
-// AuditArchiveArgs is the audit archive's choice: an AWS S3 bucket the library
-// creates (the default), or a bucket on an S3-compatible store (R2) the estate
-// made.
-type AuditArchiveArgs struct {
-	// BucketName is the archive bucket. On AWS the default is
-	// `<name>-<account>-<region>`; on an S3-compatible store it is required and
-	// is the estate's: it is a different bucket from the blob bucket.
-	BucketName string
-
-	// Endpoint puts the archive on an S3-compatible store (https URL, no path).
-	// With it there is no Object Lock (so no attested preset), and the store's
-	// credentials are read from the installation's state store at
-	// CredentialsAddress (docs/how-to/archive-on-r2.md in audit): no secret is
-	// an input.
-	Endpoint string
-	// ReuseBlobStore takes Endpoint, StoreRegion and PathStyle from
-	// Storage.Blobs (the blobs are on an S3-compatible store already): the
-	// bucket stays a different one, BucketName, and the credentials stay the
-	// installation's own. Exclusive with Endpoint; refused when Storage has no
-	// Blobs.
+// AuditPreset is one install preset's store: auditpulumi.PresetStorage, and
+// the choice to take an S3-compatible store from the blobs.
+type AuditPreset struct {
+	auditpulumi.PresetStorage
+	// ReuseBlobStore takes Endpoint, Region and PathStyle from Storage.Blobs (the
+	// blobs are on an S3-compatible store already): the bucket stays a different
+	// one, and the credentials stay the installation's own. Exclusive with
+	// Endpoint; refused when Storage has no Blobs.
 	ReuseBlobStore bool
-	// StoreRegion, PathStyle and CredentialsAddress are for Endpoint; see
-	// auditpulumi.ArchiveArgs.
-	StoreRegion        string
-	PathStyle          bool
-	CredentialsAddress string
+}
 
+// AuditArchiveArgs is the tuning of the AWS buckets the library creates.
+type AuditArchiveArgs struct {
 	// Encryption is `kms`, `s3` or `aws-managed` (AWS only). Default `kms` when
 	// Keys.Archive is set, `s3` otherwise.
 	Encryption string
 
 	// ObjectLockMode, AcknowledgeCompliance, DefaultRetentionDays,
-	// GlacierIRDays and DeepArchiveDays are the audit archive's own (AWS only).
+	// GlacierIRDays and DeepArchiveDays are the audit archive's own (AWS only);
+	// see auditpulumi.ArchiveArgs. The lock is the attested bucket's alone.
 	ObjectLockMode        string
 	AcknowledgeCompliance bool
 	DefaultRetentionDays  int
@@ -243,8 +239,14 @@ func (a *LambdaArgs) planAudit() (*auditPlan, error) {
 	if au.Profiles != nil && strings.TrimSpace(au.DeploymentYAML) != "" {
 		return nil, errors.New("sluispulumi: LambdaArgs.Audit.Profiles and DeploymentYAML are both set: the first is the short form of the second")
 	}
-	if ar := au.Archive; ar.ReuseBlobStore && ar.Endpoint != "" {
-		return nil, errors.New("sluispulumi: LambdaArgs.Audit.Archive.ReuseBlobStore and Endpoint are both set: say the store once")
+	for _, name := range sortedKeys(au.Presets) {
+		if pr := au.Presets[name]; pr.ReuseBlobStore && pr.Endpoint != "" {
+			return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Presets[%s].ReuseBlobStore and Endpoint are both set: say the store once", name)
+		}
+	}
+	if au.Presets == nil && (au.Profiles != nil || strings.TrimSpace(au.DeploymentYAML) != "") {
+		return nil, errors.New("sluispulumi: LambdaArgs.Audit.Presets is required with Profiles or DeploymentYAML: name the install presets " +
+			"(operational, standard, attested) the profiles are kept under, each with its store")
 	}
 	qn := name + "-ingest"
 	return &auditPlan{
@@ -291,43 +293,56 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 	}
 	ar := au.Archive
 	archive := auditpulumi.ArchiveArgs{
-		BucketName: ar.BucketName, Endpoint: ar.Endpoint, StoreRegion: ar.StoreRegion, PathStyle: ar.PathStyle,
-		CredentialsAddress: ar.CredentialsAddress, Encryption: ar.Encryption,
+		Encryption:     ar.Encryption,
 		ObjectLockMode: ar.ObjectLockMode, AcknowledgeCompliance: ar.AcknowledgeCompliance,
 		DefaultRetentionDays: ar.DefaultRetentionDays, GlacierIRDays: ar.GlacierIRDays, DeepArchiveDays: ar.DeepArchiveDays,
 	}
-	if ar.ReuseBlobStore {
-		b := a.Storage.External
-		if b == nil {
-			return nil, errors.New("sluispulumi: LambdaArgs.Audit.Archive.ReuseBlobStore is set and the blobs are not on an S3-compatible store (StorageArgs.Blobs)")
+	presets := map[string]auditpulumi.PresetStorage{}
+	if au.Presets == nil {
+		presets[auditpulumi.PresetOperational] = auditpulumi.PresetStorage{Create: true}
+	}
+	for name, pr := range au.Presets {
+		st := pr.PresetStorage
+		if pr.ReuseBlobStore {
+			b := a.Storage.External
+			if b == nil {
+				return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Presets[%s].ReuseBlobStore is set and the blobs are not on an S3-compatible store (StorageArgs.Blobs)", name)
+			}
+			st.Endpoint, st.PathStyle = b.Endpoint, b.PathStyle
+			if st.Region == "" && b.Region != "" {
+				st.Region = b.Region
+			}
+			if b.Bucket != "" && b.Bucket == st.Bucket {
+				return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Presets[%s].Bucket is the blob bucket %q: the audit archive is a bucket of its own", name, b.Bucket)
+			}
 		}
-		archive.Endpoint, archive.PathStyle = b.Endpoint, b.PathStyle
-		if archive.StoreRegion == "" && b.Region != "" {
-			archive.StoreRegion = b.Region
+		presets[name] = st
+	}
+	for name, st := range presets {
+		if st.Endpoint == "" && st.Create && st.Bucket == "" {
+			st.Bucket = auditpulumi.PresetBucketName(auditpulumi.ArchiveBucketName(p.name, a.AccountID, a.Region), name)
+			presets[name] = st
 		}
-		if b.Bucket != "" && b.Bucket == ar.BucketName {
-			return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Archive.BucketName is the blob bucket %q: the audit archive is a bucket of its own", b.Bucket)
+		if st.Endpoint != "" && st.Bucket == "" {
+			return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Presets[%s].Bucket is required on an S3-compatible store: the bucket is the estate's, "+
+				"and a different one from the blob bucket", name)
 		}
 	}
-	if archive.Endpoint == "" {
-		if archive.BucketName == "" {
-			archive.BucketName = auditpulumi.ArchiveBucketName(p.name, a.AccountID, a.Region)
-		}
-		if archive.Encryption == "" && au.Keys.Archive == "" {
-			archive.Encryption = auditpulumi.EncryptionS3
-		}
-	} else if archive.BucketName == "" {
-		return nil, errors.New("sluispulumi: LambdaArgs.Audit.Archive.BucketName is required on an S3-compatible store: the bucket is the estate's, " +
-			"and a different one from the blob bucket")
+	created := false
+	for _, st := range presets {
+		created = created || st.Create
+	}
+	if created && archive.Encryption == "" && au.Keys.Archive == "" {
+		archive.Encryption = auditpulumi.EncryptionS3
 	}
 	senders := []pulumi.StringInput{role}
 	return &auditpulumi.Args{
 		Tags: a.Tags, AccountID: a.AccountID, Region: a.Region,
 		LogRetentionDays: a.LogRetentionDays,
-		Preset:           au.Preset,
 		Keys:             au.Keys,
 		State:            au.State,
 		Archive:          archive,
+		Presets:          presets,
 		Ingest:           auditpulumi.IngestArgs{Senders: senders, Redrivers: au.Redrivers},
 		Writer: auditpulumi.WriterArgs{
 			Package: au.WriterPackage, PackageSHA256: au.WriterPackageSHA256,
@@ -339,4 +354,13 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 		Notary: au.Notary, Alerts: au.Alerts, Telemetry: au.Telemetry, Observe: au.Observe,
 		Guards: au.Guards,
 	}, nil
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -1,0 +1,5 @@
+# refuse: key_alias
+presets:
+  standard:
+    bucket: audit-archive
+    key_alias: arn:aws:kms:eu-example-1:111111111111:key/abc

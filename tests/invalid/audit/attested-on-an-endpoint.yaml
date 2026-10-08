@@ -1,0 +1,5 @@
+# refuse: the attested preset keeps its objects under compliance Object Lock, which is S3 only
+presets:
+  attested:
+    bucket: audit-attested
+    endpoint: https://s3.example.test

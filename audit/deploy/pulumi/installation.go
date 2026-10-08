@@ -77,21 +77,22 @@ func CheckRolePath(p string) error {
 	return nil
 }
 
-// CheckLockMode reports whether mode is a lock mode of the archive bucket.
+// CheckLockMode reports whether mode is a lock mode of an archive bucket. The
+// library creates the attested preset's bucket in GOVERNANCE or COMPLIANCE only.
 func CheckLockMode(mode string) error {
 	switch mode {
 	case None, Governance, Compliance:
 		return nil
 	}
 
-	return fmt.Errorf("auditpulumi: Archive.ObjectLockMode %q must be NONE, GOVERNANCE or COMPLIANCE", mode)
+	return fmt.Errorf("auditpulumi: ObjectLockMode %q must be NONE, GOVERNANCE or COMPLIANCE", mode)
 }
 
 // CheckProfile reports whether name can be a profile: it is the first component
 // of every object key.
 func CheckProfile(name string) error {
 	if !keyComponent.MatchString(name) {
-		return fmt.Errorf("auditpulumi: Archive.Profiles has %q, which is not a key component (no /, no leading dot)", name)
+		return fmt.Errorf("auditpulumi: the profile name %q is not a key component (no /, no leading dot)", name)
 	}
 
 	return nil

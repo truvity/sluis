@@ -134,7 +134,15 @@ func Values() []byte {
 		"receiver": obj("Stream mode: the receiver, which serves the sink and publishes to the stream.",
 			with(platform("audit-writer", true, true), m{"serviceAccount": def("serviceAccount")})),
 		"profiles":                     m{"type": "object", "description": "The profile document a config names as `deployment`: each profile composed from framework profiles.", "additionalProperties": m{"type": "object"}},
-		"preset":                       m{"enum": []string{"operational", "standard", "attested"}, "description": presetDescription},
+		"presets": func() m {
+			// The chart's default is no preset configured, which the render refuses with
+			// the profile named; the schema lets the default through.
+			return m{
+				"type": "object", "description": presetDescription,
+				"propertyNames":        m{"enum": []string{"operational", "standard", "attested"}},
+				"additionalProperties": presetStorage(),
+			}
+		}(),
 		"externalIdentifiersAreOpaque": boolean("The identifiers received for people outside the organisation already mean nothing outside the application's own database."),
 		"query": obj("The query service.", with(platform("audit-query", true, true), m{
 			"enabled":        boolean("Run it."),

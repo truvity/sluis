@@ -1074,56 +1074,30 @@
         },
         "archive": {
           "additionalProperties": false,
-          "description": "Where the archive is and how it is written.",
+          "description": "What the process adds to the deployment's presets: where their static credentials are, and the default key.",
           "properties": {
-            "bucket": {
-              "$ref": "#/$defs/config-audit-notary.v2.bucket"
-            },
-            "credentials": {
-              "additionalProperties": false,
-              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-              "properties": {
-                "address": {
-                  "description": "The key below the root, for example internal/archive.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "root": {
-                  "description": "The SSM path prefix of the installation, for example /audit/main.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "root",
-                "address"
-              ],
-              "type": "object"
-            },
-            "kmsKey": {
-              "description": "The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.",
+            "ca": {
+              "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
               "minLength": 1,
               "type": "string"
             },
-            "lockMode": {
-              "default": "compliance",
-              "description": "The Object Lock mode every object is written in: compliance (the record tier), governance (a lock a privileged role can shorten), or none (the attested tier, for a store without Object Lock). A process refuses to start when a profile demands a stricter mode than this.",
-              "enum": [
-                "compliance",
-                "governance",
-                "none"
-              ]
+            "kmsKey": {
+              "description": "The key objects are encrypted with where a preset names no `key_alias` of its own. Unset uses the bucket's default encryption, which a deployment should still be setting.",
+              "minLength": 1,
+              "type": "string"
             },
-            "prefix": {
-              "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+            "stateRoot": {
+              "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
               "minLength": 1,
               "type": "string"
             }
           },
-          "required": [
-            "bucket"
-          ],
           "type": "object"
+        },
+        "deployment": {
+          "description": "Path to the profile configuration. Its `presets` are the stores seals are put in, each profile's in the store of its preset.",
+          "minLength": 1,
+          "type": "string"
         },
         "keys": {
           "$ref": "#/$defs/config-audit-notary.v2.keys",
@@ -1167,65 +1141,9 @@
         }
       },
       "required": [
-        "archive"
+        "deployment"
       ],
       "title": "audit-notary",
-      "type": "object"
-    },
-    "config-audit-notary.v2.bucket": {
-      "additionalProperties": false,
-      "description": "An object store addressed by the S3 API. The vendor is not part of the configuration: an endpoint, a region and a path-style flag are enough to reach a cloud service, an in-cluster store or a test double, and a service that hard-codes one of them cannot be tested without it.",
-      "properties": {
-        "ca": {
-          "description": "Path to a certificate authority bundle the platform mounts, for a store whose endpoint is not signed by a public root. A store inside somebody's own network is the ordinary case, not the exotic one. Unset means the system trust store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "credentialsSecret": {
-          "additionalProperties": false,
-          "description": "The NAMES of the two secrets holding the credentials, never the values, each a name under the service's one `secrets` source (docs/contracts/config.md rule 5). Unset means the SDK's ambient credentials, which is what a workload identity provides.",
-          "properties": {
-            "accessKeyID": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            },
-            "secretAccessKey": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "accessKeyID",
-            "secretAccessKey"
-          ],
-          "type": "object"
-        },
-        "endpoint": {
-          "description": "Override the API endpoint. Unset means the SDK's own resolution for the region.",
-          "format": "uri",
-          "type": "string"
-        },
-        "name": {
-          "description": "The bucket. It exists already: a service does not create its own store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "pathStyle": {
-          "default": false,
-          "description": "Address the bucket as a path rather than as a host. Required by most non-cloud implementations.",
-          "type": "boolean"
-        },
-        "region": {
-          "description": "The region the bucket is in.",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
       "type": "object"
     },
     "config-audit-notary.v2.duration": {
@@ -2190,39 +2108,17 @@
           "additionalProperties": false,
           "description": "The archive to follow. Observe only reads it: it lists, and gets the objects and the catalogues beside them.",
           "properties": {
-            "bucket": {
-              "$ref": "#/$defs/config-audit-observe.v2.bucket"
+            "ca": {
+              "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
+              "minLength": 1,
+              "type": "string"
             },
-            "credentials": {
-              "additionalProperties": false,
-              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-              "properties": {
-                "address": {
-                  "description": "The key below the root, for example internal/archive.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "root": {
-                  "description": "The SSM path prefix of the installation, for example /audit/main.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "root",
-                "address"
-              ],
-              "type": "object"
-            },
-            "prefix": {
-              "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+            "stateRoot": {
+              "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
               "minLength": 1,
               "type": "string"
             }
           },
-          "required": [
-            "bucket"
-          ],
           "type": "object"
         },
         "batch": {
@@ -2234,6 +2130,11 @@
         "database": {
           "$ref": "#/$defs/config-audit-observe.v2.postgres",
           "description": "The index, as the role `audit migrate --observe` granted: read and write on the index and its cursors, and nothing of the deduplication table. Not the owner, and not the writer's or the query service's."
+        },
+        "deployment": {
+          "description": "Path to the profile configuration. Its `presets` are the stores followed, and its `profiles` say which preset each profile is in.",
+          "minLength": 1,
+          "type": "string"
         },
         "interval": {
           "$ref": "#/$defs/config-audit-observe.v2.duration",
@@ -2364,66 +2265,10 @@
         }
       },
       "required": [
-        "archive",
+        "deployment",
         "database"
       ],
       "title": "audit-observe",
-      "type": "object"
-    },
-    "config-audit-observe.v2.bucket": {
-      "additionalProperties": false,
-      "description": "An object store addressed by the S3 API. The vendor is not part of the configuration: an endpoint, a region and a path-style flag are enough to reach a cloud service, an in-cluster store or a test double, and a service that hard-codes one of them cannot be tested without it.",
-      "properties": {
-        "ca": {
-          "description": "Path to a certificate authority bundle the platform mounts, for a store whose endpoint is not signed by a public root. A store inside somebody's own network is the ordinary case, not the exotic one. Unset means the system trust store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "credentialsSecret": {
-          "additionalProperties": false,
-          "description": "The NAMES of the two secrets holding the credentials, never the values, each a name under the service's one `secrets` source (docs/contracts/config.md rule 5). Unset means the SDK's ambient credentials, which is what a workload identity provides.",
-          "properties": {
-            "accessKeyID": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            },
-            "secretAccessKey": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "accessKeyID",
-            "secretAccessKey"
-          ],
-          "type": "object"
-        },
-        "endpoint": {
-          "description": "Override the API endpoint. Unset means the SDK's own resolution for the region.",
-          "format": "uri",
-          "type": "string"
-        },
-        "name": {
-          "description": "The bucket. It exists already: a service does not create its own store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "pathStyle": {
-          "default": false,
-          "description": "Address the bucket as a path rather than as a host. Required by most non-cloud implementations.",
-          "type": "boolean"
-        },
-        "region": {
-          "description": "The region the bucket is in.",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
       "type": "object"
     },
     "config-audit-observe.v2.duration": {
@@ -3555,7 +3400,20 @@
           },
           "then": {
             "required": [
+              "archive",
+              "deployment"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
               "archive"
+            ]
+          },
+          "then": {
+            "required": [
+              "deployment"
             ]
           }
         }
@@ -3572,39 +3430,17 @@
           "additionalProperties": false,
           "description": "The archive the records are in: what the s3scan searcher reads. Get answers where a copy is and, until seals vouch for it, nothing about whether it has been verified.",
           "properties": {
-            "bucket": {
-              "$ref": "#/$defs/config-audit-query.v2.bucket"
+            "ca": {
+              "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
+              "minLength": 1,
+              "type": "string"
             },
-            "credentials": {
-              "additionalProperties": false,
-              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-              "properties": {
-                "address": {
-                  "description": "The key below the root, for example internal/archive.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "root": {
-                  "description": "The SSM path prefix of the installation, for example /audit/main.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "root",
-                "address"
-              ],
-              "type": "object"
-            },
-            "prefix": {
-              "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+            "stateRoot": {
+              "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
               "minLength": 1,
               "type": "string"
             }
           },
-          "required": [
-            "bucket"
-          ],
           "type": "object"
         },
         "database": {
@@ -4638,41 +4474,19 @@
         },
         "archive": {
           "additionalProperties": false,
-          "description": "Where the archive is and how it is written.",
+          "description": "What the process adds to the deployment's presets: where their static credentials are, and the default key.",
           "properties": {
-            "bucket": {
-              "$ref": "#/$defs/config-audit-verify.v2.bucket"
+            "ca": {
+              "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
+              "minLength": 1,
+              "type": "string"
             },
-            "credentials": {
-              "additionalProperties": false,
-              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-              "properties": {
-                "address": {
-                  "description": "The key below the root, for example internal/archive.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "root": {
-                  "description": "The SSM path prefix of the installation, for example /audit/main.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "root",
-                "address"
-              ],
-              "type": "object"
-            },
-            "prefix": {
-              "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+            "stateRoot": {
+              "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
               "minLength": 1,
               "type": "string"
             }
           },
-          "required": [
-            "bucket"
-          ],
           "type": "object"
         },
         "deployment": {
@@ -4735,215 +4549,21 @@
           ],
           "type": "object"
         },
-        "secrets": {
-          "$ref": "#/$defs/config-audit-verify.v2.secrets"
-        },
         "sink": {
           "$ref": "#/$defs/config-audit-verify.v2.sink",
           "description": "The writer this job records what it checked through."
         }
       },
       "required": [
-        "deployment",
-        "archive"
+        "deployment"
       ],
       "title": "audit verify",
-      "type": "object"
-    },
-    "config-audit-verify.v2.bucket": {
-      "additionalProperties": false,
-      "description": "An object store addressed by the S3 API. The vendor is not part of the configuration: an endpoint, a region and a path-style flag are enough to reach a cloud service, an in-cluster store or a test double, and a service that hard-codes one of them cannot be tested without it.",
-      "properties": {
-        "ca": {
-          "description": "Path to a certificate authority bundle the platform mounts, for a store whose endpoint is not signed by a public root. A store inside somebody's own network is the ordinary case, not the exotic one. Unset means the system trust store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "credentialsSecret": {
-          "additionalProperties": false,
-          "description": "The NAMES of the two secrets holding the credentials, never the values, each a name under the service's one `secrets` source (docs/contracts/config.md rule 5). Unset means the SDK's ambient credentials, which is what a workload identity provides.",
-          "properties": {
-            "accessKeyID": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            },
-            "secretAccessKey": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "accessKeyID",
-            "secretAccessKey"
-          ],
-          "type": "object"
-        },
-        "endpoint": {
-          "description": "Override the API endpoint. Unset means the SDK's own resolution for the region.",
-          "format": "uri",
-          "type": "string"
-        },
-        "name": {
-          "description": "The bucket. It exists already: a service does not create its own store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "pathStyle": {
-          "default": false,
-          "description": "Address the bucket as a path rather than as a host. Required by most non-cloud implementations.",
-          "type": "boolean"
-        },
-        "region": {
-          "description": "The region the bucket is in.",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
       "type": "object"
     },
     "config-audit-verify.v2.duration": {
       "description": "A Go duration: 30s, 2m, 168h.",
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
       "type": "string"
-    },
-    "config-audit-verify.v2.secrets": {
-      "allOf": [
-        {
-          "$defs": {
-            "name": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            }
-          },
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "source": {
-                    "const": "env"
-                  }
-                },
-                "required": [
-                  "source"
-                ]
-              },
-              "then": {
-                "not": {
-                  "required": [
-                    "root"
-                  ]
-                }
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "source": {
-                    "const": "file"
-                  }
-                },
-                "required": [
-                  "source"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "root": {
-                    "pattern": "^(/[A-Za-z0-9_][A-Za-z0-9_.-]*)+$"
-                  }
-                },
-                "required": [
-                  "root"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "source": {
-                    "const": "ssm"
-                  }
-                },
-                "required": [
-                  "source"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "root": {
-                    "pattern": "^(/[A-Za-z0-9_][A-Za-z0-9_.-]*)+$"
-                  }
-                },
-                "required": [
-                  "root"
-                ]
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "source": {
-                    "const": "openbao"
-                  }
-                },
-                "required": [
-                  "source"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "root": {
-                    "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$"
-                  }
-                },
-                "required": [
-                  "root"
-                ]
-              }
-            }
-          ],
-          "description": "Where a service reads its secrets from: ONE declared source, and a root under which every `...Secret` field of the configuration is a name (docs/contracts/config.md rule 5). The file never holds a value. `env` is refused at start-up on a serverless function, whose environment is not a place for a secret; the schema cannot see the platform, the loader does.",
-          "properties": {
-            "root": {
-              "description": "Where the source looks. file: an absolute directory. ssm: an absolute parameter path prefix. openbao: the mount path with no leading slash (for a KV v2 mount include the data segment, `secret/data/<app>`). Absent for env. No empty, `.` or `..` segment.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "source": {
-              "description": "env: each name is an environment variable, for a platform whose environment is a Secret object. file: each name is a file under `root`. ssm: each name is a parameter under `root`. openbao: each name is a path under the mount `root`.",
-              "enum": [
-                "env",
-                "file",
-                "ssm",
-                "openbao"
-              ]
-            }
-          },
-          "required": [
-            "source"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "source": {
-              "enum": [
-                "env",
-                "file",
-                "ssm"
-              ]
-            }
-          }
-        }
-      ],
-      "description": "Where a field named `...Secret` finds the secret it names. One source for the whole file: `env` (the name is an environment variable), `file` (the name is a path under `root`, one file per secret: a mounted Kubernetes Secret) or `ssm` (the name is a SecureString under `root` in AWS Systems Manager Parameter Store, read with the process's own identity). On AWS Lambda use `ssm`: the function's environment is never a place for a secret. Unset is `env`."
     },
     "config-audit-verify.v2.sink": {
       "additionalProperties": false,
@@ -5934,10 +5554,7 @@
             },
             "properties": {
               "forward": false
-            },
-            "required": [
-              "archive"
-            ]
+            }
           },
           "if": {
             "properties": {
@@ -6039,55 +5656,24 @@
         },
         "archive": {
           "additionalProperties": false,
-          "description": "Where the archive is and how it is written.",
+          "description": "What the process adds to the deployment's presets: where their static credentials are, and the default key.",
           "properties": {
-            "bucket": {
-              "$ref": "#/$defs/config-audit-writer.v2.bucket"
-            },
-            "credentials": {
-              "additionalProperties": false,
-              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-              "properties": {
-                "address": {
-                  "description": "The key below the root, for example internal/archive.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "root": {
-                  "description": "The SSM path prefix of the installation, for example /audit/main.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "root",
-                "address"
-              ],
-              "type": "object"
-            },
-            "kmsKey": {
-              "description": "The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.",
+            "ca": {
+              "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
               "minLength": 1,
               "type": "string"
             },
-            "lockMode": {
-              "default": "compliance",
-              "description": "The Object Lock mode every object is written in: compliance (the record tier), governance (a lock a privileged role can shorten), or none (the attested tier, for a store without Object Lock). A process refuses to start when a profile demands a stricter mode than this.",
-              "enum": [
-                "compliance",
-                "governance",
-                "none"
-              ]
+            "kmsKey": {
+              "description": "The key objects are encrypted with where a preset names no `key_alias` of its own. Unset uses the bucket's default encryption, which a deployment should still be setting.",
+              "minLength": 1,
+              "type": "string"
             },
-            "prefix": {
-              "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+            "stateRoot": {
+              "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
               "minLength": 1,
               "type": "string"
             }
           },
-          "required": [
-            "bucket"
-          ],
           "type": "object"
         },
         "catalogues": {
@@ -6503,62 +6089,6 @@
         "deployment"
       ],
       "title": "audit-writer",
-      "type": "object"
-    },
-    "config-audit-writer.v2.bucket": {
-      "additionalProperties": false,
-      "description": "An object store addressed by the S3 API. The vendor is not part of the configuration: an endpoint, a region and a path-style flag are enough to reach a cloud service, an in-cluster store or a test double, and a service that hard-codes one of them cannot be tested without it.",
-      "properties": {
-        "ca": {
-          "description": "Path to a certificate authority bundle the platform mounts, for a store whose endpoint is not signed by a public root. A store inside somebody's own network is the ordinary case, not the exotic one. Unset means the system trust store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "credentialsSecret": {
-          "additionalProperties": false,
-          "description": "The NAMES of the two secrets holding the credentials, never the values, each a name under the service's one `secrets` source (docs/contracts/config.md rule 5). Unset means the SDK's ambient credentials, which is what a workload identity provides.",
-          "properties": {
-            "accessKeyID": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            },
-            "secretAccessKey": {
-              "description": "The NAME of a secret under the service's `secrets` source: a relative path of letters, digits, dots, underscores and dashes, which neither starts at `/` nor climbs. Never a value.",
-              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "accessKeyID",
-            "secretAccessKey"
-          ],
-          "type": "object"
-        },
-        "endpoint": {
-          "description": "Override the API endpoint. Unset means the SDK's own resolution for the region.",
-          "format": "uri",
-          "type": "string"
-        },
-        "name": {
-          "description": "The bucket. It exists already: a service does not create its own store.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "pathStyle": {
-          "default": false,
-          "description": "Address the bucket as a path rather than as a host. Required by most non-cloud implementations.",
-          "type": "boolean"
-        },
-        "region": {
-          "description": "The region the bucket is in.",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
       "type": "object"
     },
     "config-audit-writer.v2.duration": {
@@ -8323,13 +7853,60 @@
       "minimum": 0,
       "type": "integer"
     },
-    "preset": {
-      "description": "The install preset: `operational` (writer, archive, deduplication, intake), `standard` (adds the notary, its seal key and alarms) or `attested` (adds compliance Object Lock and pseudonym keys). Optional: unset, it is the lowest preset every profile can be kept under, which each framework profile states as `min_preset`. Set, it may be stronger than that and is refused when weaker, naming the profile that needs more.",
-      "enum": [
-        "operational",
-        "standard",
-        "attested"
-      ]
+    "presets": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "Where one install preset keeps its copies: a bucket of its own.",
+        "properties": {
+          "bucket": {
+            "description": "The bucket.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "credentials": {
+            "description": "The address, below the installation's state root, of the static credentials of a store at an endpoint: a JSON object {accessKeyID, secretAccessKey} in the state store, read with the process's own identity. Only with `endpoint`: on AWS the workload's identity is the credential.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "endpoint": {
+            "description": "The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "key_alias": {
+            "description": "The alias of the KMS key this preset's objects are encrypted with, a name and never a key id or ARN. Empty is the installation's archive key, or the bucket's default encryption. Only on AWS S3.",
+            "pattern": "^alias/[A-Za-z0-9/_-]+$",
+            "type": "string"
+          },
+          "path_style": {
+            "description": "Address the bucket as endpoint/bucket/key, for a store whose certificate does not cover a bucket subdomain. Only with `endpoint`.",
+            "type": "boolean"
+          },
+          "prefix": {
+            "description": "The prefix within the bucket every key of this preset lives under, ending in a slash (`standard/`). Required wherever the bucket is shared with another installation.",
+            "pattern": "^([^/].*/)?$",
+            "type": "string"
+          },
+          "region": {
+            "description": "The region. For a store at an endpoint, `auto` unless the store says otherwise.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "bucket"
+        ],
+        "type": "object"
+      },
+      "description": "The install presets this installation uses, each with the storage of its own (`operational`, `standard`, `attested`). A profile's preset is the lowest its framework profiles can be kept under (`min_preset`), or the stronger one it asks for, and must be configured here. Object Lock is a property of the preset's bucket: `attested` is compliance Object Lock on S3 (never at an endpoint), every other preset is unlocked. The notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them.",
+      "propertyNames": {
+        "enum": [
+          "operational",
+          "standard",
+          "attested"
+        ]
+      },
+      "type": "object"
     },
     "profiles": {
       "additionalProperties": {

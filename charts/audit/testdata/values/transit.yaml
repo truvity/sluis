@@ -11,16 +11,13 @@ trust:
   configMap: private-ca-bundle
 x-database: &database
   url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-  passwordEnv: AUDIT_DATABASE_PASSWORD
-x-archive: &archive
-  bucket:
-    name: audit-archive
+  passwordSecret: AUDIT_DATABASE_PASSWORD
 writer:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     replicas: 3
-    archive: *archive
     database: *database
     keys:
       provider: transit
@@ -44,9 +41,10 @@ writer:
 migrate:
   enabled: true
   config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
       url: postgres://audit_owner@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordEnv: AUDIT_DATABASE_PASSWORD
+      passwordSecret: AUDIT_DATABASE_PASSWORD
     writer: audit_writer
   secretEnv:
     - name: AUDIT_DATABASE_PASSWORD
@@ -58,7 +56,8 @@ jobs:
   notary:
     enabled: true
     config:
-      archive: *archive
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      deployment: /etc/audit/deployment.yaml
       signer:
         transit:
           key: audit-seal
@@ -76,12 +75,13 @@ jobs:
         expirationSeconds: 600
   verify:
     config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
       deployment: /etc/audit/deployment.yaml
-      archive: *archive
   purge:
     enabled: false
   clockSync:
     config:
+      apiVersion: audit.truvity.github.io/audit-clock-sync/v2
       ntp: [time.cloudflare.com]
 query:
   enabled: true
@@ -90,14 +90,14 @@ query:
       - url: https://id.example.com
         audience: audit
   config:
+    apiVersion: audit.truvity.github.io/audit-query/v2
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     sink:
       url: http://audit:8080
     database:
       url: postgres://audit_query@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
-      passwordEnv: AUDIT_QUERY_DATABASE_PASSWORD
-    archive: *archive
+      passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
     keys:
       provider: transit
       transit:
@@ -119,6 +119,10 @@ query:
       expirationSeconds: 600
 
 # The notary is the standard preset's, which `security` asks for.
+presets:
+  standard:
+    bucket: audit-archive
+    region: eu-example-1
 profiles:
   security:
     frameworks: [security]

@@ -3,9 +3,9 @@
 The archive may live on any store that speaks the S3 API at an endpoint of its
 own. Cloudflare R2 is the one this has been measured against. Such an archive is
 written with **no Object Lock** (the lock is an AWS S3 guarantee another store
-does not make, so a lock mode on an endpoint is refused at configuration and at
-store construction) and is therefore an `operational` or `standard` installation,
-not an `attested` one. Its integrity rests on the objects' hashes and, with the
+does not make, so the `attested` preset on an endpoint is refused at configuration
+and at store construction), so it holds the `operational` or `standard` preset,
+not `attested`. Its integrity rests on the objects' hashes and, with the
 notary, on the seals.
 
 ## 1. The bucket and its credentials
@@ -17,45 +17,66 @@ in the stack's state:
 
 ```sh
 aws ssm put-parameter --type SecureString \
-  --name /audit/main/internal/archive \
+  --name /audit/main/internal/archive/operational \
   --value "$(printf '{"accessKeyID":"%s","secretAccessKey":"%s"}' "$ID" "$SECRET")"
 ```
 
-The Pulumi library's output `ArchiveCredentialsPath` is that name.
+The Pulumi library's output `ArchiveCredentialsPaths` lists the names, per preset.
 
 ## 2. The installation
 
+The store is the storage of a **preset**, in the deployment document
+([0026](../decisions/0026-storage-is-configured-per-preset.md)). A preset on an
+endpoint is `operational` or `standard`; an installation may keep another preset
+on AWS S3 beside it.
+
+```yaml
+presets:
+  operational:
+    bucket: acme-audit
+    prefix: operational/
+    region: auto
+    endpoint: https://<account>.r2.cloudflarestorage.com
+    credentials: internal/archive/operational   # below the state root
+```
+
+With the Pulumi library:
+
 ```go
 auditpulumi.New(ctx, "main", &auditpulumi.Args{
-    Archive: auditpulumi.ArchiveArgs{
-        BucketName: "acme-audit",
-        Endpoint:   "https://<account>.r2.cloudflarestorage.com",
-        // StoreRegion defaults to "auto", which R2 signs with.
+    Presets: map[string]auditpulumi.PresetStorage{
+        "operational": {
+            Bucket:   "acme-audit",
+            Prefix:   "operational/",
+            Endpoint: "https://<account>.r2.cloudflarestorage.com",
+            // Region defaults to "auto", which R2 signs with.
+            // CredentialsAddress defaults to internal/archive/operational.
+        },
     },
     // ... Ingest, Writer; no Keys.Archive: the store encrypts at rest itself.
 })
 ```
 
-The writer's configuration then reads:
+The process configuration names where the credentials are read from:
 
 ```yaml
 archive:
-  bucket: {name: acme-audit, endpoint: "https://<account>.r2.cloudflarestorage.com", region: auto}
-  lockMode: none
-  credentials: {root: /audit/main, address: internal/archive}
+  stateRoot: /audit/main
 ```
 
-On Kubernetes the same block goes in the component's `config`; the pod's
-identity needs `ssm:GetParameter` on the credentials parameter.
+On Kubernetes the chart renders `presets` into the deployment document and the
+component's `config.archive` carries the state root; the pod's identity needs
+`ssm:GetParameter` on the credentials parameter.
 
 ## What does not carry over
 
-- `Archive.ObjectLockMode`, `DefaultRetentionDays`, `Encryption`, `KeyArn`,
-  `Keys.Archive`, `GlacierIRDays` and `DeepArchiveDays` are the settings of an AWS
-  bucket and are refused with an endpoint. Retention and tiering are the store's
-  lifecycle rules, which you configure there.
-- `Observe`, `Query` and `ArchiveWriter` are IAM roles over an AWS bucket. The
-  workloads read the archive with the same credentials.
+- `key_alias` is refused on a preset at an endpoint, and so are `Create`,
+  `Keys.Archive` and the other settings of an AWS bucket. Retention and tiering
+  are the store's lifecycle rules, which you configure there.
+- An `attested` preset is refused at an endpoint: Object Lock is S3 only.
+- `Observe`, `Query` and `ArchiveWriter` are IAM roles over AWS buckets; they get
+  nothing for a preset on an endpoint, whose workloads read it with the credentials
+  in the state store.
 
 ## The compressed-write checksum
 
