@@ -332,12 +332,12 @@ func (m *Minter) checkPrototype(ctx context.Context, account string, api API, pr
 	if err != nil {
 		return &cloudflareError{err: fmt.Errorf("list the permission groups: %w", err)}
 	}
-	err = cloudflare.CheckPrototype(proto, names)
+	err = cloudflare.CheckPrototype(proto, names, m.cfg.Cloudflare.ForbiddenPermissionGroups...)
 	if pe, ok := cloudflare.IsPrototypeError(err); ok && pe.Reason == cloudflare.ReasonPrototypeForbidden && m.unresolved(proto, names) {
 		if names, err = m.permissionGroups(ctx, account, api, true); err != nil {
 			return &cloudflareError{err: fmt.Errorf("list the permission groups: %w", err)}
 		}
-		return cloudflare.CheckPrototype(proto, names)
+		return cloudflare.CheckPrototype(proto, names, m.cfg.Cloudflare.ForbiddenPermissionGroups...)
 	}
 	return err
 }
@@ -451,6 +451,9 @@ func (m *Minter) fail(ctx context.Context, actor audit.Actor, preset, variant st
 		outcome = "refused"
 	}
 	meters.mint(ctx, preset, variant, outcome)
+	if isPrototype {
+		meters.prototypeRefused(ctx, preset, reason)
+	}
 	m.log.WarnContext(ctx, "a Cloudflare token was not minted", "preset", preset, "variant", variant, "reason", reason, "error", err)
 }
 

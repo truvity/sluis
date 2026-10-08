@@ -13,3 +13,4 @@ alerts:
     rateLimitLow: {enabled: false}
     seatsShort: {enabled: false}
     portErrors: {enabled: false}
+    cloudflareRotationStale: {enabled: false}

@@ -217,6 +217,19 @@ func TestAPrototypeGrantingAForbiddenGroupIsRefused(t *testing.T) {
 	}
 }
 
+func TestARefusalFoundByCheckIsAnAuditEventAndAMetricNotJustAReturn(t *testing.T) {
+	e := setup(t)
+	p, _ := e.api.GetToken(ctx, dnsProto)
+	p.Policies = policiesJSON("g-bill")
+	e.api.put(p)
+	if got := e.m.Check(ctx); got["dns"] == nil {
+		t.Fatalf("check = %v", got)
+	}
+	if n := len(e.rec.Find("roster.cloudflare.token.refused")); n != 2 { // dns and dns-edge share the prototype
+		t.Errorf("refused records = %d, want 2", n)
+	}
+}
+
 func TestAMissingPrototypeAndAMissingMinterAreRefusedPlainly(t *testing.T) {
 	e := setup(t)
 	e.api.mu.Lock()

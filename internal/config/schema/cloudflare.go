@@ -9,7 +9,7 @@ const (
 // pattern cannot say (rotation shorter than lifetime, both at least a minute,
 // an account a preset names being declared) is internal/config.Cloudflare.Validate.
 func cloudflareSchema() m {
-	return obj("sluis as the STS for Cloudflare API tokens and R2 credentials (docs/how-to/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.", m{
+	section := obj("sluis as the STS for Cloudflare API tokens and R2 credentials (docs/how-to/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.", m{
 		"accounts": m{
 			"type": "object", "propertyNames": m{"pattern": cloudflareName},
 			"description": "The Cloudflare accounts sluis mints in, by the name presets use.",
@@ -30,7 +30,9 @@ func cloudflareSchema() m {
 				"endpoint":    url("Makes this an R2 preset: the S3 endpoint of the account (`https://<account-id>.r2.cloudflarestorage.com`, or `https://<account-id>.eu.r2.cloudflarestorage.com` for an EU jurisdiction). The stored document then holds an access key and secret instead of a token."),
 			}, "account", "prototype", "description", "lifetime", "rotation"),
 		},
+		"forbiddenPermissionGroups": list("Permission groups, by the name Cloudflare lists them under, that a prototype may never grant, IN ADDITION to the built-in list: Account API Tokens Edit (Write), Billing, Account Settings, Memberships, and Access: Organizations, Identity Providers, and Groups. The built-in list is the only thing between the minter and everything its creator could do, so it cannot be shortened by configuration, only extended.", m{"type": "string", "minLength": 1}),
 	})
+	return section
 }
 
 // policyCloudflareSchema is the policy document's `cloudflare` section: who may
