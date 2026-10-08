@@ -92,12 +92,26 @@ and schedule from one declaration, and one chart renders every Deployment.
    secret is in a document. Telemetry: the OpenTelemetry Collector runs as a Lambda extension and the binaries export
    OTLP to the loopback address; the adapter owns `AWS_LAMBDA_EXEC_WRAPPER`.
 
-8. **State.** DynamoDB's partition key is the record kind, so `dynamodb:LeadingKeys` confines a module to the kinds it
-   owns; module roles get no `Scan`. The session, refresh and revocation kinds belong to the signer alone; the key-ring
-   kinds are written by the signer alone; the `github-*` and `slack-*` kinds are written by their module, apart from
-   the confirmation and pass requests an operator files through the console. The `lease` and `notify` kinds are shared
-   by every module that runs scheduled work. The Kubernetes signer uses the same DynamoDB state on estates that run
-   Kubernetes on AWS.
+8. **State, secrets, keys and blobs are per module.**
+   - **One DynamoDB table per module**, on demand. A module reads another module's data by calling it, never by
+     reading its table. The signer's table holds the key ring, sessions, refresh tokens and revocations. Most data
+     start fresh in the release that carries this record (sessions, the ring, provider state, Cloudflare records);
+     what must survive moves through backup and restore.
+   - **Secrets layout v5.** `internal/<module>/{config,credentials}/...` is read and written only by that module;
+     `external/<kind>/<id>` is written only by its owning module (`oidc` by the issuer, and `github`, `slack` and
+     `cloudflare` by theirs) and granted to consumers by exact address as in [0041](0041-the-secret-contract.md).
+     Estates still on layout v4 for the unified-release cutovers stay there until they move.
+   - **One shared KMS key per estate**, because a key is billed per month and an alias is not. Each module has an
+     alias `alias/sluis-<instance>-<module>-<purpose>`; the key port always passes the alias, also on decrypt. A
+     module role's every KMS permission is conditioned on `kms:RequestAlias` and on the encryption context
+     (`instance`, `purpose`, `module`, with `kms:EncryptionContextKeys` fixing the set of context keys); the key
+     policy names only the module roles, an admin role and a break-glass role. SSM parameters are bound by
+     `kms:ViaService` and the parameter ARN in the context, not by the alias. `kms:ResourceAliases` separates nothing
+     on one key and is not used. An estate may re-point one alias at a dedicated key without a code change.
+   - **Blobs:** one bucket with a prefix per module on AWS (object ARNs per prefix, `s3:prefix` on listing, a bucket
+     policy that denies the other roles); a bucket per module on R2, whose credentials cannot be scoped to a prefix.
+   - **Policy tests.** Every generated policy has a golden test and a deny-matrix test: module X is denied module Y's
+     table, prefix, secret path and key alias, for every pair, generated from the module list.
 
 9. **Backup and restore replace migration.** `sluis migrate` is not part of the end state. `backup` is a scheduled
    module (EventBridge on Lambda, a CronJob on Kubernetes) with read access to State, secrets and blobs, no inbound API,
@@ -108,9 +122,11 @@ and schedule from one declaration, and one chart renders every Deployment.
 10. **Schedules and rollout.** Schedules are written once in a neutral form (`every: 5m` or a five-field cron);
     Pulumi translates them to EventBridge Scheduler expressions (a role per schedule, a retry policy, a dead-letter
     queue) and the `-k8s` binaries give them to an in-process scheduler (gocron v2) that takes a lease per tick, so
-    handlers are idempotent and replicas do not double-run. Modules with schedules: signer (key ring, every minute),
-    github and slack (every 5 minutes, plus run-now), google (directory refresh every 5 minutes, plus refresh on a
-    miss), cloudflare (every minute), backup (hourly or daily); issuer and console have none. On AWS every function
+    handlers are idempotent and replicas do not double-run. Ticks: signer every 5 minutes (key ring); github, slack and
+    google every 15 minutes plus on demand (run-now, and refresh on a cache miss); cloudflare a third of the shortest
+    preset rotation, clamped to 1 to 15 minutes; backup daily; issuer and console have none. A tick with nothing to do
+    reads the State once, calls no KMS, writes no log line and counts a metric, because Lambda bills duration at 1 ms
+    and bills initialisation. On AWS every function
     is served through a `live` alias that a CodeDeploy canary shifts (10% for 5 minutes, then 100%, rolled back on a
     CloudWatch alarm for errors or throttles; a window of 0 is all at once), and callers target the alias, never
     `$LATEST`. On Kubernetes a rolling update (`maxUnavailable: 0`, `maxSurge: 1`) with probes, configurable
@@ -136,8 +152,11 @@ and schedule from one declaration, and one chart renders every Deployment.
   behind a flag for one release.
 - Session and refresh state moves from the issuer's records to the signer's. The format bridge is at most 30 days and
   then removed; during it the signer reads the previous records.
-- `LeadingKeys` confines by record kind, not by item: where two modules write one kind (leases, the operator request
-  records), the confinement is by convention and by each reader re-validating what it reads.
+- A table per module makes the isolation a property of the table's ARN, not of a key condition; the cost is that a
+  module needing another's data calls it. The release that carries this record starts most state fresh: everyone signs
+  in again and the key set is republished, so relying parties' key-set caches must be allowed for in the cutover.
+- One KMS key shared by all modules is separated by alias and encryption-context conditions, which hold for symmetric
+  keys only; the remote-signing mode with asymmetric keys is outside this design.
 - The Cloudflare minter credential, which Cloudflare does not bound by the creator's rights, lives only in the
   `cloudflare` module, with the refusals of ADR 0070
   enforced there.
