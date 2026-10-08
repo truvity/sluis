@@ -238,12 +238,12 @@ Every release is also checksummed, signed and attested. goreleaser writes an SPD
 SBOM next to each archive; after the `audit` job has combined the two products'
 lines into `checksums.txt`, the `attest` job signs it (keyless cosign, published
 as `checksums.txt.sigstore.json`) and attests the provenance of every release
-asset, `attest-sboms` binds each SBOM to its archive, and `attest-images` signs
+asset, `attest-sboms` binds each SBOM to its archive, and `attest-oci` signs
 and attests each image by digest. These jobs, not the shared workflow, hold
 `id-token: write` and `attestations: write`, so the signing identity is
 `.github/workflows/release.yaml` at the tag. The certificates and signatures are
 recorded in Sigstore's public transparency log. A new image or archive family
-goes into the `attest-images` matrix and `hack/release-verify.sh`.
+goes into the `hack/release-images.txt`, the one list.
 `just release-verify vX.Y.Z` checks a published release
 ([Verify a release](docs/how-to/verify-a-release.md)); `just release-lint`
 (part of `check`) validates both goreleaser configs, lints the workflows with

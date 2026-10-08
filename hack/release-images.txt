@@ -1,0 +1,14 @@
+# The OCI artifacts a release pushes, one per line: `kind reference` (no tag).
+# The one list the release workflow's `attest-oci` matrix and
+# hack/release-verify.sh both read. An image is signed and gets provenance and
+# SBOM attestations by digest; a chart gets a signature and provenance.
+# Add a new image or chart here, and nowhere else.
+image ghcr.io/truvity/sluis/sluis
+image ghcr.io/truvity/sluis/resource-proxy
+image ghcr.io/truvity/audit/audit
+image ghcr.io/truvity/audit/audit-query
+image ghcr.io/truvity/audit/audit-notary
+image ghcr.io/truvity/audit/audit-observe
+image ghcr.io/truvity/audit/audit-writer
+chart ghcr.io/truvity/charts/sluis
+chart ghcr.io/truvity/charts/audit
