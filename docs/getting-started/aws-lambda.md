@@ -257,5 +257,5 @@ audit trail of the attempt: [Recovery on Lambda](../how-to/recover-on-lambda.md)
 - an issuer that answers its discovery document, and a console you can sign in to.
 
 Next: connect a directory ([Google Workspace](../how-to/connect/google-workspace.md)), then each thing that trusts the
-issuer ([how-to index](../index.md)). Taking a release: [upgrade pages](../how-to/upgrade/v1.64.md). Operations on
+issuer ([how-to index](../sluis/README.md)). Taking a release: [upgrade pages](../how-to/upgrade/v1.64.md). Operations on
 Lambda: [Lambda reference](../reference/lambda.md).

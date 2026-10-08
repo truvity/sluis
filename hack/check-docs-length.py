@@ -2,7 +2,7 @@
 """Warn about documentation pages over 400 lines. Never fails.
 
 A long page is usually two pages: one task or one subject per page is the
-layout the docs follow (docs/index.md). The CHANGELOG and the generated
+layout the docs follow (docs/README.md). The CHANGELOG and the generated
 reference pages (a page with a `<!-- generated: name -->` region, written by
 `just docs-generate`) are exempt, because their length is the data's.
 """

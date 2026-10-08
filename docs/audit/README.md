@@ -13,6 +13,21 @@ Pick the road you are on.
 | upgrading | [the upgrade pages](how-to/upgrade/v0.13.md), linked from the [CHANGELOG](../../audit/CHANGELOG.md) |
 | working on this repository | [repository layout](reference/repository-layout.md) and [CONTRIBUTING](../../audit/CONTRIBUTING.md) |
 
+## By section
+
+| section | start at |
+|---|---|
+| getting started | [Kubernetes](getting-started/kubernetes.md), [AWS Lambda](getting-started/aws-lambda.md), [sluis-connected](getting-started/sluis.md) |
+| architecture | [Architecture](explanation/architecture.md), [concepts](explanation/concepts.md) |
+| deployment | [Deployment shapes](deployment/README.md) |
+| operations | [Recover from an outage](how-to/recover-from-an-outage.md), [respond to alerts](how-to/respond-to-alerts.md), [verify the trail](how-to/verify-the-trail.md) |
+| how-to | the tables below |
+| reference | [record](reference/record.md), [configuration](reference/configuration.md), [extension points](reference/extension-points.md) |
+| explanation | [why](explanation/why.md), [integrity](explanation/integrity.md), [the decisions](../decisions/README.md) |
+
+audit owns the record format, the extension slots and the SDKs (emitter and query). Who may write what to a sluis
+installation's catalogue is sluis's: [change the audit catalogue](../how-to/change-the-audit-catalogue.md).
+
 ## Getting started
 
 One tutorial per deployment shape: [Kubernetes](getting-started/kubernetes.md), [AWS Lambda](getting-started/aws-lambda.md), [sluis-connected](getting-started/sluis.md).
