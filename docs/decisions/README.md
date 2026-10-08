@@ -89,6 +89,7 @@ is not edited.
 | [0066](0066-indexer-and-query-are-separate-processes.md) | The indexer and the query service are separate processes, under separate database roles | accepted |
 | [0067](0067-configuration-is-immutable-per-instance.md) | Configuration is immutable per instance; credentials and State are read live | accepted; refines [0063](0063-one-validated-configuration-file.md) and [0051](0051-versioning-policy.md) for configuration |
 | [0068](0068-storage-is-configured-per-preset.md) | Storage is configured per install preset | accepted; refines [0056](0056-lock-modes-and-store-tiers.md) and [0065](0065-archive-retention-and-lifecycle.md) |
+| [0070](0070-cloudflare-tokens-and-r2-credentials-by-prototype-clone.md) | Cloudflare tokens and R2 credentials: sluis clones a disabled prototype token | Accepted (2026-10-08). Follows [0014](0014-minting-third-party-credentials-only-where-membership-is-governed.md) (a credential is minted only where membership is governed), stores its output under the contract of [0041](0041-the-secret-contract.md) and grants it to people and agents as [0040](0040-agent-class-sessions.md) sets out. |
 <!-- /generated -->
 
 ## Audit's records
