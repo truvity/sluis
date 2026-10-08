@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -73,60 +74,120 @@ func configDir() (string, error) {
 		return "", fmt.Errorf("find the configuration directory: %w", err)
 	}
 	dir := filepath.Join(base, "sluisctl")
-	migrateLegacyConfigDir(filepath.Join(base, "accessctl"), dir, os.Stderr)
+	legacyMigration.Do(func() {
+		migrateLegacyConfigDir(filepath.Join(base, "accessctl"), dir, os.Stderr)
+	})
 	return dir, nil
 }
 
-// legacyMigratedMarker is written into the new directory once a migration
-// has run, so that a later sign-out that empties the directory is not
-// undone by copying the old state back.
+// legacyMigratedMarker sits inside the migrated tree, so it lands with the
+// rename. It records that a migration ran: a later sign-out that leaves the
+// directory with only this file is not undone by copying the old state back.
+// Deleting the whole <config>/sluisctl directory, marker included, re-runs the
+// migration from the old directory.
 const legacyMigratedMarker = ".migrated-from-accessctl"
+
+// stagingPrefix names the private directories a migration builds in.
+const stagingPrefix = ".sluisctl-migrate-"
+
+var legacyMigration sync.Once
 
 // migrateLegacyConfigDir copies the state in oldDir to newDir, once.
 //
-// It runs only when newDir holds nothing (absent or empty) and oldDir
-// holds something. Every file is written under a temporary name and then
-// linked into place, which fails if the name is taken: a file a concurrent
-// sluisctl (or a newer one) already wrote is never replaced. Modes are
-// kept but never widened beyond 0600 for files and 0700 for directories.
-// oldDir is left as it is. Failure is not fatal: the tool starts without
+// It runs only when newDir holds nothing (absent or empty) and oldDir holds
+// something. The copy is built in a private staging directory beside newDir
+// and renamed into place, so no other process ever sees a half-built newDir,
+// and a failed copy leaves nothing behind (the next run retries). A rename
+// onto a non-empty newDir fails: another process won, and newDir is used as
+// it is. Files are created 0600 and directories 0700. oldDir (which may be a
+// symlink) is left as it is. Failure is not fatal: the tool starts without
 // the old state, as a fresh laptop would, and says why on w.
 func migrateLegacyConfigDir(oldDir, newDir string, w io.Writer) {
 	if entries, err := os.ReadDir(newDir); err == nil && len(entries) > 0 {
 		return
 	}
-	if entries, err := os.ReadDir(oldDir); err != nil || len(entries) == 0 {
-		return
-	}
-	if err := os.MkdirAll(newDir, 0o700); err != nil {
-		_, _ = fmt.Fprintf(w, "sluisctl: could not migrate %s to %s: %v\n", oldDir, newDir, err)
-		return
-	}
-	copied, err := copyTreeNoClobber(oldDir, newDir)
+	src, err := filepath.EvalSymlinks(oldDir)
 	if err != nil {
-		_, _ = fmt.Fprintf(w, "sluisctl: migrating %s to %s was incomplete: %v\n", oldDir, newDir, err)
+		return
 	}
-	_ = os.WriteFile(filepath.Join(newDir, legacyMigratedMarker), nil, 0o600)
-	if copied > 0 {
-		_, _ = fmt.Fprintf(w, "sluisctl: copied its saved state from %s to %s (the old directory is left in place)\n", oldDir, newDir)
+	if entries, err := os.ReadDir(src); err != nil || len(entries) == 0 {
+		return
+	}
+	fail := func(err error) {
+		_, _ = fmt.Fprintf(w, "sluisctl: could not migrate %s to %s (will retry next run): %v\n", oldDir, newDir, err)
+	}
+	parent := filepath.Dir(newDir)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		fail(err)
+		return
+	}
+	removeStaleStaging(parent, time.Hour)
+	staging, err := os.MkdirTemp(parent, stagingPrefix+"*")
+	if err != nil {
+		fail(err)
+		return
+	}
+	defer os.RemoveAll(staging) // a no-op once renamed away
+	if err = os.Chmod(staging, 0o700); err != nil {
+		fail(err)
+		return
+	}
+	copied, err := copyTree(src, staging)
+	if err != nil {
+		fail(err)
+		return
+	}
+	if copied == 0 {
+		return
+	}
+	if err = os.WriteFile(filepath.Join(staging, legacyMigratedMarker), nil, 0o600); err != nil {
+		fail(err)
+		return
+	}
+	err = os.Rename(staging, newDir)
+	if err != nil {
+		if entries, rerr := os.ReadDir(newDir); rerr == nil {
+			if len(entries) > 0 {
+				return // another process won
+			}
+			// An empty newDir that rename refused: clear it and retry once.
+			if rerr = os.Remove(newDir); rerr == nil {
+				err = os.Rename(staging, newDir)
+			}
+		}
+	}
+	if err != nil {
+		fail(err)
+		return
+	}
+	_, _ = fmt.Fprintf(w, "sluisctl: copied its saved state from %s to %s (the old directory is left in place)\n", oldDir, newDir)
+}
+
+// removeStaleStaging deletes staging directories a crashed migration left in
+// parent, once they are older than maxAge.
+func removeStaleStaging(parent string, maxAge time.Duration) {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), stagingPrefix) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > maxAge {
+			_ = os.RemoveAll(filepath.Join(parent, e.Name()))
+		}
 	}
 }
 
-// copyTreeNoClobber copies the regular files and directories under src to
-// dst and returns how many files it placed. Anything else (a symlink, a
-// socket) is skipped.
-func copyTreeNoClobber(src, dst string) (int, error) {
+// copyTree copies the regular files and directories under src into the
+// private directory dst and returns how many files it copied. Anything else
+// (a symlink, a socket) is skipped. The first error stops the copy.
+func copyTree(src, dst string) (int, error) {
 	copied := 0
-	var firstErr error
-	note := func(err error) {
-		if err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
 	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			note(walkErr)
-			return nil
+			return walkErr
 		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil || rel == "." {
@@ -135,63 +196,54 @@ func copyTreeNoClobber(src, dst string) (int, error) {
 		target := filepath.Join(dst, rel)
 		switch {
 		case d.IsDir():
-			if err := os.MkdirAll(target, 0o700); err != nil {
-				note(err)
-				return filepath.SkipDir
-			}
+			return os.Mkdir(target, 0o700)
 		case d.Type().IsRegular():
-			ok, err := copyFileNoClobber(path, target)
-			note(err)
-			if ok {
-				copied++
+			if err := copyFile(path, target); err != nil {
+				return err
 			}
+			copied++
 		}
 		return nil
 	})
-	note(err)
-	return copied, firstErr
+	return copied, err
 }
 
-// copyFileNoClobber copies src to dst with mode capped at 0600, unless dst
-// exists. It reports whether it placed the file.
-func copyFileNoClobber(src, dst string) (bool, error) {
-	if _, err := os.Lstat(dst); err == nil {
-		return false, nil
+// copyFile copies src to the new file dst (mode 0600, fsynced). The source is
+// Lstat-ed, opened, and Fstat-ed: it must be a regular file and the same file
+// both times, so a symlink swapped in after the walk is refused.
+func copyFile(src, dst string) error {
+	before, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if !before.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", src)
 	}
 	in, err := os.Open(src)
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer in.Close()
-	info, err := in.Stat()
+	after, err := in.Stat()
 	if err != nil {
-		return false, err
+		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".migrate-*")
+	if !after.Mode().IsRegular() || !os.SameFile(before, after) {
+		return fmt.Errorf("%s changed while it was being copied", src)
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return false, err
+		return err
 	}
-	defer os.Remove(tmp.Name())
-	// CreateTemp is 0600; only ever narrow it further.
-	if err = tmp.Chmod(info.Mode().Perm() & 0o600); err != nil {
-		tmp.Close()
-		return false, err
+	if _, err = io.Copy(out, in); err != nil {
+		out.Close()
+		return err
 	}
-	if _, err = io.Copy(tmp, in); err != nil {
-		tmp.Close()
-		return false, err
+	if err = out.Sync(); err != nil {
+		out.Close()
+		return err
 	}
-	if err = tmp.Close(); err != nil {
-		return false, err
-	}
-	// Link, not rename: a rename would replace a file written meanwhile.
-	if err = os.Link(tmp.Name(), dst); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	return out.Close()
 }
 
 func configPath() (string, error) {
