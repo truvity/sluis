@@ -261,6 +261,14 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 		sec.KMSKeyID = a.ParameterKeyArn
 		in.Secrets = &sec
 	}
+	plan, err := a.planAudit()
+	if err != nil {
+		return a, err
+	}
+	a.audit = plan
+	if err := withAudit(&in, plan); err != nil {
+		return a, err
+	}
 	service, policy, err := sluisconfig.Render(&in)
 	if err != nil {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
@@ -597,4 +605,39 @@ func libraryMinor() string {
 		}
 	}
 	return ""
+}
+
+// withAudit writes the audit adapter the plan decides into the installation:
+// the queue the records are published to (installed here, or Audit.Use's), or
+// the `log` adapter when audit is off. With the deprecated AuditQueueArn the
+// estate wrote it and nothing is added. The installation naming another queue
+// or adapter is refused: the fact is stated once.
+func withAudit(in *sluisconfig.Installation, p *auditPlan) error {
+	aws := *in.AWS
+	switch p.mode {
+	case auditInstall, auditUse:
+		if aws.AuditQueueURL != "" && aws.AuditQueueURL != p.queueURL {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Audit publishes to %s and the installation's aws.auditQueueURL is %s: say it once",
+				p.queueURL, aws.AuditQueueURL)
+		}
+		if c, ok := in.Adapters["audit"]; ok && c.Adapter != "sqs" {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Audit publishes to SQS and the installation's adapters.audit is %q: say it once", c.Adapter)
+		}
+		aws.AuditQueueURL = p.queueURL
+	case auditOff:
+		if aws.AuditQueueURL != "" {
+			return errors.New("sluispulumi: LambdaArgs.Audit.Enabled is false and the installation's aws.auditQueueURL names a queue: say it once")
+		}
+		if c, ok := in.Adapters["audit"]; ok && c.Adapter != "log" {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Audit.Enabled is false and the installation's adapters.audit is %q: say it once", c.Adapter)
+		}
+		adapters := make(map[string]sluisconfig.AdapterChoice, len(in.Adapters)+1)
+		for k, v := range in.Adapters {
+			adapters[k] = v
+		}
+		adapters["audit"] = sluisconfig.AdapterChoice{Adapter: "log"}
+		in.Adapters = adapters
+	}
+	in.AWS = &aws
+	return nil
 }

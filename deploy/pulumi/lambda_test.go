@@ -154,6 +154,11 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("stateSecretParameter", l.StateSecretParameter)
 		collect("recoveryPasswordParameter", l.RecoveryPasswordParameter)
 		collect("configLayerArn", l.ConfigLayerArn)
+		collect("auditQueueUrl", l.AuditQueueURL)
+		collect("auditQueueArn", l.AuditQueueArn)
+		if l.Audit != nil {
+			collect("auditPreset", l.Audit.Preset)
+		}
 		return nil
 	})
 }

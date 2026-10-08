@@ -2,6 +2,7 @@ package sluispulumi_test
 
 import (
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -80,6 +81,9 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		})
 	case "aws:dynamodb/table:Table":
 		set("arn", arnp+"dynamodb:eu-west-1:"+account+":table/"+physical)
+	case "aws:sqs/queue:Queue":
+		set("arn", arnp+"sqs:"+region+":"+account+":"+physical)
+		set("url", "https://sqs."+region+".amazonaws.com/"+account+"/"+physical)
 	default:
 		set("arn", arnp+"mock:::"+a.TypeToken+"/"+physical)
 	}
@@ -95,6 +99,11 @@ func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 		out["targetKeyArn"] = resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":key/" + name)
 		out["arn"] = resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":alias/" + name)
 		return out, nil
+	}
+	if a.Token == "aws:s3/getObject:getObject" {
+		// The audit library compares the catalogue with the archive's copy; a
+		// first deploy has none.
+		return nil, errors.New("reading S3 Bucket Object (" + a.Args["key"].StringValue() + "): couldn't find resource")
 	}
 	return a.Args, nil
 }

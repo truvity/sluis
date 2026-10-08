@@ -244,7 +244,10 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
 	Storage:       store.Grant(),
 	State:         state.Grant(),
-	AuditQueueArn: audit.QueueArn,
+	Audit: &sluispulumi.AuditArgs{ // installed beside the function, operational: see Audit below
+		WriterPackage: "dist/audit-writer-lambda_<version>_linux_arm64.zip", WriterPackageSHA256: "<its digest>",
+		CatalogueDir: "dist/sluis-audit-catalogue", // the release's sluis-audit-catalogue bundle, unpacked
+	},
 	Schedule: sluispulumi.ScheduleArgs{GitHubOrgs: []string{"acme"}, SlackWorkspaces: []string{"T0ACME"}},
 }, pulumi.Providers(awsProvider))
 ```
@@ -276,7 +279,8 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `Policy`, `PolicyPath` (deprecated) | exactly one, without `Installation` | The policy document, or a file or directory of layers rendered by sluis's renderer (`sluisctl policy render`); the layer holds it at `/opt/sluis/policy.yaml`. The GitHub and Slack catalogues are in it (`apps.github.catalogue`, `apps.slack.catalogue`). |
 | `AllowEndpoints` | false | Lets the documents name a service `endpoint`, for a LocalStack test. Off, one is refused. |
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
-| `AuditQueueArn` | required | The audit stack's ingest queue. |
+| `Audit` | install | Where the service's audit records go: installed by default, `Use` an installation that exists, or `Enabled: false`. Needs `Installation`. See [Audit](#audit). |
+| `AuditQueueArn` (deprecated) | none | An audit installation's ingest queue that the estate installed itself and named in its installation (`aws.auditQueueURL`); the function may send to it, and the library installs nothing. Exclusive with `Audit`. Required with the deprecated `Config`; with `Installation`, set `Audit` instead. |
 | `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use: the ones the library creates and the ones the function writes at run time (its credentials and exports; the library writes it into the service document as `secrets.kmsKeyId`, and a document that names another key is refused). Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
 | `Keys` | nil | The KMS keys the estate supplies, by alias: see [Keys the estate supplies](#keys-the-estate-supplies). Set, the library creates no key. Exclusive with the four inputs below. |
 | `SigningKeyAlias` (deprecated) | `alias/sluis-signing` | The ES384 signing key's alias. Deprecated with the other key-creating inputs: they work for one more release, with a warning, and are removed after it. |
@@ -322,6 +326,54 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
 | `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
+| `Audit` | The audit installation the library installed (`*auditpulumi.Audit`: its queue, writer, archive bucket and preset); nil with `Audit.Use`, `Audit.Enabled: false` and `AuditQueueArn`. |
+| `AuditQueueURL`, `AuditQueueArn` | The queue the service publishes to (installed, or `Use`'s); empty when audit is off, and the URL is empty with the deprecated `AuditQueueArn`. |
+
+### Audit
+
+`LambdaArgs.Audit` (`AuditArgs`) decides where the service's audit records go, in one of three ways. The library writes
+the `audit` adapter into the service document itself (`aws.auditQueueURL`, or the `log` adapter), so an installation that
+names another queue or adapter is refused: the fact is stated once.
+
+| `Audit` | The library |
+|---|---|
+| unset, or set without `Use` and `Enabled: false` | **Installs audit** beside the function: the audit Pulumi library of this repository (`github.com/truvity/sluis/audit/deploy/pulumi`, the same release), named `audit-<instance>` (`Name`). The function's role is the one sender its ingest queue accepts, and the function is granted `sqs:SendMessage` on exactly that queue. The service publishes to it. |
+| `Use: &AuditUse{QueueURL, QueueArn}` | Sends the records to an installation that exists (another stack's or account's) and installs nothing. The URL is written into the configuration layer, so it must be known when the program runs; the queue must be in the function's region. `QueueArn` defaults to the ARN the URL names. |
+| `Enabled: &false` | No audit. Nothing is installed, the role is granted no queue, and the service document names the `log` audit adapter: the runtime validates each record against the catalogue and writes it to the log, and keeps it nowhere else (it logs `no audit installation is connected`). |
+
+The installation is **operational** unless the profiles ask for more. `Profiles` maps each destination (the profile names
+sluis's catalogue puts on its actions: `security`) to the framework profiles it is composed from; the default is
+`security: [history]` (`DefaultAuditProfiles`), whose minimum is `operational`: the writer, the archive, deduplication and the queue
+intake, with no notary, seal key, alarm or Object Lock. The preset is derived from the profiles with the audit library's
+own rule (the lowest preset that satisfies every profile); `Preset` may name a stronger one and a weaker one is refused,
+naming the profile that needs more. Above operational the audit library asks for its own inputs, passed through:
+`Notary`, `Keys` (the seal key), `Alerts`, `Telemetry`, `Observe`. `DeploymentYAML` is the whole deployment document for
+what `Profiles` cannot say (categories, `key_alias`, a preset per destination); it is exclusive with `Profiles`.
+
+Inputs to install, all required: `WriterPackage` and `WriterPackageSHA256` (the audit release's
+`audit-writer-lambda_<version>_linux_arm64.zip` and its digest, as for `Package`; the audit library holds it to the
+library's release, `Guards`), and `CatalogueDir`, the directory the release's `sluis-audit-catalogue_<version>.tar.gz`
+unpacks to. **The catalogue is delivered with the writer's package**: the service publishes to SQS and registers nothing,
+so the roster catalogue and every schema it references go into the writer's configuration layer, and a catalogue change
+(its version bumped) redeploys the writer on the next apply. An install with any of them missing is refused before anything
+is created, naming `Use` and `Enabled: false` as the other ways.
+
+**The archive** is the audit library's own and is never the blob bucket (`AuditArchiveArgs`):
+
+- An AWS S3 bucket it creates (the default), named `<name>-<account>-<region>` unless `BucketName` is set. Without an
+  archive key (`Keys.Archive`) it is encrypted with SSE-S3 (`Encryption: kms`, `s3` or `aws-managed` to choose); Object
+  Lock (`ObjectLockMode`, `AcknowledgeCompliance`, `DefaultRetentionDays`) is the attested preset's.
+- An S3-compatible store (`Endpoint`: R2) the estate made: the library creates no bucket, `BucketName` is required, the
+  store's credentials are read from the installation's own state store (`State.Root`, `CredentialsAddress`, default
+  `internal/archive`; written by the operator, never an input), and Object Lock is not available (so no attested preset).
+  `ReuseBlobStore` takes `Endpoint`, `StoreRegion` and `PathStyle` from `StorageArgs.Blobs` when the blobs are on that same
+  store; the bucket and the credentials stay the installation's own, and naming the blob bucket is refused.
+
+`deploy/pulumi/go.mod` requires `github.com/truvity/sluis/audit/deploy/pulumi` (a `replace` to the module beside it, at
+`v0.0.0`, until a release pins it with the root module's require: `hack/pin-pulumi-require.sh`). A stack that installed
+audit itself keeps working: leave `Audit` out and keep `AuditQueueArn` and the queue URL in the installation; to move, set
+`Audit.Use` (the library then writes the URL), or import the estate's installation under the new component and set `Audit`
+without `Use` ([the audit library's resources are named by `Name`](../../audit/docs/how-to/archive-on-r2.md)).
 
 ### Keys the estate supplies
 

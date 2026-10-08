@@ -408,12 +408,15 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	}
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
 	st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn)...)
-	st = append(st, statement{
-		"Sid":      sidAudit,
-		"Effect":   "Allow",
-		"Action":   sqsSendMessage,
-		"Resource": in.queueArn,
-	})
+	if in.queueArn != "" {
+		// No queue (audit off): the function may send to none.
+		st = append(st, statement{
+			"Sid":      sidAudit,
+			"Effect":   "Allow",
+			"Action":   sqsSendMessage,
+			"Resource": in.queueArn,
+		})
+	}
 	if len(in.signingKeyArns) > 0 {
 		st = append(st, signingStatement(in.signingKeyArns))
 	}
