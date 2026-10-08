@@ -78,6 +78,9 @@
 //
 // # Backends
 //
-// keys/local (tests; refuses weak roots), keys/kms (AWS KMS: aliases only; Encrypt takes 4096 bytes, use data keys beyond that), keys/transit
-// (placeholder, later). keys/conformance is the suite every backend passes.
+// keys/local (tests; refuses weak roots), keys/kms (AWS KMS: aliases only;
+// Encrypt takes 4096 bytes, use data keys beyond that), keys/transit (OpenBao
+// or Vault transit: key names, no aliases; the context travels as
+// associated_data or as the derivation context of a derived key).
+// keys/conformance is the suite every backend passes.
 package keys
