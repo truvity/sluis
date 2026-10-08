@@ -928,6 +928,14 @@ audit-release:
 audit-e2e-fixture:
     bash e2e/fixture/apply.sh
 
+# The key service of the "services in the cluster" tier: a KMS stand-in with the
+# notary's seal key, and the Secret that points the pods at it. After
+# `audit-e2e-fixture`; install with EXTRA_VALUES=../charts/audit/testdata/values/e2e-kms.yaml.
+[doc("Provision the KMS stand-in and the notary's seal key")]
+[working-directory: 'audit']
+audit-e2e-kms-fixture:
+    bash e2e/fixture/kms.sh
+
 # Install the PACKAGED chart `e2e-snapshot` produced — never the source
 # directory — on top of what `e2e-fixture` provisioned.
 [doc("Install the chart into the local cluster")]
@@ -948,6 +956,7 @@ audit-e2e-install:
     # only place a failed migration says why: print them before giving up.
     if ! helm --kube-context "$KCTX" upgrade --install "$RELEASE" "$CHART_TGZ" -n "$NS" \
         -f ../charts/audit/testdata/values/e2e.yaml \
+        $(for f in ${EXTRA_VALUES:-}; do printf -- '-f %s ' "$f"; done) \
         --wait --timeout 8m; then
         echo "--- the release did not install; what the cluster says ---" >&2
         kubectl --context "$KCTX" -n "$NS" get pods,jobs >&2 || true
