@@ -326,6 +326,7 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `APIID`, `APIStageName`, `APIURL` | The HTTP API, its stage and its default endpoint (it answers only with `KeepDefaultEndpoint`). `FrontDoor()` returns the first two, with the component's name, for an edge module. |
 | `DomainTarget`, `DomainHostedZoneID`, `TruststoreBucketName`, `TruststoreURI` | Empty unless the deprecated `API.DomainName` is set; the edge module has its own. |
 | `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
+| `LiveAliasArn`, `LiveVersion` | The alias `live` of the function and the version it points at. |
 | `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
 | `Audit` | The audit installation the library installed (`*auditpulumi.Audit`: its queue, writer, archive bucket and preset); nil with `Audit.Use`, `Audit.Enabled: false` and `AuditQueueArn`. |
@@ -348,6 +349,10 @@ The function gets `S3Bucket`, `S3Key`, `S3ObjectVersion` and `SourceCodeHash` (t
 **No package named.** With `Package` empty the library deploys its own release: the version of its module in the program's build information (or `Release.Version`), fetched from `<BaseURL>/v<version>/sluis-lambda_<version>_linux_arm64.zip`, with its digest from that release's `checksums.txt` unless `PackageSHA256` pins one. A pinned digest always wins; bytes that do not have it are refused. A development build (`(devel)`), a pseudo-version, a module replaced by a local copy and a program without build information have no release and are refused with a message naming `Package` and `Release.Version`.
 
 Downloads are cached by SHA-256 under the user cache directory (`os.UserCacheDir()/sluis/artifacts`), so a preview does not download again; `GITHUB_TOKEN`, when set, is sent to github.com. After the deploy, `CodeSha256Matches` is true when the code Lambda reports has the SHA-256 of the zip the library verified.
+
+### The live alias
+
+The function publishes a version on every change of its code or configuration (`publish: true`), and the alias `live` points at the newest. Every caller uses the alias, never the unqualified function: the HTTP API's integration and its invoke permission (qualified), the schedules' targets, the scheduler role's invoke grant (the alias ARN alone, not `:*`), the function's own grant to invoke itself, and the `invoke` trigger's `<function>:live` in the service document. The asynchronous-invoke configuration (no retries) is set on the alias. A change therefore moves all callers to the new version at once, and the previous version is kept to point the alias back at. The API, its stage and the domain mapping name no function, so they are not replaced. Canary rollouts through CodeDeploy are planned for a later release; the alias moves to the new version in one step today.
 
 ### Audit
 

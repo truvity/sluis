@@ -153,7 +153,7 @@ platform: { aws: true, runtime: lambda }   # or: preset: aws-serverless
 adapters:
   state:   { adapter: dynamodb, settings: { table: sluis } }
   blobs:   { adapter: s3,       settings: { bucket: sluis-blobs, prefix: blobs/ } }
-  trigger: { adapter: invoke,   settings: { github: sluis, slack: sluis } }
+  trigger: { adapter: invoke,   settings: { github: "sluis:live", slack: "sluis:live" } }
 ```
 
 `legacy` (the Kubernetes-objects store) is refused on the Lambda runtime. The issuer and both controllers share the

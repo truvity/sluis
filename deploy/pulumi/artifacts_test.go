@@ -282,3 +282,86 @@ func b64Of(h string) string {
 	raw, _ := hex.DecodeString(h)
 	return base64.StdEncoding.EncodeToString(raw)
 }
+
+// ---- the live alias
+
+const aliasType = "aws:lambda/alias:Alias"
+
+func TestTheFunctionPublishesAVersionAndCallersUseTheLiveAlias(t *testing.T) {
+	rec, out, err := buildLambda(t, estate{orgs: []string{"acme"}, workspaces: []string{"T1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := rec.one(t, "aws:lambda/function:Function", "staging-http")
+	if !prop(fn, "publish").IsBool() || !prop(fn, "publish").BoolValue() {
+		t.Errorf("the function does not publish a version: %v", fn.Inputs)
+	}
+	al := rec.one(t, aliasType, "staging-live")
+	if strIn(t, al, "name") != "live" || strIn(t, al, "functionName") != "sluis" || strIn(t, al, "functionVersion") != "7" {
+		t.Errorf("alias %v", al.Inputs)
+	}
+	live := arnp + "lambda:eu-west-1:" + account + ":function:sluis:live"
+	if out["liveAliasArn"] != live || out["liveVersion"] != "7" {
+		t.Errorf("outputs %v", out)
+	}
+	// Every target a caller uses is the alias.
+	if got := strIn(t, rec.one(t, "aws:apigatewayv2/integration:Integration", "staging-api-integration"), "integrationUri"); got != live {
+		t.Errorf("integration %q", got)
+	}
+	perm := rec.one(t, "aws:lambda/permission:Permission", "staging-api-invoke")
+	if strIn(t, perm, "qualifier") != "live" || strIn(t, perm, "function") != "sluis" {
+		t.Errorf("api permission %v", perm.Inputs)
+	}
+	n := 0
+	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
+		n++
+		if got := prop(s, "target").ObjectValue()["arn"].StringValue(); got != live {
+			t.Errorf("%s targets %q", s.Name, got)
+		}
+	}
+	if n != 3 {
+		t.Errorf("%d schedules", n)
+	}
+	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
+	if got := sp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != live {
+		t.Errorf("scheduler grant %v, want exactly the alias", got)
+	}
+	fp := grants(statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()))
+	if got := fp["lambda:InvokeFunction"]; len(got) != 1 || got[0] != arnp+"lambda:"+region+":"+account+":function:sluis:live" {
+		t.Errorf("self grant %v", got)
+	}
+	cfg := rec.one(t, "aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "staging-http")
+	if strIn(t, cfg, "qualifier") != "live" {
+		t.Errorf("async config %v", cfg.Inputs)
+	}
+}
+
+// The alias is the only thing that changed for the API's domain: the API, its
+// stage and the front door's inputs name no function, so moving the integration
+// to the alias replaces neither the domain nor its mapping.
+func TestTheAliasLeavesTheAPIDomainAndMappingAlone(t *testing.T) {
+	rec, _, err := buildLambda(t, estate{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, typ := range []string{"aws:apigatewayv2/api:Api", "aws:apigatewayv2/stage:Stage", "aws:apigatewayv2/domainName:DomainName",
+		"aws:apigatewayv2/apiMapping:ApiMapping", "aws:apigatewayv2/route:Route"} {
+		for _, d := range rec.ofType(typ) {
+			for k, v := range d.Inputs {
+				if s := v.String(); strings.Contains(s, ":live") || strings.Contains(s, "function:sluis") {
+					t.Errorf("%s %s names the function in %s: %s", typ, d.Name, k, s)
+				}
+			}
+		}
+	}
+	if !rec.has("aws:apigatewayv2/api:Api", "staging-api") || !rec.has("aws:apigatewayv2/stage:Stage", "staging-api-stage") {
+		t.Error("the API's logical names moved")
+	}
+}
+
+func TestARunNowInvokesTheAlias(t *testing.T) {
+	rec, _ := mustLambda(t, estate{config: "issuerURL: https://x.example\nadapters: {trigger: {adapter: invoke, settings: {github: sluis:live}}}\n"})
+	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, "github: sluis:live\n") || !strings.Contains(doc, "slack: sluis:live\n") {
+		t.Errorf("trigger:\n%s", doc)
+	}
+}

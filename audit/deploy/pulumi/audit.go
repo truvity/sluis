@@ -78,7 +78,13 @@ type Audit struct {
 	// library verified, which is the assurance that what runs is what the
 	// release's checksums name. False for a function that is not installed.
 	WriterCodeSha256Matches pulumi.BoolOutput
-	NotaryCodeSha256Matches pulumi.BoolOutput
+	// WriterLiveAliasArn and NotaryLiveAliasArn are the aliases (`live`) the
+	// writer's event source and the notary's schedule invoke, and
+	// WriterLiveVersion and NotaryLiveVersion the function versions they point
+	// at. Empty for a function that is not installed.
+	WriterLiveAliasArn, NotaryLiveAliasArn pulumi.StringOutput
+	WriterLiveVersion, NotaryLiveVersion   pulumi.StringOutput
+	NotaryCodeSha256Matches                pulumi.BoolOutput
 	// WriterRoleArn and NotaryRoleArn are the roles the functions run as: the
 	// ARNs a roster or gitops grant names, and the identities the OTLP door
 	// sees. Every output of a part that is turned off (Ingest.Disabled,
@@ -339,10 +345,11 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 
 	// ---- the writer: function, policy, and the queue feeding it
 	var writerFn *lambda.Function
+	var writerLive *lambda.Alias
 	var writerLogsGroup *cloudwatch.LogGroup
 	if ingest {
 		var writerLogs *cloudwatch.LogGroup
-		writerFn, writerLogs, err = newFunction(ctx, functionSpec{
+		writerFn, writerLive, writerLogs, err = newFunction(ctx, functionSpec{
 			Name: name + "-writer", Service: writerService, Role: writerRole, Package: writerPkg,
 			MemoryMB: a.Writer.MemoryMB, TimeoutSeconds: a.Writer.TimeoutSeconds,
 			Config: writerLayer,
@@ -362,7 +369,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 		if _, err := lambda.NewEventSourceMapping(ctx, name+"-writer", &lambda.EventSourceMappingArgs{
 			EventSourceArn:                 queue.Arn,
-			FunctionName:                   writerFn.Arn,
+			FunctionName:                   writerLive.Arn,
 			BatchSize:                      pulumi.Int(a.Writer.BatchSize),
 			MaximumBatchingWindowInSeconds: pulumi.Int(a.Writer.MaxBatchingWindowSeconds),
 			// Partial batch responses: a message that was archived is not redelivered
@@ -376,10 +383,11 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 
 	// ---- the notary: function, policy, and its schedule
 	var notaryFn *lambda.Function
+	var notaryLive *lambda.Alias
 	var schedule *scheduler.Schedule
 	if notary {
 		var notaryLogs *cloudwatch.LogGroup
-		notaryFn, notaryLogs, err = newFunction(ctx, functionSpec{
+		notaryFn, notaryLive, notaryLogs, err = newFunction(ctx, functionSpec{
 			Name: name + "-notary", Service: notaryService, Role: notaryRole, Package: notaryPkg,
 			MemoryMB: a.Notary.MemoryMB, TimeoutSeconds: a.Notary.TimeoutSeconds,
 			Config: notaryLayer,
@@ -395,7 +403,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}, child); err != nil {
 			return nil, err
 		}
-		if schedule, err = newSchedule(ctx, name, a, notaryFn, tags, child); err != nil {
+		if schedule, err = newSchedule(ctx, name, a, notaryFn, notaryLive, tags, child); err != nil {
 			return nil, err
 		}
 	}
@@ -468,6 +476,10 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	out.DedupeTableName = pick(ingest, func() pulumi.StringOutput { return table.Name })
 	out.WriterFunctionArn = pick(ingest, func() pulumi.StringOutput { return writerFn.Arn })
 	out.NotaryFunctionArn = pick(notary, func() pulumi.StringOutput { return notaryFn.Arn })
+	out.WriterLiveAliasArn = pick(ingest, func() pulumi.StringOutput { return writerLive.Arn })
+	out.NotaryLiveAliasArn = pick(notary, func() pulumi.StringOutput { return notaryLive.Arn })
+	out.WriterLiveVersion = pick(ingest, func() pulumi.StringOutput { return writerLive.FunctionVersion })
+	out.NotaryLiveVersion = pick(notary, func() pulumi.StringOutput { return notaryLive.FunctionVersion })
 	out.WriterCodeSha256Matches, out.NotaryCodeSha256Matches = pulumi.Bool(false).ToBoolOutput(), pulumi.Bool(false).ToBoolOutput()
 	if ingest {
 		out.WriterCodeSha256Matches = artifact.Matches(writerFn.CodeSha256, writerPkg.CodeSHA256)
@@ -496,6 +508,8 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		"queueUrl": out.QueueURL, "queueArn": out.QueueArn, "dlqUrl": out.DlqURL, "dlqArn": out.DlqArn,
 		"dedupeTableName":   out.DedupeTableName,
 		"writerFunctionArn": out.WriterFunctionArn, "notaryFunctionArn": out.NotaryFunctionArn,
+		"writerLiveAliasArn": out.WriterLiveAliasArn, "notaryLiveAliasArn": out.NotaryLiveAliasArn,
+		"writerLiveVersion": out.WriterLiveVersion, "notaryLiveVersion": out.NotaryLiveVersion,
 		"writerCodeSha256Matches": out.WriterCodeSha256Matches, "notaryCodeSha256Matches": out.NotaryCodeSha256Matches,
 		"writerRoleArn": out.WriterRoleArn, "notaryRoleArn": out.NotaryRoleArn, "observeReaderRoleArn": out.ObserveReaderRoleArn,
 		"archiveWriterRoleArn": out.ArchiveWriterRoleArn, "queryRoleArn": out.QueryRoleArn,
@@ -812,14 +826,14 @@ type functionSpec struct {
 // start-up record, from AUDIT_CONFIG_LAYER). Layers are at most five per
 // function; this is one, and the extension is the other.
 func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.StringMap,
-	opts ...pulumi.ResourceOption) (*lambda.Function, *cloudwatch.LogGroup, error) {
+	opts ...pulumi.ResourceOption) (*lambda.Function, *lambda.Alias, *cloudwatch.LogGroup, error) {
 	logs, err := cloudwatch.NewLogGroup(ctx, s.Name, &cloudwatch.LogGroupArgs{
 		Name:            pulumi.String("/aws/lambda/" + s.Name),
 		RetentionInDays: pulumi.Int(a.LogRetentionDays),
 		Tags:            tags,
 	}, opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	layerArgs := &lambda.LayerVersionArgs{
 		LayerName:               pulumi.String(s.Name + "-config"),
@@ -837,7 +851,7 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 		// its own, byte for byte the same on every run so that its key is.
 		var err error
 		if code, err = uploadPackage(ctx, s.Name+"-code", a.Artifacts, s.Package, opts...); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		files := map[string][]byte{}
 		for path, body := range s.Config {
@@ -845,17 +859,17 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 		}
 		layerZip, err := artifact.Zip(files)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		sum := artifact.Sum(layerZip)
 		local, err := artifact.WriteTemp("audit-layer-", "config.zip", layerZip)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		obj, err := artifact.Upload(ctx, s.Name+"-config-code", *a.Artifacts,
 			a.Artifacts.Key(s.Package.Version, sum, s.Name+"-config.zip"), local, sum, opts...)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		layerArgs.S3Bucket, layerArgs.S3Key, layerArgs.S3ObjectVersion = pulumi.String(obj.Bucket), pulumi.String(obj.Key), obj.VersionID
 		layerArgs.SourceCodeHash = pulumi.String(obj.CodeSHA256)
@@ -868,7 +882,7 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 	}
 	config, err := lambda.NewLayerVersion(ctx, s.Name+"-config", layerArgs, opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// The configuration layer is last: layers extract in order and a later one
 	// wins a path, so nothing after it can shadow /opt/audit/*.
@@ -903,12 +917,28 @@ func newFunction(ctx *pulumi.Context, s functionSpec, a *Args, tags pulumi.Strin
 	} else {
 		args.Code = pulumi.NewFileArchive(s.Package.Path)
 	}
+	args.Publish = pulumi.Bool(true) // a version on each change of the code or the configuration
 	fn, err := lambda.NewFunction(ctx, s.Name, args, append([]pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{logs, config})}, opts...)...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return fn, logs, nil
+	// The alias is what the writer's event source and the notary's schedule use,
+	// so a change moves them to the new version together. Canary rollouts through
+	// CodeDeploy come later.
+	live, err := lambda.NewAlias(ctx, s.Name+"-live", &lambda.AliasArgs{
+		Name:            pulumi.String(LiveAlias),
+		Description:     pulumi.String("The version callers invoke."),
+		FunctionName:    fn.Name,
+		FunctionVersion: fn.Version,
+	}, opts...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return fn, live, logs, nil
 }
+
+// LiveAlias is the alias of each function that its callers use.
+const LiveAlias = "live"
 
 // writerFiles is what the writer's configuration layer holds, by path under
 // /opt/audit: its configuration, the profile document, and the catalogues with
@@ -941,7 +971,7 @@ func notaryFiles(name string, a *Args) (map[string]string, error) {
 // invoke that one function. It does not retry: a run that failed is the Errors
 // alarm's, and the next run seals whatever is missing, because a run is
 // idempotent.
-func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function, tags pulumi.StringMap,
+func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function, live *lambda.Alias, tags pulumi.StringMap,
 	opts ...pulumi.ResourceOption) (*scheduler.Schedule, error) {
 	role, err := newRole(ctx, name+"-scheduler", a.RolePath, assumeRoleJSON("scheduler.amazonaws.com"), tags, opts...)
 	if err != nil {
@@ -949,12 +979,12 @@ func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function,
 	}
 	if _, err := iam.NewRolePolicy(ctx, name+"-scheduler", &iam.RolePolicyArgs{
 		Role:   role.Name,
-		Policy: fn.Arn.ApplyT(invokePolicy).(pulumi.StringOutput),
+		Policy: live.Arn.ApplyT(invokePolicy).(pulumi.StringOutput),
 	}, opts...); err != nil {
 		return nil, err
 	}
 	if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-notary", &lambda.FunctionEventInvokeConfigArgs{
-		FunctionName: fn.Name, MaximumRetryAttempts: pulumi.Int(0),
+		FunctionName: fn.Name, Qualifier: live.Name, MaximumRetryAttempts: pulumi.Int(0),
 	}, opts...); err != nil {
 		return nil, err
 	}
@@ -965,7 +995,7 @@ func newSchedule(ctx *pulumi.Context, name string, a *Args, fn *lambda.Function,
 		ScheduleExpressionTimezone: pulumi.String("UTC"),
 		FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 		Target: &scheduler.ScheduleTargetArgs{
-			Arn:     fn.Arn,
+			Arn:     live.Arn,
 			RoleArn: role.Arn,
 			Input:   pulumi.String("{}"),
 			RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{

@@ -312,9 +312,10 @@ func podIdentityTrustStatement(clusterArn, namespace, serviceAccount string) (st
 	}, nil
 }
 
-// invokePolicy is what the scheduler's role may do: invoke the notary.
+// invokePolicy is what the scheduler's role may do: invoke the notary's live
+// alias, and no other version.
 func invokePolicy(functionArn string) string {
-	return policyJSON(allow([]string{"lambda:InvokeFunction"}, []string{functionArn, functionArn + ":*"}, nil))
+	return policyJSON(allow([]string{"lambda:InvokeFunction"}, []string{functionArn}, nil))
 }
 
 // SealKeyPolicy is the key policy the estate gives the seal key. The library

@@ -38,6 +38,11 @@ const (
 // is rendered for.
 const DefaultFunctionName = "sluis"
 
+// LiveAlias is the alias of the Lambda function that every caller uses: the API,
+// the schedules and a run-now. The Lambda shape's `invoke` trigger names
+// `<function>:live`, so that a run-now runs the version the schedules run.
+const LiveAlias = "live"
+
 var instancePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // SSMRoot is the installation's secrets root in layout v3: /sluis/<instance>.
@@ -357,7 +362,7 @@ func (in *Installation) adapters() (map[string]internal.AdapterChoice, error) {
 	}
 	if in.Shape == ShapeLambda {
 		// A run-now invokes this very function, for both controllers.
-		fn := in.functionName()
+		fn := in.functionName() + ":" + LiveAlias
 		set("trigger", "invoke", map[string]any{"github": fn, "slack": fn})
 		if c := out["trigger"]; named("trigger") && c.Adapter == "invoke" && len(c.Settings) == 0 {
 			c.Settings = map[string]any{"github": fn, "slack": fn}

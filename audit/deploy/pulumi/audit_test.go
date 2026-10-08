@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -523,15 +524,15 @@ func TestTheNotaryIsScheduledHourlyWithoutRetriesAndItsRoleCanOnlyInvokeIt(t *te
 		t.Errorf("schedule: %v", s.Inputs)
 	}
 	tg := prop(s, "target").ObjectValue()
-	if tg["arn"].StringValue() != out["notaryFn"] || tg["retryPolicy"].ObjectValue()["maximumRetryAttempts"].NumberValue() != 0 {
+	if tg["arn"].StringValue() != out["notaryFn"]+":live" || tg["retryPolicy"].ObjectValue()["maximumRetryAttempts"].NumberValue() != 0 {
 		t.Errorf("target: %v", tg)
 	}
 	if !strings.HasSuffix(tg["roleArn"].StringValue(), "role/audit/audit-scheduler") {
 		t.Errorf("the scheduler runs as %s", tg["roleArn"].StringValue())
 	}
 	g := grants(policy(t, rec, "audit-scheduler"))
-	if len(g) != 1 || len(g["lambda:InvokeFunction"]) == 0 {
-		t.Errorf("the scheduler's rights: %v", g)
+	if len(g) != 1 || !reflect.DeepEqual(g["lambda:InvokeFunction"], []string{out["notaryFn"] + ":live"}) {
+		t.Errorf("the scheduler's rights: %v, want the live alias alone", g)
 	}
 	if c := rec.one(t, "aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "audit-notary"); prop(c, "maximumRetryAttempts").NumberValue() != 0 {
 		t.Errorf("async retries: %v", c.Inputs)
