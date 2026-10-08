@@ -29,6 +29,7 @@ required=(
     'TestConformance/MAC'
     'TestRSASignsRS256'
     'TestMACWrappedKeys'
+    'TestMACOverStateStore'
 )
 for name in "${required[@]}"; do
     if ! grep -q -- "--- PASS: ${name} " "$out"; then
