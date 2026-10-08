@@ -889,9 +889,9 @@ audit-ts:
 audit-snapshot:
     goreleaser release --snapshot --clean
 
-# Assemble the schema site into a scratch directory: proves every published
-# schema's $id is the URL it is served at.
-[working-directory: 'audit']
+# Assemble the schema half of the Pages site (sluis's and audit's) into a
+# scratch directory: proves every published schema's $id is the URL it is
+# served at. The documentation half is `mkdocs build` (see pages.yaml).
 audit-pages:
     hack/pages-site.sh "$(mktemp -d)/site"
 

@@ -289,11 +289,13 @@ func schemaReferences(file, doc string) ([]schemaRef, error) {
 	return out, nil
 }
 
-// canonicalSchemaID is sdk/catalogue.CanonicalID: an id under the legacy base
+// canonicalSchemaID is sdk/catalogue.CanonicalID: an id under a legacy base
 // names the same schema as the one under the published base.
 func canonicalSchemaID(id string) string {
-	if rest, ok := strings.CutPrefix(id, "https://schemas.truvity.com/audit/v1/"); ok {
-		return "https://truvity.github.io/audit/schemas/v1/" + rest
+	for _, legacy := range []string{"https://schemas.truvity.com/audit/v1/", "https://truvity.github.io/audit/schemas/v1/"} {
+		if rest, ok := strings.CutPrefix(id, legacy); ok {
+			return "https://truvity.github.io/sluis/schemas/audit/v1/" + rest
+		}
 	}
 	return id
 }

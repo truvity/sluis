@@ -965,7 +965,7 @@ func TestALegacySchemaIDMatchesThePublishedOne(t *testing.T) {
 	if _, _, err := build(t, func(a *auditpulumi.Args) {
 		a.Writer.Catalogues = map[string]string{"catalogue-app.yaml": doc}
 		a.Writer.CatalogueSchemas = map[string]map[string]string{"catalogue-app.yaml": {
-			"thing.json": `{"$id": "https://truvity.github.io/audit/schemas/v1/thing.json"}`,
+			"thing.json": `{"$id": "https://truvity.github.io/sluis/schemas/audit/v1/thing.json"}`,
 		}}
 	}); err != nil {
 		t.Fatal(err)

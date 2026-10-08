@@ -63,3 +63,7 @@ frontend/dist/
 # git install through `prepare` did not survive yarn 4, which packed the
 # dependency without running it and shipped no ts/dist.)
 ts/dist/
+
+# The documentation site build (mkdocs.yaml) and its privacy-plugin cache.
+/_site/
+/.cache/

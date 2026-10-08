@@ -63,7 +63,7 @@ in [Getting started on Kubernetes](../docs/audit/getting-started/kubernetes.md).
 | Go SDK: record, catalogue, emitter, sink | `github.com/truvity/sluis/audit/sdk` |
 | `audit` CLI (verify, hold, reindex, migrate, ...) | the GitHub release archives |
 | `@truvity/audit`: query client, sentences, React view | GitHub Packages, at each release tag |
-| JSON Schemas of the record, the catalogue and every configuration file | `https://truvity.github.io/audit/schemas/` ([`schemas/`](schemas/README.md)) |
+| JSON Schemas of the record, the catalogue and every configuration file | `https://truvity.github.io/sluis/schemas/audit/` ([`schemas/`](schemas/README.md)) |
 
 ## Consumers
 

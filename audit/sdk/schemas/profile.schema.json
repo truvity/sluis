@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://truvity.github.io/audit/schemas/v1/profile.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/audit/v1/profile.schema.json",
   "title": "Framework profile",
   "description": "What a framework requires of a profile: fields, categories, identity treatment, retention, integrity, review. Profiles are composed from framework profiles; the validator enforces the union of their minimum field sets.",
   "type": "object",

@@ -67,7 +67,7 @@ The `sluis` chart installs from an estate's GitOps repository and a second, non-
 
 ## Documentation
 
-[docs/README.md](docs/README.md) is the one entry point, organised by what you are trying to do: tutorials
+[docs/README.md](docs/README.md) (published at https://truvity.github.io/sluis/, with search, once GitHub Pages is enabled for the repository) is the one entry point, organised by what you are trying to do: tutorials
 (`docs/getting-started/`), tasks (`docs/how-to/`), reference (`docs/reference/`), explanation (`docs/explanation/`) and
 decisions (`docs/decisions/`). Upgrading is `docs/how-to/upgrade/`: [v1.62](docs/how-to/upgrade/v1.62.md),
 [v1.63](docs/how-to/upgrade/v1.63.md), [v1.64](docs/how-to/upgrade/v1.64.md). [CHANGELOG.md](CHANGELOG.md) says what

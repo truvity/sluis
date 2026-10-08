@@ -77,7 +77,7 @@ is not edited.
 | [0054](0054-two-deliveries-and-a-durable-ack.md) | Two deliveries, and the receiver's acknowledgement means durable | superseded by [0059](0059-sink-durability-and-transports.md) |
 | [0055](0055-no-pseudonymisation-keys-by-default.md) | No pseudonymisation keys by default | accepted; supersedes the default of [0052](0052-key-providers.md) |
 | [0056](0056-lock-modes-and-store-tiers.md) | Lock modes and store tiers: the lock is demanded where a framework demands it | accepted; refined by [0068](0068-storage-is-configured-per-preset.md) (the lock is a property of the install preset's bucket, not a setting of the process) |
-| [0057](0057-schema-ids-on-github-pages.md) | Schema identifiers on GitHub Pages, the old ones kept as aliases | accepted |
+| [0057](0057-schema-ids-on-github-pages.md) | Schema identifiers on GitHub Pages, the old ones kept as aliases | accepted; the base moved to the sluis site by [0069](0069-schema-ids-move-to-the-sluis-site.md) |
 | [0058](0058-three-parts-installed-independently.md) | Three parts, installed independently; the bucket layout is the contract | accepted; refines [0053](0053-one-installation-per-service-or-product.md) |
 | [0059](0059-sink-durability-and-transports.md) | Sink durability: the acknowledgement says how durable, and the start-up refuses less | accepted; supersedes [0054](0054-two-deliveries-and-a-durable-ack.md) and extends [0046](0046-sink-interface-and-transports.md) |
 | [0060](0060-v1-bucket-layout.md) | The v1 bucket layout, and v0 is dropped | accepted; supersedes the object layout of [0045](0045-s3-object-lock-as-the-record.md) |
@@ -89,6 +89,7 @@ is not edited.
 | [0066](0066-indexer-and-query-are-separate-processes.md) | The indexer and the query service are separate processes, under separate database roles | accepted |
 | [0067](0067-configuration-is-immutable-per-instance.md) | Configuration is immutable per instance; credentials and State are read live | accepted; refines [0063](0063-one-validated-configuration-file.md) and [0051](0051-versioning-policy.md) for configuration |
 | [0068](0068-storage-is-configured-per-preset.md) | Storage is configured per install preset | accepted; refines [0056](0056-lock-modes-and-store-tiers.md) and [0065](0065-archive-retention-and-lifecycle.md) |
+| [0069](0069-schema-ids-move-to-the-sluis-site.md) | Schema identifiers move to the sluis site, the audit Pages base kept as an alias | Accepted (2026-10-08). A consequence of [0042](0042-one-repository-one-release-train.md): audit's repository and its Pages site are retired. Amends [0057](0057-schema-ids-on-github-pages.md). |
 | [0070](0070-cloudflare-tokens-and-r2-credentials-by-prototype-clone.md) | Cloudflare tokens and R2 credentials: sluis clones a disabled prototype token | Accepted (2026-10-08). Follows [0014](0014-minting-third-party-credentials-only-where-membership-is-governed.md) (a credential is minted only where membership is governed), stores its output under the contract of [0041](0041-the-secret-contract.md) and grants it to people and agents as [0040](0040-agent-class-sessions.md) sets out. |
 <!-- /generated -->
 
