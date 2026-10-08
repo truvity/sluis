@@ -123,8 +123,8 @@ just generate       # proto to gen/ after a contract change; the generated code 
 
 Push a tag `vX.Y.Z`: the release workflow publishes the images, the chart, `sluisctl` and its Nix flake, the TypeScript
 package, the Go module and the Action at that version. The Pulumi library's tag is cut by the release itself, with its
-`require` pinned to the release. Auto-release cuts patch tags when changes merge to master; a minor needs its
-`## vX.Y.0` CHANGELOG heading and is tagged by hand.
+`require` pinned to the release. Releases are cut by hand (`just release-pin`, then tag); a minor needs its
+`## vX.Y.0` CHANGELOG heading.
 
 ## Licence
 

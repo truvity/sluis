@@ -90,8 +90,7 @@ the dependency; run it on its own with `just vuln`, the same way
   the heading if it is the first. A breaking bullet starts with
   **Breaking:** and says what to do first. A patch tag with a user-visible
   change gets its heading in the pull request, the same as a minor;
-  `changelog-heading: never` in `auto-release.yaml` means nothing adds it
-  afterwards. A patch cut only for dependency bumps has no heading. A change
+  nothing adds it afterwards. A patch cut only for dependency bumps has no heading. A change
   to `internal/audit/catalogue/roster.yaml` needs a new catalogue `version`
   and its `testdata/released/roster-<version>.yaml` fixture in the same pull
   request ([extending.md](docs/how-to/extend.md#7-an-audit-action)).
@@ -274,10 +273,9 @@ runs the first locally (and both goreleaser configs):
   wrong tag before any proxy fetches it, or, once one has, to cut the next
   version. A tag ruleset restricting the module tags to the App makes the
   hand-push impossible instead of refused (an owner step).
-- **No breaking patch.** Auto-release refuses to cut a patch while the
-  CHANGELOG entries after the newest release contain `**Breaking:`
-  (`hack/check-no-breaking-patch.sh`; the `guard` job of `auto-release.yaml`).
-  A breaking change is tagged by hand as the next minor.
+- **No breaking patch.** Do not cut a patch while the CHANGELOG entries after
+  the newest release contain `**Breaking:` (`hack/check-no-breaking-patch.sh
+  CHANGELOG.md` says). A breaking change is tagged as the next minor.
 
 The release also carries two checksummed bundles beside the binaries:
 `sluis-config-schemas_<version>.tar.gz` (the JSON Schemas of the configuration
@@ -287,11 +285,9 @@ references, side by side: the audit writer refuses to start without one).
 `internal/releasecheck` holds both to their sources, so a new schema or catalogue
 action cannot be left out of a bundle.
 
-Auto-release is armed (`vars.AUTO_RELEASE`) and cuts **patch** tags when
-changes merge: at once for a merged `security`-labelled pull request, weekly
-for dependency bumps. Minors and majors are always manual — tag them when the
-change merges, after its CHANGELOG heading has landed, because an armed
-weekly run would otherwise ship an untagged feature as a patch.
+There are no automatic releases: renovate security bumps no longer auto-release.
+Cut a patch release by hand (`just release-pin`, commit, tag), and a minor or major
+after its CHANGELOG heading has landed.
 
 This repository follows the shared
 [component contract](https://github.com/truvity/policy/blob/master/docs/contracts/component.md).
