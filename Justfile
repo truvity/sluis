@@ -498,7 +498,7 @@ check: build test pulumi-test storage-test lint chart-lint telemetry archive-che
 
 # The OpenBAO the transit key provider and signer are tested against. Pinned
 # by digest for the reason the S3 image is: a moving tag changes the test.
-openbao_image := "openbao/openbao@sha256:597f62847dd382382056a1d6704d50465908c2040038c4611832a23269a67112"
+audit_openbao_image := "openbao/openbao@sha256:597f62847dd382382056a1d6704d50465908c2040038c4611832a23269a67112"
 
 # Format all Go files
 [working-directory: 'audit']
@@ -660,7 +660,7 @@ audit-conformance:
     trap 'docker rm -f audit-s3 audit-bao >/dev/null 2>&1 || true' EXIT
     docker run -d --name audit-s3 -p 4566:4566 -e SERVICES=s3,kms,sqs,dynamodb {{s3_image}} >/dev/null
     docker run -d --name audit-bao -p 8200:8200 -e BAO_DEV_ROOT_TOKEN_ID=root \
-        {{openbao_image}} server -dev -dev-listen-address=0.0.0.0:8200 >/dev/null
+        {{audit_openbao_image}} server -dev -dev-listen-address=0.0.0.0:8200 >/dev/null
     for i in $(seq 1 40); do
         curl -sf -m 3 http://localhost:4566/_localstack/health >/dev/null 2>&1 && \
             curl -sf -m 3 http://localhost:8200/v1/sys/health >/dev/null 2>&1 && break
