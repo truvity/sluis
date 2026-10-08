@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -97,7 +98,7 @@ func (e estate) args(t *testing.T) *arp.LambdaArgs {
 		e.policy = minimalPolicy
 	}
 	pkgSHA := ""
-	if !strings.Contains(e.pkg, "://") {
+	if _, err := os.Stat(e.pkg); err == nil {
 		pkgSHA = sha(t, e.pkg)
 	}
 	a := &arp.LambdaArgs{
@@ -144,6 +145,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("wrappedSigningKeyAlias", l.WrappedSigningKeyAlias)
 		collect("functionArn", l.FunctionArn)
 		collect("functionName", l.FunctionName)
+		collect("codeMatches", l.CodeSha256Matches.ApplyT(strconv.FormatBool).(pulumi.StringOutput))
 		collect("roleArn", l.RoleArn)
 		collect("apiUrl", l.APIURL)
 		collect("accessLogGroupName", l.AccessLogGroupName)

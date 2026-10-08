@@ -235,6 +235,7 @@ func TestAPackageMayBeFetchedFromAURLAndIsHeldToTheSameDigest(t *testing.T) {
 	if _, _, err := build(t, edit); err != nil {
 		t.Fatalf("a package from a URL: %v", err)
 	}
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // the first download is cached by its digest; the changed one must be fetched
 	if _, _, err := build(t, func(a *auditpulumi.Args) {
 		edit(a)
 		body = append(append([]byte{}, body...), 0) // the server now serves other bytes than the digest names

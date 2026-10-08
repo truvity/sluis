@@ -11,6 +11,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
 	"github.com/truvity/sluis/audit/profile"
 )
 
@@ -46,6 +47,16 @@ const (
 // Args is everything the library is given. Required fields are named in their
 // comments; everything else has the default stated there.
 type Args struct {
+	// Artifacts, when set, ships the functions' code and the configuration
+	// layers through the estate's versioned artifacts bucket: each file is
+	// uploaded as it is at <prefix><version>/<sha256>-<name> and the function
+	// or layer is created from that object version. Left out, the code is
+	// uploaded with the function directly. See artifact.Args.
+	Artifacts *ArtifactsArgs
+	// Release finds a package digest that is left empty in the release's
+	// checksums.txt. See artifact.Release.
+	Release *ReleaseArgs
+
 	// Tags are put on every resource that takes tags.
 	Tags map[string]string
 
@@ -245,15 +256,24 @@ type IngestArgs struct {
 	RetentionDays int
 }
 
+// ArtifactsArgs and ReleaseArgs are the shared types of the artifact package.
+type (
+	ArtifactsArgs = artifact.Args
+	ReleaseArgs   = artifact.Release
+)
+
 // WriterArgs is the writer function.
 type WriterArgs struct {
 	// Package is the release's zip, `audit-writer-lambda_<version>_linux_arm64.zip`,
-	// as a path or an https URL. It is the function's code exactly as released:
+	// as a path or an https URL; left empty, the release of this library itself
+	// (from its build information, or Args.Release.Version), downloaded from the
+	// project's releases. It is the function's code exactly as released:
 	// the library adds nothing to it, and the configuration is a layer
 	// (docs/explanation/aws-lambda.md#configuration-as-a-layer). Required.
 	Package string
 	// PackageSHA256 is that zip's SHA-256 in hex, from the release's
-	// checksums.txt. Required: the zip is read, hashed and refused when it is not
+	// checksums.txt. Required (unless Args.Release.ResolveChecksums finds it
+	// there): the zip is read, hashed and refused when it is not
 	// the one named, so nothing is deployed that was not checked.
 	PackageSHA256 string
 	// DeploymentYAML is the profile configuration (`deployment:` in the
@@ -545,6 +565,13 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 	if err := c.checkArchive(); err != nil {
 		return nil, err
 	}
+	if c.Artifacts != nil {
+		norm, err := c.Artifacts.Normalize("audit")
+		if err != nil {
+			return nil, fmt.Errorf("auditpulumi: %w", err)
+		}
+		c.Artifacts = &norm
+	}
 
 	in := &c.Ingest
 	setInt(&in.MaxReceiveCount, 5)
@@ -568,11 +595,7 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 
 	w := &c.Writer
 	if !in.Disabled {
-		if w.Package == "" {
-			return nil, errors.New("auditpulumi: Writer.Package is required: the release's audit-writer-lambda_<version>_linux_arm64.zip " +
-				"(or set Ingest.Disabled)")
-		}
-		if !shaRE.MatchString(w.PackageSHA256) {
+		if w.Package != "" && !c.resolvesDigests() && !shaRE.MatchString(w.PackageSHA256) {
 			return nil, errors.New("auditpulumi: Writer.PackageSHA256 is required: the zip's SHA-256 in hex, from the release's checksums.txt")
 		}
 		if strings.TrimSpace(w.DeploymentYAML) == "" {
@@ -642,11 +665,7 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 
 	n := &c.Notary
 	if !n.Disabled {
-		if n.Package == "" {
-			return nil, errors.New("auditpulumi: Notary.Package is required: the release's audit-notary-lambda_<version>_linux_arm64.zip " +
-				"(or set Notary.Disabled)")
-		}
-		if !shaRE.MatchString(n.PackageSHA256) {
+		if n.Package != "" && !c.resolvesDigests() && !shaRE.MatchString(n.PackageSHA256) {
 			return nil, errors.New("auditpulumi: Notary.PackageSHA256 is required: the zip's SHA-256 in hex, from the release's checksums.txt")
 		}
 	}
@@ -854,3 +873,7 @@ func refuseSecrets(path string, v any) error {
 	}
 	return nil
 }
+
+// resolvesDigests is whether an empty PackageSHA256 is read from the release's
+// checksums.txt.
+func (c *Args) resolvesDigests() bool { return c.Release != nil && c.Release.ResolveChecksums }

@@ -29,6 +29,18 @@ func VerifyOnlyKeyPath(index int) string {
 
 const verifyOnlyDir = "verify-keys"
 
+// layerFiles is the layer's files as bytes, for the zip of the artifacts bucket.
+func layerFiles(docs map[string]string, keys []VerifyOnlyKeyArgs) map[string][]byte {
+	out := map[string][]byte{
+		"sluis/" + docSluis + ".yaml":  []byte(docs[docSluis]),
+		"sluis/" + docPolicy + ".yaml": []byte(docs[docPolicy]),
+	}
+	for i, k := range keys {
+		out["sluis/"+verifyOnlyDir+"/"+strconv.Itoa(i)+".pem"] = []byte(strings.TrimSpace(k.PEM) + "\n")
+	}
+	return out
+}
+
 // layerAssets is what the configuration layer holds: the two documents and,
 // one file each, the verify-only keys.
 func layerAssets(docs map[string]string, keys []VerifyOnlyKeyArgs) map[string]any {
