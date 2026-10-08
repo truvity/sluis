@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.74.0-rc.1
+
 ### Added
 
 - **Blobs on an S3-compatible store: `ports.blob.s3.credentialsRef`.** With `endpoint` set, the S3 Blob adapter signs with static credentials read from the installation's secrets store at an `internal/<kind>/<id>` address (layout v4 or transition) instead of the SDK's default chain: a small versioned document, `s3-credentials/v1` (`access_key_id`, `secret_access_key`; JSON Schema under `schemas/internal/`). They are read at start and again after a 403, at most once a minute, and never logged. `region` defaults to `auto` with a `credentialsRef`; any address that is not `internal/<kind>/<id>`, or a `credentialsRef` without `endpoint`, is refused at load. The Pulumi library no longer strips `credentialsRef` before its loader check. See [Keep the blobs on an S3-compatible store](docs/how-to/blobs-on-r2.md).
