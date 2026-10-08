@@ -123,6 +123,8 @@ func run(args []string) error {
 		return whoami(args[1:])
 	case "exchange":
 		return exchange(args[1:])
+	case "cloudflare":
+		return cloudflareCommand(args[1:])
 	case "token":
 		return token(args[1:])
 	case "github-token":
@@ -182,7 +184,9 @@ func usage(to *os.File) {
   kube-token    a Kubernetes exec credential      (run by kubectl)
   aws           an AWS credential process answer  (run by the AWS SDKs)
   bao           authenticate, then run the real bao CLI unchanged (OpenBAO)
-  r2            authenticate, then run the real r2broker CLI unchanged (R2)
+  cloudflare    a Cloudflare API token or R2 credentials, minted for you:
+                cloudflare token <preset>, cloudflare r2 <preset> (a credential process)
+  r2            DEPRECATED, use cloudflare r2: run the real r2broker CLI unchanged
   psql          authenticate, mint a Postgres client certificate, run psql
   pg            the same, running any command instead of psql
   ssh           known-hosts: trust SSH host CAs before the first connect

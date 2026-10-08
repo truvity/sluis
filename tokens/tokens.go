@@ -44,6 +44,15 @@ const TypeGitHubInstallationToken = "urn:access-roster:params:oauth:token-type:g
 // with; the catalogue id follows it.
 const GitHubAppAudiencePrefix = "github-app:"
 
+// TypeCloudflareToken is the requested_token_type that asks for a Cloudflare
+// credential minted from a preset instead of a token this issuer signs. The
+// audience then names the preset, `cloudflare:<preset>`.
+const TypeCloudflareToken = "urn:access-roster:params:oauth:token-type:cloudflare-token"
+
+// CloudflareAudiencePrefix is what a Cloudflare credential's audience starts
+// with; the preset's name follows it.
+const CloudflareAudiencePrefix = "cloudflare:"
+
 // ErrRefused is an exchange the issuer declined: the proof did not carry
 // a group the requested audience admits. It is separated from a
 // transport failure because a caller should retry one and not the other.
@@ -198,6 +207,65 @@ func (e *Exchanger) GitHubInstallationToken(
 		Repositories: granted.Repositories,
 		Permissions:  granted.Permissions,
 	}, nil
+}
+
+// CloudflareCredential is a Cloudflare credential minted on demand for the
+// caller. Token is set for an API token preset; AccessKeyID, SecretAccessKey
+// and Endpoint for an R2 preset.
+type CloudflareCredential struct {
+	Token           string    `json:"token,omitempty"`
+	AccessKeyID     string    `json:"access_key_id,omitempty"`
+	SecretAccessKey string    `json:"secret_access_key,omitempty"`
+	Endpoint        string    `json:"endpoint,omitempty"`
+	ExpiresOn       time.Time `json:"expires_on"`
+}
+
+// R2 reports whether this is an S3 credential and not an API token.
+func (c CloudflareCredential) R2() bool { return c.AccessKeyID != "" }
+
+// CloudflareToken trades subject for a credential of a Cloudflare preset,
+// under the policy's cloudflare grants. lifetime is the lifetime asked for,
+// zero for the preset's own; the issuer refuses one longer than the preset's. A
+// refusal is [ErrRefused], with the issuer's sentence.
+func (e *Exchanger) CloudflareToken(
+	ctx context.Context, subject, subjectType, preset string, lifetime time.Duration,
+) (CloudflareCredential, error) {
+	switch {
+	case e == nil || strings.TrimSpace(e.Issuer) == "":
+		return CloudflareCredential{}, errors.New("tokens: no issuer is configured")
+	case strings.TrimSpace(subject) == "":
+		return CloudflareCredential{}, errors.New("tokens: no subject token to exchange")
+	case strings.TrimSpace(preset) == "":
+		return CloudflareCredential{}, errors.New("tokens: no Cloudflare preset was asked for")
+	}
+	if subjectType == "" {
+		subjectType = TypeJWT
+	}
+	form := url.Values{
+		"grant_type":           {GrantTypeExchange},
+		"subject_token":        {subject},
+		"subject_token_type":   {subjectType},
+		"audience":             {CloudflareAudiencePrefix + preset},
+		"requested_token_type": {TypeCloudflareToken},
+	}
+	if lifetime > 0 {
+		form.Set("lifetime", fmt.Sprint(int64(lifetime.Seconds())))
+	}
+	var granted struct {
+		IssuedTokenType string `json:"issued_token_type"`
+		CloudflareCredential
+	}
+	if err := e.post(ctx, form, &granted); err != nil {
+		return CloudflareCredential{}, err
+	}
+	if granted.IssuedTokenType != TypeCloudflareToken {
+		return CloudflareCredential{}, fmt.Errorf("tokens: the issuer answered with a %q, not a Cloudflare credential "+
+			"(does it have a `cloudflare` section?)", granted.IssuedTokenType)
+	}
+	if granted.Token == "" && granted.AccessKeyID == "" {
+		return CloudflareCredential{}, errors.New("tokens: the exchange returned no credential")
+	}
+	return granted.CloudflareCredential, nil
 }
 
 func expiresIn(seconds int64) time.Time {

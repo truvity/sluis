@@ -41,7 +41,7 @@ type Opens struct {
 // is derived from the groups in the token it presented, and naming what
 // they open is the same information the console shows the person about
 // themselves.
-func grantsHandler(set *policy.Set, verify func(context.Context, string) (string, []string, error)) http.Handler {
+func grantsHandler(set *policy.Set, iss *Issuer, verify func(context.Context, string) (string, []string, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bearer := bearerFrom(r)
 		if bearer == "" {
@@ -83,7 +83,13 @@ func grantsHandler(set *policy.Set, verify func(context.Context, string) (string
 		if out == nil {
 			out = []Opens{}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"grants": out})
+		answer := map[string]any{"grants": out}
+		// The Cloudflare presets the groups open, when the service mints
+		// them: for `sluisctl whoami` and `aws-config`.
+		if cf := cloudflareGrantsOf(iss.cloudflareMinter(), groups); len(cf) > 0 {
+			answer["cloudflare"] = cf
+		}
+		_ = json.NewEncoder(w).Encode(answer)
 	})
 }
 
