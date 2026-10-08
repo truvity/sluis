@@ -1,10 +1,8 @@
 apiVersion: audit.truvity.github.io/audit-notary/v2
+deployment: /etc/audit/deployment.yaml
 archive:
-  bucket:
-    name: audit-archive
-    region: eu-central-1
-  prefix: app
-  lockMode: compliance
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit-main-archive
 keys:
   adapter: transit

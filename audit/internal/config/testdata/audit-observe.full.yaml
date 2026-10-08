@@ -4,11 +4,10 @@ secrets:
   root: /etc/audit/secrets
 listen:
   address: ":8080"
+deployment: /etc/audit/deployment.yaml
 archive:
-  bucket:
-    name: audit-archive
-    region: eu-west-1
-  prefix: app
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
 database:
   url: postgres://audit_observe@db.example.test:5432/audit
   passwordSecret: observe-database-password

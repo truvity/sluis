@@ -6,8 +6,8 @@ require: queued
 deployment: /etc/audit/deployment.yaml
 workloads: /etc/audit/workloads.yaml
 archive:
-  bucket:
-    name: audit-archive
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
 consume:
   sqs:
     queueUrl: https://sqs.eu-example-1.amazonaws.com/ACCOUNT/audit.fifo

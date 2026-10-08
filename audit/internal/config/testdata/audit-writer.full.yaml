@@ -12,17 +12,8 @@ deployment: /etc/audit/deployment.yaml
 workloads: /etc/audit/workloads.yaml
 catalogues: /etc/audit/catalogues
 archive:
-  bucket:
-    name: audit-archive
-    region: eu-example-1
-    endpoint: https://s3.example.test
-    ca: /etc/audit/trust/ca.crt
-    pathStyle: true
-    credentialsSecret:
-      accessKeyID: archive-access-key-id
-      secretAccessKey: archive-secret-access-key
-  prefix: app
-  lockMode: none
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit
 database:
   url: postgres://audit@db.example.test:5432/audit?sslmode=verify-full

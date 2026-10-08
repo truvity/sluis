@@ -91,7 +91,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	archive, err := cli.OpenArchiveFrom(ctx, cfg.Archive, cfg.SecretReader())
+	archive, _, err := cli.OpenArchiveAt(ctx, cfg.Deployment, cfg.Archive, cfg.SecretReader())
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func run() error {
 		_ = stopTelemetry(shutting)
 		os.Exit(0)
 	}()
-	slog.Info("audit-notary-lambda", "bucket", cfg.Archive.Bucket.Name, "settle", cfg.Settle.D().String())
+	slog.Info("audit-notary-lambda", "deployment", cfg.Deployment, "settle", cfg.Settle.D().String())
 	lambda.StartWithOptions(h, lambda.WithContext(ctx))
 	return errors.New("the Lambda runtime returned")
 }

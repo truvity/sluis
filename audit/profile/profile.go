@@ -24,11 +24,10 @@ type Profile struct {
 	Name       string
 	Frameworks []string
 
-	// Categories are the action categories this destination takes, KeyAlias the
-	// alias of its key, and Preset its install preset: the lowest its framework
-	// profiles can be kept under, or the stronger one it asked for.
+	// Categories are the action categories this destination takes, and Preset
+	// its install preset: the lowest its framework profiles can be kept under,
+	// or the stronger one it asked for. The preset names the storage it lands in.
 	Categories []string
-	KeyAlias   string
 	Preset     Preset
 
 	Classes            map[Class]bool

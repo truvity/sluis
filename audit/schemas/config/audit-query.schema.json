@@ -485,7 +485,20 @@
       },
       "then": {
         "required": [
+          "archive",
+          "deployment"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
           "archive"
+        ]
+      },
+      "then": {
+        "required": [
+          "deployment"
         ]
       }
     }
@@ -502,39 +515,17 @@
       "additionalProperties": false,
       "description": "The archive the records are in: what the s3scan searcher reads. Get answers where a copy is and, until seals vouch for it, nothing about whether it has been verified.",
       "properties": {
-        "bucket": {
-          "$ref": "#/$defs/bucket"
+        "ca": {
+          "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
+          "minLength": 1,
+          "type": "string"
         },
-        "credentials": {
-          "additionalProperties": false,
-          "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-          "properties": {
-            "address": {
-              "description": "The key below the root, for example internal/archive.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "root": {
-              "description": "The SSM path prefix of the installation, for example /audit/main.",
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "root",
-            "address"
-          ],
-          "type": "object"
-        },
-        "prefix": {
-          "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+        "stateRoot": {
+          "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
           "minLength": 1,
           "type": "string"
         }
       },
-      "required": [
-        "bucket"
-      ],
       "type": "object"
     },
     "database": {

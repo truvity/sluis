@@ -20,6 +20,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/sink/sqssink"
 	"github.com/truvity/sluis/audit/store"
+	"github.com/truvity/sluis/audit/store/routed"
 	"github.com/truvity/sluis/audit/store/s3store"
 )
 
@@ -75,109 +76,124 @@ func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, sec
 	return awsconfig.LoadDefaultConfig(ctx, opts...)
 }
 
-// OpenArchiveFrom opens the archive the configuration names.
-func OpenArchiveFrom(ctx context.Context, a config.Archive, secrets *config.Secrets) (*s3store.Store, error) {
-	lock, err := s3store.ParseLockMode(a.LockMode)
-	if err != nil {
-		return nil, err
-	}
-	// A process that only reads names no lock mode; at an endpoint of its own the
-	// archive has none, and a reader sends no lock header either way.
-	if a.LockMode == "" && a.Bucket.Endpoint != "" {
-		lock = s3store.None
-	}
-	cfg, err := awsConfig(ctx, a.Bucket, a.Credentials, secrets)
-	if err != nil {
-		return nil, err
-	}
-	return s3store.FromConfig(cfg, s3store.Options{
-		Bucket: a.Bucket.Name, Prefix: a.Prefix, Lock: lock, KMSKeyID: a.KMSKey,
-		Endpoint: a.Bucket.Endpoint, PathStyle: a.Bucket.PathStyle,
-	})
+// PresetPlan is how one install preset's store is opened: the store's options
+// and the address of its static credentials, if it has any.
+type PresetPlan struct {
+	Preset  profile.Preset
+	Storage profile.PresetStorage
+	Options s3store.Options
+	// Credentials is where the store's static credentials are in the state
+	// store; nil on AWS, where the workload's identity is the credential.
+	Credentials *config.StateRef
 }
 
-// DestinationPlan is how one destination writes the archive: the Object Lock
-// mode of its objects and the key they are encrypted under.
-type DestinationPlan struct {
-	Lock   s3store.LockMode
-	KMSKey string
-}
-
-// PlanDestinations decides how each destination writes. Object Lock is the
-// archive's lock mode for a destination whose preset is attested and none for
-// every other, so a destination that asked for no more than the standard
-// preset writes nothing it cannot clear. An attested destination on an archive
-// that writes no lock, or on an S3-compatible endpoint, which has no Object
-// Lock to give, is refused naming the destination. The key is the destination's
-// alias, or the archive's.
-func PlanDestinations(a config.Archive, profiles map[string]*profile.Profile) (map[string]DestinationPlan, error) {
-	lock, err := s3store.ParseLockMode(a.LockMode)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(profiles))
-	for name := range profiles {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	plans := make(map[string]DestinationPlan, len(profiles))
+// PlanPresets decides how each configured preset is opened. Object Lock is a
+// property of the preset's bucket: compliance for the attested preset (S3 only)
+// and none for every other, so a profile below attested writes nothing it
+// cannot clear. The key is the preset's key_alias, or the process's default
+// (archive.kmsKey); a store at an endpoint is encrypted by the store.
+func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]PresetPlan, error) {
+	plans := make(map[profile.Preset]PresetPlan, len(d.Presets))
 	var problems []error
-	for _, name := range names {
-		p := profiles[name]
-		plan := DestinationPlan{Lock: s3store.None, KMSKey: a.KMSKey}
-		if p.KeyAlias != "" {
-			if a.Bucket.Endpoint != "" {
-				problems = append(problems, fmt.Errorf("destination %s names key_alias %s and the archive is on an S3-compatible endpoint (%s), "+
-					"which is not encrypted under a KMS key: leave key_alias out, or keep the archive on S3", name, p.KeyAlias, a.Bucket.Endpoint))
-			} else {
-				plan.KMSKey = p.KeyAlias
-			}
+	for name, st := range d.Presets {
+		lock, err := s3store.ParseLockMode(name.LockMode())
+		if err != nil {
+			return nil, err
 		}
-		if p.Preset == profile.Attested {
-			switch {
-			case a.Bucket.Endpoint != "":
-				problems = append(problems, fmt.Errorf("destination %s is attested, which keeps its objects under Object Lock, "+
-					"and the archive is on an S3-compatible endpoint (%s), which has none: Object Lock is S3 only. "+
-					"Keep it on S3, or compose it from framework profiles that need less", name, a.Bucket.Endpoint))
-			case lock == s3store.None:
-				problems = append(problems, fmt.Errorf("destination %s is attested, which keeps its objects under Object Lock, "+
-					"and the archive writes none (archive.lockMode is none)", name))
-			default:
-				plan.Lock = lock
+		plan := PresetPlan{Preset: name, Storage: st, Options: s3store.Options{
+			Bucket: st.Bucket, Prefix: st.Prefix, Lock: lock,
+			Endpoint: st.Endpoint, PathStyle: st.PathStyle,
+		}}
+		switch {
+		case st.External():
+			if name == profile.Attested {
+				problems = append(problems, fmt.Errorf("preset attested is on the S3-compatible endpoint %s, which has no Object Lock: Object Lock is S3 only", st.Endpoint))
 			}
+			if st.Credentials != "" {
+				if a.StateRoot == "" {
+					problems = append(problems, fmt.Errorf("preset %s names credentials %s and archive.stateRoot is not set: "+
+						"it is the root of the state store they are read from", name, st.Credentials))
+				}
+				plan.Credentials = &config.StateRef{Root: a.StateRoot, Address: st.Credentials}
+			}
+		case st.KeyAlias != "":
+			plan.Options.KMSKeyID = st.KeyAlias
+		default:
+			plan.Options.KMSKeyID = a.KMSKey
 		}
 		plans[name] = plan
 	}
 	return plans, errors.Join(problems...)
 }
 
-// OpenDestinations opens a store for each destination whose plan differs from
-// the archive's own, sharing one client per distinct plan.
-func OpenDestinations(ctx context.Context, a config.Archive, profiles map[string]*profile.Profile, secrets *config.Secrets) (map[string]store.Store, error) {
-	plans, err := PlanDestinations(a, profiles)
+// OpenArchive opens the stores of the installation's presets and addresses
+// them as one archive: a profile's records, seals and compositions are in the
+// store of its preset, the descriptions of the records are in every store, and
+// the rest is in the strongest preset's (store/routed).
+//
+// profiles are the composed profiles of the deployment, each of which names
+// its preset. A profile whose preset is not configured is refused, naming both,
+// and so is one whose framework profiles demand a stricter Object Lock than its
+// preset's bucket gives.
+func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string]*profile.Profile, a config.Archive, secrets *config.Secrets) (*routed.Store, error) {
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := awsConfig(ctx, a.Bucket, a.Credentials, secrets)
+	if err := d.CheckStorage(frameworks); err != nil {
+		return nil, err
+	}
+	plans, err := PlanPresets(d, a)
 	if err != nil {
 		return nil, err
 	}
-	opened := map[DestinationPlan]store.Store{}
-	out := make(map[string]store.Store, len(plans))
-	for name, plan := range plans {
-		st, ok := opened[plan]
-		if !ok {
-			if st, err = s3store.FromConfig(cfg, s3store.Options{
-				Bucket: a.Bucket.Name, Prefix: a.Prefix, Lock: plan.Lock, KMSKeyID: plan.KMSKey,
-				Endpoint: a.Bucket.Endpoint, PathStyle: a.Bucket.PathStyle,
-			}); err != nil {
-				return nil, fmt.Errorf("destination %s: %w", name, err)
-			}
-			opened[plan] = st
+	var problems []error
+	for name, p := range profiles {
+		if err := profile.CheckLockMode(map[string]*profile.Profile{name: p}, p.Preset.LockMode()); err != nil {
+			problems = append(problems, err)
 		}
-		out[name] = st
 	}
-	return out, nil
+	if err := errors.Join(problems...); err != nil {
+		return nil, err
+	}
+	opened := make(map[profile.Preset]store.Store, len(plans))
+	var home profile.Preset
+	for _, name := range sortedPresets(plans) {
+		plan := plans[name]
+		cfg, err := awsConfig(ctx, config.Bucket{
+			Name: plan.Storage.Bucket, Region: plan.Storage.Region, Endpoint: plan.Storage.Endpoint,
+			CA: a.CA, PathStyle: plan.Storage.PathStyle,
+		}, plan.Credentials, secrets)
+		if err != nil {
+			return nil, fmt.Errorf("preset %s: %w", name, err)
+		}
+		st, err := s3store.FromConfig(cfg, plan.Options)
+		if err != nil {
+			return nil, fmt.Errorf("preset %s: %w", name, err)
+		}
+		opened[name] = st
+		home = name // strongest last
+	}
+	byProfile := make(map[string]store.Store, len(profiles))
+	for name, p := range profiles {
+		byProfile[name] = opened[p.Preset]
+	}
+	return routed.New(opened[home], byProfile)
+}
+
+// sortedPresets lists the planned presets, weakest first.
+func sortedPresets(plans map[profile.Preset]PresetPlan) []profile.Preset {
+	out := make([]profile.Preset, 0, len(plans))
+	for name := range plans {
+		out = append(out, name)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Rank() != out[j].Rank() {
+			return out[i].Rank() < out[j].Rank()
+		}
+		return out[i] < out[j]
+	})
+	return out
 }
 
 // OpenExportsFrom opens the exports bucket, which is a store of its own and has
@@ -375,4 +391,27 @@ func sqsSinkFrom(s config.Sink, require string) (sink.Sink, error) {
 		return nil, fmt.Errorf("require: %s: the queue at sink.sqs gives queued: %w", require, err)
 	}
 	return guarded, nil
+}
+
+// OpenArchiveAt reads the deployment document at path, composes its profiles and
+// opens the archive its presets describe. It returns the composed profiles
+// beside the archive because every caller needs both.
+func OpenArchiveAt(ctx context.Context, path string, a config.Archive, secrets *config.Secrets) (*routed.Store, map[string]*profile.Profile, error) {
+	frameworks, err := profile.Builtin()
+	if err != nil {
+		return nil, nil, err
+	}
+	d, err := LoadDeployment(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	profiles, err := d.Compose(frameworks)
+	if err != nil {
+		return nil, nil, err
+	}
+	archive, err := OpenArchive(ctx, d, profiles, a, secrets)
+	if err != nil {
+		return nil, nil, err
+	}
+	return archive, profiles, nil
 }

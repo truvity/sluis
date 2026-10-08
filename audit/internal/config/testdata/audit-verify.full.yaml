@@ -1,9 +1,8 @@
 apiVersion: audit.truvity.github.io/audit-verify/v2
 deployment: /etc/audit/deployment.yaml
 archive:
-  bucket:
-    name: audit-archive
-  prefix: app
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
 seals:
   roots:
     - 4fVY0m1lq1mWnE7yOa0zYk0o1lq9n2h8bVd3sLQ4wXk

@@ -1,8 +1,5 @@
 {
   "$defs": {
-    "bucket": {
-      "$ref": "https://github.com/truvity/policy/schemas/fragments/bucket.json"
-    },
     "duration": {
       "description": "A Go duration: 30s, 2m, 168h.",
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
@@ -564,56 +561,30 @@
     },
     "archive": {
       "additionalProperties": false,
-      "description": "Where the archive is and how it is written.",
+      "description": "What the process adds to the deployment's presets: where their static credentials are, and the default key.",
       "properties": {
-        "bucket": {
-          "$ref": "#/$defs/bucket"
-        },
-        "credentials": {
-          "additionalProperties": false,
-          "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
-          "properties": {
-            "address": {
-              "description": "The key below the root, for example internal/archive.",
-              "minLength": 1,
-              "type": "string"
-            },
-            "root": {
-              "description": "The SSM path prefix of the installation, for example /audit/main.",
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "root",
-            "address"
-          ],
-          "type": "object"
-        },
-        "kmsKey": {
-          "description": "The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.",
+        "ca": {
+          "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
           "minLength": 1,
           "type": "string"
         },
-        "lockMode": {
-          "default": "compliance",
-          "description": "The Object Lock mode every object is written in: compliance (the record tier), governance (a lock a privileged role can shorten), or none (the attested tier, for a store without Object Lock). A process refuses to start when a profile demands a stricter mode than this.",
-          "enum": [
-            "compliance",
-            "governance",
-            "none"
-          ]
+        "kmsKey": {
+          "description": "The key objects are encrypted with where a preset names no `key_alias` of its own. Unset uses the bucket's default encryption, which a deployment should still be setting.",
+          "minLength": 1,
+          "type": "string"
         },
-        "prefix": {
-          "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
+        "stateRoot": {
+          "description": "The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`.",
           "minLength": 1,
           "type": "string"
         }
       },
-      "required": [
-        "bucket"
-      ],
       "type": "object"
+    },
+    "deployment": {
+      "description": "Path to the profile configuration. Its `presets` are the stores seals are put in, each profile's in the store of its preset.",
+      "minLength": 1,
+      "type": "string"
     },
     "keys": {
       "$ref": "#/$defs/keys",
@@ -657,7 +628,7 @@
     }
   },
   "required": [
-    "archive"
+    "deployment"
   ],
   "title": "audit-notary",
   "type": "object"

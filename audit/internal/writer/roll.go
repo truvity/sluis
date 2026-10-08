@@ -33,12 +33,9 @@ import (
 // from, and never goes backwards within a writer, so within an hour the keys
 // sort in the order the batches were taken.
 type Roller struct {
-	// Store is where objects go.
+	// Store is where objects go: the archive, which with several install presets
+	// is the routed store that puts each profile's objects in its preset's.
 	Store store.Store
-	// Stores are the stores of destinations that write differently from Store: a
-	// destination below the attested preset writes no Object Lock, and one may
-	// encrypt under a key of its own. A destination not listed here uses Store.
-	Stores map[string]store.Store
 	// Instance names this writer in its own records. It is not in any key: the
 	// ULID is what keeps two writers' keys apart.
 	Instance string
@@ -60,14 +57,6 @@ type Roller struct {
 	mu   sync.Mutex
 	open map[partition]*batch
 	ids  ulid.Generator
-}
-
-// StoreFor is the store a destination's objects are put in.
-func (r *Roller) StoreFor(destination string) store.Store {
-	if s, ok := r.Stores[destination]; ok {
-		return s
-	}
-	return r.Store
 }
 
 type partition struct {
@@ -220,7 +209,7 @@ func (r *Roller) put(ctx context.Context, key partition, b *batch) error {
 	}
 	objectKey := store.RecordKey(key.profile, key.tenant, at, id)
 
-	err = r.StoreFor(key.profile).Put(ctx, store.Object{
+	err = r.Store.Put(ctx, store.Object{
 		Key:         objectKey,
 		Body:        body,
 		RetainUntil: b.retainAt,

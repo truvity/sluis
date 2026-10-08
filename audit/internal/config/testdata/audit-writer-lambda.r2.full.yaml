@@ -5,16 +5,8 @@ secrets:
 deployment: /var/task/deployment.yaml
 catalogues: /var/task/catalogues
 archive:
-  bucket:
-    name: audit-archive
-    region: auto
-    endpoint: https://account.r2.example.test
-    pathStyle: true
-  prefix: app
-  lockMode: none
-  credentials:
-    root: /audit/main
-    address: internal/archive
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
 keys:
   adapter: kms
   instance: audit-main
