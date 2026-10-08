@@ -1,5 +1,5 @@
 {
-  "$id": "https://truvity.github.io/audit/schemas/v2/config/audit-workloads.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/audit/v2/config/audit-workloads.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The workloads document a writer's configuration names as `workloads`: the issuers trusted to say which workload is publishing, and which source each speaks for.",

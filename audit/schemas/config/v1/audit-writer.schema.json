@@ -327,7 +327,7 @@
       "description": "A PostgreSQL connection. The URL carries no password: a password in it is refused, and `passwordEnv` names the environment variable that holds it."
     }
   },
-  "$id": "https://truvity.github.io/audit/schemas/v1/config/audit-writer.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/audit/v1/config/audit-writer.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [

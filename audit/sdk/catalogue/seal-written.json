@@ -1,5 +1,5 @@
 {
-  "$id": "https://truvity.github.io/audit/schemas/v1/common/seal-written.json",
+  "$id": "https://truvity.github.io/sluis/schemas/audit/v1/common/seal-written.json",
   "type": "object",
   "additionalProperties": false,
   "properties": {

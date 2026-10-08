@@ -1,5 +1,5 @@
 {
-  "$id": "https://truvity.github.io/audit/schemas/v2/config/audit-deployment.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/audit/v2/config/audit-deployment.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The profile document a configuration names as `deployment`: which framework profiles each profile is composed from. Every component that reads profiles reads this one, because retention is a property of the profile and every one of them has to agree about it.",

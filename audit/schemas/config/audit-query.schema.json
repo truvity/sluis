@@ -463,7 +463,7 @@
       "type": "object"
     }
   },
-  "$id": "https://truvity.github.io/audit/schemas/v2/config/audit-query.schema.json",
+  "$id": "https://truvity.github.io/sluis/schemas/audit/v2/config/audit-query.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
