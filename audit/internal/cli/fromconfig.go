@@ -126,6 +126,11 @@ func PlanDestinations(a config.Archive, profiles map[string]*profile.Profile) (m
 		p := profiles[name]
 		plan := DestinationPlan{Lock: s3store.None, KMSKey: a.KMSKey}
 		if p.KeyAlias != "" {
+			if a.Bucket.Endpoint != "" {
+				problems = append(problems, fmt.Errorf("destination %s names key_alias %s and the archive is on an S3-compatible endpoint (%s), "+
+					"which is not encrypted under a KMS key: leave key_alias out, or keep the archive on S3", name, p.KeyAlias, a.Bucket.Endpoint))
+				continue
+			}
 			plan.KMSKey = p.KeyAlias
 		}
 		if p.Preset == profile.Attested {

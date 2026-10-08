@@ -102,9 +102,10 @@ profiles:
   action still names destinations directly. A category nobody takes is reported once per action.
 - `categories` are lower-case names. A destination that lists none keeps only the actions that
   name it in `profiles`.
-- `key_alias` is the alias of the key the destination's objects are encrypted under; the Pulumi
-  library creates a key for each and grants every role that reads or writes the archive all of them.
-  Unset is the archive's key.
+- `key_alias` is the alias of the key the destination's objects are encrypted under. The estate
+  creates it; the Pulumi library creates no key, looks the alias up and grants every role that reads
+  or writes the archive the key behind it, conditioned on the encryption context the storage KMS
+  backend uses (`instance`, and `purpose: archive`). Unset is the archive's key.
 - Retention is the destination's framework profiles' (`retention`): the Pulumi library writes an S3
   lifecycle rule per prefix that expires its objects when a fixed retention ends, with the
   Glacier steps before it.

@@ -120,13 +120,38 @@ func writerPolicy(bucketArn, archiveKeyArn, tableArn, queueArn, logGroupArn stri
 // no key (Archive.Encryption "s3": the empty ARN).
 //
 // The argument is one ARN, or several joined with commas: the archive key and the
-// keys of the destinations that have one of their own.
+// keys behind the destinations' aliases. A destination's key is marked by
+// destGrant, and its grant is conditioned on the encryption context the
+// storage KMS backend uses for it: this installation's instance, and the purpose
+// `archive`. The archive key's grant is not.
 func archiveKeyStatements(archiveKeyArn string, actions ...string) []statement {
 	if archiveKeyArn == "" {
 		return nil
 	}
-	return []statement{allow(actions, strings.Split(archiveKeyArn, ","), nil)}
+	var plain []string
+	var st []statement
+	for _, item := range strings.Split(archiveKeyArn, ",") {
+		if rest, ok := strings.CutPrefix(item, destMark); ok {
+			instance, arn, _ := strings.Cut(rest, "|")
+			st = append(st, allow(actions, []string{arn}, map[string]any{"StringEquals": map[string]any{
+				"kms:EncryptionContext:instance": instance,
+				"kms:EncryptionContext:purpose":  "archive",
+			}}))
+			continue
+		}
+		plain = append(plain, item)
+	}
+	if len(plain) > 0 {
+		st = append([]statement{allow(actions, plain, nil)}, st...)
+	}
+	return st
 }
+
+// destMark marks a destination key among the comma-joined ARNs.
+const destMark = "dest|"
+
+// destGrant marks the key behind a destination's alias, for this instance.
+func destGrant(instance, arn string) string { return destMark + instance + "|" + arn }
 
 // notaryPolicy is what the notary function may do: read the records it seals and
 // the seals it chains to, put seals and keys/roots.jwks, and sign with the seal

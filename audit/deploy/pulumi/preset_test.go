@@ -152,10 +152,27 @@ func TestAttestedLocksTheArchiveInComplianceMode(t *testing.T) {
 	if mode := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()["mode"].StringValue(); mode != "COMPLIANCE" {
 		t.Errorf("lock mode = %s", mode)
 	}
-	// A weaker lock than the preset keeps is refused.
-	_, _, err = build(t, func(a *auditpulumi.Args) { attested(a); a.Archive.ObjectLockMode = auditpulumi.Governance })
-	if err == nil || !strings.Contains(err.Error(), "preset is attested") {
+	// The governance trial of the lock is allowed; no lock is not.
+	if _, _, err = build(t, func(a *auditpulumi.Args) { attested(a); a.Archive.ObjectLockMode = auditpulumi.Governance }); err != nil {
 		t.Errorf("governance under attested: %v", err)
+	}
+	_, _, err = build(t, func(a *auditpulumi.Args) {
+		attested(a)
+		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.None, 0
+	})
+	if err == nil || !strings.Contains(err.Error(), "ObjectLockMode is NONE and the preset is attested") {
+		t.Errorf("no lock under attested: %v", err)
+	}
+}
+
+func TestObjectLockOnAnArchiveWithNoAttestedDestinationIsRefused(t *testing.T) {
+	for _, mode := range []string{auditpulumi.Governance, auditpulumi.Compliance} {
+		_, _, err := build(t, func(a *auditpulumi.Args) {
+			a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = mode, true, 30
+		})
+		if err == nil || !strings.Contains(err.Error(), "no attested destination") {
+			t.Errorf("%s on a standard archive: %v", mode, err)
+		}
 	}
 }
 
@@ -197,7 +214,7 @@ func ruleFor(t *testing.T, rec *recorder, prefix string) map[string]resource.Pro
 	return nil
 }
 
-func TestEachDestinationHasAPrefixAnExpiryAndAKeyOfItsOwn(t *testing.T) {
+func TestEachDestinationHasAPrefixAnExpiryAndTheKeyBehindItsAlias(t *testing.T) {
 	rec, _, err := build(t, func(a *auditpulumi.Args) {
 		a.Archive.Profiles = nil // the destinations are the deployment's profiles
 		a.Writer.DeploymentYAML = "profiles:\n" +
@@ -214,25 +231,33 @@ func TestEachDestinationHasAPrefixAnExpiryAndAKeyOfItsOwn(t *testing.T) {
 			t.Errorf("%s expires after %v days, want %v", prefix, got, days)
 		}
 	}
-	// Two destination keys, under the aliases the document names; activity has
-	// none and is encrypted under the archive's.
-	aliases := map[string]bool{}
+	// The library creates no key for a destination: the alias is the estate's.
 	for _, a := range rec.ofType("aws:kms/alias:Alias") {
-		aliases[prop(a, "name").StringValue()] = true
-	}
-	for _, want := range []string{"alias/acme-security", "alias/acme-billing", "alias/audit-archive"} {
-		if !aliases[want] {
-			t.Errorf("no alias %s: %v", want, aliases)
+		if n := prop(a, "name").StringValue(); strings.Contains(n, "acme-") {
+			t.Errorf("the library created the alias %s", n)
 		}
 	}
-	// The writer may use every destination's key.
-	grant := ""
+	// The writer may use the key behind each alias, under the storage backend's
+	// encryption context, and the archive's key without one.
+	conditioned, plain := map[string]bool{}, 0
 	for _, st := range policy(t, rec, "audit-writer") {
-		if strings.Contains(strings.Join(strs(st["Action"]), " "), "kms:GenerateDataKey") {
-			grant = strings.Join(strs(st["Resource"]), " ")
+		if !strings.Contains(strings.Join(strs(st["Action"]), " "), "kms:GenerateDataKey") {
+			continue
+		}
+		cond, _ := st["Condition"].(map[string]any)
+		if cond == nil {
+			plain++
+			continue
+		}
+		eq, _ := cond["StringEquals"].(map[string]any)
+		if eq["kms:EncryptionContext:purpose"] != "archive" || eq["kms:EncryptionContext:instance"] != "audit" {
+			t.Errorf("condition: %v", cond)
+		}
+		for _, arn := range strs(st["Resource"]) {
+			conditioned[arn[strings.LastIndex(arn, "/")+1:]] = true
 		}
 	}
-	if n := len(strings.Fields(grant)); n != 3 {
-		t.Errorf("the writer may use %d keys, want 3: %s", n, grant)
+	if plain != 1 || !conditioned["acme-security"] || !conditioned["acme-billing"] || len(conditioned) != 2 {
+		t.Errorf("unconditioned grants %d, conditioned keys %v", plain, conditioned)
 	}
 }

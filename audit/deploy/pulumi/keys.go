@@ -176,6 +176,22 @@ type resolvedKeys struct {
 	Archive, Seal, Pseudonym, Conceal string
 }
 
+// lookupAlias resolves one KMS alias to the ARN of the key behind it: the one
+// lookup the keys of the installation (Keys) and the keys of the archive's
+// destinations (their key_alias) both go through. An alias that does not exist is
+// the estate's to create first, and the refusal says so, naming the field.
+func lookupAlias(ctx *pulumi.Context, field, alias string, opts ...pulumi.InvokeOption) (string, error) {
+	r, err := kms.LookupAlias(ctx, &kms.LookupAliasArgs{Name: alias}, opts...)
+	if err != nil {
+		return "", fmt.Errorf("auditpulumi: %s %s: the alias does not resolve (create the key and its alias in the estate first, "+
+			"the library creates none): %w", field, alias, err)
+	}
+	if r.TargetKeyArn == "" {
+		return "", fmt.Errorf("auditpulumi: %s %s: the alias points at no key", field, alias)
+	}
+	return r.TargetKeyArn, nil
+}
+
 // lookupKeys resolves each alias the arguments name to its key's ARN, as an
 // invoke made through the component's own provider. An alias that does not
 // exist is the estate's to create first, and the refusal says so.
@@ -193,15 +209,11 @@ func lookupKeys(ctx *pulumi.Context, a *Args, opts ...pulumi.InvokeOption) (reso
 		if k.alias == "" {
 			continue
 		}
-		r, err := kms.LookupAlias(ctx, &kms.LookupAliasArgs{Name: k.alias}, opts...)
+		arn, err := lookupAlias(ctx, k.field, k.alias, opts...)
 		if err != nil {
-			return resolvedKeys{}, fmt.Errorf("auditpulumi: %s %s: the alias does not resolve (create the key and its alias in the estate first, "+
-				"the library creates none): %w", k.field, k.alias, err)
+			return resolvedKeys{}, err
 		}
-		if r.TargetKeyArn == "" {
-			return resolvedKeys{}, fmt.Errorf("auditpulumi: %s %s: the alias points at no key", k.field, k.alias)
-		}
-		*k.into = r.TargetKeyArn
+		*k.into = arn
 	}
 	return out, nil
 }

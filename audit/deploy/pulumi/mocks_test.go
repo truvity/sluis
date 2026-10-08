@@ -121,6 +121,15 @@ func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 			"endpoint": resource.NewStringProperty("ec2.eu-west-1.amazonaws.com"),
 		}, nil
 	}
+	if a.Token == "aws:kms/getAlias:getAlias" {
+		name := a.Args["name"].StringValue()
+		return resource.PropertyMap{
+			"name": a.Args["name"], "id": resource.NewStringProperty(name),
+			"arn":          resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":" + name),
+			"targetKeyArn": resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":key/" + strings.ReplaceAll(strings.TrimPrefix(name, "alias/"), "/", "-")),
+			"targetKeyId":  resource.NewStringProperty(strings.ReplaceAll(strings.TrimPrefix(name, "alias/"), "/", "-")),
+		}, nil
+	}
 	if a.Token == "aws:s3/getObject:getObject" {
 		key := a.Args["key"].StringValue()
 		sha, ok := r.archived[key]
@@ -200,8 +209,8 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 		// alias/<name> to key/<name>.
 		Keys: auditpulumi.KeysArgs{Archive: "alias/audit-archive", Seal: "alias/audit-seal"},
 		Archive: auditpulumi.ArchiveArgs{
-			BucketName: "acme-audit", ObjectLockMode: auditpulumi.Governance, DefaultRetentionDays: 30,
-			Profiles: []string{"security", "billing-nl"},
+			BucketName: "acme-audit",
+			Profiles:   []string{"security", "billing-nl"},
 		},
 		Writer: auditpulumi.WriterArgs{
 			Package:        writerZip,
@@ -338,4 +347,17 @@ func layerFiles(t *testing.T, r *recorder, function string) map[string]string {
 		out[strings.TrimPrefix(name, "audit/")] = a.Text
 	}
 	return out
+}
+
+// attested makes the installation one that keeps a destination under Object Lock
+// (a pci-dss destination beside security), in the governance trial with a
+// 30-day floor, and then applies edit. Object Lock is the attested preset's alone.
+func attested(edit func(*auditpulumi.Args)) func(*auditpulumi.Args) {
+	return func(a *auditpulumi.Args) {
+		a.Writer.DeploymentYAML = "profiles:\n  security:\n    frameworks: [security]\n  pay:\n    frameworks: [pci-dss]\n"
+		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.Governance, 30
+		if edit != nil {
+			edit(a)
+		}
+	}
 }
