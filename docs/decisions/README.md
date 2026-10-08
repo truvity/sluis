@@ -61,6 +61,7 @@ is not edited.
 | [0038](0038-estates-render-through-sluis.md) | Estates render their documents through sluis | Accepted; refines [0036](0036-configuration-is-immutable-per-instance.md) (who writes the documents an instance is started with) and [0037](0037-one-process-everywhere.md) (one service document, one policy document) |
 | [0039](0039-the-issuer-generates-confidential-client-secrets.md) | The issuer generates confidential client secrets | Accepted; extends [0038](0038-estates-render-through-sluis.md) (what an estate declares for a client) and refines the client table of the policy document |
 | [0040](0040-agent-class-sessions.md) | Agent-class sessions: a longer chain by client class, not by resource | Accepted; amends [0001](0001-sessions-and-an-absolute-limit.md) (agent-class chains are not held to the installation's absolute limit) and [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) (its lengthening half is deprecated) |
+| [0041](0041-the-secret-contract.md) | The secret contract: two namespaces, one copy, typed documents for what leaves | Proposed (the owner's decisions of 2026-10-08, to be confirmed before anything is built); once carried out it supersedes [0034](0034-exports-go-to-openbao-directly.md) (the export copies and their schedule are retired), amends [0036](0036-configuration-is-immutable-per-instance.md) (SSM layout v3 becomes v4) and [0039](0039-the-issuer-generates-confidential-client-secrets.md) (where a generated secret and its previous value live) |
 <!-- /generated -->
 
 ## Template
