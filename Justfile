@@ -82,6 +82,7 @@ test-s3:
     ACCESS_ROSTER_S3_URL=http://localhost:4566 hack/s3-conformance.sh
     ACCESS_ROSTER_DYNAMODB_URL=http://localhost:4566 hack/dynamodb-conformance.sh
     STORAGE_LOCALSTACK_URL=http://localhost:4566 hack/storage-conformance.sh
+    KEYS_KMS_URL=http://localhost:4566 hack/keys-conformance.sh
 
 # Run linters. `config verify` first: `run` accepts unknown top-level keys
 # silently, so a settings block in the wrong place is otherwise invisible.

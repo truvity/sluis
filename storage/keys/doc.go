@@ -78,6 +78,6 @@
 //
 // # Backends
 //
-// keys/local (tests; refuses weak roots), keys/kms (next), keys/transit
+// keys/local (tests; refuses weak roots), keys/kms (AWS KMS: aliases only; Encrypt takes 4096 bytes, use data keys beyond that), keys/transit
 // (placeholder, later). keys/conformance is the suite every backend passes.
 package keys
