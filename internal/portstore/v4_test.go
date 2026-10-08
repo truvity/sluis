@@ -69,7 +69,10 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 
 		// A Slack App's bot token is external; its client secret is not.
 		slack := portstore.NewSlackCatalogueApps(b)
-		srec := slackcatalogueapp.Record{ID: "notifier", Workspace: "acme", AppID: "A1", ClientID: "c1", AuthorizeURL: "https://slack.example/i", CreatedAt: now, CreatedBy: "ada@acme.example", TeamID: "T1", BotUserID: "U1"}
+		srec := slackcatalogueapp.Record{
+			ID: "notifier", Workspace: "acme", AppID: "A1", ClientID: "c1", AuthorizeURL: "https://slack.example/i",
+			CreatedAt: now, CreatedBy: "ada@acme.example", TeamID: "T1", BotUserID: "U1",
+		}
 		if err := slack.Put(ctx, srec, slackcatalogueapp.Credentials{ClientSecret: "CLIENT-SECRET", BotToken: "xoxb-BOT"}); err != nil {
 			t.Fatal(err)
 		}
