@@ -136,13 +136,26 @@ type LambdaArgs struct {
 	// grant. With a key, the function may use it through SSM only.
 	ParameterKeyArn string
 
+	// Keys are the KMS keys the estate supplies, by alias: the library creates
+	// none, grants IAM on the keys behind the aliases and passes the aliases to
+	// the runtime (`keys:` in the service document). Nil keeps the keys the
+	// library creates itself, which is DEPRECATED: SigningKeyAlias,
+	// SigningKeyRS256Alias, DisableSigningKeyRS256 and WrappedSigning are removed
+	// after the next minor, and NewLambda logs a warning while they are used.
+	// Exclusive with them.
+	Keys *KeysArgs
+
 	// SigningKeyAlias is the token-signing key's alias. Default
 	// DefaultSigningKeyAlias. It must start with "alias/".
+	//
+	// Deprecated: supply the key with Keys; the library then creates none.
 	SigningKeyAlias string
 	// SigningKeyRS256Alias is the alias of the second signing key, `RSA_3072`
 	// and `SIGN_VERIFY`, which both estates sign RS256 tokens with beside the
 	// ES384 key. Default DefaultSigningKeyRS256Alias. It must start with
 	// "alias/". DisableSigningKeyRS256 leaves the key out (default: created).
+	//
+	// Deprecated: see SigningKeyAlias.
 	SigningKeyRS256Alias   string
 	DisableSigningKeyRS256 bool
 
@@ -153,6 +166,8 @@ type LambdaArgs struct {
 	// above. With it set the asymmetric keys are not declared: a stack that
 	// signed remotely before unprotects them (`pulumi state unprotect`) and the
 	// next apply schedules their deletion.
+	//
+	// Deprecated: supply the key with Keys.
 	WrappedSigning *WrappedSigningArgs
 
 	// VerifyOnly are the PUBLIC keys of an earlier signer, published in the
@@ -526,7 +541,7 @@ var targetID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,40}$`)
 
 // remoteSigning is whether the two asymmetric signing keys are created: always,
 // but with WrappedSigning, which replaces them.
-func (a *LambdaArgs) remoteSigning() bool { return a.WrappedSigning == nil }
+func (a *LambdaArgs) remoteSigning() bool { return a.WrappedSigning == nil && a.Keys == nil }
 
 // checkAdditionalAudiences refuses an additional web identity audience list
 // that is empty-valued, repeats an audience, or sits beside an empty
@@ -566,6 +581,13 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if err := checkAdditionalAudiences(out.WebIdentityAudience, out.AdditionalWebIdentityAudiences); err != nil {
 		return out, err
 	}
+	if err := out.Keys.validate(); err != nil {
+		return out, err
+	}
+	if out.Keys != nil && (out.WrappedSigning != nil || out.SigningKeyAlias != "" || out.SigningKeyRS256Alias != "" || out.DisableSigningKeyRS256) {
+		return out, errors.New("sluispulumi: LambdaArgs.Keys supplies the keys: WrappedSigning, SigningKeyAlias, SigningKeyRS256Alias " +
+			"and DisableSigningKeyRS256 are of the keys the library creates, and are not set beside it")
+	}
 	var missing []string
 	for k, v := range map[string]string{
 		"Region": out.Region, "AccountID": out.AccountID, "Instance": out.Instance,
@@ -577,7 +599,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	for k, nilIn := range map[string]bool{
 		"AuditQueueArn": out.AuditQueueArn == nil,
-		"Storage":       out.Storage == nil || out.Storage.BucketArn == nil, "State": out.State == nil || out.State.TableArn == nil,
+		"Storage":       out.Storage == nil || (out.Storage.BucketArn == nil && out.Storage.External == nil), "State": out.State == nil || out.State.TableArn == nil,
 	} {
 		if nilIn {
 			missing = append(missing, k)
@@ -808,6 +830,20 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 			rsArn, rsID, rsAlias = rsKey.Arn, rsKey.KeyId, rsAl.Name
 		}
 	}
+	// Keys the estate supplies: resolved from their aliases, created by nobody here.
+	var signKeyArn, secretsKeyArn pulumi.StringInput = pulumi.String(""), pulumi.String("")
+	if k := a.Keys; k != nil {
+		sign, secrets, err := lookupKeys(ctx, k, pulumi.Parent(out))
+		if err != nil {
+			return nil, err
+		}
+		signKeyArn, secretsKeyArn = sign, secrets
+		sgArn, sgAlias = sign, pulumi.String(k.Sign).ToStringOutput()
+	} else {
+		_ = ctx.Log.Warn("sluispulumi: the keys the library creates (SigningKeyAlias, SigningKeyRS256Alias, DisableSigningKeyRS256, "+
+			"WrappedSigning) are deprecated and are removed after the next minor: supply them as LambdaArgs.Keys and the library "+
+			"creates none; the existing keys are adopted by their aliases", nil)
+	}
 	// The wrapped key. The http role is named by its (deterministic) ARN in the
 	// key policy, which is what keeps the key from depending on the role.
 	var wrappedArn pulumi.StringInput
@@ -877,7 +913,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis log group: %w", err)
 	}
-	role, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, logs.Arn, fnArn, tags, child)
+	role, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, signKeyArn, secretsKeyArn, logs.Arn, fnArn, tags, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
@@ -1099,7 +1135,7 @@ func lambdaTrust() string {
 // may invoke itself for a run-now), which is what keeps the grant from being a
 // cycle.
 func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
-	wrappedKeyArn, logGroupArn pulumi.StringInput, selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
+	wrappedKeyArn, signKeyArn, secretsKeyArn, logGroupArn pulumi.StringInput, selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	rargs := &iam.RoleArgs{Name: pulumi.String(fnName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)
@@ -1116,15 +1152,20 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 	if wrappedKeyArn != nil {
 		wrapped = wrappedKeyArn
 	}
-	inputs := []any{a.Storage.BucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn, wrapped}
+	bucketArn := a.Storage.BucketArn
+	if bucketArn == nil {
+		bucketArn = pulumi.String("")
+	}
+	inputs := []any{bucketArn, a.State.TableArn, stateKey, a.AuditQueueArn, logGroupArn, wrapped, signKeyArn, secretsKeyArn}
 	for _, k := range signingKeyArns {
 		inputs = append(inputs, k)
 	}
 	doc := pulumi.All(inputs...).ApplyT(func(v []any) (string, error) {
 		return functionPolicy(functionPolicyIn{
 			region: a.Region, account: a.AccountID,
-			bucketArn: v[0].(string), tableArn: v[1].(string), tableKey: v[2].(string),
-			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[6:]),
+			bucketArn: v[0].(string), external: a.Storage.External, tableArn: v[1].(string), tableKey: v[2].(string),
+			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[8:]),
+			keys:            grantsOf(a.Keys, v[6].(string), v[7].(string)),
 			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance, exports: !a.Exports.Disabled,
 			invokeFunctionArns: []string{selfArn},
 			webIdentityAud:     a.WebIdentityAudience,

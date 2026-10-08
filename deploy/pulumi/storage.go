@@ -14,10 +14,16 @@ const StorageType = "sluis:aws:Storage"
 
 // StorageArgs is the blob bucket.
 type StorageArgs struct {
-	// BucketName is the bucket's name. Required: it is in the processes'
-	// configuration (`ports.blob.s3.bucket`), so it is known before anything is
-	// created, and a bucket name is global.
+	// BucketName is the bucket's name. Required unless Blobs is set: it is in the
+	// processes' configuration (`ports.blob.s3.bucket`), so it is known before
+	// anything is created, and a bucket name is global.
 	BucketName string
+
+	// Blobs puts the blobs on an S3-compatible endpoint instead (R2): the
+	// library then creates no bucket and grants no IAM on one, and Versioning,
+	// ProtectedPrefixes and Tags are refused. Exactly one of BucketName and
+	// Blobs. DynamoDB stays on AWS.
+	Blobs *ExternalBlobs
 
 	// Versioning turns on S3 versioning. Default off. The bucket holds the
 	// controllers' last reports and the directory snapshots, which the next tick
@@ -97,8 +103,18 @@ func (a *StorageArgs) validate() (StorageArgs, error) {
 		return StorageArgs{}, errors.New("sluispulumi: StorageArgs is nil")
 	}
 	out := *a
-	if out.BucketName == "" {
-		return out, errors.New("sluispulumi: StorageArgs.BucketName is required")
+	if (out.BucketName == "") == (out.Blobs == nil) {
+		return out, errors.New("sluispulumi: StorageArgs: set exactly one of BucketName (an S3 bucket the library creates) " +
+			"and Blobs (an S3-compatible store it does not)")
+	}
+	if out.Blobs != nil {
+		if err := out.Blobs.validate(); err != nil {
+			return out, err
+		}
+		if out.Versioning || len(out.ProtectedPrefixes) > 0 || len(out.Tags) > 0 {
+			return out, errors.New("sluispulumi: StorageArgs.Blobs: Versioning, ProtectedPrefixes and Tags are of a bucket the library " +
+				"creates, and there is none")
+		}
 	}
 	seen := map[string]bool{}
 	for _, p := range out.ProtectedPrefixes {
@@ -127,15 +143,26 @@ type Storage struct {
 	// puts a truststore here.
 	Versioned         bool
 	ProtectedPrefixes []ProtectedPrefix
+
+	// Blobs is the external store (StorageArgs.Blobs), nil for a bucket. With it
+	// BucketName is its bucket at the endpoint and BucketArn is empty.
+	Blobs *ExternalBlobs
 }
 
 // StorageGrant is what a policy needs to name the storage: the ARN of the bucket.
 type StorageGrant struct {
+	// BucketArn is the S3 bucket; nil with External.
 	BucketArn pulumi.StringInput
+	// External is the S3-compatible store of StorageArgs.Blobs: no IAM is
+	// granted on it, only the read of its credentials' address.
+	External *ExternalBlobs
 }
 
 // Grant is the storage as KubernetesIdentityArgs.Storage and LambdaArgs.Storage take it.
 func (s *Storage) Grant() *StorageGrant {
+	if s.Blobs != nil {
+		return &StorageGrant{External: s.Blobs}
+	}
 	return &StorageGrant{BucketArn: s.BucketArn}
 }
 
@@ -162,6 +189,16 @@ func NewStorage(ctx *pulumi.Context, name string, args *StorageArgs, opts ...pul
 	out := &Storage{}
 	if err := ctx.RegisterComponentResource(StorageType, name, out, opts...); err != nil {
 		return nil, err
+	}
+	if a.Blobs != nil {
+		// Nothing to create: the store is not this stack's.
+		out.BucketName = pulumi.String(a.Blobs.Bucket).ToStringOutput()
+		out.BucketArn = pulumi.String("").ToStringOutput()
+		out.Blobs = a.Blobs
+		if err := ctx.RegisterResourceOutputs(out, pulumi.Map{"bucketName": out.BucketName}); err != nil {
+			return nil, err
+		}
+		return out, nil
 	}
 	child := pulumi.Parent(out)
 	tags := tagMap(a.Tags)

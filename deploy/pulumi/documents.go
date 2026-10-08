@@ -75,15 +75,19 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 				"endpoints; AllowEndpoints is for a test against LocalStack", at)
 		}
 	}
-	if a.Installation != nil {
+	if a.Installation != nil && !reflect.DeepEqual(doc, original) {
+		return nil, errors.New("sluispulumi: LambdaArgs.Installation: the rendered service document and the library disagree " +
+			"about a key the library owns: this is a bug in the library")
+	}
+	added, err := ownRuntime(doc, a)
+	if err != nil {
+		return nil, err
+	}
+	if a.Installation != nil && !added {
 		// The renderer wrote this document, and the library's own keys with it:
 		// they are held to be what the library would write, and the bytes are
 		// the renderer's own, so that `sluisctl render` shows what the function
 		// reads.
-		if !reflect.DeepEqual(doc, original) {
-			return nil, errors.New("sluispulumi: LambdaArgs.Installation: the rendered service document and the library disagree " +
-				"about a key the library owns: this is a bug in the library")
-		}
 		out[docSluis] = a.Config
 	} else {
 		raw, err := yaml.Marshal(doc)
@@ -101,6 +105,64 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// ownRuntime writes what the estate supplies and the runtime reads, beyond what
+// the renderer knows: `instance` and the `keys:` block (LambdaArgs.Keys), and
+// `ports.blob` for external blobs (StorageArgs.Blobs). It reports whether it
+// wrote anything. A document that already names one of them is refused: the
+// library owns it. The external endpoint is the library's own and is the one
+// endpoint a document may carry without AllowEndpoints.
+func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
+	added := false
+	if a.Keys != nil {
+		if _, set := doc["keys"]; set {
+			return false, errors.New("sluispulumi: LambdaArgs.Config names keys and LambdaArgs.Keys is set: leave it out, the library writes it")
+		}
+		doc["keys"] = a.Keys.keysBlock()
+		if err := own(doc, "Config", "instance", a.Instance); err != nil {
+			return false, err
+		}
+		added = true
+	}
+	if b := a.Storage.External; b != nil {
+		ports, err := child(doc, "Config", "ports")
+		if err != nil {
+			return false, err
+		}
+		if _, set := ports["blob"]; set {
+			return false, errors.New("sluispulumi: LambdaArgs.Config names ports.blob and the storage's Blobs is set: leave it out, the library writes it")
+		}
+		if ad, ok := doc["adapters"].(map[string]any); ok {
+			if _, set := ad["blobs"]; set {
+				return false, errors.New("sluispulumi: LambdaArgs.Config names adapters.blobs and the storage's Blobs is set: leave it out")
+			}
+		}
+		ports["blob"] = b.portsBlob()
+		added = true
+	}
+	return added, nil
+}
+
+// withoutRuntimeKeys drops the keys ownRuntime writes that the service document's
+// schema does not carry yet, for the loader check: the library holds the rest of
+// the document to the loader and these to its own validation.
+func withoutRuntimeKeys(raw string) (string, error) {
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+		return "", err
+	}
+	delete(doc, "keys")
+	delete(doc, "instance")
+	if ports, ok := doc["ports"].(map[string]any); ok {
+		if blob, ok := ports["blob"].(map[string]any); ok {
+			if s3, ok := blob["s3"].(map[string]any); ok {
+				delete(s3, "credentialsRef")
+			}
+		}
+	}
+	out, err := yaml.Marshal(doc)
+	return string(out), err
 }
 
 // withInstallation renders LambdaArgs.Installation into Config and Policy, the
@@ -354,7 +416,14 @@ func validateDocuments(docs map[string]string) error {
 	defer func() { _ = os.RemoveAll(dir) }()
 	path := func(name string) (string, error) {
 		p := filepath.Join(dir, name+".yaml")
-		return p, os.WriteFile(p, []byte(docs[name]), 0o600)
+		body := docs[name]
+		if name == docSluis {
+			var err error
+			if body, err = withoutRuntimeKeys(body); err != nil {
+				return p, err
+			}
+		}
+		return p, os.WriteFile(p, []byte(body), 0o600)
 	}
 	var errs []error
 	for name, load := range map[string]func(string) error{

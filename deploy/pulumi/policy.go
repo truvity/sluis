@@ -316,10 +316,12 @@ func parameterArnsUnder(region, account string, prefixes ...string) []string {
 type functionPolicyIn struct {
 	region, account    string
 	bucketArn          string
+	external           *ExternalBlobs // set: no S3 grant, only the credentials' read
 	tableArn, tableKey string
 	queueArn           string
 	signingKeyArns     []string
 	wrappedKeyArn      string
+	keys               *keyGrants
 	webIdentityAud     string
 	// webIdentityExtra are audiences after webIdentityAud; used only with it.
 	webIdentityExtra []string
@@ -388,7 +390,11 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		"Action":   []string{logsCreateStream, logsPutEvents},
 		"Resource": in.logGroupArn + ":*",
 	}}
-	st = append(st, storageStatements(in.bucketArn)...)
+	if in.external == nil {
+		st = append(st, storageStatements(in.bucketArn)...)
+	} else {
+		st = append(st, credentialsStatements(in.external, in.region, in.account, in.instance, in.parameterKeyArn)...)
+	}
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
 	st = append(st, ssmStatementsFor(in.region, in.account, in.instance, in.parameterKeyArn, in.exports)...)
 	st = append(st, statement{
@@ -403,6 +409,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	if in.wrappedKeyArn != "" {
 		st = append(st, wrappedSigningStatement(in.wrappedKeyArn))
 	}
+	st = append(st, in.keys.statements(in.instance)...)
 	st = append(st, statement{
 		"Sid":      sidInvoke,
 		"Effect":   "Allow",
