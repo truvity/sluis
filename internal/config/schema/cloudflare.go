@@ -39,10 +39,9 @@ func cloudflareSchema() m {
 // ask for which preset. The presets are the service document's.
 func policyCloudflareSchema() m {
 	return obj("Who may ask for a Cloudflare preset (the presets are the service document's `cloudflare.presets`). A preset named here and not there stops the service.", m{
-		"grants": list("One row per group or CI job.", exclusiveOf(obj("A grant: exactly one of `group` and `job`.", m{
-			"group":   str("An internal group of this policy: every holder may ask, from the console or `sluisctl`."),
-			"job":     m{"type": "string", "pattern": `^github:[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}/[A-Za-z0-9._-]{1,100}:[A-Za-z0-9_][A-Za-z0-9_. -]{0,99}$`, "description": "A GitHub Actions job, `github:<owner>/<repo>:<job>`, proved by its OIDC token."},
+		"grants": list("One row per group.", obj("A grant.", m{
+			"group":   str("A group of this policy: every holder may ask, a person from the console or `sluisctl`, a CI job through the exchange. A CI job is a group declared with `github` matchers."),
 			"presets": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "pattern": cloudflareName}, "description": "The presets the row opens."},
-		}, "presets"), "group", "job")),
+		}, "group", "presets")),
 	})
 }
