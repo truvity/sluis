@@ -16,16 +16,34 @@ Needs `secrets.source: ssm` with `secrets.layout: v4` or `transition`: the minte
 credential lives at an `internal/` address and the credentials sluis stores at
 `external/cloudflare/<preset>`.
 
-## The minter is as powerful as the person who made it
+## The minter can mint anything the account owner can
 
 Checked against a live account (2026-10-08): **a token that can create tokens is
 not bounded by its own permissions.** A token holding only Account API Tokens
 Read and Write created children with DNS Write, Account Settings Write and R2
-Write. So the minter can grant anything its creator could, and the only guard
-is sluis's own refusal list. Treat the minter token like the credential of the
-Cloudflare user who created it, create it as a user who holds only what the
-prototypes need, and keep it out of everyone's reach: it is `internal/`, so no
-consumer is ever granted it.
+Write. The minter is created by the account owner, so it can mint anything the
+owner can, and **sluis's refusal list is the only guard** between it and the
+whole account. Its custody is therefore the owner's:
+
+- the document lives only under `internal/`, which no consumer is ever granted:
+  keep it as a KMS-encrypted parameter (`secrets.kmsKeyId`) that only the
+  function's role (or the Kubernetes identity) can read, and give nobody else
+  `ssm:GetParameter` on `internal/cloudflare/`;
+- the refusal list is built in and cannot be shortened by configuration: a
+  prototype that is active, missing, or grants Account API Tokens Edit (Write),
+  Billing, Account Settings, Memberships, or Access: Organizations, Identity
+  Providers, and Groups is refused. `cloudflare.forbiddenPermissionGroups` can
+  only **add** names to it;
+- it is checked against the prototype's live permission groups at every mint
+  and once when a cluster service starts; a permission group sluis cannot name
+  is refused. Every refusal is an audit event
+  (`roster.cloudflare.token.refused`), a log line and the counter
+  `sluis.cloudflare.prototype.refused`.
+
+A possible hardening, not required and not yet tested (whether a member who is
+not a Super Administrator can create account-owned tokens): create the minter as
+a dedicated member with limited roles, so that its ceiling is lower than the
+owner's.
 
 ## 1. Create the minter token
 
@@ -87,10 +105,10 @@ minute, `rotation` is shorter than `lifetime`, and `lifetime - rotation` is the
 time consumers have to pick up a new credential.
 
 sluis **refuses** a prototype that is active, that does not exist, or that grants
-any of: Account API Tokens Edit (Write), Billing, Account Settings, Memberships,
-Access: Organizations, Identity Providers, and Groups. The check runs against the
-prototype's permission groups **at every mint**, not only when the service
-starts, and a permission group sluis cannot name is refused too.
+any permission group on the built-in refusal list above (and any you add with
+`cloudflare.forbiddenPermissionGroups`). The check runs against the prototype's
+permission groups **at every mint** and when a cluster service starts, and a
+permission group sluis cannot name is refused too.
 
 ## 4. Say who may ask
 
