@@ -233,6 +233,22 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	}
 
 	// ---- the archive's key and the seal key are the estate's, looked up by alias
+	// A destination that names a key alias is encrypted under the key behind it. The
+	// library creates no key for it (ADR 0041): the alias is the estate's, and it is
+	// resolved with the same lookup as Keys (lookupAlias), so that the roles are
+	// granted the key it points at. With Archive.Endpoint a destination names none
+	// (the store has no KMS to encrypt under: refused by withDefaults).
+	destKeys := map[string]string{}
+	for _, d := range a.destinations {
+		if d.KeyAlias == "" {
+			continue
+		}
+		arn, err := lookupAlias(ctx, "destination "+d.Name+" key_alias", d.KeyAlias, child)
+		if err != nil {
+			return nil, err
+		}
+		destKeys[d.Name] = arn
+	}
 	// archiveKeyArn is the key's ARN (Keys.Archive's, or Archive.KeyArn), or the
 	// empty string with SSE-S3, with the AWS-managed key and on an S3-compatible
 	// store, which is what every policy builder reads as "no key": none needs an
@@ -243,6 +259,26 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		archiveKeyArn = pulumi.String(keyArns.Archive).ToStringOutput()
 	case a.Archive.KeyArn != "":
 		archiveKeyArn = pulumi.String(a.Archive.KeyArn).ToStringOutput()
+	}
+
+	// grantKeys is every key the archive's objects are under, comma-joined for the
+	// policy builders (an ARN has no comma): the archive key, and the keys behind
+	// the destinations' aliases, marked so their grants carry the encryption
+	// context the storage KMS backend uses (see destGrant).
+	grantKeys := archiveKeyArn
+	if len(destKeys) > 0 {
+		var granted []string
+		for _, d := range a.destinations {
+			if arn, ok := destKeys[d.Name]; ok {
+				granted = append(granted, destGrant(a.instance(name), arn))
+			}
+		}
+		grantKeys = archiveKeyArn.ApplyT(func(arn string) string {
+			if arn == "" {
+				return strings.Join(granted, ",")
+			}
+			return strings.Join(append([]string{arn}, granted...), ",")
+		}).(pulumi.StringOutput)
 	}
 
 	// ---- the archive
@@ -301,7 +337,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		writerLogsGroup = writerLogs
 		if _, err := iam.NewRolePolicy(ctx, name+"-writer", &iam.RolePolicyArgs{
 			Role: writerRole.Name,
-			Policy: pulumi.All(bucketArn, archiveKeyArn, table.Arn, queue.Arn, writerLogs.Arn).ApplyT(func(v []any) string {
+			Policy: pulumi.All(bucketArn, grantKeys, table.Arn, queue.Arn, writerLogs.Arn).ApplyT(func(v []any) string {
 				return writerPolicy(v[0].(string), v[1].(string), v[2].(string), v[3].(string), v[4].(string), audience, locked, grant,
 					append(writerKeyStatements(keyArns, a.instance(name)), writerState.statements()...))
 			}).(pulumi.StringOutput),
@@ -337,7 +373,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 		if _, err := iam.NewRolePolicy(ctx, name+"-notary", &iam.RolePolicyArgs{
 			Role: notaryRole.Name,
-			Policy: pulumi.All(bucketArn, archiveKeyArn, notaryLogs.Arn).ApplyT(func(v []any) string {
+			Policy: pulumi.All(bucketArn, grantKeys, notaryLogs.Arn).ApplyT(func(v []any) string {
 				return notaryPolicy(v[0].(string), v[1].(string), keyArns.Seal, v[2].(string), audience, locked, notaryState.statements())
 			}).(pulumi.StringOutput),
 		}, child); err != nil {

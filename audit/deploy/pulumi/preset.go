@@ -116,7 +116,16 @@ func applyPreset(c *Args, preset profile.Preset, dests []destination) error {
 			"Set Preset to %s to have them", preset, profile.Standard)
 	}
 
+	// Object Lock is the attested preset's alone: a destination below it writes
+	// objects it can clear, so a bucket under a lock for an archive with no
+	// attested destination would lock nothing that was meant to be locked and
+	// leave a default retention that holds the rest.
 	ar := &c.Archive
+	if ar.ObjectLockMode != "" {
+		if err := CheckLockMode(ar.ObjectLockMode); err != nil {
+			return err
+		}
+	}
 	if ar.Endpoint != "" {
 		// Object Lock is an AWS S3 guarantee; another store does not make it.
 		if f.ObjectLock {
@@ -134,9 +143,14 @@ func applyPreset(c *Args, preset profile.Preset, dests []destination) error {
 		ar.ObjectLockMode = Compliance
 	case ar.ObjectLockMode == "":
 		ar.ObjectLockMode = None
-	case f.ObjectLock && ar.ObjectLockMode != Compliance:
-		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s and the preset is %s, which keeps the archive under compliance Object Lock "+
-			"(docs/how-to/aws-turn-on-object-lock.md)", ar.ObjectLockMode, preset)
+	case !f.ObjectLock && ar.ObjectLockMode != None:
+		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s and the archive has no attested destination (the preset is %s): "+
+			"Object Lock is written only for a destination whose preset is attested, on S3. Compose a destination from framework profiles "+
+			"that need it (dora, pci-dss, nen-7513, evidence-etsi) or give it preset: attested, or set Archive.ObjectLockMode to NONE",
+			ar.ObjectLockMode, preset)
+	case f.ObjectLock && ar.ObjectLockMode == None:
+		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is NONE and the preset is %s, which keeps the archive under Object Lock "+
+			"(GOVERNANCE for a trial, COMPLIANCE for the target: docs/how-to/aws-turn-on-object-lock.md)", preset)
 	}
 	return nil
 }

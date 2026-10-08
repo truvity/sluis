@@ -57,6 +57,13 @@ func (c *Args) checkAWSArchive() error {
 		return errors.New("auditpulumi: Keys.Archive is required with Archive.Encryption \"kms\": the library creates no key, so name the " +
 			"estate's archive key by alias (alias/<name>), or choose Archive.Encryption \"aws-managed\" or \"s3\"")
 	}
+	for _, d := range c.destinations {
+		if d.KeyAlias != "" {
+			if err := checkAlias("destination "+d.Name+" key_alias", d.KeyAlias); err != nil {
+				return err
+			}
+		}
+	}
 	if len(ar.Profiles) == 0 {
 		return errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix (or give Writer.DeploymentYAML, whose profiles they are)")
 	}
@@ -110,6 +117,13 @@ func (c *Args) checkExternalArchive() error {
 		if set {
 			return fmt.Errorf("auditpulumi: %s is set with Archive.Endpoint: it is a setting of an AWS S3 bucket, and this archive is on "+
 				"the store at %s, whose encryption, lifecycle and lock are its own", field, ar.Endpoint)
+		}
+	}
+	for _, d := range c.destinations {
+		if d.KeyAlias != "" {
+			return fmt.Errorf("auditpulumi: destination %s names key_alias %s and the archive is on the store at %s: a store at an endpoint "+
+				"is not encrypted under a KMS key of the account (the same reason Keys.Archive is refused). Leave key_alias out of the "+
+				"deployment document, or keep the archive on AWS S3", d.Name, d.KeyAlias, ar.Endpoint)
 		}
 	}
 	if c.Observe != nil || c.Query != nil || c.ArchiveWriter != nil {

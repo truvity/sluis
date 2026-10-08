@@ -312,9 +312,9 @@ func TestTheObserveRoleMayTrustAPrincipalAndAServiceAccountAtOnce(t *testing.T) 
 // ---- the archive writer
 
 func TestTheArchiveWriterRoleTrustsOneServiceAccountAndWritesSealsAndKeysOnly(t *testing.T) {
-	rec, out, err := build(t, func(a *auditpulumi.Args) {
+	rec, out, err := build(t, attested(func(a *auditpulumi.Args) {
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "digest")}
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -579,7 +579,7 @@ func TestOptionsThatCannotWorkAreRefusedBeforeAnythingIsCreated(t *testing.T) {
 		says string
 	}{
 		"an encryption":      {func(a *auditpulumi.Args) { a.Archive.Encryption = "aes" }, "Archive.Encryption"},
-		"a lock, no default": {func(a *auditpulumi.Args) { a.Archive.DefaultRetentionDays = 0 }, "DefaultRetentionDays is required"},
+		"a lock, no default": {attested(func(a *auditpulumi.Args) { a.Archive.DefaultRetentionDays = 0 }), "DefaultRetentionDays is required"},
 		"an account":         {func(a *auditpulumi.Args) { a.AccountID = "123" }, "AccountID"},
 		"observe, no trust":  {func(a *auditpulumi.Args) { a.Observe = &auditpulumi.ObserveArgs{} }, "Observe.TrustedPrincipalArn or Observe.IRSA"},
 		"no provider": {func(a *auditpulumi.Args) {
@@ -626,10 +626,10 @@ const (
 // Truvity (stack `access`): both Lambdas, the notary on KMS, SSE-KMS, a lock that
 // begins in GOVERNANCE, observe by IRSA from the kernel cluster.
 func TestTheTruvityShapeIsExpressible(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) {
+	rec, _, err := build(t, attested(func(a *auditpulumi.Args) {
 		a.Archive.ObjectLockMode = auditpulumi.Governance
 		a.Observe = &auditpulumi.ObserveArgs{IRSA: irsa("audit", "audit-observe")}
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

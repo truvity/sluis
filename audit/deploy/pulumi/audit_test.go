@@ -55,7 +55,7 @@ func TestAnotherInstallationHasRolesOfItsOwn(t *testing.T) {
 }
 
 func TestTheArchiveIsLockedVersionedEncryptedAndClosed(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Archive.DefaultRetentionDays = 30 })
+	rec, _, err := build(t, attested(func(a *auditpulumi.Args) { a.Archive.DefaultRetentionDays = 30 }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,9 +91,9 @@ func TestTheArchiveIsLockedVersionedEncryptedAndClosed(t *testing.T) {
 
 func TestALockWithoutADefaultRuleIsRefusedInEveryLockedMode(t *testing.T) {
 	for _, mode := range []string{auditpulumi.Governance, auditpulumi.Compliance} {
-		_, _, err := build(t, func(a *auditpulumi.Args) {
+		_, _, err := build(t, attested(func(a *auditpulumi.Args) {
 			a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = mode, true, 0
-		})
+		}))
 		if err == nil || !strings.Contains(err.Error(), "DefaultRetentionDays is required") {
 			t.Errorf("%s: err = %v", mode, err)
 		}
@@ -158,13 +158,13 @@ func TestLifecycleDaysAreParameters(t *testing.T) {
 }
 
 func TestComplianceNeedsAnAcknowledgementAndThenIsProtected(t *testing.T) {
-	if _, _, err := build(t, func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = auditpulumi.Compliance }); err == nil ||
+	if _, _, err := build(t, attested(func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = auditpulumi.Compliance })); err == nil ||
 		!strings.Contains(err.Error(), "AcknowledgeCompliance") {
 		t.Fatalf("COMPLIANCE without the acknowledgement: %v", err)
 	}
-	rec, _, err := build(t, func(a *auditpulumi.Args) {
+	rec, _, err := build(t, attested(func(a *auditpulumi.Args) {
 		a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = auditpulumi.Compliance, true, 365
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestTheEventSourceMappingReportsBatchItemFailures(t *testing.T) {
 }
 
 func TestTheWriterMayWriteTheArchiveAndNothingElse(t *testing.T) {
-	rec, _, err := build(t, nil)
+	rec, _, err := build(t, attested(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +442,7 @@ func TestTheWriterMayWriteTheArchiveAndNothingElse(t *testing.T) {
 }
 
 func TestTheNotaryReadsPutsSealsAndSignsWithTheSealKeyOnly(t *testing.T) {
-	rec, out, err := build(t, nil)
+	rec, out, err := build(t, attested(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -676,7 +676,7 @@ func TestNothingIsCreatedForArgumentsThatCannotWork(t *testing.T) {
 		}, "Profiles"},
 		"a bad profile": {func(a *auditpulumi.Args) { a.Archive.Profiles = []string{"a/b"} }, "key component"},
 		"a mode":        {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "OFF" }, "NONE, GOVERNANCE or COMPLIANCE"},
-		"no mode":       {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "" }, "needs a lock"},
+		"no mode":       {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = "", 30 }, "needs a lock"},
 		"retention, no lock": {func(a *auditpulumi.Args) {
 			a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.None, 30
 		}, "needs a lock"},
@@ -736,9 +736,9 @@ func TestTheShippedConfigurationsValidateAgainstTheBinariesSchemas(t *testing.T)
 }
 
 func TestTheLayerHoldsTheConfigurationAndTheProfilesAndCatalogues(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) {
+	rec, _, err := build(t, attested(func(a *auditpulumi.Args) {
 		a.Writer.Catalogues = map[string]string{"catalogue.yaml": "source: app\nversion: \"1.0.0\"\n"}
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,9 +769,9 @@ func TestTheLayerHoldsTheConfigurationAndTheProfilesAndCatalogues(t *testing.T) 
 }
 
 func TestTheComplianceModeReachesTheFunctionsConfiguration(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) {
+	rec, _, err := build(t, attested(func(a *auditpulumi.Args) {
 		a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance = auditpulumi.Compliance, true
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -866,7 +866,7 @@ func TestTheNoneConfigurationsValidateAgainstTheBinariesSchemas(t *testing.T) {
 }
 
 func TestGovernanceDeclaresTheLockResourceAndLeavesTheBucketFlagUnset(t *testing.T) {
-	rec, _, err := build(t, withMode(auditpulumi.Governance))
+	rec, _, err := build(t, attested(withMode(auditpulumi.Governance)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -892,11 +892,13 @@ func TestGovernanceDeclaresTheLockResourceAndLeavesTheBucketFlagUnset(t *testing
 // bucket and its versioning are declared exactly as before, so Pulumi has no
 // replace to plan, and the one new resource is the lock configuration.
 func TestSwitchingNoneToGovernanceOnlyAddsTheLockResource(t *testing.T) {
-	before, _, err := build(t, withMode(auditpulumi.None))
+	// The lock is adopted by gaining an attested destination, and then adds the
+	// lock configuration and nothing else.
+	before, _, err := build(t, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, _, err := build(t, withMode(auditpulumi.Governance))
+	after, _, err := build(t, attested(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
