@@ -1,6 +1,6 @@
 # 0034 — Exports: the service copies its secrets into OpenBao itself
 
-**Status:** Accepted; extends [0028](0028-nothing-writes-configmaps-or-secrets.md)
+**Status:** Accepted; amended by [0041](0041-the-secret-contract.md) (proposed): the export copies, their schedule and the recovery bundles are retired; extends [0028](0028-nothing-writes-configmaps-or-secrets.md)
 and supersedes the part of an estate's GitOps ADR-034 §9 that says the issuer never
 calls OpenBao and a PushSecret copies
 **Date:** 2026-10-03
