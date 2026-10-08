@@ -10,7 +10,7 @@ without a generated client.
 
 | Services | Reached by | Path prefix |
 |---|---|---|
-| `directoryroster.v1.WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, and the SPA; the audit installation's `QueryService`, forwarded under `/audit/` | the console, same-origin under `console.mount`; a workload with its own ServiceAccount token | `/directoryroster.v1.*/` |
+| `directoryroster.v1.WorkspaceService`, `SettingsService`, `AccessService`, `GitHubService`, `SlackService`, `SlackChannelService`, `SlackSharedChannelService`, `SlackAppService`, `CloudflareService`, and the SPA; the audit installation's `QueryService`, forwarded under `/audit/` | the console, same-origin under `console.mount`; a workload with its own ServiceAccount token | `/directoryroster.v1.*/` |
 | `accessissuer.v1.SessionService` | a browser at the issuer's own host (the SSO cookie), or any caller with a token from this issuer | `/accessissuer.v1.SessionService/` |
 | `/login/*`, `/connect/*`, `/.access/*` | the origin root: the bootstrap surface, and the endpoints a CLI reads | — |
 
@@ -419,6 +419,20 @@ channel.
 | `CreateSlackSharedChannel` | operator of the HOST workspace's owner, or installation-wide | `channel{…}` | `channel` | validates against the policy and the directories and keeps the record; refuses a name already a record, and a channel the policy or a console channel record already defines. At least one of `from` and `members`. Audited as `roster.slack_shared_channel.created` |
 | `UpdateSlackSharedChannel` | same | `channel{…}` | `channel` | changes `with`, `from`, `members` and `private` / `private_per_side`; a different `host`, `name` or `channel_id` is refused (create a new channel instead). Audited as `roster.slack_shared_channel.updated` |
 | `DeleteSlackSharedChannel` | same | `name` | `note` | forgets the record and nothing else: the channel stays in Slack. Slack Connect channels are never archived from the console. Audited as `roster.slack_shared_channel.deleted` |
+
+## `directoryroster.v1.CloudflareService`
+
+Cloudflare tokens and R2 credentials minted by sluis (the service document's `cloudflare` section). See
+[mint short-lived Cloudflare tokens and R2 credentials](../how-to/cloudflare-tokens.md). No message carries the value
+of a kept token; the one credential returned is the answer to `GetCloudflareCredential`.
+
+| RPC | Role | Request | Response | Notes |
+|---|---|---|---|---|
+| `ListCloudflare` | viewer | — | `available`, `accounts[]{name, id_last4}`, `presets[]{name, description, account, lifetime_seconds, rotation_seconds, endpoint, prototype{id, status, detail}, stored{present, token_id, minted_at, expires_on, error}, live[]{id, caller, minted_at, expires_on, stored}, live_error}`, `can_operate` | the prototype's `status` is `ok`, `active`, `forbidden`, `missing` or `unreachable`, read from Cloudflare at each call. Never a token's value |
+| `RotateCloudflarePreset` | operator | `preset` | `token_id`, `expires_on` | mints the stored token now, under the tick's lease (`aborted` when the schedule holds it), and sweeps expired ones. Audited as `roster.cloudflare.token.minted` under the operator |
+| `RevokeCloudflareToken` | operator | `preset`, `token_id` | `replaced` | deletes a token sluis minted for the preset (`not_found` for any other id); a revoked stored token is replaced at once. Audited as `roster.cloudflare.token.revoked` |
+| `ListMyCloudflarePresets` | any signed-in identity | — | `available`, `presets[]{name, description, endpoint, lifetime_seconds}` | the presets the policy's `cloudflare.grants` give the caller's groups |
+| `GetCloudflareCredential` | granted by `cloudflare.grants` | `preset`, `lifetime_seconds?` | `preset`, `token_id`, `expires_on`, `token` or `access_key_id`, `secret_access_key`, `endpoint` | mints a token for the caller, shown once, `Cache-Control: no-store`. Audited as `roster.cloudflare.token.minted` or `.refused` |
 
 ## `directoryroster.v1.SlackAppService`
 

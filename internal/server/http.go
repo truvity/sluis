@@ -1155,7 +1155,7 @@ func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
 			SignOutURL: s.signOut(),
 			IssuerURL:  s.issuerOrigin(),
 			Audit:      s.auditQuery != nil,
-			Cloudflare: s.console.deps.Cloudflare != nil,
+			Cloudflare: s.console != nil && s.console.deps.Cloudflare != nil,
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
