@@ -108,7 +108,7 @@ func (w *Writer) extendOne(ctx context.Context, e extension, id string) (string,
 	if row.TenantID != e.tenant {
 		return row.ObjectKey, time.Time{}, fmt.Errorf("%s belongs to another tenant", id)
 	}
-	entry, err := w.Roller.Store.Head(ctx, row.ObjectKey)
+	entry, err := w.Roller.StoreFor(e.profile.Name).Head(ctx, row.ObjectKey)
 	if err != nil {
 		return row.ObjectKey, time.Time{}, fmt.Errorf("reading the lock on %s: %w", row.ObjectKey, err)
 	}
@@ -120,7 +120,7 @@ func (w *Writer) extendOne(ctx context.Context, e extension, id string) (string,
 	if !entry.RetainUntil.IsZero() && !entry.RetainUntil.Before(e.until) {
 		return row.ObjectKey, entry.RetainUntil, errNothingToExtend
 	}
-	if err := w.Roller.Store.ExtendRetention(ctx, row.ObjectKey, e.until); err != nil {
+	if err := w.Roller.StoreFor(e.profile.Name).ExtendRetention(ctx, row.ObjectKey, e.until); err != nil {
 		return row.ObjectKey, entry.RetainUntil, err
 	}
 	return row.ObjectKey, entry.RetainUntil, nil

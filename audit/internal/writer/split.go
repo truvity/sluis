@@ -78,21 +78,17 @@ type Remembering interface {
 	Remember(ctx context.Context, tenant string, purpose keys.Purpose, pseudonym, identifier string) error
 }
 
-// Split returns one copy per profile the action belongs to and the deployment
-// has, in a stable order.
+// Split returns one copy per destination that takes the action (its category
+// among the destination's, or the destination named in the action's deprecated
+// profiles), in a stable order. Each copy is that destination's projection of
+// the one record the emitter sent: only the fields its profile keeps.
 //
 // A copy is default-deny: every core field a framework profile does not name is removed,
 // and an extension property survives only if its class is one the profile keeps
 // and its PII level is not one the profile refuses. Adding a field to the
 // record therefore cannot quietly widen a copy of it.
 func (s *Splitter) Split(ctx context.Context, r *record.Record, x *catalogue.Composed) ([]*record.Record, error) {
-	names := make([]string, 0, len(x.Action.Profiles))
-	for _, name := range x.Action.Profiles {
-		if _, ok := s.Profiles[name]; ok {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
+	names := s.Handled(x)
 
 	copies := make([]*record.Record, 0, len(names))
 	for _, name := range names {
@@ -105,9 +101,11 @@ func (s *Splitter) Split(ctx context.Context, r *record.Record, x *catalogue.Com
 	return copies, nil
 }
 
-// Unhandled returns the profiles an action names that this deployment does not
-// have. A record whose action belongs to a profile nobody configured is not an
-// error, but it is a fact an operator should be told once rather than never.
+// Unhandled returns the destinations an action names, in its deprecated
+// `profiles`, that this deployment does not have. A record whose action belongs
+// to a destination nobody configured is not an error, but it is a fact an
+// operator should be told once rather than never. A category no destination
+// takes is reported as "category:<name>".
 func (s *Splitter) Unhandled(x *catalogue.Composed) []string {
 	var out []string
 	for _, name := range x.Action.Profiles {
@@ -115,16 +113,25 @@ func (s *Splitter) Unhandled(x *catalogue.Composed) []string {
 			out = append(out, name)
 		}
 	}
+	if c := x.Action.Category; c != "" {
+		taken := false
+		for _, p := range s.Profiles {
+			taken = taken || x.Action.Takes("", p.Categories)
+		}
+		if !taken {
+			out = append(out, "category:"+c)
+		}
+	}
 	sort.Strings(out)
 	return out
 }
 
-// Handled returns the profiles an action names that this deployment has: the
-// ones that keep its records. Empty means nothing keeps them.
+// Handled returns the destinations that keep an action's records: those that
+// take its category, and those it names. Empty means nothing keeps them.
 func (s *Splitter) Handled(x *catalogue.Composed) []string {
 	var out []string
-	for _, name := range x.Action.Profiles {
-		if _, ok := s.Profiles[name]; ok {
+	for name, p := range s.Profiles {
+		if x.Action.Takes(name, p.Categories) {
 			out = append(out, name)
 		}
 	}

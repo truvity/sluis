@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
 
 	"sigs.k8s.io/yaml"
@@ -41,9 +42,26 @@ type Deployment struct {
 	ExternalIdentifiersAreOpaque bool `json:"external_identifiers_are_opaque,omitempty"`
 }
 
-// Entry is one profile's composition.
+// Entry is one destination: a profile of the deployment and the prefix of the
+// archive its copies land under. It is composed from framework profiles, takes
+// the actions of the categories it lists, and keeps its own projection of each
+// record.
 type Entry struct {
 	Frameworks []string `json:"frameworks"`
+	// Categories are the action categories (an action's `category` in its
+	// catalogue) this destination takes. A record is written once by its emitter
+	// and the writer stores a projection of it, only this destination's
+	// fields, under every destination that takes its category. A destination that
+	// lists none keeps only the actions that name it in their deprecated
+	// `profiles`.
+	Categories []string `json:"categories,omitempty"`
+	// KeyAlias is the alias of the key this destination's objects are encrypted
+	// with, a name and not a key (`alias/...`). Empty is the archive's key.
+	KeyAlias string `json:"key_alias,omitempty"`
+	// Preset is this destination's install preset, when it asks for more than
+	// its framework profiles need. Object Lock is the writer's only for a
+	// destination whose preset is attested.
+	Preset Preset `json:"preset,omitempty"`
 }
 
 // DeploymentAPIVersion is the version of the deployment document this build
@@ -76,7 +94,41 @@ func ParseDeployment(raw []byte) (*Deployment, error) {
 	if len(d.Profiles) == 0 {
 		return nil, errors.New("deployment: no profiles")
 	}
+	if err := d.check(); err != nil {
+		return nil, err
+	}
 	return &d, nil
+}
+
+var (
+	categoryRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+	aliasRE    = regexp.MustCompile(`^alias/[A-Za-z0-9/_-]+$`)
+)
+
+// check is what the strict parse cannot say about destinations: the names of
+// their categories and keys, and that two destinations that share a key say so
+// on purpose.
+func (d *Deployment) check() error {
+	var problems []error
+	for name, e := range d.Profiles {
+		seen := map[string]bool{}
+		for _, c := range e.Categories {
+			switch {
+			case !categoryRE.MatchString(c):
+				problems = append(problems, fmt.Errorf("deployment: profile %s: category %q is not a lower-case name", name, c))
+			case seen[c]:
+				problems = append(problems, fmt.Errorf("deployment: profile %s: category %q is listed twice", name, c))
+			}
+			seen[c] = true
+		}
+		if e.KeyAlias != "" && !aliasRE.MatchString(e.KeyAlias) {
+			problems = append(problems, fmt.Errorf("deployment: profile %s: key_alias %q must be an alias (alias/<name>), never a key id or ARN", name, e.KeyAlias))
+		}
+		if e.Preset != "" && !e.Preset.Valid() {
+			problems = append(problems, fmt.Errorf("deployment: profile %s: preset %q is not one of operational, standard, attested", name, e.Preset))
+		}
+	}
+	return errors.Join(problems...)
 }
 
 // refuseOldKey names the new key to a document that still uses the old one.
@@ -118,7 +170,19 @@ func (d *Deployment) Compose(frameworks map[string]*Framework) (map[string]*Prof
 			p.Identity[External] = Clear
 			p.OpaqueExternal = true
 		}
+		p.Categories = append([]string(nil), c.Categories...)
+		p.KeyAlias = c.KeyAlias
 		out[name] = p
+	}
+	needs, err := d.ProfileNeeds(frameworks)
+	if err != nil {
+		return nil, err
+	}
+	for name, p := range out {
+		p.Preset = needs[name].Preset
+		if explicit := d.Profiles[name].Preset; explicit.Rank() > p.Preset.Rank() {
+			p.Preset = explicit
+		}
 	}
 	return out, nil
 }

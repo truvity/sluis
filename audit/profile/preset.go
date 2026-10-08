@@ -100,6 +100,9 @@ type Needs struct {
 func (d *Deployment) ProfileNeeds(frameworks map[string]*Framework) (map[string]Needs, error) {
 	out := make(map[string]Needs, len(d.Profiles))
 	for name, entry := range d.Profiles {
+		if entry.Preset != "" && !entry.Preset.Valid() {
+			return nil, fmt.Errorf("profile %s: preset %q is not one of operational, standard, attested", name, entry.Preset)
+		}
 		n := Needs{Preset: Operational}
 		for _, fw := range entry.Frameworks {
 			f, ok := frameworks[fw]
@@ -118,6 +121,15 @@ func (d *Deployment) ProfileNeeds(frameworks map[string]*Framework) (map[string]
 			}
 		}
 		sort.Strings(n.By)
+		if want := entry.Preset; want != "" {
+			if want.Rank() < n.Preset.Rank() {
+				return nil, fmt.Errorf("profile %s: preset %s is weaker than its framework profiles need: %s need %s",
+					name, want, strings.Join(n.By, ", "), n.Preset)
+			}
+			if want.Rank() > n.Preset.Rank() {
+				n = Needs{Preset: want}
+			}
+		}
 		out[name] = n
 	}
 	return out, nil

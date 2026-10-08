@@ -118,7 +118,6 @@
         "type": "object",
         "required": [
           "operation",
-          "profiles",
           "summary"
         ],
         "additionalProperties": false,
@@ -158,12 +157,18 @@
               ]
             }
           },
+          "category": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$",
+            "description": "What routes the action's records: a destination in the deployment document takes the categories it lists and keeps its own projection of each record. Not `categories`, which are the framework event categories the action satisfies."
+          },
           "profiles": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Deprecated: the destinations that keep the action's records by name. Declare `category` instead; an action with none is still kept by the destinations it names here."
           },
           "capture_level": {
             "enum": [
@@ -238,7 +243,19 @@
               }
             }
           }
-        }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "category"
+            ]
+          },
+          {
+            "required": [
+              "profiles"
+            ]
+          }
+        ]
       }
     }
   }

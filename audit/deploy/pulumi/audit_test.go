@@ -124,7 +124,8 @@ func TestLifecycleIsPerProfilePrefixAtThirtyDaysAndOneYear(t *testing.T) {
 		}
 		got[o["filter"].ObjectValue()["prefix"].StringValue()] = days
 	}
-	want := map[string][2]float64{"records/security/": {30, 365}, "records/billing-nl/": {30, 365}}
+	// security keeps 365 days, so its deep-archive step (365) would not come before the expiry and is left out.
+	want := map[string][2]float64{"records/security/": {30, 0}, "records/billing-nl/": {30, 365}}
 	if len(got) != len(want) {
 		t.Fatalf("rules by prefix = %v, want %v", got, want)
 	}
@@ -669,8 +670,10 @@ func TestNothingIsCreatedForArgumentsThatCannotWork(t *testing.T) {
 		edit func(*auditpulumi.Args)
 		says string
 	}{
-		"no bucket":     {func(a *auditpulumi.Args) { a.Archive.BucketName = "" }, "BucketName"},
-		"no profiles":   {func(a *auditpulumi.Args) { a.Archive.Profiles = nil }, "Profiles"},
+		"no bucket": {func(a *auditpulumi.Args) { a.Archive.BucketName = "" }, "BucketName"},
+		"no profiles": {func(a *auditpulumi.Args) {
+			a.Archive.Profiles, a.Ingest.Disabled, a.Writer, a.Preset = nil, true, auditpulumi.WriterArgs{}, auditpulumi.PresetStandard
+		}, "Profiles"},
 		"a bad profile": {func(a *auditpulumi.Args) { a.Archive.Profiles = []string{"a/b"} }, "key component"},
 		"a mode":        {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "OFF" }, "NONE, GOVERNANCE or COMPLIANCE"},
 		"no mode":       {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "" }, "needs a lock"},

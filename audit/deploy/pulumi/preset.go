@@ -3,6 +3,7 @@ package auditpulumi
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/truvity/sluis/audit/profile"
@@ -31,41 +32,73 @@ const (
 // `profiles:` of Writer.DeploymentYAML, the document the writer reads. An
 // installation without a writer here (Ingest.Disabled) and no document has no
 // profiles to derive from, and is operational unless it asks for more.
-func resolvePreset(a *Args) (profile.Preset, error) {
+func resolvePreset(a *Args) (profile.Preset, []destination, error) {
 	explicit, err := profile.ParsePreset(a.Preset)
 	if err != nil {
-		return "", fmt.Errorf("auditpulumi: Preset: %w", err)
+		return "", nil, fmt.Errorf("auditpulumi: Preset: %w", err)
 	}
 	if strings.TrimSpace(a.Writer.DeploymentYAML) == "" {
 		if !a.Ingest.Disabled {
-			return "", errors.New("auditpulumi: Writer.DeploymentYAML is required: the profile configuration, which the preset is derived from (or set Ingest.Disabled)")
+			return "", nil, errors.New("auditpulumi: Writer.DeploymentYAML is required: the profile configuration, which the preset is derived from (or set Ingest.Disabled)")
 		}
 		if explicit == "" {
-			return profile.Operational, nil
+			return profile.Operational, nil, nil
 		}
-		return explicit, nil
+		return explicit, nil, nil
 	}
 	d, err := profile.ParseDeployment([]byte(a.Writer.DeploymentYAML))
 	if err != nil {
-		return "", fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
+		return "", nil, fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
 	}
 	if explicit != "" && d.Preset != "" && explicit != d.Preset {
-		return "", fmt.Errorf("auditpulumi: Preset is %s and Writer.DeploymentYAML says preset %s: set one of them", explicit, d.Preset)
+		return "", nil, fmt.Errorf("auditpulumi: Preset is %s and Writer.DeploymentYAML says preset %s: set one of them", explicit, d.Preset)
 	}
 	frameworks, err := profile.Builtin()
 	if err != nil {
-		return "", fmt.Errorf("auditpulumi: the framework profiles: %w", err)
+		return "", nil, fmt.Errorf("auditpulumi: the framework profiles: %w", err)
 	}
 	p, err := d.ResolvePreset(frameworks, explicit)
 	if err != nil {
-		return "", fmt.Errorf("auditpulumi: Preset: %w", err)
+		return "", nil, fmt.Errorf("auditpulumi: Preset: %w", err)
 	}
-	return p, nil
+	composed, err := d.Compose(frameworks)
+	if err != nil {
+		return "", nil, fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
+	}
+	names := make([]string, 0, len(composed))
+	for name := range composed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	dests := make([]destination, 0, len(names))
+	for _, name := range names {
+		c := composed[name]
+		dest := destination{Name: name, KeyAlias: c.KeyAlias, Preset: c.Preset}
+		if r := c.Retention; r.Policy == "fixed" && r.DeleteAtEnd {
+			dest.RetentionDays = r.Days
+		}
+		dests = append(dests, dest)
+	}
+	return p, dests, nil
+}
+
+// destination is a destination of the archive as the deployment document
+// declares it: a prefix with its own retention, key and preset.
+type destination struct {
+	Name string
+	// KeyAlias, when set, is the alias of a key the library creates for this
+	// destination's objects.
+	KeyAlias string
+	// RetentionDays is when the prefix's objects expire, from the destination's
+	// framework profiles; 0 means the profile keeps them until told otherwise.
+	RetentionDays int
+	Preset        profile.Preset
 }
 
 // applyPreset sets what the preset decides and refuses what it leaves out and
 // the arguments ask for anyway.
-func applyPreset(c *Args, preset profile.Preset) error {
+func applyPreset(c *Args, preset profile.Preset, dests []destination) error {
+	c.destinations = dests
 	f := preset.Features()
 	c.Preset = string(preset)
 

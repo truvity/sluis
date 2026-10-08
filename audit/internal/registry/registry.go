@@ -205,7 +205,7 @@ func (r *Registry) checkCoverage(ctx context.Context) {
 		if len(p.RequiredCategories) == 0 {
 			continue
 		}
-		if missing := catalogue.MissingCategories(name, p.RequiredCategories, catalogues); len(missing) > 0 {
+		if missing := catalogue.MissingCategories(name, p.Categories, p.RequiredCategories, catalogues); len(missing) > 0 {
 			r.OnUncovered(ctx, name, missing)
 		}
 	}

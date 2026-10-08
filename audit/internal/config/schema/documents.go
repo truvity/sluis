@@ -56,6 +56,9 @@ func deploymentSchema() m {
 				"propertyNames": m{"pattern": `^[^/]+$`},
 				"additionalProperties": obj("One profile's composition.", m{
 					"frameworks": m{"type": "array", "items": str("A framework profile's name."), "description": "The framework profiles the profile is composed from."},
+					"categories": m{"type": "array", "items": m{"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"}, "uniqueItems": true, "description": "The action categories (an action's `category`) this destination takes. The writer stores a projection of each record, only this destination's fields, under every destination that takes its category. Unset keeps only the actions that name the profile in their deprecated `profiles`."},
+					"key_alias":  m{"type": "string", "pattern": "^alias/[A-Za-z0-9/_-]+$", "description": "The alias of the key this destination's objects are encrypted with. Empty is the archive's key."},
+					"preset":     m{"enum": []string{"operational", "standard", "attested"}, "description": "This destination's install preset, when it asks for more than its framework profiles need. Object Lock is the writer's only for a destination whose preset is attested."},
 				}, "frameworks"),
 			},
 			"preset":                          m{"enum": []string{"operational", "standard", "attested"}, "description": presetDescription},

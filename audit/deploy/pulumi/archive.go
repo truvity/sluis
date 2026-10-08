@@ -58,7 +58,7 @@ func (c *Args) checkAWSArchive() error {
 			"estate's archive key by alias (alias/<name>), or choose Archive.Encryption \"aws-managed\" or \"s3\"")
 	}
 	if len(ar.Profiles) == 0 {
-		return errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix")
+		return errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix (or give Writer.DeploymentYAML, whose profiles they are)")
 	}
 	if err := checkArchiveProfiles(ar.Profiles); err != nil {
 		return err

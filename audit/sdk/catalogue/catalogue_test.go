@@ -330,15 +330,15 @@ func TestMessageArguments(t *testing.T) {
 func TestMissingCategories(t *testing.T) {
 	c := wallet(t)
 	required := []string{"credential_lifecycle", "authentication"}
-	missing := MissingCategories("security", required, []*Catalogue{c})
+	missing := MissingCategories("security", nil, required, []*Catalogue{c})
 	if len(missing) != 1 || missing[0] != "authentication" {
 		t.Fatalf("missing = %v, want [authentication]", missing)
 	}
-	if got := MissingCategories("billing", []string{"credential_lifecycle"}, []*Catalogue{c}); len(got) != 0 {
+	if got := MissingCategories("billing", nil, []string{"credential_lifecycle"}, []*Catalogue{c}); len(got) != 0 {
 		t.Fatalf("missing = %v, want none", got)
 	}
 	// A profile nothing emits into covers nothing.
-	if got := MissingCategories("history", required, []*Catalogue{c}); len(got) != 2 {
+	if got := MissingCategories("history", nil, required, []*Catalogue{c}); len(got) != 2 {
 		t.Fatalf("missing = %v, want both categories", got)
 	}
 }
@@ -424,5 +424,46 @@ func TestLoadRefusesDataPropertiesThatCollideAsArguments(t *testing.T) {
 	err := loadWith(t, walletDoc, schema)
 	if err == nil || !strings.Contains(err.Error(), "data_credential_id") {
 		t.Fatalf("want a refusal naming the colliding argument, got %v", err)
+	}
+}
+
+func TestAnActionIsTakenByCategoryOrByNameInTheDeprecatedProfiles(t *testing.T) {
+	a := Action{Category: "activity", Profiles: []string{"legacy"}}
+	for _, c := range []struct {
+		dest       string
+		categories []string
+		want       bool
+	}{
+		{"billing", []string{"activity"}, true},
+		{"billing", []string{"security"}, false},
+		{"billing", nil, false},
+		{"legacy", nil, true},
+		{"", []string{"activity"}, true},
+	} {
+		if got := a.Takes(c.dest, c.categories); got != c.want {
+			t.Errorf("Takes(%q, %v) = %v, want %v", c.dest, c.categories, got, c.want)
+		}
+	}
+	if (Action{}).Takes("x", []string{""}) {
+		t.Error("an action with no category is taken by an empty category")
+	}
+}
+
+func TestAnActionNeedsACategoryOrProfiles(t *testing.T) {
+	doc := func(extra string) []byte {
+		return []byte("source: shop\nversion: \"1.0.0\"\nlocales: [en]\nactions:\n  shop.thing.done:\n    summary: s\n    operation: create\n" + extra +
+			"    message:\n      en: done\n")
+	}
+	if _, err := Load(doc("    category: activity\n"), nil); err != nil {
+		t.Errorf("a category: %v", err)
+	}
+	if _, err := Load(doc("    profiles: [security]\n"), nil); err != nil {
+		t.Errorf("profiles: %v", err)
+	}
+	if _, err := Load(doc(""), nil); err == nil {
+		t.Error("an action that names neither a category nor profiles was accepted")
+	}
+	if _, err := Load(doc("    category: Activity\n"), nil); err == nil {
+		t.Error("a category that is not a lower-case name was accepted")
 	}
 }
