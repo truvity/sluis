@@ -1,6 +1,7 @@
 name: billing-nl
 framework: "Dutch tax administration duty: Algemene wet inzake rijksbelastingen art. 52 (bewaarplicht) and the Belastingdienst brochure on automated administration"
 version: "2026.09"
+min_preset: standard
 summary: The usage-billing profile. What finance, a customer in a dispute and the tax inspector read. Quantities per tenant and meter, never people.
 disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:

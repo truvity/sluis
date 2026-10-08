@@ -528,7 +528,7 @@ audit-generate-local:
 # belongs in CI, where a retry is cheap.
 [working-directory: 'audit']
 audit-drift: audit-generate-local audit-ts-sentences audit-config-schemas
-    git diff --exit-code -- gen sdk/gen ts/src/catalogue schemas/config ../charts/audit/values.schema.json
+    git diff --exit-code -- gen sdk/gen ts/src/catalogue schemas/config ../charts/audit/values.schema.json ../charts/audit/templates/_presets.tpl
 
 # The JSON Schema of each binary's configuration file, written into
 # schemas/config/ from internal/config/schema, and the chart's values schema,

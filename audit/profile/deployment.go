@@ -19,6 +19,11 @@ type Deployment struct {
 	// same document and is read with a deprecation warning.
 	APIVersion string           `json:"apiVersion,omitempty"`
 	Profiles   map[string]Entry `json:"profiles"`
+	// Preset is the install preset the deployment asks for: operational,
+	// standard or attested. Optional. Unset, the preset is the lowest one that
+	// satisfies every profile (Derive); set, it may be stronger than that and is
+	// refused when weaker (ResolvePreset).
+	Preset Preset `json:"preset,omitempty"`
 	// ExternalIdentifiersAreOpaque is the deployment saying that the
 	// identifiers it receives for people outside the organisation are already
 	// pseudonyms: identifiers an application minted, which name nobody without
@@ -99,6 +104,9 @@ func refuseOldKey(raw []byte) error {
 // composed profile, and a treatment the deployment has relaxed should not be
 // something a reader has to know to subtract.
 func (d *Deployment) Compose(frameworks map[string]*Framework) (map[string]*Profile, error) {
+	if _, err := d.ResolvePreset(frameworks, ""); err != nil {
+		return nil, fmt.Errorf("deployment: %w", err)
+	}
 	out := make(map[string]*Profile, len(d.Profiles))
 	for name, c := range d.Profiles {
 		p, err := Compose(Composition{Name: name, Frameworks: c.Frameworks}, frameworks)

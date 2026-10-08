@@ -80,6 +80,19 @@ type Args struct {
 	// is the platform's copy.
 	LogRetentionDays int
 
+	// Preset is the install preset: "operational" (the writer, the archive,
+	// deduplication and the queue intake), "standard" (adds the notary with its
+	// seal key, and the alarms) or "attested" (adds compliance Object Lock and
+	// the pseudonym keys). Optional, and best left unset: it is derived as the
+	// lowest preset every profile in Writer.DeploymentYAML can be kept under, each
+	// framework profile stating its own minimum (`min_preset`), and nothing chosen
+	// is operational. Set, it may be stronger than that and is refused when
+	// weaker, naming the profile that needs more. What the preset leaves out is
+	// not created: under operational there is no notary, no seal key, no schedule
+	// and no alarm, and asking for one (Notary.Package, Alerts.EndpointURL) is
+	// refused.
+	Preset string
+
 	Archive   ArchiveArgs
 	Ingest    IngestArgs
 	Writer    WriterArgs
@@ -110,9 +123,10 @@ type ArchiveArgs struct {
 	// bucket name is global.
 	BucketName string
 
-	// ObjectLockMode is NONE, GOVERNANCE or COMPLIANCE. Required: there is no
-	// default, so that every caller chooses and nobody gets a lock, or no lock,
-	// by omission.
+	// ObjectLockMode is NONE, GOVERNANCE or COMPLIANCE. Unset, it is what the
+	// preset says: COMPLIANCE for attested, NONE for the presets below it. The
+	// attested preset refuses a weaker mode; a lower one accepts a stricter mode
+	// set here (the governance trial of the lock).
 	//
 	// NONE creates no Object Lock configuration and renders `lockMode: none` for
 	// the functions, which then send no retention or legal-hold header and are
@@ -491,13 +505,19 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		return nil, fmt.Errorf("auditpulumi: AccountID %q must be the 12 digits of an AWS account id", c.AccountID)
 	}
 
+	preset, err := resolvePreset(&c)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyPreset(&c, preset); err != nil {
+		return nil, err
+	}
+
 	ar := &c.Archive
 	if ar.BucketName == "" {
 		return nil, errors.New("auditpulumi: Archive.BucketName is required")
 	}
 	switch ar.ObjectLockMode {
-	case "":
-		return nil, errors.New("auditpulumi: Archive.ObjectLockMode is required: NONE, GOVERNANCE or COMPLIANCE (docs/how-to/aws-turn-on-object-lock.md)")
 	case None, Governance, Compliance:
 	default:
 		return nil, fmt.Errorf("auditpulumi: Archive.ObjectLockMode %q must be NONE, GOVERNANCE or COMPLIANCE", ar.ObjectLockMode)

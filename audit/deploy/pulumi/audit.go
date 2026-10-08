@@ -34,6 +34,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sns"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sqs"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -82,6 +83,9 @@ type Audit struct {
 	// configuration names from: create the SecureStrings under it. Empty when the
 	// configuration names none (see WriterArgs.Secrets).
 	SecretsRoot pulumi.StringOutput
+	// Preset is the install preset the installation runs: the one derived from its
+	// profiles, or the stronger one it asked for.
+	Preset pulumi.StringOutput
 	// AlarmTopicArn is the SNS topic every alarm publishes to.
 	AlarmTopicArn pulumi.StringOutput
 	// ScheduleArn is the notary's schedule.
@@ -331,11 +335,16 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	}
 
 	// ---- alarms
-	topic, err := newAlarms(ctx, name, a, alarmTargets{
-		Queue: queue, Dlq: dlq, Writer: writerFn, Notary: notaryFn, WriterLogs: writerLogsGroup,
-	}, tags, child)
-	if err != nil {
-		return nil, err
+	// The operational preset has none: nobody is paged for an installation that
+	// asked for no more than the write path.
+	var topic *sns.Topic
+	if a.features().Alarms {
+		topic, err = newAlarms(ctx, name, a, alarmTargets{
+			Queue: queue, Dlq: dlq, Writer: writerFn, Notary: notaryFn, WriterLogs: writerLogsGroup,
+		}, tags, child)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// ---- the read role for observe, and the write role for a workload outside AWS
@@ -393,6 +402,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	if grant != nil {
 		out.SecretsRoot = pulumi.String(grant.Root).ToStringOutput()
 	}
+	out.Preset = pulumi.String(a.Preset).ToStringOutput()
 	out.AlarmTopicArn = pick(topic != nil, func() pulumi.StringOutput { return topic.Arn })
 	out.ScheduleArn = pick(notary, func() pulumi.StringOutput { return schedule.Arn })
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
@@ -403,8 +413,8 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		"writerFunctionArn": out.WriterFunctionArn, "notaryFunctionArn": out.NotaryFunctionArn,
 		"writerRoleArn": out.WriterRoleArn, "notaryRoleArn": out.NotaryRoleArn, "observeReaderRoleArn": out.ObserveReaderRoleArn,
 		"archiveWriterRoleArn": out.ArchiveWriterRoleArn, "queryRoleArn": out.QueryRoleArn,
-		"secretsRoot":   out.SecretsRoot,
-		"alarmTopicArn": out.AlarmTopicArn, "scheduleArn": out.ScheduleArn,
+		"secretsRoot": out.SecretsRoot,
+		"preset":      out.Preset, "alarmTopicArn": out.AlarmTopicArn, "scheduleArn": out.ScheduleArn,
 	}); err != nil {
 		return nil, err
 	}

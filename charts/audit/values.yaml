@@ -305,6 +305,17 @@ profiles:
   security:
     frameworks: [security]
 
+# The install preset: `operational` (the writer, the archive, deduplication and
+# intake), `standard` (adds the notary and its seal key, and the alarms) or
+# `attested` (adds compliance Object Lock and the pseudonym keys). Leave it
+# unset: it is derived as the lowest preset every profile above can be kept
+# under, each framework profile stating its own minimum (`min_preset` in
+# audit/profiles/). Set, it may be stronger than that and is refused when
+# weaker, naming the profile that needs more. With nothing but `history` it is
+# operational, and `jobs.notary.enabled` is then refused. The document the
+# components read carries it, so a writer refuses to start on a weaker one too.
+# preset: standard
+
 # Whether the identifiers this installation receives for people outside the
 # organisation are already opaque — ones an application minted, which name
 # nobody without that application's own database. Where they are, a profile

@@ -463,6 +463,10 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 					a.Notary = auditpulumi.NotaryArgs{}
 				}
 				a.Ingest.Disabled, a.Notary.Disabled = c.ingestOff, c.notaryOff
+				if c.ingestOff {
+					// Without a writer there are no profiles to derive the preset from.
+					a.Preset = auditpulumi.PresetStandard
+				}
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -530,7 +534,9 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 }
 
 func TestTheSealKeyPolicyNamesTheNotaryOnlyWhenThereIsOne(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Ingest.Disabled = true; a.Writer = auditpulumi.WriterArgs{} })
+	rec, _, err := build(t, func(a *auditpulumi.Args) {
+		a.Ingest.Disabled, a.Writer, a.Preset = true, auditpulumi.WriterArgs{}, auditpulumi.PresetStandard
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +551,7 @@ func TestTheShippedConfigurationOfEachPartThatRemainsValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	validateConfigs(t, rec, map[string]string{"audit-writer": "audit-writer-lambda"})
-	rec, _, err = build(t, func(a *auditpulumi.Args) { a.Ingest.Disabled = true })
+	rec, _, err = build(t, func(a *auditpulumi.Args) { a.Ingest.Disabled, a.Preset = true, auditpulumi.PresetStandard })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -558,7 +564,9 @@ func TestADisabledPartNeedsNoBinaryAndAnEnabledOneStillDoes(t *testing.T) {
 		t.Errorf("a disabled notary needed a binary: %v", err)
 	}
 	// No ingest, no writer binary or deployment.
-	if _, _, err := build(t, func(a *auditpulumi.Args) { a.Ingest.Disabled, a.Writer = true, auditpulumi.WriterArgs{} }); err != nil {
+	if _, _, err := build(t, func(a *auditpulumi.Args) {
+		a.Ingest.Disabled, a.Writer, a.Preset = true, auditpulumi.WriterArgs{}, auditpulumi.PresetStandard
+	}); err != nil {
 		t.Errorf("a disabled ingest needed a writer: %v", err)
 	}
 	// Both are still required when the part is on.

@@ -58,6 +58,7 @@ func deploymentSchema() m {
 					"frameworks": m{"type": "array", "items": str("A framework profile's name."), "description": "The framework profiles the profile is composed from."},
 				}, "frameworks"),
 			},
+			"preset":                          m{"enum": []string{"operational", "standard", "attested"}, "description": presetDescription},
 			"external_identifiers_are_opaque": boolean("The identifiers this deployment receives for people outside the organisation are already pseudonyms an application minted, so a profile asking for `external: pseudonym` gets `clear`. Defaults to false: a deployment arrives at clear identifiers by saying so and not by omission."),
 		}, []string{"profiles"})
 }
@@ -115,3 +116,7 @@ func workloadsSchema() m {
 			},
 		}, []string{"issuers"})
 }
+
+// presetDescription is what the install preset is, wherever it is set: the
+// deployment document, the chart's values.
+const presetDescription = "The install preset: `operational` (writer, archive, deduplication, intake), `standard` (adds the notary, its seal key and alarms) or `attested` (adds compliance Object Lock and pseudonym keys). Optional: unset, it is the lowest preset every profile can be kept under, which each framework profile states as `min_preset`. Set, it may be stronger than that and is refused when weaker, naming the profile that needs more."

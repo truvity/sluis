@@ -76,9 +76,12 @@ const (
 
 // Framework is one framework's requirements.
 type Framework struct {
-	Name       string     `json:"name"`
-	Framework  string     `json:"framework"`
-	Version    string     `json:"version"`
+	Name      string `json:"name"`
+	Framework string `json:"framework"`
+	Version   string `json:"version"`
+	// MinPreset is the lowest install preset a profile composed from this
+	// framework profile can be kept under (preset.go).
+	MinPreset  Preset     `json:"min_preset"`
 	Summary    string     `json:"summary,omitempty"`
 	Disclaimer string     `json:"disclaimer"`
 	Citations  []Citation `json:"citations"`
@@ -288,6 +291,9 @@ func (p *Framework) check() error {
 		if p.Retention.FallbackDays <= 0 {
 			problems = append(problems, errors.New("retention.fallback_days is required: an expiry is not always known when the record is written"))
 		}
+	}
+	if !p.MinPreset.Valid() {
+		problems = append(problems, fmt.Errorf("min_preset is %q, which is not an install preset", p.MinPreset))
 	}
 	if len(p.Citations) == 0 {
 		problems = append(problems, errors.New("a framework profile states what a framework requires and must cite it"))

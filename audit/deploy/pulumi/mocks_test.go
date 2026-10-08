@@ -229,7 +229,7 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 			"archiveWriterRole": a.ArchiveWriterRoleArn,
 			"dedupe":            a.DedupeTableName, "writerFn": a.WriterFunctionArn, "notaryFn": a.NotaryFunctionArn,
 			"writerRole": a.WriterRoleArn, "notaryRole": a.NotaryRoleArn, "observeRole": a.ObserveReaderRoleArn, "queryRole": a.QueryRoleArn,
-			"topic": a.AlarmTopicArn, "schedule": a.ScheduleArn,
+			"topic": a.AlarmTopicArn, "preset": a.Preset, "schedule": a.ScheduleArn,
 		} {
 			wg.Add(1)
 			o.ApplyT(func(v string) string {

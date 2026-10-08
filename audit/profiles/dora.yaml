@@ -1,6 +1,7 @@
 name: dora
 framework: "DORA (Regulation (EU) 2022/2554) and Commission Delegated Regulation (EU) 2024/1774 Art. 12 (logging)"
 version: "2026.09"
+min_preset: attested
 summary: Add-on for suppliers to financial entities. Adds the logging-failure detection and reference-time-source expectations that flow down through contracts.
 disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:
