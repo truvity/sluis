@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.72.0
+
 ### Changed
 
 - **`sluisctl` keeps its local state in `<user config dir>/sluisctl` (`~/.config/sluisctl` on Linux) instead of `.../accessctl`.** Sessions, `config.yaml` and the credential and token caches all move; the deprecated `accessctl` name uses the same directory. The first run that finds the new directory empty and the old one populated copies the old files across (modes kept, never widened past 0600/0700; nothing already in the new directory is replaced), prints one line on stderr, and leaves the old directory in place for you to delete. The copy is built in a staging directory and renamed into place, so a failed or concurrent run never leaves a half-built directory. An older `accessctl`/`sluisctl` build run afterwards updates only the old directory. Deleting `~/.config/sluisctl` copies the old state again unless `~/.config/accessctl` is removed too. The OIDC client id, the `accessctl:` kubeconfig user prefix and the wire protocol are unchanged.
