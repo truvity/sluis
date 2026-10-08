@@ -6,7 +6,8 @@ serves, and gitops only wires it: a stack calls the constructors and renders the
 names. Source: `deploy/pulumi`; the exported identifiers are in [Go packages](go-module.md).
 
 **Lambda is the main path** (decision of 2026-10-04: both estates run sluis on AWS Lambda). `NewLambda` is the
-whole of it: ONE function, one role, the HTTP API with a mutual-TLS custom domain, the signing key and the schedules.
+whole of it: ONE function, one role, the HTTP API, the signing key and the schedules. The mutual-TLS custom domain in
+front of the API is an [edge module](#the-edge-modules).
 `NewKubernetesIdentity` (EKS Pod Identity) is kept for an installation that still runs the Deployment, and is not
 extended. Since v1.63 sluis is one process everywhere ([decision 0037](../decisions/0037-one-process-everywhere.md)): one
 function, one role, and on Kubernetes one Deployment, one ServiceAccount, one role.
@@ -213,12 +214,6 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 	Storage:       store.Grant(),
 	State:         state.Grant(),
 	AuditQueueArn: audit.QueueArn,
-	API: sluispulumi.APIArgs{
-		DomainName:           "access.example.test",
-		CertificateArn:       originCertArn,  // an ACM certificate the caller supplies
-		TruststorePEM:        cloudflareOriginPullCA,
-		TruststoreBucketName: "acme-sluis-truststore",
-	},
 	Schedule: sluispulumi.ScheduleArgs{GitHubOrgs: []string{"acme"}, SlackWorkspaces: []string{"T0ACME"}},
 }, pulumi.Providers(awsProvider))
 ```
@@ -264,9 +259,8 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `LogRetentionDays` | 30 | The function's log group. |
 | `AccessLogs` | nil (off) | An `AccessLogsArgs`: `RetentionDays` (default 7). Set, the library declares a log group `/aws/apigateway/<FunctionName>` and the `$default` stage's access log settings. Each request writes one JSON line with exactly `requestTime`, `requestId`, `httpMethod`, `path`, `status`, `responseLatency` and `integrationLatency` (the format is `AccessLogFormat`). The query string is never logged, because OAuth authorization codes and `state` travel in it; no header, source address, user agent or identity field is logged either. An HTTP API needs no account-level CloudWatch role (that is a REST API setting), so this adds no IAM resource; the principal that applies the stack needs API Gateway's log-delivery permissions (`logs:CreateLogDelivery`, `logs:PutResourcePolicy` and the related describe and update actions), and API Gateway adds the log group's resource policy itself. |
 | `PermissionsBoundaryArn` | none | The boundary of the role and the scheduler's. |
-| `API.DomainName`, `API.CertificateArn` | required | The custom domain and the ACM certificate for it, in the region (the caller supplies it, for example a Cloudflare Origin CA certificate imported to ACM). |
-| `API.TruststorePEM`, `API.TruststoreBucketName` | required | The client-CA bundle for mutual TLS, and the bucket the library uploads it to. |
-| `API.KeepDefaultEndpoint` | false | Leaves the default `execute-api` endpoint on, for the cutover's acceptance suite to run against `ApiUrl` before the DNS switch. Turn it off again after: it is a way round the client certificate. |
+| `API.DomainName`, `API.CertificateArn`, `API.TruststorePEM`, `API.TruststoreBucketName` (deprecated) | none | The custom domain, its ACM certificate, the client-CA bundle and the bucket the library uploads it to. **Deprecated, accepted for one release:** set, all four together, the library still builds the domain with mutual TLS and the truststore bucket as it did (the same resources and names, so a stack shows no diff) and logs a warning. Unset, it builds the API alone. They move to the [edge module](#the-edge-modules); [the migration](../how-to/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module) keeps the domain. |
+| `API.KeepDefaultEndpoint` | false | Leaves the default `execute-api` endpoint on, for the cutover's acceptance suite to run against `ApiUrl` before the DNS switch. Turn it off again after: it is a way round the client certificate. It is the API's, so it stays in the core with or without an edge. |
 | `Schedule.GitHubOrgs`, `Schedule.SlackWorkspaces` | none | The targets, one schedule each. |
 | `Schedule.Rate` | `rate(5 minutes)` | The EventBridge Scheduler expression. |
 | `Schedule.Paused`, `Exports.Paused`, `DirectoryRefresh.Paused` | false | Declares those schedules with `state: DISABLED` and keeps everything else: the schedules, the scheduler's role and the function's grants (the `export/*` read and write included), so that turning them on is one setting and the preview shows only each schedule's state. Unset, a schedule's state is left to EventBridge Scheduler's default (enabled), as before. `Paused` and `Disabled` together are refused. |
@@ -292,9 +286,8 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `FunctionArn`, `FunctionName` | The function (replace `HTTP|GitHub|SlackFunctionArn` and the names). |
 | `RoleArn`, `RoleName` | Its role (replace `HTTP|GitHub|SlackRoleArn` and the names). |
 | `AccessLogGroupName` | The API access log group (empty without `AccessLogs`). |
-| `APIID`, `APIURL` | The HTTP API and its default endpoint (it answers only with `KeepDefaultEndpoint`). |
-| `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
-| `TruststoreBucketName`, `TruststoreURI` | The client-CA bundle. |
+| `APIID`, `APIStageName`, `APIURL` | The HTTP API, its stage and its default endpoint (it answers only with `KeepDefaultEndpoint`). `FrontDoor()` returns the first two, with the component's name, for an edge module. |
+| `DomainTarget`, `DomainHostedZoneID`, `TruststoreBucketName`, `TruststoreURI` | Empty unless the deprecated `API.DomainName` is set; the edge module has its own. |
 | `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
 | `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
@@ -302,12 +295,68 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 
 ### The API
 
-An HTTP API (payload format 2.0) with a `$default` route to the function, behind a regional custom domain (TLS 1.2 or
-later) with **mutual TLS**: the truststore is `TruststorePEM` in a bucket of its own (versioned, encrypted, closed to the
-public and to plain HTTP, protected), not in the blob bucket, because the function can write that one and a function that
-can replace the client CA has no use for a client certificate. The domain names the object's version, so a new PEM
-redeploys it. This is Cloudflare's authenticated origin pulls: the PEM is Cloudflare's origin-pull CA. The default
-endpoint is disabled unless `KeepDefaultEndpoint` is set.
+An HTTP API (payload format 2.0) with a `$default` route and stage, and the permission that lets it invoke the function.
+Nothing is in front of it: with no edge module and no deprecated domain inputs, only the default `execute-api` endpoint
+exists, and it is **disabled** unless `KeepDefaultEndpoint` is set (a request that reaches the function without going
+through a front door's client certificate is a way round it). `Lambda.FrontDoor()` is what a front door takes: the API
+id, the stage and the component's name.
+
+### The edge modules
+
+A front door is a module of its own, so that the core never depends on one. `deploy/pulumi/edge/cloudflare`
+(`github.com/truvity/sluis/deploy/pulumi/edge/cloudflare`, package `edgecloudflare`) is the one for an estate with
+Cloudflare in front: it builds the regional custom domain (TLS 1.2 or later) with **mutual TLS**, its mapping to the
+API, the truststore and, if asked, the ACM certificate. `edge/aws` (a front door with no Cloudflare in front) is a later
+module. A release tags both at the same version; require the edge at the core's version.
+
+```go
+store, _ := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{
+	BucketName: "acme-sluis", Versioning: true, // the domain pins the truststore's version
+	ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edgecloudflare.Guard(cdRoleArn, operatorsAdminArn, breakglassArn)},
+}, pulumi.Providers(awsProvider))
+l, _ := sluispulumi.NewLambda(ctx, "access", lambdaArgs, pulumi.Providers(awsProvider))
+front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
+	FrontDoor:      l.FrontDoor(),
+	DomainName:     "access.example.test",
+	CertificateArn: originCertArn, // or Certificate: &edgecloudflare.CertificateArgs{...}
+	TruststorePEM:  cloudflareOriginPullCA,
+	Storage:        store, // or TruststoreBucket: ... for blobs on R2
+}, pulumi.Providers(awsProvider))
+```
+
+| `edgecloudflare.Args` | |
+|---|---|
+| `FrontDoor` | required: `Lambda.FrontDoor()`. |
+| `DomainName` | required: the custom domain. |
+| `CertificateArn` or `Certificate` | exactly one. `CertificateArn` is an ACM certificate in the function's region that the caller supplies (a Cloudflare Origin CA certificate imported to ACM, say). `Certificate` requests one with DNS validation: `CreateValidationRecord(ctx, record)` is called with the record ACM asks for (`Name`, `Type`, `Value` as outputs), creates it in the estate's own DNS and returns its fully qualified name, which the edge then waits for. The edge holds no DNS credential and imports no Cloudflare provider. |
+| `TruststorePEM` | required: the PEM bundle of the CAs a client certificate must chain to; for Authenticated Origin Pulls, Cloudflare's origin-pull CA. |
+| `Storage` or `TruststoreBucket` | exactly one, see below. |
+| `Tags` | on what the edge creates. |
+
+| `edgecloudflare.Edge` outputs | |
+|---|---|
+| `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
+| `CertificateArn` | The certificate the domain uses. |
+| `TruststoreBucketName`, `TruststoreURI`, `TruststoreVersion` | Where the client-CA bundle is, and the object version the domain pins. |
+
+**The truststore** is ONE object, `truststore/client-ca.pem`, in a versioned bucket; the domain names the object's
+version, so a new PEM redeploys it. API Gateway reads a truststore from S3 only, and the functions can write the blob
+bucket, and a function that can replace the client CA has no use for a client certificate. So the prefix is guarded by
+the bucket's policy: a `Deny` on every write, delete and re-label under `truststore/` for every principal except the
+identities you name (`ArnNotEquals` on `aws:PrincipalArn`: the role the stack is applied with, the operators' admin role,
+a break-glass role; roles, not sessions). The edge does not trust you to have done this: with `Storage` it refuses a
+bucket that is not versioned or that does not guard the prefix. The guard is part of the bucket, so it is declared on
+the storage (`StorageArgs.ProtectedPrefixes`, with `edgecloudflare.Guard(...)`), which owns the bucket's one policy.
+
+**Blobs on R2.** When the blob store is S3-compatible rather than S3, there is no S3 blob bucket for API Gateway to read.
+Leave `Storage` unset and give `TruststoreBucket` (`Name`, `ApplyPrincipalArns`): the edge creates a small S3 bucket of
+its own for the truststore alone, protected, versioned, encrypted, closed to the public and to plain HTTP, with the same
+guard.
+
+**Authenticated Origin Pulls** is the estate's zone setting, made where the zone is (a Cloudflare provider in the
+estate's own program): the zone's `tls_client_auth` on, so that Cloudflare presents its client certificate to the
+origin. Without it Cloudflare presents none and the domain refuses every request. The setting and the DNS record for
+`DomainTarget` are not in this module.
 
 ### The schedules
 

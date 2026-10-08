@@ -19,6 +19,17 @@ diff <(grep -vE '^[[:space:]]*github\.com/truvity/sluis v' "$root/deploy/pulumi/
 grep -q '^replace github.com/truvity/sluis => ../..$' "$tmp/go.mod" || fail "the replace was lost"
 grep -q '^module github.com/truvity/sluis/deploy/pulumi$' "$tmp/go.mod" || fail "the module line was touched"
 
+# An edge module requires the core library too (and the root as an indirect):
+# both move, and nothing else does.
+edge="$root/deploy/pulumi/edge/cloudflare/go.mod"
+cp "$edge" "$tmp/edge.mod"
+"$pin" v9.8.7 "$tmp/edge.mod"
+grep -qE '^[[:space:]]*github\.com/truvity/sluis v9\.8\.7( // indirect)?$' "$tmp/edge.mod" || fail "the edge's root require was not moved"
+grep -qE '^[[:space:]]*github\.com/truvity/sluis/deploy/pulumi v9\.8\.7$' "$tmp/edge.mod" || fail "the edge's core require was not moved"
+diff <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/deploy/pulumi)? v' "$edge") \
+     <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/deploy/pulumi)? v' "$tmp/edge.mod") >/dev/null || fail "something besides the requires changed in the edge"
+grep -q '^replace github.com/truvity/sluis/deploy/pulumi => ../..$' "$tmp/edge.mod" || fail "the edge's replace was lost"
+
 # Idempotent, and it reads and writes standard streams.
 "$pin" v9.8.7 "$tmp/go.mod"
 "$pin" v9.8.7 - < "$tmp/go.mod" | cmp -s - "$tmp/go.mod" || fail "not idempotent"

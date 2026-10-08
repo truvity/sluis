@@ -1,8 +1,10 @@
 // Package sluispulumi is the AWS shape of sluis as a Pulumi Go library: the
 // storage the service keeps its blobs in, the DynamoDB table of the State port,
 // and, as the main path, the Lambda deployment: ONE function from the release
-// zip with one role, an HTTP API with a mutual-TLS custom domain, the
-// token-signing key and the controllers' schedules. The EKS Pod Identity roles
+// zip with one role, an HTTP API, the token-signing key and the
+// controllers' schedules. The custom domain with mutual TLS, the certificate and
+// the truststore are a front door's: an edge module
+// (github.com/truvity/sluis/deploy/pulumi/edge/cloudflare) takes Lambda.FrontDoor(). The EKS Pod Identity roles
 // are kept, collapsed to ONE role for the one pod, for an installation that
 // runs the Deployment.
 //
@@ -13,7 +15,8 @@
 // not in the root module's dependency graph.
 //
 //	store, err := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{
-//		BucketName: "acme-sluis",
+//		BucketName: "acme-sluis", Versioning: true,
+//		ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edgecloudflare.Guard(applyRoleArn)},
 //	}, pulumi.Providers(aws))
 //	state, err := sluispulumi.NewState(ctx, "access", &sluispulumi.StateArgs{
 //		TableName: "acme-sluis",
@@ -27,13 +30,11 @@
 //		Storage:        store.Grant(),
 //		State:          state.Grant(),
 //		AuditQueueArn:  auditQueueArn,
-//		API: sluispulumi.APIArgs{
-//			DomainName:           "access.example.test",
-//			CertificateArn:       certArn,
-//			TruststorePEM:        originPullCA,
-//			TruststoreBucketName: "acme-sluis-truststore",
-//		},
 //		Schedule: sluispulumi.ScheduleArgs{GitHubOrgs: []string{"acme"}},
+//	}, pulumi.Providers(aws))
+//	_, err = edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
+//		FrontDoor: l.FrontDoor(), DomainName: "access.example.test",
+//		CertificateArn: certArn, TruststorePEM: originPullCA, Storage: store,
 //	}, pulumi.Providers(aws))
 //
 // The one function (`sluis`, or LambdaArgs.FunctionName) is the release zip's
