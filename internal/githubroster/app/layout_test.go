@@ -28,7 +28,8 @@ func TestTheControllerCarriesTheServiceDocumentsSecretsLayout(t *testing.T) {
 	file := filepath.Join(dir, "sluis.yaml")
 	doc := "apiVersion: sluis.truvity.github.io/sluis/v3\nissuerURL: https://access.example\npublicURL: https://access.example/console\n" +
 		"policy: {file: " + policy + "}\n" +
-		"ports:\n  adapter: memory\n  blob:\n    adapter: s3\n    s3: {bucket: b, endpoint: 'http://127.0.0.1:1', pathStyle: true, credentialsRef: internal/blobs/r2}\n" +
+		"ports:\n  adapter: memory\n  blob:\n    adapter: s3\n    s3: {bucket: b, endpoint: 'http://127.0.0.1:1', pathStyle: true,\n" +
+		"      credentialsRef: internal/blobs/r2}\n" +
 		"secrets: {source: ssm, root: /sluis/example, layout: v4}\nadapters:\n  secrets: {adapter: ssm}\n" +
 		"controllers: {github: {}}\n"
 	if err := os.WriteFile(file, []byte(doc), 0o600); err != nil {
