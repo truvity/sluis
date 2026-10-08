@@ -209,7 +209,7 @@ document change by checksum.
 - a CI check that fails when a committed document and its installation drift apart.
 
 Next: a gateway and the first real sign-in ([Install with Helm](../how-to/install-with-helm.md)), connecting a
-directory and each relying party ([how-to index](../index.md)), taking a release
+directory and each relying party ([how-to index](../sluis/README.md)), taking a release
 ([upgrade pages](../how-to/upgrade/v1.64.md), including the zero-diff gate in
 [Install with Helm](../how-to/install-with-helm.md#afterwards)). The values-mode (`config`, `policy`, `exchange`) is
 deprecated and works for one more minor.

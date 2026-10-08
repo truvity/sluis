@@ -6,7 +6,7 @@ and the traps that were met in use, each with the failure that earned
 it. The test for whether something belongs here: *what goes wrong if I
 do the obvious thing.* This page is an index; the pages below hold the
 substance. For a map of every page in the repository, not just these, see
-[index.md](../index.md).
+[index.md](../sluis/README.md).
 
 - [reference/policy.md](../reference/policy-validation.md#refused-at-load) — what the
   policy loader refuses, so that a typo fails a rollout rather than a
