@@ -328,7 +328,8 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 	}
 	if c := s.CredentialsPreset; c != nil {
 		if s.CredentialsAddress != "" {
-			return s, fmt.Errorf("auditpulumi: %s and %s are both set: static credentials or minted ones, not both", field("CredentialsAddress"), field("CredentialsPreset"))
+			return s, fmt.Errorf("auditpulumi: %s and %s are both set: static credentials or minted ones, not both",
+				field("CredentialsAddress"), field("CredentialsPreset"))
 		}
 		if !addressRE.MatchString(c.Minter) {
 			return s, fmt.Errorf("auditpulumi: %s %q must be below internal/ (internal/cloudflare/main/minter): the grant is on that address only",
