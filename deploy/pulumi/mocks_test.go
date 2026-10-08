@@ -86,7 +86,18 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 	return a.Name + "_id", out, nil
 }
 
-func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) { return a.Args, nil }
+// Call answers the invokes: an alias resolves to a key whose ARN is made from the
+// alias, so that a test reads which key a grant landed on.
+func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	if a.Token == "aws:kms/getAlias:getAlias" {
+		out := a.Args.Copy()
+		name := strings.TrimPrefix(a.Args["name"].StringValue(), "alias/")
+		out["targetKeyArn"] = resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":key/" + name)
+		out["arn"] = resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":alias/" + name)
+		return out, nil
+	}
+	return a.Args, nil
+}
 
 // transform notes which resources were declared protected.
 func (r *recorder) transform(ctx *pulumi.Context) error {

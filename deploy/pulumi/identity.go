@@ -118,8 +118,12 @@ func NewKubernetesIdentity(ctx *pulumi.Context, name string, args *KubernetesIde
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("sluispulumi: KubernetesIdentityArgs: required and empty: %v", sortedStrings(missing))
 	}
-	if a.Storage == nil || a.Storage.BucketArn == nil {
+	if a.Storage == nil || (a.Storage.BucketArn == nil && a.Storage.External == nil) {
 		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.Storage is required (Storage.Grant())")
+	}
+	if a.Storage.External != nil && a.Instance == "" {
+		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.Instance is required with external blobs: " +
+			"the role reads their credentials' address under the installation's SSM root")
 	}
 	if a.State != nil && a.State.TableArn == nil {
 		return nil, errors.New("sluispulumi: KubernetesIdentityArgs.State has no TableArn (State.Grant())")
@@ -195,12 +199,21 @@ func newPodIdentity(ctx *pulumi.Context, parent *KubernetesIdentity, a *Kubernet
 	if withWrapped {
 		wrapped = a.WrappedSigningKeyArn
 	}
-	inputs := []any{a.Storage.BucketArn, stateTable, stateKey, wrapped}
+	bucketArn := a.Storage.BucketArn
+	if bucketArn == nil {
+		bucketArn = pulumi.String("")
+	}
+	inputs := []any{bucketArn, stateTable, stateKey, wrapped}
 	for _, k := range a.SigningKeyArns {
 		inputs = append(inputs, k)
 	}
 	doc := pulumi.All(inputs...).ApplyT(func(v []any) (string, error) {
-		st := storageStatements(v[0].(string))
+		var st []statement
+		if a.Storage.External == nil {
+			st = storageStatements(v[0].(string))
+		} else {
+			st = credentialsStatements(a.Storage.External, a.Region, a.AccountID, a.Instance, a.ParameterKeyArn)
+		}
 		if withState {
 			st = append(st, stateStatements(v[1].(string), v[2].(string))...)
 		}

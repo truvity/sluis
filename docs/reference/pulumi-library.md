@@ -57,14 +57,44 @@ constructor makes a call to AWS to find out something it was not told.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `BucketName` | required | The bucket's name. It is in the configuration, so it is known before anything is created, and a bucket name is global. |
+| `BucketName` | required without `Blobs` | The bucket's name. It is in the configuration, so it is known before anything is created, and a bucket name is global. |
+| `Blobs` | none | Blobs on an S3-compatible endpoint instead of an S3 bucket (Cloudflare R2): see [Blobs on R2](#blobs-on-r2). Exactly one of `BucketName` and `Blobs`; with `Blobs` the library creates no bucket and `Versioning`, `ProtectedPrefixes` and `Tags` are refused. |
 | `Versioning` | off | S3 versioning. The bucket holds the controllers' last reports and the directory snapshots, which the next tick regenerates and which are never a credential; an ETag is the compare-and-swap's version. |
 | `Tags` | none | On the bucket. |
 
 ### Outputs
 
-`BucketName`, `BucketArn`, and `Grant()`, which is what `NewLambda` and
+`BucketName`, `BucketArn` (empty with `Blobs`), and `Grant()`, which is what `NewLambda` and
 `NewKubernetesIdentity` take as `Storage`.
+
+### Blobs on R2
+
+`StorageArgs.Blobs` is an `ExternalBlobs`: `Bucket`, `Endpoint` (an https URL), `Region` (default `auto`, what R2 signs
+with), `PathStyle`, `Prefix`, and `CredentialsRef`. The library creates no bucket and grants no IAM on the store. It
+writes `ports.blob` into the service document (`adapter: s3`, with the bucket, endpoint, region and `credentialsRef`) and
+grants the function's role `ssm:GetParameter` on that one parameter, `/sluis/<instance>/<CredentialsRef>`, decrypted
+through SSM only with a `ParameterKeyArn`. `CredentialsRef` is an address of the form `internal/<kind>/<id>` (for example
+`internal/blobs/r2`); it names the secret that holds the access key pair and is never the secret, so no credential is an
+input and none is in the Pulumi state. Seed the parameter out of band. DynamoDB stays on AWS. A document that names
+`ports.blob` or `adapters.blobs` itself, or an `endpoint` of its own, is refused as before.
+
+The runtime reads `credentialsRef`, `instance` and the `keys:` block (below) only from a release whose service-document
+schema carries them: the library holds the rest of the document to the loader and these to its own validation, so deploy
+them with the release that has them. Pulumi preview cannot tell.
+
+```go
+store, _ := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{
+	Blobs: &sluispulumi.ExternalBlobs{
+		Bucket: "acme-sluis", Endpoint: "https://<account>.r2.cloudflarestorage.com", CredentialsRef: "internal/blobs/r2",
+	},
+}, pulumi.Providers(awsProvider))
+l, _ := sluispulumi.NewLambda(ctx, "access", lambdaArgs /* Storage: store.Grant() */, pulumi.Providers(awsProvider))
+// API Gateway reads a truststore only from S3, so the edge gets a small S3 bucket of its own:
+front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
+	FrontDoor: l.FrontDoor(), DomainName: "access.example.test", CertificateArn: originCertArn, TruststorePEM: originPullCA,
+	TruststoreBucket: &edgecloudflare.TruststoreBucketArgs{Name: "acme-sluis-truststore", ApplyPrincipalArns: applyRoles},
+}, pulumi.Providers(awsProvider))
+```
 
 ### What is created
 
@@ -247,9 +277,10 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
 | `AuditQueueArn` | required | The audit stack's ingest queue. |
 | `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use: the ones the library creates and the ones the function writes at run time (its credentials and exports; the library writes it into the service document as `secrets.kmsKeyId`, and a document that names another key is refused). Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
-| `SigningKeyAlias` | `alias/sluis-signing` | The ES384 signing key's alias. |
-| `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
-| `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([signing on AWS](../explanation/signing-on-aws.md)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](lambda.md#iam-one-role). |
+| `Keys` | nil | The KMS keys the estate supplies, by alias: see [Keys the estate supplies](#keys-the-estate-supplies). Set, the library creates no key. Exclusive with the four inputs below. |
+| `SigningKeyAlias` (deprecated) | `alias/sluis-signing` | The ES384 signing key's alias. Deprecated with the other key-creating inputs: they work for one more release, with a warning, and are removed after it. |
+| `SigningKeyRS256Alias`, `DisableSigningKeyRS256` (deprecated) | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
+| `WrappedSigning` (deprecated) | nil | Signing with the `kms-wrapped` adapter ([signing on AWS](../explanation/signing-on-aws.md)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](lambda.md#iam-one-role). |
 | `VerifyOnly` | none | `[]VerifyOnlyKeyArgs`: the PUBLIC keys of an earlier signer, published in the JWKS and never signed with, so that the tokens it issued keep verifying for the overlap after a cutover. Each is `PEM` (one `PUBLIC KEY`, `RSA PUBLIC KEY` or `CERTIFICATE` block, RSA or ECDSA), `KeyID` (the `kid` the old tokens carry; unset is the RFC 7638 thumbprint), `Alg` (unset follows the key) and `Until` (required: when it stops being published). The layer holds each at `/opt/sluis/verify-keys/<index>.pem` (`VerifyOnlyKeyPath`), and the library writes `signingKey.verifyOnly` naming them, as the chart's `signingKey.verifyOnly` does; a document or an `Installation` that names `signingKey.verifyOnly` itself is refused. A private key, two keys in one PEM, the same key or `kid` twice, an `Alg` the key does not sign with, and a zero `Until` are refused before anything is published; an error never quotes the key. |
 | `Recovery` | enabled | A `RecoveryArgs`: `Enabled` (a `*bool`) writes `recovery.enabled`. The generated password parameter exists whatever it says, so turning recovery off and on is never a rotation ([Recovery on Lambda](../how-to/recover-on-lambda.md)). |
 | `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, and the function when `FunctionName` is not set. |
@@ -292,6 +323,38 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
 | `ExportReadPolicyJSON` | The policy document a consumer's External Secrets Operator role attaches ([lambda reference](lambda.md#iam-one-role)). |
+
+### Keys the estate supplies
+
+`LambdaArgs.Keys` (`KeysArgs`) takes the aliases of keys the estate owns and the library creates none: `Sign` (required) and
+`Secrets` (optional, the keys block's `conceal` purpose). Both are symmetric keys. The library resolves each alias with
+`aws.kms.LookupAlias` and grants on the key behind it, never on the alias:
+
+- `Sign`: `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey`, only with the context `{instance: <Instance>, purpose: sign}`
+  and no other context key (`ForAllValues:StringEquals` on `kms:EncryptionContextKeys`). The runtime generates the ring's
+  key pairs locally and wraps them with `kms:Encrypt` under that context. There is no `kms:Sign` grant.
+- `Secrets`: the same three actions under `{instance, purpose: conceal}`.
+- `LegacySigningContext` (nil is true): also keeps the older grant on the `Sign` key, `GenerateDataKeyPair` and `Decrypt`
+  under `purpose=sluis-signing` (`WrappedKeyPolicyStatements` belongs in the key's policy), which ring entries written
+  before the runtime wrapped locally are opened with. Set it false once the ring has rotated past those entries.
+
+The service document gets `instance: <Instance>` and `keys: {adapter: kms, sign: alias/…, conceal: alias/…}`
+(`storage/schemas/keys.schema.json`); a document that names `keys` itself is refused. `SigningKeyArn` and `SigningKeyAlias`
+output the key behind `Sign`. An alias is not a permission: re-pointing it moves the function to the new key at the next
+apply, and the key policy must let the function's role (the account's IAM policies, by default) use it. Moving a stack from
+the keys the library created: supply their aliases as `Keys` and the library adopts the existing keys by alias; the
+library's own `kms.Key` resources are removed from state with `pulumi state delete` (they are protected: unprotect first),
+so that the next apply does not schedule their deletion.
+
+### Reader policies for `external/` secrets
+
+`ExternalReadPolicy(ExternalReadPolicyArgs)` returns the IAM policy document for a consumer's role that reads exact
+`external/<kind>/<id>` secrets of an installation: `ssm:GetParameter` on those parameters' ARNs under
+`/sluis/<instance>/`, and, with `SecretsKeyArn`, `kms:Decrypt` on the secrets key only under `{instance, purpose: conceal}`
+(or, with `ParameterKeyArn`, through SSM for exactly those parameters). No wildcard, no `GetParametersByPath`, no prefix: a
+wildcard, a prefix, a repeated or a non-`external/` address is refused. `NewExternalReader(ctx, name, &ExternalReaderArgs{
+RoleName, Region, AccountID, Instance, Addresses, SecretsKeyArn, ParameterKeyArn})` is the same as a component that attaches
+the policy to the role as an inline policy (`PolicyJSON` is its output).
 
 ### The API
 
