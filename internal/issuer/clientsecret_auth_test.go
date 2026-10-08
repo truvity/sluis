@@ -220,3 +220,39 @@ func TestTheTokenEndpointAfterARotation(t *testing.T) {
 		})
 	}
 }
+
+// rereading is a Lookup whose first answer is the pair a replica cached before
+// a rotation, and whose Reread is the pair now.
+type rereading struct {
+	cached, now clientcreds.Secrets
+	rereads     int
+}
+
+func (r *rereading) Resolve(context.Context, string) (clientcreds.Secrets, bool) {
+	return r.cached, true
+}
+func (r *rereading) Reread(context.Context, string) (clientcreds.Secrets, bool) {
+	r.rereads++
+	return r.now, true
+}
+
+// A secret that matches nothing in the cached pair is checked once against a
+// fresh read before it is refused (ADR 0041).
+func TestAuthorizeClientIDSecretReadsOnceMoreBeforeRefusing(t *testing.T) {
+	t.Parallel()
+	r := &rereading{
+		cached: clientcreds.Secrets{Current: "one"},
+		now:    clientcreds.Secrets{Current: "two", Previous: "one", PreviousValidUntil: secretNow.Add(time.Hour)},
+	}
+	storage := secretStorage(t, r)
+	ctx := context.Background()
+	if err := storage.AuthorizeClientIDSecret(ctx, "grafana", "one"); err != nil || r.rereads != 0 {
+		t.Fatalf("a cached match: %v, rereads %d", err, r.rereads)
+	}
+	if err := storage.AuthorizeClientIDSecret(ctx, "grafana", "two"); err != nil || r.rereads != 1 {
+		t.Fatalf("a secret rotated in after the cache: %v, rereads %d", err, r.rereads)
+	}
+	if err := storage.AuthorizeClientIDSecret(ctx, "grafana", "nope"); err == nil || r.rereads != 2 {
+		t.Fatalf("a wrong secret: %v, rereads %d", err, r.rereads)
+	}
+}

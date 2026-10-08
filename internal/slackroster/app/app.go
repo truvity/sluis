@@ -265,7 +265,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		members apply.MemberCache
 	)
 	if stores.Adapter != store.AdapterLegacy {
-		base := portstore.New(stores.Ports)
+		base := portstore.New(stores.Ports).WithV4(stores.V4)
 		if err = base.CheckSecrets(ctx); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)

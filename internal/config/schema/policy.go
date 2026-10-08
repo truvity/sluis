@@ -172,6 +172,7 @@ func catalogueAppSchema() m {
 		"permissions":  perms,
 		"events":       strList("Webhook events; the webhook stays inactive."),
 		"installation": m{"enum": []string{"all", "selected"}, "description": "all or selected (default)."},
+		"export":       boolean("Place the installed App's key at `external/github/<id>` for a consumer to read (secrets layout v4). Unset keeps it internal. An id may not begin `runner-`."),
 		"grants": list("Who may ask for tokens of it, and for how much.", obj("A grant.", m{
 			"group":        str("The internal group."),
 			"repositories": m{"type": "array", "minItems": 1, "items": m{"type": "string", "minLength": 1}, "description": "Repository globs."},

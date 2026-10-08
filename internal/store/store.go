@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
@@ -23,6 +24,7 @@ import (
 	"github.com/truvity/sluis/internal/port/secretsexport"
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
 	"github.com/truvity/sluis/internal/secrets"
+	"github.com/truvity/sluis/internal/secretstore"
 )
 
 // The adapters `ports.adapter` names.
@@ -81,6 +83,20 @@ type Config struct {
 	// SecretsKMSKey is the serve document's `secrets.kmsKeyId` when its source
 	// is ssm: the key the `ssm` Secrets adapter encrypts what it writes with.
 	SecretsKMSKey string
+	// Secrets layout (ADR 0041): the serve document's `secrets.layout`,
+	// `.region`, `.endpoint` and `.grace` when its source is ssm. The layout
+	// is v3 (the default) unless it is "transition" or "v4"; those put the
+	// Secrets port over layout v4 (internal/secretstore).
+	SecretsLayout   string
+	SecretsRegion   string
+	SecretsEndpoint string
+	SecretsGrace    time.Duration
+	// OpenState opens the backend of the v4 stores (storage/state/ssm.Open).
+	// Nil is that backend.
+	OpenState secretstore.Opener
+
+	// v4 is where secretsOf leaves the v4 stores it built, for [Stores.V4].
+	v4 *v4Holder
 	// Converted is a document converted from v1: an `ssm` secrets adapter
 	// that names no root keeps v1's layout, /sluis.
 	Converted bool
@@ -203,6 +219,12 @@ func FromServe(f *config.Serve) (Config, error) {
 	if s := f.Secrets; s != nil && s.Source == "ssm" {
 		c.SecretsRoot = s.Root
 		c.SecretsKMSKey = s.KMSKeyID
+		c.SecretsLayout = s.Layout
+		c.SecretsRegion = s.Region
+		c.SecretsEndpoint = s.Endpoint
+		if s.Grace != nil {
+			c.SecretsGrace = s.Grace.D()
+		}
 	}
 	var err error
 	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
@@ -302,6 +324,9 @@ type Stores struct {
 	// Secrets delivers the secrets the document names, by name: what the
 	// composition root put in Config.Secrets. Nil delivers none.
 	Secrets secrets.Source
+	// V4 is the installation's secrets on layout v4: Internal and External
+	// over one state store. Nil on layout v3, the default.
+	V4 *secretstore.Stores
 	// Shared is true when the state is one every replica sees: a Valkey.
 	Shared bool
 	// Usable is whether the State, Index and snapshot Blob ports work at all:
@@ -376,10 +401,12 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 			return nil, err
 		}
 	}
+	cfg.v4 = &v4Holder{}
 	st, err := open(ctx, cfg, log)
 	if err != nil {
 		return st, err
 	}
+	st.V4 = cfg.v4.stores
 	st.Plan = plan
 	st.Secrets = cfg.Secrets
 	if err = st.applyTrigger(ctx, log); err != nil {

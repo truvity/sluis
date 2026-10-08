@@ -232,3 +232,41 @@ func TestARootNamedPrivateOrExportIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// The layout decides where the names are read: v3 under private/config, v4
+// under internal/config, and transition both, v4 winning.
+func TestSSMReadsTheConfigOfItsLayout(t *testing.T) {
+	ctx := context.Background()
+	api := &fakeSSM{params: map[string]string{
+		"/sluis/x/private/config/a":  "v3-a",
+		"/sluis/x/private/config/b":  "v3-b",
+		"/sluis/x/internal/config/a": "v4-a",
+		"/sluis/x/internal/config/c": "v4-c",
+	}}
+	for layout, want := range map[string]map[string]string{
+		"":           {"a": "v3-a", "b": "v3-b", "c": ""},
+		"v3":         {"a": "v3-a", "b": "v3-b", "c": ""},
+		"v4":         {"a": "v4-a", "b": "", "c": "v4-c"},
+		"transition": {"a": "v4-a", "b": "v3-b", "c": "v4-c"},
+	} {
+		src := &secrets.SSM{API: api, Root: "/sluis/x", Layout: layout}
+		for name, value := range want {
+			got, err := src.Get(ctx, name)
+			if value == "" {
+				if !errors.Is(err, secrets.ErrNotFound) {
+					t.Errorf("layout %q: %s = %q, %v; want absent", layout, name, got, err)
+				}
+				continue
+			}
+			if err != nil || got != value {
+				t.Errorf("layout %q: %s = %q, %v; want %q", layout, name, got, err, value)
+			}
+		}
+	}
+	if err := secrets.CheckRoot("/sluis/internal"); err == nil {
+		t.Error("an instance named internal was accepted")
+	}
+	if err := secrets.CheckRoot("/sluis/external"); err == nil {
+		t.Error("an instance named external was accepted")
+	}
+}

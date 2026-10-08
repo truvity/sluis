@@ -3,12 +3,14 @@ package portstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
+	"github.com/truvity/sluis/internal/secretstore"
 	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
 )
 
@@ -35,9 +37,20 @@ func (s *GitHubRunnerApps) Put(ctx context.Context, record runnerapp.Record, pri
 		return err
 	}
 	key := runnerKey(record.Tier, record.Org)
-	ref, err := s.b.newSecret(ctx, key, []byte(privateKey))
-	if err != nil {
-		return err
+	// An installed runner App is exported (ADR 0041): its document is the one
+	// copy on layout v4, with the ids from the record.
+	exported := record.Installed() && s.b.v4Writes()
+	if exported {
+		doc := s.b.v4.External.GitHubRunnerApp(record.Tier, record.Org)
+		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey); err != nil {
+			return err
+		}
+	}
+	var ref string
+	if !exported || s.b.keepInternal() {
+		if ref, err = s.b.newSecret(ctx, key, []byte(privateKey)); err != nil {
+			return err
+		}
 	}
 	raw := json.RawMessage(keys[runnerapp.RecordKey(record.Tier, record.Org)])
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
@@ -70,6 +83,11 @@ func (s *GitHubRunnerApps) List(ctx context.Context) ([]runnerapp.Record, error)
 
 // PrivateKey reads one App's key.
 func (s *GitHubRunnerApps) PrivateKey(ctx context.Context, tier, org string) (string, bool, error) {
+	if s.b.v4Reads() {
+		if doc, ok, err := s.b.getGitHub(ctx, s.b.v4.External.GitHubRunnerApp(tier, org)); err != nil || ok {
+			return doc.PrivateKey, ok, err
+		}
+	}
 	key := runnerKey(tier, org)
 	it, err := s.b.getItem(ctx, key)
 	if err != nil || it == nil || it.Secret == "" {
@@ -84,6 +102,11 @@ func (s *GitHubRunnerApps) PrivateKey(ctx context.Context, tier, org string) (st
 
 // Delete forgets one App.
 func (s *GitHubRunnerApps) Delete(ctx context.Context, tier, org string) error {
+	if s.b.v4Writes() {
+		if err := s.b.deleteExternal(ctx, s.b.v4.External.Store(), "github/runner-"+tier+"-"+org); err != nil {
+			return err
+		}
+	}
 	return s.b.deleteItem(ctx, runnerKey(tier, org))
 }
 
@@ -102,9 +125,20 @@ func (s *GitHubCatalogueApps) Put(ctx context.Context, record catalogueapp.Recor
 		return err
 	}
 	key := ghCatalogueKey(record.ID)
-	ref, err := s.b.newSecret(ctx, key, []byte(privateKey))
-	if err != nil {
-		return err
+	// An installed App with `export: true` is external on layout v4; a pending
+	// one, or one not exported, stays an internal credential.
+	exported := record.Installed() && s.b.v4Writes() && s.b.exportApp != nil && s.b.exportApp(record.ID)
+	if exported {
+		doc := s.b.v4.External.GitHubApp(record.ID)
+		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey); err != nil {
+			return err
+		}
+	}
+	var ref string
+	if !exported || s.b.keepInternal() {
+		if ref, err = s.b.newSecret(ctx, key, []byte(privateKey)); err != nil {
+			return err
+		}
 	}
 	raw := json.RawMessage(keys[catalogueapp.RecordKey(record.ID)])
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
@@ -142,6 +176,15 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 		return catalogueapp.Record{}, "", false, err
 	}
 	var privateKey string
+	if s.b.v4Reads() && record.Installed() {
+		doc, ok, err := s.b.getGitHub(ctx, s.b.v4.External.GitHubApp(record.ID))
+		if err != nil && !errors.Is(err, secretstore.ErrReservedName) {
+			return catalogueapp.Record{}, "", false, err
+		}
+		if ok {
+			return record, doc.PrivateKey, true, nil
+		}
+	}
 	if it.Secret != "" {
 		plain, err := s.b.getSecret(ctx, key, it.Secret)
 		if err != nil {
@@ -154,6 +197,11 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 
 // Delete forgets one App.
 func (s *GitHubCatalogueApps) Delete(ctx context.Context, id string) error {
+	if s.b.v4Writes() && secretstore.CheckAppName(id) == nil {
+		if err := s.b.deleteExternal(ctx, s.b.v4.External.Store(), "github/"+id); err != nil {
+			return err
+		}
+	}
 	return s.b.deleteItem(ctx, ghCatalogueKey(id))
 }
 
@@ -173,7 +221,18 @@ func (s *SlackCatalogueApps) Put(ctx context.Context, record slackcatalogueapp.R
 		return err
 	}
 	key := slackCatalogueKey(record.ID)
-	plain, _ := json.Marshal(credentials)
+	// The bot token is external (slack/v1) on layout v4; the client secret
+	// stays an internal credential.
+	internal := credentials
+	if credentials.BotToken != "" && s.b.v4Writes() {
+		if err = s.b.putSlack(ctx, record.ID, credentials.BotToken); err != nil {
+			return err
+		}
+		if !s.b.keepInternal() {
+			internal.BotToken = ""
+		}
+	}
+	plain, _ := json.Marshal(internal)
 	ref, err := s.b.newSecret(ctx, key, plain)
 	if err != nil {
 		return err
@@ -223,10 +282,24 @@ func (s *SlackCatalogueApps) Get(ctx context.Context, id string) (slackcatalogue
 			return slackcatalogueapp.Record{}, slackcatalogueapp.Credentials{}, false, fmt.Errorf("portstore: the credentials of %s do not decode", id)
 		}
 	}
+	if s.b.v4Reads() && record.Installed() {
+		token, ok, err := s.b.getSlack(ctx, id)
+		if err != nil {
+			return slackcatalogueapp.Record{}, slackcatalogueapp.Credentials{}, false, err
+		}
+		if ok {
+			credentials.BotToken = token
+		}
+	}
 	return record, credentials, true, nil
 }
 
 // Delete forgets one App.
 func (s *SlackCatalogueApps) Delete(ctx context.Context, id string) error {
+	if s.b.v4Writes() {
+		if err := s.b.deleteExternal(ctx, s.b.v4.External.Store(), "slack/"+id); err != nil {
+			return err
+		}
+	}
 	return s.b.deleteItem(ctx, slackCatalogueKey(id))
 }

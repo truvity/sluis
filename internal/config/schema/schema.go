@@ -239,10 +239,11 @@ func secretsSchema() m {
 		"refresh":  duration("`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it.", "5m"),
 		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
 		"layout":   enum("`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/` and the exports controller's copies under `<root>/export/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.", "v3", "v3", "transition", "v4"),
+		"grace":    duration("`ssm`, layout `transition` or `v4`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
 	}, "source")
 	s["allOf"] = []any{
 		m{"if": m{"properties": m{"source": m{"enum": []string{"file", "ssm"}}}}, "then": m{"required": []string{"root"}}},
-		m{"if": m{"properties": m{"source": m{"enum": []string{"env", "file"}}}}, "then": m{"not": m{"anyOf": []any{m{"required": []string{"kmsKeyId"}}, m{"required": []string{"layout"}}}}}},
+		m{"if": m{"properties": m{"source": m{"enum": []string{"env", "file"}}}}, "then": m{"not": m{"anyOf": []any{m{"required": []string{"kmsKeyId"}}, m{"required": []string{"layout"}}, m{"required": []string{"grace"}}}}}},
 	}
 	return s
 }

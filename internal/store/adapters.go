@@ -11,6 +11,8 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/observe"
+	"github.com/truvity/sluis/internal/secretstore"
+	ssmstate "github.com/truvity/sluis/storage/state/ssm"
 )
 
 // selection is what the file says about adapters beyond `ports.adapter`: the
@@ -304,7 +306,42 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if !ok {
 		return nil, fmt.Errorf("adapters.secrets: %q built a %T, which is not a port.Secrets", c.secrets.Adapter, built)
 	}
-	return secrets, nil
+	return c.overLayout(ctx, secrets)
+}
+
+// v4Holder carries the v4 stores out of [Config.secretsOf], which runs on a
+// copy of the Config.
+type v4Holder struct{ stores *secretstore.Stores }
+
+// overLayout puts the Secrets port over layout v4 when the document says so
+// (`secrets.layout: transition | v4`, ssm source): callers keep their paths and
+// the port maps them (internal/secretstore). On v3 it is the adapter itself.
+func (c Config) overLayout(ctx context.Context, v3 port.Secrets) (port.Secrets, error) {
+	layout, err := secretstore.ParseLayout(c.SecretsLayout)
+	if err != nil {
+		return nil, err
+	}
+	if layout == secretstore.LayoutV3 {
+		return v3, nil
+	}
+	if c.secrets.Adapter != "ssm" {
+		return nil, fmt.Errorf("secrets.layout: %s needs the ssm secrets adapter, not %q", layout, c.secrets.Adapter)
+	}
+	open := c.OpenState
+	if open == nil {
+		open = ssmstate.Open
+	}
+	stores, err := secretstore.Open(ctx, &config.Secrets{
+		Source: "ssm", Root: c.SecretsRoot, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
+		KMSKeyID: c.SecretsKMSKey, Layout: string(layout),
+	}, open)
+	if err != nil {
+		return nil, err
+	}
+	if c.v4 != nil {
+		c.v4.stores = stores
+	}
+	return secretstore.NewSecrets(stores, v3, c.SecretsGrace), nil
 }
 
 // decodeStrict reads a settings object into v, refusing a key v lacks.

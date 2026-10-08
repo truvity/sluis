@@ -325,6 +325,11 @@ type (
 		// Layout is the storage layout of an `ssm` installation: `v3` (the
 		// default), `transition` or `v4` (ADR 0041).
 		Layout string `json:"layout,omitempty"`
+		// Grace is how long a rotated client secret's previous value is still
+		// accepted under layout v4 (default 24h). It is the overlap of a
+		// rotation: the previous revision of the document, while the current
+		// one is younger than this.
+		Grace *Duration `json:"grace,omitempty"`
 	}
 
 	// PolicyRef names the one policy document a process decides by: the

@@ -138,7 +138,15 @@ func (m *Manager) rotate(ctx context.Context, id string, overlap time.Duration) 
 	return res, err
 }
 
+// Overlapper is a Secrets store that fixes the overlap of a rotation itself:
+// the layout-v4 store keeps no bookkeeping, so the previous secret is whatever
+// the document's previous revision is, for the configured grace.
+type Overlapper interface{ Overlap() time.Duration }
+
 func (m *Manager) rotateHeld(ctx context.Context, id string, overlap time.Duration) (Rotation, error) {
+	if o, ok := m.Store.(Overlapper); ok && overlap > 0 {
+		overlap = o.Overlap()
+	}
 	path := Path(id)
 	got, err := m.Store.Get(ctx, path)
 	switch {

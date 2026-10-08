@@ -94,6 +94,25 @@ func (r *Resolver) Forget(clientID string) {
 	r.mu.Unlock()
 }
 
+// RereadFloor is how recent a read must be for [Resolver.Reread] to reuse it:
+// a flood of wrong guesses costs the store one read per client per floor, not
+// one per guess.
+const RereadFloor = 5 * time.Second
+
+// Reread is what the token check asks before it refuses a secret: the
+// client's secrets read again from the store, because this replica may have
+// cached them before a rotation. A read younger than [RereadFloor] is reused.
+func (r *Resolver) Reread(ctx context.Context, clientID string) (Secrets, bool) {
+	r.mu.Lock()
+	c, ok := r.cache[clientID]
+	fresh := ok && !c.unavailable && r.now().Sub(c.good) < RereadFloor
+	if !fresh {
+		delete(r.cache, clientID)
+	}
+	r.mu.Unlock()
+	return r.Resolve(ctx, clientID)
+}
+
 // Resolve implements [Lookup].
 //
 // A generated client is served by its record. The input

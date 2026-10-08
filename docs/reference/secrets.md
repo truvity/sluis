@@ -19,6 +19,7 @@ secrets:
   refresh: 5m          # ssm only
   kmsKeyId: alias/example   # ssm only: the key the service's own writes are encrypted with
   layout: v3           # ssm only: v3 (default) | transition | v4, see "SSM layout v4"
+  grace: 24h           # ssm, transition or v4: how long a rotated client secret's previous value is accepted
 ```
 
 | `source` | A name is delivered as | Read |
@@ -116,3 +117,23 @@ itself.
 
 The Go side is `internal/secretstore`: `Internal` and `External` over a `state.Store`, with a typed `state.Value` for each
 address. The token check of a rotating client secret reads `External.OIDC(client).Rotating(grace)`.
+
+### What follows from the layout
+
+With `secrets.layout: transition` or `v4`, the service reads and writes through the layout; its callers keep their paths.
+
+| Value | `v3` | `v4` |
+|---|---|---|
+| The names above (`secrets.source: ssm`) | `<root>/private/config/<name>` | `<root>/internal/config/<name>`; `transition` reads v4 and falls back to v3 |
+| The console session key, directory credentials, links, organisations' keys, the link App, Slack workspaces | `<root>/private/credentials/<kind>/<id>/<ref>` | `<root>/internal/credentials/<kind>/<id>/<ref>`, a `{"value": "<base64>"}` document |
+| A generated client's secret | `private/credentials/oidc-client/<id>/secret`, a record with `previous` and `previous_valid_until` | the `oidc/v1` document `external/oidc/<id>`; a rotation is one write, and the previous secret is the document's previous revision while the current one is younger than `secrets.grace` |
+| A confidential client's secret an operator seeded | `private/config/clients/<id>/secret` | the same `oidc/v1` document |
+| An installed runner App, or a catalogue App with `export: true` | `private/credentials/github-…/<ref>`, copied to `export/…` by the exports controller | the `github/v1` document `external/github/<app>`, ids from the App's record; a pending App's key stays internal until it is installed |
+| A catalogue Slack App | `private/credentials/slack-app/<id>/<ref>`, client secret and bot token | the bot token is the `slack/v1` document `external/slack/<id>`; the client secret stays internal |
+
+In `transition` every write goes to v4 and then to v3, and a read tries v4 first. In `v4` the exports controller's copies
+under `export/` are still written until the exports are retired. The token endpoint checks a client's secret against the
+cached pair; a secret that matches neither is checked once more against a fresh read before it is refused (at most once
+every five seconds per client), so a replica that cached the pair before a rotation does not refuse the old secret during
+the overlap. A rotation with no overlap writes the new secret twice, so the previous revision is the current secret
+itself and the old one is refused at once. An orphaned client's mark is derived from the policy and is not stored.
