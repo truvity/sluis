@@ -305,7 +305,7 @@ func TestADownloadIsCachedByItsDigest(t *testing.T) {
 		}
 		resp, err := http.Get(base + r.URL.Path)
 		if err != nil {
-			http.Error(w, err.Error(), 502)
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()
