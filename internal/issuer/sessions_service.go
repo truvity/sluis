@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/truvity/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 	"google.golang.org/protobuf/types/known/timestamppb"

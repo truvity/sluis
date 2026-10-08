@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	auditrecord "github.com/truvity/audit/sdk/record"
+	auditrecord "github.com/truvity/sluis/audit/sdk/record"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"

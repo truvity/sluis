@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/truvity/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/record"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/policy"

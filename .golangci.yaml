@@ -56,6 +56,11 @@ linters:
               desc: "stdlib error wrapping with %w"
             - pkg: github.com/gofiber/fiber/v2
               desc: "github.com/gofiber/fiber/v3"
+
+            # The audit component lives in this repository (audit/), not in
+            # the retired truvity/audit repository.
+            - pkg: github.com/truvity/audit
+              desc: "github.com/truvity/sluis/audit/sdk — the audit SDK of this repository"
     lll:
       line-length: 160
     gocritic:

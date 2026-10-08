@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/truvity/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/record"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/audit"

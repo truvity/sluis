@@ -15,8 +15,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/truvity/audit/sdk/record"
-	"github.com/truvity/audit/sdk/sink"
+	"github.com/truvity/sluis/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/sink"
 )
 
 // SQSConfig is where the `sqs` audit adapter publishes. The queue is the one
