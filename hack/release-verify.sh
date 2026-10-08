@@ -16,7 +16,7 @@
 #      in Sigstore's public transparency log.
 #   3. `gh attestation verify` for each asset (build provenance and, for the
 #      SBOMs, the SBOM attestation), signed by the release workflow; then the
-#      images: cosign signature and attestations on each digest.
+#      images and charts: cosign signature and attestations on each digest.
 #
 # Environment:
 #   REPO                          owner/name (default truvity/sluis)
@@ -24,7 +24,9 @@
 #                                 downloading the release (used by the test)
 #   RELEASE_VERIFY_SKIP_SIGNATURES=1  run check 1 only. The test uses it: it has
 #                                 no release, no network and no OIDC token.
-#   RELEASE_VERIFY_SKIP_IMAGES=1  leave the images out of check 3
+#   RELEASE_IMAGES_FILE           the list of images and charts (default: release-images.txt
+#                                 beside this script)
+#   RELEASE_VERIFY_SKIP_IMAGES=1  leave the images and charts out of check 3
 #
 # Needs: sha256sum; for the rest, gh (logged in) and cosign (both in devbox).
 set -euo pipefail
@@ -35,6 +37,7 @@ repo="${REPO:-truvity/sluis}"
 workflow="$repo/.github/workflows/release.yaml"
 identity_regexp="^https://github.com/$repo/.github/workflows/release.yaml@refs/tags/v"
 issuer=https://token.actions.githubusercontent.com
+images_file="${RELEASE_IMAGES_FILE:-$(dirname "$0")/release-images.txt}"
 
 fail() { echo "release-verify: FAIL: $*" >&2; exit 1; }
 
@@ -96,16 +99,18 @@ echo "attestations: $n assets verified"
 
 if [ "${RELEASE_VERIFY_SKIP_IMAGES:-}" != 1 ]; then
   version_tag="${tag#v}"
-  for image in sluis/sluis sluis/resource-proxy audit/audit audit/audit-query \
-    audit/audit-notary audit/audit-observe audit/audit-writer; do
-    ref="ghcr.io/${repo%/*}/$image:$version_tag"
+  # The images and charts: hack/release-images.txt, `kind reference` per line.
+  # Copy it beside this script, or name it with RELEASE_IMAGES_FILE.
+  while read -r kind ref; do
+    case "$kind" in ''|'#'*) continue ;; esac
+    ref="$ref:$version_tag"
     cosign verify "$ref" \
       --certificate-identity-regexp "$identity_regexp" \
       --certificate-oidc-issuer "$issuer" > /dev/null \
       || fail "$ref: the cosign signature does not verify"
     gh attestation verify "oci://$ref" --repo "$repo" --signer-workflow "$workflow" > /dev/null \
       || fail "$ref: no valid attestation from $workflow"
-    echo "image: $ref verified"
-  done
+    echo "$kind: $ref verified"
+  done < "$images_file"
 fi
 echo "release-verify: $tag ok"
