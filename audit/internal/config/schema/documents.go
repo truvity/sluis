@@ -82,7 +82,7 @@ func presetStorage() m {
 			"account":   str("The Cloudflare account id."),
 			"minter":    str("The address, below the installation's state root, of the minter credential: a `cloudflare-minter/v1` document {schema, token} holding an account token with Account API Tokens Read and Write. It can mint anything the account owner can, so its custody is the owner's; the refusal list in the minting code is the only guard."),
 			"prototype": str("The id of the DISABLED account token whose policies and condition every minted token copies. An active prototype, or one granting token admin, billing, account settings, memberships or Access identity providers, is refused at every mint."),
-			"lifetime":  duration("How long each minted token lives, at least a minute.", ""),
+			"lifetime":  m{"type": "string", "pattern": `^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$`, "description": "How long each minted token lives, a Go duration of at least a minute (`15m`). The credentials are renewed with a third of it left."},
 		}, "account", "minter", "prototype", "lifetime"),
 		"key_alias": m{"type": "string", "pattern": "^alias/[A-Za-z0-9/_-]+$", "description": "The alias of the KMS key this preset's objects are encrypted with, a name and never a key id or ARN. Empty is the installation's archive key, or the bucket's default encryption. Only on AWS S3."},
 	}, "bucket")
