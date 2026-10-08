@@ -145,3 +145,16 @@ func TestExportFlagsInheritTheArchivesStore(t *testing.T) {
 		t.Fatalf("exports options = %+v, want their own store", o)
 	}
 }
+
+// A command that only reads names no lock mode, and at an endpoint of its own the
+// archive has none: opening it must not be refused for a lock nothing sends.
+func TestAReaderAtAnEndpointHasNoLock(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	a := NewArchiveFlags(fs, lookupFrom(map[string]string{"AUDIT_BUCKET": "b", "AUDIT_S3_ENDPOINT": "https://s3.example.test"}), Reads)
+	if err := fs.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	if o, err := a.Options(); err != nil || o.Lock != s3store.None {
+		t.Fatalf("options = %+v, %v", o, err)
+	}
+}
