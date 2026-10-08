@@ -300,17 +300,17 @@ func TestMigrateLegacyConfigDirEmptyOldIsNoop(t *testing.T) {
 
 func TestMigrateLegacyConfigDirFollowsSymlinkedOldDirSkipsInnerLinks(t *testing.T) {
 	d := newLegacyDirs(t)
-	real := filepath.Join(d.root, "real-accessctl")
-	populateLegacy(t, real)
+	realOld := filepath.Join(d.root, "realOld-accessctl")
+	populateLegacy(t, realOld)
 	outside := filepath.Join(d.root, "outside")
 	writeTestFile(t, filepath.Join(outside, "secret"), "s", 0o600)
-	if err := os.Symlink(real, d.old); err != nil {
+	if err := os.Symlink(realOld, d.old); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(real, "link-file")); err != nil {
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(realOld, "link-file")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(real, "link-dir")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(realOld, "link-dir")); err != nil {
 		t.Fatal(err)
 	}
 
