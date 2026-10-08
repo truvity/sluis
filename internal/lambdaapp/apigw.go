@@ -36,6 +36,10 @@ type HTTP struct {
 	// refresh runs one pass of the directory refresh (the {"kind":"refresh"}
 	// event); nil when this function has no directory.
 	refresh func(context.Context) (RefreshResult, error)
+	// cloudflare runs one pass over the Cloudflare presets (the
+	// {"kind":"cloudflare"} event); nil when the function has no such section.
+	// It returns the number of presets that failed and a one-line summary.
+	cloudflare func(context.Context) (failed int, summary string, err error)
 	// controllers run a controller pass per {"kind":"tick"|"run"} event, by the
 	// kind of the event's target; kindOf says which kind a target is.
 	controllers map[string]*Controller
@@ -56,6 +60,12 @@ func (h *HTTP) WithControllers(kindOf func(target string) string, controllers ma
 // WithRefresh makes the function answer {"kind":"refresh"} events with run.
 func (h *HTTP) WithRefresh(run func(context.Context) (RefreshResult, error)) *HTTP {
 	h.refresh = run
+	return h
+}
+
+// WithCloudflare makes the function answer {"kind":"cloudflare"} events with run.
+func (h *HTTP) WithCloudflare(run func(context.Context) (failed int, summary string, err error)) *HTTP {
+	h.cloudflare = run
 	return h
 }
 

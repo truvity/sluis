@@ -1,0 +1,1 @@
+{"access_key_id":"example-token-id","endpoint":"https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com","expires_on":"2026-10-08T12:15:00Z","schema":"cloudflare/v1","secret_access_key":"example-derived-secret"}

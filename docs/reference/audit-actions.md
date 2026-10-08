@@ -11,7 +11,7 @@ Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Targ
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.11.0, 68 actions.
+Catalogue version 1.12.0, 72 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -19,6 +19,10 @@ Catalogue version 1.11.0, 68 actions.
 | `roster.recovery.signed_in` | authentication | client | block | Somebody signed in with the recovery identity, which bypasses the directory. |
 | `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. |
 | `roster.github_token.minted` | create | github_app | async | A GitHub App installation token was minted, or refused. Never the token. |
+| `roster.cloudflare.token.minted` | create | cloudflare_preset | async | A Cloudflare API token or R2 credential was minted from a preset's prototype, either stored for the preset (by sluis on its schedule) or on demand for a caller. Never the value. |
+| `roster.cloudflare.token.refused` | create | cloudflare_preset | async | A Cloudflare token was not minted, for a caller who was not granted the preset or because the preset's prototype or the account refused it. |
+| `roster.cloudflare.tokens.swept` | remove | cloudflare_preset | async | sluis deleted the expired Cloudflare tokens it had minted for a preset (only its own, by the ids it recorded). |
+| `roster.cloudflare.token.revoked` | remove | cloudflare_preset | async | Somebody deleted a live Cloudflare token that sluis had minted for a preset. |
 | `roster.session.ended` | authentication | — | async | A person signed out, ending their sessions, except the agent-class sessions it spared (by client id in `spared`), which keep running until revoked or their own end. |
 | `roster.session.revoked` | remove | client | async | A person's sessions were revoked, by somebody, or by the issuer (scope `refresh_token_reuse`) when a spent refresh token was presented again after its grace window, (scope `pre_upgrade_cookie`, by an anonymous actor) when a browser signed out with a sign-in cookie set before the cookie had a secret of its own, (scope `sign_in_replaced`, by the person signing in) when another person signed in in the same browser, by the person themselves for one class of their own (scope `every_browser_and_app` ends every browser sign-in and interactive session and keeps the agent sessions, scope `every_agent` ends every agent session and keeps the browsers, and `ended_class` and `kept_class` say which), or by an operator for one client and every person (scope `client_every_identity`, no subject). |
 | `roster.session.refresh_refused` | authentication | client | async | A session was refused a refresh because its holder is no longer admitted to the client. |

@@ -287,6 +287,19 @@ type (
 		// holds for Endpoint. It needs Endpoint and `secrets.layout` v4 or
 		// transition.
 		CredentialsRef string `json:"credentialsRef,omitempty"`
+		// Credentials makes sluis mint its own R2 credentials from a
+		// `cloudflare.presets` entry instead of reading a static document. It
+		// is exclusive with CredentialsRef, which stays the simple default
+		// and needs no `cloudflare` section.
+		Credentials *PortsBlobCredentials `json:"credentials,omitempty"`
+	}
+
+	// PortsBlobCredentials names the preset an S3-compatible store's
+	// credentials are minted from.
+	PortsBlobCredentials struct {
+		// Preset is a key of `cloudflare.presets` with an `endpoint` (an R2
+		// preset).
+		Preset string `json:"preset"`
 	}
 
 	// Secrets is how the secrets a document names are delivered: `env`
@@ -425,6 +438,9 @@ type Serve struct {
 	SigningKey  *SigningKey  `json:"signingKey,omitempty"`
 	Valkey      *Valkey      `json:"valkey,omitempty"`
 	Audit       *Audit       `json:"audit,omitempty"`
+	// Cloudflare is sluis as the STS for Cloudflare API tokens and R2
+	// credentials: the accounts it mints in and the presets it mints.
+	Cloudflare *Cloudflare `json:"cloudflare,omitempty"`
 
 	// legacy is what a v1 document named by file, and [PolicyFor] reads it in
 	// place of a policy document: set only by the v1 converter.

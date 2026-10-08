@@ -364,6 +364,7 @@ func serveSchema() m {
 			"tls":            boolean("Speak TLS to the server."),
 			"cluster":        boolDefault("Speak the cluster protocol. A plain single server needs it off.", true),
 		}),
+		"cloudflare": cloudflareSchema(),
 		"audit": obj("The audit installation this service records to. Unset keeps the trail in the log only.", m{
 			"writer":                  url("The installation's receiver."),
 			"tokenFile":               str("This workload's projected service-account token, presented on every call."),
@@ -460,12 +461,16 @@ func portsBlobSchema() m {
 			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."),
 			"pathStyle": boolean("Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need."),
 			"credentialsRef": m{"type": "string", "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
-				"description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused."},
+				"description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved."},
+			"credentials": obj("Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, `secrets.layout` v4 or transition, and the `cloudflare` section.", m{
+				"preset": m{"type": "string", "pattern": cloudflareName, "description": "A key of `cloudflare.presets` that has an `endpoint` (an R2 preset)."},
+			}, "preset"),
 		}, "bucket"),
 	}, "adapter")
 	s["allOf"] = []any{m{"if": m{"properties": m{"adapter": m{"const": "s3"}}}, "then": m{"required": []string{"s3"}}}}
 	s3 := s["properties"].(m)["s3"].(m)
-	s3["dependentRequired"] = m{"credentialsRef": []string{"endpoint"}}
+	s3["dependentRequired"] = m{"credentialsRef": []string{"endpoint"}, "credentials": []string{"endpoint"}}
+	s3["not"] = m{"required": []string{"credentialsRef", "credentials"}}
 	return s
 }
 

@@ -45,6 +45,9 @@ type PolicyDocument struct {
 	Apps *PolicyApps `yaml:"apps,omitempty"`
 	// Controllers is what each controller may change.
 	Controllers *PolicyControllers `yaml:"controllers,omitempty"`
+	// CloudflareGrants is who may ask for which Cloudflare preset
+	// (`cloudflare.grants`); the presets are the service document's.
+	CloudflareGrants *PolicyCloudflare `yaml:"cloudflare,omitempty"`
 }
 
 type (
@@ -148,13 +151,14 @@ type (
 
 // The sections the policy document adds to the access model's tables, as the
 // file spells them.
-var policySections = []string{"exchange", "apps", "controllers"}
+var policySections = []string{"exchange", "apps", "controllers", "cloudflare"}
 
 // policySectionsDoc is the part of a policy document beside the tables.
 type policySectionsDoc struct {
 	Exchange    *PolicyExchange    `yaml:"exchange,omitempty"`
 	Apps        *PolicyApps        `yaml:"apps,omitempty"`
 	Controllers *PolicyControllers `yaml:"controllers,omitempty"`
+	Cloudflare  *PolicyCloudflare  `yaml:"cloudflare,omitempty"`
 }
 
 // NewPolicyDocument is a v2 document holding only the access model's tables.
@@ -210,7 +214,7 @@ func decodePolicyDocument(raw []byte) (*PolicyDocument, error) {
 	}
 	return &PolicyDocument{
 		APIVersion: APIVersion("policy"), Policy: p,
-		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers,
+		Exchange: s.Exchange, Apps: s.Apps, Controllers: s.Controllers, CloudflareGrants: s.Cloudflare,
 	}, nil
 }
 
@@ -252,7 +256,7 @@ func (d PolicyDocument) MarshalYAML() (any, error) {
 		}
 	}
 	var sections yaml.Node
-	if err = sections.Encode(policySectionsDoc{Exchange: d.Exchange, Apps: d.Apps, Controllers: d.Controllers}); err != nil {
+	if err = sections.Encode(policySectionsDoc{Exchange: d.Exchange, Apps: d.Apps, Controllers: d.Controllers, Cloudflare: d.CloudflareGrants}); err != nil {
 		return nil, err
 	}
 	out.Content = append(out.Content, sections.Content...)
@@ -375,6 +379,7 @@ func (d *PolicyDocument) Validate() error {
 	}
 	errs = append(errs, d.validateApps()...)
 	errs = append(errs, d.validateControllers()...)
+	errs = append(errs, d.CloudflareGrants.validate(func(g string) bool { _, ok := d.Policy.Groups[g]; return ok })...)
 	return errors.Join(errs...)
 }
 

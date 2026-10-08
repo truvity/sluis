@@ -95,3 +95,9 @@ apps:
 controllers:
   github: {enabledOrgs: [example-org]}
   slack: {enabledWorkspaces: [example]}
+cloudflare:
+  grants:
+    - group: "all:access-roster:operator"
+      presets: [dns-example, r2-archive]
+    - job: "github:example-org/example-repo:release"
+      presets: [dns-example]

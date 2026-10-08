@@ -32,6 +32,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/clientcreds"
+	"github.com/truvity/sluis/internal/cloudflare/minter"
 	"github.com/truvity/sluis/internal/config"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	"github.com/truvity/sluis/internal/health"
@@ -62,6 +63,14 @@ type Config struct {
 	// clears them before [New], which would run their loops.
 	GitHub *githubapp.Config
 	Slack  *slackapp.Config
+	// Cloudflare is sluis as the STS for Cloudflare tokens and R2 credentials
+	// (`cloudflare`); nil is off. Grants are the policy's, Instance names the
+	// tokens it mints.
+	Cloudflare *config.Cloudflare
+	Grants     *config.PolicyCloudflare
+	Instance   string
+	// CloudflareDial opens a Cloudflare account; nil is the real client.
+	CloudflareDial minter.Dialer
 }
 
 // LogLevel is the level the process should log at. It is the issuer's,
@@ -153,7 +162,22 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{Directory: directory, Issuer: issuer, Stores: stores}, nil
+	cfg := Config{Directory: directory, Issuer: issuer, Stores: stores}
+	if f.Cloudflare != nil || (p != nil && len(p.Cloudflare().Grants) > 0) {
+		// Grants for presets nobody declared would read as rights nobody can use.
+		if err = config.CheckCloudflare(f.Cloudflare, p); err != nil {
+			return Config{}, err
+		}
+		cfg.Cloudflare, cfg.Grants = f.Cloudflare, p.Cloudflare()
+		cfg.Instance = f.Instance
+		if cfg.Instance == "" {
+			cfg.Instance = f.Release
+		}
+		if cfg.Instance == "" {
+			cfg.Instance = "sluis"
+		}
+	}
+	return cfg, nil
 }
 
 // App is the assembled service.
@@ -169,6 +193,8 @@ type App struct {
 	// consoles are where the controllers read the console, which is this very
 	// process: a controller starts its passes once its console answers.
 	consoles map[string]string
+	// cloudflare mints Cloudflare credentials; nil when `cloudflare` is absent.
+	cloudflare *minter.Minter
 }
 
 // Handler is everything served on the public port: the OpenID surface
@@ -353,6 +379,13 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Token: auditToken(assembled, audience),
 		})
 	}
+	if cfg.Cloudflare != nil && len(cfg.Cloudflare.Presets) > 0 {
+		a.issuer = assembled
+		if a.cloudflare, err = newCloudflare(cfg, stores, directory.Audit(), log); err != nil {
+			a.Close()
+			return nil, err
+		}
+	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory", "controllers", len(a.consoles))
 	a.issuer = assembled
@@ -377,6 +410,9 @@ func (a *App) Run(ctx context.Context) error {
 		group.Go(func() error {
 			return a.slack.RunLoop(gctx, func(ctx context.Context) { awaitConsole(ctx, a.log, "slack", a.consoles["slack"]) })
 		})
+	}
+	if a.cloudflare != nil {
+		group.Go(func() error { a.runCloudflare(gctx); return nil })
 	}
 	if err := group.Wait(); err != nil {
 		return fmt.Errorf("sluis: %w", err)

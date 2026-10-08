@@ -67,9 +67,13 @@ func Load[T Document](file string) (*T, error) {
 	case *PolicyDocument:
 		err = loadPolicyDocument(file, v)
 	case *Sluis:
-		err = loadSluis(file, v)
+		if err = loadSluis(file, v); err == nil {
+			err = checked(file, v.ValidateCloudflare())
+		}
 	case *Serve:
-		err = loadService(file, "serve", v, func(l *legacyPolicy) { v.legacy = l })
+		if err = loadService(file, "serve", v, func(l *legacyPolicy) { v.legacy = l }); err == nil {
+			err = checked(file, v.ValidateCloudflare())
+		}
 	case *ControllerGitHub:
 		err = loadService(file, "controller-github", v, func(l *legacyPolicy) { v.legacy = l })
 	case *ControllerSlack:
@@ -79,6 +83,14 @@ func Load[T Document](file string) (*T, error) {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// checked wraps a semantic refusal as the loader's own error, naming the file.
+func checked(file string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &policyconfig.Error{File: file, Err: err}
 }
 
 // Config is one process's whole configuration, by section: the service

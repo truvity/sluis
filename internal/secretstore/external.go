@@ -51,6 +51,12 @@ func (e External) SlackApp(name string) state.Value[Slackv1] {
 	return state.NewValue(e.s, "slack/"+segment(name), state.Codec[Slackv1](slackCodec))
 }
 
+// Cloudflare is a preset's current credential at cloudflare/<preset>: a token,
+// or for an R2 preset an access key and secret.
+func (e External) Cloudflare(preset string) state.Value[Cloudflarev1] {
+	return state.NewValue(e.s, "cloudflare/"+segment(preset), state.Codec[Cloudflarev1](cloudflareCodec))
+}
+
 // ErrReservedName is a catalogue App named like a runner App.
 var ErrReservedName = fmt.Errorf("secretstore: a GitHub App name may not begin %q", catalogue.RunnerPrefix)
 

@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "locales": [
     "en"
   ],
@@ -60,6 +60,30 @@ export const roster: Sentences = {
       "summary": "The secret of a generated client was replaced, the old one staying valid for an overlap.",
       "message": {
         "en": "{actor} rotated the secret of client {targets_0_id}"
+      }
+    },
+    "roster.cloudflare.token.minted": {
+      "summary": "A Cloudflare API token or R2 credential was minted from a preset's prototype, either stored for the preset (by sluis on its schedule) or on demand for a caller. Never the value.",
+      "message": {
+        "en": "{data_variant, select, on_demand {{actor} was given a {targets_0_id} Cloudflare token} other {a {targets_0_id} Cloudflare token was minted and stored}}"
+      }
+    },
+    "roster.cloudflare.token.refused": {
+      "summary": "A Cloudflare token was not minted, for a caller who was not granted the preset or because the preset's prototype or the account refused it.",
+      "message": {
+        "en": "{outcome, select, denied {{actor} was refused a {targets_0_id} Cloudflare token} other {a {targets_0_id} Cloudflare token could not be minted}}"
+      }
+    },
+    "roster.cloudflare.token.revoked": {
+      "summary": "Somebody deleted a live Cloudflare token that sluis had minted for a preset.",
+      "message": {
+        "en": "{actor} revoked a {targets_0_id} Cloudflare token"
+      }
+    },
+    "roster.cloudflare.tokens.swept": {
+      "summary": "sluis deleted the expired Cloudflare tokens it had minted for a preset (only its own, by the ids it recorded).",
+      "message": {
+        "en": "expired {targets_0_id} Cloudflare tokens were deleted"
       }
     },
     "roster.github_app.created": {
