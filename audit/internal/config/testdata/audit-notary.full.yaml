@@ -2,17 +2,10 @@ apiVersion: audit.truvity.github.io/audit-notary/v2
 secrets:
   source: file
   root: /etc/audit/secrets
+deployment: /etc/audit/deployment.yaml
 archive:
-  bucket:
-    name: audit-archive
-    region: eu-central-1
-    endpoint: https://s3.example.test
-    pathStyle: true
-    credentialsSecret:
-      accessKeyID: archive-access-key-id
-      secretAccessKey: archive-secret-access-key
-  prefix: app
-  lockMode: none
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit-archive
 signer:
   transit:

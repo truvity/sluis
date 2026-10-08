@@ -12,6 +12,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/store"
+	"github.com/truvity/sluis/audit/store/routed"
 	"github.com/truvity/sluis/audit/store/storetest"
 )
 
@@ -122,6 +123,12 @@ func TestARecordLandsInEveryDestinationThatTakesItsCategory(t *testing.T) {
 	registry.Register(c)
 
 	locked, unlocked := storetest.NewMemory(), storetest.NewMemory()
+	// Each profile is in the store of its preset: evidence is attested and the
+	// others are standard.
+	archive, err := routed.New(locked, map[string]store.Store{"security": unlocked, "billing": unlocked, "evidence": locked})
+	if err != nil {
+		t.Fatal(err)
+	}
 	s := splitter(t)
 	s.Profiles = destinations(t, `
 profiles:
@@ -134,7 +141,6 @@ profiles:
   evidence:
     frameworks: [evidence-etsi]
     categories: [activity]
-    key_alias: alias/acme-evidence
 `)
 	at := fixedDay(t)
 	w, err := writer.New(&writer.Writer{
@@ -143,7 +149,7 @@ profiles:
 		Roller: &writer.Roller{
 			// Evidence is attested and writes to the locked store; the others
 			// write nothing they cannot clear.
-			Store: unlocked, Stores: map[string]store.Store{"evidence": locked},
+			Store:    archive,
 			Instance: "writer-1", Now: func() time.Time { return at },
 		},
 		DeadLetter: &writer.StoreDeadLetter{Store: unlocked, Instance: "writer-1", Now: func() time.Time { return at }},

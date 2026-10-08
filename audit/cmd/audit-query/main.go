@@ -112,7 +112,7 @@ func run() error {
 	// resolve. Without it resolve is not offered.
 	var archive store.Store
 	if cfg.Archive != nil {
-		if archive, err = cli.OpenArchiveFrom(ctx, *cfg.Archive, cfg.SecretReader()); err != nil {
+		if archive, _, err = cli.OpenArchiveAt(ctx, cfg.Deployment, *cfg.Archive, cfg.SecretReader()); err != nil {
 			return err
 		}
 	}
@@ -222,7 +222,7 @@ func searcherFor(ctx context.Context, cfg *config.Query) (index.Searcher, readin
 		reader, err := postgres.NewReader(pool)
 		return reader, readiness.Check{Name: "database", Fn: pool.Ping}, err
 	default: // s3scan; the schema admits no other
-		scanned, err := cli.OpenArchiveFrom(ctx, *cfg.Archive, cfg.SecretReader())
+		scanned, _, err := cli.OpenArchiveAt(ctx, cfg.Deployment, *cfg.Archive, cfg.SecretReader())
 		if err != nil {
 			return nil, readiness.Check{}, err
 		}

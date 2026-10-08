@@ -71,7 +71,7 @@ func run() error {
 		return err
 	}
 
-	archive, err := cli.OpenArchiveFrom(ctx, cfg.Archive, cfg.SecretReader())
+	archive, _, err := cli.OpenArchiveAt(ctx, cfg.Deployment, cfg.Archive, cfg.SecretReader())
 	if err != nil {
 		return err
 	}

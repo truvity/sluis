@@ -125,22 +125,27 @@ type (
 		CredentialsSecret *CredentialsSecret `json:"credentialsSecret,omitempty"`
 	}
 
-	// Archive is where the archive is and how it is written. The lock mode is a
-	// property of what is written, so the query service, which only reads,
-	// takes none; and only the writer encrypts what it writes.
+	// Archive is what a process adds to the deployment's presets. Where the
+	// archive is -- the bucket, prefix, region and endpoint of each install
+	// preset, and the address of the credentials of a store at an endpoint -- is the
+	// deployment document's (`deployment`, `presets`), because a profile lives in
+	// the storage of its preset and every component has to agree about which.
 	//
-	// Credentials, with a bucket at an endpoint of its own, say where the
-	// store's static credentials are kept: a JSON object {accessKeyID,
-	// secretAccessKey} at that address of the installation's state store. No
-	// secret is in the file, and none in the infrastructure code that wrote it.
-	// It replaces bucket.credentialsSecret, which names an environment variable,
-	// a file or an SSM parameter holding a lone value.
+	// StateRoot is the root of the installation's state store (SSM Parameter Store
+	// on AWS, through the storage port) below which a preset's `credentials`
+	// address is read: the value there is a JSON object {accessKeyID,
+	// secretAccessKey}. No secret is in the file, and none in the infrastructure
+	// code that wrote it. CA is a bundle of certificate authorities, for a store
+	// whose certificate is not signed by a public root. KMSKey is the key objects
+	// are encrypted with where a preset names no key_alias of its own; only the
+	// writer and the notary encrypt what they write.
+	//
+	// The Object Lock an object is written under is not here either: it is the
+	// preset's, compliance for attested and none for the rest.
 	Archive struct {
-		Bucket      Bucket    `json:"bucket"`
-		Prefix      string    `json:"prefix,omitempty"`
-		LockMode    string    `json:"lockMode,omitempty"`
-		KMSKey      string    `json:"kmsKey,omitempty"`
-		Credentials *StateRef `json:"credentials,omitempty"`
+		StateRoot string `json:"stateRoot,omitempty"`
+		CA        string `json:"ca,omitempty"`
+		KMSKey    string `json:"kmsKey,omitempty"`
 	}
 
 	// Sink is the writer a process records through. Expect says what the
@@ -360,9 +365,12 @@ type Wake struct {
 // archive by cursor and writes the index.
 type Observe struct {
 	Header
-	Listen   Listen   `json:"listen,omitzero"`
-	Archive  Archive  `json:"archive"`
-	Database Postgres `json:"database"`
+	Listen Listen `json:"listen,omitzero"`
+	// Deployment is the deployment document: its presets say which stores are
+	// followed, and its profiles which preset each profile is in.
+	Deployment string   `json:"deployment"`
+	Archive    Archive  `json:"archive,omitzero"`
+	Database   Postgres `json:"database"`
 	// Settle keeps the cursor this far behind now: longer than a put can take,
 	// and than the clocks involved can disagree.
 	Settle Duration `json:"settle,omitzero"`
@@ -393,7 +401,7 @@ type Seals struct {
 type Verify struct {
 	Header
 	Deployment string   `json:"deployment"`
-	Archive    Archive  `json:"archive"`
+	Archive    Archive  `json:"archive,omitzero"`
 	Seals      *Seals   `json:"seals,omitempty"`
 	Sink       *Sink    `json:"sink,omitempty"`
 	Require    string   `json:"require,omitempty"`
@@ -432,7 +440,10 @@ type (
 // seals in, and the key it signs them with.
 type Notary struct {
 	Header
-	Archive Archive `json:"archive"`
+	// Deployment is the deployment document: the stores seals are put in are its
+	// presets', each profile's in the store of its preset.
+	Deployment string  `json:"deployment"`
+	Archive    Archive `json:"archive,omitzero"`
 	// Signer is the seal key by the first releases' shape. Exactly one of
 	// Signer and Keys.Seal; Keys is the shape to use.
 	Signer Signer `json:"signer,omitzero"`
@@ -507,7 +518,7 @@ type WriterLambda struct {
 	Header
 	Deployment       string  `json:"deployment"`
 	Catalogues       string  `json:"catalogues,omitempty"`
-	Archive          Archive `json:"archive"`
+	Archive          Archive `json:"archive,omitzero"`
 	Keys             *Keys   `json:"keys,omitempty"`
 	ForgetIdentities bool    `json:"forgetIdentities,omitempty"`
 	Dedupe           Dedupe  `json:"dedupe"`

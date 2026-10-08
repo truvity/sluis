@@ -14,34 +14,26 @@ func deployment(t *testing.T, doc string) *Deployment {
 	return d
 }
 
-func TestDeriveIsTheHighestMinimum(t *testing.T) {
+func TestAProfilesPresetIsTheHighestMinimum(t *testing.T) {
 	fw := builtin(t)
 	for _, c := range []struct {
 		name, doc string
 		want      Preset
 	}{
-		{"history alone", "profiles:\n  h: {frameworks: [history]}\n", Operational},
-		{"security", "profiles:\n  s: {frameworks: [security]}\n", Standard},
-		{"billing", "profiles:\n  b: {frameworks: [billing-nl]}\n", Standard},
-		{"history and security", "profiles:\n  h: {frameworks: [history]}\n  s: {frameworks: [security]}\n", Standard},
-		{"dora", "profiles:\n  s: {frameworks: [security, dora]}\n", Attested},
+		{"history alone", "profiles:\n  p: {frameworks: [history]}\n", Operational},
+		{"security", "profiles:\n  p: {frameworks: [security]}\n", Standard},
+		{"billing", "profiles:\n  p: {frameworks: [billing-nl]}\n", Standard},
+		{"dora", "profiles:\n  p: {frameworks: [security, dora]}\n", Attested},
 		{"pci-dss", "profiles:\n  p: {frameworks: [pci-dss]}\n", Attested},
-		{"nen-7513", "profiles:\n  n: {frameworks: [nen-7513]}\n", Attested},
-		{"evidence-etsi", "profiles:\n  e: {frameworks: [evidence-etsi]}\n", Attested},
+		{"nen-7513", "profiles:\n  p: {frameworks: [nen-7513]}\n", Attested},
+		{"evidence-etsi", "profiles:\n  p: {frameworks: [evidence-etsi]}\n", Attested},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := deployment(t, c.doc).Derive(fw)
-			if err != nil || got != c.want {
-				t.Fatalf("Derive = %q, %v; want %q", got, err, c.want)
+			got, err := deployment(t, c.doc).ProfileNeeds(fw)
+			if err != nil || got["p"].Preset != c.want {
+				t.Fatalf("ProfileNeeds = %+v, %v; want %q", got, err, c.want)
 			}
 		})
-	}
-}
-
-func TestNothingChosenIsOperational(t *testing.T) {
-	got, err := (&Deployment{}).Derive(builtin(t))
-	if err != nil || got != Operational {
-		t.Fatalf("Derive = %q, %v; want operational", got, err)
 	}
 }
 
@@ -53,45 +45,110 @@ func TestEveryFrameworkProfileStatesAMinimum(t *testing.T) {
 	}
 }
 
-func TestAStrongerPresetIsKeptAndAWeakerOneRefused(t *testing.T) {
+const (
+	hiveLike = `
+presets:
+  operational: {bucket: hive-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials: internal/audit/r2}
+profiles:
+  history: {frameworks: [history], categories: [activity]}
+`
+	truvityLike = `
+presets:
+  standard: {bucket: example-audit, prefix: standard/, region: eu-central-1, key_alias: alias/audit-archive}
+profiles:
+  security: {frameworks: [security], categories: [security]}
+`
+	mixed = `
+presets:
+  standard: {bucket: example-audit, prefix: standard/, region: eu-central-1}
+  attested: {bucket: example-audit-locked, prefix: attested/, region: eu-central-1}
+profiles:
+  security: {frameworks: [security], categories: [security]}
+  payments: {frameworks: [pci-dss], categories: [payments]}
+`
+)
+
+func TestEveryProfilesPresetMustBeConfigured(t *testing.T) {
 	fw := builtin(t)
-	d := deployment(t, "profiles:\n  sec: {frameworks: [security]}\n  pay: {frameworks: [pci-dss]}\n")
-	got, err := d.ResolvePreset(fw, Attested)
-	if err != nil || got != Attested {
-		t.Fatalf("ResolvePreset(attested) = %q, %v", got, err)
+	for name, doc := range map[string]string{"hive": hiveLike, "truvity": truvityLike, "mixed": mixed} {
+		if err := deployment(t, doc).CheckStorage(fw); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
-	_, err = d.ResolvePreset(fw, Standard)
+	// A profile whose preset is not configured is refused, naming both.
+	d := deployment(t, "presets:\n  standard: {bucket: b}\nprofiles:\n  pay: {frameworks: [pci-dss]}\n")
+	err := d.CheckStorage(fw)
 	if err == nil {
-		t.Fatal("a standard preset under pci-dss was accepted")
+		t.Fatal("an attested profile with no attested preset was accepted")
 	}
-	for _, want := range []string{"profile pay", "pci-dss", "needs attested"} {
+	for _, want := range []string{"profile pay", "attested", "standard", "presets.attested"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not say %q", err, want)
 		}
 	}
-	if strings.Contains(err.Error(), "profile sec ") {
-		t.Errorf("error %q names a profile that is satisfied", err)
+	// So is a deployment with no presets at all, and a profile below the
+	// configured presets (it has to ask for one of them).
+	if err := deployment(t, "profiles:\n  h: {frameworks: [history]}\n").CheckStorage(fw); err == nil {
+		t.Error("no presets accepted")
 	}
-	// A stronger one than anything needs is allowed.
-	h := deployment(t, "profiles:\n  h: {frameworks: [history]}\n")
-	if got, err := h.ResolvePreset(fw, Attested); err != nil || got != Attested {
-		t.Fatalf("explicit attested over history = %q, %v", got, err)
+	if err := deployment(t, "presets:\n  standard: {bucket: b}\nprofiles:\n  h: {frameworks: [history]}\n").CheckStorage(fw); err == nil ||
+		!strings.Contains(err.Error(), "profile h") || !strings.Contains(err.Error(), "operational") {
+		t.Errorf("history on a standard-only installation: %v", err)
+	}
+	if err := deployment(t, "presets:\n  standard: {bucket: b}\nprofiles:\n  h: {frameworks: [history], preset: standard}\n").CheckStorage(fw); err != nil {
+		t.Errorf("a profile asking for the configured stronger preset: %v", err)
 	}
 }
 
-func TestADeploymentsOwnPresetIsHeldToTheSameRule(t *testing.T) {
-	fw := builtin(t)
-	d := deployment(t, "preset: operational\nprofiles:\n  s: {frameworks: [security]}\n")
-	if _, err := d.Compose(fw); err == nil || !strings.Contains(err.Error(), "profile s") {
-		t.Fatalf("Compose = %v; want a refusal naming profile s", err)
+func TestAWeakerProfilePresetIsRefused(t *testing.T) {
+	d := deployment(t, "presets:\n  attested: {bucket: b}\nprofiles:\n  p: {frameworks: [pci-dss], preset: standard}\n")
+	if err := d.CheckStorage(builtin(t)); err == nil || !strings.Contains(err.Error(), "profile p") {
+		t.Fatalf("CheckStorage = %v; want a refusal naming profile p", err)
 	}
-	d = deployment(t, "preset: standard\nprofiles:\n  s: {frameworks: [security]}\n")
-	if _, err := d.Compose(fw); err != nil {
-		t.Fatal(err)
+}
+
+func TestPresetStorageRefusals(t *testing.T) {
+	for name, c := range map[string]struct{ doc, want string }{
+		"attested on an endpoint":   {"presets:\n  attested: {bucket: b, endpoint: \"https://x.example\"}\nprofiles:\n  p: {frameworks: [pci-dss]}\n", "Object Lock"},
+		"ARN as key alias":          {"presets:\n  standard: {bucket: b, key_alias: \"arn:aws:kms:eu-central-1:111122223333:key/abc\"}\nprofiles:\n  p: {frameworks: [security]}\n", "never a key id or ARN"},
+		"key alias on endpoint":     {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", key_alias: alias/k}\nprofiles:\n  p: {frameworks: [security]}\n", "key_alias"},
+		"credentials on AWS":        {"presets:\n  standard: {bucket: b, credentials: internal/x}\nprofiles:\n  p: {frameworks: [security]}\n", "workload's identity"},
+		"no bucket":                 {"presets:\n  standard: {prefix: standard/}\nprofiles:\n  p: {frameworks: [security]}\n", "bucket is required"},
+		"unknown preset":            {"presets:\n  gold: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "gold"},
+		"prefix without slash":      {"presets:\n  standard: {bucket: b, prefix: standard}\nprofiles:\n  p: {frameworks: [security]}\n", "ending in a slash"},
+		"endpoint not a URL":        {"presets:\n  operational: {bucket: b, endpoint: nope}\nprofiles:\n  p: {frameworks: [history]}\n", "not an http(s) URL"},
+		"the old key_alias":         {"presets:\n  standard: {bucket: b}\nprofiles:\n  p: {frameworks: [security], key_alias: alias/k}\n", "key_alias"},
+		"the old deployment preset": {"preset: standard\npresets:\n  standard: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "preset"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseDeployment([]byte("apiVersion: " + DeploymentAPIVersion + "\n" + c.doc))
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("ParseDeployment = %v; want a refusal saying %q", err, c.want)
+			}
+		})
 	}
-	d = deployment(t, "preset: bogus\nprofiles:\n  s: {frameworks: [security]}\n")
-	if _, err := d.Compose(fw); err == nil {
-		t.Fatal("an unknown preset was accepted")
+}
+
+func TestFeaturesAreWhatAnyConfiguredPresetNeeds(t *testing.T) {
+	for name, c := range map[string]struct {
+		doc  string
+		want Features
+	}{
+		"hive":    {hiveLike, Features{}},
+		"truvity": {truvityLike, Features{Notary: true, Alarms: true}},
+		"mixed":   {mixed, Features{Notary: true, Alarms: true, ObjectLock: true, PseudonymKeys: true}},
+	} {
+		if got := deployment(t, c.doc).Features(); got != c.want {
+			t.Errorf("%s: %+v, want %+v", name, got, c.want)
+		}
+	}
+}
+
+func TestLockModeIsAPropertyOfThePreset(t *testing.T) {
+	for p, want := range map[Preset]string{Operational: "none", Standard: "none", Attested: "compliance"} {
+		if got := p.LockMode(); got != want {
+			t.Errorf("%s: %s, want %s", p, got, want)
+		}
 	}
 }
 

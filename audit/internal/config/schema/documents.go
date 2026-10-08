@@ -57,13 +57,29 @@ func deploymentSchema() m {
 				"additionalProperties": obj("One profile's composition.", m{
 					"frameworks": m{"type": "array", "items": str("A framework profile's name."), "description": "The framework profiles the profile is composed from."},
 					"categories": m{"type": "array", "items": m{"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"}, "uniqueItems": true, "description": "The action categories (an action's `category`) this destination takes. The writer stores a projection of each record, only this destination's fields, under every destination that takes its category. Unset keeps only the actions that name the profile in their deprecated `profiles`."},
-					"key_alias":  m{"type": "string", "pattern": "^alias/[A-Za-z0-9/_-]+$", "description": "The alias of the key this destination's objects are encrypted with. Empty is the archive's key."},
-					"preset":     m{"enum": []string{"operational", "standard", "attested"}, "description": "This destination's install preset, when it asks for more than its framework profiles need. Object Lock is the writer's only for a destination whose preset is attested."},
+					"preset":     m{"enum": []string{"operational", "standard", "attested"}, "description": "This profile's install preset, when it asks for more than its framework profiles need (asking for less is refused). It names the preset, and so the storage, the profile's copies land in, and must be one of `presets`."},
 				}, "frameworks"),
 			},
-			"preset":                          m{"enum": []string{"operational", "standard", "attested"}, "description": presetDescription},
+			"presets": m{
+				"type": "object", "minProperties": 1,
+				"description":          presetDescription,
+				"propertyNames":        m{"enum": []string{"operational", "standard", "attested"}},
+				"additionalProperties": presetStorage(),
+			},
 			"external_identifiers_are_opaque": boolean("The identifiers this deployment receives for people outside the organisation are already pseudonyms an application minted, so a profile asking for `external: pseudonym` gets `clear`. Defaults to false: a deployment arrives at clear identifiers by saying so and not by omission."),
 		}, []string{"profiles"})
+}
+
+func presetStorage() m {
+	return obj("Where one install preset keeps its copies: a bucket of its own.", m{
+		"bucket":      str("The bucket."),
+		"prefix":      m{"type": "string", "pattern": "^([^/].*/)?$", "description": "The prefix within the bucket every key of this preset lives under, ending in a slash (`standard/`). Required wherever the bucket is shared with another installation."},
+		"region":      str("The region. For a store at an endpoint, `auto` unless the store says otherwise."),
+		"endpoint":    str("The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only."),
+		"path_style":  boolean("Address the bucket as endpoint/bucket/key, for a store whose certificate does not cover a bucket subdomain. Only with `endpoint`."),
+		"credentials": str("The address, below the installation's state root, of the static credentials of a store at an endpoint: a JSON object {accessKeyID, secretAccessKey} in the state store, read with the process's own identity. Only with `endpoint`: on AWS the workload's identity is the credential."),
+		"key_alias":   m{"type": "string", "pattern": "^alias/[A-Za-z0-9/_-]+$", "description": "The alias of the KMS key this preset's objects are encrypted with, a name and never a key id or ARN. Empty is the installation's archive key, or the bucket's default encryption. Only on AWS S3."},
+	}, "bucket")
 }
 
 func grantsSchema() m {
@@ -122,4 +138,4 @@ func workloadsSchema() m {
 
 // presetDescription is what the install preset is, wherever it is set: the
 // deployment document, the chart's values.
-const presetDescription = "The install preset: `operational` (writer, archive, deduplication, intake), `standard` (adds the notary, its seal key and alarms) or `attested` (adds compliance Object Lock and pseudonym keys). Optional: unset, it is the lowest preset every profile can be kept under, which each framework profile states as `min_preset`. Set, it may be stronger than that and is refused when weaker, naming the profile that needs more."
+const presetDescription = "The install presets this installation uses, each with the storage of its own (`operational`, `standard`, `attested`). A profile's preset is the lowest its framework profiles can be kept under (`min_preset`), or the stronger one it asks for, and must be configured here. Object Lock is a property of the preset's bucket: `attested` is compliance Object Lock on S3 (never at an endpoint), every other preset is unlocked. The notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them."

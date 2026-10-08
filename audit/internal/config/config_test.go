@@ -22,6 +22,18 @@ import (
 	"github.com/truvity/sluis/audit/internal/config/schema"
 )
 
+// writeAs writes a file of the given kind in version 2, unless the body says its
+// own version: most of these tests are about version 2's contract, and a
+// version-1 file cannot name the archive any other way than the bucket it no
+// longer holds.
+func writeAs(t *testing.T, kind, body string) string {
+	t.Helper()
+	if kind != "" && !strings.Contains(body, "apiVersion:") {
+		body = "apiVersion: audit.truvity.github.io/" + kind + "/v2\n" + body
+	}
+	return write(t, body)
+}
+
 func write(t *testing.T, body string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "config.yaml")
@@ -111,27 +123,33 @@ func jsonEqual(a, b any) bool {
 	return bytes.Equal(x, y)
 }
 
+// minimalQuery is a file that reads in version 1 and in version 2 alike: the
+// version-1 tests need a kind that names no archive bucket.
+const minimalQuery = `
+grants: /g.yaml
+sink: {url: 'http://audit:8080'}
+database: {url: 'postgres://u@h/db'}
+`
+
 const minimalWriter = `
 deployment: /etc/audit/deployment.yaml
 anonymousWrites: true
-archive:
-  bucket:
-    name: audit-archive
+archive: {}
 `
 
 func TestAValidFileLoadsWithItsDefaults(t *testing.T) {
-	w, err := config.LoadWriter(write(t, minimalWriter))
+	w, err := config.LoadWriter(writeAs(t, "audit-writer", minimalWriter))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if w.Mode != "writer" || w.Listen.Address != ":8080" || w.Replicas != 1 ||
-		w.Archive.LockMode != "compliance" || w.Roll.MaxRecords != 5000 || w.Roll.Interval.D().String() != "30s" {
+		w.Roll.MaxRecords != 5000 || w.Roll.Interval.D().String() != "30s" {
 		t.Errorf("defaults not applied: %+v", w)
 	}
 }
 
 func TestEveryJobTakesAValidFile(t *testing.T) {
-	archive := "archive: {bucket: {name: b}}\n"
+	archive := "archive: {}\n"
 	for name, load := range map[string]func(string) error{
 		"verify":  func(p string) error { _, err := config.LoadVerify(p); return err },
 		"purge":   func(p string) error { _, err := config.LoadPurge(p); return err },
@@ -141,12 +159,12 @@ func TestEveryJobTakesAValidFile(t *testing.T) {
 		"notary":  func(p string) error { _, err := config.LoadNotary(p); return err },
 	} {
 		body := map[string]string{
-			"verify":  "deployment: /d.yaml\n" + archive,
+			"verify":  "apiVersion: audit.truvity.github.io/audit-verify/v2\ndeployment: /d.yaml\n" + archive,
 			"purge":   "deployment: /d.yaml\ndatabase: {url: 'postgres://u@h/db'}\n",
 			"clock":   "ntp: [time.example.test]\n",
 			"migrate": "database: {url: 'postgres://u@h/db'}\nreader: audit_query\nwriter: audit_writer\nobserve: audit_observe\n",
-			"observe": "archive: {bucket: {name: b}}\ndatabase: {url: 'postgres://u@h/db'}\n",
-			"notary":  archive + "signer: {file: {path: /etc/audit/seal.pem}}\n",
+			"observe": "apiVersion: audit.truvity.github.io/audit-observe/v2\ndeployment: /d.yaml\ndatabase: {url: 'postgres://u@h/db'}\n",
+			"notary":  "apiVersion: audit.truvity.github.io/audit-notary/v2\ndeployment: /d.yaml\n" + archive + "signer: {file: {path: /etc/audit/seal.pem}}\n",
 		}[name]
 		if err := load(write(t, body)); err != nil {
 			t.Errorf("%s: %v", name, err)
@@ -156,7 +174,7 @@ func TestEveryJobTakesAValidFile(t *testing.T) {
 
 // What a typo must do: fail, and say which key.
 func TestAnUnknownKeyIsRefusedAndNamed(t *testing.T) {
-	_, err := config.LoadWriter(write(t, minimalWriter+"archive2: {}\nlisten: {adr: ':1'}\n"))
+	_, err := config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"archive2: {}\nlisten: {adr: ':1'}\n"))
 	var ce *policyconfig.Error
 	if !errors.As(err, &ce) {
 		t.Fatalf("want a configuration error, got %v", err)
@@ -170,35 +188,31 @@ func TestAnUnknownKeyIsRefusedAndNamed(t *testing.T) {
 }
 
 func TestAMissingRequiredKeyIsRefusedAndNamed(t *testing.T) {
-	_, err := config.LoadWriter(write(t, "anonymousWrites: true\narchive: {bucket: {name: b}}\n"))
+	_, err := config.LoadWriter(writeAs(t, "audit-writer", "anonymousWrites: true\narchive: {}\n"))
 	if err == nil || !strings.Contains(err.Error(), "deployment") {
 		t.Fatalf("want a refusal naming deployment, got %v", err)
 	}
 	// A key required only in one mode.
-	_, err = config.LoadWriter(write(t, "deployment: /d\nanonymousWrites: true\n"))
-	if err == nil || !strings.Contains(err.Error(), "archive") {
-		t.Fatalf("a writer with no archive: want a refusal naming archive, got %v", err)
-	}
 }
 
 // A secret is never in the file: not under a key of its own, which no schema
 // has, and not inside a URL, which would have been the easy place.
 func TestASecretInTheFileIsRefused(t *testing.T) {
-	_, err := config.LoadWriter(write(t, minimalWriter+"database: {url: 'postgres://u:hunter2@h/db'}\n"))
+	_, err := config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"database: {url: 'postgres://u:hunter2@h/db'}\n"))
 	if err == nil {
 		t.Fatal("a password inside the database URL was accepted")
 	}
 	if strings.Contains(err.Error(), "hunter2") {
 		t.Errorf("the error quotes the secret: %v", err)
 	}
-	_, err = config.LoadWriter(write(t, minimalWriter+"database: {url: 'postgres://u@h/db', password: hunter2}\n"))
+	_, err = config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"database: {url: 'postgres://u@h/db', password: hunter2}\n"))
 	if err == nil || !strings.Contains(err.Error(), "database: additional properties 'password'") {
 		t.Errorf("a password key was not refused by name: %v", err)
 	}
 	if err != nil && strings.Contains(err.Error(), "hunter2") {
 		t.Errorf("the error quotes the secret: %v", err)
 	}
-	_, err = config.LoadWriter(write(t, minimalWriter+"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', token: s.abc}}}\n"))
+	_, err = config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', token: s.abc}}}\n"))
 	if err == nil {
 		t.Error("an OpenBAO token in the file was accepted")
 	}
@@ -243,24 +257,24 @@ anonymousWrites: true
 stream:
   nats: {url: 'nats://n:4222'}
 `
-	if _, err := config.LoadWriter(write(t, receiver)); err != nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", receiver)); err != nil {
 		t.Fatalf("a receiver: %v", err)
 	}
 	for name, extra := range map[string]string{
-		"archive": "archive: {bucket: {name: b}}\n",
+		"archive": "archive: {}\n",
 		"keys":    "keys: {provider: none}\n",
 	} {
-		if _, err := config.LoadWriter(write(t, receiver+extra)); err == nil {
+		if _, err := config.LoadWriter(writeAs(t, "audit-writer", receiver+extra)); err == nil {
 			t.Errorf("a receiver with %s was accepted", name)
 		}
 	}
-	if _, err := config.LoadWriter(write(t, "mode: receiver\ndeployment: /d\nanonymousWrites: true\n")); err == nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", "mode: receiver\ndeployment: /d\nanonymousWrites: true\n")); err == nil {
 		t.Error("a receiver with no stream was accepted: there is nowhere to publish to")
 	}
 }
 
 func TestTheStreamMustOutwaitTheRoll(t *testing.T) {
-	_, err := config.LoadWriter(write(t, minimalWriter+"stream: {nats: {url: 'nats://n:4222'}, ackWait: 20s}\nroll: {interval: 30s}\n"))
+	_, err := config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"stream: {nats: {url: 'nats://n:4222'}, ackWait: 20s}\nroll: {interval: 30s}\n"))
 	if err == nil || !strings.Contains(err.Error(), "ackWait") {
 		t.Fatalf("want a refusal naming ackWait, got %v", err)
 	}
@@ -268,27 +282,27 @@ func TestTheStreamMustOutwaitTheRoll(t *testing.T) {
 
 func TestExactlyOneWayToVerifyCallers(t *testing.T) {
 	both := minimalWriter + "workloads: /w.yaml\n"
-	if _, err := config.LoadWriter(write(t, both)); err == nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", both)); err == nil {
 		t.Error("anonymous writes and a workloads file were both accepted")
 	}
 	neither := strings.Replace(minimalWriter, "anonymousWrites: true\n", "", 1)
-	if _, err := config.LoadWriter(write(t, neither)); err == nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", neither)); err == nil {
 		t.Error("a writer that neither verifies callers nor says it accepts anybody was accepted")
 	}
 }
 
 func TestOneWayToSignInToOpenBAO(t *testing.T) {
-	const base = "deployment: /d\nanonymousWrites: true\narchive: {bucket: {name: b}}\n"
+	const base = "deployment: /d\nanonymousWrites: true\narchive: {}\n"
 	open := func(auth string) string {
 		return base + "keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test'" + auth + "}}}\n"
 	}
-	if _, err := config.LoadWriter(write(t, open(", tokenEnv: BAO_TOKEN"))); err != nil {
-		t.Errorf("a token from a named variable: %v", err)
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", open(", tokenSecret: BAO_TOKEN"))); err != nil {
+		t.Errorf("a token from a named secret: %v", err)
 	}
-	if _, err := config.LoadWriter(write(t, open(""))); err == nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", open(""))); err == nil {
 		t.Error("no way to sign in was accepted")
 	}
-	if _, err := config.LoadWriter(write(t, open(", tokenEnv: A, tokenFile: /t"))); err == nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", open(", tokenSecret: A, tokenFile: /t"))); err == nil {
 		t.Error("two ways to sign in were accepted")
 	}
 }
@@ -300,39 +314,29 @@ sink: {url: 'http://audit:8080'}
 database: {url: 'postgres://u@h/db'}
 keys: {provider: local, local: {rootFile: /r, dir: /d}}
 `
-	if _, err := config.LoadQuery(write(t, q)); err == nil || !strings.Contains(err.Error(), "archive") {
+	if _, err := config.LoadQuery(writeAs(t, "audit-query", q)); err == nil || !strings.Contains(err.Error(), "archive") {
 		t.Fatalf("resolve with no archive: %v", err)
 	}
-	if _, err := config.LoadQuery(write(t, q+"archive: {bucket: {name: b}}\n")); err != nil {
+	if _, err := config.LoadQuery(writeAs(t, "audit-query", q+"archive: {}\ndeployment: /d.yaml\n")); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestTheExportsAreNotTheArchive(t *testing.T) {
-	const q = `
-grants: /g.yaml
-sink: {url: 'http://audit:8080'}
-database: {url: 'postgres://u@h/db'}
-archive: {bucket: {name: same}}
-exports: {bucket: {name: same}}
-`
-	if _, err := config.LoadQuery(write(t, q)); err == nil || !strings.Contains(err.Error(), "exports.bucket") {
-		t.Fatalf("exports into the archive's bucket: %v", err)
 	}
 }
 
 func TestTheS3scanSearcherNeedsNoDatabaseButTheArchive(t *testing.T) {
 	const q = "grants: /g.yaml\nsink: {url: 'http://audit:8080'}\nsearcher: s3scan\n"
-	if _, err := config.LoadQuery(write(t, q)); err == nil {
+	if _, err := config.LoadQuery(writeAs(t, "audit-query", q)); err == nil {
 		t.Error("s3scan with no archive was accepted")
 	}
-	if _, err := config.LoadQuery(write(t, q+"archive: {bucket: {name: b}}\n")); err != nil {
+	if _, err := config.LoadQuery(writeAs(t, "audit-query", q+"archive: {}\n")); err == nil {
+		t.Error("an archive with no deployment was accepted: the archive is the deployment's presets")
+	}
+	if _, err := config.LoadQuery(writeAs(t, "audit-query", q+"archive: {}\ndeployment: /d.yaml\n")); err != nil {
 		t.Error(err)
 	}
 }
 
 func TestAnEmptyOrMissingFileIsRefused(t *testing.T) {
-	if _, err := config.LoadWriter(write(t, "")); err == nil {
+	if _, err := config.LoadWriter(writeAs(t, "audit-writer", "")); err == nil {
 		t.Error("an empty file was accepted")
 	}
 	if _, err := config.LoadWriter(filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
@@ -343,11 +347,11 @@ func TestAnEmptyOrMissingFileIsRefused(t *testing.T) {
 const receiverHead = "mode: receiver\ndeployment: /d.yaml\nanonymousWrites: true\n"
 
 func TestTheDefaultRequireIsTheStrongestTheModeCanGive(t *testing.T) {
-	w, err := config.LoadWriter(write(t, minimalWriter))
+	w, err := config.LoadWriter(writeAs(t, "audit-writer", minimalWriter))
 	if err != nil || w.Require != "archived" {
 		t.Errorf("a writer: %v require=%v", err, w)
 	}
-	r, err := config.LoadWriter(write(t, receiverHead+"forward: {nats: {nats: {url: 'nats://n:4222'}}}\n"))
+	r, err := config.LoadWriter(writeAs(t, "audit-writer", receiverHead+"forward: {nats: {nats: {url: 'nats://n:4222'}}}\n"))
 	if err != nil || r.Require != "queued" {
 		t.Errorf("a receiver: %v require=%v", err, r)
 	}
@@ -379,7 +383,7 @@ func TestEachTransportLoadsAndTheOthersAreRefused(t *testing.T) {
 		"require unknown":       {minimalWriter + "require: durable\n", false},
 		"sqs secret key":        {minimalWriter + "consume: {sqs: {queueUrl: 'https://sqs.example.test/ACCOUNT/audit', accessKey: x}}\n", false},
 	} {
-		_, err := config.LoadWriter(write(t, c.body))
+		_, err := config.LoadWriter(writeAs(t, "audit-writer", c.body))
 		if c.ok && err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -390,11 +394,11 @@ func TestEachTransportLoadsAndTheOthersAreRefused(t *testing.T) {
 }
 
 func TestTheRefusalsSaySWhy(t *testing.T) {
-	_, err := config.LoadWriter(write(t, receiverHead+"require: archived\nforward: {log: {}}\n"))
+	_, err := config.LoadWriter(writeAs(t, "audit-writer", receiverHead+"require: archived\nforward: {log: {}}\n"))
 	if err == nil {
 		t.Fatal("accepted")
 	}
-	_, err = config.LoadWriter(write(t, receiverHead+"require: queued\nforward: {log: {}}\n"))
+	_, err = config.LoadWriter(writeAs(t, "audit-writer", receiverHead+"require: queued\nforward: {log: {}}\n"))
 	if err == nil || !strings.Contains(err.Error(), "logged") {
 		t.Errorf("log with queued should name logged: %v", err)
 	}
@@ -413,7 +417,7 @@ func TestAnEmitterRequireNeedsWhatTheWriterIsSaidToGive(t *testing.T) {
 		"no require":     {"sink: {url: 'http://a:8080'}\n", true},
 		"expect only":    {"sink: {url: 'http://a:8080', expect: queued}\n", true},
 	} {
-		_, err := config.LoadQuery(write(t, q+c.sink))
+		_, err := config.LoadQuery(writeAs(t, "audit-query", q+c.sink))
 		if c.ok != (err == nil) {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -444,7 +448,7 @@ func TestASinkIsAWriterOrAQueue(t *testing.T) {
 		"queue without a url":   {"sink: {sqs: {region: eu-west-1}}\n", false},
 		"fifo not a fifo queue": {"sink: {sqs: {queueUrl: 'https://sqs.x/1/q', fifo: true}}\n", false},
 	} {
-		_, err := config.LoadQuery(write(t, q+c.sink))
+		_, err := config.LoadQuery(writeAs(t, "audit-query", q+c.sink))
 		if c.ok != (err == nil) {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -456,8 +460,8 @@ func TestASinkIsAWriterOrAQueue(t *testing.T) {
 }
 
 func TestObserveTakesItsDefaultsAndRefusesWhatItCannotUse(t *testing.T) {
-	const base = "archive: {bucket: {name: b}}\ndatabase: {url: 'postgres://u@h/db'}\n"
-	o, err := config.LoadObserve(write(t, base))
+	const base = "deployment: /d.yaml\ndatabase: {url: 'postgres://u@h/db'}\n"
+	o, err := config.LoadObserve(writeAs(t, "audit-observe", base))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,14 +469,14 @@ func TestObserveTakesItsDefaultsAndRefusesWhatItCannotUse(t *testing.T) {
 		t.Errorf("defaults not applied: %+v", o)
 	}
 	for name, body := range map[string]string{
-		"no database":       "archive: {bucket: {name: b}}\n",
-		"no archive":        "database: {url: 'postgres://u@h/db'}\n",
+		"no database":       "deployment: /d.yaml\n",
+		"no deployment":     "database: {url: 'postgres://u@h/db'}\n",
 		"two wake sources":  base + "wake: {sqs: {queueUrl: 'https://sqs.example/q'}, nats: {subject: s, nats: {url: 'nats://n'}}}\n",
-		"a lock mode":       "archive: {bucket: {name: b}, lockMode: compliance}\ndatabase: {url: 'postgres://u@h/db'}\n",
-		"a password in url": "archive: {bucket: {name: b}}\ndatabase: {url: 'postgres://u:p@h/db'}\n",
+		"a lock mode":       "deployment: /d.yaml\narchive: {lockMode: compliance}\ndatabase: {url: 'postgres://u@h/db'}\n",
+		"a password in url": "deployment: /d.yaml\ndatabase: {url: 'postgres://u:p@h/db'}\n",
 		"a typo":            base + "setle: 1m\n",
 	} {
-		if _, err := config.LoadObserve(write(t, body)); err == nil {
+		if _, err := config.LoadObserve(writeAs(t, "audit-observe", body)); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -482,20 +486,20 @@ func TestObserveTakesItsDefaultsAndRefusesWhatItCannotUse(t *testing.T) {
 // notary should not have to say: a ten-minute settle window and the record
 // tier's lock.
 func TestTheNotaryHasOneSignerAndItsDefaults(t *testing.T) {
-	n, err := config.LoadNotary(write(t, "archive: {bucket: {name: b}}\nsigner: {kms: {key: alias/seal}}\n"))
+	n, err := config.LoadNotary(writeAs(t, "audit-notary", "deployment: /d.yaml\narchive: {}\nsigner: {kms: {key: alias/seal}}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.Settle.D() != config.DefaultSettle || n.Archive.LockMode != "compliance" {
+	if n.Settle.D() != config.DefaultSettle {
 		t.Errorf("defaults not applied: %+v", n)
 	}
 	for name, body := range map[string]string{
-		"two signers": "archive: {bucket: {name: b}}\nsigner: {kms: {key: k}, file: {path: /k.pem}}\n",
-		"no signer":   "archive: {bucket: {name: b}}\nsigner: {}\n",
-		"no archive":  "signer: {file: {path: /k.pem}}\n",
-		"typo":        "archive: {bucket: {name: b}}\nsigner: {kms: {key: k}}\nsettel: 5m\n",
+		"two signers":   "deployment: /d.yaml\narchive: {}\nsigner: {kms: {key: k}, file: {path: /k.pem}}\n",
+		"no signer":     "deployment: /d.yaml\narchive: {}\nsigner: {}\n",
+		"no deployment": "signer: {file: {path: /k.pem}}\n",
+		"typo":          "deployment: /d.yaml\narchive: {}\nsigner: {kms: {key: k}}\nsettel: 5m\n",
 	} {
-		if _, err := config.LoadNotary(write(t, body)); err == nil {
+		if _, err := config.LoadNotary(writeAs(t, "audit-notary", body)); err == nil {
 			t.Errorf("%s: the file was accepted", name)
 		}
 	}
@@ -504,11 +508,11 @@ func TestTheNotaryHasOneSignerAndItsDefaults(t *testing.T) {
 // A verifier that checks seals pins at least one root: an empty list would
 // trust nothing and say so only by failing every seal.
 func TestSealVerificationPinsARoot(t *testing.T) {
-	base := "deployment: /d.yaml\narchive: {bucket: {name: b}}\n"
-	if _, err := config.LoadVerify(write(t, base+"seals: {roots: []}\n")); err == nil {
+	base := "deployment: /d.yaml\narchive: {}\n"
+	if _, err := config.LoadVerify(writeAs(t, "audit-verify", base+"seals: {roots: []}\n")); err == nil {
 		t.Error("an empty list of roots was accepted")
 	}
-	v, err := config.LoadVerify(write(t, base+"seals: {roots: [AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]}\n"))
+	v, err := config.LoadVerify(writeAs(t, "audit-verify", base+"seals: {roots: [AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,24 +522,23 @@ func TestSealVerificationPinsARoot(t *testing.T) {
 }
 
 func TestTheLambdaWriterTakesADynamoDBAndRefusesWhatItCannotRun(t *testing.T) {
-	w, err := config.LoadWriterLambda(write(t, "deployment: /d.yaml\narchive: {bucket: {name: b}}\ndedupe: {dynamodb: {table: t}}\n"))
+	w, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda", "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Require != "archived" || w.Archive.LockMode != "compliance" {
+	if w.Require != "archived" {
 		t.Errorf("defaults not applied: %+v", w)
 	}
 	for name, body := range map[string]string{
-		"no dedupe":        "deployment: /d.yaml\narchive: {bucket: {name: b}}\n",
-		"an empty dedupe":  "deployment: /d.yaml\narchive: {bucket: {name: b}}\ndedupe: {}\n",
-		"a database":       "deployment: /d.yaml\narchive: {bucket: {name: b}}\ndedupe: {dynamodb: {table: t}}\ndatabase: {url: 'postgres://u@h/db'}\n",
-		"a listener":       "deployment: /d.yaml\narchive: {bucket: {name: b}}\ndedupe: {dynamodb: {table: t}}\nlisten: {address: ':8080'}\n",
-		"no archive":       "deployment: /d.yaml\ndedupe: {dynamodb: {table: t}}\n",
-		"a key in memory":  "deployment: /d.yaml\narchive: {bucket: {name: b}}\ndedupe: {dynamodb: {table: t}}\nkeys: {provider: local, local: {rootFile: /r}}\n",
-		"a bad durability": "deployment: /d.yaml\narchive: {bucket: {name: b}}\ndedupe: {dynamodb: {table: t}}\nrequire: forever\n",
+		"no dedupe":        "deployment: /d.yaml\narchive: {}\n",
+		"an empty dedupe":  "deployment: /d.yaml\narchive: {}\ndedupe: {}\n",
+		"a database":       "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\ndatabase: {url: 'postgres://u@h/db'}\n",
+		"a listener":       "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nlisten: {address: ':8080'}\n",
+		"a key in memory":  "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nkeys: {provider: local, local: {rootFile: /r}}\n",
+		"a bad durability": "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nrequire: forever\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := config.LoadWriterLambda(write(t, body)); err == nil {
+			if _, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda", body)); err == nil {
 				t.Fatal("the file was accepted")
 			}
 		})
@@ -547,13 +550,13 @@ func TestTheLambdaWriterTakesADynamoDBAndRefusesWhatItCannotRun(t *testing.T) {
 // another is refused at the schema, before the typed decode could read it as
 // something it is not.
 func TestTheAPIVersionIsV2OrTheDeprecatedV1(t *testing.T) {
-	const v2 = "audit.truvity.github.io/audit-writer/v2"
+	const v2 = "audit.truvity.github.io/audit-query/v2"
 	for name, body := range map[string]string{
-		"absent": minimalWriter,
-		"v1":     "apiVersion: truvity.github.io/audit-writer/v1\n" + minimalWriter,
-		"v2":     "apiVersion: " + v2 + "\n" + minimalWriter,
+		"absent": minimalQuery,
+		"v1":     "apiVersion: truvity.github.io/audit-query/v1\n" + minimalQuery,
+		"v2":     "apiVersion: " + v2 + "\n" + minimalQuery,
 	} {
-		w, err := config.LoadWriter(write(t, body))
+		w, err := config.LoadQuery(writeAs(t, "", body))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -563,15 +566,15 @@ func TestTheAPIVersionIsV2OrTheDeprecatedV1(t *testing.T) {
 		}
 	}
 	for name, v := range map[string]string{
-		"v3":                  "audit.truvity.github.io/audit-writer/v3",
-		"the old group at v2": "truvity.github.io/audit-writer/v2",
-		"the new group at v1": "audit.truvity.github.io/audit-writer/v1",
-		"another kind, v2":    "audit.truvity.github.io/audit-query/v2",
-		"another kind, v1":    "truvity.github.io/audit-query/v1",
+		"v3":                  "audit.truvity.github.io/audit-query/v3",
+		"the old group at v2": "truvity.github.io/audit-query/v2",
+		"the new group at v1": "audit.truvity.github.io/audit-query/v1",
+		"another kind, v2":    "audit.truvity.github.io/audit-writer/v2",
+		"another kind, v1":    "truvity.github.io/audit-writer/v1",
 		"not of the form":     "v2",
-		"another group":       "example.com/audit-writer/v2",
+		"another group":       "example.com/audit-query/v2",
 	} {
-		_, err := config.LoadWriter(write(t, "apiVersion: "+v+"\n"+minimalWriter))
+		_, err := config.LoadQuery(writeAs(t, "", "apiVersion: "+v+"\n"+minimalQuery))
 		if err == nil || !strings.Contains(err.Error(), "apiVersion") {
 			t.Errorf("%s: accepted, or the refusal does not name the key: %v", name, err)
 		}
@@ -582,14 +585,14 @@ func TestTheAPIVersionIsV2OrTheDeprecatedV1(t *testing.T) {
 // environment variable name a secret, and the file's secrets are the environment.
 func TestAVersion1FileIsConvertedAndItsEnvFieldsBecomeSecrets(t *testing.T) {
 	t.Setenv("AUDIT_TEST_DB_PASSWORD", "from-the-environment")
-	body := minimalWriter + "database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n" +
-		"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', tokenEnv: AUDIT_TEST_DB_PASSWORD}}}\n"
-	w, err := config.LoadWriter(write(t, body))
+	body := "grants: /g.yaml\nsink: {url: 'http://audit:8080'}\n" +
+		"database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"
+	w, err := config.LoadQuery(write(t, body))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Database.PasswordSecret != "AUDIT_TEST_DB_PASSWORD" || w.Keys.Transit.OpenBAO.TokenSecret != "AUDIT_TEST_DB_PASSWORD" {
-		t.Errorf("the Env fields were not carried to Secret: %+v %+v", w.Database, w.Keys.Transit.OpenBAO)
+	if w.Database.PasswordSecret != "AUDIT_TEST_DB_PASSWORD" {
+		t.Errorf("the Env fields were not carried to Secret: %+v", w.Database)
 	}
 	if got := w.SecretReader().Source(); got != config.SourceEnv {
 		t.Errorf("a converted file reads its secrets from %q, want env", got)
@@ -599,7 +602,7 @@ func TestAVersion1FileIsConvertedAndItsEnvFieldsBecomeSecrets(t *testing.T) {
 		t.Errorf("the converted password does not resolve: %v", err)
 	}
 	// A v2 file does not take the old spelling: it is not v1's reading.
-	_, err = config.LoadWriter(write(t, "apiVersion: audit.truvity.github.io/audit-writer/v2\n"+minimalWriter+
+	_, err = config.LoadQuery(write(t, "apiVersion: audit.truvity.github.io/audit-query/v2\ngrants: /g.yaml\nsink: {url: 'http://audit:8080'}\n"+
 		"database: {url: 'postgres://u@h/db', passwordEnv: X}\n"))
 	if err == nil || !strings.Contains(err.Error(), "passwordEnv") {
 		t.Errorf("passwordEnv in a version-2 file was accepted or not named: %v", err)
@@ -645,6 +648,14 @@ func TestTheFrozenVersion1SchemasStillAcceptTheVersion1Examples(t *testing.T) {
 			_, err2 = config.LoadWriterLambda(p)
 		case "audit-verify":
 			_, err2 = config.LoadVerify(p)
+		}
+		// A version-1 file that names the archive's bucket cannot be converted:
+		// the bucket is now the deployment document's presets.
+		if strings.Contains(string(raw), "archive:") {
+			if err2 == nil || !strings.Contains(err2.Error(), "presets") {
+				t.Errorf("%s: a v1 file with an archive bucket: %v; want a refusal pointing at presets", c.file, err2)
+			}
+			continue
 		}
 		if err2 != nil {
 			t.Errorf("%s: a v1 file is not read: %v", c.file, err2)
@@ -744,7 +755,7 @@ func TestTheSSMSourceReadsOneParameterUnderItsRootDecrypted(t *testing.T) {
 }
 
 func TestTheSecretsBlockIsHeldToItsSource(t *testing.T) {
-	const lambda = "deployment: /d\narchive: {bucket: {name: b}}\ndedupe: {dynamodb: {table: t}}\n"
+	const lambda = "deployment: /d\narchive: {}\ndedupe: {dynamodb: {table: t}}\n"
 	for name, c := range map[string]struct {
 		block string
 		ok    bool
@@ -761,7 +772,7 @@ func TestTheSecretsBlockIsHeldToItsSource(t *testing.T) {
 		"another source":            {"secrets: {source: vault, root: /x}\n", false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := config.LoadWriterLambda(write(t, "apiVersion: audit.truvity.github.io/audit-writer-lambda/v2\n"+c.block+lambda+
+			_, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda", "apiVersion: audit.truvity.github.io/audit-writer-lambda/v2\n"+c.block+lambda+
 				"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', tokenSecret: openbao/token}}}\n"))
 			if (err == nil) != c.ok {
 				t.Errorf("ok = %v, got %v", c.ok, err)
@@ -774,12 +785,12 @@ func TestTheSecretsBlockIsHeldToItsSource(t *testing.T) {
 // sha256sum prints, so that the writer's record of it can be checked by anyone
 // holding the file.
 func TestTheLoaderRecordsTheDigestOfWhatItRead(t *testing.T) {
-	path := write(t, minimalWriter)
+	path := writeAs(t, "audit-writer", minimalWriter)
 	w, err := config.LoadWriter(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Source.File != path || w.Source.Digest != config.DigestBytes([]byte(minimalWriter)) {
+	if w.Source.File != path || w.Source.Digest != config.DigestBytes([]byte("apiVersion: audit.truvity.github.io/audit-writer/v2\n"+minimalWriter)) {
 		t.Errorf("source = %+v", w.Source)
 	}
 	if got, _ := config.DigestFile(path); got != w.Source.Digest {
@@ -825,14 +836,15 @@ func TestTheDocumentSchemasAcceptWhatTheCodeAcceptsAndRefuseWhatItWouldNot(t *te
 		name, doc string
 		ok        bool
 	}{
+		{"audit-deployment", "presets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false}, // version 1 has no presets
 		{"audit-deployment", "profiles:\n  security: {frameworks: [iso27001]}\n", true},
 		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v2\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v2\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
-		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
+		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v2\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
+		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v2\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
+		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v1\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
 		{"audit-deployment", "profiles: {}\n", false},
-		{"audit-deployment", "profiles:\n  a/b: {frameworks: [iso27001]}\n", false},
-		{"audit-deployment", "profiles:\n  security: {frameworks: [iso27001], retention: 1}\n", false},
+		{"audit-deployment", "presets: {standard: {bucket: b}}\nprofiles:\n  a/b: {frameworks: [iso27001]}\n", false},
+		{"audit-deployment", "presets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001], retention: 1}\n", false},
 		{"audit-grants", "rules:\n  - name: r\n    grant: {all_tenants: true, profiles: [security], operations: [search]}\n", true},
 		{"audit-grants", "rules:\n  - name: r\n    grant: {all_tenants: true, profiles: [security], operations: [serach]}\n", false},
 		{"audit-grants", "presets: [{name: other}]\n", false},
@@ -862,7 +874,7 @@ func TestTheEnvSourceIsRefusedOnLambda(t *testing.T) {
 	if strings.Contains(err.Error(), "AUDIT_TEST_DB_PASSWORD") {
 		t.Errorf("the refusal quotes the name: %v", err)
 	}
-	w, err := config.LoadWriter(write(t, minimalWriter+"database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"))
+	w, err := config.LoadQuery(write(t, minimalQuery[:strings.Index(minimalQuery, "database")]+"database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -912,22 +924,19 @@ func TestAVersion1FileWithEnvFieldsStillLoadsWithAWarningAndIsRefusedOnLambda(t 
 	t.Setenv("AUDIT_TEST_ACCESS_KEY", "key-value-1")
 	t.Setenv("AUDIT_TEST_SECRET_KEY", "key-value-2")
 	t.Setenv("AUDIT_TEST_DB_PASSWORD", "pw-value")
-	body := strings.Replace(minimalWriter, "    name: audit-archive\n",
-		"    name: audit-archive\n    credentialsEnv: {accessKeyID: AUDIT_TEST_ACCESS_KEY, secretAccessKey: AUDIT_TEST_SECRET_KEY}\n", 1) +
-		"database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"
+	body := "deployment: /d.yaml\ndatabase: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"
 	file := write(t, body)
-	if err := config.ValidateLegacy("audit-writer", mustDoc(t, body)); err != nil {
-		t.Fatalf("the frozen v1 schema refuses passwordEnv and credentialsEnv: %v", err)
+	if err := config.ValidateLegacy("audit-purge", mustDoc(t, body)); err != nil {
+		t.Fatalf("the frozen v1 schema refuses passwordEnv: %v", err)
 	}
-	w, err := config.LoadWriter(file)
+	w, err := config.LoadPurge(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Database.PasswordSecret != "AUDIT_TEST_DB_PASSWORD" || w.Archive.Bucket.CredentialsSecret == nil ||
-		w.Archive.Bucket.CredentialsSecret.AccessKeyID != "AUDIT_TEST_ACCESS_KEY" {
+	if w.Database.PasswordSecret != "AUDIT_TEST_DB_PASSWORD" {
 		t.Errorf("the Env fields were not carried: %+v", w)
 	}
-	for _, want := range []string{"deprecated", "passwordEnv", "credentialsEnv"} {
+	for _, want := range []string{"deprecated", "passwordEnv"} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("the deprecation warning lacks %q: %s", want, logs.String())
 		}
@@ -941,7 +950,7 @@ func TestAVersion1FileWithEnvFieldsStillLoadsWithAWarningAndIsRefusedOnLambda(t 
 		t.Errorf("off Lambda the converted password does not resolve: %v", err)
 	}
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "audit-writer")
-	if _, err := config.LoadWriter(file); err != nil {
+	if _, err := config.LoadPurge(file); err != nil {
 		t.Fatalf("a v1 file that names a secret no longer loads on Lambda: %v", err)
 	}
 	if _, err := w.Database.PoolConfig(context.Background(), config.NewSecrets(w.Secrets)); err == nil || !strings.Contains(err.Error(), "AWS Lambda") {
@@ -958,42 +967,33 @@ func mustDoc(t *testing.T, body string) any {
 	return doc
 }
 
-// An archive at an endpoint of its own is an S3-compatible store: it takes the
-// region `auto`, no Object Lock, and static credentials from the installation's
-// state store rather than from the file.
-func TestAnS3CompatibleArchiveIsUnlockedAndAutoRegioned(t *testing.T) {
+// Where the archive is, and the Object Lock it is written under, is the
+// deployment document's presets and no longer the process's file: the file keeps
+// the state root the credentials are read below, and refuses the old keys.
+func TestTheArchiveBlockHoldsNoBucketOrLock(t *testing.T) {
 	const head = "apiVersion: audit.truvity.github.io/audit-writer/v2\ndeployment: /d.yaml\nanonymousWrites: true\n"
-	w, err := config.LoadWriter(write(t, head+"archive:\n  bucket: {name: b, endpoint: 'https://r2.example.test'}\n  lockMode: none\n"+
-		"  credentials: {root: /audit/main, address: internal/archive}\n"))
+	w, err := config.LoadWriter(writeAs(t, "audit-writer", head+"archive: {stateRoot: /audit/main, ca: /etc/ca.crt, kmsKey: alias/a}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Archive.Bucket.Region != "auto" {
-		t.Errorf("region = %q, want auto", w.Archive.Bucket.Region)
-	}
-	if w.Archive.Credentials == nil || w.Archive.Credentials.Address != "internal/archive" {
-		t.Errorf("credentials = %+v", w.Archive.Credentials)
+	if w.Archive.StateRoot != "/audit/main" || w.Archive.KMSKey != "alias/a" {
+		t.Errorf("archive = %+v", w.Archive)
 	}
 	for name, body := range map[string]string{
-		"a lock mode left to its default": "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}}\n",
-		"compliance":                      "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}, lockMode: compliance}\n",
-		"governance":                      "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}, lockMode: governance}\n",
-		"credentials on AWS":              "archive: {bucket: {name: b}, lockMode: none, credentials: {root: /a, address: internal/archive}}\n",
-		"credentials twice": "archive:\n  bucket: {name: b, endpoint: 'https://r2.example.test', credentialsSecret: {accessKeyID: a, secretAccessKey: s}}\n" +
-			"  lockMode: none\n  credentials: {root: /a, address: internal/archive}\n",
-		"credentials without an address": "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}, lockMode: none, credentials: {root: /a}}\n",
+		"a bucket":    "archive: {bucket: {name: b}}\n",
+		"a lock mode": "archive: {lockMode: none}\n",
+		"a prefix":    "archive: {prefix: app}\n",
+		"credentials": "archive: {credentials: {root: /a, address: internal/archive}}\n",
+		"an endpoint": "archive: {endpoint: 'https://r2.example.test'}\n",
 	} {
-		_, err := config.LoadWriter(write(t, head+body))
-		if err == nil {
+		if _, err := config.LoadWriter(writeAs(t, "audit-writer", head+body)); err == nil {
 			t.Errorf("%s: the file was accepted", name)
-			continue
 		}
-		t.Logf("%s: %v", name, err)
 	}
 }
 
 func TestKeysByPurposeAreHeldToTheirAdapter(t *testing.T) {
-	const head = "apiVersion: audit.truvity.github.io/audit-writer/v2\ndeployment: /d.yaml\nanonymousWrites: true\narchive: {bucket: {name: b}}\n"
+	const head = "apiVersion: audit.truvity.github.io/audit-writer/v2\ndeployment: /d.yaml\nanonymousWrites: true\narchive: {}\n"
 	good := []string{
 		"keys: {adapter: kms, instance: i, pseudonym: alias/p, state: {root: /a, address: internal/p}}\n",
 		"keys: {adapter: kms, instance: i, seal: alias/s, archive: alias/a}\n",
@@ -1002,7 +1002,7 @@ func TestKeysByPurposeAreHeldToTheirAdapter(t *testing.T) {
 		"keys: {provider: none}\n",
 	}
 	for _, body := range good {
-		if _, err := config.LoadWriter(write(t, head+body)); err != nil {
+		if _, err := config.LoadWriter(writeAs(t, "audit-writer", head+body)); err != nil {
 			t.Errorf("%s: %v", body, err)
 		}
 	}
@@ -1018,15 +1018,15 @@ func TestKeysByPurposeAreHeldToTheirAdapter(t *testing.T) {
 		"kms with a server":       "keys: {adapter: kms, seal: alias/s, openbao: {address: 'https://o.example.test', tokenSecret: t}}\n",
 	}
 	for name, body := range bad {
-		if _, err := config.LoadWriter(write(t, head+body)); err == nil {
+		if _, err := config.LoadWriter(writeAs(t, "audit-writer", head+body)); err == nil {
 			t.Errorf("%s: the file was accepted", name)
 		}
 	}
 }
 
 func TestTheNotaryNamesItsSealKeyOneWay(t *testing.T) {
-	const arch = "apiVersion: audit.truvity.github.io/audit-notary/v2\narchive: {bucket: {name: b}}\n"
-	n, err := config.LoadNotary(write(t, arch+"keys: {adapter: kms, instance: i, seal: alias/seal}\n"))
+	const arch = "apiVersion: audit.truvity.github.io/audit-notary/v2\ndeployment: /d.yaml\narchive: {}\n"
+	n, err := config.LoadNotary(writeAs(t, "audit-notary", arch+"keys: {adapter: kms, instance: i, seal: alias/seal}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1038,7 +1038,7 @@ func TestTheNotaryNamesItsSealKeyOneWay(t *testing.T) {
 		"keys without a seal": arch + "keys: {adapter: kms, instance: i, archive: alias/a}\n",
 		"neither":             arch,
 	} {
-		if _, err := config.LoadNotary(write(t, body)); err == nil {
+		if _, err := config.LoadNotary(writeAs(t, "audit-notary", body)); err == nil {
 			t.Errorf("%s: the file was accepted", name)
 		}
 	}

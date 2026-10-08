@@ -108,16 +108,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// A profile whose frameworks demand a lock this bucket is not written with
-	// is refused before a copy lands where it could be deleted (ADR 0014).
-	if err := profile.CheckLockMode(profiles, cfg.Archive.LockMode); err != nil {
-		return err
-	}
-	archive, err := cli.OpenArchiveFrom(ctx, cfg.Archive, cfg.SecretReader())
-	if err != nil {
-		return err
-	}
-	destinations, err := cli.OpenDestinations(ctx, cfg.Archive, profiles, cfg.SecretReader())
+	// Each preset is its own store. A profile whose preset is not configured, or
+	// whose frameworks demand a lock its preset's bucket is not written with, is
+	// refused before a copy lands where it could be deleted (ADR 0014).
+	archive, err := cli.OpenArchive(ctx, d, profiles, cfg.Archive, cfg.SecretReader())
 	if err != nil {
 		return err
 	}
@@ -168,7 +162,6 @@ func run() error {
 	}
 	w, err := writer.Open(ctx, writer.Config{
 		Archive:          archive,
-		Destinations:     destinations,
 		Profiles:         profiles,
 		Keys:             provider,
 		Catalogues:       found,
@@ -224,8 +217,8 @@ func run() error {
 		os.Exit(0)
 	}()
 
-	slog.Info("audit-writer-lambda", "bucket", cfg.Archive.Bucket.Name, "profiles", len(profiles),
-		"table", table.Table, "window", window.String(), "lock", cfg.Archive.LockMode)
+	slog.Info("audit-writer-lambda", "presets", len(d.Presets), "profiles", len(profiles),
+		"table", table.Table, "window", window.String())
 	lambda.StartWithOptions(h.Handle, lambda.WithContext(ctx))
 	return nil
 }

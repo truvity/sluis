@@ -19,7 +19,6 @@ import (
 	"github.com/truvity/sluis/audit"
 	"github.com/truvity/sluis/audit/internal/config/schema"
 	"github.com/truvity/sluis/audit/sdk/sink"
-	"github.com/truvity/sluis/audit/store/s3store"
 )
 
 // Group is the group of every apiVersion in this repository's documents:
@@ -97,6 +96,13 @@ func versionOf(doc any, name string) (version, error) {
 // secret (`passwordSecret`, ...), and the file's `secrets` is the environment,
 // which is where version 1 read them from.
 func upgrade(doc map[string]any) (map[string]any, error) {
+	if a, ok := doc["archive"].(map[string]any); ok {
+		if _, v1 := a["bucket"]; v1 || a["lockMode"] != nil || a["prefix"] != nil || a["credentials"] != nil {
+			return nil, errors.New("archive names the bucket, prefix, lock mode or credentials, which are now the " +
+				"deployment document's `presets` (each install preset has a store of its own, and the lock is the " +
+				"preset's): move them there, and leave archive.stateRoot, ca and kmsKey")
+		}
+	}
 	renamed := false
 	var fields []string
 	var walk func(v any) any
@@ -340,9 +346,6 @@ func (w *WriterLambda) finish() error {
 	if n := b2i(w.Dedupe.DynamoDB != nil); n != 1 {
 		return fmt.Errorf("dedupe names %d stores and must name exactly one of dynamodb", n)
 	}
-	if err := w.Archive.finish(true); err != nil {
-		return err
-	}
 	if err := w.Keys.check(); err != nil {
 		return err
 	}
@@ -380,8 +383,8 @@ func (w *Writer) finish() error {
 			"the replica that saw the original, so a redelivery landing on another would be written twice")
 	}
 	if w.Mode == "writer" {
-		if err := w.Archive.finish(true); err != nil {
-			return err
+		if w.Archive == nil {
+			w.Archive = &Archive{}
 		}
 		if err := w.Keys.check(); err != nil {
 			return err
@@ -622,16 +625,9 @@ func (q *Query) finish() error {
 		if q.Exports.LinkValid == 0 {
 			q.Exports.LinkValid = Duration(60 * 60 * time.Second)
 		}
-		if q.Archive != nil && q.Exports.Bucket.Name == q.Archive.Bucket.Name &&
-			q.Exports.Bucket.Endpoint == q.Archive.Bucket.Endpoint {
-			return errors.New("exports.bucket must not be the archive's bucket: an export is an unlocked copy meant to " +
-				"be cleared, and the archive's policy denies every delete, so it would stay forever")
-		}
 	}
-	if q.Archive != nil {
-		if err := q.Archive.finish(false); err != nil {
-			return err
-		}
+	if q.Archive != nil && q.Deployment == "" {
+		return errors.New("archive needs deployment: the archive is the stores of the deployment's presets")
 	}
 	if err := q.Keys.check(); err != nil {
 		return err
@@ -665,9 +661,6 @@ func (o *Observe) finish() error {
 			return err
 		}
 	}
-	if err := o.Archive.finish(false); err != nil {
-		return err
-	}
 	return checkDatabase(&o.Database)
 }
 
@@ -684,9 +677,6 @@ func (n *Notary) finish() error {
 	}
 	if n.Settle == 0 {
 		n.Settle = Duration(DefaultSettle)
-	}
-	if err := n.Archive.finish(true); err != nil {
-		return err
 	}
 	if err := n.Keys.check(); err != nil {
 		return err
@@ -718,7 +708,7 @@ func (v *Verify) finish() error {
 			v.Seals.Grace = Duration(DefaultGrace)
 		}
 	}
-	return v.Archive.finish(false)
+	return nil
 }
 
 func (p *Purge) finish() error { return checkDatabase(&p.Database) }
@@ -738,36 +728,6 @@ func (c *ClockSync) finish() error {
 }
 
 func (m *Migrate) finish() error { return checkDatabase(&m.Database) }
-
-func (a *Archive) finish(writes bool) error {
-	if a == nil {
-		return nil
-	}
-	if writes && a.LockMode == "" {
-		a.LockMode = "compliance"
-	}
-	if a.Bucket.Endpoint != "" {
-		// An S3-compatible store: addressed with the region `auto` unless the
-		// file says otherwise, and never under Object Lock, which is an AWS S3
-		// guarantee another store does not make.
-		if a.Bucket.Region == "" {
-			a.Bucket.Region = s3store.AutoRegion
-		}
-		if err := s3store.CheckEndpointLock(a.Bucket.Endpoint, s3store.LockMode(a.LockMode)); a.LockMode != "" && err != nil {
-			return fmt.Errorf("archive.lockMode: %w", err)
-		}
-	}
-	if c := a.Credentials; c != nil {
-		if a.Bucket.CredentialsSecret != nil {
-			return errors.New("archive.credentials and archive.bucket.credentialsSecret both name the store's credentials: use one")
-		}
-		if a.Bucket.Endpoint == "" {
-			return errors.New("archive.credentials are static credentials for a store at an endpoint of its own; " +
-				"on AWS the workload's identity is the credential (set archive.bucket.endpoint, or leave credentials out)")
-		}
-	}
-	return nil
-}
 
 // adoptKey makes the archive purpose of the keys block the key objects are
 // encrypted with (archive.kmsKey), so there is one place it is read from. Naming

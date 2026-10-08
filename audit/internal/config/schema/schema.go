@@ -296,28 +296,18 @@ func keysDef() m {
 	}
 }
 
-// archive is the archive's schema for a command that writes to it, which
-// takes a lock mode, and for the writer, which also encrypts.
-func archive(writes, encrypts bool) m {
+// archive is what a process adds to the deployment's presets. Where the archive
+// is -- each preset's bucket, prefix, region and endpoint -- is the deployment
+// document's, and so is the Object Lock (a property of the preset).
+func archive(encrypts bool) m {
 	props := m{
-		"bucket": def("bucket"),
-		"prefix": str("The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart."),
+		"stateRoot": str("The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`."),
+		"ca":        str("A bundle of certificate authorities, for a store whose certificate is not signed by a public root."),
 	}
-	if writes {
-		props["lockMode"] = m{
-			"enum":        []string{"compliance", "governance", "none"},
-			"default":     "compliance",
-			"description": "The Object Lock mode every object is written in: compliance (the record tier), governance (a lock a privileged role can shorten), or none (the attested tier, for a store without Object Lock). A process refuses to start when a profile demands a stricter mode than this.",
-		}
-	}
-	props["credentials"] = obj("The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).", m{
-		"root":    str("The SSM path prefix of the installation, for example /audit/main."),
-		"address": str("The key below the root, for example internal/archive."),
-	}, "root", "address")
 	if encrypts {
-		props["kmsKey"] = str("The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.")
+		props["kmsKey"] = str("The key objects are encrypted with where a preset names no `key_alias` of its own. Unset uses the bucket's default encryption, which a deployment should still be setting.")
 	}
-	return obj("Where the archive is and how it is written.", props, "bucket")
+	return obj("What the process adds to the deployment's presets: where their static credentials are, and the default key.", props)
 }
 
 func listen() m { return ref(policy + "fragments/listen.json") }
@@ -384,7 +374,7 @@ func writerSchema() m {
 		"workloads":       str("Path to the file naming the issuers trusted to say which workload is publishing, and which source each speaks for. Exactly one of `workloads` and `anonymousWrites`."),
 		"anonymousWrites": m{"const": true, "description": "Accept writes over HTTP from callers nobody verified, stamped with no observer. For a trial install only."},
 		"catalogues":      str("A directory of catalogues to register at start-up."),
-		"archive":         archive(true, true),
+		"archive":         archive(true),
 		"database": m{"$ref": "#/$defs/postgres",
 			"description": "The shared deduplication table and the catalogue registry, as the writer's own database role: it holds those and none of the index, which audit-observe writes. Without it the writer deduplicates in process and may only run one replica."},
 		"replicas":         integer("How many writers share this stream. Above one it needs a database, and with local keys a directory every replica shares.", 1, 1),
@@ -446,7 +436,6 @@ func writerSchema() m {
 						},
 					},
 					"else": m{
-						"required":   []string{"archive"},
 						"properties": m{"forward": false},
 						"not":        m{"required": []string{"stream", "consume"}},
 					}},
@@ -458,7 +447,7 @@ func writerLambdaSchema() m {
 	props := m{
 		"deployment":       str("Path to the profile configuration: which framework profiles each profile is composed from. In the function's package, at `/var/task/deployment.yaml` in the shipped layout."),
 		"catalogues":       str("A directory of catalogues to register at start-up."),
-		"archive":          archive(true, true),
+		"archive":          archive(true),
 		"keys":             def("keys"),
 		"forgetIdentities": boolean("Do not keep the identity behind each pseudonym, sealed under its key. By default it is kept, so that resolve can find it."),
 		"dedupe": m{
@@ -477,7 +466,7 @@ func writerLambdaSchema() m {
 	}
 	return document("audit-writer-lambda", "audit-writer-lambda",
 		"The configuration of audit-writer-lambda, the write path as an AWS Lambda behind an SQS event source mapping."+secretsNote,
-		props, []string{"deployment", "archive", "dedupe"}, []string{"openbao", "keys", "duration"}, nil)
+		props, []string{"deployment", "dedupe"}, []string{"openbao", "keys", "duration"}, nil)
 }
 
 func querySchema() m {
@@ -492,7 +481,7 @@ func querySchema() m {
 		"sink":       def("sink"),
 		"require":    requireEmitter(),
 		"archive": func() m {
-			a := archive(false, false)
+			a := archive(false)
 			a["description"] = "The archive the records are in: what the s3scan searcher reads. Get answers where a copy is and, until seals vouch for it, nothing about whether it has been verified."
 			return a
 		}(),
@@ -509,16 +498,18 @@ func querySchema() m {
 		props, []string{"grants", "sink"}, []string{"postgres", "sink", "openbao", "keys", "duration"},
 		m{"allOf": []any{
 			m{"if": m{"properties": m{"searcher": m{"const": "s3scan"}}, "required": []string{"searcher"}},
-				"then": m{"required": []string{"archive"}},
+				"then": m{"required": []string{"archive", "deployment"}},
 				"else": m{"required": []string{"database"}}},
+			m{"if": m{"required": []string{"archive"}}, "then": m{"required": []string{"deployment"}}},
 		}})
 }
 
 func observeSchema() m {
 	props := m{
-		"listen": listen(),
+		"listen":     listen(),
+		"deployment": str("Path to the profile configuration. Its `presets` are the stores followed, and its `profiles` say which preset each profile is in."),
 		"archive": func() m {
-			a := archive(false, false)
+			a := archive(false)
 			a["description"] = "The archive to follow. Observe only reads it: it lists, and gets the objects and the catalogues beside them."
 			return a
 		}(),
@@ -542,13 +533,13 @@ func observeSchema() m {
 	}
 	return document("audit-observe", "audit-observe",
 		"The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0020)."+secretsNote,
-		props, []string{"archive", "database"}, []string{"postgres", "duration"}, nil)
+		props, []string{"deployment", "database"}, []string{"postgres", "duration"}, nil)
 }
 
 func verifySchema() m {
 	props := m{
 		"deployment": str("Path to the profile configuration; the check holds each object's lock to what its profile demands."),
-		"archive":    archive(false, false),
+		"archive":    archive(false),
 		"sink":       m{"$ref": "#/$defs/sink", "description": "The writer this job records what it checked through."},
 		"require":    requireEmitter(),
 		"profiles":   m{"type": "array", "minItems": 1, "uniqueItems": true, "items": str("A profile name."), "description": "The profiles whose objects to check. Unset checks every profile the deployment composes."},
@@ -563,7 +554,7 @@ func verifySchema() m {
 	}
 	return document("audit-verify", "audit verify",
 		"The configuration of `audit verify --config`, which checks record objects against the bucket contract and reports what it finds."+secretsNote,
-		props, []string{"deployment", "archive"}, []string{"sink", "duration"}, m{"dependentRequired": m{"require": []string{"sink"}}})
+		props, []string{"deployment"}, []string{"sink", "duration"}, m{"dependentRequired": m{"require": []string{"sink"}}})
 }
 
 // signer is where the notary's key is: exactly one way.
@@ -595,9 +586,10 @@ func signer() m {
 
 func notarySchema() m {
 	props := m{
-		"archive": archive(true, true),
-		"signer":  m{"$ref": "#/$defs/signer", "deprecated": true, "description": "The seal key in the first releases' shape. Use `keys.seal`; exactly one of the two."},
-		"keys":    m{"$ref": "#/$defs/keys", "description": "The seal key through the storage port: `keys.seal` names it, and the adapter says which service holds it. Exactly one of this and `signer`."},
+		"deployment": str("Path to the profile configuration. Its `presets` are the stores seals are put in, each profile's in the store of its preset."),
+		"archive":    archive(true),
+		"signer":     m{"$ref": "#/$defs/signer", "deprecated": true, "description": "The seal key in the first releases' shape. Use `keys.seal`; exactly one of the two."},
+		"keys":       m{"$ref": "#/$defs/keys", "description": "The seal key through the storage port: `keys.seal` names it, and the adapter says which service holds it. Exactly one of this and `signer`."},
 		"profiles": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": str("A profile name."),
 			"description": "The profiles to seal. Unset seals every profile the archive has records for."},
 		"settle":  duration("How long after an hour has ended it is sealed, so that a batch put late in the hour it is keyed by is in the seal. An hour is never sealed sooner.", "10m"),
@@ -606,7 +598,7 @@ func notarySchema() m {
 	}
 	return document("audit-notary", "audit-notary",
 		"The configuration of `audit-notary --config`, which seals the hours of the archive: one signed seal per profile, tenant and hour, chained through `prev`."+secretsNote,
-		props, []string{"archive"}, []string{"sink", "duration", "openbao"}, m{
+		props, []string{"deployment"}, []string{"sink", "duration", "openbao"}, m{
 			"dependentRequired": m{"require": []string{"sink"}},
 			"oneOf": []any{
 				m{"required": []string{"signer"}, "properties": m{"keys": false}},

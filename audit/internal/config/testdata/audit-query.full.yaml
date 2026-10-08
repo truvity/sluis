@@ -16,9 +16,8 @@ sink:
   tokenFile: /var/run/audit/token
   expect: archived
 archive:
-  bucket:
-    name: audit-archive
-  prefix: app
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
 exports:
   bucket:
     name: audit-exports

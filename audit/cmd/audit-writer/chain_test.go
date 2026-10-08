@@ -58,6 +58,9 @@ var _ sqssink.API = (*queue)(nil)
 func load(t *testing.T, body string) *config.Writer {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "config.yaml")
+	if !strings.Contains(body, "apiVersion:") {
+		body = "apiVersion: audit.truvity.github.io/audit-writer/v2\n" + body
+	}
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +153,7 @@ func TestTheGuardRefusesAReceiverThatCannotGiveWhatIsRequired(t *testing.T) {
 }
 
 func TestAWriterIsArchivedAndTheGuardHoldsIt(t *testing.T) {
-	cfg := load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {bucket: {name: b}}\n")
+	cfg := load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {}\n")
 	if cfg.Require != "archived" {
 		t.Errorf("a writer's default require is archived, got %q", cfg.Require)
 	}
@@ -162,7 +165,7 @@ func TestAWriterIsArchivedAndTheGuardHoldsIt(t *testing.T) {
 }
 
 func TestAWriterConsumesFromSQSOrNATSAsConfigured(t *testing.T) {
-	cfg := load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {bucket: {name: b}}\n"+
+	cfg := load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {}\n"+
 		"consume: {sqs: {queueUrl: 'https://sqs.example.test/ACCOUNT/audit', batch: 5, visibility: 2m}}\n")
 	if cfg.Consume == nil || cfg.Consume.SQS == nil || cfg.Consume.SQS.Batch != 5 || cfg.Consume.SQS.Visibility.D().Minutes() != 2 {
 		t.Fatalf("consume.sqs did not load: %+v", cfg.Consume)
@@ -175,7 +178,7 @@ func TestAWriterConsumesFromSQSOrNATSAsConfigured(t *testing.T) {
 	stop()
 
 	// The stream shorthand is consume.nats, carried with its defaults.
-	cfg = load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {bucket: {name: b}}\nstream: {nats: {url: 'nats://n:4222'}}\n")
+	cfg = load(t, "deployment: /d.yaml\nanonymousWrites: true\narchive: {}\nstream: {nats: {url: 'nats://n:4222'}}\n")
 	if cfg.Consume == nil || cfg.Consume.NATS == nil || cfg.Consume.NATS.Name != "AUDIT" || cfg.Consume.NATS.Batch != 100 {
 		t.Errorf("stream was not read as consume.nats with its defaults: %+v", cfg.Consume)
 	}

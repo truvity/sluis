@@ -109,19 +109,13 @@ func run() error {
 	}
 
 	var archive store.Store
-	var destinations map[string]store.Store
 	var provider keys.Provider
 	if cfg.Mode == "writer" {
-		// A profile whose frameworks demand a lock this store does not
-		// write is refused here, before a single copy lands where it could
-		// be deleted: docs/decisions/0014-lock-modes-and-store-tiers.md.
-		if err := profile.CheckLockMode(profiles, cfg.Archive.LockMode); err != nil {
-			return err
-		}
-		if archive, err = cli.OpenArchiveFrom(ctx, *cfg.Archive, cfg.SecretReader()); err != nil {
-			return err
-		}
-		if destinations, err = cli.OpenDestinations(ctx, *cfg.Archive, profiles, cfg.SecretReader()); err != nil {
+		// Each preset is its own store. A profile whose preset is not
+		// configured, or whose frameworks demand a lock its preset's bucket is
+		// not written with, is refused here, before a single copy lands where
+		// it could be deleted: docs/decisions/0014-lock-modes-and-store-tiers.md.
+		if archive, err = cli.OpenArchive(ctx, d, profiles, *cfg.Archive, cfg.SecretReader()); err != nil {
 			return err
 		}
 		if provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader()); err != nil {
@@ -230,7 +224,6 @@ func run() error {
 		}
 		w, err := writer.Open(ctx, writer.Config{
 			Archive:          archive,
-			Destinations:     destinations,
 			Profiles:         profiles,
 			Keys:             provider,
 			Catalogues:       found,
@@ -353,11 +346,7 @@ func run() error {
 		}
 	}()
 
-	bucket := ""
-	if cfg.Archive != nil {
-		bucket = cfg.Archive.Bucket.Name
-	}
-	slog.Info("audit-writer", "mode", cfg.Mode, "listen", cfg.Listen.Address, "bucket", bucket, "profiles", len(profiles))
+	slog.Info("audit-writer", "mode", cfg.Mode, "listen", cfg.Listen.Address, "presets", len(d.Presets), "profiles", len(profiles))
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

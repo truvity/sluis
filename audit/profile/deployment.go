@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"sort"
+	"strings"
 
 	"sigs.k8s.io/yaml"
 )
@@ -21,11 +23,11 @@ type Deployment struct {
 	// same document and is read with a deprecation warning.
 	APIVersion string           `json:"apiVersion,omitempty"`
 	Profiles   map[string]Entry `json:"profiles"`
-	// Preset is the install preset the deployment asks for: operational,
-	// standard or attested. Optional. Unset, the preset is the lowest one that
-	// satisfies every profile (Derive); set, it may be stronger than that and is
-	// refused when weaker (ResolvePreset).
-	Preset Preset `json:"preset,omitempty"`
+	// Presets are the install presets this installation uses, each with the
+	// storage its profiles' copies land in. A profile's preset is the lowest its
+	// framework profiles can be kept under, or the stronger one it asked for
+	// (Entry.Preset), and must be one of these (CheckStorage).
+	Presets map[Preset]PresetStorage `json:"presets,omitempty"`
 	// ExternalIdentifiersAreOpaque is the deployment saying that the
 	// identifiers it receives for people outside the organisation are already
 	// pseudonyms: identifiers an application minted, which name nobody without
@@ -55,14 +57,43 @@ type Entry struct {
 	// lists none keeps only the actions that name it in their deprecated
 	// `profiles`.
 	Categories []string `json:"categories,omitempty"`
-	// KeyAlias is the alias of the key this destination's objects are encrypted
-	// with, a name and not a key (`alias/...`). Empty is the archive's key.
-	KeyAlias string `json:"key_alias,omitempty"`
 	// Preset is this destination's install preset, when it asks for more than
-	// its framework profiles need. Object Lock is the writer's only for a
-	// destination whose preset is attested.
+	// its framework profiles need; asking for less is refused. It names the
+	// preset, and so the storage, the destination's copies land in.
 	Preset Preset `json:"preset,omitempty"`
 }
+
+// PresetStorage is where one install preset keeps its copies: a bucket of its
+// own, on AWS S3 or on an S3-compatible store.
+//
+// Object Lock is a property of the preset's bucket: the attested preset's is
+// compliance Object Lock on S3, and every other preset's is none.
+type PresetStorage struct {
+	Bucket string `json:"bucket"`
+	// Prefix is the prefix within the bucket every key of this preset lives
+	// under. Required wherever the bucket is shared with another installation.
+	Prefix string `json:"prefix,omitempty"`
+	Region string `json:"region,omitempty"`
+	// Endpoint is the URL of an S3-compatible store that is not AWS. Empty is
+	// AWS S3.
+	Endpoint string `json:"endpoint,omitempty"`
+	// PathStyle addresses the bucket as endpoint/bucket/key, for a store whose
+	// certificate does not cover a bucket subdomain. Only with Endpoint.
+	PathStyle bool `json:"path_style,omitempty"`
+	// Credentials is the address, below the installation's state root, of the
+	// static credentials of a store at an endpoint ({accessKeyID,
+	// secretAccessKey}). Only with Endpoint: on AWS the workload's identity is
+	// the credential.
+	Credentials string `json:"credentials,omitempty"`
+	// KeyAlias is the alias of the KMS key this preset's objects are encrypted
+	// with, a name and not a key (`alias/...`). Empty is the installation's
+	// archive key (or the bucket's default). Only on AWS S3.
+	KeyAlias string `json:"key_alias,omitempty"`
+}
+
+// External reports whether the preset's store is an S3-compatible one that is
+// not AWS.
+func (s PresetStorage) External() bool { return s.Endpoint != "" }
 
 // DeploymentAPIVersion is the version of the deployment document this build
 // writes and reads first. DeploymentAPIVersionV1 is the one before it, which is
@@ -121,14 +152,137 @@ func (d *Deployment) check() error {
 			}
 			seen[c] = true
 		}
-		if e.KeyAlias != "" && !aliasRE.MatchString(e.KeyAlias) {
-			problems = append(problems, fmt.Errorf("deployment: profile %s: key_alias %q must be an alias (alias/<name>), never a key id or ARN", name, e.KeyAlias))
-		}
 		if e.Preset != "" && !e.Preset.Valid() {
 			problems = append(problems, fmt.Errorf("deployment: profile %s: preset %q is not one of operational, standard, attested", name, e.Preset))
 		}
 	}
+	for _, name := range d.presetNames() {
+		problems = append(problems, d.Presets[name].check(name)...)
+	}
 	return errors.Join(problems...)
+}
+
+// presetNames lists the configured presets, weakest first.
+func (d *Deployment) presetNames() []Preset {
+	out := make([]Preset, 0, len(d.Presets))
+	for name := range d.Presets {
+		out = append(out, name)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Rank() != out[j].Rank() {
+			return out[i].Rank() < out[j].Rank()
+		}
+		return out[i] < out[j]
+	})
+	return out
+}
+
+// check is what the strict parse cannot say about one preset's storage.
+func (s PresetStorage) check(name Preset) []error {
+	var problems []error
+	if !name.Valid() {
+		return []error{fmt.Errorf("deployment: presets: %q is not one of operational, standard, attested", name)}
+	}
+	if s.Bucket == "" {
+		problems = append(problems, fmt.Errorf("deployment: preset %s: bucket is required", name))
+	}
+	if s.KeyAlias != "" && !aliasRE.MatchString(s.KeyAlias) {
+		problems = append(problems, fmt.Errorf("deployment: preset %s: key_alias %q must be an alias (alias/<name>), never a key id or ARN", name, s.KeyAlias))
+	}
+	if s.Prefix != "" && (strings.HasPrefix(s.Prefix, "/") || !strings.HasSuffix(s.Prefix, "/")) {
+		problems = append(problems, fmt.Errorf("deployment: preset %s: prefix %q is a path ending in a slash and not starting with one (operational/)", name, s.Prefix))
+	}
+	if s.External() {
+		if u, err := url.Parse(s.Endpoint); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: endpoint %q is not an http(s) URL", name, s.Endpoint))
+		}
+		if s.KeyAlias != "" {
+			problems = append(problems, fmt.Errorf("deployment: preset %s names key_alias %s and its store is the S3-compatible endpoint %s, "+
+				"which is not encrypted under a KMS key of the account: leave key_alias out, or keep the preset on AWS S3", name, s.KeyAlias, s.Endpoint))
+		}
+		if name == Attested {
+			problems = append(problems, fmt.Errorf("deployment: preset attested is on the S3-compatible endpoint %s, which has no Object Lock: "+
+				"the attested preset keeps its objects under compliance Object Lock, which is S3 only. Keep it on AWS S3", s.Endpoint))
+		}
+	} else {
+		if s.Credentials != "" {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials are static credentials for a store at an endpoint; "+
+				"on AWS the workload's identity is the credential (set endpoint, or leave credentials out)", name))
+		}
+		if s.PathStyle {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: path_style is for a store at an endpoint", name))
+		}
+	}
+	return problems
+}
+
+// LockMode is the Object Lock the preset's bucket is written under:
+// compliance for the attested preset and none for every other.
+func (p Preset) LockMode() string {
+	if p.Features().ObjectLock {
+		return "compliance"
+	}
+	return "none"
+}
+
+// CheckStorage holds the deployment's profiles to its presets: every profile's
+// preset (the lowest its framework profiles can be kept under, or the stronger
+// one it asked for) must be one the deployment configures, and at least one
+// preset must be. It composes the profiles, so a profile that names an
+// unknown framework profile, or asks for a weaker preset than it needs, is
+// refused here too.
+func (d *Deployment) CheckStorage(frameworks map[string]*Framework) error {
+	if len(d.Presets) == 0 {
+		return errors.New("deployment: no presets: name the storage of each install preset the profiles use " +
+			"(presets: {standard: {bucket: ..., prefix: ...}})")
+	}
+	needs, err := d.ProfileNeeds(frameworks)
+	if err != nil {
+		return fmt.Errorf("deployment: %w", err)
+	}
+	names := make([]string, 0, len(needs))
+	for name := range needs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var problems []error
+	for _, name := range names {
+		n := needs[name]
+		if _, ok := d.Presets[n.Preset]; !ok {
+			why := "its framework profiles " + strings.Join(n.By, ", ") + " need it"
+			if len(n.By) == 0 {
+				why = "it is the lowest preset its framework profiles can be kept under, or the one it asks for"
+			}
+			problems = append(problems, fmt.Errorf("deployment: profile %s is kept under the %s preset (%s) and presets configures only %s: "+
+				"configure presets.%s, or set the profile's preset to one that is configured",
+				name, n.Preset, why, joinPresets(d.presetNames()), n.Preset))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+func joinPresets(ps []Preset) string {
+	s := make([]string, len(ps))
+	for i, p := range ps {
+		s[i] = string(p)
+	}
+	return strings.Join(s, ", ")
+}
+
+// Features is what the installation provisions: what any of its configured
+// presets does. An installation of an operational and a standard preset runs
+// the notary and has alarms; one with an attested preset has Object Lock on
+// that preset's bucket and pseudonym keys.
+func (d *Deployment) Features() Features {
+	var f Features
+	for name := range d.Presets {
+		g := name.Features()
+		f.Notary = f.Notary || g.Notary
+		f.Alarms = f.Alarms || g.Alarms
+		f.ObjectLock = f.ObjectLock || g.ObjectLock
+		f.PseudonymKeys = f.PseudonymKeys || g.PseudonymKeys
+	}
+	return f
 }
 
 // refuseOldKey names the new key to a document that still uses the old one.
@@ -157,9 +311,6 @@ func refuseOldKey(raw []byte) error {
 // composed profile, and a treatment the deployment has relaxed should not be
 // something a reader has to know to subtract.
 func (d *Deployment) Compose(frameworks map[string]*Framework) (map[string]*Profile, error) {
-	if _, err := d.ResolvePreset(frameworks, ""); err != nil {
-		return nil, fmt.Errorf("deployment: %w", err)
-	}
 	out := make(map[string]*Profile, len(d.Profiles))
 	for name, c := range d.Profiles {
 		p, err := Compose(Composition{Name: name, Frameworks: c.Frameworks}, frameworks)
@@ -171,7 +322,6 @@ func (d *Deployment) Compose(frameworks map[string]*Framework) (map[string]*Prof
 			p.OpaqueExternal = true
 		}
 		p.Categories = append([]string(nil), c.Categories...)
-		p.KeyAlias = c.KeyAlias
 		out[name] = p
 	}
 	needs, err := d.ProfileNeeds(frameworks)

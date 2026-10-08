@@ -5,11 +5,8 @@ secrets:
 deployment: /var/task/deployment.yaml
 catalogues: /var/task/catalogues
 archive:
-  bucket:
-    name: audit-archive
-    region: eu-central-1
-  prefix: app
-  lockMode: governance
+  stateRoot: /audit/main
+  ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit-archive
 keys:
   provider: transit
