@@ -627,7 +627,6 @@ const (
 // begins in GOVERNANCE, observe by IRSA from the kernel cluster.
 func TestTheTruvityShapeIsExpressible(t *testing.T) {
 	rec, _, err := build(t, attested(func(a *auditpulumi.Args) {
-		a.Archive.ObjectLockMode = auditpulumi.Governance
 		a.Observe = &auditpulumi.ObserveArgs{IRSA: irsa("audit", "audit-observe")}
 	}))
 	if err != nil {
@@ -638,8 +637,8 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		if prop(f, "vpcConfig").IsObject() {
 			t.Errorf("%s is in a VPC", fn)
 		}
-		if !strings.Contains(layerFiles(t, rec, fn)["audit.yaml"], "lockMode: governance") {
-			t.Errorf("%s is not in governance mode", fn)
+		if !strings.Contains(layerFiles(t, rec, fn)["audit.yaml"], "lockMode: compliance") {
+			t.Errorf("%s is not in compliance mode", fn)
 		}
 	}
 	if n := layerFiles(t, rec, "audit-notary")["audit.yaml"]; !strings.Contains(n, "seal: alias/audit-seal") {

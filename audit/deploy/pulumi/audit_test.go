@@ -69,7 +69,7 @@ func TestTheArchiveIsLockedVersionedEncryptedAndClosed(t *testing.T) {
 	}
 	lock := rec.one(t, "aws:s3/bucketObjectLockConfiguration:BucketObjectLockConfiguration", "audit-archive")
 	def := prop(lock, "rule").ObjectValue()["defaultRetention"].ObjectValue()
-	if def["mode"].StringValue() != "GOVERNANCE" || def["days"].NumberValue() != 30 {
+	if def["mode"].StringValue() != "COMPLIANCE" || def["days"].NumberValue() != 30 {
 		t.Errorf("default retention: %v", def)
 	}
 	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive")
@@ -90,7 +90,7 @@ func TestTheArchiveIsLockedVersionedEncryptedAndClosed(t *testing.T) {
 }
 
 func TestALockWithoutADefaultRuleIsRefusedInEveryLockedMode(t *testing.T) {
-	for _, mode := range []string{auditpulumi.Governance, auditpulumi.Compliance} {
+	for _, mode := range []string{auditpulumi.Compliance} {
 		_, _, err := build(t, attested(func(a *auditpulumi.Args) {
 			a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = mode, true, 0
 		}))
@@ -158,7 +158,7 @@ func TestLifecycleDaysAreParameters(t *testing.T) {
 }
 
 func TestComplianceNeedsAnAcknowledgementAndThenIsProtected(t *testing.T) {
-	if _, _, err := build(t, attested(func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = auditpulumi.Compliance })); err == nil ||
+	if _, _, err := build(t, attested(func(a *auditpulumi.Args) { a.Archive.AcknowledgeCompliance = false })); err == nil ||
 		!strings.Contains(err.Error(), "AcknowledgeCompliance") {
 		t.Fatalf("COMPLIANCE without the acknowledgement: %v", err)
 	}
@@ -748,14 +748,14 @@ func TestTheLayerHoldsTheConfigurationAndTheProfilesAndCatalogues(t *testing.T) 
 			t.Errorf("the writer's layer lacks %s; has %v", f, keys(w))
 		}
 	}
-	for _, want := range []string{"deployment: /opt/audit/deployment.yaml", "catalogues: /opt/audit/catalogues", "lockMode: governance",
+	for _, want := range []string{"deployment: /opt/audit/deployment.yaml", "catalogues: /opt/audit/catalogues", "lockMode: compliance",
 		"kmsKey: alias/audit-archive", "table: audit-dedupe", "name: acme-audit", "require: archived"} {
 		if !strings.Contains(w["audit.yaml"], want) {
 			t.Errorf("the writer's configuration lacks %q:\n%s", want, w["audit.yaml"])
 		}
 	}
 	n := layerFiles(t, rec, "audit-notary")
-	for _, want := range []string{"adapter: kms", "seal: alias/audit-seal", "instance: audit", "lockMode: governance", "settle: 10m"} {
+	for _, want := range []string{"adapter: kms", "seal: alias/audit-seal", "instance: audit", "lockMode: compliance", "settle: 10m"} {
 		if !strings.Contains(n["audit.yaml"], want) {
 			t.Errorf("the notary's configuration lacks %q:\n%s", want, n["audit.yaml"])
 		}
@@ -865,8 +865,8 @@ func TestTheNoneConfigurationsValidateAgainstTheBinariesSchemas(t *testing.T) {
 	}
 }
 
-func TestGovernanceDeclaresTheLockResourceAndLeavesTheBucketFlagUnset(t *testing.T) {
-	rec, _, err := build(t, attested(withMode(auditpulumi.Governance)))
+func TestComplianceDeclaresTheLockResourceAndLeavesTheBucketFlagUnset(t *testing.T) {
+	rec, _, err := build(t, attested(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -880,18 +880,18 @@ func TestGovernanceDeclaresTheLockResourceAndLeavesTheBucketFlagUnset(t *testing
 	g := grants(policy(t, rec, "audit-writer"))
 	for _, a := range []string{"s3:PutObjectRetention", "s3:PutObjectLegalHold"} {
 		if _, ok := g[a]; !ok {
-			t.Errorf("the writer lacks %s under GOVERNANCE", a)
+			t.Errorf("the writer lacks %s under COMPLIANCE", a)
 		}
 	}
 	if _, ok := grants(policy(t, rec, "audit-notary"))["s3:PutObjectRetention"]; !ok {
-		t.Error("the notary lacks s3:PutObjectRetention under GOVERNANCE")
+		t.Error("the notary lacks s3:PutObjectRetention under COMPLIANCE")
 	}
 }
 
 // Turning the lock on later is an edit of ObjectLockMode and nothing else: the
 // bucket and its versioning are declared exactly as before, so Pulumi has no
 // replace to plan, and the one new resource is the lock configuration.
-func TestSwitchingNoneToGovernanceOnlyAddsTheLockResource(t *testing.T) {
+func TestGainingAnAttestedDestinationOnlyAddsTheLockResource(t *testing.T) {
 	// The lock is adopted by gaining an attested destination, and then adds the
 	// lock configuration and nothing else.
 	before, _, err := build(t, nil)

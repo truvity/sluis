@@ -148,9 +148,10 @@ func applyPreset(c *Args, preset profile.Preset, dests []destination) error {
 			"Object Lock is written only for a destination whose preset is attested, on S3. Compose a destination from framework profiles "+
 			"that need it (dora, pci-dss, nen-7513, evidence-etsi) or give it preset: attested, or set Archive.ObjectLockMode to NONE",
 			ar.ObjectLockMode, preset)
-	case f.ObjectLock && ar.ObjectLockMode == None:
-		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is NONE and the preset is %s, which keeps the archive under Object Lock "+
-			"(GOVERNANCE for a trial, COMPLIANCE for the target: docs/how-to/aws-turn-on-object-lock.md)", preset)
+	case f.ObjectLock && ar.ObjectLockMode != Compliance:
+		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s and the archive has an attested destination (the preset is %s), "+
+			"which is kept under compliance Object Lock: set COMPLIANCE (or leave it unset) "+
+			"(docs/how-to/aws-turn-on-object-lock.md)", ar.ObjectLockMode, preset)
 	}
 	return nil
 }
