@@ -1,5 +1,14 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library's custom domain is split out into an edge module: `github.com/truvity/sluis/deploy/pulumi/edge/cloudflare`.** A module of its own (package `edgecloudflare`), so the core never depends on a front door: `NewEdge` builds the regional API Gateway custom domain with mutual TLS, its mapping to the API, the truststore and, if asked, the ACM certificate. The truststore is ONE versioned object, `truststore/client-ca.pem`, in the installation's blob bucket, which the domain pins by version; the bucket policy denies every write, delete and re-label under `truststore/` to every principal except the apply identities you name (the CD role, the operators' admin role, a break-glass role), so the functions, which write the rest of that bucket, cannot replace the client CA. `Args.CertificateArn` takes a certificate the caller supplies; `Args.Certificate` requests one with DNS validation through a callback that creates the record in the estate's own DNS, so the edge holds no DNS credential and imports no Cloudflare provider. For blobs on an S3-compatible store (R2), API Gateway cannot read a truststore from the blob store: `Args.TruststoreBucket` makes the edge create a small S3 bucket of its own for it, with the same guard. Authenticated Origin Pulls remains the estate's zone setting. `edge/aws` is a later module. The release workflow tags the edge at the same version as the core.
+- **Core: `Lambda.FrontDoor()`, `Lambda.APIStageName`, and `StorageArgs.ProtectedPrefixes`.** `FrontDoor` is what an edge module takes (the API id, its stage, the component's name for aliases). `ProtectedPrefixes` is a bucket-policy Deny on writes under a key prefix for every principal but the listed ones, in the bucket's one policy; `Storage` now reports `Versioned` and `ProtectedPrefixes`.
+
+### Deprecated
+
+- **`LambdaArgs.API.DomainName`, `CertificateArn`, `TruststorePEM` and `TruststoreBucketName`, and the outputs `DomainTarget`, `DomainHostedZoneID`, `TruststoreBucketName` and `TruststoreURI`.** They are accepted for one release, all four together or none, and while set `NewLambda` still builds the domain and its truststore bucket exactly as before (same resources, same names, no diff) and logs a warning. Unset, `NewLambda` builds the API alone, with no domain, no certificate and no truststore, and the outputs are empty. `API.KeepDefaultEndpoint` stays: it is the API's. An existing stack moves to the edge module without replacing the custom domain (the edge's domain and mapping are aliased to the core's): [the steps](docs/how-to/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module), including `pulumi state unprotect` of the old truststore bucket, which was protected.
+
 ## v1.73.0
 
 ### Changed

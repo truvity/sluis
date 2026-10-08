@@ -11,7 +11,8 @@ Not here: why it is built this way ([ports](../explanation/ports.md)), every lib
 ## What you need
 
 - An AWS account and credentials that can create IAM, Lambda, API Gateway, DynamoDB, S3, KMS, SSM and EventBridge
-  resources; the account id and a region (`111122223333` and `eu-central-1` below).
+  resources; the account id and a region (`111122223333` and `eu-central-1` below), and the ARN of the IAM role you apply
+  with (`applyRoleArn` below): only it may write the truststore.
 - An ACM certificate in that region for the host you will serve (`access.example.test` below), and its ARN. You supply
   it; the library does not issue one.
 - An SQS ingest queue of an audit installation ([truvity/audit](https://github.com/truvity/audit)), and its ARN. The
@@ -100,7 +101,8 @@ beside `main.go`. A truststore is the PEM of the CAs a client certificate must c
 own CA and a client certificate to test with:
 
 ```sh
-go get github.com/truvity/sluis/deploy/pulumi@v1.64.0 github.com/truvity/sluis@v1.64.0
+go get github.com/truvity/sluis/deploy/pulumi@v1.64.0 github.com/truvity/sluis/deploy/pulumi/edge/cloudflare@v1.64.0 \
+  github.com/truvity/sluis@v1.64.0
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 30 \
   -keyout ca.key -out truststore.pem -subj "/CN=demo-client-ca"
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
@@ -121,6 +123,7 @@ import (
 
 	sluisconfig "github.com/truvity/sluis/config"
 	sluispulumi "github.com/truvity/sluis/deploy/pulumi"
+	edge "github.com/truvity/sluis/deploy/pulumi/edge/cloudflare"
 )
 
 const (
@@ -129,6 +132,7 @@ const (
 	version      = "1.64.0"
 	lambdaSHA256 = "<the digest from step 3>"
 	certArn      = "<the ACM certificate's ARN>"
+	applyRoleArn = "<the ARN of the IAM role you apply with>"
 	auditQueue   = "<the audit ingest queue ARN>"
 )
 
@@ -140,8 +144,12 @@ func main() {
 		}
 		withAWS := pulumi.Providers(provider)
 
+		// The blob bucket also holds the truststore, so it is versioned and guards
+		// that prefix: only the apply role may write it.
 		store, err := sluispulumi.NewStorage(ctx, "demo", &sluispulumi.StorageArgs{
-			BucketName: "demo-sluis-" + account}, withAWS)
+			BucketName: "demo-sluis-" + account, Versioning: true,
+			ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edge.Guard(applyRoleArn)},
+		}, withAWS)
 		if err != nil {
 			return err
 		}
@@ -166,17 +174,22 @@ func main() {
 			State:          state.Grant(),
 			AuditQueueArn:  pulumi.String(auditQueue),
 			WrappedSigning: &sluispulumi.WrappedSigningArgs{}, // the library creates the symmetric key
-			API: sluispulumi.APIArgs{
-				DomainName:           "access.example.test",
-				CertificateArn:       pulumi.String(certArn),
-				TruststorePEM:        string(pem),
-				TruststoreBucketName: "demo-sluis-truststore-" + account,
-			},
 		}, withAWS)
 		if err != nil {
 			return err
 		}
-		ctx.Export("domainTarget", l.DomainTarget)
+		// The front door: the custom domain with mutual TLS, in front of the API.
+		front, err := edge.NewEdge(ctx, "demo", &edge.Args{
+			FrontDoor:      l.FrontDoor(),
+			DomainName:     "access.example.test",
+			CertificateArn: pulumi.String(certArn),
+			TruststorePEM:  string(pem),
+			Storage:        store,
+		}, withAWS)
+		if err != nil {
+			return err
+		}
+		ctx.Export("domainTarget", front.DomainTarget)
 		ctx.Export("functionName", l.FunctionName)
 		return nil
 	})
@@ -193,8 +206,8 @@ refuses one that disagrees with the arguments, naming the argument. It replaces 
 pulumi preview
 ```
 
-Read it. Expect the bucket, the table, the KMS key and its alias, the function, its role and layer, the HTTP API with
-its custom domain, the SSM parameters for the recovery password and the state secret, and the schedules, all as
+Read it. Expect the bucket, the table, the KMS key and its alias, the function, its role and layer, the HTTP API, the
+custom domain with the truststore object, the SSM parameters for the recovery password and the state secret, and the schedules, all as
 creates and nothing else. Then:
 
 ```sh

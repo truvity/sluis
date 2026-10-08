@@ -177,8 +177,10 @@ jobs:
         run: |
           set -euo pipefail
           # deploy/pulumi is a module of its own, so that Pulumi is not in the
-          # root's dependency graph.
-          for dir in deploy/pulumi; do
+          # root's dependency graph. The edge modules are modules of their own
+          # for the same reason, and require this library: it is tagged first,
+          # so that the edge builds against it as a consumer would.
+          for dir in deploy/pulumi deploy/pulumi/edge/cloudflare; do
             tag="$dir/${GITHUB_REF_NAME}"
             pinned="$(mktemp)"
             hack/pin-pulumi-require.sh "${GITHUB_REF_NAME}" - < "$dir/go.mod" > "$pinned"

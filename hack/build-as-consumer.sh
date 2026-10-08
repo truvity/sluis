@@ -25,12 +25,12 @@ version="${3:?}"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-grep -v -E '^replace[[:space:]]+github\.com/truvity/sluis[[:space:]]' "$pinned" > "$work/consumer.mod"
+grep -v -E '^replace[[:space:]]+github\.com/truvity/sluis(/deploy/pulumi)?[[:space:]]' "$pinned" > "$work/consumer.mod"
 if grep -q -E '^replace[[:space:]]' "$work/consumer.mod"; then
   echo "build-as-consumer: a replace remains in the pinned go.mod" >&2
   exit 1
 fi
-grep -q -E "^[[:space:]]*github\.com/truvity/sluis ${version//./\\.}\$" "$work/consumer.mod" \
+grep -q -E "^[[:space:]]*github\.com/truvity/sluis ${version//./\\.}([[:space:]]*//.*)?\$" "$work/consumer.mod" \
   || { echo "build-as-consumer: the pinned go.mod does not require the root at $version" >&2; exit 1; }
 cp "$dir/go.sum" "$work/consumer.sum"
 

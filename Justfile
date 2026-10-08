@@ -89,6 +89,7 @@ lint: console
     golangci-lint config verify
     golangci-lint run ./...
     cd deploy/pulumi && GOWORK=off golangci-lint run ./...
+    cd deploy/pulumi/edge/cloudflare && GOWORK=off golangci-lint run ./...
     # A `;` inside a mermaid sequenceDiagram is a STATEMENT SEPARATOR, not
     # punctuation: it splits the message text in half, the second half
     # parses as a statement with no arrow, and GitHub renders "Unable to
@@ -105,10 +106,14 @@ lint: console
 # validated against the schemas in schemas/config, so the library cannot drift
 # from the binaries it configures.
 #
+# The edge modules (deploy/pulumi/edge/*) are modules of their own for the same
+# reason, and build against the core beside them.
+#
 # It also tests hack/pin-pulumi-require.sh, which the release workflow runs to
 # tag the library at a commit whose require is the release being cut.
 pulumi-test:
     cd deploy/pulumi && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
+    cd deploy/pulumi/edge/cloudflare && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
     hack/test-pin-pulumi-require.sh
 
 # Test the storage module (storage/). Like deploy/pulumi it is a module of its
@@ -166,6 +171,7 @@ release-check tag="": console
     set -euo pipefail
     if [ -n "{{tag}}" ]; then
         ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/go.mod > /dev/null
+        ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/edge/cloudflare/go.mod > /dev/null
     fi
     ./hack/check-archives.py
     goreleaser check

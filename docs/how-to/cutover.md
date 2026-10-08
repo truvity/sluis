@@ -133,3 +133,57 @@ wrote since the switch; to carry it back, freeze the new writers and run `sluis 
   remove it when you retire the old one.
 - Turn off the recovery password once a directory group grants operator ([recover on Lambda](recover-on-lambda.md)).
 - Tell the people who use sign-in that they signed in again, and the owners of relying parties the activation-delay gap.
+
+## Moving a stack from the core library's domain to the edge module
+
+Before the edge modules, `NewLambda` built the custom domain, its mutual TLS and a truststore bucket of its own from
+`API.DomainName`, `API.CertificateArn`, `API.TruststorePEM` and `API.TruststoreBucketName`. Those four are deprecated and
+still work for one release (with a warning); the domain, the certificate and the truststore are now
+[the edge module's](../reference/pulumi-library.md#the-edge-modules). A stack moves **without replacing the custom
+domain**: the edge's domain and mapping are aliased to the ones the core created (under the Lambda component, by the
+name `Lambda.FrontDoor()` carries), so Pulumi sees one resource moved and not one deleted and one created. The domain
+name, certificate and `DomainTarget` do not change, so DNS is not touched and nothing is down.
+
+**Preconditions.** The stack is on a release that has the edge module, with its four inputs set. You know the roles that
+may write the truststore from now on: the role the stack is applied with (CD), the operators' admin role and a
+break-glass role. An apply by any other principal, the functions' role included, is denied.
+
+1. **Guard the blob bucket.** In the program, give the storage `Versioning: true` and
+   `ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edgecloudflare.Guard(cdRole, adminRole, breakglassRole)}`.
+   (Blobs on R2: skip this and give the edge a `TruststoreBucket` instead.) Versioning the blob bucket keeps old
+   versions of every object it holds: set a lifecycle rule if that matters. `pulumi up` this alone first: the preview
+   shows the bucket's versioning and its policy changing in place and nothing else. The deny does not touch what the
+   functions already do under other prefixes.
+2. **Add the edge and drop the four inputs.** Remove `API.DomainName`, `API.CertificateArn`, `API.TruststorePEM` and
+   `API.TruststoreBucketName`; keep `API.KeepDefaultEndpoint` (it is the API's). Add `edgecloudflare.NewEdge` with the
+   same domain, `CertificateArn`, `TruststorePEM` and `Storage`.
+3. **Unprotect the old truststore bucket.** It was created with `Protect(true)`, so Pulumi refuses to plan the move
+   until it is not. With the Lambda component's name `<l>` (for example `access`), read the URN from `pulumi stack
+   --show-urns` and run:
+
+   ```sh
+   pulumi state unprotect 'urn:pulumi:<stack>::<project>::sluis:aws:Lambda$aws:s3/bucket:Bucket::<l>-truststore'
+   ```
+
+4. **Preview, and read it.** Expect: the new object `<edge>-truststore-pem` created in the blob bucket; the domain
+   `<l>-domain` **updated in place** (`truststoreUri` and `truststoreVersion`), and the mapping unchanged; the old
+   object, policy, public-access block, versioning, encryption configuration and bucket deleted. A **replace** of the
+   domain or the mapping is wrong: stop (the alias did not match, which is a different Lambda component name or a
+   different stack), and do not apply.
+5. **Apply.** `pulumi up`. The old bucket still holds the old object's versions, so its deletion fails with
+   `BucketNotEmpty`; everything else completes, and the domain is already on the new truststore. That one error is
+   expected.
+6. **Empty the old bucket and finish.** Delete every version and delete marker in it
+   (`aws s3api list-object-versions` and `aws s3api delete-objects`, repeated until the listing is empty), then
+   `pulumi up` again: it deletes the bucket. Check the domain
+   (`aws apigatewayv2 get-domain-name --domain-name <domain>`: `MutualTlsAuthentication.TruststoreUri` names the blob
+   bucket and `TruststoreVersion` the new object's version) and ask the issuer with a client certificate as in
+   [the tutorial](../getting-started/aws-lambda.md#6-point-dns-at-it-and-ask-the-issuer).
+
+To keep the old bucket and manage it by hand instead, `pulumi state delete --force` its six resources after step 3 (the
+bucket, `-encryption`, `-versioning`, `-public-access`, `-policy` and the object `<l>-truststore-pem`) and skip step 6's
+emptying; the domain moves in step 5 as before.
+
+**Rollback.** Before step 5, revert the program. After it, restore the four inputs and apply: the library builds its
+own truststore bucket again (the old bucket's name must be free, so do not delete it first) and the domain is updated
+back in place.

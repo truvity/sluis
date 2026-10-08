@@ -371,27 +371,53 @@ type RecoveryArgs struct {
 	Enabled *bool
 }
 
-// APIArgs is the HTTP API (payload format 2.0) in front of the function, and its
-// custom domain.
+// APIArgs is the HTTP API (payload format 2.0) in front of the function.
+//
+// The library builds the API, its integration, its $default route and stage and
+// the permission that lets it invoke the function, and nothing in front of it:
+// the custom domain, the certificate, the truststore and DNS are a front door's
+// (the edge modules: github.com/truvity/sluis/deploy/pulumi/edge/cloudflare),
+// which takes Lambda.FrontDoor().
+//
+// DomainName, CertificateArn, TruststorePEM and TruststoreBucketName are
+// DEPRECATED and are accepted for one release: set, the library still builds
+// the domain with mutual TLS and the truststore bucket as it did, with a
+// warning, so that an existing stack keeps its resources until it moves to the
+// edge module (docs/how-to/cutover.md). Leave all four unset to build the API
+// alone. They are all or none.
 type APIArgs struct {
-	// DomainName is the custom domain. Required.
+	// DomainName is the custom domain.
+	//
+	// Deprecated: use the edge module (edge/cloudflare).
 	DomainName string
 	// CertificateArn is the ACM certificate for DomainName, in the function's
-	// region. The caller supplies it, e.g. a Cloudflare Origin CA certificate
-	// imported to ACM. Required.
+	// region.
+	//
+	// Deprecated: use the edge module (edge/cloudflare).
 	CertificateArn pulumi.StringInput
 	// TruststorePEM is the PEM bundle of the CAs a client certificate must chain
-	// to: mutual TLS on the custom domain, for Cloudflare's authenticated origin
-	// pulls. The library uploads it to its own bucket. Required.
+	// to: mutual TLS on the custom domain. The library uploads it to its own
+	// bucket.
+	//
+	// Deprecated: use the edge module (edge/cloudflare), which keeps it in the
+	// installation's blob bucket.
 	TruststorePEM string
 	// TruststoreBucketName is the bucket the truststore goes in: its own, and not
-	// the blob bucket, which the functions can write. Required, and global.
+	// the blob bucket, which the functions can write. Global.
+	//
+	// Deprecated: use the edge module (edge/cloudflare): its truststore bucket is
+	// the blob bucket, or a small bucket of its own named there.
 	TruststoreBucketName string
 	// KeepDefaultEndpoint leaves the default `execute-api` endpoint enabled, for
 	// the cutover's acceptance suite to run against APIURL before the DNS
-	// switch. Default false: only the custom domain serves, and the default
+	// switch. Default false: only a custom domain serves, and the default
 	// endpoint would be a way round the client certificate.
 	KeepDefaultEndpoint bool
+}
+
+// legacyDomain reports whether the deprecated custom-domain inputs are in use.
+func (a *APIArgs) legacyDomain() bool {
+	return a.DomainName != "" || a.CertificateArn != nil || strings.TrimSpace(a.TruststorePEM) != "" || a.TruststoreBucketName != ""
 }
 
 // ScheduleArgs is the controllers' ticks.
@@ -445,19 +471,25 @@ type Lambda struct {
 	FunctionArn, FunctionName pulumi.StringOutput
 	RoleArn, RoleName         pulumi.StringOutput
 
-	// APIID and APIURL are the HTTP API and its default endpoint (which answers
-	// only with API.KeepDefaultEndpoint).
-	APIID  pulumi.StringOutput
-	APIURL pulumi.StringOutput
+	// APIID, APIStageName and APIURL are the HTTP API, its stage and its default
+	// endpoint (which answers only with API.KeepDefaultEndpoint). A front door
+	// maps its domain to the first two (FrontDoor).
+	APIID        pulumi.StringOutput
+	APIStageName pulumi.StringOutput
+	APIURL       pulumi.StringOutput
 	// AccessLogGroupName is the API access log group (empty when AccessLogs is nil).
 	AccessLogGroupName pulumi.StringOutput
 	// DomainTarget and DomainHostedZoneID are what DNS for the custom domain
-	// points at (a CNAME, or an alias record).
+	// points at (a CNAME, or an alias record). Empty unless the deprecated
+	// API.DomainName is set: a front door has its own.
 	DomainTarget       pulumi.StringOutput
 	DomainHostedZoneID pulumi.StringOutput
 	// TruststoreBucketName and TruststoreURI are where the client-CA bundle is.
+	// Empty unless the deprecated API.DomainName is set.
 	TruststoreBucketName pulumi.StringOutput
 	TruststoreURI        pulumi.StringOutput
+
+	name string
 
 	// SchedulerRoleArn is the role EventBridge Scheduler assumes.
 	SchedulerRoleArn pulumi.StringOutput
@@ -538,19 +570,29 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	for k, v := range map[string]string{
 		"Region": out.Region, "AccountID": out.AccountID, "Instance": out.Instance,
 		"Package": out.Package, "PackageSHA256": out.PackageSHA256, "Config": strings.TrimSpace(out.Config),
-		"API.DomainName": out.API.DomainName, "API.TruststorePEM": strings.TrimSpace(out.API.TruststorePEM),
-		"API.TruststoreBucketName": out.API.TruststoreBucketName,
 	} {
 		if v == "" {
 			missing = append(missing, k)
 		}
 	}
 	for k, nilIn := range map[string]bool{
-		"API.CertificateArn": out.API.CertificateArn == nil, "AuditQueueArn": out.AuditQueueArn == nil,
-		"Storage": out.Storage == nil || out.Storage.BucketArn == nil, "State": out.State == nil || out.State.TableArn == nil,
+		"AuditQueueArn": out.AuditQueueArn == nil,
+		"Storage":       out.Storage == nil || out.Storage.BucketArn == nil, "State": out.State == nil || out.State.TableArn == nil,
 	} {
 		if nilIn {
 			missing = append(missing, k)
+		}
+	}
+	if out.API.legacyDomain() {
+		// All or none: a half-set domain is a mistake, and the old message
+		// names what is missing.
+		for k, empty := range map[string]bool{
+			"API.DomainName": out.API.DomainName == "", "API.TruststorePEM": strings.TrimSpace(out.API.TruststorePEM) == "",
+			"API.TruststoreBucketName": out.API.TruststoreBucketName == "", "API.CertificateArn": out.API.CertificateArn == nil,
+		} {
+			if empty {
+				missing = append(missing, k)
+			}
 		}
 	}
 	if len(missing) > 0 {
@@ -898,9 +940,36 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		}
 		out.AccessLogGroupName = accessLogs.Name
 	}
-	api, domain, truststore, err := newAPI(ctx, name, &a, fn, accessLogs, tags, child)
+	api, stage, err := newAPI(ctx, name, &a, fn, accessLogs, tags, child)
 	if err != nil {
 		return nil, err
+	}
+	out.name = name
+	out.DomainTarget, out.DomainHostedZoneID = pulumi.String("").ToStringOutput(), pulumi.String("").ToStringOutput()
+	out.TruststoreBucketName, out.TruststoreURI = pulumi.String("").ToStringOutput(), pulumi.String("").ToStringOutput()
+	if a.API.legacyDomain() {
+		_ = ctx.Log.Warn("sluispulumi: LambdaArgs.API.DomainName, CertificateArn, TruststorePEM and TruststoreBucketName are deprecated "+
+			"and are removed after the next minor: the custom domain, the certificate and the truststore are the edge module's "+
+			"(github.com/truvity/sluis/deploy/pulumi/edge/cloudflare), which keeps the truststore in the blob bucket; "+
+			"docs/how-to/cutover.md moves a stack without replacing the domain", nil)
+		domain, truststore, err := newLegacyDomain(ctx, name, &a, api, stage, tags, child)
+		if err != nil {
+			return nil, err
+		}
+		out.DomainTarget = domain.DomainNameConfiguration.ApplyT(func(c apigatewayv2.DomainNameDomainNameConfiguration) string {
+			if c.TargetDomainName == nil {
+				return ""
+			}
+			return *c.TargetDomainName
+		}).(pulumi.StringOutput)
+		out.DomainHostedZoneID = domain.DomainNameConfiguration.ApplyT(func(c apigatewayv2.DomainNameDomainNameConfiguration) string {
+			if c.HostedZoneId == nil {
+				return ""
+			}
+			return *c.HostedZoneId
+		}).(pulumi.StringOutput)
+		out.TruststoreBucketName = truststore.Bucket
+		out.TruststoreURI = pulumi.Sprintf("s3://%s/%s", truststore.Bucket, truststoreKey)
 	}
 
 	// ---- the schedules
@@ -973,20 +1042,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.FunctionArn, out.FunctionName = fn.Arn, fn.Name
 	out.RoleArn, out.RoleName = role.Arn, role.Name
 	out.APIID, out.APIURL = api.ID().ToStringOutput(), api.ApiEndpoint
-	out.DomainTarget = domain.DomainNameConfiguration.ApplyT(func(c apigatewayv2.DomainNameDomainNameConfiguration) string {
-		if c.TargetDomainName == nil {
-			return ""
-		}
-		return *c.TargetDomainName
-	}).(pulumi.StringOutput)
-	out.DomainHostedZoneID = domain.DomainNameConfiguration.ApplyT(func(c apigatewayv2.DomainNameDomainNameConfiguration) string {
-		if c.HostedZoneId == nil {
-			return ""
-		}
-		return *c.HostedZoneId
-	}).(pulumi.StringOutput)
-	out.TruststoreBucketName = truststore.Bucket
-	out.TruststoreURI = pulumi.Sprintf("s3://%s/%s", truststore.Bucket, truststoreKey)
+	out.APIStageName = stage.Name
 	out.SchedulerRoleArn = schedRole.Arn
 	out.StateSecretParameter = stateParam.Name
 	out.RecoveryPasswordParameter = recoveryParam.Name
@@ -999,7 +1055,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
 		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "roleArn": out.RoleArn, "roleName": out.RoleName,
-		"apiId": out.APIID, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
+		"apiId": out.APIID, "apiStageName": out.APIStageName, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
@@ -1085,66 +1141,11 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 
 const truststoreKey = "truststore/client-ca.pem"
 
-// newAPI is the HTTP API, its integration with the function, the custom
-// domain with mutual TLS and the truststore in its own bucket.
+// newAPI is the HTTP API, its integration with the function, its $default
+// route and stage and the permission to invoke the function. Nothing in front
+// of it: that is a front door's (FrontDoor).
 func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, accessLogs *cloudwatch.LogGroup, tags pulumi.StringMapInput,
-	opts ...pulumi.ResourceOption) (*apigatewayv2.Api, *apigatewayv2.DomainName, *s3.Bucket, error) {
-	bucket, err := s3.NewBucket(ctx, name+"-truststore", &s3.BucketArgs{
-		Bucket: pulumi.String(a.API.TruststoreBucketName), Tags: tags,
-	}, append(opts, pulumi.Protect(true))...)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("sluis truststore bucket: %w", err)
-	}
-	if _, err := s3.NewBucketServerSideEncryptionConfigurationV2(ctx, name+"-truststore-encryption",
-		&s3.BucketServerSideEncryptionConfigurationV2Args{
-			Bucket: bucket.ID(),
-			Rules: s3.BucketServerSideEncryptionConfigurationV2RuleArray{
-				&s3.BucketServerSideEncryptionConfigurationV2RuleArgs{
-					ApplyServerSideEncryptionByDefault: &s3.BucketServerSideEncryptionConfigurationV2RuleApplyServerSideEncryptionByDefaultArgs{
-						SseAlgorithm: pulumi.String("AES256"),
-					},
-				},
-			},
-		}, opts...); err != nil {
-		return nil, nil, nil, err
-	}
-	// Versioned: the domain names the version of the truststore it was given.
-	versioning, err := s3.NewBucketVersioningV2(ctx, name+"-truststore-versioning", &s3.BucketVersioningV2Args{
-		Bucket:                  bucket.ID(),
-		VersioningConfiguration: &s3.BucketVersioningV2VersioningConfigurationArgs{Status: pulumi.String("Enabled")},
-	}, opts...)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	block, err := s3.NewBucketPublicAccessBlock(ctx, name+"-truststore-public-access", &s3.BucketPublicAccessBlockArgs{
-		Bucket: bucket.ID(), BlockPublicAcls: pulumi.Bool(true), BlockPublicPolicy: pulumi.Bool(true),
-		IgnorePublicAcls: pulumi.Bool(true), RestrictPublicBuckets: pulumi.Bool(true),
-	}, opts...)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if _, err := s3.NewBucketPolicy(ctx, name+"-truststore-policy", &s3.BucketPolicyArgs{
-		Bucket: bucket.ID(),
-		Policy: bucket.Arn.ApplyT(func(arn string) (string, error) {
-			return document([]statement{{
-				"Sid": "DenyPlainHTTP", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
-				"Resource":  []string{arn, arn + "/*"},
-				"Condition": map[string]any{"Bool": map[string]any{"aws:SecureTransport": "false"}},
-			}})
-		}).(pulumi.StringOutput),
-	}, append(opts, pulumi.DependsOn([]pulumi.Resource{block}))...); err != nil {
-		return nil, nil, nil, err
-	}
-	obj, err := s3.NewBucketObjectv2(ctx, name+"-truststore-pem", &s3.BucketObjectv2Args{
-		Bucket:      bucket.ID(),
-		Key:         pulumi.String(truststoreKey),
-		Content:     pulumi.String(a.API.TruststorePEM),
-		ContentType: pulumi.String("application/x-pem-file"),
-	}, append(opts, pulumi.DependsOn([]pulumi.Resource{versioning}))...)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("sluis truststore object: %w", err)
-	}
-
+	opts ...pulumi.ResourceOption) (*apigatewayv2.Api, *apigatewayv2.Stage, error) {
 	api, err := apigatewayv2.NewApi(ctx, name+"-api", &apigatewayv2.ApiArgs{
 		Name:                      pulumi.String(a.FunctionNamePrefix),
 		ProtocolType:              pulumi.String("HTTP"),
@@ -1152,7 +1153,7 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 		Tags:                      tags,
 	}, opts...)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("sluis api: %w", err)
+		return nil, nil, fmt.Errorf("sluis api: %w", err)
 	}
 	integ, err := apigatewayv2.NewIntegration(ctx, name+"-api-integration", &apigatewayv2.IntegrationArgs{
 		ApiId:                api.ID(),
@@ -1162,14 +1163,14 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 		PayloadFormatVersion: pulumi.String("2.0"),
 	}, opts...)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	if _, err := apigatewayv2.NewRoute(ctx, name+"-api-route", &apigatewayv2.RouteArgs{
 		ApiId:    api.ID(),
 		RouteKey: pulumi.String("$default"),
 		Target:   pulumi.Sprintf("integrations/%s", integ.ID()),
 	}, opts...); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	stageArgs := &apigatewayv2.StageArgs{
 		ApiId: api.ID(), Name: pulumi.String("$default"), AutoDeploy: pulumi.Bool(true), Tags: tags,
@@ -1182,7 +1183,7 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 	}
 	stage, err := apigatewayv2.NewStage(ctx, name+"-api-stage", stageArgs, opts...)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	if _, err := lambda.NewPermission(ctx, name+"-api-invoke", &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
@@ -1190,8 +1191,73 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 		Principal: pulumi.String("apigateway.amazonaws.com"),
 		SourceArn: pulumi.Sprintf("%s/*/*", api.ExecutionArn),
 	}, opts...); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
+	return api, stage, nil
+}
+
+// newLegacyDomain is what the library built before the edge modules, for the
+// deprecated API.DomainName and its three companions: the truststore in its own
+// bucket and the custom domain with mutual TLS. The resources and their names
+// are unchanged, so that an existing stack sees no diff.
+func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apigatewayv2.Api, stage *apigatewayv2.Stage,
+	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*apigatewayv2.DomainName, *s3.Bucket, error) {
+	bucket, err := s3.NewBucket(ctx, name+"-truststore", &s3.BucketArgs{
+		Bucket: pulumi.String(a.API.TruststoreBucketName), Tags: tags,
+	}, append(opts, pulumi.Protect(true))...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sluis truststore bucket: %w", err)
+	}
+	if _, err := s3.NewBucketServerSideEncryptionConfigurationV2(ctx, name+"-truststore-encryption",
+		&s3.BucketServerSideEncryptionConfigurationV2Args{
+			Bucket: bucket.ID(),
+			Rules: s3.BucketServerSideEncryptionConfigurationV2RuleArray{
+				&s3.BucketServerSideEncryptionConfigurationV2RuleArgs{
+					ApplyServerSideEncryptionByDefault: &s3.BucketServerSideEncryptionConfigurationV2RuleApplyServerSideEncryptionByDefaultArgs{
+						SseAlgorithm: pulumi.String("AES256"),
+					},
+				},
+			},
+		}, opts...); err != nil {
+		return nil, nil, err
+	}
+	// Versioned: the domain names the version of the truststore it was given.
+	versioning, err := s3.NewBucketVersioningV2(ctx, name+"-truststore-versioning", &s3.BucketVersioningV2Args{
+		Bucket:                  bucket.ID(),
+		VersioningConfiguration: &s3.BucketVersioningV2VersioningConfigurationArgs{Status: pulumi.String("Enabled")},
+	}, opts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	block, err := s3.NewBucketPublicAccessBlock(ctx, name+"-truststore-public-access", &s3.BucketPublicAccessBlockArgs{
+		Bucket: bucket.ID(), BlockPublicAcls: pulumi.Bool(true), BlockPublicPolicy: pulumi.Bool(true),
+		IgnorePublicAcls: pulumi.Bool(true), RestrictPublicBuckets: pulumi.Bool(true),
+	}, opts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := s3.NewBucketPolicy(ctx, name+"-truststore-policy", &s3.BucketPolicyArgs{
+		Bucket: bucket.ID(),
+		Policy: bucket.Arn.ApplyT(func(arn string) (string, error) {
+			return document([]statement{{
+				"Sid": "DenyPlainHTTP", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
+				"Resource":  []string{arn, arn + "/*"},
+				"Condition": map[string]any{"Bool": map[string]any{"aws:SecureTransport": "false"}},
+			}})
+		}).(pulumi.StringOutput),
+	}, append(opts, pulumi.DependsOn([]pulumi.Resource{block}))...); err != nil {
+		return nil, nil, err
+	}
+	obj, err := s3.NewBucketObjectv2(ctx, name+"-truststore-pem", &s3.BucketObjectv2Args{
+		Bucket:      bucket.ID(),
+		Key:         pulumi.String(truststoreKey),
+		Content:     pulumi.String(a.API.TruststorePEM),
+		ContentType: pulumi.String("application/x-pem-file"),
+	}, append(opts, pulumi.DependsOn([]pulumi.Resource{versioning}))...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sluis truststore object: %w", err)
+	}
+
 	domain, err := apigatewayv2.NewDomainName(ctx, name+"-domain", &apigatewayv2.DomainNameArgs{
 		DomainName: pulumi.String(a.API.DomainName),
 		DomainNameConfiguration: &apigatewayv2.DomainNameDomainNameConfigurationArgs{
@@ -1206,14 +1272,14 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 		Tags: tags,
 	}, opts...)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("sluis custom domain: %w", err)
+		return nil, nil, fmt.Errorf("sluis custom domain: %w", err)
 	}
 	if _, err := apigatewayv2.NewApiMapping(ctx, name+"-domain-mapping", &apigatewayv2.ApiMappingArgs{
 		ApiId: api.ID(), DomainName: domain.DomainName, Stage: stage.Name,
 	}, opts...); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return api, domain, bucket, nil
+	return domain, bucket, nil
 }
 
 // newSchedules is the scheduler's role, which may invoke the function and
