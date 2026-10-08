@@ -1,27 +1,21 @@
-# Third-party actions are pinned to commit SHAs (exact version tag noted
-# inline) so this repo starts clean on the unpinned-actions CodeQL finding.
+# govulncheck for every Go module (the sluis and audit recipes), daily and on
+# master. Deliberately NOT in ci.yaml and not a required context: a
+# standard-library advisory with no released fix would otherwise wedge every
+# pull request on a finding nobody can act on. CodeQL is the repository's
+# default setup, not a workflow.
 name: Security
 
 on:
   push:
     branches: [master]
-  pull_request:
-    branches: [master]
   schedule:
     - cron: "0 6 * * *" # daily 6am UTC
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  # The same recipe the shared workflow runs everywhere else, instead of
-  # a hand-rolled copy that installed devbox through an UNPINNED
-  # `curl | bash` -- eight repositories carried that identical block.
-  #
-  # Deliberately NOT in ci.yaml's recipe list, and deliberately not a
-  # required context. A standard-library advisory with no released fix
-  # would otherwise wedge every pull request on a finding nobody can act
-  # on, which is exactly what happened to pulumi-zitadel.
   govulncheck:
     uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
     with:

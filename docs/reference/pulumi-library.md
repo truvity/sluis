@@ -502,7 +502,7 @@ EKS, one role) and [Upgrade to v1.62](../how-to/upgrade/v1.62.md). Preview befor
 ## Releasing
 
 The release workflow tags the library `deploy/pulumi/vX.Y.Z` at a child of the release commit whose `go.mod` requires the
-root module at the release (`hack/pin-pulumi-require.sh`), which is how
+root module at the release (`hack/modules.py`), which is how
 `go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z` finds a library that builds for a consumer. Nobody bumps the
 require by hand before a tag. A `deploy/pulumi/vX.Y.Z` tag pushed by hand is refused by design. The procedure and its
 gates are in [CONTRIBUTING](../../CONTRIBUTING.md#releasing).

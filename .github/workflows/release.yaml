@@ -1,17 +1,17 @@
-# Tag-triggered release: binaries, the service image (ko) and the helm
-# chart, all to GHCR — the shared implementation.
+# One release for the whole repository. Pushing a root tag vX.Y.Z:
 #
-# The hand-rolled copy this replaces was one of NINE identical ones
-# across the public estate, and the shared workflow it now calls had sat
-# in ci-workflows with zero callers. That gap is not theoretical: one
-# repository's release workflows drifted out of sync with the tool they
-# invoked and nobody noticed until a tag was cut months later, because release
-# machinery is exercised only by a tag.
+#   release  sluis: binaries, images (ko), the Helm chart and the Nix flakes,
+#            by the shared workflow (truvity/ci-workflows)
+#   audit    audit: the same, from audit/.goreleaser.yaml, added to the SAME
+#            GitHub release (the shared workflow runs one goreleaser config, so
+#            the second product is a job of its own beside it)
+#   npm      the TypeScript package
+#   modules  every other Go module (hack/modules.py finds them), tagged
+#            <dir>/vX.Y.Z at a commit whose requires of the repository's own
+#            modules are this release (hack/tag-modules.sh)
 #
-# The caller must grant the permissions below — a reusable workflow can
-# narrow them but never widen them, which is also why the private (ECR)
-# half is a separate workflow rather than a flag on this one: its
-# callers grant id-token, not packages.
+# Release machinery is exercised only by a tag, so `just release-check vX.Y.Z`
+# runs everything that does not need one, and `gate` runs the chain's pin first.
 name: Release
 
 on:
@@ -23,22 +23,14 @@ permissions:
   contents: write
   packages: write
 
-# Never cancel a running publish — a half-pushed artifact set is worse
-# than a queued wait.
+# Never cancel a running publish: a half-pushed artifact set is worse than a
+# queued wait.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # Before anything is built or published: refuse a tag whose Pulumi library
-  # cannot be pinned to it. deploy/pulumi requires github.com/truvity/sluis and
-  # the library is tagged (by pulumi-tag below) at a commit whose require is
-  # THIS release: hack/pin-pulumi-require.sh makes that go.mod, so a go.mod the
-  # pin cannot handle stops the release here, before anything is published.
-  # The pinned library is then BUILT as a consumer would, in pulumi-tag, before
-  # its ref exists (hack/build-as-consumer.sh). The
-  # require on master is never bumped by hand.
-  # `just release-check <tag>` runs the pin locally.
+  # Before anything is published: refuse a tag whose modules cannot be pinned.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -46,12 +38,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: deploy/pulumi can be pinned to this release
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          ./hack/pin-pulumi-require.sh "$TAG" - < deploy/pulumi/go.mod > /dev/null
+      - run: ./hack/modules.py check "$GITHUB_REF_NAME"
 
   release:
     needs: gate
@@ -60,36 +47,80 @@ jobs:
       packages: write
     uses: truvity/ci-workflows/.github/workflows/release-public.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
     with:
-      # Charts are published by this workflow, NOT by goreleaser, so this
-      # list is a second place the set of shipped artifacts is written
-      # down -- and it kept `directory-roster` after the chart was
-      # deleted, which failed the release on `copy chart: lstat
-      # charts/directory-roster: no such file or directory`.
+      # Charts are published here, NOT by goreleaser, so this list is a second
+      # place the set of shipped artifacts is written down.
       charts: '["sluis"]'
-      # Nest the images under the repo namespace:
-      # ko names each artifact after its cmd dir (cmd/sluis), so the published slug
-      # is ghcr.io/truvity/sluis/sluis.
+      # ko names each artifact after its cmd dir: ghcr.io/truvity/sluis/sluis.
       ko-docker-repo: ghcr.io/truvity/sluis
-      # sluisctl as a Nix flake: the release carries
-      # sluisctl_<version>_nix-flake.tar.gz, which another repository's
-      # devbox installs by URL, instead of a hand-downloaded binary.
-      # accessctl is the same program under its old name, kept for one or two
-      # releases (accessctl_<version>_nix-flake.tar.gz) so that a devbox.json
-      # that names it keeps resolving while it is moved.
-      #
-      # The chart is pushed to oci://ghcr.io/truvity/charts/<chart>, so
-      # `charts` above is what makes it oci://ghcr.io/truvity/charts/sluis.
+      # sluisctl as a Nix flake (sluisctl_<version>_nix-flake.tar.gz) that
+      # another repository's devbox installs by URL. accessctl is the same
+      # program under its old name, kept for a release or two.
       nix-flakes: '["sluisctl", "accessctl"]'
 
-  # The TypeScript package, to GitHub Packages, at the tag's version.
-  #
-  # Built here rather than on install. A git dependency builds itself
-  # through `prepare`, and a package manager is free to pack it without
-  # running that: yarn 4 did, and a consumer received a package with no ts/dist
-  # at all. A registry holds exactly what was built and tested, once.
-  #
-  # After the binaries, image and charts: a release whose artifacts
-  # failed should not leave a package claiming its version.
+  audit:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: truvity/ci-actions/public-runners@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
+        with:
+          runners: ubuntu-latest
+          visibility: ${{ github.event.repository.visibility }}
+      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ko-build/setup-ko@61b4d1d396f5b2e7d6bb6fefdce3dc38d1a13445 # v0.10
+      - name: Log in to GHCR
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+      # audit/.goreleaser.yaml: the archives and four images
+      # (ghcr.io/truvity/audit/*) onto the release the first job created.
+      - name: GoReleaser (audit)
+        run: devbox run -- just audit-release
+        env:
+          GITHUB_RELEASE_DISABLED: "false"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KO_DOCKER_REPO: ghcr.io/truvity/audit
+      # The docs name checksums.txt for the Lambda zips: one file for the
+      # release, so audit's lines go into it.
+      - name: One checksums.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt --dir "$RUNNER_TEMP"
+          cat audit/dist/audit_*_checksums.txt >> "$RUNNER_TEMP/checksums.txt"
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/checksums.txt" --clobber
+      # The charts and the flake read dist/ of the checkout goreleaser built in.
+      - run: rm -rf dist && cp -a audit/dist dist
+      - uses: truvity/ci-actions/publish-charts@b1929140480a682ba6fc2cadaf58da387b500a90 # v1.11.0
+        with:
+          charts: '["audit"]'
+          chart-root: charts
+          registry: oci://ghcr.io/truvity/charts
+          app-version-mode: release
+          helmctl-version: 0.8.0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      # The CLI as a Nix flake, so that another repository's devbox pins
+      # `audit verify` by hash.
+      - uses: truvity/ci-actions/publish-nix-flakes@b1929140480a682ba6fc2cadaf58da387b500a90 # v1.11.0
+        with:
+          flakes: '["audit"]'
+          flake-dir: ${{ runner.temp }}/nix-flakes
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # The TypeScript package, to GitHub Packages, at the tag's version. Built
+  # here rather than on install: a git dependency builds itself through
+  # `prepare`, and a package manager is free to pack it without running that
+  # (yarn 4 did, and a consumer received a package with no ts/dist).
   npm:
     needs: release
     runs-on: ubuntu-latest
@@ -101,8 +132,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # A pinned Node, not whatever the
-          # runner image carries today.
           node-version: 24.21.0
           registry-url: https://npm.pkg.github.com
           scope: "@truvity"
@@ -115,103 +144,56 @@ jobs:
           (cd ts && npm ci && npx tsc --noEmit && npx vitest run && npx tsc -p tsconfig.build.json)
           # The repository's version is the tag; package.json carries none.
           npm version "${TAG#v}" --no-git-tag-version --allow-same-version
-          # npm refuses a pre-release (vX.Y.Z-rc.N) without a dist-tag; it goes
-          # to `next`, so `latest` stays the last release.
+          # npm refuses a pre-release (vX.Y.Z-rc.N) without a dist-tag.
           dist=latest
           case "$TAG" in *-*) dist=next ;; esac
           npm publish --tag "$dist"
           # The package was @truvity/access-roster before the rename to sluis.
-          # GitHub Packages cannot `npm deprecate`, so for one or two releases
-          # the SAME build is published under the old name too, its description
-          # saying so: a consumer that has not moved keeps getting releases,
-          # and one that reads its lockfile sees where to go. Remove this step
+          # GitHub Packages cannot `npm deprecate`, so for a release or two the
+          # SAME build is published under the old name too. Remove this step
           # when the old name is retired (docs/decisions/0035-renamed-to-sluis.md).
           npm pkg set name="@truvity/access-roster" \
             description="DEPRECATED: renamed to @truvity/sluis, the same code under its new name. Install @truvity/sluis."
           npm publish --tag "$dist"
 
-  # A Go module in a subdirectory is released by a tag that carries the
-  # directory: `deploy/pulumi/vX.Y.Z` is how
-  # `go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z` finds it, and a plain
-  # `vX.Y.Z` does not. release-public.yaml (truvity/ci-workflows) cuts nothing but
-  # the tag that triggered it, so this job adds the library's, once the release
-  # itself succeeded.
+  # The modules other than the root, once the release itself succeeded.
   #
-  # THE LIBRARY'S TAG IS NOT THE RELEASE COMMIT. deploy/pulumi builds against the
-  # root module beside it (a `replace`), and a consumer, who does not get the
-  # replace, builds it against the root module at the version its go.mod
-  # REQUIRES. That require used to be bumped by hand before every tag, and a
-  # library tagged with a stale one compiled for nobody (it used a package its
-  # require did not have). So the tag points at a commit made here: a child of
-  # the release commit whose deploy/pulumi/go.mod requires THIS release, and
-  # nothing else differs (hack/pin-pulumi-require.sh, which has a test), and it
-  # is BUILT as a consumer would build it, before the ref exists: the replace
-  # dropped, the root module fetched at the release tag, `go build` and
-  # `go vet` (hack/build-as-consumer.sh). The require on master is whatever it
-  # was and never has to be bumped.
-  #
-  # Idempotent, so that a re-run of a release does not fail on its own tag: a tag
-  # that exists counts when it is that very commit (a child of the release
-  # commit with the pinned go.mod). It refuses a tag that exists at anything else:
-  # a tag fetched once cannot be taken back, and the proxy remembers the first.
-  pulumi-tag:
-    needs: release
+  # The tags are pushed with an installation token of the catalogue App, not
+  # GITHUB_TOKEN: a tag ruleset can name an App as its only bypass but cannot
+  # name GitHub Actions ("Actor GitHub Actions integration must be part of the
+  # ruleset source or owner organization"), so the App is what lets the module
+  # tags be creatable by this job alone. The job's OIDC token is exchanged at the
+  # issuer for it: no key, no secret. The issuer must grant this workflow file a
+  # token of the App for this repository (contents: write); without
+  # vars.ACCESS_ROSTER_ISSUER the job falls back to GITHUB_TOKEN, which a ruleset
+  # on the module tags would refuse.
+  modules:
+    needs: [release, audit]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The token is for the API calls below and nothing else: git needs
-          # none here, and a credential left in .git/config is one more place
-          # a step could read it.
+          # The token is for the API calls and nothing else; a credential left
+          # in .git/config is one more place a step could read it.
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: deploy/pulumi/go.mod
-      - name: tag the Pulumi library at the release commit, pinned to the release
+          go-version-file: go.mod
+      - uses: truvity/ci-actions/token-exchange@de28ab4e61adb8b217c0838886cc6e4b2c71b398 # v1.9.0
+        id: app
+        if: vars.ACCESS_ROSTER_ISSUER != ''
+        with:
+          issuer: ${{ vars.ACCESS_ROSTER_ISSUER }}
+          github-app: truvity-ci-automation
+          repositories: ${{ github.event.repository.name }}
+          permissions: contents:write
+      - name: tag the modules, dependencies first, each pinned to the release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.github-token || github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # deploy/pulumi is a module of its own, so that Pulumi is not in the
-          # root's dependency graph. The edge modules are modules of their own
-          # for the same reason, and require this library: it is tagged first,
-          # so that the edge builds against it as a consumer would.
-          for dir in deploy/pulumi deploy/pulumi/edge/cloudflare; do
-            tag="$dir/${GITHUB_REF_NAME}"
-            pinned="$(mktemp)"
-            hack/pin-pulumi-require.sh "${GITHUB_REF_NAME}" - < "$dir/go.mod" > "$pinned"
-            hack/build-as-consumer.sh "$dir" "$pinned" "${GITHUB_REF_NAME}"
-            if ref=$(gh api "repos/$REPO/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha' 2>/dev/null); then
-              read -r otype existing <<<"$ref"
-              # A signed or annotated tag is an object of its own: the ref
-              # points at the tag object and only its peeled target is the
-              # commit. Compare the commit, never the tag object.
-              while [ "$otype" = "tag" ]; do
-                read -r otype existing < <(gh api "repos/$REPO/git/tags/$existing" --jq '.object.type + " " + .object.sha')
-              done
-              parent=""
-              if [ "$otype" = "commit" ]; then
-                parent="$(gh api "repos/$REPO/git/commits/$existing" --jq '.parents | if length == 1 then .[0].sha else "" end')"
-              fi
-              if [ "$otype" = "commit" ] && [ "$parent" = "$GITHUB_SHA" ] \
-                 && gh api -H 'Accept: application/vnd.github.raw+json' "repos/$REPO/contents/$dir/go.mod?ref=$existing" | cmp -s - "$pinned"; then
-                echo "$tag already points at $existing, the release commit with the require pinned"
-                continue
-              fi
-              echo "::error::$tag exists at $existing ($otype), not at the release commit $GITHUB_SHA with $dir/go.mod pinned to ${GITHUB_REF_NAME}"
-              exit 1
-            fi
-            base_tree="$(gh api "repos/$REPO/git/commits/$GITHUB_SHA" --jq .tree.sha)"
-            blob="$(gh api "repos/$REPO/git/blobs" -f "content=$(base64 -w0 "$pinned")" -f encoding=base64 --jq .sha)"
-            tree="$(jq -n --arg base "$base_tree" --arg path "$dir/go.mod" --arg blob "$blob" \
-              '{base_tree: $base, tree: [{path: $path, mode: "100644", type: "blob", sha: $blob}]}' \
-              | gh api "repos/$REPO/git/trees" --input - --jq .sha)"
-            commit="$(jq -n --arg msg "$dir ${GITHUB_REF_NAME}: require github.com/truvity/sluis ${GITHUB_REF_NAME}" --arg tree "$tree" --arg parent "$GITHUB_SHA" \
-              '{message: $msg, tree: $tree, parents: [$parent]}' \
-              | gh api "repos/$REPO/git/commits" --input - --jq .sha)"
-            gh api "repos/$REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$commit" --jq .ref
-          done
+          GOEXPERIMENT: jsonv2
+        run: ./hack/tag-modules.sh "$GITHUB_REF_NAME"

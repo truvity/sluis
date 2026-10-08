@@ -1,29 +1,14 @@
 # The OpenID Foundation Config profile, on demand only.
 #
-# WHY NOT ON A SCHEDULE ANY MORE. It ran daily, and a daily run of one
-# of three profiles is a check that reports green while the two that
-# actually sign somebody in have not been run for weeks. That is worse
-# than no check: it reads as "conformance passes". The suite is now run
-# by a person, as a whole, at each major and minor release — all three
-# profiles, including the manual steps a person has to sign off — and
-# docs/how-to/run-conformance.md is the procedure.
-#
-# WHY IT STAYS AT ALL. Config reads the discovery document and the key
-# set and checks them against the specification. It needs no client, no
-# secret and nobody at a browser, so it is the one profile that can run
-# unattended, and it guards the surface most likely to break by
-# accident: change a provider option and discovery changes with it,
-# silently, for every relying party that reads it. Keeping it one click
-# away is worth more than deleting it.
-#
-# WHY NOT ON A TAG. A tag is a build, not a deployment: at the moment
-# `v1.2.3` is pushed the cluster is still running whatever it ran
-# before, so a run here would certify the OLD issuer and report it
-# against the NEW version.
-#
-# The other two profiles sign somebody in, and the signing-in needs a
-# credential this workflow should not hold: `hack/conformance_drive.py`
-# gets one from the cluster, and CI has no business with cluster access.
+# Not scheduled: a daily run of one of three profiles reads as "conformance
+# passes" while the two that sign somebody in have not been run for weeks. The
+# suite is run by a person, as a whole, at each major and minor release
+# (docs/how-to/run-conformance.md). This profile stays one click away because it
+# needs no client, no secret and nobody at a browser, and guards the surface
+# most likely to break by accident: discovery and the key set. Not on a tag: a
+# tag is a build, not a deployment, so a run would certify the OLD issuer against
+# the NEW version. The other two profiles need a credential from the cluster,
+# which CI has no business holding.
 name: Conformance
 
 on:
@@ -48,13 +33,10 @@ jobs:
       ISSUER: ${{ inputs.issuer }}
       SUITE: https://localhost.emobix.co.uk:8443
     steps:
-      # Pinned by COMMIT SHA, never a tag: a tag moves, and this is the
-      # house rule every other workflow here follows.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      # The suite is published as images, so there is no Java build. It
-      # answers on a PUBLIC name that resolves to 127.0.0.1, which is how
-      # it gets a real certificate while running on a runner.
+      # The suite answers on a PUBLIC name that resolves to 127.0.0.1, which is
+      # how it gets a real certificate on a runner.
       - name: Start the conformance suite
         run: |
           git clone --depth 1 https://gitlab.com/openid/conformance-suite.git /tmp/suite
@@ -71,8 +53,6 @@ jobs:
           echo "::error::the suite never came up" >&2
           exit 1
 
-      # The discovery document has to be reachable from the runner before
-      # the suite is blamed for not reading it.
       - name: Check the issuer is reachable
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
@@ -103,9 +83,6 @@ jobs:
           echo "plan: ${SUITE}/plan-detail.html?plan=${plan}"
           hack/conformance-run.sh "$plan"
 
-      # The suite's own record of the run, which is what an auditor wants
-      # and what a failure needs: the summary above says which module,
-      # this says which assertion.
       - name: Keep the log
         if: always()
         run: |

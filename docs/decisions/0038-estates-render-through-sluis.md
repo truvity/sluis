@@ -56,8 +56,8 @@ documents from it.**
 4. **The `require` is pinned by the release, not by a person.** The library still
    requires the root module (the public package lives in it). The release workflow
    tags `deploy/pulumi/vX.Y.Z` at a child of the release commit whose `go.mod`
-   requires `vX.Y.Z` and nothing else differs (`hack/pin-pulumi-require.sh`, tested
-   in `just pulumi-test`). The require on master is never bumped before a tag.
+   requires `vX.Y.Z` and nothing else differs (`hack/modules.py`, tested
+   in `just release-chain`). The require on master is never bumped before a tag.
 5. **The old way keeps working for one minor**, marked deprecated: `LambdaArgs.Config`,
    `Policy` and `PolicyPath` log a warning when used, and `sluisctl policy render`
    stays (a layer of policy files is still a way to write a policy, and is what an
