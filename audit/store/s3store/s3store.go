@@ -132,6 +132,10 @@ type Options struct {
 	// does its wildcard cover a bucket subdomain? -- rather than of the
 	// endpoint, which is why it is its own switch.
 	PathStyle bool
+	// Reauth, when set, is called after the store answers 403, and the request is
+	// sent once more if it replaced the credentials. See [Reauth]. Nil (the
+	// default, and the case for static credentials) never retries.
+	Reauth Reauth
 }
 
 // New returns a store.
@@ -148,6 +152,9 @@ func New(api API, o Options) (*Store, error) {
 	}
 	if err := CheckEndpointLock(o.Endpoint, mode); err != nil {
 		return nil, err
+	}
+	if o.Reauth != nil {
+		api = &reauthAPI{API: api, reauth: o.Reauth}
 	}
 	s := &Store{api: api, bucket: o.Bucket, prefix: o.Prefix, kmsKey: o.KMSKeyID}
 	switch mode {

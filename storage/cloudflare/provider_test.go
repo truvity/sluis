@@ -232,3 +232,27 @@ func TestTheHTTPClientSpeaksCloudflare(t *testing.T) {
 		t.Errorf("auth failure: %v", err)
 	}
 }
+
+// A 403 asks for new credentials, at most one mint in 30 seconds.
+func TestReauthenticateMintsAtMostOnceInThirtySeconds(t *testing.T) {
+	ctx := context.Background()
+	p, f, clock, _ := newProvider(t, nil)
+	if _, err := p.Retrieve(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := p.Reauthenticate(ctx); err != nil || !ok || f.creates != 2 {
+		t.Fatalf("first: %v %v creates %d", ok, err, f.creates)
+	}
+	*clock = clock.Add(20 * time.Second)
+	if ok, err := p.Reauthenticate(ctx); err != nil || ok || f.creates != 2 {
+		t.Fatalf("within 30s: %v %v creates %d", ok, err, f.creates)
+	}
+	*clock = clock.Add(11 * time.Second)
+	if ok, err := p.Reauthenticate(ctx); err != nil || !ok || f.creates != 3 {
+		t.Fatalf("after 30s: %v %v creates %d", ok, err, f.creates)
+	}
+	c, _ := p.Retrieve(ctx)
+	if c.AccessKeyID != "tok003" {
+		t.Errorf("the held credentials are %s", c.AccessKeyID)
+	}
+}
