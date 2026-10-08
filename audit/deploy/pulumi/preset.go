@@ -68,6 +68,15 @@ type PresetStorage struct {
 	// Must be below internal/. Default "internal/archive/<preset>". Only with
 	// Endpoint: on AWS the roles are the credential.
 	CredentialsAddress string
+	// CredentialsPreset makes the functions mint the store's R2 credentials for
+	// themselves (the deployment document's `credentials_preset`): they clone a
+	// disabled Cloudflare prototype with the minter token kept at Minter, below
+	// State.Root, and record the ids they mint at cloudflare-minted/<preset>
+	// there. The roles are granted read on exactly the Minter address and read and
+	// write on exactly that record, and nothing else for it. Exclusive with
+	// CredentialsAddress, and only with Endpoint. Unset (the default) is the
+	// static credentials, which need no Cloudflare account.
+	CredentialsPreset *profile.CredentialsPreset
 	// KeyAlias is the alias (`alias/...`) of the KMS key this preset's objects are
 	// encrypted with, in place of the installation's archive key. It is looked up
 	// and never created, and is also the document's key_alias. Only on AWS S3, and
@@ -109,9 +118,25 @@ func (s presetStore) external() bool { return s.Endpoint != "" }
 // key is a key of this preset's, under its prefix.
 func (s presetStore) key(rest string) string { return s.Prefix + rest }
 
-// credentialsPath is the SSM parameter an endpoint preset's credentials are at.
+// credentialsPath is the SSM parameter an endpoint preset's static credentials
+// are at. A preset that mints its credentials has none ([presetStore.minted]).
 func (s presetStore) credentialsPath(stateRoot string) string {
 	return stateRoot + "/" + s.CredentialsAddress
+}
+
+// minted reports whether the preset's credentials are minted from a Cloudflare
+// prototype and not read from a static document.
+func (s presetStore) minted() bool { return s.CredentialsPreset != nil }
+
+// minterPath is the SSM parameter of the minter credential of a preset that
+// mints, and recordPath the one the functions record the tokens they minted in
+// (storage/cloudflare.Provider: cloudflare-minted/<preset> below the state root).
+func (s presetStore) minterPath(stateRoot string) string {
+	return stateRoot + "/" + s.CredentialsPreset.Minter
+}
+
+func (s presetStore) recordPath(stateRoot string) string {
+	return stateRoot + "/cloudflare-minted/" + string(s.Preset)
 }
 
 // resolvePresets decides what the installation's presets are: it reads the
@@ -150,6 +175,7 @@ func resolvePresets(a *Args) error {
 			in[name] = PresetStorage{
 				Bucket: s.Bucket, Prefix: s.Prefix, Region: s.Region, Endpoint: s.Endpoint,
 				PathStyle: s.PathStyle, CredentialsAddress: s.Credentials, KeyAlias: s.KeyAlias,
+				CredentialsPreset: s.CredentialsPreset,
 			}
 		}
 	default:
@@ -250,6 +276,7 @@ func documentStorage(s presetStore) profile.PresetStorage {
 	return profile.PresetStorage{
 		Bucket: s.Bucket, Prefix: s.Prefix, Region: s.Region, Endpoint: s.Endpoint,
 		PathStyle: s.PathStyle, Credentials: s.CredentialsAddress, KeyAlias: s.KeyAlias,
+		CredentialsPreset: s.CredentialsPreset,
 	}
 }
 
@@ -277,6 +304,8 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the bucket is addressed by the SDK", field("PathStyle"), field("Endpoint"))
 		case s.CredentialsAddress != "":
 			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the roles are the credential", field("CredentialsAddress"), field("Endpoint"))
+		case s.CredentialsPreset != nil:
+			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the roles are the credential", field("CredentialsPreset"), field("Endpoint"))
 		}
 		return s, nil
 	}
@@ -296,6 +325,22 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 	}
 	if s.Region == "" {
 		s.Region = "auto"
+	}
+	if c := s.CredentialsPreset; c != nil {
+		if s.CredentialsAddress != "" {
+			return s, fmt.Errorf("auditpulumi: %s and %s are both set: static credentials or minted ones, not both", field("CredentialsAddress"), field("CredentialsPreset"))
+		}
+		if !addressRE.MatchString(c.Minter) {
+			return s, fmt.Errorf("auditpulumi: %s %q must be below internal/ (internal/cloudflare/main/minter): the grant is on that address only",
+				field("CredentialsPreset.Minter"), c.Minter)
+		}
+		if c.Account == "" || c.Prototype == "" {
+			return s, fmt.Errorf("auditpulumi: %s needs Account, Minter and Prototype", field("CredentialsPreset"))
+		}
+		if _, err := c.LifetimeDuration(); err != nil {
+			return s, fmt.Errorf("auditpulumi: %s.%w", field("CredentialsPreset"), err)
+		}
+		return s, nil
 	}
 	if s.CredentialsAddress == "" {
 		s.CredentialsAddress = defaultCredentialsAddress + "/" + string(name)

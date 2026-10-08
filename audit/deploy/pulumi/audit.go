@@ -88,7 +88,9 @@ type Audit struct {
 	// ArchiveCredentialsPaths are the SSM parameters the functions read the
 	// credentials of each preset at an endpoint from, by preset name: write a
 	// SecureString there, a JSON object {"accessKeyID": ..., "secretAccessKey": ...},
-	// before the first record (docs/how-to/archive-on-r2.md). A preset on AWS S3
+	// before the first record (docs/how-to/archive-on-r2.md); for a preset with
+	// CredentialsPreset it is the MINTER credential's address (a cloudflare-minter/v1
+	// document). A preset on AWS S3
 	// has none: the roles are the credential.
 	ArchiveCredentialsPaths pulumi.StringMapOutput
 	// SecretsRoot is the SSM parameter path the writer reads the secrets its
@@ -171,14 +173,23 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 			}
 			region = r.Region
 		}
-		var credentials []string
+		// A store with static credentials is read at that one address. One that
+		// mints its credentials reads the minter at its one address and reads and
+		// writes the record of the tokens it minted at one, never anything wider.
+		var credentials, records []string
 		for _, e := range endpoints {
+			if e.minted() {
+				credentials = append(credentials, e.minterPath(a.State.Root))
+				records = append(records, e.recordPath(a.State.Root))
+				continue
+			}
 			credentials = append(credentials, e.credentialsPath(a.State.Root))
 		}
 		base := stateGrant{Region: region, Account: accountID, KeyArn: a.State.KeyArn}
 		if ingest {
 			g := base
 			g.Read = append(g.Read, credentials...)
+			g.Write = append(g.Write, records...)
 			if a.Keys.Pseudonym != "" {
 				g.Write = append(g.Write, a.State.Root+"/"+pseudonymStateAddress+"/*")
 			}
@@ -187,6 +198,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		if notary && len(credentials) > 0 {
 			g := base
 			g.Read = append(g.Read, credentials...)
+			g.Write = append(g.Write, records...)
 			notaryState = &g
 		}
 	}
@@ -450,6 +462,10 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	credentialsPaths := pulumi.StringMap{}
 	if ingest || notary {
 		for _, e := range endpoints {
+			if e.minted() {
+				credentialsPaths[string(e.Preset)] = pulumi.String(e.minterPath(a.State.Root))
+				continue
+			}
 			credentialsPaths[string(e.Preset)] = pulumi.String(e.credentialsPath(a.State.Root))
 		}
 	}
