@@ -130,7 +130,7 @@ func (m *Minter) tick(ctx context.Context, preset string, p config.CloudflarePre
 	if !due {
 		return res
 	}
-	minted, err := m.rotate(ctx, preset, p, rev, now)
+	minted, err := m.rotate(ctx, preset, p, rev, now, audit.System())
 	if err != nil {
 		res.Outcome, res.Err = OutcomeFailed, err
 		return res
@@ -149,19 +149,19 @@ func (m *Minter) tick(ctx context.Context, preset string, p config.CloudflarePre
 
 // rotate mints the stored token and writes it. A token that was minted and
 // could not be stored is deleted at once: nobody could ever read it.
-func (m *Minter) rotate(ctx context.Context, preset string, p config.CloudflarePreset, rev state.Rev, now time.Time) (*Minted, error) {
+func (m *Minter) rotate(ctx context.Context, preset string, p config.CloudflarePreset, rev state.Rev, now time.Time, actor audit.Actor) (*Minted, error) {
 	minted, err := m.mint(ctx, preset, p, cloudflare.StoredName(m.cfg.Instance, preset, now), now, p.Lifetime.D())
 	if err != nil {
-		m.fail(ctx, audit.System(), preset, audit.CloudflareStored, err)
+		m.fail(ctx, actor, preset, audit.CloudflareStored, err)
 		return nil, err
 	}
 	if _, err = m.cfg.External.Cloudflare(preset).Put(ctx, minted.Document(), rev); err != nil {
 		err = &storeError{err: fmt.Errorf("write external/cloudflare/%s: %w", preset, err)}
 		m.dropUnstored(ctx, preset, p, minted)
-		m.fail(ctx, audit.System(), preset, audit.CloudflareStored, err)
+		m.fail(ctx, actor, preset, audit.CloudflareStored, err)
 		return nil, err
 	}
-	m.cfg.record(ctx, audit.CloudflareTokenMinted(audit.System(), preset, audit.CloudflareToken{
+	m.cfg.record(ctx, audit.CloudflareTokenMinted(actor, preset, audit.CloudflareToken{
 		Variant: audit.CloudflareStored, R2: p.R2(), Account: p.Account, TokenID: minted.TokenID, ExpiresOn: minted.ExpiresOn,
 	}))
 	meters.mint(ctx, preset, audit.CloudflareStored, "ok")
@@ -257,6 +257,11 @@ type LiveToken struct {
 	// Stored is the token the preset's stored document holds (or held): minted
 	// by the schedule, not for a caller.
 	Stored bool
+	// Caller is who an on-demand token was minted for, as its name spells it
+	// (see [cloudflare.Caller]); empty for the stored one.
+	Caller string
+	// MintedAt is the time in the token's name; zero when the name has none.
+	MintedAt time.Time
 }
 
 // Live lists the preset's own tokens that Cloudflare still accepts, newest
@@ -280,7 +285,11 @@ func (m *Minter) Live(ctx context.Context, preset string) ([]LiveToken, error) {
 		if !cloudflare.IsOwn(t.Name, m.cfg.Instance, preset) || t.Status == cloudflare.StatusExpired || (!t.ExpiresOn.IsZero() && !t.ExpiresOn.After(now)) {
 			continue
 		}
-		out = append(out, LiveToken{ID: t.ID, Name: t.Name, ExpiresOn: t.ExpiresOn, Stored: cloudflare.IsStored(t.Name, m.cfg.Instance, preset)})
+		caller, at := cloudflare.SplitName(t.Name, m.cfg.Instance, preset)
+		out = append(out, LiveToken{
+			ID: t.ID, Name: t.Name, ExpiresOn: t.ExpiresOn, Caller: caller, MintedAt: at,
+			Stored: cloudflare.IsStored(t.Name, m.cfg.Instance, preset),
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ExpiresOn.After(out[j].ExpiresOn) })
 	return out, nil
@@ -338,7 +347,7 @@ func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit
 		return res, nil
 	}
 	now := m.now()
-	minted, err := m.rotate(ctx, preset, p, rev, now)
+	minted, err := m.rotate(ctx, preset, p, rev, now, actor)
 	if err != nil {
 		return res, fmt.Errorf("the token was revoked; minting its replacement failed (the next tick retries): %w", err)
 	}

@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package directoryroster.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// CloudflareService is the console's view of sluis as the STS for Cloudflare
+// tokens and R2 credentials (service document `cloudflare`, policy
+// `cloudflare.grants`): what a person may ask for, and what an operator
+// watches, rotates and revokes.
+//
+// No message of this service ever carries the value of a token that is kept.
+// The one credential it returns is the answer to GetCloudflareCredential: a
+// token minted for the caller on the spot, shown once.
+service CloudflareService {
+  // ListCloudflare is the administrator's view: the accounts (ids redacted),
+  // every preset with the live state of its prototype, the stored token's
+  // metadata and the tokens minted on demand that are still live. Viewer.
+  // Never a token's value.
+  rpc ListCloudflare(ListCloudflareRequest) returns (ListCloudflareResponse);
+
+  // RotateCloudflarePreset mints the preset's stored token now instead of at
+  // its next rotation, stores it where consumers read it and sweeps the
+  // expired ones. Operator. Audited.
+  rpc RotateCloudflarePreset(RotateCloudflarePresetRequest) returns (RotateCloudflarePresetResponse);
+
+  // RevokeCloudflareToken deletes a live token of a preset by id. A revoked
+  // stored token is replaced at once. Operator. Audited.
+  rpc RevokeCloudflareToken(RevokeCloudflareTokenRequest) returns (RevokeCloudflareTokenResponse);
+
+  // ListMyCloudflarePresets are the presets the policy grants the signed-in
+  // person through their groups. Anyone signed in.
+  rpc ListMyCloudflarePresets(ListMyCloudflarePresetsRequest) returns (ListMyCloudflarePresetsResponse);
+
+  // GetCloudflareCredential mints a token of a granted preset for the caller:
+  // the prototype's rights, a lifetime up to the preset's, named for the
+  // caller. The value is in the response and nowhere else. Anyone the policy
+  // grants the preset. Audited.
+  rpc GetCloudflareCredential(GetCloudflareCredentialRequest) returns (GetCloudflareCredentialResponse);
+}
+
+message ListCloudflareRequest {}
+
+message ListCloudflareResponse {
+  // false when this deployment has no `cloudflare` section.
+  bool available = 1;
+  repeated CloudflareAccount accounts = 2;
+  repeated CloudflarePreset presets = 3;
+  // whether the caller may rotate and revoke.
+  bool can_operate = 4;
+}
+
+// CloudflareAccount is an account the service document declares.
+message CloudflareAccount {
+  // the name presets use for it.
+  string name = 1;
+  // the account id, redacted to its last four characters.
+  string id_last4 = 2;
+}
+
+message CloudflarePreset {
+  string name = 1;
+  string description = 2;
+  // the account's name in the service document.
+  string account = 3;
+  // how long a minted token lives, and how often the stored one is replaced.
+  int64 lifetime_seconds = 4;
+  int64 rotation_seconds = 5;
+  // set for an R2 preset: the S3 endpoint.
+  string endpoint = 6;
+  CloudflarePrototype prototype = 7;
+  CloudflareStored stored = 8;
+  // the preset's tokens minted on demand that Cloudflare still accepts.
+  repeated CloudflareLiveToken live = 9;
+  // set when the live tokens could not be listed: the reason, not a list.
+  string live_error = 10;
+}
+
+// CloudflarePrototype is the prototype token as sluis reads it now.
+message CloudflarePrototype {
+  string id = 1;
+  // ok, active, forbidden, missing or unreachable.
+  string status = 2;
+  // why, for any status but ok: the permission groups that were refused, or
+  // what could not be read. Never a value.
+  string detail = 3;
+}
+
+// CloudflareStored is the token the schedule keeps at external/cloudflare/<preset>.
+message CloudflareStored {
+  bool present = 1;
+  // the token's id in Cloudflare (for R2, the access key id); empty when it
+  // could not be matched to a live token.
+  string token_id = 2;
+  google.protobuf.Timestamp minted_at = 3;
+  google.protobuf.Timestamp expires_on = 4;
+  // set when the stored document could not be read.
+  string error = 5;
+}
+
+// CloudflareLiveToken is a token minted on demand that is still live.
+message CloudflareLiveToken {
+  string id = 1;
+  // who it was minted for, as its name spells it.
+  string caller = 2;
+  google.protobuf.Timestamp minted_at = 3;
+  google.protobuf.Timestamp expires_on = 4;
+  // true for the stored token, which the schedule minted.
+  bool stored = 5;
+}
+
+message RotateCloudflarePresetRequest {
+  string preset = 1;
+}
+
+message RotateCloudflarePresetResponse {
+  string token_id = 1;
+  google.protobuf.Timestamp expires_on = 2;
+}
+
+message RevokeCloudflareTokenRequest {
+  string preset = 1;
+  string token_id = 2;
+}
+
+message RevokeCloudflareTokenResponse {
+  // true when the revoked token was the stored one and a new one was minted.
+  bool replaced = 1;
+}
+
+message ListMyCloudflarePresetsRequest {}
+
+message ListMyCloudflarePresetsResponse {
+  bool available = 1;
+  repeated MyCloudflarePreset presets = 2;
+}
+
+message MyCloudflarePreset {
+  string name = 1;
+  string description = 2;
+  // set for an R2 preset.
+  string endpoint = 3;
+  int64 lifetime_seconds = 4;
+}
+
+message GetCloudflareCredentialRequest {
+  string preset = 1;
+  // optional: shorter than the preset's lifetime. Zero is the preset's.
+  int64 lifetime_seconds = 2;
+}
+
+message GetCloudflareCredentialResponse {
+  string preset = 1;
+  string token_id = 2;
+  google.protobuf.Timestamp expires_on = 3;
+  // the API token's value; empty for an R2 preset.
+  string token = 4;
+  // for an R2 preset: the S3 credentials.
+  string access_key_id = 5;
+  string secret_access_key = 6;
+  string endpoint = 7;
+}

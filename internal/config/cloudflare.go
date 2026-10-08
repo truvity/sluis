@@ -172,6 +172,14 @@ func (c *Cloudflare) PresetNames() []string {
 	return sortedKeys(c.Presets)
 }
 
+// AccountNames are the accounts' names, sorted.
+func (c *Cloudflare) AccountNames() []string {
+	if c == nil {
+		return nil
+	}
+	return sortedKeys(c.Accounts)
+}
+
 func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

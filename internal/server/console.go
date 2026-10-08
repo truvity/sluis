@@ -193,6 +193,10 @@ type ConsoleDeps struct {
 	// GitHubHTTP makes the calls to GitHub that connecting and
 	// disconnecting need. Nil is a client with a short timeout.
 	GitHubHTTP *http.Client
+	// Cloudflare is the minter of Cloudflare credentials. Nil is a
+	// deployment with no `cloudflare` section and no Cloudflare page; it is
+	// connected late, by [ConsoleServer.UseCloudflare].
+	Cloudflare CloudflareSTS
 	// Audit records what an identity did through the console. Nil records
 	// nothing.
 	Audit audit.Recorder
@@ -223,6 +227,7 @@ var (
 	_ directoryrosterv1connect.SlackSharedChannelServiceHandler = (*Console)(nil)
 	_ directoryrosterv1connect.SlackChannelServiceHandler       = (*Console)(nil)
 	_ directoryrosterv1connect.SlackServiceHandler              = (*Console)(nil)
+	_ directoryrosterv1connect.CloudflareServiceHandler         = (*Console)(nil)
 )
 
 // NewConsole returns the operator services.

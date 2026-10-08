@@ -177,6 +177,21 @@ prototype with a lifetime up to the preset's and named
 id from the console or the CLI; if it was the stored one, a replacement is
 minted at once.
 
+### In the console
+
+The Cloudflare page of the console (Systems) is both views of this. Anyone
+signed in sees the presets their groups are granted and can **Get a token**: the
+value is shown once and not kept. A viewer also sees each preset's prototype as
+sluis reads it now, the stored token's id, age and expiry (a warning past one
+rotation, an error past two, the alert's threshold), and the on-demand tokens
+still live. An operator can **Rotate now** and **Revoke** after a confirmation;
+both are audited under their name (`roster.cloudflare.token.minted`,
+`roster.cloudflare.token.revoked`). Rotate now is refused while the prototype is
+active or grants a forbidden permission, like any mint, and answers "aborted"
+when the schedule is rotating the same preset. Opening the page reads each
+preset's prototype and lists its tokens once, a handful of the API requests in
+the limit above.
+
 ## sluis's own R2 credentials, without a static document
 
 An R2 consumer of sluis itself can name a preset instead of a static document, so

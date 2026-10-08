@@ -294,6 +294,7 @@ func (s *ConsoleServer) Handler() http.Handler {
 	mux.Handle(directoryrosterv1connect.NewSlackSharedChannelServiceHandler(s.console, telemetry.ConnectOptions()...))
 	mux.Handle(directoryrosterv1connect.NewSlackChannelServiceHandler(s.console, telemetry.ConnectOptions()...))
 	mux.Handle(directoryrosterv1connect.NewSlackServiceHandler(s.console, telemetry.ConnectOptions()...))
+	mux.Handle(directoryrosterv1connect.NewCloudflareServiceHandler(s.console, telemetry.ConnectOptions()...))
 
 	if s.consoleUI != nil {
 		mux.Handle("GET /assets/", http.FileServerFS(s.consoleUI))
@@ -1132,6 +1133,9 @@ type whoamiBody struct {
 	// its Audit page. Whether the person may read anything there is the
 	// installation's to say.
 	Audit bool `json:"audit,omitempty"`
+	// Cloudflare says sluis mints Cloudflare credentials here, so the console
+	// shows its Cloudflare page. What the person may do on it is the grants'.
+	Cloudflare bool `json:"cloudflare,omitempty"`
 }
 
 func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
@@ -1151,6 +1155,7 @@ func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
 			SignOutURL: s.signOut(),
 			IssuerURL:  s.issuerOrigin(),
 			Audit:      s.auditQuery != nil,
+			Cloudflare: s.console.deps.Cloudflare != nil,
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
