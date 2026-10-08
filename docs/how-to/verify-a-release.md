@@ -14,7 +14,7 @@ pipeline takes anything from it. The release is checksummed, signed and attested
 | `checksums.txt.sigstore.json`, a keyless cosign bundle over `checksums.txt` | release asset | the `attest` job, after the lines are combined |
 | a build-provenance attestation for every release asset | GitHub attestations | the `attest` job |
 | `<archive>.sbom.spdx.json`, an SPDX SBOM per archive, and an SBOM attestation binding it to the archive | release asset, attestation | syft in goreleaser, `attest-sboms` |
-| for every image digest: a cosign signature, a build-provenance attestation and an SPDX SBOM attestation | the registry, beside the image | `attest-images` |
+| for every image digest: a cosign signature, a build-provenance attestation and an SPDX SBOM attestation; for every OCI Helm chart: a signature and provenance | the registry, beside the artifact | `attest-oci` |
 
 Nothing is signed with a long-lived key. The signing certificate is short-lived and names the workflow that asked for it
 (`.github/workflows/release.yaml` at the release tag), issued against the workflow's GitHub OIDC token. Keyless means the
@@ -40,7 +40,7 @@ It downloads the release and fails on the first of:
    `--certificate-oidc-issuer https://token.actions.githubusercontent.com`;
 3. an asset with no attestation from `truvity/sluis/.github/workflows/release.yaml`
    (`gh attestation verify <file> --repo truvity/sluis --signer-workflow ...`);
-4. an image whose signature or attestation does not verify. `RELEASE_VERIFY_SKIP_IMAGES=1` leaves the images out.
+4. an image or Helm chart (the list is `hack/release-images.txt`, copy it beside the script) whose signature or attestation does not verify. `RELEASE_VERIFY_SKIP_IMAGES=1` leaves them out.
 
 The identity is pinned to a `v*` tag of the release workflow, not to a branch: a workflow run from another ref, or from a
 fork, cannot produce a certificate that matches.
