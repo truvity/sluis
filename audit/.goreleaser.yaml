@@ -12,14 +12,13 @@
 version: 2
 project_name: audit
 
-# The version comes from the root `vX.Y.Z` tag only. The sdk/ and
-# deploy/pulumi/ module tags sit at the same commit and must never be
-# picked as the version (an annotated `sdk/v0.7.0` once was, and ko refused
-# it as an image tag).
+# The version comes from the root `vX.Y.Z` tag only. The module tags
+# (audit/sdk/vX.Y.Z, storage/vX.Y.Z, ...) sit at commits beside it and must
+# never be picked as the version (an annotated `sdk/v0.7.0` once was, and ko
+# refused it as an image tag).
 git:
   ignore_tags:
-    - "sdk/*"
-    - "deploy/*"
+    - "*/*"
 
 builds:
   - id: audit
@@ -212,19 +211,24 @@ kos:
     sbom: spdx
 
 # Named rather than inferred from the remote, so the config validates in a
-# checkout that has none.
+# checkout that has none. The release is the repository's: the root config's run
+# creates it, and this one adds its assets to it (keep-existing leaves the
+# notes alone).
 release:
   github:
     owner: truvity
-    name: audit
+    name: sluis
+  mode: keep-existing
+  prerelease: auto
   # Set by hack/e2e-snapshot.sh only: a commit that is not a tag has
   # nothing to attach a GitHub release to, and the kind tier's snapshot
   # build needs none. Empty (the default, every real release) leaves this
   # exactly as it always was.
   disable: "{{ .Env.GITHUB_RELEASE_DISABLED }}"
 
+# Beside the root config's checksums.txt on the same release, not over it.
 checksum:
-  name_template: checksums.txt
+  name_template: "audit_{{ .Version }}_checksums.txt"
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 # CHANGELOG.md is written by hand and says what changed; a list of commit

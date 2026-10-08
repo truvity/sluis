@@ -130,13 +130,18 @@ lint: console
 #
 # The edge modules (deploy/pulumi/edge/*) are modules of their own for the same
 # reason, and build against the core beside them.
-#
-# It also tests hack/pin-pulumi-require.sh, which the release workflow runs to
-# tag the library at a commit whose require is the release being cut.
 pulumi-test:
     cd deploy/pulumi && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
     cd deploy/pulumi/edge/cloudflare && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
-    hack/test-pin-pulumi-require.sh
+
+# The release's chain of module tags without a tag: hack/modules.py (which
+# modules there are, in the order they are tagged, and the pin of their
+# requires to the release) against the real go.mod files, then the pin of
+# every module to a made-up release, read back. The release workflow's gate
+# runs the same `check`.
+release-chain:
+    hack/test-modules.sh
+    hack/modules.py check v9.9.9 > /dev/null
 
 # Test the storage module (storage/). Like deploy/pulumi it is a module of its
 # own that the root build, test and lint never see, so this recipe is its gate.
@@ -170,32 +175,26 @@ acceptance: console
     kind delete cluster --name sluis-acceptance
 
 # Check the release configuration without cutting one, and, given the tag
-# about to be cut (`just release-check v1.64.0`), refuse a tag the Pulumi
-# library does not agree with.
+# about to be cut (`just release-check v1.74.0`), the whole chain of module
+# tags: every go.mod pinned to it (hack/modules.py check), as the release
+# tags the modules at commits whose requires are the release, dependencies
+# first, building each as a consumer before its ref exists
+# (hack/build-as-consumer.sh; that part needs the tags pushed and only runs in
+# the release).
 #
-# The require gate: deploy/pulumi requires github.com/truvity/sluis, and a
-# library tagged vX.Y.Z whose require names another version ships against
-# the wrong root. The release workflow tags the library at a commit whose
-# require is pinned to the release (hack/pin-pulumi-require.sh) and builds it
-# as a consumer before tagging (hack/build-as-consumer.sh), so the require on
-# master is never bumped by hand; this runs the pin, as the workflow's gate
-# does.
-#
-# The release path, as far as it can be exercised without a tag.
-#
-# `goreleaser check` validates the config and `build --single-target`
-# proves it compiles, but NEITHER reaches the archives stage — which is
-# where v0.12.0 failed, four minutes into a tagged run, publishing
-# nothing. So the archive shapes are checked here by reading the same
-# file goreleaser reads.
+# `goreleaser check` validates a config and `build --single-target` proves it
+# compiles, but NEITHER reaches the archives stage -- which is where v0.12.0
+# failed, four minutes into a tagged run, publishing nothing. So the archive
+# shapes are checked here by reading the same file goreleaser reads. Both
+# configs are exercised: the root's (sluis) and audit/'s.
 release-check tag="": console
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -n "{{tag}}" ]; then
-        ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/go.mod > /dev/null
-        ./hack/pin-pulumi-require.sh "{{tag}}" - < deploy/pulumi/edge/cloudflare/go.mod > /dev/null
-    fi
+    ./hack/modules.py check "{{ if tag == "" { "v9.9.9" } else { tag } }}"
     ./hack/check-archives.py
+    goreleaser check
+    goreleaser build --snapshot --clean --single-target
+    cd audit
     goreleaser check
     goreleaser build --snapshot --clean --single-target
 
@@ -905,6 +904,12 @@ audit-vuln:
 [working-directory: 'audit']
 audit-e2e-snapshot:
     bash hack/e2e-snapshot.sh
+
+# audit's half of a release: archives, images and the Lambda zips, onto the
+# GitHub release the root config created. The release workflow runs it.
+[working-directory: 'audit']
+audit-release:
+    goreleaser release --clean
 
 # Stand in for the platform: the database and its two roles, the stream and the
 # archive bucket, under the exact names ../charts/audit/testdata/values/e2e.yaml

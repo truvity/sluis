@@ -213,11 +213,14 @@ Push a `v*` tag. The release workflow builds the binaries, the images
 `/resource-proxy`),
 the chart (`oci://ghcr.io/truvity/charts/sluis`), `sluisctl`'s
 archives and its Nix flake, and publishes the TypeScript package to GitHub
-Packages, all stamped with the tag.
-The Go module and the GitHub Action are the same tag; the Pulumi library, a
-module of its own, is tagged `deploy/pulumi/vX.Y.Z` at the same commit by the
-release's `pulumi-tag` job. One tag, every artifact: a consumer pins one
-version of this repository.
+Packages, all stamped with the tag. The `audit` job adds audit's archives, Lambda
+zips, images (`ghcr.io/truvity/audit/*`), chart and Nix flake to the same GitHub
+release (`audit/.goreleaser.yaml`, `just audit-release`).
+The Go module and the GitHub Action are the same tag. Every other Go module of
+the repository (`hack/modules.py list` names them: `storage`, `deploy/pulumi`,
+`deploy/pulumi/edge/cloudflare`, `audit`, `audit/sdk`, `audit/deploy/pulumi`) is
+tagged `<dir>/vX.Y.Z` by the release's `modules` job. One tag, every artifact: a
+consumer pins one version of this repository.
 
 `just docs-check` also holds the documentation's links and names
 (`hack/check-docs-hygiene.py`): every relative link in a Markdown file or
@@ -229,28 +232,37 @@ reason. An identifier that deliberately keeps its old name gets an `allow` row;
 prose still to be rewritten is a `baseline` count that only goes down.
 
 Two gates run before the artifacts exist, and `just release-check vX.Y.Z`
-runs the pin locally:
+runs the first locally (and both goreleaser configs):
 
-- **The Pulumi library's require.** `deploy/pulumi/go.mod` requires
-  `github.com/truvity/sluis`, and the release workflow tags the library at a
-  child of the release commit whose require is the tag
-  (`hack/pin-pulumi-require.sh`; the `pulumi-tag` job), so nothing is bumped by
-  hand. The `gate` job runs the pin first, so a `go.mod` it cannot handle stops
-  the release before anything is published, and `pulumi-tag` then builds the
-  pinned library as a consumer would (the `replace` dropped, the root module
-  fetched at the release tag with `GOPROXY=direct`, `go build` and `go vet`,
-  `hack/build-as-consumer.sh`) before the `deploy/pulumi/vX.Y.Z` ref exists.
-  The `checkout` step keeps no credential (`persist-credentials: false`); the
-  token is in the API calls only.
+- **The modules' requires.** A module that requires another module of this
+  repository (`deploy/pulumi` requires the root, an edge module also the core
+  library, `audit` its SDK) is tagged at a child of the release commit whose
+  requires are the tag (`hack/modules.py pin`, `hack/tag-modules.sh`), so nothing
+  is bumped by hand. The `gate` job runs `hack/modules.py check` first, so a
+  `go.mod` the pin cannot handle stops the release before anything is published.
+  The modules are tagged dependencies first, and each pinned module is built as
+  a consumer would build it (the `replace` dropped, the other modules fetched at
+  their tags with `GOPROXY=direct`, `go build` and `go vet`,
+  `hack/build-as-consumer.sh`) before its `<dir>/vX.Y.Z` ref exists. A new
+  `go.mod` joins the chain with no workflow edit. The checkout keeps no
+  credential (`persist-credentials: false`).
 
-  **A `deploy/pulumi/vX.Y.Z` tag pushed by hand at the release commit is refused
-  by design:** the job accepts an existing tag only when it is a child of the
-  release commit with the pinned `go.mod`, and fails otherwise, because a tag
-  that a proxy has fetched cannot be taken back. The recovery is to delete the
+  The tags are pushed with an installation token of the catalogue App
+  `truvity-ci-automation` (`ci-actions/token-exchange` with
+  `vars.ACCESS_ROSTER_ISSUER`; no key or secret), narrowed to this repository and
+  `contents: write`, because a tag ruleset can name an App as its bypass but not
+  GitHub Actions. The issuer must grant `release.yaml` a token of that App for
+  this repository (`cfg/access.yaml` in the estate's gitops); without
+  the variable the job falls back to `GITHUB_TOKEN`. Root `v*` tags stay pushed by
+  hand, under the team-gated `release-tags` ruleset.
+
+  **A module tag pushed by hand is refused by design:** the job accepts an
+  existing tag only when it is the commit this release would make (the release
+  commit, or its child with the pinned `go.mod`), and fails otherwise, because a
+  tag that a proxy has fetched cannot be taken back. The recovery is to delete the
   wrong tag before any proxy fetches it, or, once one has, to cut the next
-  version, and to re-run the job for the right one. An owner step, not done
-  here: a tag ruleset restricting `deploy/pulumi/v*` to the release workflow
-  makes the hand-push impossible instead of refused.
+  version. A tag ruleset restricting the module tags to the App makes the
+  hand-push impossible instead of refused (an owner step).
 - **No breaking patch.** Auto-release refuses to cut a patch while the
   CHANGELOG entries after the newest release contain `**Breaking:`
   (`hack/check-no-breaking-patch.sh`; the `guard` job of `auto-release.yaml`).

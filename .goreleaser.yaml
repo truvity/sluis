@@ -9,6 +9,14 @@ project_name: sluis
 
 version: 2
 
+# A release tags every Go module of the repository at the same commit
+# (storage/vX.Y.Z, deploy/pulumi/vX.Y.Z, audit/vX.Y.Z, ...). Only the root
+# `vX.Y.Z` is the version: a module tag must never be picked as it (an
+# annotated `sdk/v0.7.0` once was, and ko refused it as an image tag).
+git:
+  ignore_tags:
+    - "*/*"
+
 # The console is BUILT here, not committed. `frontend/dist` is embedded
 # by the Go binary, and goreleaser runs `go build` directly rather than
 # through the Justfile, so without this the release would compile

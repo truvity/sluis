@@ -46,7 +46,7 @@ otherwise ([high availability](high-availability.md)). Valkey is optional (the d
 - **The audit catalogue needs its schemas.** If you run the audit installation, its writer refuses to start without the
   `.json` schemas; they ship as the release asset `sluis-audit-catalogue_<version>.tar.gz`.
 - **Nobody bumps `deploy/pulumi/go.mod` by hand before a tag**: the Pulumi library require is pinned by the release
-  (`hack/pin-pulumi-require.sh`, [CONTRIBUTING.md](../../CONTRIBUTING.md)). This matters only to estates that also
+  (`hack/modules.py`, [CONTRIBUTING.md](../../CONTRIBUTING.md)). This matters only to estates that also
   use the Pulumi library.
 - **Deleting a key from a document needs state surgery** when it is a persisted setting (a signing key ring, an adapter
   swap): moving state is [migrate state](migrate-state.md), not an edit.

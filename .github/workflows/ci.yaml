@@ -1,15 +1,11 @@
-# Calls the shared workflow (truvity/ci-workflows), which runs each
-# Justfile recipe as its OWN parallel job. Previously all four ran
-# serially inside one job, so a red result told you only that something
-# failed — and this file was one of five near-identical copies across the
-# public estate, which is how ten of them ended up silently broken on
-# 2026-08-15.
+# The one CI for pull requests and master. The shared workflow
+# (truvity/ci-workflows) runs each Justfile recipe as its OWN parallel job; `plan`
+# (hack/ci-plan.sh) picks the recipes a change can reach, so a docs-only or
+# audit-only pull request runs what it touches. Master runs everything. The
+# service-container tiers below are the tests that skip without their service.
 #
-# Hosted runners: minutes are free on public repositories, so the fan-out
-# costs nothing.
-#
-# Pinned by COMMIT SHA, never a tag — tags move, and this code runs in
-# every repository of both organizations.
+# Pinned by COMMIT SHA, never a tag: this code runs in every repository of both
+# organizations. Hosted runners: minutes are free on public repositories.
 name: CI
 
 on:
@@ -26,22 +22,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      recipes: ${{ steps.plan.outputs.recipes }}
+      audit: ${{ steps.plan.outputs.audit }}
+      s3: ${{ steps.plan.outputs.s3 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: hack/ci-plan.sh
+
   recipes:
+    needs: plan
     uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
     with:
-      # Required: the component contract (C1-C13) is judged, shown in the
-      # job summary, and fails this job when a rule fails.
+      # The component contract (C1-C13) is judged, shown in the job summary,
+      # and fails this job when a rule fails.
       policy-conformance: true
       policy-conformance-strict: true
-      recipes: '["build","test","lint","chart-lint","telemetry","archive-check","docs-check","leak-canary","audit-catalogue","ts","console","pulumi-test","storage-test","test-race"]'
+      recipes: ${{ needs.plan.outputs.recipes }}
+
+  # audit/ is a component of its own inside this repository (it never imports
+  # sluis, which a test holds). `audit-race` needs a C toolchain, which its
+  # recipe brings; `audit-drift-ts` and `audit-ts` fetch from a registry.
+  audit:
+    needs: plan
+    if: needs.plan.outputs.audit == 'true'
+    uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
+    with:
+      recipes: '["audit-build","audit-test","audit-lint","audit-proto","audit-drift","audit-schemas","audit-chart","audit-telemetry","audit-pages","audit-sdk-closure","audit-pulumi-test","audit-race","audit-drift-ts","audit-ts"]'
 
   # The S3 Blob and DynamoDB State adapters against a real S3 and DynamoDB
-  # API. The image
-  # is pinned by digest (see `s3_image` in the Justfile, which `just test-s3`
-  # uses locally: keep the two equal). The script fails when a conformance test
-  # skipped or did not run, so an endpoint that stopped reaching the tests cannot
-  # turn this green.
+  # API. The image is pinned by digest (see `s3_image` in the Justfile, which
+  # `just test-s3` uses locally: keep the two equal). The scripts fail when a
+  # conformance test skipped or did not run, so an endpoint that stopped
+  # reaching the tests cannot turn this green.
   s3:
+    needs: plan
+    if: needs.plan.outputs.s3 == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -53,9 +78,8 @@ jobs:
         options: >-
           --health-cmd "curl -sf http://localhost:4566/_localstack/health"
           --health-interval 10s --health-timeout 5s --health-retries 10
-      # An OpenBao development server (the image's default command), for the
-      # storage module's KV and transit backends; pinned by digest, keep it
-      # equal to `openbao_image` in the Justfile.
+      # An OpenBao development server for the storage module's KV and transit
+      # backends; pinned by digest, keep it equal to `openbao_image` in the Justfile.
       openbao:
         image: ghcr.io/openbao/openbao@sha256:11fd73a2102cda9c55d5d881a8c3210303146a7ec1e8ac76f526e175c6d24641 # 2.6.2
         env:
@@ -65,98 +89,38 @@ jobs:
           --health-cmd "wget -q -O /dev/null http://127.0.0.1:8200/v1/sys/health"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
+      STORAGE_OPENBAO_ADDR: http://127.0.0.1:8200
+      STORAGE_OPENBAO_ROOT_TOKEN: root
       ACCESS_ROSTER_S3_URL: http://localhost:4566
       ACCESS_ROSTER_DYNAMODB_URL: http://localhost:4566
       STORAGE_LOCALSTACK_URL: http://localhost:4566
       KEYS_KMS_URL: http://localhost:4566
-      STORAGE_OPENBAO_ADDR: http://127.0.0.1:8200
-      STORAGE_OPENBAO_ROOT_TOKEN: root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
-      - name: the adapters against LocalStack, and no skips
-        run: hack/s3-conformance.sh
-      - name: the DynamoDB adapter against LocalStack, and no skips
-        run: hack/dynamodb-conformance.sh
-      - name: the storage ssm and s3 state backends against LocalStack, and no skips
-        run: hack/storage-conformance.sh
-      - name: the keys KMS backend against LocalStack, and no skips
-        run: hack/keys-conformance.sh
-      - name: the secrets layout move (sluis migrate secrets-layout) against LocalStack, and no skips
-        run: hack/secrets-layout-conformance.sh
-      - name: the storage OpenBao backends (KV v2 state, transit keys) against a dev server, and no skips
-        run: hack/openbao-conformance.sh
+      - run: hack/s3-conformance.sh
+      - run: hack/dynamodb-conformance.sh
+      - run: hack/storage-conformance.sh
+      - run: hack/keys-conformance.sh
+      - run: hack/secrets-layout-conformance.sh
+      - run: hack/openbao-conformance.sh
 
-  # audit/ is a component of its own inside this repository (it never imports
-  # sluis, which a test holds), so its jobs run only when a change can reach
-  # it: on master always, on a pull request when the diff touches audit/, its
-  # chart, or the files every job here shares. The sluis jobs above are
-  # unconditional.
-  changes:
+  # audit's tests that skip without their service: Postgres, S3 with SQS and
+  # DynamoDB (LocalStack), and OpenBAO. One job, three service containers.
+  audit-services:
+    needs: plan
+    if: needs.plan.outputs.audit == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      audit: ${{ steps.filter.outputs.audit }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - id: filter
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "audit=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --name-only "$BASE" HEAD | grep -qE '^(audit/|charts/audit/|Justfile$|devbox\.(json|lock)$|\.github/)'; then
-            echo "audit=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "audit=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  audit:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
-    uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
-    with:
-      recipes: '["audit-build","audit-test","audit-lint","audit-proto","audit-drift","audit-schemas","audit-chart","audit-telemetry","audit-pages","audit-sdk-closure","audit-pulumi-test"]'
-
-  # The race detector needs a C toolchain; everything else builds with cgo
-  # off, which is what makes the binaries static.
-  audit-race:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
-    uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
-    with:
-      recipes: '["audit-race"]'
-
-  # The TypeScript half of the generated-code check (a remote plugin, which
-  # rate limits) and the TypeScript package, both of which fetch from a
-  # registry and so are not part of `audit-check`.
-  audit-ts:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
-    uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
-    with:
-      recipes: '["audit-drift-ts","audit-ts"]'
-
-  # The tests that skip without their service: Postgres, S3 (with SQS and
-  # DynamoDB) and OpenBAO, each a service container, each followed by a step
-  # that fails if the test it exists for did not run.
-  audit-postgres:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: audit
+    timeout-minutes: 20
     env:
       AUDIT_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/audit_test?sslmode=disable
+      AUDIT_S3_URL: http://localhost:4566
+      AUDIT_SQS_URL: http://localhost:4566
+      AUDIT_DYNAMODB_URL: http://localhost:4566
+      AUDIT_OPENBAO_URL: http://localhost:8200
+      AUDIT_OPENBAO_TOKEN: root
       CGO_ENABLED: "0"
       GOEXPERIMENT: jsonv2
     services:
@@ -169,41 +133,7 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 10s
           --health-timeout 5s --health-retries 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: audit/go.mod
-      - name: one Go for every job
-        # devbox.json pins the Go every other job runs; go.mod pins this one.
-        # Two toolchains for one module is how "passes in one job, fails in
-        # another" starts, so the pins have to agree.
-        run: |
-          have=$(python3 -c 'import json;print(json.load(open("../devbox.json"))["packages"]["go"])')
-          for mod in go.mod sdk/go.mod; do
-            want=$(sed -n 's/^go \([0-9.]*\).*/\1/p' "$mod")
-            [ "$want" = "$have" ] || { echo "audit/$mod wants go $want, devbox.json pins $have"; exit 1; }
-          done
-      - name: go test ./... with a database
-        run: go test ./...
-      - name: the Postgres tests must have run, not skipped
-        run: |
-          go test ./index/postgres/ -run TestMigrateIsIdempotent -v | tee out.txt
-          grep -q -- "--- PASS: TestMigrateIsIdempotent" out.txt
-          go test ./internal/observe/ ./index/postgres/ -run 'TestTheIndexerOverPostgres|TestTheObserveRoleHasTheIndexAndNothingElse' -v | tee out.txt
-          grep -q -- "--- PASS: TestTheIndexerOverPostgres" out.txt
-          grep -q -- "--- PASS: TestTheObserveRoleHasTheIndexAndNothingElse" out.txt
-
-  audit-s3:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: audit
-    services:
-      s3:
+      localstack:
         image: localstack/localstack@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
         env:
           SERVICES: s3,kms,sqs,dynamodb
@@ -211,42 +141,6 @@ jobs:
         options: >-
           --health-cmd "curl -sf http://localhost:4566/_localstack/health"
           --health-interval 10s --health-timeout 5s --health-retries 10
-    env:
-      AUDIT_S3_URL: http://localhost:4566
-      AUDIT_SQS_URL: http://localhost:4566
-      AUDIT_DYNAMODB_URL: http://localhost:4566
-      CGO_ENABLED: "0"
-      GOEXPERIMENT: jsonv2
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: audit/go.mod
-      - name: the archive walks and the bucket contract against real S3, the queue sink against real SQS, and the deduplication store against a real DynamoDB API
-        run: go test ./internal/s3test/... ./internal/bucketcontract/... ./store/... ./sink/sqssink/... ./dedupe/...
-      - name: the S3 tests must have run, not skipped
-        run: |
-          go test ./internal/s3test/ -run TestPrefixesListsEveryTenant -v | tee out.txt
-          grep -q -- "--- PASS: TestPrefixesListsEveryTenant" out.txt
-          go test ./internal/bucketcontract/ -run TestWhatTheWriterWritesConforms -v | tee out.txt
-          grep -q -- "--- PASS: TestWhatTheWriterWritesConforms/s3-locked" out.txt
-          grep -q -- "--- PASS: TestWhatTheWriterWritesConforms/s3-unlocked" out.txt
-          go test ./dedupe/dynamodbdedupe/ -run TestLocalStackConditionalPut -v | tee out.txt
-          grep -q -- "--- PASS: TestLocalStackConditionalPut" out.txt
-          go test ./sink/sqssink/ -run TestLocalStackRoundTrip -v | tee out.txt
-          grep -q -- "--- PASS: TestLocalStackRoundTrip/fifo" out.txt
-          go test ./internal/s3test/ -run TestTheIndexerOverS3 -v | tee out.txt
-          grep -q -- "--- PASS: TestTheIndexerOverS3/indexes_every_tenant_and_profile_it_finds_by_listing" out.txt
-
-  audit-openbao:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: audit
-    services:
       openbao:
         image: openbao/openbao@sha256:597f62847dd382382056a1d6704d50465908c2040038c4611832a23269a67112
         env:
@@ -256,28 +150,18 @@ jobs:
         options: >-
           --health-cmd "wget -qO- http://127.0.0.1:8200/v1/sys/health"
           --health-interval 5s --health-timeout 5s --health-retries 20
-    env:
-      AUDIT_OPENBAO_URL: http://localhost:8200
-      AUDIT_OPENBAO_TOKEN: root
-      CGO_ENABLED: "0"
-      GOEXPERIMENT: jsonv2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: audit/go.mod
-      - name: the transit keys and signer against OpenBAO
-        run: go test ./keys/... ./internal/writer/...
-      - name: the OpenBAO tests must have run, not skipped
-        run: |
-          go test ./keys/ -run TestTransitReplicasAgreeAndPurposesDoNot -v | tee out.txt
-          grep -q -- "--- PASS: TestTransitReplicasAgreeAndPurposesDoNot" out.txt
+      - run: hack/audit-service-tests.sh
 
   # The local cluster, stood up from nothing on truvity/policy's kind box; the
   # chart is installed from the package a snapshot release builds.
   audit-cluster:
-    needs: changes
-    if: needs.changes.outputs.audit == 'true'
+    needs: plan
+    if: needs.plan.outputs.audit == 'true'
     uses: truvity/ci-workflows/.github/workflows/integration.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
     permissions:
       contents: read
@@ -296,21 +180,19 @@ jobs:
           }
         ]
 
-  # Stable name for branch protection: the matrix reports as
-  # "recipes / build" and so on, so a required context called "check"
-  # would never arrive and every PR would hang waiting for it.
+  # Stable name for branch protection: the matrix reports as "recipes / build"
+  # and so on, so a required context called "check" would never arrive and
+  # every PR would hang waiting for it. Skipped jobs (a change that cannot
+  # reach them) are not failures; anything else but success is.
   check:
-    needs: [recipes, s3, changes, audit, audit-race, audit-ts, audit-postgres, audit-s3, audit-openbao, audit-cluster]
+    needs: [plan, recipes, audit, s3, audit-services, audit-cluster]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # The audit jobs are skipped when nothing they cover changed, which is
-      # not a failure; anything else but success is.
-      - run: |
-          [ "${{ needs.recipes.result }}" = "success" ] &&
-          [ "${{ needs.s3.result }}" = "success" ] &&
-          [ "${{ needs.changes.result }}" = "success" ] &&
-          for r in "${{ needs.audit.result }}" "${{ needs.audit-race.result }}" "${{ needs.audit-ts.result }}" "${{ needs.audit-postgres.result }}" "${{ needs.audit-s3.result }}" "${{ needs.audit-openbao.result }}" "${{ needs.audit-cluster.result }}"; do
-            [ "$r" = "success" ] || [ "$r" = "skipped" ] || exit 1
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            [ "$r" = "success" ] || [ "$r" = "skipped" ] || { echo "a job ended $r"; exit 1; }
           done
