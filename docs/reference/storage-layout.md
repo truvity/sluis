@@ -1,9 +1,10 @@
 # Storage layout
 
 Where sluis keeps what it keeps, on the adapters of the AWS platform (`dynamodb`,
-`ssm`, `s3`). This is **layout v3**: one root per installation, `/sluis/<instance>`
+`ssm`, `s3`). This section describes **layout v3**: one root per installation, `/sluis/<instance>`
 ([0036](../decisions/0036-configuration-is-immutable-per-instance.md)), so two
-installations share an account. The storage layout of the records themselves (kind
+installations share an account. Layout v3 is the default in v1.74.0; [layout v4](#layout-v4-secretslayout-v4) is
+selected with `secrets.layout` and described below. The storage layout of the records themselves (kind
 and id) is v2's, unchanged; v3 moves the SSM paths. The **legacy** adapter (ConfigMaps, Secrets,
 Valkey) is unchanged and keeps its own names until a deployment leaves it.
 

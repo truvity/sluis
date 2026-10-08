@@ -231,15 +231,24 @@ block is present). Both servers default it to `:8080`.
 
 Exactly one of `login`, `tokenFile` and `tokenSecret`.
 
-**`keys`** (where pseudonymisation keys live)
+**`keys`** (where the keys live, by purpose: the storage port's shape, [the adapter block](../../storage/reference/adapter-block.md))
 
 | key | type | default | meaning |
 |---|---|---|---|
-| `provider` | `none`, `local` or `transit`, required | | `none` means no pseudonyms, no key material and no resolve ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)). `local` requires `local`, `transit` requires `transit`, and `none` allows neither |
-| `local.rootFile` | path, required | | a file holding the 32-byte root the data keys are wrapped under |
-| `local.dir` | path | in memory | where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy. Unset keeps them in memory, which only a trial install should |
-| `transit.prefix` | string | `audit` | what every key's name starts with: `<prefix>.<purpose>.<tenant>` |
-| `transit.openbao` | `openbao`, required | | the engine and how to sign in |
+| `adapter` | `kms`, `transit` or `local` | | the key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBao) or `local` (a root file; development) |
+| `seal` | a key name, or `{key, context}` | | the notary's seal key: asymmetric ECC P-384 (ES384). It signs and takes no encryption context. The notary takes `keys.seal`: exactly one of `seal` and `signer` |
+| `pseudonym` | a key | | wraps the per-tenant pseudonym secrets. Provisioned only for an installation that pseudonymises (the `attested` preset, or a profile that needs pseudonyms) |
+| `conceal` | a key | | identities sealed where the law requires them to be recoverable |
+| `archive` | a key | | the key the archive's objects are encrypted with (for S3, the SSE-KMS alias) |
+| `instance` | string | | names the installation in the default encryption context `{instance, purpose}`; bound into ciphertexts, so choose something stable and non-secret |
+| `state` | `{root, address}` | | with `kms`: where the wrapped per-tenant secrets behind `pseudonym` are kept (the installation's SSM store). Nothing in it is usable without the pseudonym key |
+| `openbao` | `openbao` | | with `transit`: the engine and how to sign in |
+| `rootFile` | path | | with `local`: a file of 32 bytes |
+| `provider` | `none`, `local` or `transit` | | **deprecated**: the first releases' shape, still loaded. Use `adapter` and a key per purpose. Unset, or `none`, means no pseudonyms, no key material and no resolve ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)). The `local` and `transit` blocks beside it are deprecated with it |
+
+A key is an alias or a transit key name; an ARN or key id is refused. The archive's own `credentials` (`{root, address}`)
+read `{accessKeyID, secretAccessKey}` from an `internal/` address, for an archive on an endpoint
+([archive on R2](../how-to/archive-on-r2.md)).
 <!-- /generated -->
 
 ## Refusals

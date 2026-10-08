@@ -177,6 +177,8 @@ through SSM Parameter Store instead, read at cold start with the function's own 
 
 ## The lock modes
 
+Storage is configured per install preset ([0068](../../decisions/0068-storage-is-configured-per-preset.md)): the deployment lists the presets it uses, each with its own bucket, prefix, region, optional endpoint and key alias, and the lock is a property of the preset's bucket. Object Lock COMPLIANCE exists only on an attested preset's S3 bucket; the other presets write no lock, and a store at an endpoint (R2) never has one. The modes below are the Pulumi library's `Archive.ObjectLockMode` for that bucket; where the text says `archive.lockMode`, read it as the lock of the preset's bucket.
+
 The mode is a parameter, and it is required. **The order is NONE, then
 GOVERNANCE, and COMPLIANCE only after sign-off**
 ([0065](../../decisions/0065-archive-retention-and-lifecycle.md)).

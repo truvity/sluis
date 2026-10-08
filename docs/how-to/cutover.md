@@ -48,8 +48,9 @@ preset (DynamoDB for State, SSM for secrets, S3 for the controllers' reports), w
   schedule exists, disabled, with the scheduler's role and the function's grants, and
   turning them on in step 6 is one setting whose preview changes only each schedule's state.
 - **A first smoke start of the new installation writes `console/session-key`.** The real run then needs `--overwrite`.
-- **The Pulumi library's require pin is automatic.** Nobody bumps `deploy/pulumi/go.mod` by hand before a tag
-  ([CONTRIBUTING](../../CONTRIBUTING.md), `hack/modules.py`); do not do it for a cutover either.
+- **The Pulumi library's require pin is part of the release step.** One version covers every module, and a release is
+  cut by hand (`just release-pin vX.Y.Z`, commit, merge, tag; no automatic releases). Nobody bumps `deploy/pulumi/go.mod`
+  separately ([CONTRIBUTING](../../CONTRIBUTING.md)); do not do it for a cutover either.
 - **Deleting keys needs state surgery.** Leaving remote signing for KMS-wrapped signing drops the two old keys from the
   Pulumi state before the apply: `pulumi state delete` refuses while role policies depend on the keys, so export the
   state, remove the key resources and the dependency edges that name them, import it back, then apply; disable the old

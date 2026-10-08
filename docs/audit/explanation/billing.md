@@ -11,7 +11,7 @@ Nothing here is in the request path.
 
 | # | slot | what the application adds | state |
 |---|---|---|---|
-| 1 | **catalogue** | on each billable action: `meter: {name, quantity_path, outcomes: [success]}` and `profiles: [security, billing]` | built |
+| 1 | **catalogue** | on each billable action: `meter: {name, quantity_path, outcomes: [success]}` and `category: billing` (the destination that takes it keeps the metering copy; the per-action `profiles` list is deprecated) | built |
 | 2 | **emit** | nothing — the record carries `meter{name, quantity, unit}` | built |
 | 3 | **writer** | nothing — it splits a `billing` copy (tenant and meter, no actor, the metering profile's retention), and the dedupe table makes it exactly-once; the indexer then reads the meter fields from the object | built |
 | 4 | **rollups and statement** | a rollup row per tenant, meter and hour, filled at index time; a monthly CronJob writes an immutable statement object naming the seal of the archive it was computed from (once seals exist) | rollups partly built; the statement not built |

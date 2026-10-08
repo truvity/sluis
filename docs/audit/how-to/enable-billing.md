@@ -55,7 +55,7 @@ computed from the same records that make the trail evidence. How it works and wh
        summary: A credential was verified for a tenant.
        operation: execute
        categories: [data_access]
-       profiles: [security, billing]
+       category: billing                     # the destination that takes `billing` keeps the copy; `profiles:` is deprecated
        delivery: block
        meter:
          name: verifications

@@ -8,8 +8,7 @@ is, and has no page. On AWS the sink is SQS ([ports](../reference/ports.md#audit
 
 **The catalogue is the model.** [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
 declares every action (listed in [audit actions](../reference/audit-actions.md)) with what kind of operation it is,
-the framework categories it answers, which profile keeps it (`security`, every one of them: this service serves one
-organisation, and a second copy under a second retention would answer nothing), the types of its targets, the kinds
+the framework categories it answers, its `category` (`security` or `activity`: the installation's destinations take records by category, so the estate decides which copies, retention and key each gets; the deprecated per-action `profiles` list is no longer used), the types of its targets, the kinds
 of actor (a person, recovery, a CI job, a workload, the service itself), a schema for its data, and how it reads as a
 sentence. Every action has one constructor in [`internal/audit/events.go`](../../internal/audit/events.go), and
 nothing else builds a record, so the vocabulary is fixed by the compiler; `just audit-catalogue` holds the two
@@ -20,7 +19,7 @@ refuses to start without the catalogue's `.json` schemas, which ship as the rele
 
 **Who is who.** The actor is who acted, by kind; the subject is who it concerns, and differs from the actor as often
 as not: an operator revokes a person's sessions, the controller invites a person. A person is named by the address
-the directory knows them by, and `security` keeps it in clear, because a trail of staff whose subjects are
+the directory knows them by, and the trail keeps it in clear, because a trail of staff whose subjects are
 pseudonyms answers none of the questions it exists for; the installation runs no pseudonymisation keys. A GitHub
 account is a person's, so its login is treated the same way. No address is ever data.
 

@@ -11,7 +11,9 @@ installation: the writer, the query service, their stores and the operator's
 command. `sdk/`, `github.com/truvity/sluis/audit/sdk`, is what an application
 imports to emit records, and nothing else: it carries no database driver, no
 stream server, no object-store client and no JWT library. See
-[the SDK module](#the-sdk-module) below. `deploy/pulumi/` is the third, the AWS
+[the SDK module](#the-sdk-module) below. The installation module requires `github.com/truvity/sluis/storage`
+(state and keys by purpose); that is the one thing of sluis's it imports, and the SDK and the Pulumi library import
+none of it. `deploy/pulumi/` is the third, the AWS
 shape as a Pulumi library, a module of its own so that Pulumi is in nobody
 else's dependency graph. The committed `go.work` does not list it, for the same
 reason: a workspace's module graph is one graph. Run its tests with

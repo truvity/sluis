@@ -125,8 +125,8 @@ the issuer's own sentence, before anything later runs.
 A shared workflow that needs a GitHub App token — to push a tag, open a
 pull request — does not have to take a private key from every caller.
 It calls the action with `github-app` inside its own job and lets the
-caller choose the source with an input; the shared auto-release workflow
-this repository's own release uses spells it `token-source`:
+caller choose the source with an input; a shared release workflow
+spells it `token-source`:
 
 ```yaml
 # the caller
