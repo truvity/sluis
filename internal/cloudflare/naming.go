@@ -49,6 +49,21 @@ func IsStored(name, instance, preset string) bool {
 	return err == nil
 }
 
+// SplitName reads the caller and the time out of a name this package made for
+// preset: the caller is empty for a stored token's name. Both are zero for a name
+// that is not one of ours.
+func SplitName(name, instance, preset string) (caller string, at time.Time) {
+	if !IsOwn(name, instance, preset) {
+		return "", time.Time{}
+	}
+	rest := strings.TrimPrefix(name, Prefix(instance, preset))
+	if i := strings.LastIndex(rest, "/"); i >= 0 {
+		caller, rest = rest[:i], rest[i+1:]
+	}
+	at, _ = time.Parse(time.RFC3339, rest)
+	return caller, at
+}
+
 // maxCaller bounds the caller's part of a name: Cloudflare bounds a token's
 // name, and a long caller would crowd out the time.
 const maxCaller = 64

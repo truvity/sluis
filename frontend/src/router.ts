@@ -136,6 +136,9 @@ export const paths = {
   slackDiscovered: (filter?: { workspace?: string; kind?: string; visibility?: string; q?: string; sort?: string }) => withQuery("/slack/discovered", filter),
   // The Slack Apps the deployment declares: create, install, reinstall.
   slackApps: () => "/slack/apps",
+  // Cloudflare tokens and R2 credentials: what a person may ask for, and
+  // what an operator watches, rotates and revokes.
+  cloudflare: () => "/cloudflare",
   // Every open session in the installation. Operator-only, and
   // only present at all once an issuer shares this console's origin.
   sessions: () => "/sessions",
