@@ -1,0 +1,167 @@
+# Audit with its services in the cluster: NATS carries the stream, PostgreSQL
+# holds the deduplication table and the index, and credentials arrive as
+# Kubernetes Secrets (delivered, for example, from OpenBAO by an operator such
+# as External Secrets). Nothing reads SQS, DynamoDB or SSM Parameter Store, and
+# there is no Pulumi program and no Lambda.
+#
+# What stays outside the cluster, and is the operator's to bring:
+#
+#   - an S3 bucket: AWS S3 here, or Cloudflare R2 (the commented variant below).
+#     Prefer AWS S3 where Object Lock may be needed later: the `attested`
+#     preset keeps its objects under compliance Object Lock, which is AWS S3
+#     only and is refused on an endpoint.
+#   - a key: an AWS KMS key here (the notary signs seals with it), or OpenBAO
+#     transit (the commented variant below).
+#   - the PostgreSQL database and its four roles.
+#   - the Secrets named below.
+#
+# The host and Secret names are examples. A secret is never in this file.
+mode: stream
+replicas: 2
+
+presets:
+  standard:
+    bucket: audit-eu-example-1
+    region: eu-example-1
+    prefix: audit/
+    # Objects are encrypted under this KMS key; the alias is a name, never an ARN.
+    key_alias: alias/audit-archive
+  # The same preset on Cloudflare R2 instead (no KMS key, no Object Lock):
+  #   standard:
+  #     bucket: audit-archive
+  #     prefix: audit/
+  #     region: auto
+  #     endpoint: https://ACCOUNT.r2.cloudflarestorage.com
+  # and give each pod that touches the archive the access key as AWS_ACCESS_KEY_ID
+  # and AWS_SECRET_ACCESS_KEY (`secretEnv`, as the writer's below).
+profiles:
+  security:
+    frameworks: [security]
+
+# Identifiers an application minted are already opaque, so the writer needs no
+# pseudonymisation key. Set it false and add a `keys` block under `writer.config`
+# (see the variants at the end) if records carry direct identifiers.
+externalIdentifiersAreOpaque: true
+
+migrate:
+  enabled: true
+  config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
+    database:
+      url: postgres://audit_owner@postgres.postgres.svc:5432/audit?sslmode=require
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+    writer: audit_writer
+    observe: audit_observe
+    reader: audit_query
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-owner-database
+      key: password
+
+# The receiver is the front door: it publishes to NATS and holds neither the
+# bucket nor a key.
+receiver:
+  config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
+    mode: receiver
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    database:
+      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+    stream:
+      nats:
+        url: nats://nats.nats.svc:4222
+      name: AUDIT
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-database
+      key: password
+
+# Three writers consume the stream. On AWS the pod's identity (IRSA, Pod
+# Identity) is the S3 credential; elsewhere the access key comes from a Secret.
+writer:
+  consumers: 3
+  config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    replicas: 3
+    database:
+      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+    stream:
+      nats:
+        url: nats://nats.nats.svc:4222
+      name: AUDIT
+      consumer: audit-writer
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-database
+      key: password
+
+observe:
+  enabled: true
+  config:
+    apiVersion: audit.truvity.github.io/audit-observe/v2
+    deployment: /etc/audit/deployment.yaml
+    database:
+      url: postgres://audit_observe@postgres.postgres.svc:5432/audit?sslmode=require
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-observe-database
+      key: password
+
+jobs:
+  # Seals each closed hour into a signed chain, with a KMS key of its own: the
+  # notary's identity may sign and the writer's may not. The key is an
+  # ECC_NIST_P384 SIGN_VERIFY key; the pod reaches KMS through the SDK's
+  # default credential chain.
+  notary:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      deployment: /etc/audit/deployment.yaml
+      keys:
+        adapter: kms
+        seal:
+          key: alias/audit-seal
+      sink:
+        url: http://audit:8080
+    # OpenBAO transit instead of KMS, signing with a token from a Secret:
+    #   keys: null
+    #   signer:
+    #     transit:
+    #       key: audit-seal
+    #       openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}
+    # with a `secretEnv` entry for AUDIT_BAO_TOKEN.
+  verify:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
+      deployment: /etc/audit/deployment.yaml
+      sink:
+        url: http://audit:8080
+  purge:
+    enabled: false
+  clockSync:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-clock-sync/v2
+      # Any NTP server the cluster can reach. On AWS, 169.254.169.123 is the
+      # instance's own time service.
+      ntp: ["pool.ntp.org"]
+      sink:
+        url: http://audit:8080
+
+# Variant: pseudonymisation keys in OpenBAO transit (every writer asks the same
+# engine, so there is no key directory). Under `writer.config`, with
+# `externalIdentifiersAreOpaque: false`, a token with the writer's policy in
+# AUDIT_BAO_TOKEN, and the query service given a token of its own:
+#   keys:
+#     provider: transit
+#     transit:
+#       openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}
+# With KMS, pseudonyms (keys.adapter: kms, keys.pseudonym) also need `keys.state`,
+# the SSM Parameter Store path where the wrapped per-tenant secrets are kept.

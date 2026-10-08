@@ -206,6 +206,38 @@ The chart takes references; it creates none of these.
 | a CA bundle, if OpenBAO or Postgres serve from a private chain (e.g. trust-manager's) | `trust.configMap` |
 | a `ReadWriteMany` storage class, for more than one replica on `local` keys (transit needs none) | `keysVolume` |
 
+## Running the services in the cluster
+
+The services an installation needs run in the cluster, from this chart's
+dependencies' point of view: NATS carries the stream (`mode: stream`),
+PostgreSQL holds the deduplication table and the index, and OpenBAO can hold
+the keys, in place of SQS, DynamoDB and SSM Parameter Store. There is no Pulumi
+program and no Lambda. [`examples/in-cluster-services.yaml`](examples/in-cluster-services.yaml)
+is the whole shape, and the kind tier installs it (the `audit-kms` lane of
+`audit-cluster`, with `testdata/values/e2e-kms.yaml` over `e2e.yaml`).
+
+What stays outside, and is the operator's to bring:
+
+- **an S3 bucket**: AWS S3, or an S3-compatible store such as Cloudflare R2
+  (`presets.<name>.endpoint`, and `path_style` where the store has no
+  bucket subdomains). Use AWS S3 where Object Lock may be needed later: the
+  `attested` preset is on AWS S3 only and is refused on an endpoint.
+- **a key**: an AWS KMS key (the notary's `keys.adapter: kms`, reached through
+  the SDK's default credential chain: IRSA, Pod Identity, or the environment), or an OpenBAO
+  transit engine (`keys.provider: transit`, `signer.transit`).
+- **secrets, delivered as Kubernetes Secrets** (for instance from OpenBAO by an
+  operator): the database passwords, the OpenBAO tokens, and, off AWS, the
+  archive's access key as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+  Each reaches a component through its `secretEnv`.
+- **the PostgreSQL database** and its four roles.
+
+Two limits to know. A preset's `credentials` is an address in an SSM Parameter
+Store path, so a store at an endpoint takes its access key from the environment
+as above instead. And pseudonyms under `keys.adapter: kms` keep the per-tenant
+secrets wrapped under the key in a state store (`keys.state`), which is SSM
+Parameter Store today; with KMS and no SSM, declare
+`externalIdentifiersAreOpaque`, or use OpenBAO transit for pseudonyms.
+
 ## Keys are off
 
 `keys.provider: none` is the default, which is no `keys` block: no key directory, no login to a secret

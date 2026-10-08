@@ -30,6 +30,7 @@ var shapes = []string{
 	"examples/stream.yaml",
 	"examples/sqs.yaml",
 	"examples/external-writer.yaml",
+	"examples/in-cluster-services.yaml",
 }
 
 // What each ConfigMap is named for: where its config lives in the values, and
