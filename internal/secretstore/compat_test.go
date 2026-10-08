@@ -120,7 +120,9 @@ func TestTransitionWritesBothAndReadsV4First(t *testing.T) {
 	}
 	// Create-only is refused when v3 holds the secret and v4 does not.
 	other := "credentials/console/session-key"
-	f.v3.Put(ctx, other, []byte("a"))
+	if _, err := f.v3.Put(ctx, other, []byte("a")); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.sec.PutIfVersion(ctx, other, []byte("b"), ""); !errors.Is(err, port.ErrConflict) {
 		t.Fatalf("create over a v3-only secret = %v", err)
 	}
