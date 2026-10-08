@@ -156,26 +156,6 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 	return added, nil
 }
 
-// withoutRuntimeKeys drops the one key ownRuntime writes that the service
-// document's schema does not carry yet (ports.blob.s3.credentialsRef), for the
-// loader check: the library holds the rest of the document to the loader and it
-// to its own validation.
-func withoutRuntimeKeys(raw string) (string, error) {
-	var doc map[string]any
-	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
-		return "", err
-	}
-	if ports, ok := doc["ports"].(map[string]any); ok {
-		if blob, ok := ports["blob"].(map[string]any); ok {
-			if s3, ok := blob["s3"].(map[string]any); ok {
-				delete(s3, "credentialsRef")
-			}
-		}
-	}
-	out, err := yaml.Marshal(doc)
-	return string(out), err
-}
-
 // withInstallation renders LambdaArgs.Installation into Config and Policy, the
 // arguments the rest of the library reads, after completing the installation
 // with what the arguments say and refusing one that says another: the library
@@ -439,14 +419,7 @@ func validateDocuments(docs map[string]string) error {
 	defer func() { _ = os.RemoveAll(dir) }()
 	path := func(name string) (string, error) {
 		p := filepath.Join(dir, name+".yaml")
-		body := docs[name]
-		if name == docSluis {
-			var err error
-			if body, err = withoutRuntimeKeys(body); err != nil {
-				return p, err
-			}
-		}
-		return p, os.WriteFile(p, []byte(body), 0o600)
+		return p, os.WriteFile(p, []byte(docs[name]), 0o600)
 	}
 	var errs []error
 	for name, load := range map[string]func(string) error{

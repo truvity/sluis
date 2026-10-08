@@ -7,6 +7,13 @@
 // secret. `Endpoint` and `PathStyle` exist for LocalStack and for S3-compatible
 // stores.
 //
+// An S3-compatible store that has no ambient identity (R2) takes static
+// credentials from [Config.Credentials]: read when the adapter is built and
+// read again after an answer of 403, at most once a minute (see credentials.go).
+// The sluis blob writer sends no content-encoding, so the SDK's checksums stay
+// off ("when required") and R2's refusal of a checksum together with a
+// content-encoding does not arise.
+//
 // # Operations
 //
 //   - Read is GetObject; the version is the object's ETag.
@@ -42,6 +49,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -70,6 +78,10 @@ type Config struct {
 	// PathStyle addresses the bucket in the path and not in the host name,
 	// which a LocalStack or MinIO address needs.
 	PathStyle bool
+	// Credentials, when set, supplies static credentials in place of the SDK's
+	// default chain, for an Endpoint with no ambient identity. It is called
+	// when the adapter is built and again after a 403, at most once a minute.
+	Credentials CredentialsFunc
 }
 
 // API is the part of the S3 client the adapter calls. *s3.Client satisfies
@@ -101,6 +113,14 @@ func New(ctx context.Context, cfg Config) (*Blob, error) {
 	if cfg.Region != "" {
 		loaders = append(loaders, awsconfig.WithRegion(cfg.Region))
 	}
+	var creds *credentials
+	if cfg.Credentials != nil {
+		var err error
+		if creds, err = newCredentials(ctx, cfg.Credentials, time.Now); err != nil {
+			return nil, err
+		}
+		loaders = append(loaders, awsconfig.WithCredentialsProvider(creds.cache))
+	}
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
 	if err != nil {
 		return nil, fmt.Errorf("s3blob: loading the AWS configuration: %w", err)
@@ -115,6 +135,9 @@ func New(ctx context.Context, cfg Config) (*Blob, error) {
 		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
+	if creds != nil {
+		return NewWithAPI(&reauth{API: client, creds: creds}, cfg)
+	}
 	return NewWithAPI(client, cfg)
 }
 

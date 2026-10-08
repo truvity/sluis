@@ -299,7 +299,9 @@ type (
 	}
 
 	// PortsBlobS3 is where the S3 Blob adapter keeps its objects. Credentials
-	// are the platform's (Pod Identity, IRSA, a Lambda role), never configured.
+	// are the platform's (Pod Identity, IRSA, a Lambda role), never configured;
+	// an S3-compatible endpoint with no such identity names them by address
+	// (CredentialsRef), never by value.
 	PortsBlobS3 struct {
 		Bucket    string `json:"bucket,omitempty"`
 		Prefix    string `json:"prefix,omitempty"`
@@ -307,6 +309,11 @@ type (
 		KMSKey    string `json:"kmsKey,omitempty"`
 		Endpoint  string `json:"endpoint,omitempty"`
 		PathStyle bool   `json:"pathStyle,omitempty"`
+		// CredentialsRef is the internal address (`internal/<kind>/<id>`) of
+		// the s3-credentials/v1 document the installation's secrets store
+		// holds for Endpoint. It needs Endpoint and `secrets.layout` v4 or
+		// transition.
+		CredentialsRef string `json:"credentialsRef,omitempty"`
 	}
 
 	// Secrets is how the secrets a document names are delivered: `env`

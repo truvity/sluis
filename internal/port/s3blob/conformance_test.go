@@ -17,6 +17,8 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/porttest"
 	"github.com/truvity/sluis/internal/port/s3blob"
+	"github.com/truvity/sluis/internal/secretstore"
+	statememory "github.com/truvity/sluis/storage/state/memory"
 )
 
 // EnvURL names a LocalStack (or any S3 and KMS endpoint) the conformance run
@@ -46,10 +48,18 @@ func randomName(t *testing.T) string {
 	return hex.EncodeToString(b)
 }
 
-func newBucket(t *testing.T, url string) string {
+func newBucket(t *testing.T, url string) string { return newBucketWith(t, url, "", "") }
+
+func newBucketWith(t *testing.T, url, id, secret string) string {
 	t.Helper()
 	ctx := context.Background()
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	var opts []func(*awsconfig.LoadOptions) error
+	if id != "" {
+		opts = append(opts, awsconfig.WithCredentialsProvider(aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+			return aws.Credentials{AccessKeyID: id, SecretAccessKey: secret}, nil
+		})))
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,4 +128,38 @@ func TestAMissingBucketIsUnavailableNotNotFound(t *testing.T) {
 	if _, err = b.Read(ctx, "reports/x"); !errors.Is(err, port.ErrUnavailable) {
 		t.Fatalf("Read from a missing bucket: %v, want ErrUnavailable", err)
 	}
+}
+
+// With an endpoint and static credentials read from the installation's secrets
+// store (a memory one here) at an internal address, the adapter passes the same
+// suite: the SDK's default chain is not what signs.
+func TestConformanceWithStaticCredentials(t *testing.T) {
+	url := localstack(t)
+	// Not the environment's: the credentials must come from the store.
+	t.Setenv("AWS_ACCESS_KEY_ID", "wrong")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wrong")
+	ctx := context.Background()
+	stores := secretstore.FromStore(statememory.New(), secretstore.LayoutV4, "")
+	doc, err := stores.Internal.S3Credentials("internal/blobs/example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// LocalStack takes any credentials.
+	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "test", SecretAccessKey: "test"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	bucket := newBucketWith(t, url, "test", "test")
+	porttest.RunGroups(t, func(t *testing.T) porttest.Env {
+		b, err := s3blob.New(ctx, s3blob.Config{
+			Bucket: bucket, Prefix: "run/" + randomName(t), Endpoint: url, PathStyle: true, Region: "auto",
+			Credentials: func(ctx context.Context) (s3blob.Credentials, error) {
+				got, _, err := doc.Get(ctx)
+				return s3blob.Credentials{AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey}, err
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "snapshots/"}}
+	}, "blob/")
 }

@@ -17,6 +17,12 @@ const (
 	SchemaSlackv1  = "slack/v1"
 )
 
+// SchemaS3Credentialsv1 names the internal document of an S3-compatible
+// store's static credentials (schemas/internal/s3-credentials.v1.schema.json).
+// It is internal, so it is not a contract with anyone outside sluis; the schema
+// is pinned for the operator who seeds it.
+const SchemaS3Credentialsv1 = "s3-credentials/v1"
+
 // OIDCv1 is the document of a confidential client's secret, at
 // external/oidc/<client>. Every field is a JSON string.
 type OIDCv1 struct {
@@ -38,6 +44,15 @@ type GitHubv1 struct {
 type Slackv1 struct {
 	Schema   string `json:"schema"`
 	BotToken string `json:"bot_token"`
+}
+
+// S3Credentialsv1 is the document of an S3-compatible store's static
+// credentials, at an internal address (ports.blob.s3.credentialsRef). Every
+// field is a JSON string.
+type S3Credentialsv1 struct {
+	Schema          string `json:"schema"`
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
 }
 
 // ErrSchema is a document that is not the schema the address names, or that
@@ -123,6 +138,15 @@ var (
 		},
 	}
 )
+
+var s3CredentialsCodec = documentCodec[S3Credentialsv1]{
+	schema:   SchemaS3Credentialsv1,
+	schemaOf: func(d *S3Credentialsv1) *string { return &d.Schema },
+	required: map[string]func(S3Credentialsv1) string{
+		"access_key_id":     func(d S3Credentialsv1) string { return d.AccessKeyID },
+		"secret_access_key": func(d S3Credentialsv1) string { return d.SecretAccessKey },
+	},
+}
 
 var _ state.Codec[OIDCv1] = oidcCodec
 
