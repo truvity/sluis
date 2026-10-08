@@ -32,8 +32,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/truvity/audit/sdk/catalogue"
-	"github.com/truvity/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/catalogue"
+	"github.com/truvity/sluis/audit/sdk/record"
 )
 
 //go:embed catalogue

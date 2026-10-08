@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	auditv1 "github.com/truvity/audit/sdk/gen/audit/v1"
-	"github.com/truvity/audit/sdk/record"
+	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
+	"github.com/truvity/sluis/audit/sdk/record"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/audit/audittest"
