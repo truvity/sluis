@@ -74,9 +74,11 @@ def order(mods):
     for path, d in mods.items():
         text = (ROOT / d / "go.mod").read_text()
         deps[path] = {p for _, p, _ in requires(text, mods)} - {path}
+    # Among the modules ready together, the one most others require goes first.
+    users = {p: sum(p in d for d in deps.values()) for p in mods}
     done, out = set(), []
     while len(done) < len(mods):
-        ready = sorted(p for p in mods if p not in done and deps[p] <= done)
+        ready = sorted((p for p in mods if p not in done and deps[p] <= done), key=lambda p: (-users[p], p))
         if not ready:
             die("the modules require each other in a cycle: " + ", ".join(sorted(set(mods) - done)))
         for p in ready:
@@ -134,6 +136,12 @@ def main(argv):
                 if bad:
                     die(f"{d}/go.mod still requires {bad} after the pin")
                 print(f"{'' if d == '.' else d + '/'}{version}")
+        # The root is tagged by hand BEFORE this runs, at the commit that is
+        # released, so its own requires cannot be pinned afterwards: they must
+        # already name the release, or `go get <root>@<tag>` cannot resolve them.
+        stale = [(p, v) for _, p, v in requires((ROOT / "go.mod").read_text(), mods) if v != version]
+        for p, v in stale:
+            print(f"::warning::the root go.mod requires {p} {v}, not {version}: a consumer of the root tag cannot resolve it", file=sys.stderr)
     else:
         die(f"unknown command {cmd}", 2)
 
