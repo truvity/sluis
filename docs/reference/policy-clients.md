@@ -51,7 +51,7 @@ Refused at start: the object form with `generate: false`; on a `public` or `exch
 cannot create only if absent (`legacy`); and, for a generated client, a State that replicas do not share (the `memory`
 adapter excepted). An older binary refuses the object form, so roll every replica first. Stored records of clients no
 longer generated are reported once as orphans and never deleted by the issuer. The relying party receives the secret
-through an [`oidc-client` export](exports.md#the-policy-document-exports); rotation is
+by reading the [`oidc/v1` document](secrets.md#the-external-documents) at `external/oidc/<client>`; rotation is
 [`sluisctl clients`](sluisctl.md#clients-rotate-show-purge). How:
 [let the issuer generate a client's secret](../how-to/let-the-issuer-generate-a-clients-secret.md),
 [rotate a client secret](../how-to/rotate-a-client-secret.md).

@@ -14,7 +14,6 @@ import (
 
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/openbao"
-	"github.com/truvity/sluis/internal/port/porttest"
 )
 
 // fake is a KV version 2 mount with the login the adapter uses: just enough of
@@ -231,119 +230,40 @@ func newServer(t *testing.T, f *fake) (string, *http.Client) {
 	return srv.URL, srv.Client()
 }
 
-func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Store {
+func adapter(t *testing.T, f *fake, mutate func(*openbao.Config)) *openbao.Secrets {
 	t.Helper()
-	addr, client := newServer(t, f)
-	cfg := openbao.Config{
-		Client:    client,
-		Address:   addr,
-		Namespace: "staging",
-		Auth: openbao.Auth{
-			Method: openbao.MethodJWT, Mount: "jwt-staging", Role: "sluis-writer",
-			Token: func(context.Context) (string, error) { return "a-jwt", nil },
-		},
+	if mutate == nil {
+		return secretsAdapter(t, f, "sluis")
 	}
-	if mutate != nil {
-		mutate(&cfg)
-	}
-	s, err := openbao.New(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s
+	return secretsAdapter(t, f, "sluis", mutate)
 }
 
-func TestConformance(t *testing.T) {
-	porttest.RunExport(t, func(t *testing.T) porttest.ExportEnv {
-		f := newFake()
-		s := adapter(t, f, nil)
-		return porttest.ExportEnv{
-			Export: s,
-			Read: func(_ *testing.T, target port.ExportTarget) (map[string]string, bool) {
-				ns := target.Namespace
-				if ns == "" {
-					ns = "staging"
-				}
-				return f.read(ns, target.Path)
-			},
-		}
-	})
-}
-
-func TestAnIdenticalPutMakesNoNewVersion(t *testing.T) {
-	f := newFake()
-	s := adapter(t, f, nil)
-	target := port.ExportTarget{Path: "slack-apps/alerts"}
-	props := map[string]string{"bot_token": "xoxb"}
-	for range 4 {
-		if err := s.Put(context.Background(), target, props, port.ExportPatch); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if v := f.versions("staging", "slack-apps/alerts"); v != 1 {
-		t.Fatalf("version %d after four identical puts, want 1", v)
-	}
-	// What somebody changed is put back.
-	f.mu.Lock()
-	f.secrets["staging|slack-apps/alerts"].data["bot_token"] = "tampered"
-	f.mu.Unlock()
-	if err := s.Put(context.Background(), target, props, port.ExportPatch); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := f.read("staging", "slack-apps/alerts"); got["bot_token"] != "xoxb" {
-		t.Fatalf("the copy was not put back: %v", got)
-	}
-}
-
-func TestPatchUsesAMergePatchAndReplaceAPost(t *testing.T) {
-	f := newFake()
-	s := adapter(t, f, nil)
-	target := port.ExportTarget{Path: "arc/acme"}
-	ctx := context.Background()
-	if err := s.Put(ctx, target, map[string]string{"x": "1"}, port.ExportReplace); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Put(ctx, target, map[string]string{"y": "2"}, port.ExportPatch); err != nil {
-		t.Fatal(err)
-	}
-	var methods []string
-	for _, r := range f.requests {
-		if strings.Contains(r, "kv/data/") && !strings.HasPrefix(r, "GET") {
-			methods = append(methods, strings.SplitN(r, " ", 2)[0])
-		}
-	}
-	if strings.Join(methods, ",") != "POST,PATCH" {
-		t.Fatalf("writes were %v, want POST then PATCH", methods)
-	}
-}
-
-func TestOneLoginPerNamespaceIsReusedUntilTheLeaseIsMostlySpent(t *testing.T) {
+func TestOneLoginIsReusedUntilTheLeaseIsMostlySpent(t *testing.T) {
 	f := newFake()
 	f.ttl = 100
 	now := time.Now()
 	s := adapter(t, f, func(c *openbao.Config) { c.Now = func() time.Time { return now } })
 	ctx := context.Background()
-	put := func(ns string) {
+	put := func() {
 		t.Helper()
-		if err := s.Put(ctx, port.ExportTarget{Namespace: ns, Path: "k/v"}, map[string]string{"a": now.String()}, port.ExportReplace); err != nil {
+		if _, err := s.Put(ctx, "k/v", []byte(now.String())); err != nil {
 			t.Fatal(err)
 		}
 	}
-	put("staging")
-	put("staging")
-	put("devel")
-	if f.logins != 2 {
-		t.Fatalf("%d logins for two namespaces, want 2", f.logins)
+	put()
+	put()
+	if f.logins != 1 {
+		t.Fatalf("%d logins for two writes, want 1", f.logins)
 	}
 	now = now.Add(79 * time.Second)
-	put("staging")
-	if f.logins != 2 {
-		t.Fatalf("%d logins inside the lease, want 2", f.logins)
+	put()
+	if f.logins != 1 {
+		t.Fatalf("%d logins inside the lease, want 1", f.logins)
 	}
 	now = now.Add(2 * time.Second)
-	put("staging")
-	if f.logins != 3 {
-		t.Fatalf("%d logins past 80%% of the lease, want 3", f.logins)
+	put()
+	if f.logins != 2 {
+		t.Fatalf("%d logins past 80%% of the lease, want 2", f.logins)
 	}
 }
 
@@ -352,8 +272,8 @@ func TestARevokedTokenIsReplacedOnceAndAPolicyRefusalIsNotRetried(t *testing.T) 
 	now := time.Now()
 	s := adapter(t, f, func(c *openbao.Config) { c.Now = func() time.Time { return now } })
 	ctx := context.Background()
-	target := port.ExportTarget{Path: "k/v"}
-	if err := s.Put(ctx, target, map[string]string{"a": "1"}, port.ExportReplace); err != nil {
+	path := "k/v"
+	if _, err := s.Put(ctx, path, []byte("1")); err != nil {
 		t.Fatal(err)
 	}
 	f.mu.Lock()
@@ -361,23 +281,18 @@ func TestARevokedTokenIsReplacedOnceAndAPolicyRefusalIsNotRetried(t *testing.T) 
 	f.mu.Unlock()
 	// A token made a moment ago was not revoked: its 403 is the policy's and
 	// costs no new login.
-	if err := s.Put(ctx, target, map[string]string{"a": "2"}, port.ExportReplace); err == nil {
+	if _, err := s.Put(ctx, path, []byte("2")); err == nil {
 		t.Fatal("a fresh token's 403 was retried into success")
 	}
 	if f.logins != 1 {
 		t.Fatalf("%d logins for a fresh token's 403, want 1", f.logins)
 	}
 	now = now.Add(time.Minute)
-	if err := s.Put(ctx, target, map[string]string{"a": "2"}, port.ExportReplace); err != nil {
+	if _, err := s.Put(ctx, path, []byte("2")); err != nil {
 		t.Fatalf("a revoked token must cost one new login, not an error: %v", err)
 	}
 	if f.logins != 2 {
 		t.Fatalf("%d logins, want 2", f.logins)
-	}
-	f.denyPatch = true
-	err := s.Put(ctx, target, map[string]string{"b": "1"}, port.ExportPatch)
-	if err == nil || errors.Is(err, port.ErrUnavailable) || !strings.Contains(err.Error(), "403") || !strings.Contains(err.Error(), "permission denied") {
-		t.Fatalf("a refused PATCH: %v, want a 403 that is not 'unavailable'", err)
 	}
 }
 
@@ -385,14 +300,14 @@ func TestADownServerIsUnavailableAndALoginRefusalIsNot(t *testing.T) {
 	f := newFake()
 	s := adapter(t, f, nil)
 	f.down = true
-	err := s.Put(context.Background(), port.ExportTarget{Path: "k/v"}, map[string]string{"a": "1"}, port.ExportReplace)
+	_, err := s.Put(context.Background(), "k/v", []byte("1"))
 	if !errors.Is(err, port.ErrUnavailable) {
 		t.Fatalf("a sealed server: %v, want ErrUnavailable", err)
 	}
 	f2 := newFake()
 	f2.loginErr = http.StatusBadRequest
 	s2 := adapter(t, f2, nil)
-	err = s2.Put(context.Background(), port.ExportTarget{Path: "k/v"}, map[string]string{"a": "1"}, port.ExportReplace)
+	_, err = s2.Put(context.Background(), "k/v", []byte("1"))
 	if err == nil || errors.Is(err, port.ErrUnavailable) || !strings.Contains(err.Error(), "log in") {
 		t.Fatalf("a refused login: %v", err)
 	}
@@ -402,7 +317,7 @@ func TestAnErrorNeverCarriesAValueOrTheToken(t *testing.T) {
 	f := newFake()
 	f.loginErr = http.StatusForbidden
 	s := adapter(t, f, nil)
-	err := s.Put(context.Background(), port.ExportTarget{Path: "k/v"}, map[string]string{"bot_token": "xoxb-very-secret"}, port.ExportReplace)
+	_, err := s.Put(context.Background(), "k/v", []byte("xoxb-very-secret"))
 	if err == nil {
 		t.Fatal("want an error")
 	}
@@ -423,7 +338,7 @@ func TestTheLoginPresentsTheTokenSourcesJWTEachTime(t *testing.T) {
 		c.Auth.Token = func(context.Context) (string, error) { n++; return "jwt-" + string(rune('0'+n)), nil }
 	})
 	for range 2 {
-		if err := s.Put(context.Background(), port.ExportTarget{Path: "k/v"}, map[string]string{"a": "1"}, port.ExportReplace); err != nil {
+		if _, err := s.Put(context.Background(), "k/v", []byte("1")); err != nil {
 			t.Fatal(err)
 		}
 		now = now.Add(time.Minute)
@@ -435,7 +350,7 @@ func TestTheLoginPresentsTheTokenSourcesJWTEachTime(t *testing.T) {
 
 func TestNewRefusesWhatIsNotAConfiguration(t *testing.T) {
 	ok := openbao.Config{Address: "https://openbao.example", Auth: openbao.Auth{Method: "kubernetes", Role: "r"}}
-	if _, err := openbao.New(ok); err != nil {
+	if _, err := openbao.NewClient(ok); err != nil {
 		t.Fatalf("a valid configuration: %v", err)
 	}
 	for name, mutate := range map[string]func(*openbao.Config){
@@ -453,7 +368,7 @@ func TestNewRefusesWhatIsNotAConfiguration(t *testing.T) {
 	} {
 		c := ok
 		mutate(&c)
-		if _, err := openbao.New(c); err == nil {
+		if _, err := openbao.NewClient(c); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}

@@ -25,7 +25,7 @@ recovery is a **password**. The password's design is in [recovery](../explanatio
   root `/sluis/<instance>`) reads it at cold start and again every five minutes. No file is written and no environment
   variable carries it. The `RecoveryPasswordParameter` output holds the parameter's name, never the value.
 - **There is one function and one role** (since v1.63). It reads `private/config/` and `private/credentials/` and writes
-  only `private/credentials/` and `export/`; it never writes `config/`.
+  only `private/credentials/` (and `internal/credentials/` and `external/` on layout v4); it never writes `config/`.
 - **Read the password from a terminal.** Not into a ticket or a chat.
 - **Ten refused attempts within a minute make a function instance answer 429 for the next minute.** The count lives in
   each instance, so it bounds guessing per instance, not per installation; a 40-character password is not guessable

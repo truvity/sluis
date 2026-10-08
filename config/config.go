@@ -54,9 +54,6 @@ type (
 	Audit = internal.Audit
 	// AdapterChoice names the adapter of one concern and its settings.
 	AdapterChoice = internal.AdapterChoice
-	// Export is one copy of a secret the console keeps, made out of the service
-	// into a secret store a consumer reads.
-	Export = internal.Export
 )
 
 // Group is the group of the documents' kinds: an apiVersion is

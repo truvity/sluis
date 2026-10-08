@@ -19,10 +19,9 @@ DynamoDB adapter and the domain stores share; the service's own *logical* keys
 
 The root is the installation's, `<root>` = `/sluis/<instance>` (the serve document's
 `secrets.root`; for example `/sluis/acme`). An instance may not
-be named `private` or `export`. The IAM boundary is the first level:
-`<root>/private/*` is sluis's alone, `<root>/export/*` is what consumers' External
-Secrets Operator reads. A port path `p` is `<root>/private/<p>`, except
-`export/<name>`, which is `<root>/export/<name>`. Inside `private` there are exactly
+be named `private`, `export`, `internal` or `external`. The IAM boundary is the first level:
+`<root>/private/*` is sluis's alone. A port path `p` is `<root>/private/<p>`, except
+`export/<name>`, which is `<root>/export/<name>` and which nothing writes any more (layout v3's exports, retired). Inside `private` there are exactly
 two kinds of parameter: `config/`, the secrets a document **names** (an operator
 seeds them, sluis reads them), and `credentials/`, which sluis writes.
 
@@ -43,7 +42,7 @@ seeds them, sluis reads them), and `credentials/`, which sluis writes.
 | `<root>/private/credentials/github-runner-app/<tier>/<org>/<ref>` | a runner App's key | sluis |
 | `<root>/private/credentials/slack-workspace/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
 | `<root>/private/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret and bot token | sluis |
-| `<root>/export/<export-name>` | a copy for a consumer: see [Exports](#exports) | sluis |
+| `<root>/export/<export-name>` | a copy for a consumer (retired: see [Exports](#exports-retired)) | nothing, since ADR 0041 |
 
 The names under `config/` are the ones the documents give
 ([configuration](secrets.md#the-names)); the http function reads them by path
@@ -70,7 +69,7 @@ begins `u-`) is written `u-` and its bytes in hex.
 | `/sluis/private/config/clients/<id>` | `<root>/private/config/clients/<id>/secret` |
 | `/sluis/private/config/issuer/state-secret`, `recovery/password` | the same names under `<root>/private/config/` |
 | `/sluis/private/credentials/...` | `<root>/private/credentials/...`, copied by `sluis migrate` |
-| `/sluis/export/<path>` | `<root>/export/<path>`, written again by the next exports pass |
+| `/sluis/export/<path>` | retired: the exports are no longer made (ADR 0041) |
 
 `sluis migrate ssm-layout --to-root /sluis/<instance>` copies the first three rows
 and deletes nothing; `sluis migrate` moves the credentials
@@ -136,7 +135,7 @@ The logical keys the service writes are in [keys](keys.md); how the adapter cond
 | `slack-share` | `<host>/<channel>` | a Slack Connect share |
 | `slack-user-cache` | `<team>/<user>` | who a Slack member is (24 h) |
 | `console` | `session-key` | (the key itself is in Secrets) |
-| `lease` | `<kind>/<target>` | a tick's lease: kinds `github-tick`, `github-links`, `slack-tick`, `refresh`, `export` |
+| `lease` | `<kind>/<target>` | a tick's lease: kinds `github-tick`, `github-links`, `slack-tick`, `refresh` |
 | `notify` | `<target>` | a notification (a minute) |
 | `gate`, `cache`, `dedupe` | the rest of the key, `/`-separated | ledger entries, shared inputs, idempotency markers |
 | `keyring` | `<alg>/<kid>` | a signing key's schedule (`ES384/<kid>`) |
@@ -239,34 +238,8 @@ controller last reported) and `snapshots/<directory>` (the hub's cache, never
 migrated). The names already read as `<what>/<whose>`, so nothing is gained by
 moving them, and a report would otherwise be rewritten for no reason.
 
-## Exports
+## Exports (retired)
 
-An export is a copy of a secret for a program that cannot ask sluis. With a Secrets
-adapter configured and `ports.export` unset, an export writes through the **Secrets
-port** at `export/<path>`, which the `ssm` adapter keeps at
-`<root>/export/<path>`. (`ports.export: openbao` keeps working for the Kubernetes
-path, and writes to OpenBao as before.) The `<path>` is the export's `path` in
-the `exports` list: **it is the name a consumer reads, and a consumer contract.**
-Keep it stable.
-
-**Value format.** One JSON object per export, text values only, so that ESO's SSM
-provider extracts a property with `remoteRef: {key: /sluis/<instance>/export/<path>, property: <name>}`:
-
-```json
-{"bot_token":"xoxb-..."}
-```
-
-A replace writes exactly the properties; a patch (every App source) sets its
-properties and keeps the others in the object. The property names are fixed by the
-source (an export's `properties` map may rename them):
-
-| Source | Properties |
-|---|---|
-| `slack-app` | `bot_token` |
-| `github-app` | `app_id`, `installation_id`, `private_key` |
-| `runner-app` | `github-app-id`, `github-installation-id`, `github-private-key` |
-| `bundle` | one property per entry of the bundle (disaster-recovery copies; an SSM parameter holds at most 8 KiB, so a large bundle is refused: send bundles to OpenBao) |
-
-An identical export writes nothing, so SSM makes no new version. The `exports`
-event of the one Lambda function (`{"kind":"exports"}`) writes them on a
-schedule.
+Layout v3's exports (`<root>/export/<path>`, copies made by the exports controller) are retired by ADR 0041. A consumer
+reads the typed document at `<root>/external/<kind>/<id>`: [secrets](secrets.md#the-external-documents) has the kinds,
+their fields and their schemas, and [exports](exports.md) the old sources and where each went.

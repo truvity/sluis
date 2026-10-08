@@ -424,10 +424,6 @@ type Deps struct {
 	// catalogue and the Secret it keeps each App's key in. Nil mints none,
 	// and every such request is refused as naming an App that cannot.
 	GitHubApps *issuer.GitHubApps
-	// ClientSecretChanged is called after a person rotated a generated
-	// client's secret, so that what copies it out (an export) need not wait
-	// for its interval. It must not block. Nil does nothing.
-	ClientSecretChanged func(ctx context.Context, clientID string)
 	// Around wraps everything this issuer serves on its port, the console
 	// included. It is applied to the one handler both [App.Handler] and
 	// [App.Run] use, so what a caller tests through the first is what the
@@ -637,7 +633,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		c, ok := set.Client(id)
 		return ok && c.SecretGenerated()
 	})
-	secretsAdmin, leases := newClientSecretManager(set, stores, creds, deps.ClientSecretChanged, log)
+	secretsAdmin, leases := newClientSecretManager(set, stores, creds, log)
 	if stores.Ports.Secrets != nil {
 		core.UseClientSecrets(secretsAdmin)
 	}

@@ -95,19 +95,3 @@ apps:
 controllers:
   github: {enabledOrgs: [example-org]}
   slack: {enabledWorkspaces: [example]}
-exports:
-  - name: slack-app.alerts
-    source: slack-app
-    app: alerts
-    namespace: staging
-    path: slack-apps/alerts
-    properties: {bot_token: bot_token}
-    interval: 1h
-  - source: runner-app
-    tier: large
-    org: example-org
-    namespace: staging
-    path: arc/example
-  - source: bundle
-    bundle: github-apps
-    path: sluis-backup/github-apps

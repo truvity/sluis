@@ -166,25 +166,6 @@ alerts:
       minErrors: 5
       for: 10m
       labels: {}
-    exportFailing:
-      enabled: true
-      severity: warning
-      # This many failed attempts of ONE export within `window`, held for `for`.
-      # A failed copy is retried with backoff (5s up to 5m), so a store that is
-      # down shows as a failure every few minutes. A warning, not a page: the
-      # copy is stale and nothing live changes.
-      failures: 3
-      window: 30m
-      for: 15m
-      labels: {}
-    exportStale:
-      enabled: true
-      severity: warning
-      # No ok attempt of an export for this long: 3h is two missed hourly
-      # refreshes and the one that should have followed.
-      maxAgeSeconds: 10800
-      for: 10m
-      labels: {}
 
 # Grafana dashboards, rendered only with `renders: dashboards`: one ConfigMap
 # per file in dashboards/, labelled for Grafana's sidecar. Install it into the
@@ -333,8 +314,7 @@ config:
   # (sluis.truvity.github.io/sluis/v3, .../policy/v2), so
   # neither `config` nor `policy` carries one. Whose CI tokens are verified
   # (`policy.exchange.github.owners`), the runner tiers
-  # (`policy.apps.github.runnerTiers`) and the exports (`policy.exports`) are
-  # the policy document's.
+  # (`policy.apps.github.runnerTiers`) are the policy document's.
 
 # The secrets the config names, each one key of a Secret projected as the
 # file <config.secrets.root>/<name>: `valkey.passwordSecret`,
@@ -434,9 +414,8 @@ directory: {}
 
   # A SECOND COPY OF THE WORKSPACE CREDENTIAL, for recovery. Off unless
   # written out. DEPRECATED, with every `push` below: it needs
-  # `config.store: kubernetes`. On a State adapter the service copies it
-  # itself, into OpenBao: `policy.exports` with `source: bundle` (see `exports`
-  # below and docs/decisions/0034).
+  # `config.store: kubernetes`. On a State adapter there is no second copy to
+  # make: backup and restore are whole-installation (docs/decisions/0041).
   #
   #   push:
   #     secretStore: {name: openbao, kind: ClusterSecretStore}
@@ -833,8 +812,8 @@ githubApps:
   #       secretStore: {name: example-store, kind: SecretStore}
   #       remoteKey: platform/github-apps/iac
   #
-  # `push` is DEPRECATED (a State adapter uses `policy.exports`, source
-  # `github-app`). It is the one way a credential leaves this service. External
+  # `push` is DEPRECATED (a State adapter reads the App's `github/v1`
+  # document at `external/github/<app>`, docs/decisions/0041). It is the one way a credential leaves this service. External
   # Secrets copies exactly the App's three property keys -- the id, the
   # installation id and the private key, never the whole Secret -- to the
   # store and path the entry names, for a consumer that cannot ask the
@@ -935,8 +914,8 @@ slackState: {}
 #       secretStore: {name: example-store, kind: SecretStore}
 #       remoteKey: platform/slack-apps/sync
 #
-# `push` is DEPRECATED (a State adapter uses `policy.exports`, source
-# `slack-app`). It copies exactly the App's bot token -- one key, never the client
+# `push` is DEPRECATED (a State adapter reads the App's `slack/v1`
+# document at `external/slack/<app>`, docs/decisions/0041). It copies exactly the App's bot token -- one key, never the client
 # secret, never the record -- to the store and path the entry names, for a
 # program that acts in the workspace as the bot and cannot ask the service
 # at the moment it runs. What it writes is a REAL credential: a second
@@ -974,20 +953,10 @@ audit:
     audience: audit
     expirationSeconds: 3600
 
-# What the chart mounts for the service's exports: copies of the secrets the
-# console keeps (a Slack App's bot token, the runner Apps, the recovery
-# bundles), made into OpenBao by the service itself, asynchronously and never
-# as a dependency (docs/decisions/0034). WHAT is copied is `policy.exports`;
-# WHERE, and how the service logs in, is `config.ports.export`. This is the
-# part that is not config: a CA bundle and a projected token, mounted where
-# the config's `caFile` and `auth.tokenFile` must say (the chart refuses
-# another path).
-#
-# These replace `slackApps[].push`, `directory.push`, `githubApps.push` and
-# `githubApps.catalogue[].push` for a deployment that keeps its state in a
-# State adapter (`config.ports.adapter`), which is the only one that has no
-# Kubernetes Secrets for a PushSecret to read. The `push` values stay for the
-# `legacy` storage and are deprecated.
+# What the chart mounts for the service's OpenBao connection (the `openbao`
+# secrets adapter): a CA bundle and a projected token, mounted where the
+# config's `caFile` and `auth.tokenFile` must say (the chart refuses another
+# path). The key keeps the name it had when the exports used the same mounts.
 exports:
   openbao:
     # PEM of the authorities that sign OpenBao's certificate. Empty mounts

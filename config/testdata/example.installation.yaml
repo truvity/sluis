@@ -1,6 +1,6 @@
 # A small installation on AWS Lambda, as the acme estate's example is: one
 # function, DynamoDB state, an S3 bucket, SSM secrets, KMS-wrapped signing,
-# the GitHub controller for one organisation and one export. Every name is a
+# the GitHub controller for one organisation. Every name is a
 # placeholder; no value here is a secret.
 apiVersion: sluis.truvity.github.io/installation/v1
 instance: example
@@ -55,13 +55,6 @@ controllers:
     consoleURL: https://access.example.test/console
     interval: 15m
     enabledOrgs: [example-org]
-
-exports:
-  - name: arc-runner-app
-    source: runner-app
-    tier: stable
-    org: example-org
-    path: github-runner-app/stable/example-org
 
 access:
   groups:

@@ -24,7 +24,7 @@ schema, and the installation adds what a document cannot say.
 | `openbao` | the `openbao` secrets adapter's settings (`address`, `caFile`, `mount`, `namespace`, `root`, `auth`); it chooses that adapter for `secrets`. |
 | `adapters` | names single concerns, over what the preset and the resources above give. |
 | `exchange` | `audience` (the service document's) and the policy document's `clusters`, `aws` and `github.owners`. |
-| `apps`, `exports` | the policy document's, unchanged. |
+| `apps` | the policy document's, unchanged. |
 | `controllers` | `github` and `slack`, each present when the controller is on: its own keys go to the service document's `controllers`, `enabledOrgs` and `enabledWorkspaces` to the policy document's. |
 | `access` | the access model's tables (`groups`, `clients`, `resources`, `github`, `slack`, ...), the policy document's, unchanged. |
 

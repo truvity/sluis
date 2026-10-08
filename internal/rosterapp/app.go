@@ -33,7 +33,6 @@ import (
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/internal/exports"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/hub"
@@ -163,9 +162,6 @@ type App struct {
 	issuer    *issuerapp.App
 	stores    *store.Stores
 	log       *slog.Logger
-	// exports copies secrets out of the service, out of band; nil when the
-	// deployment declares none.
-	exports *exports.Runner
 	// github and slack are the controllers that run beside the service; nil
 	// when the document names none.
 	github *githubapp.App
@@ -190,16 +186,6 @@ func (a *App) Policy() *policy.Set { return a.directory.Policy() }
 
 // Trigger is the Trigger the console notifies, as the plan chose it.
 func (a *App) Trigger() port.Trigger { return a.stores.Ports.Trigger }
-
-// ExportsPass makes every declared export once under its lease and returns what
-// it did; declared is false when the deployment declares none. It is what a
-// function runs on a schedule in place of the loop [App.Run] starts.
-func (a *App) ExportsPass(ctx context.Context) (res exports.PassResult, declared bool) {
-	if a.exports == nil {
-		return exports.PassResult{}, false
-	}
-	return a.exports.Pass(ctx), true
-}
 
 // ReconcileClientSecrets makes sure every client whose secret the issuer
 // generates has it stored. New runs it once; a function with no loop runs it
@@ -347,20 +333,6 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		apps.Store = store
 	}
 	deps.GitHubApps = &apps
-	// A rotation copies the new secret out at once, when the deployment
-	// exports it. The runner is built after the issuer, so the hook reads it
-	// when it is called; it does not block the request that rotated.
-	var copies *exports.Runner
-	deps.ClientSecretChanged = func(ctx context.Context, clientID string) {
-		if copies == nil {
-			return
-		}
-		go func() {
-			bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
-			defer cancel()
-			copies.RefreshClient(bounded, clientID)
-		}()
-	}
 	assembled, err := issuerapp.New(ctx, cfg.Issuer, deps, log)
 	if err != nil {
 		a.Close()
@@ -381,14 +353,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 			Token: auditToken(assembled, audience),
 		})
 	}
-	copies, err = openExports(cfg, stores, directory, log)
-	if err != nil {
-		a.Close()
-		return nil, err
-	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory", "controllers", len(a.consoles))
-	a.issuer, a.exports = assembled, copies
+	a.issuer = assembled
 	return a, nil
 }
 
@@ -398,11 +365,6 @@ func (a *App) Run(ctx context.Context) error {
 	group, gctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return a.issuer.Run(gctx) })
 	group.Go(func() error { return a.directory.RunLoops(gctx) })
-	if a.exports != nil {
-		// Run returns nil whatever the store does: an export never ends the
-		// service, and ends with it.
-		group.Go(func() error { return a.exports.Run(gctx) })
-	}
 	// The controllers' loops end with the service, and a controller that fails
 	// ends it: the one process is as healthy as its parts. Each waits for the
 	// console, which is this process, to answer before its first pass.

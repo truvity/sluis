@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/truvity/sluis/internal/secrets"
-	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/app"
@@ -364,41 +363,4 @@ func where(t *testing.T, client *http.Client, url string) string {
 	}
 	defer func() { _ = response.Body.Close() }()
 	return response.Header.Get("Location")
-}
-
-// An export names what the deployment declares, or the
-// service does not start: an export of an App nobody declared would copy
-// nothing for ever and say nothing.
-func TestExportsAreHeldToWhatTheDeploymentDeclares(t *testing.T) {
-	export := config.Export{Source: "slack-app", App: "alerts", Path: "slack-apps/alerts"}
-	withExports := func(exports ...config.Export) *config.PolicyDocument {
-		return &config.PolicyDocument{APIVersion: "v2", Exports: exports}
-	}
-	to := &config.Ports{Export: &config.PortsExport{Adapter: "memory"}}
-	for _, tc := range []struct {
-		name   string
-		change func(*config.Serve)
-		policy *config.PolicyDocument
-		want   string
-	}{
-		{"a demonstration", func(f *config.Serve) { f.Demo, f.Ports = true, to }, withExports(export), "demonstration"},
-		{"an App nobody declared", func(f *config.Serve) { f.Demo, f.Ports = false, to }, withExports(export), "not declared in slackApps"},
-		{"a source this build does not know", func(f *config.Serve) { f.Demo, f.Ports = false, to },
-			withExports(config.Export{Source: "ssh-key", Path: "a/b"}), "ssh-key"},
-	} {
-		if _, err := app.FromConfig(issuerFile(t, tc.change), tc.policy); err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s: %v, want an error with %q", tc.name, err, tc.want)
-		}
-	}
-	declared := withExports(export)
-	declared.Apps = &config.PolicyApps{Slack: &config.AppsSlack{Catalogue: []slackcatalogue.App{
-		{ID: "alerts", Workspace: "acme", BotScopes: []string{"chat:write"}},
-	}}}
-	cfg, err := app.FromConfig(issuerFile(t, func(f *config.Serve) { f.Demo, f.Ports = false, to }), declared)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := cfg.Exports(); len(got) != 1 || got[0].Name != "slack-app.alerts" {
-		t.Errorf("exports = %+v", got)
-	}
 }

@@ -43,9 +43,9 @@ preset (DynamoDB for State, SSM for secrets, S3 for the controllers' reports), w
   The library puts them in the configuration layer and names them in `signingKey.verifyOnly`, as the chart does
   ([the Pulumi library](../reference/pulumi-library.md#inputs-lambdaargs)). Only public keys: a private one is refused.
   Remove them after `Until`; past it they are not published anyway.
-- **Declare the schedules paused.** Until the switch the old installation's controllers and exports are the ones that
-  run. Deploy the destination with `Schedule.Paused`, `Exports.Paused` and `DirectoryRefresh.Paused` set: every
-  schedule exists, disabled, with the scheduler's role and the function's grants (the `export/*` write included), and
+- **Declare the schedules paused.** Until the switch the old installation's controllers are the ones that
+  run. Deploy the destination with `Schedule.Paused` and `DirectoryRefresh.Paused` set: every
+  schedule exists, disabled, with the scheduler's role and the function's grants, and
   turning them on in step 6 is one setting whose preview changes only each schedule's state.
 - **A first smoke start of the new installation writes `console/session-key`.** The real run then needs `--overwrite`.
 - **The Pulumi library's require pin is automatic.** Nobody bumps `deploy/pulumi/go.mod` by hand before a tag

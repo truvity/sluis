@@ -57,18 +57,6 @@ audit:
   forwardedForTrustedHops: 1
 ports:
   adapter: memory
-  export:
-    adapter: openbao
-    openbao:
-      address: https://openbao.staging.example.internal
-      caFile: /var/run/openbao/ca.pem
-      mount: kv
-      namespace: staging
-      auth:
-        method: jwt
-        mount: jwt-staging
-        role: sluis-writer
-        tokenFile: /var/run/openbao/token
 platform:
   aws: true
   kubernetes: true

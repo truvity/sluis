@@ -51,7 +51,7 @@ func installationSchema() m {
 	tables := m{}
 	for k, v := range polProps {
 		switch k {
-		case "apiVersion", "exchange", "apps", "controllers", "exports":
+		case "apiVersion", "exchange", "apps", "controllers":
 		default:
 			tables[k] = v
 		}
@@ -59,7 +59,7 @@ func installationSchema() m {
 
 	props := m{
 		"apiVersion": m{"const": Group + "/installation/v1", "description": "Which version of which document this is. " + Group + "/installation/v1 is what this build reads and writes."},
-		"instance":   m{"type": "string", "pattern": `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "not": m{"enum": []string{"private", "export"}}, "description": "The installation's name (`acme`, `prod`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private` and `export` would nest under another's tree."},
+		"instance":   m{"type": "string", "pattern": `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "not": m{"enum": []string{"private", "export", "internal", "external"}}, "description": "The installation's name (`acme`, `prod`): lower-case letters, digits and dashes. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account; `private`, `export`, `internal` and `external` would nest under another's tree."},
 		"shape":      enum("Where the installation runs: `lambda` (one AWS Lambda function), `kubernetes` (one Deployment) or `server` (one process). It fixes the paths the documents name and what is derived.", "", "lambda", "kubernetes", "server"),
 		"preset":     presetSchema(),
 		"release":    strDefault("The name the installation's objects carry (the service document's `release`). On Kubernetes, the release's full name.", "sluis"),
@@ -84,7 +84,7 @@ func installationSchema() m {
 			"bucket":        str("The S3 bucket of the `s3` blobs adapter."),
 			"auditQueueURL": url("The audit ingest queue the `sqs` audit adapter sends to."),
 		}),
-		"openbao": obj("An OpenBao the secrets are kept in (the `openbao` secrets adapter, layout v3 under `root`); the exports go there too. Setting it chooses that adapter for `secrets` unless `adapters.secrets` names another. It is an answer to the preset's question: the preset's own answers do not ask for an OpenBao.", m{
+		"openbao": obj("An OpenBao the secrets are kept in (the `openbao` secrets adapter, layout v3 under `root`). Setting it chooses that adapter for `secrets` unless `adapters.secrets` names another. It is an answer to the preset's question: the preset's own answers do not ask for an OpenBao.", m{
 			"address":   m{"type": "string", "pattern": `^https://[^\s/?#@]+/?$`, "description": "The server, https only and with no path."},
 			"caFile":    str("The PEM bundle the server's certificate chains to."),
 			"mount":     str("The KV version 2 mount. Default the adapter's."),
@@ -110,7 +110,6 @@ func installationSchema() m {
 		"exchange":    exchange,
 		"apps":        policyAppsSchema(),
 		"controllers": controllers,
-		"exports":     polProps["exports"],
 		"access": obj("The access model's tables (docs/reference/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
 			tables),
 	}

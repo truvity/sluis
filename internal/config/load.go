@@ -156,6 +156,9 @@ func loadSluis(file string, into *Sluis) error {
 		return err
 	}
 	if doc != nil && doc[policyconfig.APIVersionKey] == APIVersion("sluis") {
+		if err = refuseRetired(file, "sluis"); err != nil {
+			return err
+		}
 		kind := policyconfig.Kind{Name: Group + "/sluis", Version: 3, Schema: schemaFor("sluis")}
 		return policyconfig.LoadKind(file, kind, into)
 	}

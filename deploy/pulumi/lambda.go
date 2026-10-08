@@ -184,7 +184,7 @@ type LambdaArgs struct {
 
 	// FunctionNamePrefix starts the names of what is not the function: the
 	// configuration layer (`<prefix>-config`), the API, the schedules
-	// (`<prefix>-<kind>-<target>`, `<prefix>-exports`, `<prefix>-directory-
+	// (`<prefix>-<kind>-<target>`, `<prefix>-directory-
 	// refresh`) and the scheduler's role. Default "sluis".
 	FunctionNamePrefix string
 	// FunctionName is the function's name, and the name of its role, its role
@@ -213,8 +213,6 @@ type LambdaArgs struct {
 	API APIArgs
 	// Schedule is the controllers' tick: one schedule per target.
 	Schedule ScheduleArgs
-	// Exports is the schedule that runs the exports.
-	Exports ExportsArgs
 	// DirectoryRefresh is the schedule that refreshes the directory's snapshots.
 	DirectoryRefresh DirectoryRefreshArgs
 	// WebIdentityAudience restricts the audience of the outbound web identity
@@ -302,23 +300,6 @@ type VerifyOnlyKeyArgs struct {
 	// nothing for it and logs that).
 	Until time.Time
 }
-
-// ExportsArgs is the exports schedule: one EventBridge schedule invoking the
-// function with `{"kind":"exports"}`.
-type ExportsArgs struct {
-	// Disabled leaves the schedule out, and the function's read of what it
-	// wrote under export/.
-	Disabled bool
-	// Paused declares the schedule DISABLED (EventBridge Scheduler's `state`)
-	// and keeps everything else, the role's export/* grants included, so that
-	// turning the exports on is this one setting. Exclusive with Disabled.
-	Paused bool
-	// Rate is the schedule expression. Default DefaultExportsSchedule.
-	Rate string
-}
-
-// DefaultExportsSchedule is the exports' tick when ExportsArgs.Rate is empty.
-const DefaultExportsSchedule = "rate(15 minutes)"
 
 // DirectoryRefreshArgs is the directory refresh schedule: one EventBridge
 // schedule invoking the function with `{"kind":"refresh"}`.
@@ -527,11 +508,6 @@ type Lambda struct {
 	// letters and digits with no look-alikes. Only the name is an output, never the
 	// value; an operator reads it with `aws ssm get-parameter --with-decryption`.
 	RecoveryPasswordParameter pulumi.StringOutput
-
-	// ExportReadPolicyJSON is the IAM policy document a consumer's External
-	// Secrets Operator role attaches: read on /sluis/<instance>/export/* and
-	// nothing else.
-	ExportReadPolicyJSON pulumi.StringOutput
 }
 
 var functionNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -689,20 +665,11 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.Function.TimeoutSeconds == 0 {
 		out.Function.TimeoutSeconds = 300
 	}
-	if out.Exports.Disabled && out.Exports.Paused {
-		return out, errors.New("sluispulumi: Exports: Disabled leaves the schedule out and Paused declares it disabled: set one")
-	}
 	if out.DirectoryRefresh.Disabled && out.DirectoryRefresh.Paused {
 		return out, errors.New("sluispulumi: DirectoryRefresh: Disabled leaves the schedule out and Paused declares it disabled: set one")
 	}
 	if err := checkVerifyOnly(out.VerifyOnly); err != nil {
 		return out, err
-	}
-	if out.Exports.Rate == "" {
-		out.Exports.Rate = DefaultExportsSchedule
-	}
-	if r := out.Exports.Rate; !strings.HasPrefix(r, "rate(") && !strings.HasPrefix(r, "cron(") {
-		return out, fmt.Errorf("sluispulumi: Exports.Rate %q is not an EventBridge Scheduler expression", r)
 	}
 	if out.DirectoryRefresh.Rate == "" {
 		out.DirectoryRefresh.Rate = DefaultDirectoryRefreshSchedule
@@ -746,10 +713,11 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 // `bootstrap` (provided.al2023, arm64, no VPC), with ONE role:
 //
 //   - logs to its own group; S3 on the blob bucket; DynamoDB on the table; SSM
-//     read and write under /sluis/<instance>/private/credentials/* and
-//     /sluis/<instance>/export/* (and read of what it wrote there, for the exports
-//     pass); SSM read under /sluis/<instance>/private/config/* (the secrets its
-//     document names); sqs:SendMessage on the audit queue;
+//     read and write under /sluis/<instance>/private/credentials/* (layout v3)
+//     and /sluis/<instance>/internal/credentials/* and /external/* (layout v4,
+//     with the parameters' history); SSM read under .../private/config/* and
+//     .../internal/config/* (the secrets its document names);
+//     sqs:SendMessage on the audit queue;
 //   - kms:Sign and kms:GetPublicKey on the signing keys (remote signing) or, with
 //     WrappedSigning, kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on
 //     the symmetric key under the encryption context purpose=sluis-signing;
@@ -761,7 +729,7 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 //
 // The API is an HTTP API with payload format 2.0 and a $default route to the
 // function, behind a regional custom domain with mutual TLS. The controllers'
-// passes, the exports and the directory refresh are invoked by EventBridge
+// passes and the directory refresh are invoked by EventBridge
 // schedules, through a role of their own that may invoke only this function.
 func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulumi.ResourceOption) (*Lambda, error) {
 	a, err := args.validate()
@@ -1070,11 +1038,6 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
 	}
 
-	exportPolicy, err := ExportReadPolicy(a.Region, a.AccountID, a.Instance, a.ParameterKeyArn)
-	if err != nil {
-		return nil, err
-	}
-
 	out.SigningKeyArn, out.SigningKeyID, out.SigningKeyAlias = sgArn, sgID, sgAlias
 	out.WrappedSigningKeyArn, out.WrappedSigningKeyAlias = wrappedKeyArn, wrappedAlias
 	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
@@ -1087,7 +1050,6 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.RecoveryPasswordParameter = recoveryParam.Name
 	out.ScheduleNames = schedNames
 	out.ConfigLayerArn = layer.Arn
-	out.ExportReadPolicyJSON = pulumi.String(exportPolicy).ToStringOutput()
 
 	if err := ctx.RegisterResourceOutputs(out, pulumi.Map{
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
@@ -1098,7 +1060,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
-		"exportReadPolicyJson": out.ExportReadPolicyJSON, "stateSecretParameter": out.StateSecretParameter,
+		"stateSecretParameter":      out.StateSecretParameter,
 		"recoveryPasswordParameter": out.RecoveryPasswordParameter, "configLayerArn": out.ConfigLayerArn,
 	}); err != nil {
 		return nil, err
@@ -1170,7 +1132,7 @@ func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, si
 			bucketArn: v[0].(string), external: a.Storage.External, tableArn: v[1].(string), tableKey: v[2].(string),
 			queueArn: v[3].(string), logGroupArn: v[4].(string), wrappedKeyArn: v[5].(string), signingKeyArns: stringsOf(v[8:]),
 			keys:            grantsOf(a.Keys, v[6].(string), v[7].(string)),
-			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance, exports: !a.Exports.Disabled,
+			parameterKeyArn: a.ParameterKeyArn, instance: a.Instance,
 			invokeFunctionArns: []string{selfArn},
 			webIdentityAud:     a.WebIdentityAudience,
 			webIdentityExtra:   a.AdditionalWebIdentityAudiences,
@@ -1328,8 +1290,8 @@ func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apiga
 }
 
 // newSchedules is the scheduler's role, which may invoke the function and
-// nothing else, and one schedule per target, one for the exports and one for
-// the directory refresh.
+// nothing else, and one schedule per target and one for the
+// directory refresh.
 func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Function,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
@@ -1396,26 +1358,6 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			return nil, none, fmt.Errorf("sluis schedule %s: %w", sname, err)
 		}
 		names = append(names, pulumi.String(sname))
-	}
-	if !a.Exports.Disabled {
-		ename := a.FunctionNamePrefix + "-exports"
-		if _, err := scheduler.NewSchedule(ctx, name+"-exports", &scheduler.ScheduleArgs{
-			Name:                       pulumi.String(ename),
-			Description:                pulumi.String("Runs the exports."),
-			ScheduleExpression:         pulumi.String(a.Exports.Rate),
-			ScheduleExpressionTimezone: pulumi.String("UTC"),
-			State:                      scheduleState(a.Exports.Paused),
-			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
-			Target: &scheduler.ScheduleTargetArgs{
-				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"exports"}`),
-				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
-					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
-				},
-			},
-		}, opts...); err != nil {
-			return nil, none, fmt.Errorf("sluis exports schedule: %w", err)
-		}
-		names = append(names, pulumi.String(ename))
 	}
 	if !a.DirectoryRefresh.Disabled {
 		rname := a.FunctionNamePrefix + "-directory-refresh"

@@ -2,7 +2,6 @@ package ssm_test
 
 import (
 	"context"
-	"encoding/json"
 	"regexp"
 	"slices"
 	"sort"
@@ -10,14 +9,10 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/backend"
-	"github.com/truvity/sluis/internal/config"
-	"github.com/truvity/sluis/internal/exports"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
-	"github.com/truvity/sluis/internal/port/secretsexport"
 	"github.com/truvity/sluis/internal/port/ssm"
 	"github.com/truvity/sluis/internal/portstore"
-	"github.com/truvity/sluis/internal/rails"
 	slackcatalogueapp "github.com/truvity/sluis/internal/slackapp/catalogueapp"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 )
@@ -73,52 +68,5 @@ func TestACredentialIsAParameterUnderTheCredentialsPrefix(t *testing.T) {
 		if !slices.ContainsFunc(got, re.MatchString) {
 			t.Errorf("no parameter matches %s in %v", re, got)
 		}
-	}
-}
-
-// An exports pass over the ssm Secrets adapter writes `/sluis/<instance>/export/<name>`,
-// one JSON object of the properties.
-func TestAnExportsPassWritesTheExportPrefix(t *testing.T) {
-	ctx := context.Background()
-	f := newFake()
-	secrets := newSecrets(t, f, ssm.Config{})
-	state := memory.New()
-	slacks := portstore.NewSlackCatalogueApps(portstore.New(state.Set()))
-	at := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
-	if err := slacks.Put(ctx,
-		slackcatalogueapp.Record{ID: "alerts", Workspace: "acme", AppID: "A1", ClientID: "c1", TeamID: "T1", CreatedAt: at, CreatedBy: "ada@acme.example"},
-		slackcatalogueapp.Credentials{ClientSecret: "s", BotToken: "xoxb-BOT"}); err != nil {
-		t.Fatal(err)
-	}
-	specs, err := exports.FromConfig([]config.Export{{Source: "slack-app", App: "alerts", Path: "slack-app-alerts"}},
-		exports.Declared{SlackApps: []string{"alerts"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	runner := &exports.Runner{
-		Specs: specs, Sources: exports.Sources{SlackCatalogueApps: slacks},
-		Export: secretsexport.New(secrets), State: state,
-		Leases: &rails.Leases{State: state, Holder: "test"},
-	}
-	if res := runner.Pass(ctx); res.Done != 1 || res.Failed != 0 {
-		t.Fatalf("Pass = %+v", res)
-	}
-	got, err := secrets.Get(ctx, "export/slack-app-alerts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var props map[string]string
-	if err := json.Unmarshal(got.Value, &props); err != nil || props["bot_token"] != "xoxb-BOT" || len(props) != 1 {
-		t.Fatalf("the export = %s (%v)", got.Value, err)
-	}
-	if want := []string{"/sluis/test/export/slack-app-alerts"}; !slices.Equal(names(f), want) {
-		t.Errorf("parameters = %v, want %v", names(f), want)
-	}
-	// A second pass makes no new version.
-	if res := runner.Pass(ctx); res.Failed != 0 {
-		t.Fatalf("second Pass = %+v", res)
-	}
-	if again, _ := secrets.Get(ctx, "export/slack-app-alerts"); again.Version != got.Version {
-		t.Errorf("an identical export made a new version: %s -> %s", got.Version, again.Version)
 	}
 }

@@ -16,7 +16,7 @@ import (
 type Concern string
 
 // The concerns. State includes sessions (keys under `ses.`, with a lifetime);
-// secrets are the dynamic secrets and the exports under `export/`.
+// secrets are the dynamic secrets.
 const (
 	ConcernState    Concern = "state"
 	ConcernSecrets  Concern = "secrets"
@@ -277,7 +277,7 @@ var Catalogue = []Descriptor{
 	planned(ConcernState, "kubernetes", "State in a ConfigMap the service rebuilds and owns.", Requires{Kubernetes: true}, RuntimeKubernetes),
 	planned(ConcernState, "postgres", "State in a PostgreSQL table.", Requires{}),
 	planned(ConcernState, "valkey", "State, sessions included, in Valkey.", Requires{}),
-	planned(ConcernSecrets, "kubernetes", "Dynamic secrets and exports as Kubernetes Secrets the service writes.", Requires{Kubernetes: true}, RuntimeKubernetes),
+	planned(ConcernSecrets, "kubernetes", "Dynamic secrets as Kubernetes Secrets the service writes.", Requires{Kubernetes: true}, RuntimeKubernetes),
 	planned(ConcernSecrets, "store", "Secrets in the service's own encrypted store, for a platform with no secret store.", Requires{}),
 	planned(ConcernBlobs, "postgres", "Blobs in PostgreSQL large objects.", Requires{}),
 	planned(ConcernBlobs, "off", "No blob storage: reports and snapshots are not kept.", Requires{}),

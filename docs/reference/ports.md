@@ -12,7 +12,7 @@ paths, each with a version: `Get(path) (value, version)`, `Put`, `PutIfVersion`
 (`ErrConflict` when the version moved, `ErrNotFound` when gone, an empty version
 means "only if absent"), `Delete` and `List(prefix)` (names, never values, by whole
 segments). A value is at most `MaxSecret` (8 KiB, an SSM advanced parameter's
-limit). Exports live under `export/` (`port.ExportPrefix`). The suite is
+limit). Layout v3 kept its exports under `export/` (`port.ExportPrefix`; retired by ADR 0041). The suite is
 `porttest.RunSecrets`; the `memory`, `ssm` and `openbao` adapters pass it, and an adapter for a
 real store runs it against the engine.
 
@@ -139,52 +139,6 @@ only this process.
 A notification is a hint and may be duplicated or lost; the lease and the
 backstop make both harmless. Writing a `share.` record **is** a notification of
 the guest's tick.
-
-## Export
-
-The reverse of State: a copy of a secret the service keeps, put where a program that
-cannot ask the service reads it (Alertmanager posting as a Slack bot, a runner scale
-set with its GitHub App), and the disaster-recovery bundles. Nothing is read back,
-and nothing depends on it
-([0034](../decisions/0034-exports-go-to-openbao-directly.md)).
-
-```go
-type Export interface {
-    Put(ctx, target ExportTarget, properties map[string]string, mode ExportMode) error
-    Delete(ctx, target ExportTarget) error
-}
-```
-
-- A target is a `Path` under the adapter's mount (`slack-apps/alerts`: segments of
-  anything but `?#%\*` and space, no empty, `.` or `..` segment, no leading or
-  trailing slash) and an optional `Namespace` of the store.
-- **`ExportReplace`** makes the key hold exactly the properties. **`ExportPatch`**
-  sets them and leaves every other property of the key, creating the key when it is
-  absent. A `Put` of no properties is refused (`ErrNoProperties`): a copy is never
-  emptied by a source that read nothing.
-- **Idempotent.** Putting what the key already holds writes nothing, and in a store
-  that versions its keys makes no new version.
-- **Never on a request's path.** A caller treats a failed `Put` as "the copy is
-  stale" and retries it out of band; an `Export` that is down changes nothing live.
-- An error names the call, the target and the status, and never a value.
-
-Adapters: `internal/port/memory` (`NewExport`, which a test reads back and can make
-fail) and `internal/port/openbao`, a KV version 2 mount: `POST data/<path>` to
-replace, `PATCH data/<path>` with a JSON merge patch to patch (and a `POST` for a key
-that is not there), a `GET` first so that nothing is written when nothing differs,
-and a login of its own per namespace with the `kubernetes` or the `jwt` auth method
-(a token read afresh from a file, or from a `TokenSource` a Lambda sets to its web
-identity token). The policy it needs is `read`, `create`, `update` and `patch` on
-`<mount>/data/<prefix>/*`; `Delete` removes every version through
-`<mount>/metadata/<path>` and is not used by the exporter. `porttest.RunExport` is the
-conformance suite both pass; the OpenBao one runs against a fake KV mount in
-`go test`.
-
-What is copied, where and how often is `exports` in the configuration file
-([configuration](exports.md)),
-run by `internal/exports`: one worker per export, under a per-export lease on the
-State, retried with backoff, and counted
-([telemetry](telemetry.md#the-exports)).
 
 ## Inputs
 

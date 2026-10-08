@@ -31,19 +31,12 @@ package config
 
 import (
 	"github.com/truvity/sluis/internal/config/duration"
-	"github.com/truvity/sluis/internal/exportspec"
 	"github.com/truvity/sluis/storage/keys"
 )
 
 // Duration is a time span as the file spells it: a Go duration string such as
 // "30s", "2m" or "168h".
 type Duration = duration.Duration
-
-// Export is one copy of a secret the console keeps, made out of the service
-// into a secret store a consumer reads (docs/decisions/0034). It is declared in
-// the policy document's `exports`, and internal/exportspec holds it to its
-// rules.
-type Export = exportspec.Entry
 
 type (
 	// Address is a TCP listener: host:port, an empty host binding every
@@ -223,23 +216,6 @@ type (
 		Cluster     *bool  `json:"cluster,omitempty"`
 	}
 
-	// PortsExport names the adapter behind the Export port.
-	PortsExport struct {
-		Adapter string              `json:"adapter,omitempty"`
-		OpenBao *PortsExportOpenBao `json:"openbao,omitempty"`
-	}
-
-	// PortsExportOpenBao is the OpenBao KV mount the `openbao` Export adapter
-	// writes to and how it logs in. No credential is configured: the login
-	// presents a token the platform provides, read from a file.
-	PortsExportOpenBao struct {
-		Address   string       `json:"address,omitempty"`
-		CAFile    string       `json:"caFile,omitempty"`
-		Mount     string       `json:"mount,omitempty"`
-		Namespace string       `json:"namespace,omitempty"`
-		Auth      *OpenBaoAuth `json:"auth,omitempty"`
-	}
-
 	// OpenBaoAuth is how the service logs in to OpenBao inside each namespace
 	// it writes to: the kubernetes or the jwt auth method, as a role, with a
 	// token read from a file.
@@ -277,9 +253,6 @@ type (
 		Blob    *PortsBlob `json:"blob,omitempty"`
 		// DynamoDB is the table of the `dynamodb` adapter.
 		DynamoDB *DynamoDB `json:"dynamodb,omitempty"`
-		// Export replaces the Export port, which has no adapter by default:
-		// nothing is copied out of the service unless a deployment says where.
-		Export *PortsExport `json:"export,omitempty"`
 	}
 
 	// DynamoDB is where the `dynamodb` adapter keeps State, the transitional

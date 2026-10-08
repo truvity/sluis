@@ -112,8 +112,7 @@ type Secrets struct {
 }
 
 var (
-	_ port.Secrets           = (*Secrets)(nil)
-	_ port.NamespacedSecrets = (*Secrets)(nil)
+	_ port.Secrets = (*Secrets)(nil)
 )
 
 // NewSecrets validates the configuration and returns the adapter. It does not
@@ -144,18 +143,6 @@ func secretsRoot(root string) (string, error) {
 		}
 	}
 	return root, nil
-}
-
-// In implements [port.NamespacedSecrets]: the same installation in another
-// OpenBao namespace, over the same connection (a login is made per namespace).
-func (s *Secrets) In(namespace string) (port.Secrets, error) {
-	if err := port.CheckNamespace(namespace); err != nil {
-		return nil, err
-	}
-	if namespace == s.namespace {
-		return s, nil
-	}
-	return &Secrets{c: s.c, root: s.root, namespace: namespace}, nil
 }
 
 // key maps a port path to the KV key under the mount.
@@ -418,7 +405,7 @@ func (s *Secrets) requireMount(ctx context.Context) error {
 }
 
 func (s *Secrets) refusal(what, path string, status int, body []byte) error {
-	return answer(what, port.ExportTarget{Namespace: s.namespace, Path: path}, status, body)
+	return answer(what, target{Namespace: s.namespace, Path: path}, status, body)
 }
 
 // encodeFields is the KV data of a value.

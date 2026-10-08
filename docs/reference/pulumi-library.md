@@ -295,8 +295,7 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `API.KeepDefaultEndpoint` | false | Leaves the default `execute-api` endpoint on, for the cutover's acceptance suite to run against `ApiUrl` before the DNS switch. Turn it off again after: it is a way round the client certificate. It is the API's, so it stays in the core with or without an edge. |
 | `Schedule.GitHubOrgs`, `Schedule.SlackWorkspaces` | none | The targets, one schedule each. |
 | `Schedule.Rate` | `rate(5 minutes)` | The EventBridge Scheduler expression. |
-| `Schedule.Paused`, `Exports.Paused`, `DirectoryRefresh.Paused` | false | Declares those schedules with `state: DISABLED` and keeps everything else: the schedules, the scheduler's role and the function's grants (the `export/*` read and write included), so that turning them on is one setting and the preview shows only each schedule's state. Unset, a schedule's state is left to EventBridge Scheduler's default (enabled), as before. `Paused` and `Disabled` together are refused. |
-| `Exports.Rate`, `Exports.Disabled` | `rate(15 minutes)`, false | The exports schedule: how often the function is invoked with `{"kind":"exports"}`. `Disabled` leaves it out, and the function's read of `export/*` with it. (`Exports.Function` is gone.) |
+| `Schedule.Paused`, `DirectoryRefresh.Paused` | false | Declares those schedules with `state: DISABLED` and keeps everything else: the schedules, the scheduler's role and the function's grants, so that turning them on is one setting and the preview shows only each schedule's state. Unset, a schedule's state is left to EventBridge Scheduler's default (enabled), as before. `Paused` and `Disabled` together are refused. |
 | `DirectoryRefresh.Rate`, `DirectoryRefresh.Disabled` | `rate(15 minutes)`, false | The directory refresh schedule: how often the function is invoked with `{"kind":"refresh"}` to take a new snapshot of every connected directory, under the refresh lease. Lambda has no refresh loop; a request that finds a snapshot due refreshes it too. |
 | `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the role may ask STS for. |
 | `AdditionalWebIdentityAudiences` | none | Further audiences, after `WebIdentityAudience`, the role may ask STS to mint a web identity token for (for example an OpenTelemetry layer authenticating through the token exchange). Exact match, `ForAllValues:StringEquals`. The role is then no longer console-bearer only: any code running with it can mint these tokens, so a policy rule matching the role must grant only what that audience's consumer needs. Empty entries, duplicates and use with an empty `WebIdentityAudience` are refused; unset, the policy is unchanged. |
@@ -323,7 +322,6 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
 | `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
-| `ExportReadPolicyJSON` | The policy document a consumer's External Secrets Operator role attaches ([lambda reference](lambda.md#iam-one-role)). |
 
 ### Keys the estate supplies
 
@@ -429,8 +427,7 @@ origin. Without it Cloudflare presents none and the domain refuses every request
 
 One EventBridge schedule per target, `<prefix>-github-<org>` and `<prefix>-slack-<workspace>`, each invoking the one
 function with `{"kind":"tick","target":"<id>"}`. A target is letters, digits and `- _ . :`, at most 40 (`github:links` is
-the link check; a colon is a `-` in the schedule's name). `<prefix>-exports` invokes it with `{"kind":"exports"}` every
-`Exports.Rate`, and `<prefix>-directory-refresh` with `{"kind":"refresh"}` every `DirectoryRefresh.Rate`. A schedule
+the link check; a colon is a `-` in the schedule's name). `<prefix>-directory-refresh` invokes it with `{"kind":"refresh"}` every `DirectoryRefresh.Rate`. A schedule
 whose `Paused` is set is declared disabled, so an estate preparing a cutover has every schedule and grant in place and
 turns the schedules on with one setting ([cutover](../how-to/cutover.md#before-you-start)). The scheduler
 has a role of its own, `<prefix>-scheduler`, that may invoke the one function and nothing else; no schedule retries,
@@ -442,8 +439,7 @@ enabled in the account; the library does not enable it.
 The library sets `SLUIS_CONFIG` and, from `Telemetry.Env`, the telemetry layer's `OTEL_*`; the binary refuses every
 retired variable ([environment](lambda.md#environment)). The role and its grants are in [IAM: one role](lambda.md#iam-one-role).
 Signing with the `kms` or `kms-wrapped` adapter: [Signing on AWS](../explanation/signing-on-aws.md) and
-[the key policy](aws-signing-key.md). The SSM layout, the generated state secret and the recovery password, and
-`ExportReadPolicyJSON` are in [AWS Lambda: `Instance` and the SSM root](lambda.md#instance-and-the-ssm-root) and
+[the key policy](aws-signing-key.md). The SSM layout, the generated state secret and the recovery password are in [AWS Lambda: `Instance` and the SSM root](lambda.md#instance-and-the-ssm-root) and
 [storage layout](storage-layout.md#ssm-the-ssm-secrets-adapter).
 
 ## Upgrading the library

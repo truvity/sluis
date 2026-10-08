@@ -13,5 +13,3 @@ alerts:
     rateLimitLow: {enabled: false}
     seatsShort: {enabled: false}
     portErrors: {enabled: false}
-    exportFailing: {enabled: false}
-    exportStale: {enabled: false}

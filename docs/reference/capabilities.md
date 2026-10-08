@@ -28,13 +28,11 @@ is built around the adapters.
 | Ports as Go interfaces (`internal/port`) and the apps depending on them | ✅ | ✅ |
 | Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (the token pair in Secrets, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Secrets adapter) | ✅ | ✅ |
 | Secrets in OpenBao (`adapters.secrets: openbao`, layout v3, compare-and-swap by KV `cas`; in the Unreleased section of the changelog) | 🧪 | 🧪 |
-| Export: copies of the secrets the console keeps (a Slack App's bot token, the runner and catalogue Apps, recovery bundles) written by the service itself, asynchronously, per-export lease, retried with backoff (`internal/exports`, `ports.export` and `exports`, [0034](../decisions/0034-exports-go-to-openbao-directly.md)); to OpenBao KV, or through the Secrets port (SSM) | ✅ | ✅ |
-| Export: the `jwt` login with the web identity token of AWS outbound federation, for a function in the VPC reaching OpenBao through its internal load balancer (the adapter takes a `TokenSource`; no Lambda wiring yet) | — | 📄 |
+| Export: copies of the secrets the console keeps (retired by [0041](../decisions/0041-the-secret-contract.md): a consumer reads the typed document at `external/<kind>/<id>`, [exports](exports.md)) | retired | retired |
 | Export: the External Secrets `PushSecret`s of the chart (`slackApps[].push`, `directory.push`, `githubApps.push`, `githubApps.catalogue[].push`, `slackState.push`; need `config.store: kubernetes`) | deprecated, replaced by the above | — |
 | Inputs: mounted ConfigMaps and Secrets | ✅ | — |
 | Inputs: the configuration layer, or a parameter store | — | ✅ |
 | Port conformance suite: in-memory and legacy | ✅ | — |
-| Port conformance suite: Export (in-memory, and OpenBao against a fake KV mount) | 🧪 | 🧪 |
 | Port conformance suite: DynamoDB (LocalStack and an in-memory fake of the API; `migrate` into and out of it) | ✅ | ✅ |
 
 ## Runtime
@@ -86,7 +84,7 @@ is the part of the runtime that is built; the Lambda runtime itself is not.
 | The chart sets the `OTEL_*` environment on every pod from `telemetry.otlp` (endpoint, protocol, a service name per component, extra `OTEL_*`); unset renders nothing | 🧪 | — |
 | Platform logs over OTLP (observability's otlp-lambda layer) | — | ✅ |
 | Traces: HTTP and Connect spans, a span per tick and per port call, the trace continued into the console (trace context across queues waits for the queues) | 🧪 | 📄 |
-| Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; exports; rate limits ([reference/telemetry.md](telemetry.md)) | 🧪 | 📄 |
+| Metrics: the issuer's requests, tokens, sign-ins and keys; ticks and leases; port calls; rate limits ([reference/telemetry.md](telemetry.md)) | 🧪 | 📄 |
 | Chart modes `renders: alerts` and `renders: dashboards`: twelve rules, unit-tested with `vmalert-tool`, and a dashboard held to `dashboardlint` | 🧪 | — |
 | No personal data in a span: an allowlist exporter, tested by planting markers; no person or group in a label | 🧪 | 📄 |
 

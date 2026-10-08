@@ -58,34 +58,6 @@ audit:
   forwardedForTrustedHops: 1
 ports:
   adapter: memory
-  export:
-    adapter: openbao
-    openbao:
-      address: https://openbao.staging.example.internal
-      caFile: /var/run/openbao/ca.pem
-      mount: kv
-      namespace: staging
-      auth:
-        method: jwt
-        mount: jwt-staging
-        role: sluis-writer
-        tokenFile: /var/run/openbao/token
-exports:
-  - name: slack-app.alerts
-    source: slack-app
-    app: alerts
-    namespace: staging
-    path: slack-apps/alerts
-    properties: {bot_token: bot_token}
-    interval: 1h
-  - source: runner-app
-    tier: stable
-    org: example-org
-    namespace: staging
-    path: arc/example
-  - source: bundle
-    bundle: github-apps
-    path: sluis-backup/github-apps
 platform:
   aws: true
   kubernetes: true

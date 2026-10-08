@@ -16,7 +16,7 @@ made and being deployed.
 ## Before you start
 
 - **The old secret stays valid for the overlap.** Default 24h, at most 7d; `0` is a hard cut. Choose it longer than the
-  relying party's export refresh plus its own refresh. A rotation made during an open overlap drops the older previous
+  relying party's secret refresh (its ExternalSecret's `refreshInterval`) plus its own. A rotation made during an open overlap drops the older previous
   secret, and says so.
 - **Other replicas learn within 30 seconds.** The replica that served the request forgets the client at once; the others
   cache a record for 30 seconds. After a hard cut, another replica may accept the old current secret for up to 30
@@ -31,8 +31,8 @@ made and being deployed.
 ### 1. Rotate
 
 **Run** `sluisctl clients rotate <id> [--overlap 24h]`.
-**Expect** the new secret is stored, the old one is accepted until the printed time, and an exported copy is written at
-once (or at the export's `interval` where it is not).
+**Expect** the new secret is stored, the old one is accepted until the printed time, and the document at `external/oidc/<client>` holds the
+new one at once.
 **Verify** `sluisctl clients show <id>`: `rotated` is now, `previous still valid` is `true` until the overlap ends.
 **Rollback**: none; rotate again. A refusal says why: the client is not generated, has no record yet, or is being
 changed by another call (try again).
@@ -51,7 +51,7 @@ When a client stops being generated (removed, or back to a named input) its reco
 (`roster.client.secret.orphaned`) and kept. Delete it only when you mean it:
 
 **Run** `sluisctl clients purge <id>`, which is refused while the client is still a generated client of the policy.
-Then delete the input secret `clients/<id>/secret` and the exported copy at the export's target, by hand. The issuer
+Then delete the input secret `clients/<id>/secret`, by hand. The issuer
 touches neither.
 **Expect** `roster.client.secret.deleted`.
 

@@ -195,6 +195,10 @@ func RefuseRetired(binary string, environ []string) error {
 // than the schema's bare "not a key this service reads": the person reading it
 // is migrating, and needs the new place. A v1 document (no apiVersion) is
 // converted instead (docs/reference/configuration.md, "apiVersion").
+// retiredExports is what a document that still has exports is told.
+const retiredExports = "retired (ADR 0041): the exports controller is gone; a consumer reads the typed document at " +
+	"<root>/external/<kind>/<id> (docs/reference/secrets.md, \"The external documents\")"
+
 var retiredKeys = map[string]map[string]string{
 	"serve": {
 		"policyDir": "the policy is one rendered document now: name it with policy.file " +
@@ -203,7 +207,8 @@ var retiredKeys = map[string]map[string]string{
 		"api":                                   "removed: sluis serve serves no directory API listener, so its guard configured nothing",
 		"github":                                "moved to the policy document: exchange.github.owners, apps.github.runnerTiers and apps.github.catalogue",
 		"slack":                                 "moved to the policy document: apps.slack.catalogue",
-		"exports":                               "moved to the policy document: exports",
+		"exports":                               retiredExports,
+		"ports.export":                          retiredExports,
 		"exchange.clustersFile":                 "moved to the policy document: exchange.clusters, the rows themselves",
 		"exchange.awsFile":                      "moved to the policy document: exchange.aws, the rows themselves",
 		"valkey.passwordEnv":                    "valkey.passwordSecret, the secret's name (valkey/password), delivered by `secrets`",
@@ -216,6 +221,10 @@ var retiredKeys = map[string]map[string]string{
 		"signingKey.kms.stateSecretFile":        "signingKey.kms.stateSecret, the secret's name (issuer/state-secret)",
 		"signingKey.kmsWrapped.stateSecretFile": "signingKey.kmsWrapped.stateSecret, the secret's name (issuer/state-secret)",
 	},
+	"sluis": {
+		"exports":      retiredExports,
+		"ports.export": retiredExports,
+	},
 	"controller-github": {
 		"policyDir":     "the policy is one rendered document now: name it with policy.file",
 		"catalogueFile": "the catalogue is the policy document's apps.github.catalogue, read from policy.file",
@@ -226,6 +235,7 @@ var retiredKeys = map[string]map[string]string{
 		"enabledWorkspaces": "moved to the policy document: controllers.slack.enabledWorkspaces",
 	},
 	"policy": {
+		"exports": retiredExports,
 		"version": "a policy document says apiVersion: sluis.truvity.github.io/policy/v2 in place of version: 1",
 		"access":  "an access document is a layer, not a policy document: `sluisctl policy render` reshapes it into one",
 		"overlay": "an access document is a layer, not a policy document: `sluisctl policy render` reshapes it into one",

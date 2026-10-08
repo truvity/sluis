@@ -10,8 +10,8 @@ relying party reads.
 - A confidential client in the policy (`kind: confidential`), and operator access.
 - A Secrets adapter that can write only if absent: `ssm` or `openbao`. The `legacy` adapter cannot, and start is refused.
 - A State shared between replicas, for example `dynamodb`. Start is refused otherwise (the `memory` adapter is excepted).
-- An export store the relying party can read, and a secret operator on the relying party's side (External Secrets, for
-  instance) that reads it.
+- A secret operator on the relying party's side (External Secrets, for instance) that can read the document at
+  `external/oidc/<client>`: the relying party is granted that exact address on its own side.
 
 ## Before you start
 
@@ -42,38 +42,23 @@ trail shows `roster.client.secret.adopted`; without one, `roster.client.secret.c
 **Rollback**: put the name back. The stored record is then reported as orphaned and kept; see
 [rotate a client secret](rotate-a-client-secret.md#retire-a-generated-client).
 
-### 2. Export it
+### 2. Have the relying party read the document
 
-**Run** add an export that copies the client's id and current secret:
+The secret is stored once, as the `oidc/v1` document at `external/oidc/<client>` (layout v4; see
+[secrets](../reference/secrets.md#the-external-documents)). Nothing is copied.
 
-```yaml
-exports:
-  - source: oidc-client
-    client: grafana
-    path: oidc/grafana
-    namespace: devel          # the OpenBao namespace, where the adapter has them
-    interval: 1h
-    properties: {client-secret: secret}   # optional: write only these, under these names
-```
-
-**Expect** `client-id` and `client-secret` at `path`, written with `replace`. Only the current secret is exported, never
-the previous one. A rotation made with `sluisctl clients rotate` copies the new secret out at once; any other change
-reaches the copy at the next `interval` (default 1h, at least 1m), because nothing watches the Secrets port.
-**Verify** read the key in the store, or `sluisctl clients show grafana` and the issuer's log for the export.
-**Rollback**: remove the entry. The copy already written stays where it is.
-
-### 3. Have the relying party read the export
-
-**Run** point the relying party's own secret operator at `path`. For External Secrets that is an `ExternalSecret` whose
-`remoteRef.key` is the path and whose `property` is `client-secret`. The issuer writes the store and never touches the
-relying party's Kubernetes Secret.
-**Expect** the relying party's Secret holds the generated value within its refresh interval.
+**Run** point the relying party's own secret operator at that address. For External Secrets that is an `ExternalSecret`
+whose `remoteRef.key` is `external/oidc/<client>` (under the installation's root) and whose `property` is
+`client-secret`; it names the key of its own Secret itself. The issuer never touches the relying party's Kubernetes
+Secret.
+**Expect** the relying party's Secret holds the generated value within its refresh interval. Only the current secret is
+in the document, never the previous one.
 **Verify** a sign-in to the relying party succeeds.
 **Rollback**: none needed, because the old input is still accepted until you remove it.
 
-### 4. Remove the input secret
+### 3. Remove the input secret
 
-**Run** once the relying party signs in with the exported value, delete `clients/<id>/secret` from wherever the
+**Run** once the relying party signs in with the generated value, delete `clients/<id>/secret` from wherever the
 installation delivers inputs. The token endpoint reads the stored record of a generated client first and the input only
 while the store says there is none, so the input does nothing once the record exists.
 **Expect** no change for the relying party.
@@ -85,5 +70,5 @@ while the store says there is none, so the input does nothing once the record ex
 - A failure for one client is logged and counted (`sluis.client_secret.reconcile`) and does not stop the issuer; it is
   retried every five minutes on a server and on the directory refresh on Lambda.
 - Rotate with [rotate a client secret](rotate-a-client-secret.md). Reference: [`secret` in the policy](../reference/policy-clients.md#a-generated-secret),
-  [`source: oidc-client`](../reference/exports.md#the-policy-document-exports), and the decision in
+  the [`oidc/v1` document](../reference/secrets.md#the-external-documents), and the decision in
   [ADR 0039](../decisions/0039-the-issuer-generates-confidential-client-secrets.md).

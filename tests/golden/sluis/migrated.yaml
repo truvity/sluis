@@ -9,7 +9,6 @@ metadata:
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
-
 ---
 # Source: sluis/templates/serviceaccount.yaml
 # The account a recovery token is minted for. Deliberately bound to
@@ -127,7 +126,6 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
-
 ---
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -147,7 +145,6 @@ subjects:
   - kind: ServiceAccount
     name: access-issuer
     namespace: default
-
 ---
 # Source: sluis/templates/controllers.yaml
 # What the controllers in this process may do to the cluster, bound to the
@@ -180,7 +177,6 @@ rules:
     resources: ["secrets"]
     resourceNames: ["access-issuer-github-links"]
     verbs: ["get", "update"]
-
 ---
 # Source: sluis/templates/serviceaccount.yaml
 # The directory store is plain Kubernetes objects in THIS namespace:
@@ -200,7 +196,6 @@ rules:
   - apiGroups: [""]
     resources: ["secrets", "configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
 ---
 # Source: sluis/templates/controllers.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -240,7 +235,6 @@ subjects:
   - kind: ServiceAccount
     name: access-issuer
     namespace: default
-
 ---
 # Source: sluis/templates/service.yaml
 apiVersion: v1

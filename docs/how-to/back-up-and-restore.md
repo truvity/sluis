@@ -59,14 +59,10 @@ are a `PushSecret` of your own.
 
 ### On a State adapter
 
-With `ports.adapter` other than `legacy` there are no such Secrets: the credentials are in the Secrets port, and the
-service copies the five bundles into OpenBao itself, entry for entry, with `exports` of `source: bundle`
-([exports](../reference/exports.md)). The copy is made at start, within seconds of a
-change and every hour. A failed one is the alert `AccessRosterExportFailing`
-([telemetry](../reference/telemetry.md#accessrosterexportfailing)). To restore from one, read the key (`bao kv get`,
-[0013](../decisions/0013-openbao-access-through-the-bao-cli.md)), write each entry of its JSON object back as a key of
-the Secret of that name, and proceed as step 3. The service does not read an export back: the Secrets port is the source
-of truth, and a lost Secrets store is what the copy is for.
+With `ports.adapter` other than `legacy` there are no such Secrets: the credentials are in the Secrets port. The copies
+the service used to make of them into OpenBao (`exports` of `source: bundle`) are retired
+([exports](../reference/exports.md)); backup and restore are whole-installation
+([ADR 0041](../decisions/0041-the-secret-contract.md)).
 
 ### 3. Restore the five Secrets
 

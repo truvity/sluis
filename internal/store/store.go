@@ -19,9 +19,8 @@ import (
 	dynamoport "github.com/truvity/sluis/internal/port/dynamodb"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/port/observe"
-	"github.com/truvity/sluis/internal/port/openbao"
+	_ "github.com/truvity/sluis/internal/port/openbao" // registers the openbao secrets adapter
 	"github.com/truvity/sluis/internal/port/s3blob"
-	"github.com/truvity/sluis/internal/port/secretsexport"
 	_ "github.com/truvity/sluis/internal/port/ssm" // registers the ssm secrets adapter
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/secretstore"
@@ -39,13 +38,6 @@ const (
 // BlobS3 is the adapter `ports.blob.adapter` names. It replaces one port and composes
 // with any `ports.adapter`.
 const BlobS3 = "s3"
-
-// The adapters `ports.export.adapter` names. The Export port has none unless
-// a deployment names one: nothing is copied out of the service by default.
-const (
-	ExportOpenBao = "openbao"
-	ExportMemory  = "memory"
-)
 
 // KubeNeed says how much a process needs the namespace's objects.
 type KubeNeed int
@@ -71,8 +63,6 @@ type Config struct {
 	Blob *config.PortsBlob
 	// DynamoDB is the table of the `dynamodb` adapter.
 	DynamoDB dynamoport.Config
-	// Export is the Export port's adapter; nil is none.
-	Export *config.PortsExport
 
 	// Secrets delivers the secrets the document names (the Valkey password):
 	// the composition root sets it after FromServe. Nil delivers none.
@@ -135,43 +125,6 @@ func (c Config) validatePorts() error {
 	return nil
 }
 
-// validateExport refuses an Export the file names but this build has no
-// adapter for, or names without its settings. The schema says the same; this
-// is the check for a Config that was not read from a file.
-func (c Config) validateExport() error {
-	e := c.Export
-	if e == nil {
-		return nil
-	}
-	switch e.Adapter {
-	case ExportMemory:
-		return nil
-	case ExportOpenBao:
-		if e.OpenBao == nil || e.OpenBao.Address == "" || e.OpenBao.Auth == nil {
-			return errors.New("ports.export.openbao: address and auth are required with ports.export.adapter: openbao")
-		}
-		return nil
-	default:
-		return fmt.Errorf("ports.export.adapter: %q is %q or %q", e.Adapter, ExportOpenBao, ExportMemory)
-	}
-}
-
-// exportOf builds the Export port. It connects to nothing: an OpenBao that is
-// down at start must not stop the service, since a copy is never a dependency.
-func (c Config) exportOf() (port.Export, error) {
-	if err := c.validateExport(); err != nil || c.Export == nil {
-		return nil, err
-	}
-	if c.Export.Adapter == ExportMemory {
-		return memory.NewExport(), nil
-	}
-	o := c.Export.OpenBao
-	return openbao.New(openbao.Config{
-		Address: o.Address, CAFile: o.CAFile, Mount: o.Mount, Namespace: o.Namespace,
-		Auth: openbao.Auth{Method: o.Auth.Method, Mount: o.Auth.Mount, Role: o.Auth.Role, TokenFile: o.Auth.TokenFile},
-	})
-}
-
 // compose replaces the Blob the base adapter brought with the one configured. It runs before the set is observed, so the replacements are
 // timed and counted like every other port.
 func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (port.Set, error) {
@@ -194,17 +147,6 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 		set.Blob = blob
 		log.InfoContext(ctx, "blobs are kept in S3", "adapter", BlobS3, "bucket", b.S3.Bucket, "prefix", b.S3.Prefix)
 	}
-	exp, err := c.exportOf()
-	if err != nil {
-		return port.Set{}, fmt.Errorf("ports.export: %w", err)
-	}
-	if exp == nil && secrets != nil {
-		// No `ports.export`: the copies go through the Secrets port, to
-		// `export/<path>` (SSM `/sluis/export/<path>`).
-		exp = secretsexport.New(secrets)
-		log.InfoContext(ctx, "exports are written through the secrets adapter", "adapter", c.secrets.Adapter, "prefix", port.ExportPrefix)
-	}
-	set.Export = exp
 	return set, nil
 }
 
@@ -248,7 +190,6 @@ func FromServe(f *config.Serve) (Config, error) {
 		Blob:    blobOf(f.Ports),
 
 		DynamoDB: dynamoOf(f.Ports),
-		Export:   exportConfigOf(f.Ports),
 		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", f.SigningKey),
 
 		Converted: f.Converted(),
@@ -325,13 +266,6 @@ func blobOf(p *config.Ports) *config.PortsBlob {
 		return nil
 	}
 	return p.Blob
-}
-
-func exportConfigOf(p *config.Ports) *config.PortsExport {
-	if p == nil {
-		return nil
-	}
-	return p.Export
 }
 
 func orDefault(value, fallback string) string {

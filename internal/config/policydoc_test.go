@@ -53,8 +53,8 @@ func TestTheFullPolicyDocumentLoads(t *testing.T) {
 	if len(d.GitHubCatalogue().Apps) != 1 || len(d.SlackCatalogue().Apps) != 1 || len(d.RunnerTiers()) != 2 {
 		t.Errorf("apps: %+v", d.Apps)
 	}
-	if d.EnabledOrgs()[0] != "example-org" || d.EnabledWorkspaces()[0] != "example" || len(d.Exports) != 3 {
-		t.Errorf("controllers or exports: %+v %+v", d.Controllers, d.Exports)
+	if d.EnabledOrgs()[0] != "example-org" || d.EnabledWorkspaces()[0] != "example" {
+		t.Errorf("controllers: %+v", d.Controllers)
 	}
 	var doc map[string]any
 	if err := yaml.Unmarshal(fullPolicy(t), &doc); err != nil {
@@ -102,7 +102,7 @@ func TestTheCanonicalEncodingRoundTrips(t *testing.T) {
 		t.Error("the tables changed in the round trip")
 	}
 	if !reflect.DeepEqual(d.Exchange, back.Exchange) || !reflect.DeepEqual(d.Apps, back.Apps) ||
-		!reflect.DeepEqual(d.Controllers, back.Controllers) || !reflect.DeepEqual(d.Exports, back.Exports) {
+		!reflect.DeepEqual(d.Controllers, back.Controllers) {
 		t.Error("a section changed in the round trip")
 	}
 }
@@ -122,7 +122,6 @@ func TestThePolicySchemaAndTheTypesDescribeTheSameKeys(t *testing.T) {
 		"exchange":    reflect.TypeFor[config.PolicyExchange](),
 		"apps":        reflect.TypeFor[config.PolicyApps](),
 		"controllers": reflect.TypeFor[config.PolicyControllers](),
-		"exports":     reflect.TypeFor[config.Export](),
 	}
 	tables := reflect.TypeFor[policy.Policy]()
 	for i := range tables.NumField() {
@@ -224,8 +223,6 @@ func TestThePolicyDocumentChecksItsReferences(t *testing.T) {
 			base + "controllers: {github: {enabledOrgs: [acme]}}\n", "controllers.github.enabledOrgs names acme"},
 		"an enabled workspace nobody declares": {
 			base + "controllers: {slack: {enabledWorkspaces: [acme]}}\n", "controllers.slack.enabledWorkspaces names acme"},
-		"an export of an undeclared App": {
-			base + "exports: [{source: slack-app, app: alerts, path: a/b}]\n", "is not declared"},
 		"two clusters on one issuer": {
 			base + "exchange: {clusters: [{name: a, issuer: 'https://i'}, {name: b, issuer: 'https://i'}]}\n", "both claim the issuer"},
 		"an AWS account with no audience": {
@@ -328,8 +325,7 @@ func TestAV1ServeDocumentConvertsWithItsFiles(t *testing.T) {
 		"exchange: {audience: sluis, clustersFile: "+clusters+", awsFile: "+aws+"}\n"+
 		"api: {audience: directory-roster}\n"+
 		"github: {owners: [example-org], runnerTiers: [small], catalogueFile: "+gh+"}\n"+
-		"slack: {catalogueFile: "+sl+"}\n"+
-		"exports: [{source: slack-app, app: alerts, path: slack/alerts}]\n")
+		"slack: {catalogueFile: "+sl+"}\n")
 	c, err := config.LoadConfig[config.Serve](serve, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -341,8 +337,8 @@ func TestAV1ServeDocumentConvertsWithItsFiles(t *testing.T) {
 	}
 	if len(p.Policy.Groups) != 2 || p.Clusters()[0].Name != "devel" || p.AWS().MaxAge.D().String() != "5m0s" ||
 		p.GitHubOwners()[0] != "example-org" || p.RunnerTiers()[0] != "small" ||
-		len(p.GitHubCatalogue().Apps) != 1 || len(p.SlackCatalogue().Apps) != 1 || len(p.Exports) != 1 {
-		t.Errorf("the policy document: %+v %+v %+v", p.Exchange, p.Apps, p.Exports)
+		len(p.GitHubCatalogue().Apps) != 1 || len(p.SlackCatalogue().Apps) != 1 {
+		t.Errorf("the policy document: %+v %+v", p.Exchange, p.Apps)
 	}
 	// The service document alone does not read the policy's files: migrate
 	// reads it on a workstation where they are not.

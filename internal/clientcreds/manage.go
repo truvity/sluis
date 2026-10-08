@@ -48,9 +48,6 @@ type Manager struct {
 	// Generated says whether the policy in force declares the client with
 	// `secret: {generate: true}`.
 	Generated func(clientID string) bool
-	// Changed is called after a rotation was written, for what follows from
-	// it (an immediate export). May be nil; it must not block.
-	Changed func(ctx context.Context, clientID string)
 	// Now replaces the clock, for a test.
 	Now func() time.Time
 	Log *slog.Logger
@@ -91,9 +88,6 @@ func (m *Manager) Rotate(ctx context.Context, clientID string, overlap time.Dura
 		return Rotation{}, err
 	}
 	m.forget(clientID)
-	if m.Changed != nil {
-		m.Changed(ctx, clientID)
-	}
 	return res, nil
 }
 

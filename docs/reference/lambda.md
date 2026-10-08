@@ -21,7 +21,6 @@ The function takes four kinds of event:
 |---|---|---|
 | An API Gateway HTTP API event, payload format 2.0 | The issuer and the console: the same `net/http` mux the Kubernetes server serves | API Gateway |
 | `{"kind":"tick"\|"run","target":"<id>"}` | ONE pass of ONE target, run by the controller the policy says the target belongs to (the GitHub controller's organisations and `github:links`, the Slack controller's workspaces) | EventBridge Scheduler (`tick`), and an async invoke from the console (`run`) |
-| `{"kind":"exports"}` | Every declared export, once | EventBridge Scheduler |
 | `{"kind":"refresh"}` | One directory refresh | EventBridge Scheduler |
 
 Any other `kind` is refused. The function's timeout is 300 s by default (API Gateway still cuts a request at 30 s) and
@@ -76,21 +75,6 @@ target ends cleanly as `unknown`.
 The leases are `Create` and `Update` with a TTL on the State port, which is DynamoDB here, so two invocations (a
 schedule firing while somebody pressed "run now") cannot both run. The controller refuses to run its pass when the
 State is not shared, so a function configured with `memory` fails at its first event and not by acting twice.
-
-### Exports
-
-`{"kind":"exports"}` comes from an EventBridge Scheduler schedule (15 minutes by default, `Exports.Rate`). Each
-invocation makes every declared export once (the secrets under `/sluis/<instance>/export/...` and the other targets of
-the policy document's `exports`), each under its own lease in DynamoDB, and returns:
-
-```json
-{"kind":"exports","outcome":"ran","exports":2,"done":2,"contended":0,"failed":0}
-```
-
-A pass is idempotent (a copy of what is already there writes nothing). `contended` exports are another invocation's.
-`outcome` is `none` when the deployment declares no export. If any export could not be made the invocation FAILS, so
-the schedule's retry and an alarm on the function's errors see a copy that is going stale. A change to a source is
-picked up at the next schedule, up to one interval later.
 
 ### Directory refresh
 
@@ -189,7 +173,8 @@ under another tree, and the root is refused at start. The layout is in
 ```text
 /sluis/<instance>/private/config/...        what an operator seeds and the stack generates
 /sluis/<instance>/private/credentials/...   what sluis writes: its records' credentials
-/sluis/<instance>/export/...                what sluis copies out, for consumers
+/sluis/<instance>/internal/...              layout v4: sluis's alone
+/sluis/<instance>/external/<kind>/<id>      layout v4: the typed documents consumers read
 ```
 
 ### Secrets
@@ -229,8 +214,8 @@ is granted on `*` but the one action that takes no resource, `sts:GetWebIdentity
 | Logs: `logs:CreateLogStream`, `logs:PutLogEvents` on its own log group |
 | S3: `GetObject`, `PutObject`, `DeleteObject` on the blob bucket's objects (under the prefix); `ListBucket` on the bucket |
 | DynamoDB: `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` on the table; with a customer key, its use through DynamoDB only |
-| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` on `<root>/private/credentials/*` and `<root>/export/*`, for the secrets adapter (`ssm`) that keeps the service's credentials and exports |
-| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath` on `<root>/private/config/*`: the secrets the document names, read by path, never written |
+| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath`, `PutParameter`, `DeleteParameter` on `<root>/private/credentials/*` (layout v3) and on `<root>/internal/credentials/*` and `<root>/external/*` (layout v4, with `GetParameterHistory`), for the secrets adapter (`ssm`) that keeps the service's credentials and the external documents |
+| SSM: `GetParameter`, `GetParameters`, `GetParametersByPath` on `<root>/private/config/*` and `<root>/internal/config/*`: the secrets the document names, read by path, never written |
 | `kms:Encrypt`, `Decrypt`, `GenerateDataKey` on `ParameterKeyArn` (the key the parameters the library creates and the ones the function writes use), through SSM only and only for the parameters under the role's own prefixes (when a customer key is set) |
 | `sqs:SendMessage` on the audit ingest queue |
 | `kms:Sign`, `kms:GetPublicKey` on both signing keys (remote signing; not declared with `WrappedSigning`) |
@@ -243,9 +228,7 @@ explicit denials: the key ring is writable by the one role. Every grant ends at 
 in the account is out of reach of the first. The role carries a permissions boundary when `PermissionsBoundaryArn` is
 set.
 
-A consumer of the exports (an External Secrets Operator role) attaches `ExportReadPolicy(region, account, instance,
-key)` (the output `ExportReadPolicyJSON`), which reads `<root>/export/*` and, with a customer-managed key, `kms:Decrypt`
-on it through SSM, and nothing else; it grants nothing under `<root>/private`. EventBridge Scheduler needs its own role
+A consumer of an external document (an External Secrets Operator role) is granted its exact addresses on its own side; the library has no policy for it here (see [ADR 0041](../decisions/0041-the-secret-contract.md)). EventBridge Scheduler needs its own role
 (`<prefix>-scheduler`), which the library makes, with `lambda:InvokeFunction` on the one function and nothing else.
 
 ## How a controller authenticates to the console

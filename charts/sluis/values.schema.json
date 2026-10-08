@@ -541,153 +541,6 @@
           },
           "type": "object"
         },
-        "exports": {
-          "description": "The secrets the service copies out of itself into the store its `ports.export` (or its secrets adapter) names (docs/decisions/0034): a copy is asynchronous, retried with backoff and never a dependency. An unknown source, a source this document does not declare and two exports that would write one key are refused before anything starts.",
-          "items": {
-            "additionalProperties": false,
-            "allOf": [
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "enum": [
-                        "slack-app",
-                        "github-app"
-                      ]
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "app"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "const": "runner-app"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "tier",
-                    "org"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "const": "oidc-client"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "client"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "source": {
-                      "const": "bundle"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "bundle"
-                  ]
-                }
-              }
-            ],
-            "description": "One copy: what is copied (`source` and the field that names it) and where it goes (`path`, in `namespace`).",
-            "properties": {
-              "app": {
-                "description": "The catalogue id, for `slack-app` and `github-app`. It must be declared in the catalogue.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "bundle": {
-                "description": "The bundle, for `bundle`: each is what the Kubernetes Secret of that name held, one JSON document per entry. Written with `replace`: the key holds exactly the bundle.",
-                "enum": [
-                  "workspace-credentials",
-                  "github-apps",
-                  "github-links",
-                  "github-runner-apps",
-                  "github-catalogue-apps",
-                  "slack-credentials",
-                  "slack-records"
-                ]
-              },
-              "client": {
-                "description": "The id of a policy client, for `oidc-client`. It must be confidential with `secret: {generate: true}`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "interval": {
-                "$ref": "#/definitions/config-policy.duration",
-                "default": "1h",
-                "description": "How often the copy is made again with nothing changed, to put back what somebody altered. A change is copied at once; this is the backstop."
-              },
-              "name": {
-                "description": "Identifies the export in the log, the metrics and its lease: lower-case letters, digits, '.', '_' and '-'. Absent, the source and what it names, e.g. `slack-app.alerts`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "namespace": {
-                "description": "The OpenBao namespace. Absent, `ports.export.openbao.namespace`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "org": {
-                "description": "The organisation, for `runner-app`.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "path": {
-                "description": "The key under the KV mount: `slack-apps/alerts`. No leading or trailing slash.",
-                "minLength": 1,
-                "type": "string"
-              },
-              "properties": {
-                "additionalProperties": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "description": "Which properties of the App are written and under what names: `{private_key: github-private-key}`. Absent, all of the source's, under the names the External Secrets PushSecrets wrote: `bot_token`; `app_id`, `installation_id`, `private_key`; `github-app-id`, `github-installation-id`, `github-private-key` for a runner App; `client-id`, `client-secret` for an `oidc-client` (the current secret only, never the previous one), which is written with `replace`: the key holds exactly its properties. Otherwise a property export is a PATCH: other properties of the key are left as they are. Not for `bundle`.",
-                "type": "object"
-              },
-              "source": {
-                "description": "What is copied. `slack-app`: a catalogue Slack App's bot token (`app`). `github-app`: a catalogue GitHub App's id, installation id and private key (`app`). `runner-app`: a runner App's id, installation id and private key (`tier`, `org`). `oidc-client`: a confidential client's id and the secret the issuer generated for it (`client`). `bundle`: one of the disaster-recovery bundles, whole (`bundle`).",
-                "enum": [
-                  "slack-app",
-                  "github-app",
-                  "runner-app",
-                  "oidc-client",
-                  "bundle"
-                ]
-              },
-              "tier": {
-                "description": "A runner tier, for `runner-app`. It must be one of `github.runnerTiers`.",
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "source",
-              "path"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        },
         "github": {
           "additionalProperties": {
             "additionalProperties": false,
@@ -1239,7 +1092,7 @@
             },
             "secrets": {
               "additionalProperties": false,
-              "description": "The adapter for secrets (dynamic secrets, exports under `export/`), replacing the preset's.",
+              "description": "The adapter for secrets (dynamic secrets), replacing the preset's.",
               "properties": {
                 "adapter": {
                   "description": "The adapter's name, as the compatibility matrix lists it.",
@@ -2349,126 +2202,6 @@
                 "table"
               ],
               "type": "object"
-            },
-            "export": {
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "adapter": {
-                        "const": "openbao"
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "openbao"
-                    ]
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "auth": {
-                        "properties": {
-                          "method": {
-                            "const": "jwt"
-                          }
-                        }
-                      }
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "auth": {
-                        "required": [
-                          "tokenFile"
-                        ]
-                      }
-                    }
-                  }
-                }
-              ],
-              "description": "The store the copies of `exports` are written to (docs/decisions/0034). Absent, nothing is copied out of the service, and `exports` must be empty.",
-              "properties": {
-                "adapter": {
-                  "description": "`openbao` writes to a KV version 2 mount of an OpenBao. `memory` keeps the copies in this process and is for a test or the demonstration.",
-                  "enum": [
-                    "openbao",
-                    "memory"
-                  ]
-                },
-                "openbao": {
-                  "additionalProperties": false,
-                  "description": "The OpenBao the copies are written to. Nothing is contacted at start: an OpenBao that is down must not stop the service, since a copy is never a dependency.",
-                  "properties": {
-                    "address": {
-                      "description": "The server, https only and with no path: `https://openbao.example`. A token and a login JWT cross this connection.",
-                      "pattern": "^https://[^\\s/?#@]+/?$",
-                      "type": "string"
-                    },
-                    "auth": {
-                      "additionalProperties": false,
-                      "description": "How the service logs in, inside each namespace it writes to. The `kubernetes` and `jwt` methods take the same request (`auth/<mount>/login` with a role and a JWT) and differ in the mount they default to and where the JWT comes from.",
-                      "properties": {
-                        "method": {
-                          "description": "`kubernetes`: the Kubernetes auth method, with this pod's ServiceAccount token. `jwt`: the JWT/OIDC method, with a token the platform projects (a ServiceAccount token of another audience, or, on AWS Lambda, the web identity token of outbound federation) from `tokenFile`.",
-                          "enum": [
-                            "kubernetes",
-                            "jwt"
-                          ]
-                        },
-                        "mount": {
-                          "description": "The auth method's mount path in each namespace. Absent, the method's name.",
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "role": {
-                          "description": "The role the login asks for. It must be bound to this workload's identity and carry a policy that reads, creates, updates and patches only the paths `exports` names.",
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "tokenFile": {
-                          "description": "Where the JWT is read from, afresh on every login. Absent with `kubernetes`, the pod's ServiceAccount token; required with `jwt`.",
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "method",
-                        "role"
-                      ],
-                      "type": "object"
-                    },
-                    "caFile": {
-                      "description": "A PEM bundle of the authorities that sign the server's certificate, in place of the system's.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "mount": {
-                      "default": "kv",
-                      "description": "The KV version 2 mount.",
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "namespace": {
-                      "description": "The OpenBao namespace an export that names none is written to.",
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "address",
-                    "auth"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "adapter"
-              ],
-              "type": "object"
             }
           },
           "type": "object"
@@ -2608,13 +2341,13 @@
               "description": "`ssm`, layout `transition` or `v4`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
             },
             "kmsKeyId": {
-              "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
+              "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
               "minLength": 1,
               "type": "string"
             },
             "layout": {
               "default": "v3",
-              "description": "`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/` and the exports controller's copies under `<root>/export/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.",
+              "description": "`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.",
               "enum": [
                 "v3",
                 "transition",
@@ -3081,70 +2814,6 @@
           "additionalProperties": false,
           "description": "The rules.",
           "properties": {
-            "exportFailing": {
-              "additionalProperties": false,
-              "description": "An export's copy keeps failing.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "failures": {
-                  "description": "Failed attempts of one export within `window`.",
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "for": {
-                  "description": "How long the condition holds before the alert fires, as a duration.",
-                  "type": "string"
-                },
-                "labels": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "description": "Labels added to this rule only.",
-                  "type": "object"
-                },
-                "severity": {
-                  "description": "The severity label.",
-                  "type": "string"
-                },
-                "window": {
-                  "description": "The window, as a duration.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
-            },
-            "exportStale": {
-              "additionalProperties": false,
-              "description": "An export has not had its copy in the store for `maxAgeSeconds`.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "for": {
-                  "description": "How long the condition holds before the alert fires, as a duration.",
-                  "type": "string"
-                },
-                "labels": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "description": "Labels added to this rule only.",
-                  "type": "object"
-                },
-                "maxAgeSeconds": {
-                  "description": "The age, in seconds.",
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "severity": {
-                  "description": "The severity label.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
-            },
             "issuer5xx": {
               "additionalProperties": false,
               "description": "The listener answers a share of its requests 5xx.",
@@ -3691,20 +3360,20 @@
     },
     "exports": {
       "additionalProperties": false,
-      "description": "What the chart mounts for the service's exports (docs/decisions/0034): the CA that signs OpenBao's certificate and the projected token the login presents. What is copied and where (`config.exports`), and the OpenBao it is copied to and how the service logs in to it (`config.ports.export`), are the `config`'s.",
+      "description": "What the chart mounts for the service's OpenBao connection (the `openbao` secrets adapter): the CA that signs OpenBao's certificate and the projected token the login presents. The address and how the service logs in are the `config`'s (`config.adapters.secrets`). The key keeps the name it had when the exports used the same mounts.",
       "properties": {
         "openbao": {
           "additionalProperties": false,
           "properties": {
             "caBundle": {
-              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.ports.export.openbao.caFile` and `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted.",
+              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted.",
               "type": "string"
             },
             "token": {
               "additionalProperties": false,
               "properties": {
                 "audience": {
-                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.ports.export.openbao.auth.tokenFile` and `config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token.",
+                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token.",
                   "type": "string"
                 },
                 "expirationSeconds": {

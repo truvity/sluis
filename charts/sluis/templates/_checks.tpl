@@ -196,7 +196,7 @@ sluis.checks: everything the service's config must agree with.
 {{- include "sluis.controllersChecks" . -}}
 {{- /*
   The OpenBao Secrets adapter (adapters.secrets: openbao) logs in with the same
-  projected token and trusts the same CA bundle as the export adapter: one
+  projected token and trusts the CA bundle the chart mounts: one
   bundle, one audience. The settings say where the chart mounts them.
 */ -}}
 {{- $secretsOpenbao := eq (dig "adapters" "secrets" "adapter" "" $c) "openbao" -}}
@@ -204,15 +204,6 @@ sluis.checks: everything the service's config must agree with.
 {{- $set := dig "adapters" "secrets" "settings" dict $c -}}
 {{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.caFile" "got" $set.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
 {{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $set) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
-{{- end -}}
-{{- $openbao := dig "ports" "export" "openbao" dict $c -}}
-{{- /* The mounted CA and token are the export adapter's and the secrets adapter's alike: either may be the one that names them. */ -}}
-{{- if or $openbao (not $secretsOpenbao) -}}
-{{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.caFile" "got" $openbao.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
-{{- include "sluis.expectPath" (dict "key" "config.ports.export.openbao.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $openbao) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
-{{- end -}}
-{{- if and (dig "exports" list .Values.policy) (not (dig "ports" "export" "adapter" "" $c)) (not (dig "adapters" "secrets" "adapter" "" $c)) -}}
-{{- fail "policy.exports names secrets to copy and config.ports.export names nowhere to copy them to: set config.ports.export (adapter: openbao, and its address and auth), or remove policy.exports" -}}
 {{- end -}}
 {{- /*
   Recovery is the one thing left that asks the API server, and deliberately

@@ -45,7 +45,6 @@ type managed struct {
 	store    port.Secrets
 	resolver *Resolver
 	clock    *clock
-	changed  []string
 }
 
 func newManaged(t *testing.T, store port.Secrets, lock Locker, generated ...string) *managed {
@@ -63,9 +62,8 @@ func newManaged(t *testing.T, store port.Secrets, lock Locker, generated ...stri
 			}
 			return false
 		},
-		Changed: func(_ context.Context, id string) { m.changed = append(m.changed, id) },
-		Now:     m.clock.now,
-		Log:     quiet(),
+		Now: m.clock.now,
+		Log: quiet(),
 	}
 	return m
 }
@@ -143,9 +141,6 @@ func TestRotateRefusesAnOverlapOutsideZeroToSevenDays(t *testing.T) {
 	if stored(t, store, "grafana") != before {
 		t.Error("a refused rotation changed the record")
 	}
-	if len(m.changed) != 0 {
-		t.Errorf("Changed was called for refusals: %v", m.changed)
-	}
 }
 
 func TestRotateDuringAnOpenOverlapDiscardsTheOlderSecret(t *testing.T) {
@@ -204,9 +199,6 @@ func TestRotateRefusals(t *testing.T) {
 	if _, err := none.Rotate(ctx0, "grafana", 0); !errors.Is(err, ErrNoRecord) {
 		t.Errorf("no store: %v", err)
 	}
-	if len(m.changed) != 0 {
-		t.Errorf("Changed after refusals: %v", m.changed)
-	}
 }
 
 func TestRotateRefusesACorruptRecordWithoutItsValue(t *testing.T) {
@@ -233,7 +225,7 @@ func TestRotateIsBusyWhenTheLeaseIsHeldOrTheRecordMovedUnderIt(t *testing.T) {
 		if _, err := m.Rotate(ctx0, "grafana", 0); !errors.Is(err, ErrBusy) {
 			t.Fatalf("err = %v, want ErrBusy", err)
 		}
-		if stored(t, store, "grafana") != before || len(m.changed) != 0 {
+		if stored(t, store, "grafana") != before {
 			t.Error("a busy rotation wrote or announced")
 		}
 		if len(lock.targets) != 1 || lock.targets[0] != "client-secret:grafana" {
@@ -260,7 +252,7 @@ func TestRotateIsBusyWhenTheLeaseIsHeldOrTheRecordMovedUnderIt(t *testing.T) {
 			if _, err := m.Rotate(ctx0, "grafana", 0); !errors.Is(err, ErrBusy) {
 				t.Fatalf("err = %v, want ErrBusy", err)
 			}
-			if stored(t, inner, "grafana") != before || len(m.changed) != 0 {
+			if stored(t, inner, "grafana") != before {
 				t.Error("changed")
 			}
 		})
@@ -293,9 +285,6 @@ func TestRotateForgetsTheResolverAndTellsChangedOnce(t *testing.T) {
 	now, _ := m.resolver.Resolve(ctx0, "grafana")
 	if now.Current == before.Current || now.Previous != before.Current {
 		t.Errorf("resolver still serves %+v", now)
-	}
-	if len(m.changed) != 1 || m.changed[0] != "grafana" {
-		t.Errorf("Changed = %v", m.changed)
 	}
 }
 

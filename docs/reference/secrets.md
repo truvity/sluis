@@ -53,7 +53,7 @@ two installations share an account without colliding. Under it:
 ```text
 /sluis/<instance>/private/config/<name>                    what an operator seeds: the names above
 /sluis/<instance>/private/credentials/<kind>/<id>/<ref>    what sluis writes: the credentials of the Secrets port
-/sluis/<instance>/export/<path>                            what sluis copies out, for consumers
+/sluis/<instance>/export/<path>                            layout v3's exports (retired, nothing writes it)
 ```
 
 The `ssm` Secrets adapter takes its root from the same `secrets.root` (`source: ssm`): naming another root under
@@ -128,11 +128,10 @@ With `secrets.layout: transition` or `v4`, the service reads and writes through 
 | The console session key, directory credentials, links, organisations' keys, the link App, Slack workspaces | `<root>/private/credentials/<kind>/<id>/<ref>` | `<root>/internal/credentials/<kind>/<id>/<ref>`, a `{"value": "<base64>"}` document |
 | A generated client's secret | `private/credentials/oidc-client/<id>/secret`, a record with `previous` and `previous_valid_until` | the `oidc/v1` document `external/oidc/<id>`; a rotation is one write, and the previous secret is the document's previous revision while the current one is younger than `secrets.grace` |
 | A confidential client's secret an operator seeded | `private/config/clients/<id>/secret` | the same `oidc/v1` document |
-| An installed runner App, or a catalogue App with `export: true` | `private/credentials/github-…/<ref>`, copied to `export/…` by the exports controller | the `github/v1` document `external/github/<app>`, ids from the App's record; a pending App's key stays internal until it is installed |
+| An installed runner App, or a catalogue App with `export: true` | `private/credentials/github-…/<ref>` | the `github/v1` document `external/github/<app>`, ids from the App's record; a pending App's key stays internal until it is installed |
 | A catalogue Slack App | `private/credentials/slack-app/<id>/<ref>`, client secret and bot token | the bot token is the `slack/v1` document `external/slack/<id>`; the client secret stays internal |
 
-In `transition` every write goes to v4 and then to v3, and a read tries v4 first. In `v4` the exports controller's copies
-under `export/` are still written until the exports are retired. The token endpoint checks a client's secret against the
+In `transition` every write goes to v4 and then to v3, and a read tries v4 first. The exports controller's copies under `export/` are retired. The token endpoint checks a client's secret against the
 cached pair; a secret that matches neither is checked once more against a fresh read before it is refused (at most once
 every five seconds per client), so a replica that cached the pair before a rotation does not refuse the old secret during
 the overlap. A rotation with no overlap writes the new secret twice, so the previous revision is the current secret

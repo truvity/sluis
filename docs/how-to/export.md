@@ -7,8 +7,7 @@ Write every Secret and ConfigMap the service manages to one file, for an offline
 ## Preconditions
 
 - `kubectl` access to the service's namespace, on the `legacy` (Kubernetes objects) State. On a State adapter the
-  credentials are in the Secrets port and the service exports them itself
-  ([back up and restore](back-up-and-restore.md#on-a-state-adapter)).
+  credentials are in the Secrets port ([back up and restore](back-up-and-restore.md#on-a-state-adapter)).
 
 ## Before you start
 

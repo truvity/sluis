@@ -54,42 +54,19 @@ by this adapter (with `source: file` it is a directory).
 ## Values
 
 A secret is one KV key with one field, `value` (text) or `value_b64` (bytes that are not UTF-8), so
-`bao kv put kv/sluis/private/config/<name> value=...` seeds one. An export of properties (the JSON object the secrets
-export writes) is stored as the properties themselves, one field each, so a consumer's External Secrets reads
-`property: botToken` of the key exactly as it does a copy made by `ports.export: openbao`; `Get` puts the object back
-together. `PutIfVersion` is KV's check-and-set, atomic on the server. The mount must not set `cas_required`, or
+`bao kv put kv/sluis/private/config/<name> value=...` seeds one. A JSON object under `export/` (what layout v3's exports wrote) is stored as the properties themselves, one field
+each; `Get` puts the object back together. `PutIfVersion` is KV's check-and-set, atomic on the server. The mount must not set `cas_required`, or
 unconditional writes are refused. A value is never logged, and an error names the operation, the path and the status only.
-
-## An export in another namespace
-
-An export entry's `namespace` is honoured on the default destination (`ports.export` unset): the same `export/<path>` of
-the same installation is written in that namespace, over the same connection, with a login of its own there. A preview
-runner App can thus land in `devel`:
-
-```yaml
-exports:
-  - source: runner-app
-    tier: preview
-    org: truvity
-    namespace: devel
-    path: github-runner-app/preview/truvity   # kv/sluis/export/github-runner-app/preview/truvity in devel
-```
-
-A `403` is put down to the token (and costs one new login) only when the token is older than 30 seconds; a fresh
-token's `403` is the policy's. After an empty listing or a delete of an absent key the adapter asks the server whether
-the mount exists, and fails loudly with the mount and namespace if it does not (a wrong `mount` or `namespace` otherwise
-reads as "nothing there"). The role must exist in that namespace too, with the policy below there. The `ssm` adapter has
-no namespaces and refuses such an entry.
 
 ## The policy it needs
 
-Least privilege, with root `sluis` and mount `kv`, in the namespace and again in every namespace an export names:
+Least privilege, with root `sluis` and mount `kv`, in the namespace:
 
 ```hcl
 # what sluis writes and reads back
 path "kv/data/sluis/private/credentials/*"     { capabilities = ["create", "read", "update"] }
 path "kv/metadata/sluis/private/credentials/*" { capabilities = ["list", "delete"] }
-# the exports: written, never read by sluis for any other purpose
+# layout v3's exports: only read and deleted by a migration
 path "kv/data/sluis/export/*"     { capabilities = ["create", "read", "update"] }
 path "kv/metadata/sluis/export/*" { capabilities = ["list", "delete"] }
 # List("") (every secret) lists the two directories themselves; List of a
@@ -102,6 +79,6 @@ path "kv/metadata/sluis/export/" { capabilities = ["list"] }
 path "kv/data/sluis/private/config/*" { capabilities = ["read"] }
 ```
 
-`read` on the export keys is the idempotence check (an identical write makes no new version); `delete` and `list` on the
-metadata are for `Delete` and `List`, and may be left out when nothing deletes or lists. Consumers get `read` on
-`kv/data/sluis/export/*` and nothing else.
+`delete` and `list` on the
+metadata are for `Delete` and `List`, and may be left out when nothing deletes or lists. On layout v4 the same grants are on `internal/` and `external/`, and a consumer gets `read` on the exact
+`kv/data/sluis/external/<kind>/<id>` it needs and nothing else.

@@ -3,8 +3,8 @@
 The service loads one policy document, from the file the service document's `policy.file` names. There is one layer: the
 console is read-only, so nothing it does can add to what is declared here. It says what the installation decides. Its
 tables are the access model's ([policy](policy.md): `vocabulary`, `groups`, `claims`, `lifetimes`, `resources`,
-`clients`, `github`, `slack`, `people`, ...), unchanged; beside them are four sections that say whom the exchange
-trusts, which Apps an operator may make, what the controllers may change and what is exported. Held to
+`clients`, `github`, `slack`, `people`, ...), unchanged; beside them are three sections that say whom the exchange
+trusts, which Apps an operator may make and what the controllers may change. Held to
 `schemas/config/policy.schema.json`; `apiVersion: sluis.truvity.github.io/policy/v2`.
 
 | Section | Holds | Was |
@@ -17,7 +17,6 @@ trusts, which Apps an operator may make, what the controllers may change and wha
 | `apps.slack.catalogue[]` | the Slack App catalogue ([connect/slack-apps-catalogue.md](../how-to/connect/slack-apps-catalogue.md)) | `slack.catalogueFile` |
 | `controllers.github.enabledOrgs[]` | the organisations the GitHub controller changes; every other bound organisation is a dry run | the controller's `enabledOrgs` |
 | `controllers.slack.enabledWorkspaces[]` | the workspaces the Slack controller changes | the controller's `enabledWorkspaces` |
-| `exports[]` | the secrets copied out of the service ([exports](exports.md)) | `exports` of `serve` |
 
 There is no secret in any of them: every row is a name and a URL.
 
@@ -45,8 +44,7 @@ controllers:
 
 Whatever the service checked at start across these belongs to the document, and runs wherever it is loaded (the binary,
 `sluisctl policy render`, the Pulumi library before it publishes one): a catalogue grant naming an undeclared group, a
-Slack App for an undeclared workspace, an enabled organisation or workspace the policy does not bind, an export of an
-undeclared App, two clusters for one issuer.
+Slack App for an undeclared workspace, an enabled organisation or workspace the policy does not bind, two clusters for one issuer.
 
 ## Rendering
 

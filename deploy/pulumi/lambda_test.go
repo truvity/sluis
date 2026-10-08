@@ -150,7 +150,6 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("domainTarget", l.DomainTarget)
 		collect("domainHostedZoneID", l.DomainHostedZoneID)
 		collect("truststoreUri", l.TruststoreURI)
-		collect("exportReadPolicy", l.ExportReadPolicyJSON)
 		collect("schedulerRoleArn", l.SchedulerRoleArn)
 		collect("stateSecretParameter", l.StateSecretParameter)
 		collect("recoveryPasswordParameter", l.RecoveryPasswordParameter)
@@ -303,16 +302,15 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		t.Errorf("sqs: %v", got)
 	}
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	// It reads its credentials, its config and (it runs the exports, the
-	// default) the copies it wrote.
-	wantRead := []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*",
-		ssmArn + "/sluis/staging/private/config", ssmArn + "/sluis/staging/private/config/*",
-		ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
+	// It reads its credentials and config on layout v3 and v4, and the
+	// external documents.
+	wantRead := v3v4Reads(ssmArn)
 	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
 		t.Errorf("reads %v", got)
 	}
 	for _, res := range g["ssm:PutParameter"] {
-		if !strings.Contains(res, "/sluis/staging/private/credentials") && !strings.Contains(res, "/sluis/staging/export") {
+		if !strings.Contains(res, "/sluis/staging/private/credentials") && !strings.Contains(res, "/sluis/staging/internal/credentials") &&
+			!strings.Contains(res, "/sluis/staging/external") {
 			t.Errorf("may put %s", res)
 		}
 	}
@@ -398,22 +396,6 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		out["domainHostedZoneID"] == "" || out["apiUrl"] == "" {
 		t.Errorf("outputs: %v", out)
 	}
-
-	// The consumer's policy reads /sluis/export/* and nothing else.
-	eg := grants(statements(t, out["exportReadPolicy"]))
-	if len(eg) != 3 {
-		t.Errorf("export policy grants %v", eg)
-	}
-	for a, res := range eg {
-		if !strings.HasPrefix(a, "ssm:Get") {
-			t.Errorf("export policy grants %s", a)
-		}
-		for _, r := range res {
-			if !strings.Contains(r, ":parameter/sluis/staging/export") {
-				t.Errorf("export policy names %s", r)
-			}
-		}
-	}
 }
 
 func sortedCopy(s []string) []string {
@@ -447,7 +429,6 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		"sluis-github-trust-form":   `{"kind":"tick","target":"trust-form"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
 		"sluis-github-github-links": `{"kind":"tick","target":"github:links"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
 		"sluis-slack-T0TRUVITY":     `{"kind":"tick","target":"T0TRUVITY"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
-		"sluis-exports":             `{"kind":"exports"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
 		"sluis-directory-refresh":   `{"kind":"refresh"} ` + arnp + "lambda:eu-west-1:" + account + ":function:sluis",
 	}
 	if got := schedules(t, rec); !reflect.DeepEqual(got, want) {
@@ -457,12 +438,6 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		if prop(s, "name").StringValue() == "sluis-directory-refresh" {
 			if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" {
 				t.Errorf("directory refresh rate: %v", s.Inputs)
-			}
-			continue
-		}
-		if prop(s, "name").StringValue() == "sluis-exports" {
-			if prop(s, "scheduleExpression").StringValue() != "rate(15 minutes)" {
-				t.Errorf("exports rate: %v", s.Inputs)
 			}
 			continue
 		}
@@ -501,11 +476,11 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 		},
 	})
 	shape(t, rec, out, "access.two.example.test")
-	if got := schedules(t, rec); len(got) != 3 {
+	if got := schedules(t, rec); len(got) != 2 {
 		t.Errorf("schedules: %v", got)
 	}
 	for _, s := range rec.ofType("aws:scheduler/schedule:Schedule") {
-		if n := prop(s, "name").StringValue(); n == "sluis-exports" || n == "sluis-directory-refresh" {
+		if n := prop(s, "name").StringValue(); n == "sluis-directory-refresh" {
 			continue
 		}
 		if prop(s, "scheduleExpression").StringValue() != "rate(5 minutes)" {
@@ -820,7 +795,7 @@ func TestTheLambdaInputsAreRequiredAndChecked(t *testing.T) {
 
 func TestAParameterKeyIsGrantedThroughSSMOnly(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
-	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
 	var n int
 	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Sid"] != "SluisParameterKey" {
@@ -834,9 +809,6 @@ func TestAParameterKeyIsGrantedThroughSSMOnly(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("%d parameter-key statements", n)
-	}
-	if !strings.Contains(out["exportReadPolicy"], key) {
-		t.Error("the consumer's policy cannot decrypt the exports")
 	}
 }
 
@@ -1030,34 +1002,6 @@ func TestTheRolePolicyIsUnchangedWithoutAdditionalWebIdentityAudiences(t *testin
 		}
 		if aud == "" && strings.Contains(base, "Condition") && strings.Contains(base, "IdentityTokenAudience") {
 			t.Errorf("a condition without an audience:\n%s", base)
-		}
-	}
-}
-
-func TestTheExportsScheduleIsConfigurableAndCanBeLeftOut(t *testing.T) {
-	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) {
-		a.Exports = arp.ExportsArgs{Rate: "rate(1 hour)"}
-	}})
-	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-exports")
-	tgt := prop(s, "target").ObjectValue()
-	if prop(s, "scheduleExpression").StringValue() != "rate(1 hour)" || !strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis") ||
-		tgt["input"].StringValue() != `{"kind":"exports"}` {
-		t.Errorf("exports schedule: %v", s.Inputs)
-	}
-	sp := grants(statements(t, prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()))
-	// The scheduler invokes the one function and nothing else.
-	if len(sp["lambda:InvokeFunction"]) != 1 {
-		t.Errorf("scheduler grants %v", sp)
-	}
-	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = true }})
-	if rec.has("aws:scheduler/schedule:Schedule", "staging-exports") {
-		t.Error("a disabled exports schedule was made")
-	}
-	for name, mutate := range map[string]func(*arp.LambdaArgs){
-		"bad rate": func(a *arp.LambdaArgs) { a.Exports.Rate = "hourly" },
-	} {
-		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil {
-			t.Errorf("%s: accepted", name)
 		}
 	}
 }
@@ -1406,34 +1350,53 @@ func TestRecoveryEnabledIsWrittenIntoTheServiceDocument(t *testing.T) {
 	}
 }
 
-// There is one role, with the credentials and exports it writes and the config
-// it reads and never writes (config/* is the operator's and the stack's); it is
-// denied nothing, since a deny would bind the signing, too.
-func TestTheOneRoleReadsConfigAndWritesOnlyCredentialsAndExports(t *testing.T) {
+// There is one role, with the credentials and external documents it writes and
+// the config it reads and never writes (config/* is the operator's and the
+// stack's); it is denied nothing, since a deny would bind the signing, too.
+func TestTheOneRoleReadsConfigAndWritesOnlyCredentialsAndExternalDocuments(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	cfg := []string{ssmArn + "/sluis/staging/private/config", ssmArn + "/sluis/staging/private/config/*"}
-	creds := []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*"}
-	export := []string{ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
-	writes := append(append([]string{}, creds...), export...)
+	writes := v3v4Writes(ssmArn)
 	h := rolePolicy(t, rec)
-	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(append(append([]string{}, writes...), cfg...))) {
-		t.Errorf("reads %v, want credentials, exports and config", got)
+	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(v3v4Reads(ssmArn))) {
+		t.Errorf("reads %v, want credentials, external documents and config", got)
 	}
 	for _, a := range []string{"ssm:PutParameter", "ssm:DeleteParameter"} {
-		if !reflect.DeepEqual(h[a], writes) {
+		if !reflect.DeepEqual(sortedCopy(h[a]), sortedCopy(writes)) {
 			t.Errorf("%s on %v, want %v", a, h[a], writes)
 		}
 	}
+	// The rotation reads a parameter's previous revision.
+	if got := h["ssm:GetParameterHistory"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(v4Writes(ssmArn))) {
+		t.Errorf("history on %v", got)
+	}
+}
+
+func v3Writes(ssmArn string) []string {
+	return []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*"}
+}
+
+func v4Writes(ssmArn string) []string {
+	return []string{
+		ssmArn + "/sluis/staging/internal/credentials", ssmArn + "/sluis/staging/internal/credentials/*",
+		ssmArn + "/sluis/staging/external", ssmArn + "/sluis/staging/external/*",
+	}
+}
+
+func v3v4Writes(ssmArn string) []string { return append(v3Writes(ssmArn), v4Writes(ssmArn)...) }
+
+func v3v4Reads(ssmArn string) []string {
+	return append(v3v4Writes(ssmArn),
+		ssmArn+"/sluis/staging/private/config", ssmArn+"/sluis/staging/private/config/*",
+		ssmArn+"/sluis/staging/internal/config", ssmArn+"/sluis/staging/internal/config/*")
 }
 
 // A path grant covers every level below it: no Allow may name a parent of the
 // installation's root or reach outside it, none is a wildcard inside an SSM
-// path, and no ssm action is on every resource. Only a function that runs the
-// exports reads export/.
+// path, and no ssm action is on every resource.
 func TestNoGrantReachesOutsideTheInstallationsRoot(t *testing.T) {
-	for _, exportsDisabled := range []bool{false, true} {
-		rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Exports.Disabled = exportsDisabled }})
+	for range 1 {
+		rec, _ := mustLambda(t, estate{})
 		ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
 		for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 			actions := strs(s["Action"])
@@ -1455,9 +1418,8 @@ func TestNoGrantReachesOutsideTheInstallationsRoot(t *testing.T) {
 				}
 			}
 		}
-		reads := slices.ContainsFunc(rolePolicy(t, rec)["ssm:GetParameter"], func(r string) bool { return strings.Contains(r, "/export") })
-		if reads == exportsDisabled {
-			t.Errorf("exports disabled=%v and the role reads export/ = %v", exportsDisabled, reads)
+		if slices.ContainsFunc(rolePolicy(t, rec)["ssm:GetParameter"], func(r string) bool { return strings.Contains(r, "/sluis/staging/export") }) {
+			t.Error("the role reads the retired export/ prefix")
 		}
 	}
 }
@@ -1466,9 +1428,12 @@ func TestNoGrantReachesOutsideTheInstallationsRoot(t *testing.T) {
 // parameters under the prefixes it reads or writes.
 func TestTheParameterKeyIsHeldToTheRolesPrefixes(t *testing.T) {
 	key := arnp + "kms:" + region + ":" + account + ":key/params"
-	rec, out := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
+	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	want := []string{ssmArn + "/sluis/staging/private/credentials/*", ssmArn + "/sluis/staging/export/*", ssmArn + "/sluis/staging/private/config/*"}
+	want := []string{
+		ssmArn + "/sluis/staging/private/credentials/*", ssmArn + "/sluis/staging/private/config/*",
+		ssmArn + "/sluis/staging/internal/*", ssmArn + "/sluis/staging/external/*",
+	}
 	n := 0
 	for _, s := range statements(t, prop(rec.one(t, policyType, "staging-http-policy"), "policy").StringValue()) {
 		if s["Sid"] != "SluisParameterKey" {
@@ -1482,9 +1447,6 @@ func TestTheParameterKeyIsHeldToTheRolesPrefixes(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("%d parameter-key statements", n)
-	}
-	if !strings.Contains(out["exportReadPolicy"], "/sluis/staging/export/*") || strings.Contains(out["exportReadPolicy"], "private") {
-		t.Errorf("the consumer's key condition: %s", out["exportReadPolicy"])
 	}
 }
 
@@ -1566,7 +1528,7 @@ func TestTheFunctionNameDecidesTheNamesAndTheLogicalNamesStay(t *testing.T) {
 	// Schedules keep their prefix names, whatever the function is called.
 	rec, _ = mustLambda(t, estate{orgs: []string{"acme"}, workspaces: []string{"T1"}, mutate: func(a *arp.LambdaArgs) { a.FunctionName = "sluis-http" }})
 	got := schedules(t, rec)
-	if len(got) != 4 || got["sluis-github-acme"] == "" || got["sluis-slack-T1"] == "" {
+	if len(got) != 3 || got["sluis-github-acme"] == "" || got["sluis-slack-T1"] == "" {
 		t.Errorf("schedules: %v", got)
 	}
 }
@@ -1599,8 +1561,7 @@ func TestEverySchedulePointsAtTheOneFunction(t *testing.T) {
 }
 
 // A paused schedule is declared, DISABLED, and everything else stays: its
-// expression, its target, the scheduler's role and the function's grants (the
-// export/* write the exports need included), so that turning it on is one
+// expression, its target, the scheduler's role and the function's grants, so that turning it on is one
 // setting and no grant changes with it.
 func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T) {
 	const scheduleType = "aws:scheduler/schedule:Schedule"
@@ -1608,11 +1569,11 @@ func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T)
 	running, _ := mustLambda(t, targets)
 	all := targets
 	all.mutate = func(a *arp.LambdaArgs) {
-		a.Schedule.Paused, a.Exports.Paused, a.DirectoryRefresh.Paused = true, true, true
+		a.Schedule.Paused, a.DirectoryRefresh.Paused = true, true
 	}
 	paused, _ := mustLambda(t, all)
 
-	if got, want := schedules(t, paused), schedules(t, running); !reflect.DeepEqual(got, want) || len(got) != 5 {
+	if got, want := schedules(t, paused), schedules(t, running); !reflect.DeepEqual(got, want) || len(got) != 4 {
 		t.Errorf("paused schedules %v, want the running ones %v", got, want)
 	}
 	for _, s := range running.ofType(scheduleType) {
@@ -1628,15 +1589,6 @@ func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T)
 	if got, want := rolePolicy(t, paused), rolePolicy(t, running); !reflect.DeepEqual(got, want) {
 		t.Errorf("pausing changed the function's grants:\n%v\n--- want ---\n%v", got, want)
 	}
-	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	export := []string{ssmArn + "/sluis/staging/export", ssmArn + "/sluis/staging/export/*"}
-	for _, action := range []string{"ssm:PutParameter", "ssm:GetParametersByPath"} {
-		for _, arn := range export {
-			if !slices.Contains(rolePolicy(t, paused)[action], arn) {
-				t.Errorf("with the exports paused the role lost %s on %s", action, arn)
-			}
-		}
-	}
 	sp := func(rec *recorder) string {
 		return prop(rec.one(t, policyType, "staging-scheduler-policy"), "policy").StringValue()
 	}
@@ -1651,7 +1603,6 @@ func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T)
 	}{
 		"ticks": {func(a *arp.LambdaArgs) { a.Schedule.Paused = true },
 			[]string{"sluis-github-acme", "sluis-github-github-links", "sluis-slack-T1"}},
-		"exports":           {func(a *arp.LambdaArgs) { a.Exports.Paused = true }, []string{"sluis-exports"}},
 		"directory refresh": {func(a *arp.LambdaArgs) { a.DirectoryRefresh.Paused = true }, []string{"sluis-directory-refresh"}},
 	} {
 		e := targets
@@ -1670,7 +1621,6 @@ func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T)
 
 	// Disabled leaves a schedule out and Paused declares it: one or the other.
 	for name, mutate := range map[string]func(*arp.LambdaArgs){
-		"exports":           func(a *arp.LambdaArgs) { a.Exports.Disabled, a.Exports.Paused = true, true },
 		"directory refresh": func(a *arp.LambdaArgs) { a.DirectoryRefresh.Disabled, a.DirectoryRefresh.Paused = true, true },
 	} {
 		if _, _, err := buildLambda(t, estate{mutate: mutate}); err == nil || !strings.Contains(err.Error(), "set one") {

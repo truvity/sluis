@@ -40,7 +40,7 @@
 // The one function (`sluis`, or LambdaArgs.FunctionName) is the release zip's
 // `bootstrap`, in no VPC, with one role: it serves the issuer and the console
 // behind the API, and runs the GitHub and Slack controllers' passes (one
-// invocation per target, from a schedule or a run-now) and the exports and
+// invocation per target, from a schedule or a run-now) and the
 // directory refresh. The role may kms:Sign with the signing key (or, with
 // WrappedSigning, generate and decrypt key pairs under the one symmetric key),
 // and invoke itself; the controllers' code runs with it, so there is no
@@ -52,8 +52,9 @@
 // OAuth-state secret and the recovery password are generated and kept in SSM
 // under the installation's root, /sluis/<instance> (layout v3).
 // /sluis/<instance>/private/* is sluis's alone, and config/* under it the
-// function reads; /sluis/<instance>/export/* is for consumers, and
-// Lambda.ExportReadPolicyJSON is the policy that reads it and nothing else.
+// function reads. On layout v4 (docs/decisions/0041) /sluis/<instance>/internal/*
+// is sluis's alone and /sluis/<instance>/external/<kind>/<id> are the documents
+// consumers read, each granted on its own side.
 //
 // RenderPorts renders the `ports:` block of the processes' configuration from
 // the same names.
