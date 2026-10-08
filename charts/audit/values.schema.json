@@ -7868,6 +7868,38 @@
             "minLength": 1,
             "type": "string"
           },
+          "credentials_preset": {
+            "additionalProperties": false,
+            "description": "Instead of static credentials, mint the store's R2 credentials for this process: it clones a disabled Cloudflare prototype token with the minter token and renews with a third of the lifetime left (and mints again once after a 403). Exclusive with `credentials`; only with `endpoint`. The static `credentials` stay the default and need no Cloudflare account.",
+            "properties": {
+              "account": {
+                "description": "The Cloudflare account id.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "lifetime": {
+                "$ref": "#/$defs/duration",
+                "description": "How long each minted token lives, at least a minute."
+              },
+              "minter": {
+                "description": "The address, below the installation's state root, of the minter credential: a `cloudflare-minter/v1` document {schema, token} holding an account token with Account API Tokens Read and Write. It can mint anything the account owner can, so its custody is the owner's; the refusal list in the minting code is the only guard.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "prototype": {
+                "description": "The id of the DISABLED account token whose policies and condition every minted token copies. An active prototype, or one granting token admin, billing, account settings, memberships or Access identity providers, is refused at every mint.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "account",
+              "minter",
+              "prototype",
+              "lifetime"
+            ],
+            "type": "object"
+          },
           "endpoint": {
             "description": "The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only.",
             "minLength": 1,

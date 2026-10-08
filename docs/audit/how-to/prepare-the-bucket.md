@@ -165,6 +165,34 @@ presets:
   the installation's state store below `archive.stateRoot`, of a JSON object
   `{accessKeyID, secretAccessKey}`, read with the process's own identity. No secret is in a
   file. Unset, the SDK's ambient credentials are used, which is what a workload identity provides.
+- **Credentials minted for the process**, on Cloudflare R2: instead of `credentials`, a
+  `credentials_preset` makes the process clone a disabled Cloudflare prototype token with a
+  minter token and renew the resulting credentials with a third of their lifetime left. The static
+  `credentials` stay the default and need no Cloudflare account; the two are exclusive.
+
+  ```yaml
+  presets:
+    operational:
+      bucket: audit-example
+      region: auto
+      endpoint: https://<account-id>.r2.cloudflarestorage.com
+      path_style: true
+      credentials_preset:
+        account: <account-id>
+        minter: internal/cloudflare/main/minter   # below archive.stateRoot; cloudflare-minter/v1
+        prototype: <id of the disabled prototype token>
+        lifetime: 15m
+  ```
+
+  The minter document is `{"schema": "cloudflare-minter/v1", "token": "..."}` in the state
+  store. It can mint anything the Cloudflare account owner can, so the refusal list in the
+  minting code is the only guard: a prototype that is active, or grants token admin, billing,
+  account settings, memberships or Access identity providers, is refused at every mint. The
+  process records the ids of the tokens it mints at `cloudflare-minted/<preset>` in the same
+  store and deletes the expired ones at its next mint, because Cloudflare hides an expired
+  token from its list while still counting it. The process's role needs `ssm:GetParameter` on
+  the minter address and read and write on `cloudflare-minted/*` below the state root. The
+  code is `github.com/truvity/sluis/storage/cloudflare`, shared with sluis itself.
 - **A private CA.** `archive.ca` is the path to a bundle trusted for the endpoint, mounted by
   the platform (the chart's `trust` puts one at `/etc/audit/trust/<key>`).
 

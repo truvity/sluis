@@ -47,3 +47,25 @@ func TestTheArchiveCredentialsAreReadFromTheStateStore(t *testing.T) {
 		t.Fatalf("a missing credential: %v", err)
 	}
 }
+
+func TestTheMinterTokenIsReadFromItsDocumentAndNeverEchoed(t *testing.T) {
+	ctx := context.Background()
+	st := memory.New()
+	for addr, value := range map[string]string{
+		"good": `{"schema":"cloudflare-minter/v1","token":"m1nter-secret"}`,
+		"old":  `{"schema":"other/v1","token":"m1nter-secret"}`,
+		"none": `{"schema":"cloudflare-minter/v1"}`,
+	} {
+		if _, err := st.Put(ctx, "internal/"+addr, []byte(value), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if tok, err := readMinter(ctx, st, "internal/good"); err != nil || tok != "m1nter-secret" {
+		t.Fatalf("good: %q %v", tok, err)
+	}
+	for _, addr := range []string{"internal/old", "internal/none", "internal/absent"} {
+		if _, err := readMinter(ctx, st, addr); err == nil || strings.Contains(err.Error(), "m1nter-secret") {
+			t.Errorf("%s: %v", addr, err)
+		}
+	}
+}

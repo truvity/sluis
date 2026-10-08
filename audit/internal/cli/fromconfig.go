@@ -37,7 +37,7 @@ import (
 // the file names none. Its static credentials are either named secrets
 // (bucket.credentialsSecret) or, for the archive, the pair at an address of the
 // installation's state store (archive.credentials).
-func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, secrets *config.Secrets) (aws.Config, error) {
+func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, secrets *config.Secrets, minted ...aws.CredentialsProvider) (aws.Config, error) {
 	var opts []func(*awsconfig.LoadOptions) error
 	region := b.Region
 	if region == "" && b.Endpoint != "" {
@@ -66,6 +66,13 @@ func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, sec
 		opts = append(opts, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(id, secret, "")))
 	}
+	// A provider the caller built (R2 credentials minted from a Cloudflare preset)
+	// is the store's credential; it renews itself, so it is not read once.
+	for _, p := range minted {
+		if p != nil {
+			opts = append(opts, awsconfig.WithCredentialsProvider(aws.NewCredentialsCache(p)))
+		}
+	}
 	if creds != nil {
 		id, secret, err := archiveCredentials(ctx, *creds)
 		if err != nil {
@@ -86,6 +93,19 @@ type PresetPlan struct {
 	// Credentials is where the store's static credentials are in the state
 	// store; nil on AWS, where the workload's identity is the credential.
 	Credentials *config.StateRef
+	// Minted, when set, is how the store's R2 credentials are minted for the
+	// process from a Cloudflare preset (mutually exclusive with Credentials).
+	Minted *MintedCredentials
+}
+
+// MintedCredentials is a store whose credentials are minted: the preset's
+// description and where the minter credential and the record of minted tokens
+// are in the state store.
+type MintedCredentials struct {
+	Preset profile.Preset
+	Spec   profile.CredentialsPreset
+	// Root is the installation's state root (archive.stateRoot).
+	Root string
 }
 
 // PlanPresets decides how each configured preset is opened. Object Lock is a
@@ -113,6 +133,13 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 			if name == profile.Attested {
 				problems = append(problems, fmt.Errorf("preset attested is on the S3-compatible endpoint %s, "+
 					"which has no Object Lock: Object Lock is S3 only", st.Endpoint))
+			}
+			if cp := st.CredentialsPreset; cp != nil {
+				if a.StateRoot == "" {
+					problems = append(problems, fmt.Errorf("preset %s names credentials_preset and archive.stateRoot is not set: "+
+						"it is the root of the state store the minter credential is read from", name))
+				}
+				plan.Minted = &MintedCredentials{Preset: name, Spec: *cp, Root: a.StateRoot}
 			}
 			if st.Credentials != "" {
 				if a.StateRoot == "" {
@@ -166,10 +193,16 @@ func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string
 	var home profile.Preset
 	for _, name := range sortedPresets(plans) {
 		plan := plans[name]
+		var minted aws.CredentialsProvider
+		if plan.Minted != nil {
+			if minted, err = mintedProvider(ctx, *plan.Minted); err != nil {
+				return nil, fmt.Errorf("preset %s: %w", name, err)
+			}
+		}
 		cfg, err := awsConfig(ctx, config.Bucket{
 			Name: plan.Storage.Bucket, Region: plan.Storage.Region, Endpoint: plan.Storage.Endpoint,
 			CA: a.CA, PathStyle: plan.Storage.PathStyle,
-		}, plan.Credentials, secrets)
+		}, plan.Credentials, secrets, minted)
 		if err != nil {
 			return nil, fmt.Errorf("preset %s: %w", name, err)
 		}
