@@ -110,6 +110,11 @@ pulumi-test:
     cd deploy/pulumi && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
     hack/test-pin-pulumi-require.sh
 
+# Test the storage module (storage/). Like deploy/pulumi it is a module of its
+# own that the root build, test and lint never see, so this recipe is its gate.
+storage-test:
+    cd storage && GOWORK=off go vet ./... && GOWORK=off go test -count=1 ./...
+
 # Run Go vulnerability check. Deliberately not part of `check`: a newly
 # published CVE in a dependency must not turn a PR that never touched it
 # red. `.github/workflows/security.yaml` runs this as its own job.
@@ -450,4 +455,4 @@ audit-sentences:
 # `ts` is in here despite being slow: it typechecks and tests the
 # published package, which nothing else does. `console` arrives through
 # `build`, which needs it.
-check: build test pulumi-test lint chart-lint telemetry archive-check docs-check leak-canary audit-catalogue ts
+check: build test pulumi-test storage-test lint chart-lint telemetry archive-check docs-check leak-canary audit-catalogue ts
