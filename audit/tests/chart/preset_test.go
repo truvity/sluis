@@ -24,11 +24,11 @@ func helmTemplate(t *testing.T, values string) (string, error) {
 	}
 	// The base names a preset of its own; `presets: null` clears it, so that the
 	// values under test are the presets the install has.
-	clear := filepath.Join(t.TempDir(), "clear.yaml")
-	if err := os.WriteFile(clear, []byte("presets: null\n"), 0o600); err != nil {
+	cleared := filepath.Join(t.TempDir(), "cleared.yaml")
+	if err := os.WriteFile(cleared, []byte("presets: null\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(helm(t), "template", "audit", ".", "-f", "testdata/values/operational-base.yaml", "-f", clear, "-f", p)
+	cmd := exec.Command(helm(t), "template", "audit", ".", "-f", "testdata/values/operational-base.yaml", "-f", cleared, "-f", p)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
@@ -51,18 +51,18 @@ func TestTheChartDerivesAProfilesPresetAsGoDoes(t *testing.T) {
 		t.Fatal("no framework profiles: the sweep would prove nothing")
 	}
 	for name, fw := range frameworks {
-		min := fw.MinPreset
-		if min == "" {
-			min = profile.Operational
+		minimum := fw.MinPreset
+		if minimum == "" {
+			minimum = profile.Operational
 		}
 		for _, preset := range profile.Presets {
 			values := "profiles:\n  p:\n    frameworks: [" + name + "]\n    preset: " + string(preset) + "\n" + threePresets
 			stderr, err := helmTemplate(t, values)
-			weaker := preset.Rank() < min.Rank()
+			weaker := preset.Rank() < minimum.Rank()
 			switch {
 			case weaker && err == nil:
-				t.Errorf("%s asking for %s rendered; its minimum is %s", name, preset, min)
-			case weaker && !strings.Contains(stderr, "profile p asks for the "+string(preset)+" preset and its framework profiles "+name+" need "+string(min)):
+				t.Errorf("%s asking for %s rendered; its minimum is %s", name, preset, minimum)
+			case weaker && !strings.Contains(stderr, "profile p asks for the "+string(preset)+" preset and its framework profiles "+name+" need "+string(minimum)):
 				t.Errorf("%s asking for %s was refused without naming the profile that needs more: %s", name, preset, stderr)
 			case !weaker && err != nil:
 				t.Errorf("%s asking for %s was refused: %s", name, preset, stderr)
@@ -73,12 +73,13 @@ func TestTheChartDerivesAProfilesPresetAsGoDoes(t *testing.T) {
 		for _, configured := range profile.Presets {
 			values := "profiles:\n  p:\n    frameworks: [" + name + "]\npresets:\n  " + string(configured) + ": {bucket: audit-" + string(configured) + "}\n"
 			stderr, err := helmTemplate(t, values)
-			missing := configured != min
+			missing := configured != minimum
 			switch {
 			case missing && err == nil:
-				t.Errorf("%s needs %s and only %s is configured, and it rendered", name, min, configured)
-			case missing && !(strings.Contains(stderr, "profile p is kept under the "+string(min)+" preset") && strings.Contains(stderr, "configures only "+string(configured))):
-				t.Errorf("%s needs %s and only %s is configured: the refusal does not name both: %s", name, min, configured, stderr)
+				t.Errorf("%s needs %s and only %s is configured, and it rendered", name, minimum, configured)
+			case missing && (!strings.Contains(stderr, "profile p is kept under the "+string(minimum)+" preset") ||
+				!strings.Contains(stderr, "configures only "+string(configured))):
+				t.Errorf("%s needs %s and only %s is configured: the refusal does not name both: %s", name, minimum, configured, stderr)
 			case !missing && err != nil && strings.Contains(stderr, "is kept under the"):
 				t.Errorf("%s under its own preset %s was refused: %s", name, configured, stderr)
 			}

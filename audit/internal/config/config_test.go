@@ -212,7 +212,7 @@ func TestASecretInTheFileIsRefused(t *testing.T) {
 	if err != nil && strings.Contains(err.Error(), "hunter2") {
 		t.Errorf("the error quotes the secret: %v", err)
 	}
-	_, err = config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', token: s.abc}}}\n"))
+	_, err = config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', token: s.abc}}}\n")) //nolint:lll // a table row
 	if err == nil {
 		t.Error("an OpenBAO token in the file was accepted")
 	}
@@ -839,9 +839,9 @@ func TestTheDocumentSchemasAcceptWhatTheCodeAcceptsAndRefuseWhatItWouldNot(t *te
 		{"audit-deployment", "presets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false}, // version 1 has no presets
 		{"audit-deployment", "profiles:\n  security: {frameworks: [iso27001]}\n", true},
 		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v2\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v2\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
-		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v1\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
+		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v2\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},  //nolint:lll // a table row
+		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v2\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},       //nolint:lll // a table row
+		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v1\npresets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001]}\n", false}, //nolint:lll // a table row
 		{"audit-deployment", "profiles: {}\n", false},
 		{"audit-deployment", "presets: {standard: {bucket: b}}\nprofiles:\n  a/b: {frameworks: [iso27001]}\n", false},
 		{"audit-deployment", "presets: {standard: {bucket: b}}\nprofiles:\n  security: {frameworks: [iso27001], retention: 1}\n", false},
@@ -874,7 +874,8 @@ func TestTheEnvSourceIsRefusedOnLambda(t *testing.T) {
 	if strings.Contains(err.Error(), "AUDIT_TEST_DB_PASSWORD") {
 		t.Errorf("the refusal quotes the name: %v", err)
 	}
-	w, err := config.LoadQuery(write(t, minimalQuery[:strings.Index(minimalQuery, "database")]+"database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"))
+	head, _, _ := strings.Cut(minimalQuery, "database")
+	w, err := config.LoadQuery(write(t, head+"database: {url: 'postgres://u@h/db', passwordEnv: AUDIT_TEST_DB_PASSWORD}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}

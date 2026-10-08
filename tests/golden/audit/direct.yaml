@@ -77,6 +77,7 @@ data:
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
   deployment.yaml: |
+    apiVersion: audit.truvity.github.io/audit-deployment/v2
     external_identifiers_are_opaque: true
     profiles:
       security:
@@ -253,7 +254,7 @@ spec:
         checksum/config: a87fb0cda37fc9aece3a6c727c9fad4850d670f7cae09a8ea228b8ce1cbf5f69
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 7153ffcc3156f1836054780f1509583392a70952e4ac3f6bdb22e3f2c36798f1
+        checksum/deployment: 4c2418ba86fdbb28388990ffde7a3dc173b6b943401b94f6c0a23ed827f33367
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
@@ -356,7 +357,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 3cddaf55a155422576829bd6f74c947b80a099448878f2d256284104449ec50b
-            checksum/deployment: 7153ffcc3156f1836054780f1509583392a70952e4ac3f6bdb22e3f2c36798f1
+            checksum/deployment: 4c2418ba86fdbb28388990ffde7a3dc173b6b943401b94f6c0a23ed827f33367
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -427,7 +428,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 5de5af53ee794bcf7195d9a0236dcd8aa74b76c3a6c97bcb6c14322059eaf109
-            checksum/deployment: 7153ffcc3156f1836054780f1509583392a70952e4ac3f6bdb22e3f2c36798f1
+            checksum/deployment: 4c2418ba86fdbb28388990ffde7a3dc173b6b943401b94f6c0a23ed827f33367
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify

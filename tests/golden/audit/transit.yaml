@@ -93,6 +93,7 @@ data:
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
   deployment.yaml: |
+    apiVersion: audit.truvity.github.io/audit-deployment/v2
     external_identifiers_are_opaque: false
     profiles:
       security:
@@ -373,7 +374,7 @@ spec:
         checksum/grants: c6e926709c6176bc66b906eaad228b9bb32e6760036c8733b2758355055342a1
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: f226af41dd31442d10bed73cdfd8bc456acae2391d1f14fc3e1dc7048fc9a47a
+        checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
     spec:
       serviceAccountName: audit-query
       
@@ -496,7 +497,7 @@ spec:
         checksum/config: 0792572454b3c6783ee631453ec8208874f9f911050711caa2223b6eed494177
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: f226af41dd31442d10bed73cdfd8bc456acae2391d1f14fc3e1dc7048fc9a47a
+        checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
@@ -622,7 +623,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: f86cfe56cd678fa2ca34df74f110bb707c9c8d9f913a472739495a6a1f4fccdc
-            checksum/deployment: f226af41dd31442d10bed73cdfd8bc456acae2391d1f14fc3e1dc7048fc9a47a
+            checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -709,7 +710,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 0c3e570bd95afa44974c90dfa927077d2912ebadd57cf6c20ff81cdc24f53441
-            checksum/deployment: f226af41dd31442d10bed73cdfd8bc456acae2391d1f14fc3e1dc7048fc9a47a
+            checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify

@@ -216,7 +216,7 @@ func TestTheFunctionsRoleIsTheQueuesOnlySender(t *testing.T) {
 // writer's configuration, the credentials at the installation's own address.
 func TestAuditArchiveOnAnS3CompatibleStore(t *testing.T) {
 	au := installAudit(t)
-	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: "https://acct.r2.example.test"}}}
+	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: "https://acct.r2.example.test"}}} //nolint:lll // a table row
 	rec, _ := mustLambda(t, auditEstate(t, au, nil))
 	if rec.has("aws:s3/bucket:Bucket", "audit-example-archive-operational") {
 		t.Error("the archive is the store's, and an AWS bucket is declared for it")
@@ -367,7 +367,7 @@ func TestAuditArgumentsAreRefusedWhenTheyDisagree(t *testing.T) {
 		"an endpoint and reuse": {
 			audit: func(t *testing.T) *arp.AuditArgs {
 				au := installAudit(t)
-				au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "b", Endpoint: "https://x.example.test"}, ReuseBlobStore: true}}
+				au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "b", Endpoint: "https://x.example.test"}, ReuseBlobStore: true}} //nolint:lll // a table row
 				return au
 			},
 			want: "say the store once",

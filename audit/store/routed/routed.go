@@ -169,8 +169,9 @@ func (s *Store) stores(prefix string) []store.Store {
 	if everywhere(prefix) {
 		return s.all[:1:1]
 	}
-	if strings.HasPrefix(prefix, store.RecordsPrefix) || strings.HasPrefix(prefix, store.SealsPrefix) ||
-		prefix == "" || strings.HasPrefix(store.RecordsPrefix, prefix) || strings.HasPrefix(store.SealsPrefix, prefix) {
+	// A prefix under records/ or seals/, or a head of either (a listing of "rec").
+	underOrHead := func(dir string) bool { return strings.HasPrefix(prefix, dir) || strings.HasPrefix(dir, prefix) }
+	if prefix == "" || underOrHead(store.RecordsPrefix) || underOrHead(store.SealsPrefix) {
 		return s.all
 	}
 	return []store.Store{s.home}

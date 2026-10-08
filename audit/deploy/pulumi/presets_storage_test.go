@@ -49,7 +49,7 @@ func TestAStandardAndAnAttestedPresetMakeTwoBucketsAndOnlyTheAttestedOneIsLocked
 	if len(buckets) != 2 || buckets["audit-archive-standard"] != "acme-audit-standard" || buckets["audit-archive-attested"] != "acme-audit-attested" {
 		t.Fatalf("buckets: %v", buckets)
 	}
-	if out["bucketNames"] != "standard=acme-audit-standard,attested=acme-audit-attested" && out["bucketNames"] != "attested=acme-audit-attested,standard=acme-audit-standard" {
+	if out["bucketNames"] != "standard=acme-audit-standard,attested=acme-audit-attested" && out["bucketNames"] != "attested=acme-audit-attested,standard=acme-audit-standard" { //nolint:lll // a table row
 		t.Errorf("bucketNames = %q", out["bucketNames"])
 	}
 	if out["presets"] != "standard,attested" {
@@ -274,7 +274,7 @@ func TestPresetsAreValidatedWithoutAProfilesDocument(t *testing.T) {
 	}
 	if _, _, err := build(t, func(a *auditpulumi.Args) {
 		off(a)
-		a.Presets["operational"] = auditpulumi.PresetStorage{Bucket: "acme-audit", KeyAlias: "arn:aws:kms:x", Create: true}
+		a.Presets["operational"] = auditpulumi.PresetStorage{Bucket: "acme-audit", KeyAlias: "1234abcd-12ab-34cd-56ef-1234567890ab", Create: true}
 	}); err == nil || !strings.Contains(err.Error(), "KeyAlias") {
 		t.Errorf("a bad preset without a document: %v", err)
 	}

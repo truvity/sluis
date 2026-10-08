@@ -72,6 +72,7 @@ data:
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
   deployment.yaml: |
+    apiVersion: audit.truvity.github.io/audit-deployment/v2
     external_identifiers_are_opaque: true
     profiles:
       security:
@@ -265,7 +266,7 @@ spec:
         app.kubernetes.io/component: observe
       annotations:
         checksum/config: a9af695186c2e0007809bc77c46f29744067123875e0251c319457b2c9373406
-        checksum/deployment: 74e07505d2939a370bbc449f2505bfdd3ee099f8b10400d9496a4a42ff73aa2a
+        checksum/deployment: b670c40113793a993731c3f110596c8dac76fc4993c85b23816db743c4118625
     spec:
       serviceAccountName: audit-observe
       
@@ -381,7 +382,7 @@ spec:
         checksum/grants: c6e926709c6176bc66b906eaad228b9bb32e6760036c8733b2758355055342a1
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: 74e07505d2939a370bbc449f2505bfdd3ee099f8b10400d9496a4a42ff73aa2a
+        checksum/deployment: b670c40113793a993731c3f110596c8dac76fc4993c85b23816db743c4118625
     spec:
       serviceAccountName: audit-query
       
@@ -496,7 +497,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: caa0ff546af7503a093cdf3c980dfe18909a6ea3fca0deaa5744fa72f5c15b4e
-            checksum/deployment: 74e07505d2939a370bbc449f2505bfdd3ee099f8b10400d9496a4a42ff73aa2a
+            checksum/deployment: b670c40113793a993731c3f110596c8dac76fc4993c85b23816db743c4118625
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary

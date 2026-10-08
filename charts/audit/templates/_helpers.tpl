@@ -334,6 +334,7 @@ hashes THIS and not a part of the values that feed it, so that every key the
 document has (profiles, externalIdentifiersAreOpaque, and whatever it gains)
 moves the pod that reads it. */}}
 {{- define "audit.deploymentDocument" -}}
+apiVersion: audit.truvity.github.io/audit-deployment/v2
 external_identifiers_are_opaque: {{ .Values.externalIdentifiersAreOpaque }}
 profiles:
   {{- include "audit.profiles" . | nindent 2 }}

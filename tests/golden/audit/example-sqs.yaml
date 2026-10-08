@@ -64,6 +64,7 @@ data:
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
   deployment.yaml: |
+    apiVersion: audit.truvity.github.io/audit-deployment/v2
     external_identifiers_are_opaque: true
     profiles:
       security:
@@ -244,7 +245,7 @@ spec:
         app.kubernetes.io/component: observe
       annotations:
         checksum/config: a9af695186c2e0007809bc77c46f29744067123875e0251c319457b2c9373406
-        checksum/deployment: b5bfe78b07c0b3e298a9b3a907d587c2352ee0597cd04417aae3de96e6e44ece
+        checksum/deployment: 92f042d6065a6c9a02866f6432139cf201288305d73d6429e53d50d4c1a34e98
     spec:
       serviceAccountName: audit-observe
       
@@ -350,7 +351,7 @@ spec:
         checksum/config: e54f8fbdfcaf7afcfc6a9188b122c6a199d0070710b902f8b643b7a600bb73d5
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: b5bfe78b07c0b3e298a9b3a907d587c2352ee0597cd04417aae3de96e6e44ece
+        checksum/deployment: 92f042d6065a6c9a02866f6432139cf201288305d73d6429e53d50d4c1a34e98
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:
@@ -474,7 +475,7 @@ spec:
         checksum/config: fa8e3e4c2f4728b8696e5152c3164e80a26e4c3f9788468a517def4ef4da5a36
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: b5bfe78b07c0b3e298a9b3a907d587c2352ee0597cd04417aae3de96e6e44ece
+        checksum/deployment: 92f042d6065a6c9a02866f6432139cf201288305d73d6429e53d50d4c1a34e98
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:
