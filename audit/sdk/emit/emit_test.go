@@ -342,7 +342,7 @@ func TestNewRefusesADeliveryItCannotProvide(t *testing.T) {
 	c.Actions["shop.order.placed"] = catalogue.Action{
 		Summary:   c.Actions["shop.order.placed"].Summary,
 		Operation: c.Actions["shop.order.placed"].Operation,
-		Profiles:  c.Actions["shop.order.placed"].Profiles,
+		Profiles:  c.Actions["shop.order.placed"].Profiles, //nolint:staticcheck // the test copies the deprecated list as the catalogue still carries it
 		Delivery:  "eventually",
 	}
 	_, err = emit.New(emit.Options{Source: "shop", Catalogue: c, Sink: &sink.Memory{}})
