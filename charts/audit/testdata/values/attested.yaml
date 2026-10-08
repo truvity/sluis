@@ -1,11 +1,29 @@
-# The attested tier on an S3-compatible store that is not AWS: no Object
-# Lock, so the record objects's own sha256 and per-record hashes are the integrity
-# control; an endpoint and path-style addressing; static credentials, since
-# the store has no pod identity; and the query service with an exports bucket
-# on a store of its own. The profile composes only framework profiles whose frameworks
-# do not demand the lock, or the writer would refuse to start.
+# Two install presets on an S3-compatible store that is not AWS (the shape of
+# an estate that keeps its archive on Cloudflare R2): the standard preset for
+# `security` and the operational one for `history`, each with a bucket of its
+# own, an endpoint and path-style addressing. The store has no pod identity, so
+# each preset names the address of its static credentials below the
+# installation's state root (`archive.stateRoot`); the secrets are in the state
+# store and never in this file. No preset here is attested: Object Lock is S3
+# only, and the chart refuses the attested preset on an endpoint. The record
+# objects' own sha256 and per-record hashes are the integrity control. The query
+# service keeps its exports on a store of its own.
 mode: direct
 externalIdentifiersAreOpaque: true
+presets:
+  operational:
+    bucket: audit-operational
+    region: auto
+    endpoint: https://s3.example.test
+    path_style: true
+    credentials: internal/audit/r2
+  standard:
+    bucket: audit-standard
+    prefix: standard/
+    region: auto
+    endpoint: https://s3.example.test
+    path_style: true
+    credentials: internal/audit/r2
 profiles:
   security:
     frameworks: [security]
@@ -13,26 +31,11 @@ profiles:
     frameworks: [history]
 writer:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
     anonymousWrites: true
     archive:
-      bucket:
-        name: audit-archive
-        region: auto
-        endpoint: https://s3.example.test
-        pathStyle: true
-        credentialsEnv:
-          accessKeyID: AUDIT_S3_ACCESS_KEY_ID
-          secretAccessKey: AUDIT_S3_SECRET_ACCESS_KEY
-      prefix: audit/app
-      lockMode: none
-  secretEnv:
-    - name: AUDIT_S3_ACCESS_KEY_ID
-      secretName: audit-store-credentials
-      key: AWS_ACCESS_KEY_ID
-    - name: AUDIT_S3_SECRET_ACCESS_KEY
-      secretName: audit-store-credentials
-      key: AWS_SECRET_ACCESS_KEY
+      stateRoot: /audit/main
 query:
   enabled: true
   replicas: 1
@@ -41,36 +44,23 @@ query:
       - url: https://id.example.test
         audience: audit
   config:
+    apiVersion: audit.truvity.github.io/audit-query/v2
     searcher: s3scan
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
+    archive:
+      stateRoot: /audit/main
     sink:
       url: http://audit:8080
-    archive:
-      bucket:
-        name: audit-archive
-        region: auto
-        endpoint: https://s3.example.test
-        pathStyle: true
-        credentialsEnv:
-          accessKeyID: AUDIT_S3_ACCESS_KEY_ID
-          secretAccessKey: AUDIT_S3_SECRET_ACCESS_KEY
-      prefix: audit/app
     exports:
       bucket:
         name: audit-exports
         endpoint: https://files.example.test
         pathStyle: true
-        credentialsEnv:
+        credentialsSecret:
           accessKeyID: AUDIT_EXPORTS_ACCESS_KEY_ID
           secretAccessKey: AUDIT_EXPORTS_SECRET_ACCESS_KEY
   secretEnv:
-    - name: AUDIT_S3_ACCESS_KEY_ID
-      secretName: audit-store-credentials
-      key: AWS_ACCESS_KEY_ID
-    - name: AUDIT_S3_SECRET_ACCESS_KEY
-      secretName: audit-store-credentials
-      key: AWS_SECRET_ACCESS_KEY
     - name: AUDIT_EXPORTS_ACCESS_KEY_ID
       secretName: audit-exports-credentials
       key: AWS_ACCESS_KEY_ID
@@ -80,26 +70,13 @@ query:
 jobs:
   verify:
     config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
       deployment: /etc/audit/deployment.yaml
       archive:
-        bucket:
-          name: audit-archive
-          region: auto
-          endpoint: https://s3.example.test
-          pathStyle: true
-          credentialsEnv:
-            accessKeyID: AUDIT_S3_ACCESS_KEY_ID
-            secretAccessKey: AUDIT_S3_SECRET_ACCESS_KEY
-        prefix: audit/app
-    secretEnv:
-      - name: AUDIT_S3_ACCESS_KEY_ID
-        secretName: audit-store-credentials
-        key: AWS_ACCESS_KEY_ID
-      - name: AUDIT_S3_SECRET_ACCESS_KEY
-        secretName: audit-store-credentials
-        key: AWS_SECRET_ACCESS_KEY
+        stateRoot: /audit/main
   purge:
     enabled: false
   clockSync:
     config:
+      apiVersion: audit.truvity.github.io/audit-clock-sync/v2
       ntp: [time.example.test]

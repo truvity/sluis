@@ -19,6 +19,11 @@
 writer:
   enabled: false
 
+presets:
+  standard:
+    bucket: audit-eu-example-1
+    region: eu-west-1
+    prefix: audit/app/
 profiles:
   security:
     frameworks: [security]
@@ -30,9 +35,10 @@ externalIdentifiersAreOpaque: true
 migrate:
   enabled: true
   config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
       url: postgres://audit_owner@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_DATABASE_PASSWORD
+      passwordSecret: AUDIT_DATABASE_PASSWORD
     observe: audit_observe
     reader: audit_query
   secretEnv:
@@ -48,14 +54,11 @@ observe:
     annotations:
       eks.amazonaws.com/role-arn: ROLE-ARN-OF-THE-OBSERVE-ROLE
   config:
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
+    apiVersion: audit.truvity.github.io/audit-observe/v2
+    deployment: /etc/audit/deployment.yaml
     database:
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_OBSERVE_DATABASE_PASSWORD
+      passwordSecret: AUDIT_OBSERVE_DATABASE_PASSWORD
     settle: 2m
   secretEnv:
     - name: AUDIT_OBSERVE_DATABASE_PASSWORD
@@ -76,6 +79,7 @@ query:
       - url: https://id.example.com
         audience: audit
   config:
+    apiVersion: audit.truvity.github.io/audit-query/v2
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     require: queued
@@ -85,12 +89,7 @@ query:
         region: eu-west-1
     database:
       url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_QUERY_DATABASE_PASSWORD
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
+      passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
   secretEnv:
     - name: AUDIT_QUERY_DATABASE_PASSWORD
       secretName: audit-db-query
@@ -108,11 +107,8 @@ jobs:
         # Read on the archive, put on seals/ and keys/, and sqs:SendMessage.
         eks.amazonaws.com/role-arn: ROLE-ARN-OF-THE-NOTARY-ROLE
     config:
-      archive:
-        bucket:
-          name: audit-eu-example-1
-          region: eu-west-1
-        prefix: audit/app
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      deployment: /etc/audit/deployment.yaml
       require: queued
       sink:
         sqs:

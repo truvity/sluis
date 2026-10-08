@@ -69,6 +69,12 @@ data:
       security:
         frameworks:
         - security
+    presets:
+      standard:
+        bucket: audit-eu-example-1
+        key_alias: alias/audit-archive
+        prefix: audit/app/
+        region: eu-west-1
   # The document a writer's config names as `workloads`: the issuers trusted to
   # name a calling workload, and the source each speaks for.
   workloads.yaml: |
@@ -98,12 +104,6 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-writer/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      kmsKey: alias/audit-archive
-      prefix: audit/app
     consume:
       sqs:
         batch: 10
@@ -179,14 +179,10 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-observe/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
     database:
       passwordSecret: observe-database-password
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
+    deployment: /etc/audit/deployment.yaml
     secrets:
       root: /etc/audit/secrets
       source: file
@@ -247,7 +243,8 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: observe
       annotations:
-        checksum/config: df6edfe4e8345145356097e9b687608f1833275c58a0a0630b5f737a0100614b
+        checksum/config: a9af695186c2e0007809bc77c46f29744067123875e0251c319457b2c9373406
+        checksum/deployment: b5bfe78b07c0b3e298a9b3a907d587c2352ee0597cd04417aae3de96e6e44ece
     spec:
       serviceAccountName: audit-observe
       
@@ -289,6 +286,10 @@ spec:
               mountPath: /etc/audit/config.yaml
               subPath: config.yaml
               readOnly: true
+            - name: deployment
+              mountPath: /etc/audit/deployment.yaml
+              subPath: deployment.yaml
+              readOnly: true
             
             
             - name: secret-files
@@ -300,6 +301,9 @@ spec:
         - name: config
           configMap:
             name: audit-observe-config
+        - name: deployment
+          configMap:
+            name: audit-deployment
         
         
         - name: secret-files
@@ -346,7 +350,7 @@ spec:
         checksum/config: e54f8fbdfcaf7afcfc6a9188b122c6a199d0070710b902f8b643b7a600bb73d5
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
+        checksum/deployment: b5bfe78b07c0b3e298a9b3a907d587c2352ee0597cd04417aae3de96e6e44ece
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:
@@ -467,10 +471,10 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: c58797a864822312694cf54703f9e4c3425750cfd64c7583a8c8ce25b2a1431f
+        checksum/config: fa8e3e4c2f4728b8696e5152c3164e80a26e4c3f9788468a517def4ef4da5a36
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
+        checksum/deployment: b5bfe78b07c0b3e298a9b3a907d587c2352ee0597cd04417aae3de96e6e44ece
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:

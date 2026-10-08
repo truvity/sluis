@@ -120,6 +120,12 @@ func checkCatalogues(ctx *pulumi.Context, a *Args, opts ...pulumi.InvokeOption) 
 	if a.Ingest.Disabled || a.Guards.SkipCatalogueCheck || len(a.Writer.Catalogues) == 0 {
 		return nil
 	}
+	// The catalogues are kept in the strongest preset's store (store/routed). A
+	// store at an endpoint is not one this provider can read.
+	home := a.home()
+	if home.external() {
+		return nil
+	}
 	files := make([]string, 0, len(a.Writer.Catalogues))
 	for f := range a.Writer.Catalogues {
 		files = append(files, f)
@@ -131,9 +137,9 @@ func checkCatalogues(ctx *pulumi.Context, a *Args, opts ...pulumi.InvokeOption) 
 		if err != nil {
 			return err
 		}
-		key := "catalogue/" + source + "/" + version
+		key := home.key("catalogue/" + source + "/" + version)
 		got, err := s3.GetObject(ctx, &s3.GetObjectArgs{
-			Bucket: a.Archive.BucketName, Key: key, DownloadBody: pulumi.StringRef("false"),
+			Bucket: home.Bucket, Key: key, DownloadBody: pulumi.StringRef("false"),
 		}, opts...)
 		if err != nil {
 			if absent(err) {

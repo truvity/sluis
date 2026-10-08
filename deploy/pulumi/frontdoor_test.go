@@ -1,6 +1,7 @@
 package sluispulumi_test
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -52,6 +53,9 @@ func TestCoreFunctionAndIAMDoNotDependOnTheDomain(t *testing.T) {
 	without, _ := mustLambda(t, estate{orgs: []string{"acme"}, mutate: noDomain})
 	for _, typ := range []string{fnType, policyType, "aws:iam/role:Role", "aws:lambda/layerVersion:LayerVersion", "aws:kms/key:Key"} {
 		a, b := with.ofType(typ), without.ofType(typ)
+		// Resources register concurrently: compare by name, not by order.
+		sort.SliceStable(a, func(i, j int) bool { return a[i].Name < a[j].Name })
+		sort.SliceStable(b, func(i, j int) bool { return b[i].Name < b[j].Name })
 		if len(a) != len(b) {
 			t.Errorf("%s: %d with the domain, %d without", typ, len(a), len(b))
 			continue

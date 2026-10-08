@@ -1,7 +1,9 @@
 # Alert-only mode, the way a second install beside the write path runs it: the
 # write path's own values are absent, and the routing label is the cluster's.
 renders: alerts
-preset: standard
+presets:
+  standard:
+    bucket: audit-archive
 alerts:
   namespace: audit
   ruleLabels:

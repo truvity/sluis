@@ -9,8 +9,5 @@ observe:
     create: true
     name: audit-shared
   config:
-    archive:
-      bucket:
-        name: audit-archive
     database:
       url: postgres://audit_observe@db.example.test:5432/audit?sslmode=verify-full

@@ -1,6 +1,10 @@
 # A valid install whose writer verifies who publishes, which is the base the
 # refusals about workload identity are laid over (tests/invalid/audit).
 mode: direct
+presets:
+  operational:
+    bucket: audit-archive
+    region: eu-example-1
 externalIdentifiersAreOpaque: true
 workloadIdentity:
   issuers:
@@ -10,11 +14,9 @@ workloadIdentity:
       source: app
 writer:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
     workloads: /etc/audit/workloads.yaml
-    archive:
-      bucket:
-        name: audit-archive
 jobs:
   verify:
     enabled: false

@@ -12,6 +12,12 @@
 # configuration, key for key (audit/docs/reference/configuration.md).
 mode: stream
 
+presets:
+  standard:
+    bucket: audit-eu-example-1
+    region: eu-west-1
+    prefix: audit/app/
+    key_alias: alias/audit-archive
 profiles:
   security:
     frameworks: [security]
@@ -34,11 +40,12 @@ workloadIdentity:
 migrate:
   enabled: true
   config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
     # The OWNER of the tables, which no part connects as. Each role below must
     # exist, and is granted what its part needs and nothing else.
     database:
       url: postgres://audit_owner@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_DATABASE_PASSWORD
+      passwordSecret: AUDIT_DATABASE_PASSWORD
     writer: audit_writer
     observe: audit_observe
   secretEnv:
@@ -51,13 +58,14 @@ migrate:
 # a log in its place is a refusal at start-up rather than a gap in the trail.
 receiver:
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     mode: receiver
     require: queued
     deployment: /etc/audit/deployment.yaml
     workloads: /etc/audit/workloads.yaml
     database:
       url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_DATABASE_PASSWORD
+      passwordSecret: AUDIT_DATABASE_PASSWORD
     forward:
       sqs:
         queueUrl: https://sqs.eu-west-1.amazonaws.com/ACCOUNT/audit.fifo
@@ -74,19 +82,16 @@ receiver:
 writer:
   consumers: 3
   config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     require: archived
     deployment: /etc/audit/deployment.yaml
     workloads: /etc/audit/workloads.yaml
     replicas: 3
     archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
       kmsKey: alias/audit-archive
     database:
       url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_DATABASE_PASSWORD
+      passwordSecret: AUDIT_DATABASE_PASSWORD
     consume:
       sqs:
         queueUrl: https://sqs.eu-west-1.amazonaws.com/ACCOUNT/audit.fifo
@@ -109,14 +114,11 @@ writer:
 observe:
   enabled: true
   config:
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
+    apiVersion: audit.truvity.github.io/audit-observe/v2
+    deployment: /etc/audit/deployment.yaml
     database:
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
-      passwordEnv: AUDIT_OBSERVE_DATABASE_PASSWORD
+      passwordSecret: AUDIT_OBSERVE_DATABASE_PASSWORD
     settle: 2m
   secretEnv:
     - name: AUDIT_OBSERVE_DATABASE_PASSWORD
@@ -131,11 +133,6 @@ jobs:
     enabled: true
     config:
       deployment: /etc/audit/deployment.yaml
-      archive:
-        bucket:
-          name: audit-eu-example-1
-          region: eu-west-1
-        prefix: audit/app
       sink:
         url: http://audit:8080
         tokenFile: /var/run/audit/token

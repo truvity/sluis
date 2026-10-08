@@ -121,7 +121,7 @@ which file it read, and its digest, in its start-up record
 |---|---|---|---|
 | `deployment` | path, required | | the profile configuration, in the layer at `/opt/audit/deployment.yaml` |
 | `catalogues` | path | none | a directory of catalogues registered at start-up, `/opt/audit/catalogues` in the layer. There is no registry service to register one with |
-| `archive` | `archive`, required | | the bucket, `lockMode` (default `compliance`; the library sets the bucket's own) and `kmsKey` |
+| `archive` | `archive` | | `stateRoot`, `ca` and `kmsKey`; the stores are the deployment's `presets` |
 | `keys` | `keys` | none | pseudonymisation keys. Only a provider a function outside a VPC can reach is usable: `transit` over a public address |
 | `forgetIdentities` | boolean | false | as in `audit-writer` |
 | `dedupe.dynamodb.table` | string, required | | the table: a string hash key `pk`, TTL on `expires_at` |

@@ -6,156 +6,391 @@ import (
 	"sort"
 	"strings"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/truvity/sluis/audit/profile"
 )
 
 // Install presets. The library provisions as much of the system as the
-// installation's preset says: operational is the writer, the archive,
-// deduplication and the queue intake; standard adds the notary with its seal key
-// and the alarms; attested adds compliance Object Lock (and is where pseudonym
-// keys are provisioned).
+// presets an installation configures say: operational is the writer, the
+// archive, deduplication and the queue intake; standard adds the notary with its
+// seal key and the alarms; attested adds compliance Object Lock (on that
+// preset's bucket alone) and is where pseudonym keys are provisioned.
 //
-// The preset is derived from the profiles, with the one rule the chart and the
-// writer use (profile.Deployment.ResolvePreset): the lowest preset that satisfies
-// every profile, each framework profile stating its own minimum as `min_preset`.
-// Args.Preset may name a stronger one; a weaker one is refused, naming the
-// profile that needs more.
+// A profile's preset is derived (profile.Deployment.ProfileNeeds): the highest
+// minimum of the framework profiles it is composed from, or the stronger one it
+// asks for. Each preset an installation's profiles use is configured in
+// Args.Presets with the storage of its own, and a profile whose preset is not
+// configured is refused, naming both.
 const (
-	// PresetOperational, PresetStandard and PresetAttested are the values of
-	// Args.Preset.
+	// PresetOperational, PresetStandard and PresetAttested are the keys of
+	// Args.Presets.
 	PresetOperational = string(profile.Operational)
 	PresetStandard    = string(profile.Standard)
 	PresetAttested    = string(profile.Attested)
 )
 
-// resolvePreset is the preset an installation runs. The profiles are the
-// `profiles:` of Writer.DeploymentYAML, the document the writer reads. An
-// installation without a writer here (Ingest.Disabled) and no document has no
-// profiles to derive from, and is operational unless it asks for more.
-func resolvePreset(a *Args) (profile.Preset, []destination, error) {
-	explicit, err := profile.ParsePreset(a.Preset)
-	if err != nil {
-		return "", nil, fmt.Errorf("auditpulumi: Preset: %w", err)
-	}
-	if strings.TrimSpace(a.Writer.DeploymentYAML) == "" {
-		if !a.Ingest.Disabled {
-			return "", nil, errors.New("auditpulumi: Writer.DeploymentYAML is required: the profile configuration, " +
-				"which the preset is derived from (or set Ingest.Disabled)")
+// PresetStorage is where one install preset keeps its copies: a bucket of its
+// own on AWS S3 or on an S3-compatible store.
+//
+// Object Lock is a property of the attested preset's bucket alone (compliance,
+// S3 only): every other preset's bucket is written without a lock, so a profile
+// below attested writes nothing it cannot clear.
+type PresetStorage struct {
+	// Bucket is the bucket's name. Required: it is in the deployment document the
+	// functions read, so it has to be known before anything is created, and a
+	// bucket name is global. With Create it is the bucket the library makes
+	// (PresetBucketName gives a conventional name).
+	Bucket string
+	// Prefix is the prefix within the bucket every key of this preset lives
+	// under, such as "standard/": it ends in "/" and does not start with one.
+	// Optional, but required wherever the bucket is shared with another
+	// installation or preset. The roles' grants are scoped to it.
+	Prefix string
+	// Region is the bucket's region on AWS (default: the stack's), and the
+	// region the store is addressed with at an Endpoint (default "auto", which is
+	// what R2 signs with).
+	Region string
+	// Endpoint, when set, puts the preset on an S3-compatible store that is not
+	// AWS (Cloudflare R2 is the one this has been measured against): an https
+	// URL with a host and no path. The bucket is the store's, made there by the
+	// estate: the library creates no bucket, no lifecycle rule and no encryption
+	// setting for it, and no role is granted anything on it. Empty is AWS S3.
+	// The attested preset is refused here: Object Lock is an AWS S3 guarantee.
+	Endpoint string
+	// PathStyle addresses the bucket as endpoint/bucket/key instead of
+	// bucket.endpoint/key, for a store whose certificate does not cover a bucket
+	// subdomain. Only with Endpoint.
+	PathStyle bool
+	// CredentialsAddress is where the store's credentials are, below State.Root: a
+	// JSON object {"accessKeyID": ..., "secretAccessKey": ...} written by the
+	// operator as a SecureString, read by the functions through the state store.
+	// Must be below internal/. Default "internal/archive/<preset>". Only with
+	// Endpoint: on AWS the roles are the credential.
+	CredentialsAddress string
+	// KeyAlias is the alias (`alias/...`) of the KMS key this preset's objects are
+	// encrypted with, in place of the installation's archive key. It is looked up
+	// and never created, and is also the document's key_alias. Only on AWS S3, and
+	// only with Archive.Encryption "kms".
+	KeyAlias string
+	// Create makes the library create the bucket: versioned, closed to the public
+	// and to plain HTTP, encrypted as ArchiveArgs says, with a lifecycle rule for
+	// each `<Prefix>records/<profile>/` of the profiles kept under this preset,
+	// and, for the attested preset, compliance Object Lock. Only on AWS S3. False
+	// is an existing bucket, which the library only grants access to.
+	Create bool
+}
+
+// PresetBucketName is the conventional name of a preset's bucket: the archive
+// bucket name (ArchiveBucketName) and the preset.
+func PresetBucketName(archiveBucket, preset string) string { return archiveBucket + "-" + preset }
+
+// lifecycleProfile is a profile kept under a preset and when its objects
+// expire, from its framework profiles; 0 means the profile keeps them until
+// told otherwise.
+type lifecycleProfile struct {
+	Name          string
+	RetentionDays int
+}
+
+// presetStore is a configured preset with its defaults applied.
+type presetStore struct {
+	Preset profile.Preset
+	PresetStorage
+	// Locked is the attested preset's bucket: written under compliance Object
+	// Lock.
+	Locked bool
+	// Profiles are the profiles kept under this preset, sorted.
+	Profiles []lifecycleProfile
+}
+
+func (s presetStore) external() bool { return s.Endpoint != "" }
+
+// key is a key of this preset's, under its prefix.
+func (s presetStore) key(rest string) string { return s.Prefix + rest }
+
+// credentialsPath is the SSM parameter an endpoint preset's credentials are at.
+func (s presetStore) credentialsPath(stateRoot string) string {
+	return stateRoot + "/" + s.CredentialsAddress
+}
+
+// resolvePresets decides what the installation's presets are: it reads the
+// profiles document, takes the storage from Args.Presets (or from the document,
+// when that is where it was written), checks it, and renders the deployment
+// document the functions read, with the presets in it. It sets stores,
+// deployment, deploymentYAML and features on the arguments.
+func resolvePresets(a *Args) error {
+	var d *profile.Deployment
+	hasDoc := strings.TrimSpace(a.Writer.DeploymentYAML) != ""
+	if hasDoc {
+		var err error
+		if d, err = profile.ParseDeployment([]byte(a.Writer.DeploymentYAML)); err != nil {
+			return fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
 		}
-		if explicit == "" {
-			return profile.Operational, nil, nil
+	}
+
+	var in map[profile.Preset]PresetStorage
+	switch {
+	case d != nil && len(d.Presets) > 0 && len(a.Presets) > 0:
+		return errors.New("auditpulumi: Presets is set and Writer.DeploymentYAML has a `presets:` block of its own: " +
+			"the storage of each preset is named in one place. Leave `presets:` out of the document (the library renders it " +
+			"from Presets), or leave Presets out")
+	case len(a.Presets) > 0:
+		in = make(map[profile.Preset]PresetStorage, len(a.Presets))
+		for k, v := range a.Presets {
+			name, err := profile.ParsePreset(k)
+			if err != nil || name == "" {
+				return fmt.Errorf("auditpulumi: Presets has the key %q: one of operational, standard, attested", k)
+			}
+			in[name] = v
 		}
-		return explicit, nil, nil
+	case d != nil && len(d.Presets) > 0:
+		in = make(map[profile.Preset]PresetStorage, len(d.Presets))
+		for name, s := range d.Presets {
+			in[name] = PresetStorage{
+				Bucket: s.Bucket, Prefix: s.Prefix, Region: s.Region, Endpoint: s.Endpoint,
+				PathStyle: s.PathStyle, CredentialsAddress: s.Credentials, KeyAlias: s.KeyAlias,
+			}
+		}
+	default:
+		return errors.New("auditpulumi: Presets is required: name the storage of each install preset the profiles use " +
+			`(Presets: {"standard": {Bucket: ..., Prefix: "standard/", Create: true}}); a profile is kept under the ` +
+			"preset its framework profiles need (operational, standard or attested)")
 	}
-	d, err := profile.ParseDeployment([]byte(a.Writer.DeploymentYAML))
-	if err != nil {
-		return "", nil, fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
-	}
-	if explicit != "" && d.Preset != "" && explicit != d.Preset {
-		return "", nil, fmt.Errorf("auditpulumi: Preset is %s and Writer.DeploymentYAML says preset %s: set one of them", explicit, d.Preset)
-	}
-	frameworks, err := profile.Builtin()
-	if err != nil {
-		return "", nil, fmt.Errorf("auditpulumi: the framework profiles: %w", err)
-	}
-	p, err := d.ResolvePreset(frameworks, explicit)
-	if err != nil {
-		return "", nil, fmt.Errorf("auditpulumi: Preset: %w", err)
-	}
-	composed, err := d.Compose(frameworks)
-	if err != nil {
-		return "", nil, fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
-	}
-	names := make([]string, 0, len(composed))
-	for name := range composed {
+
+	names := make([]profile.Preset, 0, len(in))
+	for name := range in {
 		names = append(names, name)
 	}
-	sort.Strings(names)
-	dests := make([]destination, 0, len(names))
+	sort.Slice(names, func(i, j int) bool { return names[i].Rank() < names[j].Rank() })
+
+	stores := make([]presetStore, 0, len(names))
 	for _, name := range names {
-		c := composed[name]
-		dest := destination{Name: name, KeyAlias: c.KeyAlias, Preset: c.Preset}
-		if r := c.Retention; r.Policy == "fixed" && r.DeleteAtEnd {
-			dest.RetentionDays = r.Days
-		}
-		dests = append(dests, dest)
-	}
-	return p, dests, nil
-}
-
-// destination is a destination of the archive as the deployment document
-// declares it: a prefix with its own retention, key and preset.
-type destination struct {
-	Name string
-	// KeyAlias, when set, is the alias of a key the library creates for this
-	// destination's objects.
-	KeyAlias string
-	// RetentionDays is when the prefix's objects expire, from the destination's
-	// framework profiles; 0 means the profile keeps them until told otherwise.
-	RetentionDays int
-	Preset        profile.Preset
-}
-
-// applyPreset sets what the preset decides and refuses what it leaves out and
-// the arguments ask for anyway.
-func applyPreset(c *Args, preset profile.Preset, dests []destination) error {
-	c.destinations = dests
-	f := preset.Features()
-	c.Preset = string(preset)
-
-	if !f.Notary {
-		if !c.Notary.Disabled && (c.Notary.Package != "" || c.Notary.PackageSHA256 != "") {
-			return fmt.Errorf("auditpulumi: Notary.Package is set and the preset is %s, which has no notary and no seal key: "+
-				"the profiles need nothing more. Set Preset to %s (or compose a profile that needs it, such as security) to run the notary, "+
-				"or leave Notary out", preset, profile.Standard)
-		}
-		c.Notary.Disabled = true
-	}
-
-	if !f.Alarms && c.Alerts.EndpointURL != nil {
-		return fmt.Errorf("auditpulumi: Alerts.EndpointURL is set and the preset is %s, which has no alarms. "+
-			"Set Preset to %s to have them", preset, profile.Standard)
-	}
-
-	// Object Lock is the attested preset's alone: a destination below it writes
-	// objects it can clear, so a bucket under a lock for an archive with no
-	// attested destination would lock nothing that was meant to be locked and
-	// leave a default retention that holds the rest.
-	ar := &c.Archive
-	if ar.ObjectLockMode != "" {
-		if err := CheckLockMode(ar.ObjectLockMode); err != nil {
+		s, err := checkPresetStorage(name, in[name])
+		if err != nil {
 			return err
 		}
+		stores = append(stores, presetStore{Preset: name, PresetStorage: s, Locked: name == profile.Attested})
 	}
-	if ar.Endpoint != "" {
-		// Object Lock is an AWS S3 guarantee; another store does not make it.
-		if f.ObjectLock {
-			return fmt.Errorf("auditpulumi: Archive.Endpoint is set and the preset is %s, which keeps the archive under compliance Object Lock: "+
-				"a store at an endpoint of its own does not make that guarantee. Use AWS S3 for this installation, or a preset below %s "+
-				"(compose profiles that need no more)", preset, profile.Attested)
+	if err := checkPresetBuckets(stores); err != nil {
+		return err
+	}
+
+	// The document the functions read: the profiles the user wrote, and the
+	// presets built from Presets. Without profiles (Ingest.Disabled, no
+	// document) a placeholder profile lets the presets be validated.
+	final := profile.Deployment{
+		APIVersion: profile.DeploymentAPIVersion,
+		Profiles:   map[string]profile.Entry{"placeholder": {Frameworks: []string{"history"}}},
+		Presets:    make(map[profile.Preset]profile.PresetStorage, len(stores)),
+	}
+	if d != nil {
+		final.Profiles = d.Profiles
+		final.ExternalIdentifiersAreOpaque = d.ExternalIdentifiersAreOpaque
+	}
+	for _, s := range stores {
+		final.Presets[s.Preset] = documentStorage(s)
+	}
+	raw, err := yaml.Marshal(&final)
+	if err != nil {
+		return fmt.Errorf("auditpulumi: rendering the deployment document: %w", err)
+	}
+	checked, err := profile.ParseDeployment(raw)
+	if err != nil {
+		return fmt.Errorf("auditpulumi: Presets: %w", mapFieldNames(err))
+	}
+	if d != nil {
+		frameworks, err := profile.Builtin()
+		if err != nil {
+			return fmt.Errorf("auditpulumi: the framework profiles: %w", err)
 		}
-		if ar.ObjectLockMode != "" && ar.ObjectLockMode != None {
-			return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s with Archive.Endpoint: Object Lock is refused on an S3-compatible store "+
-				"(NONE is the only mode there)", ar.ObjectLockMode)
+		if err := checked.CheckStorage(frameworks); err != nil {
+			return fmt.Errorf("auditpulumi: Presets: %w", err)
 		}
+		composed, err := checked.Compose(frameworks)
+		if err != nil {
+			return fmt.Errorf("auditpulumi: Writer.DeploymentYAML: %w", err)
+		}
+		profiles := make([]string, 0, len(composed))
+		for name := range composed {
+			profiles = append(profiles, name)
+		}
+		sort.Strings(profiles)
+		for _, name := range profiles {
+			c := composed[name]
+			lp := lifecycleProfile{Name: name}
+			if r := c.Retention; r.Policy == "fixed" && r.DeleteAtEnd {
+				lp.RetentionDays = r.Days
+			}
+			for i := range stores {
+				if stores[i].Preset == c.Preset {
+					stores[i].Profiles = append(stores[i].Profiles, lp)
+				}
+			}
+		}
+		a.hasDocument = true
+	}
+
+	a.stores = stores
+	a.deployment = checked
+	a.deploymentYAML = string(raw)
+	a.features = checked.Features()
+	return nil
+}
+
+// mapFieldNames makes a refusal of the profile package say the field of Args it
+// is about, where it has a word for it.
+func mapFieldNames(err error) error {
+	m := strings.NewReplacer("key_alias", "KeyAlias", "path_style", "PathStyle", "credentials are", "CredentialsAddress is")
+	return errors.New(m.Replace(err.Error()))
+}
+
+// documentStorage is a preset's storage as the deployment document says it.
+func documentStorage(s presetStore) profile.PresetStorage {
+	return profile.PresetStorage{
+		Bucket: s.Bucket, Prefix: s.Prefix, Region: s.Region, Endpoint: s.Endpoint,
+		PathStyle: s.PathStyle, Credentials: s.CredentialsAddress, KeyAlias: s.KeyAlias,
+	}
+}
+
+// checkPresetStorage holds one preset's storage to what a bucket there can be,
+// and applies its defaults. Every refusal names the field.
+func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, error) {
+	field := func(f string) string { return fmt.Sprintf("Presets[%q].%s", string(name), f) }
+	if s.Bucket == "" {
+		return s, fmt.Errorf("auditpulumi: %s is required: the preset's bucket (PresetBucketName gives a conventional one)", field("Bucket"))
+	}
+	if !bucketNameRE.MatchString(s.Bucket) {
+		return s, fmt.Errorf("auditpulumi: %s %q is not a bucket name (3 to 63 characters of a-z, 0-9, . and -)", field("Bucket"), s.Bucket)
+	}
+	if s.Prefix != "" && (strings.HasPrefix(s.Prefix, "/") || !strings.HasSuffix(s.Prefix, "/")) {
+		return s, fmt.Errorf("auditpulumi: %s %q is a path ending in a slash and not starting with one (%s/)", field("Prefix"), s.Prefix, name)
+	}
+	if s.KeyAlias != "" {
+		if err := checkAlias(field("KeyAlias"), s.KeyAlias); err != nil {
+			return s, err
+		}
+	}
+	if s.Endpoint == "" {
+		switch {
+		case s.PathStyle:
+			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the bucket is addressed by the SDK", field("PathStyle"), field("Endpoint"))
+		case s.CredentialsAddress != "":
+			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the roles are the credential", field("CredentialsAddress"), field("Endpoint"))
+		}
+		return s, nil
+	}
+	if err := checkEndpoint(field("Endpoint"), s.Endpoint); err != nil {
+		return s, err
 	}
 	switch {
-	case ar.ObjectLockMode == "" && f.ObjectLock:
-		ar.ObjectLockMode = Compliance
-	case ar.ObjectLockMode == "":
-		ar.ObjectLockMode = None
-	case !f.ObjectLock && ar.ObjectLockMode != None:
-		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s and the archive has no attested destination (the preset is %s): "+
-			"Object Lock is written only for a destination whose preset is attested, on S3. Compose a destination from framework profiles "+
-			"that need it (dora, pci-dss, nen-7513, evidence-etsi) or give it preset: attested, or set Archive.ObjectLockMode to NONE",
-			ar.ObjectLockMode, preset)
-	case f.ObjectLock && ar.ObjectLockMode != Compliance:
-		return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s and the archive has an attested destination (the preset is %s), "+
-			"which is kept under compliance Object Lock: set COMPLIANCE (or leave it unset) "+
-			"(docs/how-to/aws-turn-on-object-lock.md)", ar.ObjectLockMode, preset)
+	case name == profile.Attested:
+		return s, fmt.Errorf("auditpulumi: %s is set on the attested preset: it keeps its objects under compliance Object Lock, "+
+			"which is an AWS S3 guarantee the store at %s does not make. Keep the attested preset on AWS S3", field("Endpoint"), s.Endpoint)
+	case s.Create:
+		return s, fmt.Errorf("auditpulumi: %s is set with %s: the library creates buckets on AWS S3 only, and the bucket at %s is the store's, "+
+			"made by the estate", field("Create"), field("Endpoint"), s.Endpoint)
+	case s.KeyAlias != "":
+		return s, fmt.Errorf("auditpulumi: %s is set with %s: a store at an endpoint is not encrypted under a KMS key of the account. "+
+			"Leave KeyAlias out, or keep the preset on AWS S3", field("KeyAlias"), field("Endpoint"))
+	}
+	if s.Region == "" {
+		s.Region = "auto"
+	}
+	if s.CredentialsAddress == "" {
+		s.CredentialsAddress = defaultCredentialsAddress + "/" + string(name)
+	}
+	if !addressRE.MatchString(s.CredentialsAddress) {
+		return s, fmt.Errorf("auditpulumi: %s %q must be below internal/ (%s): the library's own parameters are there, "+
+			"and the grant is on that address only", field("CredentialsAddress"), s.CredentialsAddress, defaultCredentialsAddress+"/"+string(name))
+	}
+	return s, nil
+}
+
+// checkPresetBuckets holds the presets' buckets apart: a bucket the library
+// creates is one preset's, the attested preset's lock is a property of its
+// bucket, and two presets sharing a bucket keep to prefixes of their own.
+func checkPresetBuckets(stores []presetStore) error {
+	for i, s := range stores {
+		for _, t := range stores[:i] {
+			if s.Bucket != t.Bucket || s.Endpoint != t.Endpoint {
+				continue
+			}
+			switch {
+			case s.Create || t.Create:
+				return fmt.Errorf("auditpulumi: Presets[%q] and Presets[%q] both name the bucket %s and one has Create: "+
+					"a bucket the library creates is one preset's", t.Preset, s.Preset, s.Bucket)
+			case s.Preset == profile.Attested || t.Preset == profile.Attested:
+				return fmt.Errorf("auditpulumi: Presets[%q] and Presets[%q] both name the bucket %s: Object Lock is a property of the "+
+					"bucket, and the attested preset's is its own", t.Preset, s.Preset, s.Bucket)
+			case s.Prefix == "" || t.Prefix == "" || strings.HasPrefix(s.Prefix, t.Prefix) || strings.HasPrefix(t.Prefix, s.Prefix):
+				return fmt.Errorf("auditpulumi: Presets[%q] and Presets[%q] share the bucket %s and their prefixes (%q, %q) overlap: "+
+					"give each its own, such as %s/", t.Preset, s.Preset, s.Bucket, t.Prefix, s.Prefix, s.Preset)
+			}
+		}
 	}
 	return nil
 }
 
-// features is what the resolved preset provisions.
-func (a *Args) features() profile.Features { return profile.Preset(a.Preset).Features() }
+// home is the strongest configured preset: where what belongs to no profile
+// (the catalogues, the schemas) is kept (store/routed).
+func (a *Args) home() presetStore { return a.stores[len(a.stores)-1] }
+
+// awsStores are the presets on AWS S3, which the roles are granted.
+func (a *Args) awsStores() []presetStore {
+	var out []presetStore
+	for _, s := range a.stores {
+		if !s.external() {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// endpointStores are the presets at an endpoint, whose credentials the
+// functions read from the state store.
+func (a *Args) endpointStores() []presetStore {
+	var out []presetStore
+	for _, s := range a.stores {
+		if s.external() {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// created are the presets whose bucket the library creates.
+func (a *Args) created() []presetStore {
+	var out []presetStore
+	for _, s := range a.stores {
+		if s.Create {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// applyFeatures sets what the configured presets decide and refuses what they
+// leave out and the arguments ask for anyway.
+func applyFeatures(c *Args) error {
+	f := c.features
+	have := make([]string, len(c.stores))
+	for i, s := range c.stores {
+		have[i] = string(s.Preset)
+	}
+	configured := strings.Join(have, ", ")
+
+	if !f.Notary {
+		if !c.Notary.Disabled && (c.Notary.Package != "" || c.Notary.PackageSHA256 != "") {
+			return fmt.Errorf("auditpulumi: Notary.Package is set and the configured presets (%s) provision no notary and no seal key: "+
+				"no profile needs more. Configure Presets[%q] (and give a profile that needs it, such as security) to run the notary, "+
+				"or leave Notary out", configured, profile.Standard)
+		}
+		c.Notary.Disabled = true
+	}
+	if !f.Alarms && c.Alerts.EndpointURL != nil {
+		return fmt.Errorf("auditpulumi: Alerts.EndpointURL is set and the configured presets (%s) provision no alarms. "+
+			"Configure Presets[%q] to have them", configured, profile.Standard)
+	}
+	return nil
+}

@@ -29,6 +29,9 @@ spec:
             {{- include "audit.selectorLabels" $ | nindent 12 }}
           annotations:
             checksum/config: {{ toYaml .comp.config | sha256sum }}
+            {{- if .profiles }}
+            checksum/deployment: {{ include "audit.deploymentDocument" $ | sha256sum }}
+            {{- end }}
         spec:
           restartPolicy: OnFailure
           serviceAccountName: {{ .account }}
@@ -74,7 +77,7 @@ spec:
 # to sign.
 {{ include "audit.configMap" (dict "root" . "name" "notary" "config" .Values.jobs.notary.config) }}
 ---
-{{ include "audit.cronjob" (dict "root" . "name" "notary" "service" "audit-notary" "image" (include "audit.notaryImage" .) "comp" .Values.jobs.notary "account" (include "audit.notaryServiceAccountName" .) "profiles" false) }}
+{{ include "audit.cronjob" (dict "root" . "name" "notary" "service" "audit-notary" "image" (include "audit.notaryImage" .) "comp" .Values.jobs.notary "account" (include "audit.notaryServiceAccountName" .) "profiles" true) }}
 {{- end }}
 {{- if .Values.jobs.verify.enabled }}
 ---

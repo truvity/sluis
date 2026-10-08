@@ -1,0 +1,4 @@
+# refuse: minLength
+presets:
+  standard:
+    bucket: ""

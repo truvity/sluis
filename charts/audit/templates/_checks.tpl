@@ -63,13 +63,14 @@ route nothing can reach, and without the query service it has no backend. */ -}}
 {{- end -}}
 
 
-{{- /* The install preset is derived from the profiles (audit.preset, which
-refuses a `preset` weaker than they need). What it leaves out is not
-rendered, and asking for it anyway is refused: a notary job under a preset
-that has no seal key would sign with nothing to sign with. */ -}}
-{{- $preset := include "audit.preset" . -}}
-{{- if and .Values.jobs.notary.enabled (eq $preset "operational") -}}
-{{- fail "audit: `jobs.notary.enabled` is true and the install preset is operational, which has no notary and no seal key. The profiles need nothing more; set `preset: standard` (or compose a profile that needs it, such as `security`) to run the notary." -}}
+{{- /* Storage is configured per preset, and every profile is kept under a
+configured one (audit.storageChecks). What the configured presets leave out is
+not rendered, and asking for it anyway is refused: a notary job under presets
+that have no seal key would sign with nothing to sign with. */ -}}
+{{- include "audit.storageChecks" . -}}
+{{- $features := include "audit.features" . | fromYaml -}}
+{{- if and .Values.jobs.notary.enabled (not $features.notary) -}}
+{{- fail "audit: `jobs.notary.enabled` is true and no configured preset has a notary or a seal key (only operational is configured). Configure the standard or attested preset under `presets` for the profiles that need it (such as `security`) to run the notary." -}}
 {{- end -}}
 
 {{- /* secretFiles project a Secret's keys under /etc/audit/secrets, which is where a

@@ -82,6 +82,10 @@ data:
       security:
         frameworks:
         - security
+    presets:
+      standard:
+        bucket: audit-archive
+        region: eu-example-1
 
 ---
 # Source: audit/templates/configmap.yaml
@@ -102,9 +106,7 @@ data:
   # it renders.
   config.yaml: |
     anonymousWrites: true
-    archive:
-      bucket:
-        name: audit-archive
+    apiVersion: audit.truvity.github.io/audit-writer/v2
     deployment: /etc/audit/deployment.yaml
 
 ---
@@ -132,9 +134,8 @@ data:
   # schemas/config/ at start-up, and by this chart's values.schema.json before
   # it renders.
   config.yaml: |
-    archive:
-      bucket:
-        name: audit-archive
+    apiVersion: audit.truvity.github.io/audit-notary/v2
+    deployment: /etc/audit/deployment.yaml
     signer:
       kms:
         key: alias/audit-seal
@@ -166,9 +167,7 @@ data:
   # schemas/config/ at start-up, and by this chart's values.schema.json before
   # it renders.
   config.yaml: |
-    archive:
-      bucket:
-        name: audit-archive
+    apiVersion: audit.truvity.github.io/audit-verify/v2
     deployment: /etc/audit/deployment.yaml
     sink:
       url: http://audit:8080
@@ -194,6 +193,7 @@ data:
   # schemas/config/ at start-up, and by this chart's values.schema.json before
   # it renders.
   config.yaml: |
+    apiVersion: audit.truvity.github.io/audit-clock-sync/v2
     ntp:
     - time.cloudflare.com
     sink:
@@ -250,10 +250,10 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 6fdd3254ae616782c2415037378317dbae744e4d1e7d1317f1b8721b9f8f9f22
+        checksum/config: a87fb0cda37fc9aece3a6c727c9fad4850d670f7cae09a8ea228b8ce1cbf5f69
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
+        checksum/deployment: 7153ffcc3156f1836054780f1509583392a70952e4ac3f6bdb22e3f2c36798f1
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
@@ -355,7 +355,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: c9cb283e400e80cb2affee696807dacf04a332268aa2738530a2134f45cb143d
+            checksum/config: 3cddaf55a155422576829bd6f74c947b80a099448878f2d256284104449ec50b
+            checksum/deployment: 7153ffcc3156f1836054780f1509583392a70952e4ac3f6bdb22e3f2c36798f1
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -383,12 +384,19 @@ spec:
                   mountPath: /etc/audit/config.yaml
                   subPath: config.yaml
                   readOnly: true
+                - name: deployment
+                  mountPath: /etc/audit/deployment.yaml
+                  subPath: deployment.yaml
+                  readOnly: true
                 
                 
           volumes:
             - name: config
               configMap:
                 name: audit-notary-config
+            - name: deployment
+              configMap:
+                name: audit-deployment
             
             
 
@@ -418,7 +426,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: a769eb8b7cc22369c2023e82babf3a8c08e60f07f80a783b4c8026741e6c187c
+            checksum/config: 5de5af53ee794bcf7195d9a0236dcd8aa74b76c3a6c97bcb6c14322059eaf109
+            checksum/deployment: 7153ffcc3156f1836054780f1509583392a70952e4ac3f6bdb22e3f2c36798f1
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify
@@ -489,7 +498,7 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: 132712ace0c03ddd8f5ca6c418e8174544c50290997293d9cff4228e2edf9ff0
+            checksum/config: 551f9b7e6a8fb0a4f3361deea6bad89e346b29a86c3d0bf0a7be97b2e080196b
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-clock-sync

@@ -5,8 +5,5 @@ observe:
   serviceAccount:
     create: false
   config:
-    archive:
-      bucket:
-        name: audit-archive
     database:
       url: postgres://audit_observe@db.example.test:5432/audit?sslmode=verify-full

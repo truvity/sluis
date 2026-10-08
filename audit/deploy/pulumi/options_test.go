@@ -108,7 +108,7 @@ func TestNoAccountLookupIsMadeWhenNothingNeedsTheAccount(t *testing.T) {
 
 func sseOf(t *testing.T, rec *recorder) map[string]resourceValue {
 	t.Helper()
-	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive")
+	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive-standard")
 	rule := prop(sse, "rules").ArrayValue()[0].ObjectValue()
 	return map[string]resourceValue{
 		"alg":    {rule["applyServerSideEncryptionByDefault"].ObjectValue()["sseAlgorithm"].StringValue()},
@@ -329,8 +329,10 @@ func TestTheArchiveWriterRoleTrustsOneServiceAccountAndWritesSealsAndKeysOnly(t 
 		t.Errorf("trust: %+v", s)
 	}
 	g := grants(policy(t, rec, "audit-archive-writer"))
-	for _, a := range []string{"s3:PutObject", "s3:PutObjectRetention"} {
-		if len(g[a]) != 2 || !hasResource(g, a, "/seals/*") || !hasResource(g, a, "/keys/*") {
+	for a, n := range map[string]int{"s3:PutObject": 4, "s3:PutObjectRetention": 2} {
+		// seals/ and keys/ in each of the two buckets, and nowhere else; retention
+		// only in the attested bucket, the one under Object Lock.
+		if len(g[a]) != n || !hasResource(g, a, "/seals/*") || !hasResource(g, a, "/keys/*") {
 			t.Errorf("%s on %v", a, g[a])
 		}
 	}
@@ -356,7 +358,6 @@ func TestTheArchiveWriterRoleTrustsOneServiceAccountAndWritesSealsAndKeysOnly(t 
 
 func TestTheArchiveWriterPrefixesAreAParameterAndNoLockMeansNoRetention(t *testing.T) {
 	rec, _, err := build(t, func(a *auditpulumi.Args) {
-		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.None, 0
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "digest"), Prefixes: []string{"records/", "dlq/"}}
 	})
 	if err != nil {
@@ -454,16 +455,13 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 			rec, out, err := build(t, func(a *auditpulumi.Args) {
 				// A part that is off needs none of its arguments.
 				if c.ingestOff {
-					a.Writer = auditpulumi.WriterArgs{}
+					// The notary reads the profiles document, so it stays.
+					a.Writer.Package, a.Writer.PackageSHA256 = "", ""
 				}
 				if c.notaryOff {
 					a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{}, ""
 				}
 				a.Ingest.Disabled, a.Notary.Disabled = c.ingestOff, c.notaryOff
-				if c.ingestOff {
-					// Without a writer there are no profiles to derive the preset from.
-					a.Preset = auditpulumi.PresetStandard
-				}
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -473,7 +471,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 				t.Errorf("%d resources, want %d: %v", n, w.resources, rec.names())
 			}
 			// The archive is always there.
-			rec.one(t, "aws:s3/bucket:Bucket", "audit-archive")
+			rec.one(t, "aws:s3/bucket:Bucket", "audit-archive-standard")
 			same(t, "roles", names(rec, "aws:iam/role:Role"), w.roles...)
 			same(t, "keys", names(rec, "aws:kms/key:Key"), w.keys...)
 			same(t, "functions", names(rec, "aws:lambda/function:Function"), w.functions...)
@@ -499,7 +497,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 				"dedupe": !c.ingestOff, "writerFn": !c.ingestOff, "writerRole": !c.ingestOff,
 				"sealKeyArn": !c.notaryOff, "sealKeyAlias": !c.notaryOff, "notaryFn": !c.notaryOff, "notaryRole": !c.notaryOff,
 				"schedule": !c.notaryOff, "topic": w.topic,
-				"bucketArn": true, "archiveKeyArn": true, "observeRole": true,
+				"bucketArns": true, "archiveKeyArn": true, "observeRole": true,
 			} {
 				if (out[k] != "") != on {
 					t.Errorf("output %s = %q, want set = %v", k, out[k], on)
@@ -536,7 +534,7 @@ func TestTheShippedConfigurationOfEachPartThatRemainsValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	validateConfigs(t, rec, map[string]string{"audit-writer": "audit-writer-lambda"})
-	rec, _, err = build(t, func(a *auditpulumi.Args) { a.Ingest.Disabled, a.Preset = true, auditpulumi.PresetStandard })
+	rec, _, err = build(t, func(a *auditpulumi.Args) { a.Ingest.Disabled = true })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,9 +546,9 @@ func TestADisabledPartNeedsNoBinaryAndAnEnabledOneStillDoes(t *testing.T) {
 	if _, _, err := build(t, func(a *auditpulumi.Args) { a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{Disabled: true}, "" }); err != nil {
 		t.Errorf("a disabled notary needed a binary: %v", err)
 	}
-	// No ingest, no writer binary or deployment.
+	// No ingest, no writer binary (the profiles document stays: the notary reads it).
 	if _, _, err := build(t, func(a *auditpulumi.Args) {
-		a.Ingest.Disabled, a.Writer, a.Preset = true, auditpulumi.WriterArgs{}, auditpulumi.PresetStandard
+		a.Ingest.Disabled, a.Writer.Package, a.Writer.PackageSHA256 = true, "", ""
 	}); err != nil {
 		t.Errorf("a disabled ingest needed a writer: %v", err)
 	}
@@ -637,9 +635,6 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 		if prop(f, "vpcConfig").IsObject() {
 			t.Errorf("%s is in a VPC", fn)
 		}
-		if !strings.Contains(layerFiles(t, rec, fn)["audit.yaml"], "lockMode: compliance") {
-			t.Errorf("%s is not in compliance mode", fn)
-		}
 	}
 	if n := layerFiles(t, rec, "audit-notary")["audit.yaml"]; !strings.Contains(n, "seal: alias/audit-seal") {
 		t.Errorf("the notary does not sign with the KMS seal key:\n%s", n)
@@ -654,8 +649,11 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 // and no schedule, and a role for the pod to put seals/ and keys/.
 func TestTheHiveShapeIsExpressible(t *testing.T) {
 	rec, out, err := build(t, func(a *auditpulumi.Args) {
-		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays, a.Archive.Encryption, a.Keys.Archive = auditpulumi.None, 0, auditpulumi.EncryptionS3, ""
-		a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{Disabled: true}, ""
+		// Everything is operational: the history framework profile, with no notary.
+		a.Writer.DeploymentYAML = "profiles:\n  activity:\n    frameworks: [history]\n"
+		a.Presets = map[string]auditpulumi.PresetStorage{"operational": {Bucket: "acme-audit", Create: true}}
+		a.Archive.Encryption, a.Keys.Archive = auditpulumi.EncryptionS3, ""
+		a.Notary, a.Keys.Seal, a.Alerts = auditpulumi.NotaryArgs{Disabled: true}, "", auditpulumi.AlertsArgs{}
 		a.Telemetry = nil
 		a.Observe = &auditpulumi.ObserveArgs{IRSA: irsa("audit", "audit-observe")}
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "audit-notary")}
@@ -670,7 +668,7 @@ func TestTheHiveShapeIsExpressible(t *testing.T) {
 	if prop(f, "vpcConfig").IsObject() {
 		t.Error("the writer is in a VPC")
 	}
-	if w := layerFiles(t, rec, "audit-writer")["audit.yaml"]; !strings.Contains(w, "lockMode: none") || strings.Contains(w, "kmsKey") {
+	if w := layerFiles(t, rec, "audit-writer")["audit.yaml"]; strings.Contains(w, "kmsKey") || strings.Contains(w, "lockMode") {
 		t.Errorf("the writer's configuration:\n%s", w)
 	}
 	if len(rec.ofType(scheduleType)) != 0 || len(rec.ofType(lockType)) != 0 || len(rec.ofType("aws:kms/key:Key")) != 0 {

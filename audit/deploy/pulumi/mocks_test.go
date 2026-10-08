@@ -208,14 +208,14 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 		// The keys are the estate's, looked up by alias; the mock resolves
 		// alias/<name> to key/<name>.
 		Keys: auditpulumi.KeysArgs{Archive: "alias/audit-archive", Seal: "alias/audit-seal"},
-		Archive: auditpulumi.ArchiveArgs{
-			BucketName: "acme-audit",
-			Profiles:   []string{"security", "billing-nl"},
+		// The security profile is kept under the standard preset.
+		Presets: map[string]auditpulumi.PresetStorage{
+			"standard": {Bucket: "acme-audit", Create: true},
 		},
 		Writer: auditpulumi.WriterArgs{
 			Package:        writerZip,
 			PackageSHA256:  writerSHA,
-			DeploymentYAML: "profiles:\n  security:\n    frameworks: [security]\n",
+			DeploymentYAML: "profiles:\n  security:\n    frameworks: [security]\n  billing-nl:\n    frameworks: [billing-nl]\n",
 		},
 		Notary: auditpulumi.NotaryArgs{Package: notaryZip, PackageSHA256: notarySHA},
 		Telemetry: &auditpulumi.TelemetryArgs{
@@ -246,12 +246,12 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 			return err
 		}
 		for k, o := range map[string]pulumi.StringOutput{
-			"bucketName": a.BucketName, "bucketArn": a.BucketArn, "archiveKeyArn": a.ArchiveKeyArn, "sealKeyArn": a.SealKeyArn,
+			"archiveKeyArn": a.ArchiveKeyArn, "sealKeyArn": a.SealKeyArn, "deploymentYaml": a.DeploymentYAML,
 			"sealKeyAlias": a.SealKeyAlias, "queueUrl": a.QueueURL, "queueArn": a.QueueArn, "dlqUrl": a.DlqURL, "dlqArn": a.DlqArn,
-			"archiveWriterRole": a.ArchiveWriterRoleArn, "credentialsPath": a.ArchiveCredentialsPath,
-			"dedupe": a.DedupeTableName, "writerFn": a.WriterFunctionArn, "notaryFn": a.NotaryFunctionArn,
+			"archiveWriterRole": a.ArchiveWriterRoleArn,
+			"dedupe":            a.DedupeTableName, "writerFn": a.WriterFunctionArn, "notaryFn": a.NotaryFunctionArn,
 			"writerRole": a.WriterRoleArn, "notaryRole": a.NotaryRoleArn, "observeRole": a.ObserveReaderRoleArn, "queryRole": a.QueryRoleArn,
-			"topic": a.AlarmTopicArn, "preset": a.Preset, "schedule": a.ScheduleArn,
+			"topic": a.AlarmTopicArn, "schedule": a.ScheduleArn,
 		} {
 			wg.Add(1)
 			o.ApplyT(func(v string) string {
@@ -262,6 +262,33 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 				return v
 			})
 		}
+		// The per-preset outputs are maps, read as "preset=value" pairs, sorted and
+		// comma-joined, under the output's name.
+		for k, o := range map[string]pulumi.StringMapOutput{
+			"bucketNames": a.BucketNames, "bucketArns": a.BucketArns, "credentialsPaths": a.ArchiveCredentialsPaths,
+		} {
+			wg.Add(1)
+			o.ApplyT(func(v map[string]string) map[string]string {
+				defer wg.Done()
+				var kv []string
+				for p, x := range v {
+					kv = append(kv, p+"="+x)
+				}
+				sort.Strings(kv)
+				rec.mu.Lock()
+				got[k] = strings.Join(kv, ",")
+				rec.mu.Unlock()
+				return v
+			})
+		}
+		wg.Add(1)
+		a.Presets.ApplyT(func(v []string) []string {
+			defer wg.Done()
+			rec.mu.Lock()
+			got["presets"] = strings.Join(v, ",")
+			rec.mu.Unlock()
+			return v
+		})
 		return nil
 	}, pulumi.WithMocks("audit-test", "test", rec))
 	wg.Wait()
@@ -349,12 +376,14 @@ func layerFiles(t *testing.T, r *recorder, function string) map[string]string {
 	return out
 }
 
-// attested makes the installation one that keeps a destination under Object Lock
-// (a pci-dss destination beside security), under compliance with a
-// 30-day floor, and then applies edit. Object Lock is the attested preset's alone.
+// attested makes the installation one that keeps a profile under Object Lock (a
+// pci-dss profile beside security): a standard bucket and an attested bucket the
+// library creates, the attested one under compliance with a 30-day floor. Object
+// Lock is the attested preset's bucket alone. Then edit is applied.
 func attested(edit func(*auditpulumi.Args)) func(*auditpulumi.Args) {
 	return func(a *auditpulumi.Args) {
-		a.Writer.DeploymentYAML = "profiles:\n  security:\n    frameworks: [security]\n  pay:\n    frameworks: [pci-dss]\n"
+		a.Writer.DeploymentYAML = "profiles:\n  security:\n    frameworks: [security]\n  billing-nl:\n    frameworks: [billing-nl]\n  pay:\n    frameworks: [pci-dss]\n"
+		a.Presets["attested"] = auditpulumi.PresetStorage{Bucket: "acme-audit-attested", Create: true}
 		a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = auditpulumi.Compliance, true, 30
 		if edit != nil {
 			edit(a)

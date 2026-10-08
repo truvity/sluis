@@ -77,6 +77,11 @@ data:
       security:
         frameworks:
         - security
+    presets:
+      standard:
+        bucket: audit-eu-example-1
+        prefix: audit/app/
+        region: eu-west-1
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -104,11 +109,7 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-notary/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
+    deployment: /etc/audit/deployment.yaml
     require: queued
     signer:
       transit:
@@ -144,14 +145,10 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-observe/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
     database:
       passwordSecret: observe-database-password
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
+    deployment: /etc/audit/deployment.yaml
     secrets:
       root: /etc/audit/secrets
       source: file
@@ -197,11 +194,6 @@ data:
   # it renders.
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-query/v2
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
     database:
       passwordSecret: query-database-password
       url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
@@ -272,7 +264,8 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: observe
       annotations:
-        checksum/config: df6edfe4e8345145356097e9b687608f1833275c58a0a0630b5f737a0100614b
+        checksum/config: a9af695186c2e0007809bc77c46f29744067123875e0251c319457b2c9373406
+        checksum/deployment: 74e07505d2939a370bbc449f2505bfdd3ee099f8b10400d9496a4a42ff73aa2a
     spec:
       serviceAccountName: audit-observe
       
@@ -314,6 +307,10 @@ spec:
               mountPath: /etc/audit/config.yaml
               subPath: config.yaml
               readOnly: true
+            - name: deployment
+              mountPath: /etc/audit/deployment.yaml
+              subPath: deployment.yaml
+              readOnly: true
             
             - name: trust
               mountPath: /etc/audit/trust
@@ -328,6 +325,9 @@ spec:
         - name: config
           configMap:
             name: audit-observe-config
+        - name: deployment
+          configMap:
+            name: audit-deployment
         
         - name: trust
           configMap:
@@ -377,11 +377,11 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: query
       annotations:
-        checksum/config: 5b39aaff02417d0599d4525722e139cb348f49c38eccd128b0310698f741832a
+        checksum/config: d8597f480fc7967283f7e1f9b6999179ba986c6876b3a56f703314ff76f10202
         checksum/grants: c6e926709c6176bc66b906eaad228b9bb32e6760036c8733b2758355055342a1
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
+        checksum/deployment: 74e07505d2939a370bbc449f2505bfdd3ee099f8b10400d9496a4a42ff73aa2a
     spec:
       serviceAccountName: audit-query
       
@@ -495,7 +495,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: bd971c19b8adc5137c55a8a008214b489e5d97a60ea23ed11c705401738ceebc
+            checksum/config: caa0ff546af7503a093cdf3c980dfe18909a6ea3fca0deaa5744fa72f5c15b4e
+            checksum/deployment: 74e07505d2939a370bbc449f2505bfdd3ee099f8b10400d9496a4a42ff73aa2a
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -523,6 +524,10 @@ spec:
                   mountPath: /etc/audit/config.yaml
                   subPath: config.yaml
                   readOnly: true
+                - name: deployment
+                  mountPath: /etc/audit/deployment.yaml
+                  subPath: deployment.yaml
+                  readOnly: true
                 
                 - name: trust
                   mountPath: /etc/audit/trust
@@ -535,6 +540,9 @@ spec:
             - name: config
               configMap:
                 name: audit-notary-config
+            - name: deployment
+              configMap:
+                name: audit-deployment
             
             - name: trust
               configMap:

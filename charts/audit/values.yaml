@@ -13,7 +13,9 @@
 # Where the chart mounts what, which a `config:` block names by path:
 #
 #   /etc/audit/config.yaml       the component's own configuration
-#   /etc/audit/deployment.yaml   the profile configuration (`profiles` below)
+#   /etc/audit/deployment.yaml   the profiles and the storage of each install preset
+#                                (`profiles` and `presets` below); every component that
+#                                reads the archive names it as `deployment`
 #   /etc/audit/workloads.yaml    the issuers and workloads (`workloadIdentity`)
 #   /etc/audit/grants.yaml       the query service's grants (`query.grants`)
 #   /etc/audit/catalogues/       the catalogues (`catalogues`)
@@ -271,7 +273,10 @@ writer:
   #
   # The writer puts v1 objects, `records/<profile>/<tenant>/<yyyy>/<mm>/<dd>/
   # <hh>/<ULID>`, and the catalogues at `catalogue/<app>/<version>`
-  # (audit/docs/reference/bucket-contract.md). The chart creates no bucket, so the
+  # (audit/docs/reference/bucket-contract.md), in the bucket of the preset each
+  # profile is kept under (`presets` above). Its `archive` is only
+  # `{stateRoot, ca, kmsKey}`; `deployment: /etc/audit/deployment.yaml` is how it
+  # finds the buckets. The chart creates no bucket, so the
   # bucket's lifecycle is yours and is written against those prefixes, one rule
   # per profile on `records/<profile>/`: Glacier Instant Retrieval at 30 days
   # and Deep Archive at 1 year (audit/docs/decisions/0023, audit/docs/reference/archive-prefixes-and-iam.md).
@@ -299,22 +304,73 @@ receiver:
 # values file that names one profile gets this one as well. Name every profile
 # the installation should keep.
 #
-# Nothing chosen is one `history` profile and the operational preset: audit for
-# yourself. An estate that needs the notary or a framework's controls names its
-# profiles, such as `security: {frameworks: [security]}`. See audit/docs/explanation/which-profiles-to-compose.md for
-# which of the others a deployment should compose, and what each costs.
+# Nothing chosen is one `history` profile, kept under the operational preset:
+# audit for yourself. An estate that needs the notary or a framework's controls
+# names its profiles, such as `security: {frameworks: [security]}`. A profile
+# may add `preset: attested` (or `standard`) to be kept under a stronger preset
+# than its framework profiles need; asking for a weaker one is refused. See
+# audit/docs/explanation/which-profiles-to-compose.md for which of the others a
+# deployment should compose, and what each costs.
 profiles: {}
 
-# The install preset: `operational` (the writer, the archive, deduplication and
-# intake), `standard` (adds the notary and its seal key, and the alarms) or
-# `attested` (adds compliance Object Lock and the pseudonym keys). Leave it
-# unset: it is derived as the lowest preset every profile above can be kept
-# under, each framework profile stating its own minimum (`min_preset` in
-# audit/profiles/). Set, it may be stronger than that and is refused when
-# weaker, naming the profile that needs more. With nothing but `history` it is
-# operational, and `jobs.notary.enabled` is then refused. The document the
-# components read carries it, so a writer refuses to start on a weaker one too.
-# preset: standard
+# Where each install preset keeps its copies, as the `presets` of the same
+# document. A profile is kept under the preset it needs (the highest
+# `min_preset` of its framework profiles, or the stronger one it asks for) and
+# the chart refuses a profile whose preset is not configured here, naming both.
+# Each preset has a bucket of its own:
+#
+#   bucket       the bucket (required)
+#   prefix       the prefix every key of the preset lives under, ending in a
+#                slash and not starting with one (`standard/`); required where
+#                the bucket is shared with another installation
+#   region       the region (`auto` on a store that does not say)
+#   endpoint     the URL of an S3-compatible store that is not AWS; empty is
+#                AWS S3
+#   path_style   address the bucket as endpoint/bucket/key; only with `endpoint`
+#   credentials  the address, below the process's `archive.stateRoot`, of the
+#                static credentials of a store at an endpoint; only with
+#                `endpoint` (on AWS the pod's identity is the credential)
+#   key_alias    the KMS key alias (`alias/...`, never a key id or ARN) objects
+#                are encrypted with; only on AWS S3; empty is the process's
+#                `archive.kmsKey`, or the bucket's default encryption
+#
+# The notary and its seal key, the alarms and the pseudonym keys are
+# provisioned when ANY configured preset needs them (`standard` and `attested`
+# do), and `jobs.notary.enabled` is refused when none does. Object Lock is the
+# attested preset's bucket alone: compliance mode, on AWS S3 only, so an
+# attested preset on an `endpoint` is refused. The processes' `archive` blocks
+# keep only `stateRoot`, `ca` and `kmsKey`.
+#
+# An estate that keeps everything on an S3-compatible store:
+#
+# presets:
+#   operational:
+#     bucket: audit-operational
+#     region: auto
+#     endpoint: https://account.r2.example.test
+#     credentials: internal/audit/r2
+#
+# An estate on AWS S3 with a KMS key and the standard preset:
+#
+# presets:
+#   standard:
+#     bucket: audit-eu-example-1
+#     prefix: standard/
+#     region: eu-example-1
+#     key_alias: alias/audit-archive
+#
+# Mixed: standard copies in a bucket of their own, attested ones in a bucket
+# with Object Lock (the bucket's own setting, which the chart does not create):
+#
+# presets:
+#   standard:
+#     bucket: audit-standard
+#     region: eu-example-1
+#   attested:
+#     bucket: audit-attested
+#     region: eu-example-1
+#     key_alias: alias/audit-attested
+presets: {}
 
 # Whether the identifiers this installation receives for people outside the
 # organisation are already opaque — ones an application minted, which name
@@ -414,7 +470,8 @@ observe:
   enabled: false
   replicas: 1
   # The audit-observe configuration: schemas/config/audit-observe.schema.json.
-  # `archive` is read only (no lock mode), `database` is the role
+  # `deployment: /etc/audit/deployment.yaml` names the buckets it follows (the
+  # `presets`), `archive` is only `{stateRoot, ca}`, `database` is the role
   # `migrate.config.observe` granted, `settle` is the settle window and `wake`
   # an optional subject or queue of bucket notifications that only shortens the
   # poll.

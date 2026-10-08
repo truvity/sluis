@@ -564,3 +564,8 @@ func missing(err error) bool {
 	}
 	return false
 }
+
+// KeyFor is the object key a store opened with these options gives a layout key
+// such as `records/<profile>/...`: the prefix, a slash and the key, or the key
+// itself at the bucket root.
+func KeyFor(o Options, key string) string { return (&Store{prefix: o.Prefix}).key(key) }

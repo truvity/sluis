@@ -68,20 +68,21 @@ type secretEnv struct {
 // the chart's own business. They are the binaries' own configuration keys,
 // read from where the chart's values carry them.
 type chartValues struct {
+	// Presets is the deployment's storage per install preset: the tier's profile
+	// is kept under the standard preset.
+	Presets struct {
+		Standard struct {
+			Bucket    string `json:"bucket"`
+			Region    string `json:"region"`
+			Endpoint  string `json:"endpoint"`
+			PathStyle bool   `json:"path_style"`
+		} `json:"standard"`
+	} `json:"presets"`
 	Writer struct {
 		Config struct {
 			Database struct {
 				URL string `json:"url"`
 			} `json:"database"`
-			Archive struct {
-				Bucket struct {
-					Name      string `json:"name"`
-					Region    string `json:"region"`
-					Endpoint  string `json:"endpoint"`
-					PathStyle bool   `json:"pathStyle"`
-				} `json:"bucket"`
-				LockMode string `json:"lockMode"`
-			} `json:"archive"`
 			Stream struct {
 				NATS struct {
 					URL string `json:"url"`
@@ -96,7 +97,7 @@ type chartValues struct {
 		Config struct {
 			Database struct {
 				URL         string `json:"url"`
-				PasswordEnv string `json:"passwordEnv"`
+				PasswordEnv string `json:"passwordSecret"`
 			} `json:"database"`
 			Reader string `json:"reader"`
 		} `json:"config"`
@@ -106,7 +107,7 @@ type chartValues struct {
 		Config struct {
 			Database struct {
 				URL         string `json:"url"`
-				PasswordEnv string `json:"passwordEnv"`
+				PasswordEnv string `json:"passwordSecret"`
 			} `json:"database"`
 		} `json:"config"`
 		SecretEnv []secretEnv `json:"secretEnv"`
@@ -158,7 +159,6 @@ type Names struct {
 	Region        string
 	Endpoint      string
 	PathStyle     bool
-	LockMode      string
 	S3CredsSecret string // existingSecret: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 }
 
@@ -205,7 +205,7 @@ func Resolve(o Options) (Names, error) {
 	s3Secret := secretOf(v.Writer.SecretEnv, "AUDIT_S3_ACCESS_KEY_ID")
 
 	for field, got := range map[string]string{
-		"writer.config.archive.bucket.name":                  v.Writer.Config.Archive.Bucket.Name,
+		"presets.standard.bucket":                            v.Presets.Standard.Bucket,
 		"migrate.config.database.url (host)":                 db.Host,
 		"migrate.config.database.url (user)":                 db.User.Username(),
 		"migrate.config.database.url (database)":             strings.TrimPrefix(db.Path, "/"),
@@ -244,11 +244,10 @@ func Resolve(o Options) (Names, error) {
 		StreamSubject:  "e2e.audit-records",
 		StreamConsumer: v.Writer.Config.Stream.Consumer,
 
-		Bucket:        v.Writer.Config.Archive.Bucket.Name,
-		Region:        v.Writer.Config.Archive.Bucket.Region,
-		Endpoint:      v.Writer.Config.Archive.Bucket.Endpoint,
-		PathStyle:     v.Writer.Config.Archive.Bucket.PathStyle,
-		LockMode:      v.Writer.Config.Archive.LockMode,
+		Bucket:        v.Presets.Standard.Bucket,
+		Region:        v.Presets.Standard.Region,
+		Endpoint:      v.Presets.Standard.Endpoint,
+		PathStyle:     v.Presets.Standard.PathStyle,
 		S3CredsSecret: s3Secret,
 	}, nil
 }

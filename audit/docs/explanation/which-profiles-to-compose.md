@@ -76,8 +76,8 @@ Two consequences worth knowing before composing:
   installation composing any of them needs a bucket that has it; `security`,
   `history` and `billing-nl` are satisfied by integrity under a managed key
   (seals, [0019](../decisions/0019-seals.md); until they are built, the hashes
-  `audit verify` checks), and may run on any S3-compatible store with
-  `archive.lockMode: none`. A component refuses to start when the store is
+  `audit verify` checks), and may run on any S3-compatible store (their
+  preset is `operational` or `standard`, which is written without a lock). A component refuses to start when the store is
   weaker than a composed profile demands
   ([0014](../decisions/0014-lock-modes-and-store-tiers.md)).
 - **A profile that requires a category nobody emits refuses to start.** The

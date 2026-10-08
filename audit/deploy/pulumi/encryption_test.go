@@ -13,7 +13,7 @@ func archiveKeysCreated(rec *recorder) []string {
 	var out []string
 	for _, ty := range []string{"aws:kms/key:Key", "aws:kms/alias:Alias"} {
 		for _, d := range rec.ofType(ty) {
-			if d.Name == "audit-archive" {
+			if strings.HasPrefix(d.Name, "audit-archive") {
 				out = append(out, ty)
 			}
 		}
@@ -33,7 +33,7 @@ func TestAnExistingKMSKeyIsUsedAndNoneIsCreated(t *testing.T) {
 	if k := archiveKeysCreated(rec); len(k) != 0 {
 		t.Errorf("created %v beside a given key", k)
 	}
-	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive")
+	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive-standard")
 	rule := prop(sse, "rules").ArrayValue()[0].ObjectValue()
 	def := rule["applyServerSideEncryptionByDefault"].ObjectValue()
 	if def["sseAlgorithm"].StringValue() != "aws:kms" || def["kmsMasterKeyId"].StringValue() != givenKey || !rule["bucketKeyEnabled"].BoolValue() {
@@ -75,7 +75,7 @@ func TestAWSManagedKeyCreatesNoKeyAndGrantsNoKMS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive")
+	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive-standard")
 	rule := prop(sse, "rules").ArrayValue()[0].ObjectValue()
 	def := rule["applyServerSideEncryptionByDefault"].ObjectValue()
 	if def["sseAlgorithm"].StringValue() != "aws:kms" || def["kmsMasterKeyId"].V != nil || !rule["bucketKeyEnabled"].BoolValue() {

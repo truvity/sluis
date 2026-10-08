@@ -335,11 +335,12 @@ document has (profiles, externalIdentifiersAreOpaque, and whatever it gains)
 moves the pod that reads it. */}}
 {{- define "audit.deploymentDocument" -}}
 external_identifiers_are_opaque: {{ .Values.externalIdentifiersAreOpaque }}
-{{- if .Values.preset }}
-preset: {{ .Values.preset }}
-{{- end }}
 profiles:
   {{- include "audit.profiles" . | nindent 2 }}
+{{- with .Values.presets }}
+presets:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end -}}
 
 {{/* The profiles in effect: the values', or, when none is chosen, a `history`

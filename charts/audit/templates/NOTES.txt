@@ -33,32 +33,23 @@ writers behind a durable consumer, which is what makes a writer that is down a
 backlog rather than a hole.
 {{- end }}
 
-{{ with (and .Values.writer.enabled .Values.writer.config.archive) -}}
-The archive is {{ .bucket.name }}{{ with .prefix }} under {{ . }}/{{ end }}.
-{{- if .prefix }} {{ if $.Values.jobs.notary.enabled }}Five{{ else }}Four{{ end }} identities need rights beneath that prefix, and none of
-them may delete anything:
-
-  writer   put objects, under records/ and catalogue/ among others; put and get
-           retention; put legal holds; get and list under the prefix; encrypt
-           with the bucket's key
-{{- if $.Values.jobs.notary.enabled }}
-  notary   get and list under the prefix; put under {{ .prefix }}/seals/ and
-           {{ .prefix }}/keys/roots.jwks; decrypt; sign with the seal key (and
-           no put under records/, which is the writer's)
-{{- end }}
-  verify   get and list under the prefix; decrypt
-  observe  get and list under the prefix; decrypt
-  query    get and list under the prefix; decrypt
-
-Scope each to the objects under {{ .prefix }}/ in {{ .bucket.name }}, and
-condition its s3:ListBucket on that prefix, or one application can read
-another's archive. See audit/docs/reference/archive-prefixes-and-iam.md for the policies.
+{{ range $name := (keys (.Values.presets | default dict) | sortAlpha) -}}
+{{- $s := index $.Values.presets $name -}}
+The {{ $name }} preset keeps its copies in {{ $s.bucket }}{{ with $s.prefix }} under {{ . }}{{ end }}{{ with $s.endpoint }} at {{ . }}{{ end }}.
+{{- if $s.prefix }}
+Every identity that reads or writes it needs rights beneath that prefix only,
+and none of them may delete anything: the writer puts objects, retention and
+legal holds{{ if eq $name "attested" }} (under compliance Object Lock){{ end }}; verify, the indexer and the query
+service get and list{{ if $.Values.jobs.notary.enabled }}; the notary also puts under {{ $s.prefix }}seals/
+and {{ $s.prefix }}keys/roots.jwks{{ end }}. Condition s3:ListBucket on the prefix, or one
+application can read another's archive.
 {{- else }}
-No `prefix` is set, so this installation writes at the root of the bucket. That
-is only safe where the bucket is its own; in a shared one, `prefix` is what
-keeps two applications' archives apart and what their IAM is scoped to.
+No `prefix` is set, so this preset writes at the root of its bucket. That is
+only safe where the bucket is its own; in a shared one, `prefix` is what keeps
+two installations' archives apart and what their IAM is scoped to.
 {{- end }}
-{{- end }}
+{{ end }}
+See audit/docs/reference/archive-prefixes-and-iam.md for the policies.
 
 {{ if and .Values.writer.enabled (not .Values.writer.config.database) -}}
 No database is configured. The writer deduplicates in process and may run only

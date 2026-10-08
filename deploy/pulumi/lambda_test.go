@@ -157,7 +157,7 @@ func buildLambda(t *testing.T, e estate) (*recorder, map[string]string, error) {
 		collect("auditQueueUrl", l.AuditQueueURL)
 		collect("auditQueueArn", l.AuditQueueArn)
 		if l.Audit != nil {
-			collect("auditPreset", l.Audit.Preset)
+			collect("auditPresets", l.Audit.Presets.ApplyT(func(p []string) string { return strings.Join(p, ",") }).(pulumi.StringOutput))
 		}
 		return nil
 	})

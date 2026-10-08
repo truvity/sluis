@@ -11,6 +11,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
 	sluisconfig "github.com/truvity/sluis/config"
 	arp "github.com/truvity/sluis/deploy/pulumi"
 )
@@ -161,11 +162,11 @@ func TestAuditIsInstalledByDefaultAsOperationalOnS3(t *testing.T) {
 	}
 
 	// The archive is a bucket of its own, SSE-S3 and named for the installation.
-	b := rec.one(t, "aws:s3/bucket:Bucket", "audit-example-archive")
-	if got, want := prop(b, "bucket").StringValue(), "audit-example-"+account+"-"+region; got != want {
+	b := rec.one(t, "aws:s3/bucket:Bucket", "audit-example-archive-operational")
+	if got, want := prop(b, "bucket").StringValue(), "audit-example-"+account+"-"+region+"-operational"; got != want {
 		t.Errorf("archive bucket %q, want %q", got, want)
 	}
-	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-example-archive")
+	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-example-archive-operational")
 	rule := sse.Inputs.Mappable()["rules"].([]any)[0].(map[string]any)["applyServerSideEncryptionByDefault"].(map[string]any)
 	if rule["sseAlgorithm"] != "AES256" {
 		t.Errorf("archive encryption: %v", sse.Inputs)
@@ -193,8 +194,8 @@ func TestAuditIsInstalledByDefaultAsOperationalOnS3(t *testing.T) {
 	if dep := layer["audit/deployment.yaml"]; !strings.Contains(dep, "security:") || !strings.Contains(dep, "history") {
 		t.Errorf("deployment document:\n%s", dep)
 	}
-	if out["auditPreset"] != "operational" {
-		t.Errorf("the preset is %q, derived from the profiles it is operational", out["auditPreset"])
+	if out["auditPresets"] != "operational" {
+		t.Errorf("the presets are %q, the default profiles are kept under operational", out["auditPresets"])
 	}
 	if out["auditQueueUrl"] != queueURL || out["auditQueueArn"] != queueArn {
 		t.Errorf("outputs: %v", out)
@@ -215,16 +216,24 @@ func TestTheFunctionsRoleIsTheQueuesOnlySender(t *testing.T) {
 // writer's configuration, the credentials at the installation's own address.
 func TestAuditArchiveOnAnS3CompatibleStore(t *testing.T) {
 	au := installAudit(t)
-	au.Archive = arp.AuditArchiveArgs{BucketName: "acme-audit", Endpoint: "https://acct.r2.example.test"}
+	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: "https://acct.r2.example.test"}}}
 	rec, _ := mustLambda(t, auditEstate(t, au, nil))
-	if rec.has("aws:s3/bucket:Bucket", "audit-example-archive") {
+	if rec.has("aws:s3/bucket:Bucket", "audit-example-archive-operational") {
 		t.Error("the archive is the store's, and an AWS bucket is declared for it")
 	}
-	conf := auditLayer(t, rec)["audit/audit.yaml"]
-	for _, want := range []string{"endpoint: https://acct.r2.example.test", "name: acme-audit", "lockMode: none", "internal/archive"} {
-		if !strings.Contains(conf, want) {
-			t.Errorf("the writer's configuration lacks %q:\n%s", want, conf)
+	layer := auditLayer(t, rec)
+	for file, wants := range map[string][]string{
+		"audit/deployment.yaml": {"endpoint: https://acct.r2.example.test", "bucket: acme-audit"},
+		"audit/audit.yaml":      {"stateRoot:"},
+	} {
+		for _, want := range wants {
+			if !strings.Contains(layer[file], want) {
+				t.Errorf("%s lacks %q:\n%s", file, want, layer[file])
+			}
 		}
+	}
+	if strings.Contains(layer["audit/audit.yaml"], "lockMode") {
+		t.Errorf("the lock is the preset's, not the function's:\n%s", layer["audit/audit.yaml"])
 	}
 }
 
@@ -232,19 +241,19 @@ func TestAuditArchiveOnAnS3CompatibleStore(t *testing.T) {
 // of its own.
 func TestAuditArchiveCanReuseTheBlobStore(t *testing.T) {
 	au := installAudit(t)
-	au.Archive = arp.AuditArchiveArgs{BucketName: "acme-audit", ReuseBlobStore: true}
+	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit"}, ReuseBlobStore: true}}
 	blobs := r2()
 	blobs.PathStyle = true
 	rec, _ := mustLambda(t, auditEstate(t, au, onBlobStore(blobs)))
-	conf := auditLayer(t, rec)["audit/audit.yaml"]
-	for _, want := range []string{"endpoint: " + blobs.Endpoint, "name: acme-audit", "pathStyle: true"} {
+	conf := auditLayer(t, rec)["audit/deployment.yaml"]
+	for _, want := range []string{"endpoint: " + blobs.Endpoint, "bucket: acme-audit", "path_style: true"} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("the writer's configuration lacks %q:\n%s", want, conf)
 		}
 	}
 	// Not the blob bucket.
 	au = installAudit(t)
-	au.Archive = arp.AuditArchiveArgs{BucketName: blobs.Bucket, ReuseBlobStore: true}
+	au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: blobs.Bucket}, ReuseBlobStore: true}}
 	_, _, err := buildLambda(t, auditEstate(t, au, onBlobStore(r2())))
 	if err == nil || !strings.Contains(err.Error(), "blob bucket") {
 		t.Errorf("the blob bucket as the archive: %v", err)
@@ -350,7 +359,7 @@ func TestAuditArgumentsAreRefusedWhenTheyDisagree(t *testing.T) {
 		"reuse the blob store with no external blobs": {
 			audit: func(t *testing.T) *arp.AuditArgs {
 				au := installAudit(t)
-				au.Archive = arp.AuditArchiveArgs{BucketName: "acme-audit", ReuseBlobStore: true}
+				au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit"}, ReuseBlobStore: true}}
 				return au
 			},
 			want: "ReuseBlobStore",
@@ -358,7 +367,7 @@ func TestAuditArgumentsAreRefusedWhenTheyDisagree(t *testing.T) {
 		"an endpoint and reuse": {
 			audit: func(t *testing.T) *arp.AuditArgs {
 				au := installAudit(t)
-				au.Archive = arp.AuditArchiveArgs{BucketName: "b", Endpoint: "https://x.example.test", ReuseBlobStore: true}
+				au.Presets = map[string]arp.AuditPreset{"operational": {PresetStorage: auditpulumi.PresetStorage{Bucket: "b", Endpoint: "https://x.example.test"}, ReuseBlobStore: true}}
 				return au
 			},
 			want: "say the store once",
@@ -384,8 +393,8 @@ func TestAuditArgumentsAreRefusedWhenTheyDisagree(t *testing.T) {
 		"a stronger preset than the archive can keep": {
 			audit: func(t *testing.T) *arp.AuditArgs {
 				au := installAudit(t)
-				au.Preset = "attested"
-				au.Archive = arp.AuditArchiveArgs{BucketName: "acme-audit", Endpoint: "https://x.example.test"}
+				au.DeploymentYAML = "profiles:\n  security: {frameworks: [pci-dss]}\n"
+				au.Presets = map[string]arp.AuditPreset{"attested": {PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: "https://x.example.test"}}}
 				return au
 			},
 			want: "Object Lock",
@@ -416,4 +425,36 @@ func TestAuditArgumentsAreRefusedWhenTheyDisagree(t *testing.T) {
 			t.Errorf("error %v", err)
 		}
 	})
+}
+
+// The installation may keep two presets in two buckets: standard (a security
+// profile) unlocked, attested (a payments profile) under compliance Object Lock.
+func TestAuditMixedPresetsAreTwoBuckets(t *testing.T) {
+	au := installAudit(t)
+	au.DeploymentYAML = "profiles:\n  security: {frameworks: [security]}\n  payments: {frameworks: [pci-dss]}\n"
+	au.Presets = map[string]arp.AuditPreset{
+		"standard": {PresetStorage: auditpulumi.PresetStorage{Prefix: "standard/", Create: true}},
+		"attested": {PresetStorage: auditpulumi.PresetStorage{Prefix: "attested/", Create: true}},
+	}
+	au.Archive = arp.AuditArchiveArgs{AcknowledgeCompliance: true, DefaultRetentionDays: 30}
+	au.Notary.Disabled = true
+	rec, _ := mustLambda(t, auditEstate(t, au, nil))
+	rec.one(t, "aws:s3/bucket:Bucket", "audit-example-archive-standard")
+	rec.one(t, "aws:s3/bucket:Bucket", "audit-example-archive-attested")
+	dep := auditLayer(t, rec)["audit/deployment.yaml"]
+	for _, want := range []string{"standard:", "attested:", "prefix: standard/", "prefix: attested/"} {
+		if !strings.Contains(dep, want) {
+			t.Errorf("deployment document lacks %q:\n%s", want, dep)
+		}
+	}
+}
+
+// Profiles that are not the default need their presets named.
+func TestAuditProfilesNeedPresets(t *testing.T) {
+	au := installAudit(t)
+	au.Profiles = map[string][]string{"security": {"security"}}
+	_, _, err := buildLambda(t, auditEstate(t, au, nil))
+	if err == nil || !strings.Contains(err.Error(), "Presets") {
+		t.Errorf("profiles with no presets: %v", err)
+	}
 }

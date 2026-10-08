@@ -23,10 +23,10 @@ Every threshold carries its reason in a comment above the rule, and every
 aggregation that drops it pairs series across them.
 */ -}}
 {{- /* The alert rules are what the standard preset adds. This release has no
-profiles of its own to derive it from unless it is given them, so it is given
-`preset` (or the same `profiles` as the write path's release). */ -}}
-{{- if eq (include "audit.preset" .) "operational" -}}
-{{- fail "audit: `renders: alerts` and the install preset is operational, which has no alarms. Set `preset: standard` (or the profiles of the write path's release, such as `security`)." -}}
+profiles of its own, so it is given the `presets` of the write path's release
+(the names are enough: its buckets are the write path's). */ -}}
+{{- if not (fromYaml (include "audit.features" .)).alarms -}}
+{{- fail "audit: `renders: alerts` and no configured preset has alarms (the standard or attested preset does). Set `presets` as the write path's release does, such as `presets: {standard: {bucket: ...}}`." -}}
 {{- end -}}
 {{- $a := .Values.alerts -}}
 {{- $r := $a.rules -}}

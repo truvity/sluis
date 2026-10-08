@@ -10,6 +10,15 @@
 # configuration, key for key (audit/docs/reference/configuration.md).
 mode: stream
 
+# Where each install preset keeps its copies. `security` needs the standard
+# preset, so that is the one configured; the profiles name no storage of their
+# own, and each process finds it through `deployment`.
+presets:
+  standard:
+    bucket: audit-eu-example-1
+    region: eu-west-1
+    prefix: audit/app/
+    key_alias: alias/audit-archive
 profiles:
   security:
     frameworks: [security]
@@ -88,12 +97,6 @@ writer:
     deployment: /etc/audit/deployment.yaml
     workloads: /etc/audit/workloads.yaml
     replicas: 3
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
-      kmsKey: alias/audit-archive
     database:
       url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
       passwordSecret: database-password
@@ -119,15 +122,11 @@ writer:
 observe:
   enabled: true
   config:
+    deployment: /etc/audit/deployment.yaml
     apiVersion: audit.truvity.github.io/audit-observe/v2
     secrets:
       source: file
       root: /etc/audit/secrets
-    archive:
-      bucket:
-        name: audit-eu-example-1
-        region: eu-west-1
-      prefix: audit/app
     database:
       url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
       passwordSecret: observe-database-password

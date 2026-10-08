@@ -50,8 +50,8 @@ func TestChartHonoursTheFixturesNames(t *testing.T) {
 	// for by name, and the configuration the chart renders must carry the
 	// names the box was given: the migration's reader is the query role this
 	// fixture actually creates and grants — the one field here that names a
-	// ROLE rather than a Secret — and the writer's config names the bucket and
-	// the stream the box provisioned.
+	// ROLE rather than a Secret — and the deployment document names the bucket and
+	// the writer's config the stream the box provisioned.
 	for _, want := range []string{
 		"name: " + names.WriterSecret,
 		"name: " + names.S3CredsSecret,
@@ -61,7 +61,7 @@ func TestChartHonoursTheFixturesNames(t *testing.T) {
 		"name: " + names.OwnerSecret,
 		"name: " + names.ObserveSecret,
 		names.ObserveRole + "@" + names.DatabaseHost,
-		"name: " + names.Bucket,
+		"bucket: " + names.Bucket,
 		"url: " + names.StreamURL,
 		"name: " + names.StreamName,
 		"consumer: " + names.StreamConsumer,
