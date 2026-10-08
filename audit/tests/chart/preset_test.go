@@ -26,12 +26,12 @@ func TestTheChartDerivesThePresetAsGoDoes(t *testing.T) {
 	}
 	for name, fw := range frameworks {
 		for _, preset := range profile.Presets {
-			values := "profiles:\n  security: null\n  p:\n    frameworks: [" + name + "]\npreset: " + string(preset) + "\n"
+			values := "profiles:\n  p:\n    frameworks: [" + name + "]\npreset: " + string(preset) + "\n"
 			p := filepath.Join(t.TempDir(), "preset.yaml")
 			if err := os.WriteFile(p, []byte(values), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command(helm(t), "template", "audit", ".", "-f", "testdata/values/direct.yaml", "-f", p)
+			cmd := exec.Command(helm(t), "template", "audit", ".", "-f", "testdata/values/operational-base.yaml", "-f", p)
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr
 			err := cmd.Run()

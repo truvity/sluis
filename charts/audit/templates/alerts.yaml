@@ -22,6 +22,12 @@ Every threshold carries its reason in a comment above the rule, and every
 `by (...)` keeps the cluster label: one store holds many clusters and an
 aggregation that drops it pairs series across them.
 */ -}}
+{{- /* The alert rules are what the standard preset adds. This release has no
+profiles of its own to derive it from unless it is given them, so it is given
+`preset` (or the same `profiles` as the write path's release). */ -}}
+{{- if eq (include "audit.preset" .) "operational" -}}
+{{- fail "audit: `renders: alerts` and the install preset is operational, which has no alarms. Set `preset: standard` (or the profiles of the write path's release, such as `security`)." -}}
+{{- end -}}
 {{- $a := .Values.alerts -}}
 {{- $r := $a.rules -}}
 {{- $ns := default .Release.Namespace $a.namespace -}}

@@ -1,4 +1,5 @@
 # refuse: /alerts/format
 renders: alerts
+preset: standard
 alerts:
   format: configmap

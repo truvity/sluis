@@ -37,8 +37,3 @@ jobs:
       ntp: [time.cloudflare.com]
       sink:
         url: http://audit:8080
-
-# The notary is the standard preset's, which `security` asks for.
-profiles:
-  security:
-    frameworks: [security]

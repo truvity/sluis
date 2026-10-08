@@ -1,8 +1,5 @@
 # refuse: the install preset is operational, which has no notary
-profiles:
-  security: null
-  history:
-    frameworks: [history]
+# base: operational-base
 jobs:
   notary:
     enabled: true
