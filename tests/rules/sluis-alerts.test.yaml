@@ -320,6 +320,48 @@ tests:
         alertname: AccessRosterLeaseLost
         exp_alerts: []
 
+  # ---------------------------------------------------------------- Cloudflare rotation
+  - name: a credential not rotated for twice its rotation fires, per preset
+    interval: 1m
+    input_series:
+      - series: 'sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '946684800x40'
+      - series: 'sluis_cloudflare_rotation_interval_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '300x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AccessRosterCloudflareRotationStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              k8s_cluster_name: example
+              namespace: sluis
+              preset: dns
+            exp_annotations:
+              summary: 'The Cloudflare credential of preset dns was last rotated 20m 0s ago, past its allowance'
+              description: >-
+                The stored credential of this preset is older than 2 times
+                its rotation. Look at the log for "a Cloudflare token was not minted" (its
+                reason says whether the prototype was refused, the minter credential is
+                missing or Cloudflare answered an error), at the scheduled invocation on
+                Lambda, and at the preset's prototype in Cloudflare.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostercloudflarerotationstale
+
+  - name: a credential rotated every five minutes, and a preset with no series, do not fire
+    interval: 1m
+    input_series:
+      - series: 'sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '946684800+300x10'
+      - series: 'sluis_cloudflare_rotation_interval_seconds{namespace="sluis",k8s_cluster_name="example",preset="dns"}'
+        values: '300x40'
+      - series: 'sluis_cloudflare_rotation_interval_seconds{namespace="sluis",k8s_cluster_name="example",preset="other"}'
+        values: '300x40'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AccessRosterCloudflareRotationStale
+        exp_alerts: []
+
   # ---------------------------------------------------------------- GitHub rate limit
   - name: a budget under a hundred for the whole half hour fires
     interval: 1m

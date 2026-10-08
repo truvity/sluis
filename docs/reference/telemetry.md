@@ -142,6 +142,15 @@ Source: `internal/clientcreds/telemetry.go`. No client id is ever a label, so a 
 | `sluis.client_secret.orphans` | counter | none | Stored records newly found with no generated client in the policy, each counted once. |
 | `sluis.client_secret.admin_refused` | counter | `reason` | Requests to the admin endpoint refused before they acted: `unauthenticated`, `forbidden` or `wrong_audience`. |
 
+### Cloudflare credentials
+
+| Metric | Type | Labels | What it says |
+|---|---|---|---|
+| `sluis.cloudflare.rotation.last_timestamp` | gauge, `s` | `preset` | When a preset's stored credential was minted (Unix seconds). |
+| `sluis.cloudflare.rotation.interval` | gauge, `s` | `preset` | The preset's configured `rotation`. |
+| `sluis.cloudflare.tokens.minted` | counter | `preset`, `variant`, `outcome` | Credentials minted. `variant` is `stored` or `on_demand`; `outcome` is `ok`, `refused` (a prototype or a grant said no) or `failed`. |
+| `sluis.cloudflare.tokens.swept` | counter | `preset` | Expired tokens deleted. |
+
 ### The controllers and the rails
 
 | Metric | Type | Labels | What it says |
@@ -204,14 +213,14 @@ Nothing a person controls becomes a label.
 
 ## Alerts
 
-Twelve rules, in one group, rendered by the chart with `renders: alerts`. Every
+Eleven rules, in one group, rendered by the chart with `renders: alerts`. Every
 threshold is a value (`alerts.rules.<rule>`) and its reason is in the comment
 above the rule in `charts/sluis/templates/alerts.yaml`. Every
 aggregation keeps the cluster label, since one store holds many clusters.
 
 <!-- generated: telemetry-alerts -->
 
-Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (10 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
+Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/alerts.yaml` with default values (11 rules). The expressions carry the default thresholds; every one is a value under `alerts.rules`.
 
 | Alert | Severity | For | What it says | Default expression |
 |---|---|---|---|---|
@@ -222,6 +231,7 @@ Source: `tests/golden/sluis/alerts.yaml`, the render of `charts/sluis/templates/
 | `AccessRosterTickFailing` | warning | 0m | The controller's tick of this target failed 3 or more times within 45m. | `sum by (k8s_cluster_name, namespace, kind, target) (increase(access_roster_ticks_total{namespace="sluis",outcome="failed"}[45m])) >= 3` |
 | `AccessRosterTickStale` | critical | 10m | This target has not completed a tick for longer than 3600s. | `time() - max by (k8s_cluster_name, namespace, kind, target) (last_over_time(access_roster_tick_last_success_timestamp_seconds{namespace="sluis"}[1d])) > 3600` |
 | `AccessRosterLeaseLost` | warning | 0m | Controllers lost their lease on a target 3 or more times within 1h. | `sum by (k8s_cluster_name, namespace, kind) (increase(access_roster_leases_lost_total{namespace="sluis"}[1h])) >= 3` |
+| `AccessRosterCloudflareRotationStale` | critical | 5m | The stored credential of this preset is older than 2 times its rotation. | `time() - max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{namespace="sluis"}[1d])) > 2 * max by (k8s_cluster_name, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{namespace="sluis"}[1d]))` |
 | `AccessRosterGitHubRateLimitLow` | warning | 30m | The GitHub budget for this resource has been under 100 requests for 30m. | `min by (k8s_cluster_name, namespace, resource) (github_roster_rate_limit_remaining{namespace="sluis"}) < 100` |
 | `AccessRosterSeatsShort` | warning | 30m | The controller could not invite everyone the policy admits to this organisation because it has no free seats. | `max by (k8s_cluster_name, namespace, org) (github_roster_seats_short{namespace="sluis"}) > 0` |
 | `AccessRosterPortErrors` | critical | 10m | More than 5% of the calls to this storage port failed in the last 5 minutes. | `( sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) / sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis"}[5m])) ) > 0.05 and sum by (k8s_cluster_name, namespace, port) (increase(access_roster_port_operation_duration_seconds_count{namespace="sluis",outcome=~"unavailable\|error"}[5m])) >= 5` |
@@ -295,6 +305,16 @@ for a whole lifetime. One loss is the design working: the tick stopped before it
 next write. Repeated losses are two runners on one target (more than one replica where the State is not shared, which the chart
 refuses; see [high availability](../how-to/high-availability.md)) or a State that cannot be reached
 to renew: see `AccessRosterPortErrors`.
+
+#### AccessRosterCloudflareRotationStale
+
+A preset's stored credential was minted more than twice its `rotation` ago, so
+the schedule is not replacing it and consumers will soon read an expired one.
+The log line "a Cloudflare token was not minted" carries the reason:
+`prototype_active`, `prototype_forbidden` or `prototype_missing` (fix the
+prototype in Cloudflare), `minter_missing` (the `internal/cloudflare/<account>/minter`
+document), `store_error` or `cloudflare_error`. On Lambda check that the
+`{"kind":"cloudflare"}` schedule exists and is invoking the function.
 
 #### AccessRosterGitHubRateLimitLow
 

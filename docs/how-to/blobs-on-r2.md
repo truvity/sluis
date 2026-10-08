@@ -55,3 +55,16 @@ service document and never written in it.
 
 The start log has `blobs are kept in S3` with the bucket and prefix, and `GET <endpoint>/<bucket>?list-type=2&prefix=<prefix>`
 shows `reports/` objects after the first reconcile.
+
+## Static credentials need nothing else
+
+A `credentialsRef` is the default and the simple path. It involves no `cloudflare`
+section, no minter token and no Cloudflare API call: the document at the internal
+address is all there is, and a service document with a `credentialsRef` and no
+`cloudflare` section loads and starts. (Audit's S3-compatible archive and
+per-destination storage use their own static `credentials` the same way.)
+
+To have sluis mint short-lived R2 credentials for itself instead, name a
+preset: `credentials: {preset: ...}`, exclusive with `credentialsRef`. That
+needs the `cloudflare` section; see [mint short-lived Cloudflare tokens and R2
+credentials](cloudflare-tokens.md).

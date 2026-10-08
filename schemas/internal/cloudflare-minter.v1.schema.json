@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truvity/sluis/schemas/internal/cloudflare-minter.v1.schema.json",
+  "title": "cloudflare-minter/v1",
+  "description": "The credential sluis mints Cloudflare tokens with, at the internal address <root>/internal/cloudflare/<account>/minter that cloudflare.accounts.<name>.minter names: an account API token that holds Account API Tokens Read and Edit and nothing else. The document is internal: sluis reads it, nobody else is granted it. Every field is a string. Adding a field is not breaking; removing, renaming or re-typing one is.",
+  "type": "object",
+  "required": ["schema", "token"],
+  "properties": {
+    "schema": { "const": "cloudflare-minter/v1" },
+    "token": { "type": "string", "minLength": 1, "description": "The minter token's value." }
+  }
+}

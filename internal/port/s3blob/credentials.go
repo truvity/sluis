@@ -17,6 +17,9 @@ import (
 type Credentials struct {
 	AccessKeyID     string
 	SecretAccessKey string
+	// Expires, when set, is when the pair is to be read again: a pair that
+	// is minted for a lifetime. Zero is a pair that never expires by itself.
+	Expires time.Time
 }
 
 // CredentialsFunc reads the current credentials, from wherever the
@@ -61,7 +64,10 @@ func (c *credentials) retrieve(ctx context.Context) (aws.Credentials, error) {
 	c.mu.Lock()
 	c.cur, c.last = got, c.now()
 	c.mu.Unlock()
-	return aws.Credentials{AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey, Source: "sluis"}, nil
+	return aws.Credentials{
+		AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey, Source: "sluis",
+		CanExpire: !got.Expires.IsZero(), Expires: got.Expires,
+	}, nil
 }
 
 // refresh drops the cached pair so the next request reads it again, unless it
