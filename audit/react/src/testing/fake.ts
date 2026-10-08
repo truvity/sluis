@@ -2,8 +2,17 @@ import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 
-import { QueryService, Sort_Field, type Filter, type SearchRequest, type StringPredicate } from "../gen/audit/v1/query_pb.js";
-import { Operation, Outcome_Result, RecordSchema, type Record as AuditRecord } from "../gen/audit/v1/record_pb.js";
+import {
+  Operation,
+  Outcome_Result,
+  QueryService,
+  RecordSchema,
+  Sort_Field,
+  type Filter,
+  type Record as AuditRecord,
+  type SearchRequest,
+  type StringPredicate,
+} from "@truvity/audit";
 
 /** Records a fake service answers from, newest first. */
 export function sampleRecords(): AuditRecord[] {

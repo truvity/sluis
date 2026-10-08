@@ -58,7 +58,7 @@ usage:
   audit messages <catalogue.yaml>...
         Print what a viewer needs to render a catalogue's records as
         sentences — each action's summary and templates — as JSON, for
-        @truvity/audit's viewer.
+        @truvity/audit-react's viewer.
 
   audit verify --profile <name> --from <date> --to <date> [flags]
         Check a profile's record objects over a range of ingest time against

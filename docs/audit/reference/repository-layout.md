@@ -105,7 +105,8 @@ cmd/protoc-gen-audit-jsonschema/   the buf plugin for the record's JSON Schema
 
 charts/audit/         the installation an application's own chart instantiates:
                       receiver, writer, indexer, query service, the notary and the other three jobs
-ts/                   @truvity/audit: client, qualifier box, sentences, React hooks and view
+ts/                   @truvity/audit: client, qualifier box, sentences
+react/                @truvity/audit-react: React hooks and the default MUI view
 examples/             emit, read — compiled and tested by the gate
 testdata/             the record corpus; the template fixture both scanners share
 hack/                 the leak canary
