@@ -54,6 +54,15 @@ type (
 	Audit = internal.Audit
 	// AdapterChoice names the adapter of one concern and its settings.
 	AdapterChoice = internal.AdapterChoice
+	// CloudflareSection is the service document's `cloudflare`: the accounts
+	// and presets. [Cloudflare] adds the policy's grants to it.
+	CloudflareSection = internal.Cloudflare
+	// CloudflareAccount is one Cloudflare account and its minter credential's address.
+	CloudflareAccount = internal.CloudflareAccount
+	// CloudflarePreset is one thing sluis mints.
+	CloudflarePreset = internal.CloudflarePreset
+	// CloudflareGrant opens presets to a group or a CI job.
+	CloudflareGrant = internal.CloudflareGrant
 )
 
 // Group is the group of the documents' kinds: an apiVersion is

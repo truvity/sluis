@@ -14,6 +14,8 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/truvity/sluis/config"
+	internalconfig "github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/policy"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden documents")
@@ -364,7 +366,7 @@ func TestTheInstallationTypeAndItsSchemaDescribeTheSameKeys(t *testing.T) {
 			t.Errorf("the full example does not set %s", key)
 			continue
 		}
-		own := map[string]bool{"issuer": true, "aws": true, "openbao": true, "exchange": true, "controllers": true}
+		own := map[string]bool{"issuer": true, "aws": true, "openbao": true, "exchange": true, "controllers": true, "cloudflare": true}
 		if m, isMap := set.(map[string]any); isMap && own[key] {
 			for sub := range section.Properties {
 				if _, ok := m[sub]; !ok {
@@ -431,5 +433,34 @@ func TestRenderRefusesAnAdapterTableThatBreaksTheRules(t *testing.T) {
 	})
 	if _, _, err := config.Render(in); err != nil {
 		t.Errorf("an allowed override was refused: %v", err)
+	}
+}
+
+// Cloudflare: the accounts and presets go to the service document, the grants to
+// the policy document, and a grant for a preset nobody declared is refused.
+func TestCloudflareIsSplitBetweenTheTwoDocuments(t *testing.T) {
+	in := installation(t, "example")
+	in.Access.Groups["all:infra:dns-editors"] = policy.Group{}
+	in.Cloudflare = &config.Cloudflare{Grants: []internalconfig.CloudflareGrant{{Group: "all:infra:dns-editors", Presets: []string{"dns"}}}}
+	in.Cloudflare.Accounts = map[string]internalconfig.CloudflareAccount{
+		"main": {ID: "0123456789abcdef0123456789abcdef", Minter: "internal/cloudflare/main/minter"},
+	}
+	in.Cloudflare.Presets = map[string]internalconfig.CloudflarePreset{"dns": {
+		Account: "main", Prototype: "proto-dns-0001", Description: "DNS",
+		Lifetime: internalconfig.Duration(15 * time.Minute), Rotation: internalconfig.Duration(5 * time.Minute),
+	}}
+	service, pol, err := config.Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(service), "cloudflare:") || strings.Contains(string(service), "grants:") {
+		t.Errorf("service document:\n%s", service)
+	}
+	if !strings.Contains(string(pol), "cloudflare:") || !strings.Contains(string(pol), "dns-editors") {
+		t.Errorf("policy document:\n%s", pol)
+	}
+	in.Cloudflare.Grants[0].Presets = []string{"missing"}
+	if _, _, err = config.Render(in); err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Errorf("a grant for an undeclared preset: %v", err)
 	}
 }

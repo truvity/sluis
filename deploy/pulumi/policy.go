@@ -243,6 +243,7 @@ const (
 	sidLogs           = "SluisLogs"
 	sidPrivate        = "SluisPrivateParameters"
 	sidExternal       = "SluisExternalParameters"
+	sidCloudflare     = "SluisCloudflare"
 	sidParamKy        = "SluisParameterKey"
 	sidInvoke         = "SluisRunAPass"
 	sidAudit          = "SluisAuditIngest"
@@ -336,6 +337,8 @@ type functionPolicyIn struct {
 	instance           string
 	logGroupArn        string
 	invokeFunctionArns []string
+	// cloudflare adds the grants of the Cloudflare minter (see ssmStatements).
+	cloudflare bool
 }
 
 // ssmStatements is the grant on /sluis/<instance> that both the Lambda role and
@@ -351,7 +354,7 @@ type functionPolicyIn struct {
 //     read only;
 //   - with a customer-managed parameter key, its use through SSM only, for the
 //     parameters under those prefixes.
-func ssmStatements(region, account, instance, parameterKeyArn string) []statement {
+func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare bool) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
 	st := []statement{{
 		"Sid":      sidPrivate,
@@ -381,6 +384,29 @@ func ssmStatements(region, account, instance, parameterKeyArn string) []statemen
 		"Action":   withHistory,
 		"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)),
 	})
+	if cloudflare {
+		// sluis as the STS for Cloudflare: the minter credential of each account is
+		// read and never written (it is the operator's), the record of the ids it
+		// minted is read and written, and the credentials it stores are written
+		// where consumers read them. Exactly these paths; the KMS grant below
+		// already covers every parameter under internal/ and external/.
+		st = append(st, statement{
+			"Sid":      sidCloudflare + "Minter",
+			"Effect":   "Allow",
+			"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
+			"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/cloudflare"),
+		}, statement{
+			"Sid":      sidCloudflare + "Minted",
+			"Effect":   "Allow",
+			"Action":   withHistory,
+			"Resource": parameterArns(region, account, InternalParameterPrefix(instance)+"/cloudflare-minted"),
+		}, statement{
+			"Sid":      sidCloudflare + "Stored",
+			"Effect":   "Allow",
+			"Action":   withHistory,
+			"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)+"/cloudflare"),
+		})
+	}
 	prefixes := []string{
 		CredentialsParameterPrefix(instance), ConfigParameterPrefix(instance),
 		InternalParameterPrefix(instance), ExternalParameterPrefix(instance),
@@ -407,7 +433,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 		st = append(st, credentialsStatements(in.external, in.region, in.account, in.instance, in.parameterKeyArn)...)
 	}
 	st = append(st, stateStatements(in.tableArn, in.tableKey)...)
-	st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn)...)
+	st = append(st, ssmStatements(in.region, in.account, in.instance, in.parameterKeyArn, in.cloudflare)...)
 	if in.queueArn != "" {
 		// No queue (audit off): the function may send to none.
 		st = append(st, statement{

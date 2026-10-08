@@ -5,8 +5,10 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -199,5 +201,76 @@ func TestAnInstallationTakesItsKeysFromTheLibrary(t *testing.T) {
 	in.Keys.Keys["sign"] = keys.Entry{Key: "alias/other"}
 	if _, _, err := buildLambda(t, supplied(in)); err == nil || !strings.Contains(err.Error(), "keys.sign") {
 		t.Errorf("error %v, want one naming keys.sign", err)
+	}
+}
+
+func withCloudflare(in *sluisconfig.Installation) {
+	in.Cloudflare = &sluisconfig.Cloudflare{
+		Cloudflare: sluisconfig.CloudflareSection{
+			Accounts: map[string]sluisconfig.CloudflareAccount{"main": {ID: "0123456789abcdef0123456789abcdef", Minter: "internal/cloudflare/main/minter"}},
+			Presets: map[string]sluisconfig.CloudflarePreset{"dns": {
+				Account: "main", Prototype: "proto-dns-0001", Description: "DNS",
+				Lifetime: sluisconfig.Duration(15 * time.Minute), Rotation: sluisconfig.Duration(5 * time.Minute),
+			}},
+		},
+		Grants: []sluisconfig.CloudflareGrant{{Group: "all:audit:security", Presets: []string{"dns"}}},
+	}
+}
+
+// An installation that declares Cloudflare presets gets the rotation schedule
+// and the function's grants on exactly the minter, the record of minted ids and
+// the stored credentials; one that does not gets neither.
+func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
+	in := exampleInstallation(t)
+	withCloudflare(in)
+	rec, _ := mustLambda(t, withInstallation(in, nil))
+
+	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
+	tgt := prop(s, "target").ObjectValue()
+	if prop(s, "scheduleExpression").StringValue() != "rate(1 minute)" || tgt["input"].StringValue() != `{"kind":"cloudflare"}` ||
+		!strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http") {
+		t.Errorf("rotation schedule: %v", s.Inputs)
+	}
+	root := arnp + "ssm:" + region + ":" + account + ":parameter/sluis/example"
+	g := rolePolicy(t, rec)
+	has := func(action, resource string) bool { return slices.Contains(g[action], resource) }
+	if !has("ssm:GetParameter", root+"/internal/cloudflare/*") || has("ssm:PutParameter", root+"/internal/cloudflare/*") {
+		t.Errorf("the minter credential must be readable and never writable: %v", g["ssm:GetParameter"])
+	}
+	if !has("ssm:PutParameter", root+"/internal/cloudflare-minted/*") || !has("ssm:GetParameter", root+"/internal/cloudflare-minted/*") {
+		t.Errorf("the record of minted ids must be read and written: %v", g["ssm:PutParameter"])
+	}
+	if !has("ssm:PutParameter", root+"/external/cloudflare/*") {
+		t.Errorf("the stored credentials must be writable: %v", g["ssm:PutParameter"])
+	}
+	for _, r := range g["ssm:PutParameter"] {
+		if strings.HasSuffix(r, "/internal/*") || strings.HasSuffix(r, "/internal/config/*") || r == root+"/internal/cloudflare/*" {
+			t.Errorf("a write grant too wide: %s", r)
+		}
+	}
+
+	// Off when the installation declares none, and when the schedule is left out.
+	rec, _ = mustLambda(t, withInstallation(exampleInstallation(t), nil))
+	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
+		t.Error("a rotation schedule without presets")
+	}
+	if g = rolePolicy(t, rec); has("ssm:GetParameter", root+"/internal/cloudflare/*") {
+		t.Error("a Cloudflare grant without presets")
+	}
+	rec, _ = mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) { a.CloudflareRotation.Disabled = true }))
+	if rec.has("aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation") {
+		t.Error("a disabled rotation schedule was made")
+	}
+	rec, _ = mustLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
+		a.CloudflareRotation.Paused, a.CloudflareRotation.Rate = true, "rate(2 minutes)"
+	}))
+	s = rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
+	if prop(s, "state").StringValue() != "DISABLED" || prop(s, "scheduleExpression").StringValue() != "rate(2 minutes)" {
+		t.Errorf("paused schedule: %v", s.Inputs)
+	}
+	if _, _, err := buildLambda(t, withInstallation(in, func(a *arp.LambdaArgs) {
+		a.CloudflareRotation = arp.CloudflareRotationArgs{Disabled: true, Paused: true}
+	})); err == nil {
+		t.Error("disabled and paused together were accepted")
 	}
 }
