@@ -491,7 +491,7 @@ func exportsSchema() m {
 
 // portsDynamoDBSchema is `ports.dynamodb`: the table of the `dynamodb` adapter.
 func portsDynamoDBSchema() m {
-	return obj("The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.", m{
+	return obj("The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.", m{
 		"table":    str("The table's name."),
 		"region":   str("The table's region. Absent, the SDK's own resolution (`AWS_REGION`)."),
 		"endpoint": url("Overrides the DynamoDB address: LocalStack or DynamoDB Local."),
@@ -509,11 +509,15 @@ func portsBlobSchema() m {
 			"prefix":    str("A key prefix inside the bucket, for an installation that shares it. Names are `<prefix>/reports/<target>` and `<prefix>/snapshots/<directory>`."),
 			"region":    str("The bucket's region. Absent, the SDK's own resolution (`AWS_REGION`)."),
 			"kmsKey":    str("A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies."),
-			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store."),
+			"endpoint":  url("Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."),
 			"pathStyle": boolean("Addresses the bucket in the path and not the host name, which LocalStack and most S3-compatible stores need."),
+			"credentialsRef": m{"type": "string", "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
+				"description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused."},
 		}, "bucket"),
 	}, "adapter")
 	s["allOf"] = []any{m{"if": m{"properties": m{"adapter": m{"const": "s3"}}}, "then": m{"required": []string{"s3"}}}}
+	s3 := s["properties"].(m)["s3"].(m)
+	s3["dependentRequired"] = m{"credentialsRef": []string{"endpoint"}}
 	return s
 }
 

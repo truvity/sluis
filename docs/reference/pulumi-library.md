@@ -78,9 +78,10 @@ through SSM only with a `ParameterKeyArn`. `CredentialsRef` is an address of the
 input and none is in the Pulumi state. Seed the parameter out of band. DynamoDB stays on AWS. A document that names
 `ports.blob` or `adapters.blobs` itself, or an `endpoint` of its own, is refused as before.
 
-The runtime reads `credentialsRef` only from a release whose service-document schema carries it (v1.74.0): the library
-holds the rest of the document to the loader and that key to its own validation, so deploy it with the release that has it.
-Pulumi preview cannot tell. (`instance` and the `keys:` block below are in the schema already.)
+The runtime reads `credentialsRef` from a release whose service-document schema carries it (the release that adds the
+S3-compatible Blob credentials): the library holds the whole document, `credentialsRef` included, to that schema, so
+deploy it with that release or later. The document the parameter holds is `s3-credentials/v1`, see
+[the deployment page](../how-to/blobs-on-r2.md).
 
 ```go
 store, _ := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{

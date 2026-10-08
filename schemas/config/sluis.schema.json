@@ -1120,6 +1120,11 @@
             },
             "s3": {
               "additionalProperties": false,
+              "dependentRequired": {
+                "credentialsRef": [
+                  "endpoint"
+                ]
+              },
               "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
               "properties": {
                 "bucket": {
@@ -1127,9 +1132,14 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "credentialsRef": {
+                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused.",
+                  "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
+                  "type": "string"
+                },
                 "endpoint": {
                   "$ref": "#/$defs/url",
-                  "description": "Overrides the S3 address: LocalStack or an S3-compatible store."
+                  "description": "Overrides the S3 address: LocalStack or an S3-compatible store (Cloudflare R2, MinIO)."
                 },
                 "kmsKey": {
                   "description": "A KMS key id, ARN or alias for server-side encryption (SSE-KMS) of every write. Absent, the bucket's default encryption applies.",
@@ -1164,7 +1174,7 @@
         },
         "dynamodb": {
           "additionalProperties": false,
-          "description": "The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
+          "description": "The DynamoDB table of the `dynamodb` adapter: one table with a string partition key `pk`, a string sort key `sk` and the TTL attribute `expires`. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here; an S3-compatible `endpoint` with no such identity names a credentials document by address (`credentialsRef`), never by value.",
           "properties": {
             "create": {
               "default": false,

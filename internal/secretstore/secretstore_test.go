@@ -345,3 +345,57 @@ func TestOpen(t *testing.T) {
 		t.Errorf("nil = %v, want ErrNoStore", err)
 	}
 }
+
+// The static credentials of an S3-compatible store: golden, matching their
+// schema, and reachable only through an internal address.
+func TestS3CredentialsDocument(t *testing.T) {
+	ctx := context.Background()
+	st, root := newStores(t)
+	doc, err := st.Internal.S3Credentials("internal/blobs/example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "example-access-key", SecretAccessKey: "example-secret-key"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	it, err := root.Child("internal").Get(ctx, "blobs/example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if golden := readFile(t, "testdata", "s3-credentials.v1.golden.json"); string(it.Value) != string(golden) {
+		t.Fatalf("encoder output changed:\n got %s\nwant %s", it.Value, golden)
+	}
+	var schema struct {
+		Required   []string                  `json:"required"`
+		Properties map[string]map[string]any `json:"properties"`
+	}
+	if err = json.Unmarshal(readFile(t, "..", "..", "schemas", "internal", "s3-credentials.v1.schema.json"), &schema); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err = json.Unmarshal(it.Value, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range schema.Required {
+		if _, ok := m[f].(string); !ok {
+			t.Errorf("required field %q is missing or not a string", f)
+		}
+	}
+	for f := range m {
+		if _, ok := schema.Properties[f]; !ok {
+			t.Errorf("field %q is not in the schema", f)
+		}
+	}
+	got, _, err := doc.Get(ctx)
+	if err != nil || got.SecretAccessKey != "example-secret-key" {
+		t.Fatalf("read back = %+v, %v", got, err)
+	}
+	if _, err = doc.Put(ctx, secretstore.S3Credentialsv1{AccessKeyID: "id"}, ""); !errors.Is(err, secretstore.ErrSchema) {
+		t.Errorf("a half document: %v, want ErrSchema", err)
+	}
+	for _, ref := range []string{"external/s3/x", "internal/../x", "internal/a", "x"} {
+		if _, err = st.Internal.S3Credentials(ref); !errors.Is(err, secretstore.ErrRef) {
+			t.Errorf("%q: %v, want ErrRef", ref, err)
+		}
+	}
+}

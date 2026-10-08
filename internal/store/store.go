@@ -123,6 +123,14 @@ func (c Config) validatePorts() error {
 		if b.S3 == nil || b.S3.Bucket == "" {
 			return errors.New("ports.blob.s3.bucket: required with ports.blob.adapter: s3")
 		}
+		if ref := b.S3.CredentialsRef; ref != "" {
+			if _, err := secretstore.CheckInternalRef(ref); err != nil {
+				return fmt.Errorf("ports.blob.s3.credentialsRef: %w", err)
+			}
+			if b.S3.Endpoint == "" {
+				return errors.New("ports.blob.s3.credentialsRef: needs ports.blob.s3.endpoint (static credentials are for an S3-compatible store)")
+			}
+		}
 	}
 	return nil
 }
@@ -170,17 +178,6 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	if err := c.validatePorts(); err != nil {
 		return port.Set{}, err
 	}
-	if b := c.Blob; b != nil {
-		blob, err := s3blob.New(ctx, s3blob.Config{
-			Bucket: b.S3.Bucket, Prefix: b.S3.Prefix, Region: b.S3.Region, KMSKey: b.S3.KMSKey,
-			Endpoint: b.S3.Endpoint, PathStyle: b.S3.PathStyle,
-		})
-		if err != nil {
-			return port.Set{}, fmt.Errorf("ports.blob: %w", err)
-		}
-		set.Blob = blob
-		log.InfoContext(ctx, "blobs are kept in S3", "adapter", BlobS3, "bucket", b.S3.Bucket, "prefix", b.S3.Prefix)
-	}
 	secrets, err := c.secretsOf(ctx)
 	if err != nil {
 		return port.Set{}, err
@@ -188,6 +185,14 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	if secrets != nil {
 		set.Secrets = secrets
 		log.InfoContext(ctx, "secrets are kept by the secrets adapter", "adapter", c.secrets.Adapter)
+	}
+	if b := c.Blob; b != nil {
+		blob, err := c.s3Blob(ctx)
+		if err != nil {
+			return port.Set{}, fmt.Errorf("ports.blob: %w", err)
+		}
+		set.Blob = blob
+		log.InfoContext(ctx, "blobs are kept in S3", "adapter", BlobS3, "bucket", b.S3.Bucket, "prefix", b.S3.Prefix)
 	}
 	exp, err := c.exportOf()
 	if err != nil {
@@ -201,6 +206,38 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	}
 	set.Export = exp
 	return set, nil
+}
+
+// s3Blob builds the S3 Blob adapter. With `credentialsRef` the credentials are
+// the document at that internal address of the installation's v4 secrets
+// stores, which secretsOf has built by now; `region` defaults to `auto`, the
+// region an S3-compatible store without regions wants.
+func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
+	b := c.Blob.S3
+	cfg := s3blob.Config{
+		Bucket: b.Bucket, Prefix: b.Prefix, Region: b.Region, KMSKey: b.KMSKey,
+		Endpoint: b.Endpoint, PathStyle: b.PathStyle,
+	}
+	if b.CredentialsRef != "" {
+		if c.v4 == nil || c.v4.stores == nil {
+			return nil, errors.New("credentialsRef needs the installation's secrets on layout v4 or transition (secrets.layout), where the internal address is")
+		}
+		doc, err := c.v4.stores.Internal.S3Credentials(b.CredentialsRef)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.Region == "" {
+			cfg.Region = "auto"
+		}
+		cfg.Credentials = func(ctx context.Context) (s3blob.Credentials, error) {
+			got, _, err := doc.Get(ctx)
+			if err != nil {
+				return s3blob.Credentials{}, fmt.Errorf("reading %s: %w", b.CredentialsRef, err)
+			}
+			return s3blob.Credentials{AccessKeyID: got.AccessKeyID, SecretAccessKey: got.SecretAccessKey}, nil
+		}
+	}
+	return s3blob.New(ctx, cfg)
 }
 
 // FromServe reads the configuration of `sluis serve`.

@@ -1,6 +1,9 @@
 package secretstore
 
 import (
+	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/truvity/sluis/storage/state"
@@ -70,4 +73,31 @@ func (i Internal) PersonToken(person, system string) state.Value[PersonToken] {
 // domain or id (v3: credentials/directory/google/<workspace-id>/<ref>).
 func (i Internal) Directory(domain string) state.Value[[]byte] {
 	return state.NewValue(i.s, "credentials/directory/google/"+segment(domain), state.Raw())
+}
+
+// refPattern is an `internal/<kind>/<id>` address: two lower-case segments.
+var refPattern = regexp.MustCompile(`^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$`)
+
+// ErrRef is an address that is not `internal/<kind>/<id>`.
+var ErrRef = fmt.Errorf("secretstore: want an internal/<kind>/<id> address")
+
+// CheckInternalRef refuses an address that is not `internal/<kind>/<id>`: an
+// external address, a path that climbs, or any other shape. It returns the
+// address below the internal namespace, `<kind>/<id>`.
+func CheckInternalRef(ref string) (string, error) {
+	if !refPattern.MatchString(ref) || strings.Contains(ref, "..") {
+		return "", fmt.Errorf("%w: %q", ErrRef, ref)
+	}
+	return strings.TrimPrefix(ref, "internal/"), nil
+}
+
+// S3Credentials is the static credential document of an S3-compatible store,
+// at the internal address ref (`internal/<kind>/<id>`, the setting
+// `ports.blob.s3.credentialsRef`).
+func (i Internal) S3Credentials(ref string) (state.Value[S3Credentialsv1], error) {
+	addr, err := CheckInternalRef(ref)
+	if err != nil {
+		return state.Value[S3Credentialsv1]{}, err
+	}
+	return state.NewValue(i.s, addr, state.Codec[S3Credentialsv1](s3CredentialsCodec)), nil
 }
