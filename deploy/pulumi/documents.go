@@ -184,6 +184,18 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	if err := withVerifyOnly(&in, a.VerifyOnly); err != nil {
 		return a, err
 	}
+	if a.ParameterKeyArn != "" {
+		sec := sluisconfig.Secrets{}
+		if in.Secrets != nil {
+			sec = *in.Secrets
+		}
+		if sec.KMSKeyID != "" && sec.KMSKeyID != a.ParameterKeyArn {
+			return a, fmt.Errorf("sluispulumi: LambdaArgs.ParameterKeyArn is %q and the installation's secrets.kmsKeyId is %q: say it once",
+				a.ParameterKeyArn, sec.KMSKeyID)
+		}
+		sec.KMSKeyID = a.ParameterKeyArn
+		in.Secrets = &sec
+	}
 	service, policy, err := sluisconfig.Render(&in)
 	if err != nil {
 		return a, fmt.Errorf("sluispulumi: LambdaArgs.Installation: %w", err)
@@ -206,6 +218,16 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 	}
 	if err = own(secrets, "Config: secrets", "region", a.Region); err != nil {
 		return err
+	}
+	if a.ParameterKeyArn != "" {
+		// The key the function's own writes use: the ssm adapter reads it from
+		// here (secrets.kmsKeyId), and an adapter that names another is refused.
+		if err = own(secrets, "Config: secrets", "kmsKeyId", a.ParameterKeyArn); err != nil {
+			return err
+		}
+		if err = ownSecretsAdapterKey(doc, a.ParameterKeyArn); err != nil {
+			return err
+		}
 	}
 	recovery, err := child(doc, "Config", "recovery")
 	if err != nil {
@@ -240,6 +262,27 @@ func ownServe(doc map[string]any, a *LambdaArgs, root string) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// ownSecretsAdapterKey refuses an `adapters.secrets` ssm adapter that names a
+// key other than the library's; the same value, or none, is accepted.
+func ownSecretsAdapterKey(doc map[string]any, key string) error {
+	adapters, ok := doc["adapters"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	secrets, ok := adapters["secrets"].(map[string]any)
+	if !ok || secrets["adapter"] != "ssm" {
+		return nil
+	}
+	settings, ok := secrets["settings"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if v, set := settings["kmsKeyId"]; set && v != key {
+		return fmt.Errorf("sluispulumi: LambdaArgs.Config: adapters.secrets.settings.kmsKeyId is %v and ParameterKeyArn is %q: say it once", v, key)
 	}
 	return nil
 }

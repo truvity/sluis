@@ -17,6 +17,7 @@ secrets:
   root: /sluis/example    # file: a directory; ssm: the installation's root
   region: eu-west-1    # ssm only
   refresh: 5m          # ssm only
+  kmsKeyId: alias/example   # ssm only: the key the service's own writes are encrypted with
 ```
 
 | `source` | A name is delivered as | Read |

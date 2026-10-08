@@ -251,7 +251,7 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `AllowEndpoints` | false | Lets the documents name a service `endpoint`, for a LocalStack test. Off, one is refused. |
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
 | `AuditQueueArn` | required | The audit stack's ingest queue. |
-| `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use. Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
+| `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use: the ones the library creates and the ones the function writes at run time (its credentials and exports; the library writes it into the service document as `secrets.kmsKeyId`, and a document that names another key is refused). Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
 | `SigningKeyAlias` | `alias/sluis-signing` | The ES384 signing key's alias. |
 | `SigningKeyRS256Alias`, `DisableSigningKeyRS256` | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
 | `WrappedSigning` | nil | Signing with the `kms-wrapped` adapter ([signing on AWS](../explanation/signing-on-aws.md)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](lambda.md#iam-one-role). |

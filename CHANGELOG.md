@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The Pulumi library's `ParameterKeyArn` now also encrypts what the function writes at run time.** Until now it keyed the two parameters Pulumi creates and the IAM grants, but the function's own writes (its credentials and exports) were encrypted with the AWS-managed `aws/ssm` key, readable by any principal in the account allowed `ssm:GetParameter`. With `ParameterKeyArn` set, the library writes `secrets.kmsKeyId: <ParameterKeyArn>` into the service document, from a `Config` and from an `Installation`, and the `ssm` secrets adapter encrypts with it. A document that names another key (`secrets.kmsKeyId`, `adapters.secrets.settings.kmsKeyId`) is refused naming the field; the same value is accepted. Unset, the document is byte-identical. The root module gains `secrets.kmsKeyId` (`ssm` source only; the adapter's `kmsKeyId` setting may repeat it, naming another is refused), so the library and the binary are released at the same version. **Estates that set `ParameterKeyArn` must re-write the parameters the function created before this release** (under `<root>/private/credentials/` and `<root>/export/`): they are on `aws/ssm` until written again.
+
 ## v1.72.0
 
 ### Changed

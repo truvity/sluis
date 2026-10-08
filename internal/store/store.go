@@ -78,6 +78,9 @@ type Config struct {
 	// SecretsRoot is the serve document's `secrets.root` when its source is
 	// ssm: the root the `ssm` Secrets adapter takes.
 	SecretsRoot string
+	// SecretsKMSKey is the serve document's `secrets.kmsKeyId` when its source
+	// is ssm: the key the `ssm` Secrets adapter encrypts what it writes with.
+	SecretsKMSKey string
 	// Converted is a document converted from v1: an `ssm` secrets adapter
 	// that names no root keeps v1's layout, /sluis.
 	Converted bool
@@ -199,6 +202,7 @@ func FromServe(f *config.Serve) (Config, error) {
 	}
 	if s := f.Secrets; s != nil && s.Source == "ssm" {
 		c.SecretsRoot = s.Root
+		c.SecretsKMSKey = s.KMSKeyID
 	}
 	var err error
 	if c.Adapter == AdapterDynamoDB && f.Valkey != nil && f.Valkey.Address != "" {
