@@ -303,7 +303,8 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 			"and leaves its lifecycle alone. Choose one", field("Create"), field("Adopt"))
 	}
 	if s.AcknowledgeLifecycle && !s.Adopt {
-		return s, fmt.Errorf("auditpulumi: %s is set without %s: it is the estate's statement about the lifecycle of a bucket it adopts", field("AcknowledgeLifecycle"), field("Adopt"))
+		return s, fmt.Errorf("auditpulumi: %s is set without %s: it is the estate's "+
+			"statement about the lifecycle of a bucket it adopts", field("AcknowledgeLifecycle"), field("Adopt"))
 	}
 	if s.KeyAlias != "" {
 		if err := checkAlias(field("KeyAlias"), s.KeyAlias); err != nil {
