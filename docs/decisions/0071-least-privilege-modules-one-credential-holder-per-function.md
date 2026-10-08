@@ -75,9 +75,13 @@ and schedule from one declaration, and one chart renders every Deployment.
 6. **Lambda binaries are plain HTTP servers behind the AWS Lambda Web Adapter.** Each function is a zip on
    `provided.al2023` with a zip layer **we build** from a pinned adapter release and checksum, not the adapter
    project's public layer. Non-HTTP events (scheduler ticks, module-to-module invokes) arrive through the adapter's
-   pass-through path as a POST of the raw event. The callee tells the shapes apart by path, by the adapter's request
-   headers and by a closed set of `kind` values; a module-to-module call is an `rpc` envelope that is deliberately not
-   shaped like an API Gateway event, and the pass-through path is never routed from the internet.
+   pass-through path, `/events`, as a POST of the raw event. `/events` exists **only in the `-lambda` binaries**: its
+   server is bound to the loopback address, API Gateway never routes it, the handler refuses a request whose context
+   is an API Gateway request, and the right to invoke is IAM. It dispatches a scheduler tick (`{"kind": ...}`) to the
+   module's `Tick(ctx, kind)` and an `rpc` envelope (deliberately not shaped like an API Gateway event) to the
+   module's typed internal calls. The `-k8s` binaries have no `/events`: an in-process scheduler with leases calls
+   `Tick`, and module calls arrive on an authenticated `/rpc` route (projected token and NetworkPolicy). The business
+   logic is one set of functions per module; the two mains differ only in how they are reached.
 
 7. **Configuration.** On AWS each function reads one **AppConfig** profile, rendered and deployed by Pulumi; only the
    deployment role may call `appconfig:StartDeployment`. The validator is a Lambda that runs sluis's real loader on the
@@ -101,7 +105,20 @@ and schedule from one declaration, and one chart renders every Deployment.
    operator tool that reads a backup back. The cutover tools shipped for the move to unified releases stay until that
    move is complete, then go.
 
-10. **Release.** Eight arm64 Lambda zips and eight multi-arch images, the adapter layer zip, and `sluisctl` and
+10. **Schedules and rollout.** Schedules are written once in a neutral form (`every: 5m` or a five-field cron);
+    Pulumi translates them to EventBridge Scheduler expressions (a role per schedule, a retry policy, a dead-letter
+    queue) and the `-k8s` binaries give them to an in-process scheduler (gocron v2) that takes a lease per tick, so
+    handlers are idempotent and replicas do not double-run. Modules with schedules: signer (key ring, every minute),
+    github and slack (every 5 minutes, plus run-now), google (directory refresh every 5 minutes, plus refresh on a
+    miss), cloudflare (every minute), backup (hourly or daily); issuer and console have none. On AWS every function
+    is served through a `live` alias that a CodeDeploy canary shifts (10% for 5 minutes, then 100%, rolled back on a
+    CloudWatch alarm for errors or throttles; a window of 0 is all at once), and callers target the alias, never
+    `$LATEST`. On Kubernetes a rolling update (`maxUnavailable: 0`, `maxSurge: 1`) with probes, configurable
+    replicas, requests and limits per module, a PodDisruptionBudget (`maxUnavailable: 1` from two replicas) and
+    topology spread. Per-module defaults for replicas, resources, Lambda memory, timeout and reserved concurrency are
+    in the chart values and the Pulumi library, not in this record.
+
+11. **Release.** Eight arm64 Lambda zips and eight multi-arch images, the adapter layer zip, and `sluisctl` and
     `sluis-restore` archives, each with an SBOM and a checksum in one `checksums.txt`, signed. Lambda is packaged as
     native zips and zip layers, never as container images, so that the package digest an installation pins is the
     code that runs.
