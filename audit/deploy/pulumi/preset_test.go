@@ -6,7 +6,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/truvity/sluis/audit/deploy/pulumi"
+	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
 )
 
 // profilesOf is a deployment document with one profile composed of the
