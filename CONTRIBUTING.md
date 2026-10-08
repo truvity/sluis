@@ -209,11 +209,13 @@ its own set of anti-patterns, out of this file's scope — see
 
 To cut a release `vX.Y.Z` (or a pre-release `vX.Y.Z-rc.1`):
 
-1. On an up-to-date master, `just release-pin vX.Y.Z` sets the root `go.mod`'s
-   requires of the repository's own modules (`storage`, `audit/sdk`) to the
-   release and keeps the `replace` lines.
+1. On an up-to-date master, `just release-pin vX.Y.Z` sets EVERY `go.mod`'s
+   requires of the repository's own modules, in every module, to the release and
+   keeps the `replace` lines, so the commit builds and tests as it stands (pinning
+   one module alone breaks the others: Go selects the higher version through
+   the one and the other's `go.mod` needs updating).
 2. Commit that (`chore: release vX.Y.Z`), merge it, and tag that commit: `git tag vX.Y.Z`,
-   push the tag. The tag must be on a commit whose root `go.mod` is pinned: the
+   push the tag. The tag must be on a commit whose every `go.mod` is pinned: the
    `gate` job runs `hack/modules.py check vX.Y.Z --release` and fails the release
    otherwise, before anything is published.
 3. The workflow does the rest, below. `just release-check vX.Y.Z` rehearses it.
@@ -244,18 +246,17 @@ prose still to be rewritten is a `baseline` count that only goes down.
 Two gates run before the artifacts exist, and `just release-check vX.Y.Z`
 runs the first locally (and both goreleaser configs):
 
-- **The modules' requires.** A module that requires another module of this
-  repository (`deploy/pulumi` requires the root, an edge module also the core
-  library, `audit` its SDK) is tagged at a child of the release commit whose
-  requires are the tag (`hack/modules.py pin`, `hack/tag-modules.sh`), so nothing
-  is bumped by hand. The `gate` job runs `hack/modules.py check` first, so a
-  `go.mod` the pin cannot handle stops the release before anything is published.
-  The modules are tagged dependencies first, and each pinned module is built as
-  a consumer would build it (the `replace` dropped, the other modules fetched at
-  their tags with `GOPROXY=direct`, `go build` and `go vet`,
-  `hack/build-as-consumer.sh`) before its `<dir>/vX.Y.Z` ref exists. A new
-  `go.mod` joins the chain with no workflow edit. The checkout keeps no
-  credential (`persist-credentials: false`).
+- **The modules' requires.** Every module is tagged at the release commit, in
+  which `just release-pin` has already set every require of a module of this
+  repository to the tag (`hack/modules.py`; `hack/test-release-pin.sh` runs the
+  pin on a copy and loads every module). The `gate` job runs
+  `hack/modules.py check --release` first, so an unpinned commit stops the
+  release before anything is published. The modules are tagged dependencies
+  first (`hack/tag-modules.sh`), and each is built as a consumer would build it
+  (the `replace` dropped, the other modules fetched at their tags with
+  `GOPROXY=direct`, `go build` and `go vet`, `hack/build-as-consumer.sh`) before
+  its `<dir>/vX.Y.Z` ref exists. A new `go.mod` joins the chain with no workflow
+  edit. The checkout keeps no credential (`persist-credentials: false`).
 
   The tags are pushed with an installation token of the catalogue App
   `truvity-ci-automation` (`ci-actions/token-exchange` with
@@ -267,8 +268,7 @@ runs the first locally (and both goreleaser configs):
   hand, under the team-gated `release-tags` ruleset.
 
   **A module tag pushed by hand is refused by design:** the job accepts an
-  existing tag only when it is the commit this release would make (the release
-  commit, or its child with the pinned `go.mod`), and fails otherwise, because a
+  existing tag only when it is the release commit, and fails otherwise, because a
   tag that a proxy has fetched cannot be taken back. The recovery is to delete the
   wrong tag before any proxy fetches it, or, once one has, to cut the next
   version. A tag ruleset restricting the module tags to the App makes the

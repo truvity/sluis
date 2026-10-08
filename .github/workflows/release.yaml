@@ -7,8 +7,9 @@
 #            the second product is a job of its own beside it)
 #   npm      the TypeScript package
 #   modules  every other Go module (hack/modules.py finds them), tagged
-#            <dir>/vX.Y.Z at a commit whose requires of the repository's own
-#            modules are this release (hack/tag-modules.sh)
+#            <dir>/vX.Y.Z at the release commit, which `just release-pin`
+#            made: every go.mod already requires this release
+#            (hack/tag-modules.sh)
 #
 # Release machinery is exercised only by a tag, so `just release-check vX.Y.Z`
 # runs everything that does not need one, and `gate` runs the chain's pin first.
@@ -30,7 +31,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Before anything is published: refuse a tag whose modules cannot be pinned.
+  # Before anything is published: refuse a tag whose commit is not the pinned release commit.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -38,8 +39,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # --release: the root tag was pushed by hand, so its go.mod must already
-      # require the release (`just release-pin`)
+      # --release: the tagged commit must already have every go.mod pinned to
+      # the release (`just release-pin`)
       - run: ./hack/modules.py check "$GITHUB_REF_NAME" --release
 
   release:
@@ -193,7 +194,7 @@ jobs:
           github-app: truvity-ci-automation
           repositories: ${{ github.event.repository.name }}
           permissions: contents:write
-      - name: tag the modules, dependencies first, each pinned to the release
+      - name: tag the modules, dependencies first, at the release commit
         env:
           GH_TOKEN: ${{ steps.app.outputs.github-token || github.token }}
           REPO: ${{ github.repository }}
