@@ -1,3 +1,4 @@
+//nolint:lll // fixtures and table rows are one-line documents
 package profile
 
 import (
@@ -109,16 +110,20 @@ func TestAWeakerProfilePresetIsRefused(t *testing.T) {
 
 func TestPresetStorageRefusals(t *testing.T) {
 	for name, c := range map[string]struct{ doc, want string }{
-		"attested on an endpoint":   {"presets:\n  attested: {bucket: b, endpoint: \"https://x.example\"}\nprofiles:\n  p: {frameworks: [pci-dss]}\n", "Object Lock"},
-		"ARN as key alias":          {"presets:\n  standard: {bucket: b, key_alias: \"1234abcd-12ab-34cd-56ef-1234567890ab\"}\nprofiles:\n  p: {frameworks: [security]}\n", "never a key id or ARN"}, //nolint:lll // a table row
-		"key alias on endpoint":     {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", key_alias: alias/k}\nprofiles:\n  p: {frameworks: [security]}\n", "key_alias"},             //nolint:lll // a table row
-		"credentials on AWS":        {"presets:\n  standard: {bucket: b, credentials: internal/x}\nprofiles:\n  p: {frameworks: [security]}\n", "workload's identity"},                               //nolint:lll // a table row
-		"no bucket":                 {"presets:\n  standard: {prefix: standard/}\nprofiles:\n  p: {frameworks: [security]}\n", "bucket is required"},
-		"unknown preset":            {"presets:\n  gold: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "gold"},
-		"prefix without slash":      {"presets:\n  standard: {bucket: b, prefix: standard}\nprofiles:\n  p: {frameworks: [security]}\n", "ending in a slash"},
-		"endpoint not a URL":        {"presets:\n  operational: {bucket: b, endpoint: nope}\nprofiles:\n  p: {frameworks: [history]}\n", "not an http(s) URL"},
-		"the old key_alias":         {"presets:\n  standard: {bucket: b}\nprofiles:\n  p: {frameworks: [security], key_alias: alias/k}\n", "key_alias"},
-		"the old deployment preset": {"preset: standard\npresets:\n  standard: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "preset"},
+		"attested on an endpoint":     {"presets:\n  attested: {bucket: b, endpoint: \"https://x.example\"}\nprofiles:\n  p: {frameworks: [pci-dss]}\n", "Object Lock"},
+		"ARN as key alias":            {"presets:\n  standard: {bucket: b, key_alias: \"1234abcd-12ab-34cd-56ef-1234567890ab\"}\nprofiles:\n  p: {frameworks: [security]}\n", "never a key id or ARN"},                                                                            //nolint:lll // a table row
+		"key alias on endpoint":       {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", key_alias: alias/k}\nprofiles:\n  p: {frameworks: [security]}\n", "key_alias"},                                                                                        //nolint:lll // a table row
+		"credentials on AWS":          {"presets:\n  standard: {bucket: b, credentials: internal/x}\nprofiles:\n  p: {frameworks: [security]}\n", "workload's identity"},                                                                                                          //nolint:lll // a table row
+		"credentials and a preset":    {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", credentials: internal/x, credentials_preset: {account: a, minter: internal/m, prototype: p, lifetime: 15m}}\nprofiles:\n  p: {frameworks: [security]}\n", "not both"}, //nolint:lll // a table row
+		"a preset on AWS":             {"presets:\n  standard: {bucket: b, credentials_preset: {account: a, minter: internal/m, prototype: p, lifetime: 15m}}\nprofiles:\n  p: {frameworks: [security]}\n", "set endpoint"},                                                       //nolint:lll // a table row
+		"a preset missing a field":    {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", credentials_preset: {account: a, lifetime: 15m}}\nprofiles:\n  p: {frameworks: [security]}\n", "account, minter and prototype"},                                       //nolint:lll // a table row
+		"a preset lifetime too short": {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", credentials_preset: {account: a, minter: internal/m, prototype: p, lifetime: 10s}}\nprofiles:\n  p: {frameworks: [security]}\n", "under a minute"},                    //nolint:lll // a table row
+		"no bucket":                   {"presets:\n  standard: {prefix: standard/}\nprofiles:\n  p: {frameworks: [security]}\n", "bucket is required"},
+		"unknown preset":              {"presets:\n  gold: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "gold"},
+		"prefix without slash":        {"presets:\n  standard: {bucket: b, prefix: standard}\nprofiles:\n  p: {frameworks: [security]}\n", "ending in a slash"},
+		"endpoint not a URL":          {"presets:\n  operational: {bucket: b, endpoint: nope}\nprofiles:\n  p: {frameworks: [history]}\n", "not an http(s) URL"},
+		"the old key_alias":           {"presets:\n  standard: {bucket: b}\nprofiles:\n  p: {frameworks: [security], key_alias: alias/k}\n", "key_alias"},
+		"the old deployment preset":   {"preset: standard\npresets:\n  standard: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "preset"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := ParseDeployment([]byte("apiVersion: " + DeploymentAPIVersion + "\n" + c.doc))

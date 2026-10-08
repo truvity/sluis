@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/yaml"
 )
@@ -85,10 +86,44 @@ type PresetStorage struct {
 	// secretAccessKey}). Only with Endpoint: on AWS the workload's identity is
 	// the credential.
 	Credentials string `json:"credentials,omitempty"`
+	// CredentialsPreset makes the process mint the store's R2 credentials for
+	// itself instead of reading static ones: it clones a Cloudflare prototype
+	// token with a minter token and renews before they expire. Exclusive with
+	// Credentials, and only with Endpoint. The static Credentials stay the
+	// default and the simpler path.
+	CredentialsPreset *CredentialsPreset `json:"credentials_preset,omitempty"`
 	// KeyAlias is the alias of the KMS key this preset's objects are encrypted
 	// with, a name and not a key (`alias/...`). Empty is the installation's
 	// archive key (or the bucket's default). Only on AWS S3.
 	KeyAlias string `json:"key_alias,omitempty"`
+}
+
+// CredentialsPreset is how a store's R2 credentials are minted: the Cloudflare
+// account, the address of the minter credential, the disabled prototype token
+// whose policies are the rights, and how long each minted token lives.
+type CredentialsPreset struct {
+	// Account is the Cloudflare account id.
+	Account string `json:"account"`
+	// Minter is the address, below the installation's state root, of the minter
+	// credential: a `cloudflare-minter/v1` document {schema, token}.
+	Minter string `json:"minter"`
+	// Prototype is the id of the DISABLED account token to clone.
+	Prototype string `json:"prototype"`
+	// Lifetime is how long each minted token lives, a Go duration of at least
+	// a minute (`15m`). The credentials are renewed with a third of it left.
+	Lifetime string `json:"lifetime"`
+}
+
+// LifetimeDuration is Lifetime as a duration.
+func (c CredentialsPreset) LifetimeDuration() (time.Duration, error) {
+	d, err := time.ParseDuration(c.Lifetime)
+	if err != nil {
+		return 0, fmt.Errorf("lifetime %q: %w", c.Lifetime, err)
+	}
+	if d < time.Minute {
+		return 0, fmt.Errorf("lifetime %s is under a minute", d)
+	}
+	return d, nil
 }
 
 // External reports whether the preset's store is an S3-compatible one that is
@@ -192,6 +227,25 @@ func (s PresetStorage) check(name Preset) []error {
 	if s.Prefix != "" && (strings.HasPrefix(s.Prefix, "/") || !strings.HasSuffix(s.Prefix, "/")) {
 		problems = append(problems, fmt.Errorf("deployment: preset %s: prefix %q is a path ending in a slash "+
 			"and not starting with one (operational/)", name, s.Prefix))
+	}
+	if c := s.CredentialsPreset; c != nil {
+		if s.Credentials != "" {
+			problems = append(problems, fmt.Errorf("deployment: preset %s names credentials and credentials_preset: "+
+				"static credentials or minted ones, not both", name))
+		}
+		if !s.External() {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_preset mints R2 credentials for a store at an endpoint; "+
+				"set endpoint, or leave credentials_preset out", name))
+		}
+		if c.Account == "" || c.Minter == "" || c.Prototype == "" {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_preset needs account, minter and prototype", name))
+		}
+		if strings.Contains(c.Minter, "..") || strings.HasPrefix(c.Minter, "/") {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_preset.minter %q is an address below the state root", name, c.Minter))
+		}
+		if _, err := c.LifetimeDuration(); err != nil {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_preset.%w", name, err))
+		}
 	}
 	if s.External() {
 		if u, err := url.Parse(s.Endpoint); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {

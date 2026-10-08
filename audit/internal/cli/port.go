@@ -13,6 +13,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/storage/cloudflare"
 	skeys "github.com/truvity/sluis/storage/keys"
 	kmskeys "github.com/truvity/sluis/storage/keys/kms"
 	localkeys "github.com/truvity/sluis/storage/keys/local"
@@ -159,4 +160,49 @@ func OpenPortProvider(ctx context.Context, k *config.Keys, secrets *config.Secre
 		return nil, err
 	}
 	return p, nil
+}
+
+// mintInstance names the tokens an audit process mints: sluis/audit/<preset>/self/<time>.
+const mintInstance = "audit"
+
+// minterDocument is the credential the process mints R2 credentials with, at an
+// address of the state store: {"schema": "cloudflare-minter/v1", "token": ...}.
+type minterDocument struct {
+	Schema string `json:"schema"`
+	Token  string `json:"token"`
+}
+
+// mintedProvider is the credentials provider of a store whose R2 credentials
+// are minted from a Cloudflare preset (storage/cloudflare, shared with sluis):
+// the minter token is read from the state store at each mint, the prototype is
+// checked at each mint, and the ids of the tokens minted are kept in the same
+// store so the expired ones are deleted.
+func mintedProvider(ctx context.Context, m MintedCredentials) (*cloudflare.Provider, error) {
+	st, err := stateAt(ctx, config.StateRef{Root: m.Root}, "")
+	if err != nil {
+		return nil, fmt.Errorf("credentials_preset: %w", err)
+	}
+	life, err := m.Spec.LifetimeDuration()
+	if err != nil {
+		return nil, fmt.Errorf("credentials_preset: %w", err)
+	}
+	return cloudflare.NewProvider(cloudflare.ProviderConfig{
+		Instance: mintInstance, Preset: string(m.Preset), Account: m.Spec.Account, Prototype: m.Spec.Prototype, Lifetime: life,
+		Minter: func(ctx context.Context) (string, error) { return readMinter(ctx, st, m.Spec.Minter) },
+		Record: st,
+	})
+}
+
+// readMinter reads the minter token at address in st. Neither the token nor
+// the document is ever put in an error.
+func readMinter(ctx context.Context, st state.Store, address string) (string, error) {
+	item, err := st.Get(ctx, address)
+	if err != nil {
+		return "", fmt.Errorf("credentials_preset.minter: reading %s: %w", address, err)
+	}
+	var d minterDocument
+	if err := json.Unmarshal(item.Value, &d); err != nil || d.Schema != "cloudflare-minter/v1" || d.Token == "" {
+		return "", fmt.Errorf("credentials_preset.minter: %s is not a cloudflare-minter/v1 document with a token", address)
+	}
+	return d.Token, nil
 }
