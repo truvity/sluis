@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Alert from "@mui/material/Alert";
-import { AuditProvider, AuditView } from "@truvity/audit/react";
+import { AuditProvider, AuditView } from "@truvity/audit-react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Collapse from "@mui/material/Collapse";

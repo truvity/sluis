@@ -56,6 +56,8 @@ frontend/                 the console: Vite + React + MUI, its built
                           dist/ embedded into the binary by go:embed
 ts/                       the TypeScript package; dist/ is built and
                           published to GitHub Packages by the release
+                          (audit/ts and audit/react are its audit
+                          siblings: @truvity/audit, @truvity/audit-react)
 proto/  gen/              contracts and committed generated code
 docs/                     getting-started, how-to (with upgrade/),
                           reference, explanation, decisions (ADRs)
@@ -224,8 +226,8 @@ The release workflow, on a `v*` tag, builds the binaries, the images
 (`ghcr.io/truvity/sluis/sluis`, and the sidecar
 `/resource-proxy`),
 the chart (`oci://ghcr.io/truvity/charts/sluis`), `sluisctl`'s
-archives and its Nix flake, and publishes the TypeScript package to GitHub
-Packages, all stamped with the tag. The `audit` job adds audit's archives, Lambda
+archives and its Nix flake, and publishes the TypeScript packages (`@truvity/sluis`, `@truvity/audit`,
+`@truvity/audit-react`) to GitHub Packages, all stamped with the tag. The `audit` job adds audit's archives, Lambda
 zips, images (`ghcr.io/truvity/audit/*`), chart and Nix flake to the same GitHub
 release (`audit/.goreleaser.yaml`, `just audit-release`).
 The Go module and the GitHub Action are the same tag. Every other Go module of

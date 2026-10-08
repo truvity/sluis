@@ -38,7 +38,7 @@ installation beside it is [deploying](../getting-started/kubernetes.md), and the
 | **one constructor per action** | in the application's code | a function per action name, so the name is spelled once |
 | the **emit library** | in the application's process | `emit`, the receiver's address in its own namespace, and the pod's projected service-account token |
 | a **CI check** | in the application's pipeline | `audit validate`, `audit check-emitters` |
-| the **Audit page** | in the application's console | `@truvity/audit/react`, and the query service's address |
+| the **Audit page** | in the application's console | `@truvity/audit-react`, and the query service's address |
 
 The application holds no credentials for the bucket, the index or the stream:
 only the address of a Service in its own namespace. Nothing it runs can read a
@@ -255,7 +255,7 @@ console gives it.
 ```tsx
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { createQueryClient } from "@truvity/audit";
-import { AuditProvider, AuditView } from "@truvity/audit/react";
+import { AuditProvider, AuditView } from "@truvity/audit-react";
 import shop from "./audit-sentences.json"; // `audit messages catalogue/shop.yaml`
 
 const audit = createQueryClient(createConnectTransport({

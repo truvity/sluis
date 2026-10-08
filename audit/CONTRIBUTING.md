@@ -78,7 +78,8 @@ their own jobs, and they matter as much.
   transit provider is tested because it is offered, not because it is the
   default. The transit signer, for the seals that will follow, is a separate
   choice, and is tested the same way.
-- `just ts` installs the TypeScript package's dependencies, then typechecks,
+- `just audit-ts` installs the TypeScript packages' dependencies (`ts/`, then
+  `react/`, which installs the first from the checkout), then typechecks,
   tests, builds, and checks what a publish would ship.
 - Against real S3, on demand: `AUDIT_S3_REAL_BUCKET=<bucket> go test
   ./internal/s3test -run RealBucket` checks that a lock can be lengthened and

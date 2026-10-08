@@ -3,20 +3,21 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { ConnectError } from "@connectrpc/connect";
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import type { QueryClient } from "../client.js";
 import {
   FacetsRequestSchema,
   SearchRequestSchema,
   Sort_Field,
+  Sentencer,
   Sort_Order,
   TimePredicateSchema,
   type Facet,
   type Filter,
   type GetResponse,
   type ProfileAccess,
-} from "../gen/audit/v1/query_pb.js";
-import type { Record as AuditRecord } from "../gen/audit/v1/record_pb.js";
-import { Sentencer, type Sentences } from "../sentences.js";
+  type QueryClient,
+  type Record as AuditRecord,
+  type Sentences,
+} from "@truvity/audit";
 
 interface Audit {
   client: QueryClient;

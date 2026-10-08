@@ -2,9 +2,8 @@ import { Code } from "@connectrpc/connect";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createQueryClient } from "../client.js";
-import type { Sentences } from "../sentences.js";
-import { fakeQueryService, type FakeOptions } from "../testing/fake.js";
+import { createQueryClient, type Sentences } from "@truvity/audit";
+import { fakeQueryService, type FakeOptions } from "./testing/fake.js";
 import { AuditProvider, AuditView } from "./index.js";
 
 const shop: Sentences = {

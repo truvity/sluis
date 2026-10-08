@@ -1,7 +1,7 @@
 # The Audit page
 
 One page, in the application's own console. It is a React component from
-`@truvity/audit` (`ts/`, `@truvity/audit/react`) that the console renders
+`@truvity/audit-react` (`react/`, over the query client `@truvity/audit` in `ts/`) that the console renders
 like any other page of itself, and it calls the query service of the
 installation in that application's namespace.
 
