@@ -127,7 +127,7 @@ func migrateLegacyConfigDir(oldDir, newDir string, w io.Writer) {
 		fail(err)
 		return
 	}
-	defer os.RemoveAll(staging) // a no-op once renamed away
+	defer func() { _ = os.RemoveAll(staging) }() // a no-op once renamed away
 	if err = os.Chmod(staging, 0o700); err != nil {
 		fail(err)
 		return
@@ -223,7 +223,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	after, err := in.Stat()
 	if err != nil {
 		return err
@@ -236,11 +236,11 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	if _, err = io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close()
 		return err
 	}
 	if err = out.Sync(); err != nil {
-		out.Close()
+		_ = out.Close()
 		return err
 	}
 	return out.Close()
