@@ -1135,7 +1135,8 @@ func lambdaTrust() string {
 // may invoke itself for a run-now), which is what keeps the grant from being a
 // cycle.
 func newFunctionRole(ctx *pulumi.Context, name, fnName string, a *LambdaArgs, signingKeyArns []pulumi.StringInput,
-	wrappedKeyArn, signKeyArn, secretsKeyArn, logGroupArn pulumi.StringInput, selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
+	wrappedKeyArn, signKeyArn, secretsKeyArn, logGroupArn pulumi.StringInput,
+	selfArn string, tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, error) {
 	rargs := &iam.RoleArgs{Name: pulumi.String(fnName), AssumeRolePolicy: pulumi.String(lambdaTrust()), Tags: tags}
 	if a.PermissionsBoundaryArn != "" {
 		rargs.PermissionsBoundary = pulumi.String(a.PermissionsBoundaryArn)

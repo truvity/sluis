@@ -142,7 +142,9 @@ func TestExternalBlobsOnAnS3CompatibleEndpoint(t *testing.T) {
 		t.Errorf("credentials grant: %v", creds)
 	}
 	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
-	for _, want := range []string{"endpoint: https://acct.r2.example.test", "bucket: acme-blobs", "region: auto", "credentialsRef: internal/blobs/r2", "adapter: s3"} {
+	for _, want := range []string{
+		"endpoint: https://acct.r2.example.test", "bucket: acme-blobs", "region: auto", "credentialsRef: internal/blobs/r2", "adapter: s3",
+	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the service document lacks %q:\n%s", want, doc)
 		}
@@ -234,14 +236,14 @@ func TestKubernetesIdentityWithExternalBlobs(t *testing.T) {
 
 func TestExternalReadPolicyNamesExactAddresses(t *testing.T) {
 	key := arnp + "kms:eu-west-1:" + account + ":key/acme-secrets"
-	doc, err := arp.ExternalReadPolicy(arp.ExternalReadPolicyArgs{
+	_, err := arp.ExternalReadPolicy(arp.ExternalReadPolicyArgs{
 		Region: region, AccountID: account, Instance: "acme", SecretsKeyArn: key,
 		Addresses: []string{"external/github/acme-bot", "external/slack/T0ACME"},
 	})
 	if err == nil {
 		t.Fatal("an upper-case id was accepted")
 	}
-	doc, err = arp.ExternalReadPolicy(arp.ExternalReadPolicyArgs{
+	doc, err := arp.ExternalReadPolicy(arp.ExternalReadPolicyArgs{
 		Region: region, AccountID: account, Instance: "acme", SecretsKeyArn: key,
 		Addresses: []string{"external/slack/t0acme", "external/github/acme-bot"},
 	})

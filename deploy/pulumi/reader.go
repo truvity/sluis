@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -42,17 +43,17 @@ func (a *ExternalReadPolicyArgs) validate() ([]string, error) {
 	var errs []error
 	for k, v := range map[string]string{"Region": a.Region, "AccountID": a.AccountID} {
 		if v == "" {
-			errs = append(errs, fmt.Errorf("%s is required", k))
+			errs = append(errs, fmt.Errorf("%s is required", strings.ToLower(k)))
 		}
 	}
 	if !validInstance(a.Instance) {
-		errs = append(errs, fmt.Errorf("Instance %q is lower-case letters, digits and dashes, at most 32, and not private or export", a.Instance))
+		errs = append(errs, fmt.Errorf("the instance %q is lower-case letters, digits and dashes, at most 32, and not private or export", a.Instance))
 	}
 	if len(a.Addresses) == 0 {
-		errs = append(errs, errors.New("Addresses is empty: a reader of nothing is a mistake"))
+		errs = append(errs, errors.New("the addresses are empty: a reader of nothing is a mistake"))
 	}
 	if a.SecretsKeyArn != "" && a.ParameterKeyArn != "" {
-		errs = append(errs, errors.New("SecretsKeyArn and ParameterKeyArn are two ways to encrypt the same parameters: set one"))
+		errs = append(errs, errors.New("the secrets key and the parameter key are two ways to encrypt the same parameters: set one"))
 	}
 	seen := map[string]bool{}
 	var arns []string

@@ -53,17 +53,17 @@ func (b *ExternalBlobs) validate() error {
 	}
 	var errs []error
 	if b.Bucket == "" {
-		errs = append(errs, errors.New("Bucket is required"))
+		errs = append(errs, errors.New("the bucket is required"))
 	}
 	u, err := url.Parse(b.Endpoint)
 	switch {
 	case b.Endpoint == "":
-		errs = append(errs, errors.New("Endpoint is required"))
+		errs = append(errs, errors.New("the endpoint is required"))
 	case err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "":
-		errs = append(errs, fmt.Errorf("Endpoint %q is not an https URL (host, no credentials, no query)", b.Endpoint))
+		errs = append(errs, fmt.Errorf("the endpoint %q is not an https URL (host, no credentials, no query)", b.Endpoint))
 	}
 	if !credentialsRefPattern.MatchString(b.CredentialsRef) || strings.Contains(b.CredentialsRef, "..") {
-		errs = append(errs, fmt.Errorf("CredentialsRef %q is not an address of the form internal/<kind>/<id> "+
+		errs = append(errs, fmt.Errorf("the credentials ref %q is not an address of the form internal/<kind>/<id> "+
 			"(lower-case letters, digits, - . _; no wildcard); it names a secret and is never the secret", b.CredentialsRef))
 	}
 	if err := errors.Join(errs...); err != nil {
