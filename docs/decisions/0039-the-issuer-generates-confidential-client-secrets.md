@@ -1,6 +1,6 @@
 # 0039 — The issuer generates confidential client secrets
 
-**Status:** Accepted; extends [0038](0038-estates-render-through-sluis.md) (what an estate
+**Status:** Accepted; amended by [0041](0041-the-secret-contract.md) (proposed): the secret and its previous value live at `external/oidc/<client>`; extends [0038](0038-estates-render-through-sluis.md) (what an estate
 declares for a client) and refines the client table of the policy document
 **Date:** 2026-10-06
 
