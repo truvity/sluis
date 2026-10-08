@@ -15,8 +15,13 @@ appears.
     hack/modules.py pin <vX.Y.Z> [file]   a go.mod with every require of a module of
                                           this repository set to the version; `-` or no
                                           file reads standard input, writes standard output
-    hack/modules.py check <vX.Y.Z>        pins every go.mod in a scratch copy and
-                                          reads the result back: the release's gate
+    hack/modules.py pin-root <vX.Y.Z>     the root go.mod, in place, with its requires of the
+                                          repository's modules set to the version: the release
+                                          commit (`just release-pin`), made BEFORE the root tag
+    hack/modules.py check <vX.Y.Z> [--release]
+                                          pins every go.mod in a scratch copy and reads the
+                                          result back: the release's gate. --release also
+                                          fails when the root go.mod is not already pinned
 
 Only python3 and the standard library: the release gate runs on a bare runner.
 `pin` rewrites the version of the require lines and nothing else, and refuses
@@ -120,9 +125,16 @@ def main(argv):
             sys.stdout.write(pin(version, sys.stdin.read(), mods))
         else:
             Path(f).write_text(pin(version, Path(f).read_text(), mods))
-    elif cmd == "check":
+    elif cmd == "pin-root":
         if len(args) != 1:
-            die("usage: modules.py check <vX.Y.Z>", 2)
+            die("usage: modules.py pin-root <vX.Y.Z>", 2)
+        f = ROOT / "go.mod"
+        f.write_text(pin(args[0], f.read_text(), mods))
+    elif cmd == "check":
+        strict = "--release" in args
+        args = [a for a in args if a != "--release"]
+        if len(args) != 1:
+            die("usage: modules.py check <vX.Y.Z> [--release]", 2)
         version = args[0]
         dirs = order(mods)
         if not dirs:
@@ -141,7 +153,10 @@ def main(argv):
         # already name the release, or `go get <root>@<tag>` cannot resolve them.
         stale = [(p, v) for _, p, v in requires((ROOT / "go.mod").read_text(), mods) if v != version]
         for p, v in stale:
-            print(f"::warning::the root go.mod requires {p} {v}, not {version}: a consumer of the root tag cannot resolve it", file=sys.stderr)
+            level = "error" if strict else "warning"
+            print(f"::{level}::the root go.mod requires {p} {v}, not {version}: a consumer of the root tag cannot resolve it; run `just release-pin {version}` and tag the commit", file=sys.stderr)
+        if stale and strict:
+            sys.exit(1)
     else:
         die(f"unknown command {cmd}", 2)
 

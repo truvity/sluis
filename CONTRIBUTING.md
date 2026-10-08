@@ -208,7 +208,18 @@ its own set of anti-patterns, out of this file's scope — see
 
 ## Releasing
 
-Push a `v*` tag. The release workflow builds the binaries, the images
+To cut a release `vX.Y.Z` (or a pre-release `vX.Y.Z-rc.1`):
+
+1. On an up-to-date master, `just release-pin vX.Y.Z` sets the root `go.mod`'s
+   requires of the repository's own modules (`storage`, `audit/sdk`) to the
+   release and keeps the `replace` lines.
+2. Commit that (`chore: release vX.Y.Z`), merge it, and tag that commit: `git tag vX.Y.Z`,
+   push the tag. The tag must be on a commit whose root `go.mod` is pinned: the
+   `gate` job runs `hack/modules.py check vX.Y.Z --release` and fails the release
+   otherwise, before anything is published.
+3. The workflow does the rest, below. `just release-check vX.Y.Z` rehearses it.
+
+The release workflow, on a `v*` tag, builds the binaries, the images
 (`ghcr.io/truvity/sluis/sluis`, and the sidecar
 `/resource-proxy`),
 the chart (`oci://ghcr.io/truvity/charts/sluis`), `sluisctl`'s

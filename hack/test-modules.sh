@@ -67,4 +67,11 @@ printf 'require (\n\tgithub.com/truvity/sluis v1.0.0\n\tgithub.com/truvity/sluis
 "$mod" check v9.8.7 > "$tmp/check.out" || fail "check refused the repository"
 grep -qxF 'audit/sdk/v9.8.7' "$tmp/check.out" || fail "check did not list the audit SDK's tag"
 grep -qxF 'v9.8.7' "$tmp/check.out" || fail "check did not list the root's tag"
+# The root: pinned in place by pin-root, and the release gate refuses it until then.
+"$mod" check v9.8.7 --release 2>/dev/null && fail "the release gate accepted an unpinned root"
+cp "$root/go.mod" "$tmp/root.go.mod.orig"
+trap 'cp "$tmp/root.go.mod.orig" "$root/go.mod"; rm -rf "$tmp"' EXIT
+"$mod" pin-root v9.8.7-rc.1
+"$mod" check v9.8.7-rc.1 --release > /dev/null || fail "the release gate refused a pinned root"
+grep -qxF 'storage/v9.8.7-rc.1' <("$mod" check v9.8.7-rc.1 --release) || fail "a pre-release tag was not listed"
 echo "modules: ok"
