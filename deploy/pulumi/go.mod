@@ -8,6 +8,7 @@ require (
 	github.com/pulumi/pulumi/sdk/v3 v3.267.0
 	github.com/truvity/policy v1.45.0
 	github.com/truvity/sluis v1.63.0
+	github.com/truvity/sluis/audit/deploy/pulumi v0.0.0
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -59,7 +60,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -88,7 +89,9 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
-	github.com/truvity/sluis/storage v0.0.0-00010101000000-000000000000 // indirect
+	github.com/truvity/sluis/audit v0.0.0 // indirect
+	github.com/truvity/sluis/audit/sdk v0.0.0 // indirect
+	github.com/truvity/sluis/storage v0.0.0 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
@@ -110,6 +113,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
@@ -124,6 +128,7 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
+	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
 // The library renders and validates its documents with the root module's public
@@ -139,3 +144,15 @@ replace github.com/truvity/sluis => ../..
 // The storage module is developed beside the root module and released with it
 // (the root module requires it); this checkout builds against it by path.
 replace github.com/truvity/sluis/storage => ../../storage
+
+// The audit Pulumi library is in this repository and installs audit by default
+// (LambdaArgs.Audit). This checkout builds against the modules beside it, by the
+// replaces below; a consumer does not get them, so the require above is what
+// they build against, pinned to the release being cut like the root module's.
+// The audit modules it stands on are replaced the same way (a replace is not
+// inherited from the module that needs them).
+replace github.com/truvity/sluis/audit/deploy/pulumi => ../../audit/deploy/pulumi
+
+replace github.com/truvity/sluis/audit => ../../audit
+
+replace github.com/truvity/sluis/audit/sdk => ../../audit/sdk

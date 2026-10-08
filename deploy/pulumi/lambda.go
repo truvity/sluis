@@ -19,6 +19,7 @@ import (
 	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
 	sluisconfig "github.com/truvity/sluis/config"
 )
 
@@ -127,8 +128,19 @@ type LambdaArgs struct {
 	// State is the DynamoDB table (State.Grant()). Required: the function keeps
 	// State in it.
 	State *StateGrant
-	// AuditQueueArn is the audit stack's ingest queue; the function may send to
-	// it. Required.
+	// Audit is where the service's audit records go: audit is INSTALLED by
+	// default (the audit Pulumi library of this repository, the operational
+	// preset derived from the profiles), Audit.Use sends the records to an
+	// installation that exists, and Audit.Enabled false installs and sends
+	// nothing. See AuditArgs. Needs Installation. Exclusive with AuditQueueArn.
+	Audit *AuditArgs
+	// AuditQueueArn is an audit installation's ingest queue that the estate
+	// installed itself and named in its Installation (`aws.auditQueueURL`); the
+	// function may send to it. With Installation, left out and with no Audit,
+	// audit is installed (see Audit); with the deprecated Config it is required.
+	//
+	// Deprecated: set Audit; Audit.Use is the same with the queue URL written
+	// into the document by the library.
 	AuditQueueArn pulumi.StringInput
 
 	// ParameterKeyArn is the customer-managed key SecureString parameters under
@@ -253,6 +265,9 @@ type LambdaArgs struct {
 	// endpoint the documents point at is where the function reads its secrets
 	// and its State from, and a forged one would serve forged secrets.
 	AllowEndpoints bool
+
+	// audit is what Audit resolved to (planAudit), set once.
+	audit *auditPlan
 }
 
 // WrappedSigningArgs is the symmetric key of the `kms-wrapped` signing adapter.
@@ -503,6 +518,16 @@ type Lambda struct {
 	// random bytes, base64. The library generates it and keeps it across applies.
 	StateSecretParameter pulumi.StringOutput
 
+	// Audit is the audit installation the library installed (Audit unset or
+	// without Use): its outputs are the writer, the archive and the queue. Nil
+	// with Audit.Use, Audit.Enabled false and AuditQueueArn.
+	Audit *auditpulumi.Audit
+	// AuditQueueURL and AuditQueueArn are the queue the service publishes to
+	// (installed here, or Audit.Use's); empty when audit is off, and the URL is
+	// empty with the deprecated AuditQueueArn.
+	AuditQueueURL pulumi.StringOutput
+	AuditQueueArn pulumi.StringOutput
+
 	// RecoveryPasswordParameter is the name of the SSM SecureString that holds the
 	// recovery password, `/sluis/<instance>/private/config/recovery/password`: 40 random
 	// letters and digits with no look-alikes. Only the name is an output, never the
@@ -566,6 +591,19 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.Keys != nil && (out.WrappedSigning != nil || out.SigningKeyAlias != "" || out.SigningKeyRS256Alias != "" || out.DisableSigningKeyRS256) {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys supplies the keys: WrappedSigning, SigningKeyAlias, SigningKeyRS256Alias " +
 			"and DisableSigningKeyRS256 are of the keys the library creates, and are not set beside it")
+	}
+	if out.audit == nil {
+		plan, err := out.planAudit()
+		if err != nil {
+			return out, err
+		}
+		out.audit = plan
+	}
+	switch out.audit.mode {
+	case auditInstall, auditUse:
+		out.AuditQueueArn = pulumi.String(out.audit.queueArn)
+	case auditOff:
+		out.AuditQueueArn = pulumi.String("")
 	}
 	var missing []string
 	for k, v := range map[string]string{
@@ -888,6 +926,27 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
+	// ---- audit: installed here beside the function (its role is the one sender
+	// the queue accepts), or the queue of an installation that exists.
+	auditURL, auditArn := rsEmpty, rsEmpty
+	switch a.audit.mode {
+	case auditInstall:
+		aargs, err := a.auditInstallArgs(a.audit, role.Arn)
+		if err != nil {
+			return nil, err
+		}
+		aud, err := auditpulumi.New(ctx, a.audit.name, aargs, child)
+		if err != nil {
+			return nil, fmt.Errorf("sluis audit: %w", err)
+		}
+		out.Audit = aud
+		auditURL, auditArn = aud.QueueURL, aud.QueueArn
+	case auditUse:
+		auditURL, auditArn = pulumi.String(a.audit.queueURL).ToStringOutput(), pulumi.String(a.audit.queueArn).ToStringOutput()
+	case auditLegacy:
+		auditArn = a.AuditQueueArn.ToStringOutput()
+	}
+	out.AuditQueueURL, out.AuditQueueArn = auditURL, auditArn
 	env := pulumi.StringMap{}
 	if t := a.Telemetry; t != nil {
 		if _, has := t.Env["OTEL_SERVICE_NAME"]; !has {
@@ -1062,6 +1121,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"schedulerRoleArn": out.SchedulerRoleArn, "scheduleNames": out.ScheduleNames,
 		"stateSecretParameter":      out.StateSecretParameter,
 		"recoveryPasswordParameter": out.RecoveryPasswordParameter, "configLayerArn": out.ConfigLayerArn,
+		"auditQueueUrl": out.AuditQueueURL, "auditQueueArn": out.AuditQueueArn,
 	}); err != nil {
 		return nil, err
 	}

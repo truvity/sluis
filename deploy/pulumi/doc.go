@@ -37,6 +37,13 @@
 //		CertificateArn: certArn, TruststorePEM: originPullCA, Storage: store,
 //	}, pulumi.Providers(aws))
 //
+// With an Installation, LambdaArgs.Audit decides where the audit records go:
+// the audit Pulumi library of this repository is installed by default (the
+// operational preset, derived from the profiles; the function's role is the one
+// sender of its queue), Audit.Use sends them to an installation that exists, and
+// Audit.Enabled false sends them nowhere (the service logs them). The older
+// AuditQueueArn names a queue the estate installed itself.
+//
 // The one function (`sluis`, or LambdaArgs.FunctionName) is the release zip's
 // `bootstrap`, in no VPC, with one role: it serves the issuer and the console
 // behind the API, and runs the GitHub and Slack controllers' passes (one
