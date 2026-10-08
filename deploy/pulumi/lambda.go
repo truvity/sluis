@@ -24,10 +24,10 @@ import (
 	sluisconfig "github.com/truvity/sluis/config"
 )
 
-// LambdaType is the Pulumi type token of the Lambda component.
 // LiveAlias is the alias of the function that every caller uses.
 const LiveAlias = sluisconfig.LiveAlias
 
+// LambdaType is the Pulumi type token of the Lambda component.
 const LambdaType = "sluis:aws:Lambda"
 
 // DefaultSigningKeyAlias is the token-signing key's alias when
@@ -1258,7 +1258,8 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
-		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches, "liveAliasArn": out.LiveAliasArn, "liveVersion": out.LiveVersion, "roleArn": out.RoleArn, "roleName": out.RoleName,
+		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches,
+		"liveAliasArn": out.LiveAliasArn, "liveVersion": out.LiveVersion, "roleArn": out.RoleArn, "roleName": out.RoleName,
 		"apiId": out.APIID, "apiStageName": out.APIStageName, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
@@ -1356,7 +1357,8 @@ const truststoreKey = "truststore/client-ca.pem"
 // newAPI is the HTTP API, its integration with the function, its $default
 // route and stage and the permission to invoke the function. Nothing in front
 // of it: that is a front door's (FrontDoor).
-func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, live *lambda.Alias, accessLogs *cloudwatch.LogGroup, tags pulumi.StringMapInput,
+func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, live *lambda.Alias,
+	accessLogs *cloudwatch.LogGroup, tags pulumi.StringMapInput,
 	opts ...pulumi.ResourceOption) (*apigatewayv2.Api, *apigatewayv2.Stage, error) {
 	api, err := apigatewayv2.NewApi(ctx, name+"-api", &apigatewayv2.ApiArgs{
 		Name:                      pulumi.String(a.FunctionNamePrefix),
