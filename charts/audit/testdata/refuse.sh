@@ -11,11 +11,12 @@
 # a configuration the schema of its binary refuses has to be refused here, by
 # the same words, before it is ever deployed.
 set -uo pipefail
-chart="$(dirname "$0")/.."
+chart="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$chart/../.." && pwd)"
 base="$chart/testdata/values/direct.yaml"
 fail=0
 cases=0
-for overlay in tests/invalid/audit/*.yaml; do
+for overlay in "$root"/tests/invalid/audit/*.yaml; do
     want=$(sed -n '1s/^# refuse: //p' "$overlay")
     if [ -z "$want" ]; then
         echo "NO EXPECTATION: $overlay has no '# refuse:' first line"
