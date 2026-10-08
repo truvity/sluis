@@ -20,7 +20,7 @@
 // schemas/config/audit-writer.schema.json before anything starts; the
 // environment adds only the secrets that file names, and OpenTelemetry's own
 // OTEL_* variables say where telemetry goes. See
-// docs/decisions/0021-one-validated-configuration-file.md.
+// docs/decisions/0063-one-validated-configuration-file.md.
 package main
 
 import (
@@ -114,7 +114,7 @@ func run() error {
 		// Each preset is its own store. A profile whose preset is not
 		// configured, or whose frameworks demand a lock its preset's bucket is
 		// not written with, is refused here, before a single copy lands where
-		// it could be deleted: docs/decisions/0014-lock-modes-and-store-tiers.md.
+		// it could be deleted: docs/decisions/0056-lock-modes-and-store-tiers.md.
 		if archive, err = cli.OpenArchive(ctx, d, profiles, *cfg.Archive, cfg.SecretReader()); err != nil {
 			return err
 		}
@@ -295,7 +295,7 @@ func run() error {
 	// Catalogue registration is served here, beside the sink. An installation
 	// belongs to one application, so a registry of its own would be a
 	// Deployment, a ServiceAccount and a network policy for one call at
-	// start-up: docs/decisions/0011-one-installation-per-service-or-product.md.
+	// start-up: docs/decisions/0053-one-installation-per-service-or-product.md.
 	// It needs the database, because a registered catalogue is kept in it and
 	// shares the index's migration chain.
 	if pool != nil {

@@ -50,7 +50,7 @@
           "type": "array"
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -180,7 +180,7 @@
           "type": "array"
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -717,7 +717,7 @@
           "uniqueItems": true
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -1115,7 +1115,7 @@
           "uniqueItems": true
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -1801,7 +1801,7 @@
     },
     "config-audit-observe.v1": {
       "additionalProperties": false,
-      "description": "The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0020). Secrets are never in this file: a field named ...Env holds the NAME of the environment variable that holds the secret. Telemetry is the OTEL_* environment, not configuration.",
+      "description": "The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0062). Secrets are never in this file: a field named ...Env holds the NAME of the environment variable that holds the secret. Telemetry is the OTEL_* environment, not configuration.",
       "properties": {
         "apiVersion": {
           "default": "truvity.github.io/audit-observe/v1",
@@ -2096,7 +2096,7 @@
     },
     "config-audit-observe.v2": {
       "additionalProperties": false,
-      "description": "The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0020). Secrets are never in this file: a field named ...Secret holds the NAME of a secret, which the `secrets` block says how to find (an environment variable, a file or an SSM parameter). Telemetry is the OTEL_* environment, not configuration.",
+      "description": "The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0062). Secrets are never in this file: a field named ...Secret holds the NAME of a secret, which the `secrets` block says how to find (an environment variable, a file or an SSM parameter). Telemetry is the OTEL_* environment, not configuration.",
       "properties": {
         "apiVersion": {
           "description": "The version of this document's shape, `audit.truvity.github.io/audit-observe/v2`. Absent means version 1, which is deprecated and read for one minor (`truvity.github.io/audit-observe/v1`); another value is refused, so that a later shape arrives by a version and not by a file that quietly means something else.",
@@ -2956,7 +2956,7 @@
           "type": "object"
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -3500,7 +3500,7 @@
           "type": "object"
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -4276,7 +4276,7 @@
           "uniqueItems": true
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -4511,7 +4511,7 @@
           "uniqueItems": true
         },
         "require": {
-          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.",
+          "description": "The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -5106,7 +5106,7 @@
           "type": "integer"
         },
         "require": {
-          "description": "The weakest durability this process's chain may give. Unset is `archived` for a writer and `queued` for a receiver. At start-up the process refuses to run if what it is configured with can never give that: a receiver, which holds no archive, cannot promise `archived`, and `forward.log` cannot promise more than `logged`. A write acknowledged weaker than this fails. See ADR 0017.",
+          "description": "The weakest durability this process's chain may give. Unset is `archived` for a writer and `queued` for a receiver. At start-up the process refuses to run if what it is configured with can never give that: a receiver, which holds no archive, cannot promise `archived`, and `forward.log` cannot promise more than `logged`. A write acknowledged weaker than this fails. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -5979,7 +5979,7 @@
           "type": "integer"
         },
         "require": {
-          "description": "The weakest durability this process's chain may give. Unset is `archived` for a writer and `queued` for a receiver. At start-up the process refuses to run if what it is configured with can never give that: a receiver, which holds no archive, cannot promise `archived`, and `forward.log` cannot promise more than `logged`. A write acknowledged weaker than this fails. See ADR 0017.",
+          "description": "The weakest durability this process's chain may give. Unset is `archived` for a writer and `queued` for a receiver. At start-up the process refuses to run if what it is configured with can never give that: a receiver, which holds no archive, cannot promise `archived`, and `forward.log` cannot promise more than `logged`. A write acknowledged weaker than this fails. See ADR 0059.",
           "enum": [
             "logged",
             "queued",
@@ -7165,7 +7165,7 @@
       }
     }
   ],
-  "description": "The audit trail's write path: the writer, the query service, and the jobs that seal, verify and prune what it writes. Each component's `config` is the schema its binary validates its file against, embedded; everything else is the platform's. Names follow docs/reference/configuration.md.",
+  "description": "The audit trail's write path: the writer, the query service, and the jobs that seal, verify and prune what it writes. Each component's `config` is the schema its binary validates its file against, embedded; everything else is the platform's. Names follow docs/audit/reference/configuration.md.",
   "patternProperties": {
     "^x-": {}
   },
@@ -7928,7 +7928,7 @@
           "type": "boolean"
         },
         "grants": {
-          "description": "The grants file a config names as `grants`: issuers, presets and rules. See docs/how-to/read-the-trail.md#access.",
+          "description": "The grants file a config names as `grants`: issuers, presets and rules. See docs/audit/how-to/read-the-trail.md#access.",
           "type": "object"
         },
         "keysVolume": {
@@ -8113,7 +8113,7 @@
     },
     "telemetry": {
       "additionalProperties": false,
-      "description": "The OpenTelemetry SDK environment every pod carries (ADR 0021): where signals go, never the configuration file.",
+      "description": "The OpenTelemetry SDK environment every pod carries (ADR 0063): where signals go, never the configuration file.",
       "properties": {
         "otlp": {
           "additionalProperties": false,

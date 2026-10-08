@@ -9,7 +9,8 @@ import (
 	"testing"
 )
 
-// root is the repository, two levels above this package.
+// root is the audit module, two levels above this package. Its documentation
+// lives in the repository's docs/audit tree, one level above the module.
 func root(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("..", ".."))
@@ -66,25 +67,26 @@ func anchors(t *testing.T, path string) map[string]bool {
 func TestRelativeLinksResolve(t *testing.T) {
 	base := root(t)
 	var pages []string
-	err := filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", ".devbox", "dist", "gen":
-				return filepath.SkipDir
+	for _, top := range []string{base, filepath.Join(base, "..", "docs", "audit")} {
+		err := filepath.WalkDir(top, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				switch d.Name() {
+				case ".git", "node_modules", ".devbox", "dist", "gen":
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(path, ".md") {
+				pages = append(pages, path)
 			}
 			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		// The decision template's links are placeholders by design.
-		if strings.HasSuffix(path, ".md") && d.Name() != "0000-template.md" {
-			pages = append(pages, path)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	cache := map[string]map[string]bool{}
 	checked := 0

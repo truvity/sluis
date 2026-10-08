@@ -1,5 +1,5 @@
 // Package recobj is the format of a record object: the one object an ingest
-// batch becomes, as docs/reference/bucket-contract.md specifies it.
+// batch becomes, as docs/audit/reference/bucket-contract.md specifies it.
 //
 // The body is newline-delimited JSON, zstd-compressed, and each line is
 //

@@ -1,5 +1,5 @@
 // Package fixture stands in for the platform on the local kind box (see
-// truvity/policy's hack/kind/README.md and docs/decisions/0005-kind-is-the-gate.md
+// truvity/policy's hack/kind/README.md and docs/decisions/0047-kind-is-the-gate.md
 // there): a Postgres database and its two roles, a JetStream stream, an S3
 // bucket — the
 // things a real deployment's platform would already have provisioned before

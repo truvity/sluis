@@ -19,7 +19,7 @@ import (
 )
 
 // Verify checks a profile's record objects over a range of ingest time against
-// the bucket contract (docs/reference/bucket-contract.md): for every object, its
+// the bucket contract (docs/audit/reference/bucket-contract.md): for every object, its
 // key, its metadata, the sha256 of its stored bytes, and the hash on every one
 // of its records.
 //
@@ -27,7 +27,7 @@ import (
 // credentials and their own copy of this command, which is what makes the
 // answer worth having: nothing in the result depends on trusting the operator
 // of the archive. What the objects alone cannot say is that nothing was omitted
-// or added: that is what seals vouch for (docs/decisions/0019-seals.md), and
+// or added: that is what seals vouch for (docs/decisions/0061-seals.md), and
 // with Seals set this checks them too, against the roots it is given and
 // nothing else.
 type Verify struct {

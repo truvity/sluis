@@ -18,7 +18,7 @@ than compiled; the first three are in `sdk/schemas/`:
 They are generated from `internal/config/schema` by `just config-schemas` and
 committed; `just drift` fails when they differ. The binaries embed them and the
 chart's `values.schema.json` embeds them under each component's `config`. See
-[the configuration reference](../docs/reference/configuration.md).
+[the configuration reference](../../docs/audit/reference/configuration.md).
 
 The core record's JSON Schema is generated from `proto/audit/v1/record.proto`
 by a buf plugin during `just generate`, comments included, and published as

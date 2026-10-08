@@ -3,7 +3,7 @@
 //
 // It is audit-notary's own logic (internal/cli.Notary): for each profile and
 // tenant, every hour that has closed and settled and has no seal gets one, signed
-// ES384 by a KMS key and chained to the one before (ADR 0019). A run is
+// ES384 by a KMS key and chained to the one before (ADR 0061). A run is
 // idempotent, so the schedule's retry, an overlapping invocation and a missed
 // hour are all harmless: the next run seals what is missing, and an hour that is
 // already sealed is read and left alone.

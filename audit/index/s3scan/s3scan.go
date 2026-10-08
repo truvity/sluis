@@ -13,7 +13,7 @@
 // with nothing.
 //
 // A day here is a day of INGEST time, because that is what the v1 layout keys
-// objects by (docs/reference/bucket-contract.md): records/<profile>/<tenant>/
+// objects by (docs/audit/reference/bucket-contract.md): records/<profile>/<tenant>/
 // <yyyy>/<mm>/<dd>/<hh>/<ULID>. Rows are ordered by occurred_at within an
 // ingest day, so a record that was ingested late sorts among the records of the
 // day it arrived, not the day it happened. A query that names a period of

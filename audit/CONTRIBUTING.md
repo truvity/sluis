@@ -29,13 +29,13 @@ A page belongs to one directory of `docs/`, by what the reader is doing:
 
 | directory | holds |
 |---|---|
-| `docs/getting-started/` | one tutorial per deployment shape, from nothing to working |
-| `docs/how-to/` | one task per page; runbooks use one template (purpose, preconditions, before you start, steps with command, expected output, verify and rollback, afterwards); migration steps in `docs/how-to/upgrade/vX.Y.md`, linked from the CHANGELOG |
-| `docs/reference/` | configuration keys, chart values, API, catalogue, bucket contract |
-| `docs/explanation/` | design and the why |
+| `docs/audit/getting-started/` | one tutorial per deployment shape, from nothing to working |
+| `docs/audit/how-to/` | one task per page; runbooks use one template (purpose, preconditions, before you start, steps with command, expected output, verify and rollback, afterwards); migration steps in `docs/audit/how-to/upgrade/vX.Y.md`, linked from the CHANGELOG |
+| `docs/audit/reference/` | configuration keys, chart values, API, catalogue, bucket contract |
+| `docs/audit/explanation/` | design and the why |
 | `docs/decisions/` | the ADRs, with a Status column in the index; a superseded decision has its own Status line changed |
 
-- `docs/explanation/why.md` and `docs/explanation/concepts.md` are the entry points and must stay
+- `docs/audit/explanation/why.md` and `docs/audit/explanation/concepts.md` are the entry points and must stay
   readable by someone who has never seen the code.
 - Prefer a page under about 400 lines; split by audience, not by length.
 - Where reference can be produced from code or a schema, mark it
@@ -74,7 +74,7 @@ their own jobs, and they matter as much.
   transit keys and signer. About twenty seconds; it needs Docker. The OpenBAO
   half covers a path a deployment opts into rather than the usual one:
   pseudonymisation keys are off by default
-  ([0013](docs/decisions/0013-no-pseudonymisation-keys-by-default.md)), so the
+  ([0055](../docs/decisions/0055-no-pseudonymisation-keys-by-default.md)), so the
   transit provider is tested because it is offered, not because it is the
   default. The transit signer, for the seals that will follow, is a separate
   choice, and is tested the same way.
@@ -97,9 +97,9 @@ a value or a heading, search the docs for it in the same change.
 
 Where the documentation runs ahead of the code — as it does while the
 architecture of
-[0011](docs/decisions/0011-one-installation-per-service-or-product.md),
-[0012](docs/decisions/0012-two-deliveries-and-a-durable-ack.md) and
-[0013](docs/decisions/0013-no-pseudonymisation-keys-by-default.md) is being
+[0053](../docs/decisions/0053-one-installation-per-service-or-product.md),
+[0054](../docs/decisions/0054-two-deliveries-and-a-durable-ack.md) and
+[0055](../docs/decisions/0055-no-pseudonymisation-keys-by-default.md) is being
 built — every name that does not exist yet says so where it is used: `# not
 built yet`, or a sentence beside it. A reference
 that cannot be told apart from the built thing is worse than a gap.

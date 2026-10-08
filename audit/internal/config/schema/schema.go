@@ -20,7 +20,7 @@ const Group = "audit" + ".truvity.github.io"
 
 // LegacyGroup is the group version 1 of every document was written under:
 // `truvity.github.io/<kind>/v1`. It is read, with a deprecation warning, for
-// one minor after version 2 (ADR 0025).
+// one minor after version 2 (ADR 0067).
 const LegacyGroup = "truvity.github.io"
 
 // Version is the version of every document's shape this build writes and reads
@@ -89,7 +89,7 @@ func durability(description string) m {
 // its own: it holds the writer's acknowledgements to a floor, and needs
 // sink.expect to know the writer can meet it before anything is sent.
 func requireEmitter() m {
-	return durability("The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0017.")
+	return durability("The weakest durability an acknowledgement from the writer may carry (`logged`, `queued` or `archived`). Unset checks nothing. Set, it needs `sink.expect` at least as strong, which is checked at start-up, and an acknowledgement weaker than this fails the write instead of passing it with a caveat. See ADR 0059.")
 }
 
 // stream is how a process reaches a NATS JetStream stream.
@@ -405,7 +405,7 @@ func writerSchema() m {
 			},
 			"oneOf": []any{m{"required": []string{"nats"}}, m{"required": []string{"sqs"}}},
 		},
-		"require": durability("The weakest durability this process's chain may give. Unset is `archived` for a writer and `queued` for a receiver. At start-up the process refuses to run if what it is configured with can never give that: a receiver, which holds no archive, cannot promise `archived`, and `forward.log` cannot promise more than `logged`. A write acknowledged weaker than this fails. See ADR 0017."),
+		"require": durability("The weakest durability this process's chain may give. Unset is `archived` for a writer and `queued` for a receiver. At start-up the process refuses to run if what it is configured with can never give that: a receiver, which holds no archive, cannot promise `archived`, and `forward.log` cannot promise more than `logged`. A write acknowledged weaker than this fails. See ADR 0059."),
 		"roll": obj("How much a writer gathers from the stream before it writes, which decides how many objects a day of records becomes.", m{
 			"interval":   duration("How long gathered records wait before they are written, and how long an object stays open within one write.", "30s"),
 			"maxRecords": integer("How many gathered records are written at once.", 1, 5000),
@@ -462,7 +462,7 @@ func writerLambdaSchema() m {
 			},
 			"oneOf": []any{m{"required": []string{"dynamodb"}}},
 		},
-		"require": durability("The weakest durability this process's chain may give; the writer gives `archived` at best, which is the default. A batch acknowledged weaker than this fails. See ADR 0017."),
+		"require": durability("The weakest durability this process's chain may give; the writer gives `archived` at best, which is the default. A batch acknowledged weaker than this fails. See ADR 0059."),
 	}
 	return document("audit-writer-lambda", "audit-writer-lambda",
 		"The configuration of audit-writer-lambda, the write path as an AWS Lambda behind an SQS event source mapping."+secretsNote,
@@ -532,7 +532,7 @@ func observeSchema() m {
 		},
 	}
 	return document("audit-observe", "audit-observe",
-		"The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0020)."+secretsNote,
+		"The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0062)."+secretsNote,
 		props, []string{"deployment", "database"}, []string{"postgres", "duration"}, nil)
 }
 

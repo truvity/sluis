@@ -14,12 +14,12 @@
 //     (dedupe/dynamodbdedupe), shared by every concurrent invocation environment;
 //   - there is no listener, no registry, no stream: the catalogues the writer
 //     runs with are files in the package;
-//   - configuration is a file in the package (docs/decisions/0021): the Pulumi
+//   - configuration is a file in the package (docs/decisions/0063): the Pulumi
 //     library renders it from the stack's own outputs and ships it in the zip, so
 //     there is nothing to fetch at cold start and nothing in the environment
 //     that is a secret;
 //   - telemetry is OTEL_* and nothing else, sent to the extension's loopback
-//     proxy (docs/explanation/aws-lambda.md), and flushed at the end of every
+//     proxy (docs/audit/explanation/aws-lambda.md), and flushed at the end of every
 //     invocation because an environment is frozen between them, and again on
 //     SIGTERM.
 //
@@ -110,7 +110,7 @@ func run() error {
 	}
 	// Each preset is its own store. A profile whose preset is not configured, or
 	// whose frameworks demand a lock its preset's bucket is not written with, is
-	// refused before a copy lands where it could be deleted (ADR 0014).
+	// refused before a copy lands where it could be deleted (ADR 0056).
 	archive, err := cli.OpenArchive(ctx, d, profiles, cfg.Archive, cfg.SecretReader())
 	if err != nil {
 		return err

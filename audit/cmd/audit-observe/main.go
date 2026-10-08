@@ -1,5 +1,5 @@
 // Command audit-observe is the indexer: it turns the archive into the search
-// index by following the bucket (docs/decisions/0020).
+// index by following the bucket (docs/decisions/0062).
 //
 // It is a process of its own, and not a mode of audit-query, because the two
 // hold opposite database rights. This one writes the index and holds no

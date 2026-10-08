@@ -54,7 +54,7 @@ func (c *Args) checkArchive() error {
 			return errors.New("auditpulumi: the attested preset's bucket is under COMPLIANCE (Archive.ObjectLockMode) and " +
 				"Archive.AcknowledgeCompliance is false: compliance retention cannot be shortened by anyone, including the account's root, " +
 				"and a retention wrong in the long direction is paid for until it expires. Run the governance trial first, sign off the " +
-				"retentions, then set AcknowledgeCompliance on a NEW bucket (docs/decisions/0023-archive-retention-and-lifecycle.md)")
+				"retentions, then set AcknowledgeCompliance on a NEW bucket (docs/decisions/0065-archive-retention-and-lifecycle.md)")
 		}
 		if ar.DefaultRetentionDays <= 0 {
 			return fmt.Errorf("auditpulumi: Archive.DefaultRetentionDays is required with Archive.ObjectLockMode %s: "+

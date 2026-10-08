@@ -20,7 +20,7 @@ var (
 func docPages(t *testing.T) []string {
 	t.Helper()
 	var pages []string
-	err := filepath.WalkDir(filepath.Join(root(t), "docs"), func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(filepath.Join(root(t), "..", "docs", "audit"), func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -38,8 +38,8 @@ func docPages(t *testing.T) []string {
 	return pages
 }
 
-// TestPageLength warns about a page over maxPageLines. CHANGELOG.md lives at
-// the repository root and is not under docs/, so it is exempt by position.
+// TestPageLength warns about a page over maxPageLines. CHANGELOG.md lives in
+// the module root and is not under docs/audit/, so it is exempt by position.
 func TestPageLength(t *testing.T) {
 	for _, page := range docPages(t) {
 		raw, err := os.ReadFile(page)

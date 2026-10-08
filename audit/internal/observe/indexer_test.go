@@ -11,7 +11,7 @@ import (
 )
 
 // The indexer over the in-memory archive and index: every claim of
-// docs/decisions/0020, with the clock in the test's hand.
+// docs/decisions/0062, with the clock in the test's hand.
 func TestTheIndexerOverMemory(t *testing.T) {
 	observetest.Run(t, func(*testing.T) observetest.Env {
 		idx := index.NewMemory()

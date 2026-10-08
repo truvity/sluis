@@ -3,10 +3,10 @@
 // For each profile and tenant it writes, for every hour that has closed and
 // settled, one signed seal of what that hour holds, chained to the one before:
 // seals/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>.jws
-// (docs/reference/bucket-contract.md, docs/decisions/0019-seals.md). It runs
+// (docs/audit/reference/bucket-contract.md, docs/decisions/0061-seals.md). It runs
 // once and exits, hourly, as a scheduled job.
 //
-// It is a part of its own (docs/decisions/0016): it reads the records, puts
+// It is a part of its own (docs/decisions/0058): it reads the records, puts
 // seals and signs, and it holds nothing the writer does. The key is a managed
 // one the writer's identity cannot use.
 package main

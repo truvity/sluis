@@ -63,7 +63,7 @@ func (k *KeyFlags) Local() bool { return *k.Provider == "local" }
 // accountability is for, and people outside arrive as identifiers the
 // application already minted. A profile that asks for a pseudonym anyway is
 // refused by the writer, naming the profile — see
-// docs/decisions/0013-no-pseudonymisation-keys-by-default.md.
+// docs/decisions/0055-no-pseudonymisation-keys-by-default.md.
 func (k *KeyFlags) Open(ctx context.Context) (keys.Provider, error) {
 	switch *k.Provider {
 	case "none", "":

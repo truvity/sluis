@@ -10,7 +10,7 @@ The directory and the `profile` package carry the name; the deployment document 
 profiles each of its profiles is composed from under the key `frameworks:`. A *preset* is something else (a named bundle of adapter or deployment
 choices, per truvity/policy decision 0012), and the old `presets:` key is refused with a message
 that names `frameworks:`. Everything about them, including the table of the seven and the composition
-rules, is in [the profiles reference](../docs/reference/profiles.md); which to compose is
-[which profiles to compose](../docs/explanation/which-profiles-to-compose.md). The format is
+rules, is in [the profiles reference](../../docs/audit/reference/profiles.md); which to compose is
+[which profiles to compose](../../docs/audit/explanation/which-profiles-to-compose.md). The format is
 [`sdk/schemas/profile.schema.json`](../sdk/schemas/profile.schema.json), and `audit profile explain <name>`
 prints what a profile keeps.

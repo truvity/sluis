@@ -7,8 +7,8 @@ a notary seals each hour, and `audit verify` lets an auditor check the archive w
 the bucket and nothing else.
 
 **Status: stabilizing.** A minor release may carry a breaking change with a **Breaking:** entry in the
-[CHANGELOG](CHANGELOG.md) and a migration page under [`docs/how-to/upgrade/`](docs/how-to/upgrade/v0.13.md);
-a patch never does ([policy decision 0012](https://github.com/truvity/policy/blob/master/docs/decisions/0012-stabilization-amendments.md)).
+[CHANGELOG](CHANGELOG.md) and a migration page under [`docs/audit/how-to/upgrade/`](../docs/audit/how-to/upgrade/v0.13.md);
+a patch never does ([policy decision 0012](https://github.com/truvity/policy/blob/master/docs/decisions/0054-stabilization-amendments.md)).
 
 ```mermaid
 flowchart LR
@@ -37,20 +37,20 @@ following the bucket. A **query service** reads them back behind declared grants
 ## Install and a worked example
 
 An installation belongs to **one application** and runs in that application's namespace
-([0011](docs/decisions/0011-one-installation-per-service-or-product.md)). It comes in three shapes,
+([0053](../docs/decisions/0053-one-installation-per-service-or-product.md)). It comes in three shapes,
 each with a tutorial from nothing to working:
 
 | shape | for | start |
 |---|---|---|
-| Kubernetes, with the chart | an internal service (direct) or a product (stream) | [Getting started on Kubernetes](docs/getting-started/kubernetes.md) |
-| AWS Lambda, with the Pulumi library | writer and notary as functions behind an SQS queue | [Getting started on AWS Lambda](docs/getting-started/aws-lambda.md) |
-| connected to sluis | audit's half of an access-management install | [Getting started with a sluis-connected install](docs/getting-started/sluis.md) |
+| Kubernetes, with the chart | an internal service (direct) or a product (stream) | [Getting started on Kubernetes](../docs/audit/getting-started/kubernetes.md) |
+| AWS Lambda, with the Pulumi library | writer and notary as functions behind an SQS queue | [Getting started on AWS Lambda](../docs/audit/getting-started/aws-lambda.md) |
+| connected to sluis | audit's half of an access-management install | [Getting started with a sluis-connected install](../docs/audit/getting-started/sluis.md) |
 
 They write the same archive, under the same catalogue rules and bucket layout, and are verified by the
 same command. The two combine: writer on Lambda, observe and query in Kubernetes.
 
 The worked example is `charts/audit/examples/direct.yaml`, rendered as a golden fixture, walked through
-in [Getting started on Kubernetes](docs/getting-started/kubernetes.md).
+in [Getting started on Kubernetes](../docs/audit/getting-started/kubernetes.md).
 
 ## Artifacts
 
@@ -59,7 +59,7 @@ in [Getting started on Kubernetes](docs/getting-started/kubernetes.md).
 | chart `audit` | `oci://ghcr.io/truvity/charts/audit` ([chart README](../charts/audit/README.md)) |
 | images `audit-writer`, `audit-query`, `audit-observe`, `audit-notary`, `audit` | `ghcr.io/truvity/audit/<name>` |
 | Lambda zips `audit-writer-lambda_<version>_linux_arm64.zip`, `audit-notary-lambda_<version>_linux_arm64.zip` | the GitHub release, with `checksums.txt` |
-| Pulumi library | `github.com/truvity/sluis/audit/deploy/pulumi` ([reference](docs/reference/aws-pulumi-library.md)) |
+| Pulumi library | `github.com/truvity/sluis/audit/deploy/pulumi` ([reference](../docs/audit/reference/aws-pulumi-library.md)) |
 | Go SDK: record, catalogue, emitter, sink | `github.com/truvity/sluis/audit/sdk` |
 | `audit` CLI (verify, hold, reindex, migrate, ...) | the GitHub release archives |
 | `@truvity/audit`: query client, sentences, React view | GitHub Packages, at each release tag |
@@ -70,7 +70,7 @@ in [Getting started on Kubernetes](docs/getting-started/kubernetes.md).
 | repo | surface |
 |---|---|
 | estates that deploy it | chart `audit`, or the Pulumi library for AWS Lambda |
-| sluis | emits records; see [the sluis page](docs/getting-started/sluis.md) |
+| sluis | emits records; see [the sluis page](../docs/audit/getting-started/sluis.md) |
 
 ## Neighbours
 
@@ -79,11 +79,11 @@ component's own records are one trail: audit is the record each of them writes.
 
 ## Documentation
 
-[`docs/`](docs/README.md) is organised by what you are doing: tutorials in
-[`getting-started/`](docs/getting-started/kubernetes.md), tasks and runbooks in
-[`how-to/`](docs/how-to/), lookups in [`reference/`](docs/reference/configuration.md), the why in
-[`explanation/`](docs/explanation/architecture.md) and the [decisions](docs/decisions/README.md). The
-changelog says what changed; the steps to take are in [`how-to/upgrade/`](docs/how-to/upgrade/v0.13.md).
+[`docs/`](../docs/audit/README.md) is organised by what you are doing: tutorials in
+[`getting-started/`](../docs/audit/getting-started/kubernetes.md), tasks and runbooks in
+[`how-to/`](../docs/audit/how-to/), lookups in [`reference/`](../docs/audit/reference/configuration.md), the why in
+[`explanation/`](../docs/audit/explanation/architecture.md) and the [decisions](../docs/decisions/README.md). The
+changelog says what changed; the steps to take are in [`how-to/upgrade/`](../docs/audit/how-to/upgrade/v0.13.md).
 
 ## The rule that makes this repository public
 
@@ -96,7 +96,7 @@ repository. `hack/leak-canary.sh` enforces it, and `just check` runs it. This re
 ## Status
 
 **Stabilizing** (see above). What is built, designed and run live, platform by platform:
-[capabilities](docs/reference/capabilities.md).
+[capabilities](../docs/audit/reference/capabilities.md).
 
 ## What it is not
 
@@ -109,7 +109,7 @@ repository. `hack/leak-canary.sh` enforces it, and `just check` runs it. This re
 
 Tools come from the repository's root `devbox.json` through direnv. `just audit-check` is the gate and needs
 nothing but this checkout. [CONTRIBUTING](CONTRIBUTING.md) has the rest, and
-[the repository layout](docs/reference/repository-layout.md) says where things are.
+[the repository layout](../docs/audit/reference/repository-layout.md) says where things are.
 
 ## Releasing
 
@@ -118,7 +118,7 @@ workflow: it builds the toolchain archives, the Lambda zips and, through `ko`, t
 `audit` chart to `oci://ghcr.io/truvity/charts/audit` at the tag's version.
 [`charts/audit/Chart.yaml`](../charts/audit/Chart.yaml)'s `version: 0.0.0` / `appVersion: "0.0.0"` are
 placeholders the release stamps over; never bump them by hand. A breaking change links its migration page
-from the CHANGELOG ([upgrade pages](docs/how-to/upgrade/v0.13.md)).
+from the CHANGELOG ([upgrade pages](../docs/audit/how-to/upgrade/v0.13.md)).
 
 ## Licence
 

@@ -38,7 +38,7 @@ func TestTheRolesAreNamedExactlyAndLiveUnderTheAuditPath(t *testing.T) {
 }
 
 func TestAnotherInstallationHasRolesOfItsOwn(t *testing.T) {
-	// One account may hold several installations (ADR 0011): the name is in every
+	// One account may hold several installations (ADR 0053): the name is in every
 	// role, because an IAM role name is unique across the account whatever its path.
 	rec, _, err := build(t, nil)
 	if err != nil {

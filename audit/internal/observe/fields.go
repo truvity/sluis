@@ -1,5 +1,5 @@
 // Package observe is the third part of an installation: it turns the archive
-// into the search index by following the bucket (docs/decisions/0020).
+// into the search index by following the bucket (docs/decisions/0062).
 //
 // The listing is the source of truth. A cursor per profile and tenant says how
 // far the keys have been read, a settle window keeps the cursor behind anything
@@ -96,7 +96,7 @@ func (g Given) With(cs ...*catalogue.Catalogue) Given {
 
 // ArchiveCatalogues reads catalogues from where the writer put them: the
 // archive's own catalogue/<app>/<version> and the extension schemas beside it
-// (docs/reference/bucket-contract.md). Observe therefore needs no copy of the
+// (docs/audit/reference/bucket-contract.md). Observe therefore needs no copy of the
 // catalogues and no registry: what describes a record is in the bucket that
 // holds it, from before the first record that names it.
 type ArchiveCatalogues struct {

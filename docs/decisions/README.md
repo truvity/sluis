@@ -63,7 +63,71 @@ is not edited.
 | [0040](0040-agent-class-sessions.md) | Agent-class sessions: a longer chain by client class, not by resource | Accepted; amends [0001](0001-sessions-and-an-absolute-limit.md) (agent-class chains are not held to the installation's absolute limit) and [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) (its lengthening half is deprecated) |
 | [0041](0041-the-secret-contract.md) | The secret contract: internal and external, one storage module, keys by purpose | Accepted (2026-10-08). Once carried out it amends [0034](0034-exports-go-to-openbao-directly.md) (the export copies, their schedule and the recovery bundles are retired), [0036](0036-configuration-is-immutable-per-instance.md) (layout v3 becomes v4) and [0039](0039-the-issuer-generates-confidential-client-secrets.md) (where a generated secret and its previous value live). Its companion [0042](0042-one-repository-one-release-train.md) moves audit into this repository and decides how audit is installed. |
 | [0042](0042-one-repository-one-release-train.md) | One repository, one release train: audit moves into sluis and is installed by preset to destinations | Accepted (2026-10-08). Companion of [0041](0041-the-secret-contract.md), which decides secrets, storage, keys and deployment shapes for both products. |
+| [0043](0043-record-schema-proto-with-json-schema-slots.md) | Record schema in Protocol Buffers with JSON Schema extension slots | accepted |
+| [0044](0044-profiles-composed-from-framework-profiles.md) | Profiles composed from framework profiles, one copy per profile | accepted; the compliance bundle this record first called a preset is a *framework profile*, and the `profiles/` directory, the `frameworks:` key and the `profile` package carry that name (a *preset* is a named bundle of adapter or deployment choices, per truvity/policy decision 0012) |
+| [0045](0045-s3-object-lock-as-the-record.md) | S3 Object Lock in compliance mode is the record; everything else is a projection | accepted; the object layout is superseded by [0060](0060-v1-bucket-layout.md), and retention is extended by [0065](0065-archive-retention-and-lifecycle.md) |
+| [0046](0046-sink-interface-and-transports.md) | One sink interface at every hop; the queue is invisible | accepted; the delivery modes are superseded by [0054](0054-two-deliveries-and-a-durable-ack.md), itself superseded by [0059](0059-sink-durability-and-transports.md), which extends this |
+| [0047](0047-identity-tiers-and-pseudonymisation.md) | Identity tiers and per-purpose pseudonymisation in the split writer | accepted |
+| [0048](0048-search-contract.md) | Search contract: DNF typed predicates, cursor page object, tail cursor | accepted |
+| [0049](0049-authentication-and-authorization-plug-points.md) | Pluggable authentication and authorization with declarative defaults | accepted |
+| [0050](0050-digest-chain-and-verification.md) | Hourly signed digest chain and an auditor-run verify command | superseded by [0061](0061-seals.md) |
+| [0051](0051-versioning-policy.md) | Versioning: package per major, major.minor on the record, decoders forever | accepted; refined by [0067](0067-configuration-is-immutable-per-instance.md) for configuration |
+| [0052](0052-key-providers.md) | Key providers: local, OpenBAO transit and AWS KMS envelope, behind one interface | accepted; the default is `none` per [0055](0055-no-pseudonymisation-keys-by-default.md) |
+| [0053](0053-one-installation-per-service-or-product.md) | One installation per service or product, in that application's namespace | accepted; refined by [0058](0058-three-parts-installed-independently.md) |
+| [0054](0054-two-deliveries-and-a-durable-ack.md) | Two deliveries, and the receiver's acknowledgement means durable | superseded by [0059](0059-sink-durability-and-transports.md) |
+| [0055](0055-no-pseudonymisation-keys-by-default.md) | No pseudonymisation keys by default | accepted; supersedes the default of [0052](0052-key-providers.md) |
+| [0056](0056-lock-modes-and-store-tiers.md) | Lock modes and store tiers: the lock is demanded where a framework demands it | accepted; refined by [0068](0068-storage-is-configured-per-preset.md) (the lock is a property of the install preset's bucket, not a setting of the process) |
+| [0057](0057-schema-ids-on-github-pages.md) | Schema identifiers on GitHub Pages, the old ones kept as aliases | accepted |
+| [0058](0058-three-parts-installed-independently.md) | Three parts, installed independently; the bucket layout is the contract | accepted; refines [0053](0053-one-installation-per-service-or-product.md) |
+| [0059](0059-sink-durability-and-transports.md) | Sink durability: the acknowledgement says how durable, and the start-up refuses less | accepted; supersedes [0054](0054-two-deliveries-and-a-durable-ack.md) and extends [0046](0046-sink-interface-and-transports.md) |
+| [0060](0060-v1-bucket-layout.md) | The v1 bucket layout, and v0 is dropped | accepted; supersedes the object layout of [0045](0045-s3-object-lock-as-the-record.md) |
+| [0061](0061-seals.md) | Seals: JOSE ES384, chained, per profile, tenant and hour | accepted; supersedes [0050](0050-digest-chain-and-verification.md) |
+| [0062](0062-observe-follows-the-bucket.md) | Observe follows the bucket by cursor; notifications only wake it | accepted |
+| [0063](0063-one-validated-configuration-file.md) | One configuration file, validated against a schema | accepted; refined by [0067](0067-configuration-is-immutable-per-instance.md); the secret fields it names (`<field>Env`) are `<field>Secret` through `secrets.source` in configuration version 2 (truvity/policy decision 0012; [upgrade](../audit/how-to/upgrade/v0.13.md)) |
+| [0064](0064-contracts-proto-and-connect.md) | Contracts are proto and Connect; Lambda RPCs are unary | accepted |
+| [0065](0065-archive-retention-and-lifecycle.md) | Archive retention: Object Lock compliance as the target, governance first | accepted; extends [0045](0045-s3-object-lock-as-the-record.md) and [0056](0056-lock-modes-and-store-tiers.md) |
+| [0066](0066-indexer-and-query-are-separate-processes.md) | The indexer and the query service are separate processes, under separate database roles | accepted |
+| [0067](0067-configuration-is-immutable-per-instance.md) | Configuration is immutable per instance; credentials and State are read live | accepted; refines [0063](0063-one-validated-configuration-file.md) and [0051](0051-versioning-policy.md) for configuration |
+| [0068](0068-storage-is-configured-per-preset.md) | Storage is configured per install preset | accepted; refines [0056](0056-lock-modes-and-store-tiers.md) and [0065](0065-archive-retention-and-lifecycle.md) |
 <!-- /generated -->
+
+## Audit's records
+
+The records numbered 0043 to 0067 are audit's, which had its own series
+(0001 to 0025) before audit moved into this repository
+([0042](0042-one-repository-one-release-train.md)). They were renumbered after
+sluis's, in order, and are otherwise unchanged apart from the Status and Date
+lines, which now use the shape the rest of this directory has. A reference to
+"audit ADR NNNN" in an older changelog entry, issue or comment means the
+record in this table.
+
+| formerly audit ADR | now | decision |
+|---|---|---|
+| 0001 | [0043](0043-record-schema-proto-with-json-schema-slots.md) | Record schema in Protocol Buffers with JSON Schema extension slots |
+| 0002 | [0044](0044-profiles-composed-from-framework-profiles.md) | Profiles composed from framework profiles, one copy per profile |
+| 0003 | [0045](0045-s3-object-lock-as-the-record.md) | S3 Object Lock in compliance mode is the record; everything else is a projection |
+| 0004 | [0046](0046-sink-interface-and-transports.md) | One sink interface at every hop; the queue is invisible |
+| 0005 | [0047](0047-identity-tiers-and-pseudonymisation.md) | Identity tiers and per-purpose pseudonymisation in the split writer |
+| 0006 | [0048](0048-search-contract.md) | Search contract: DNF typed predicates, cursor page object, tail cursor |
+| 0007 | [0049](0049-authentication-and-authorization-plug-points.md) | Pluggable authentication and authorization with declarative defaults |
+| 0008 | [0050](0050-digest-chain-and-verification.md) | Hourly signed digest chain and an auditor-run verify command |
+| 0009 | [0051](0051-versioning-policy.md) | Versioning: package per major, major.minor on the record, decoders forever |
+| 0010 | [0052](0052-key-providers.md) | Key providers: local, OpenBAO transit and AWS KMS envelope, behind one interface |
+| 0011 | [0053](0053-one-installation-per-service-or-product.md) | One installation per service or product, in that application's namespace |
+| 0012 | [0054](0054-two-deliveries-and-a-durable-ack.md) | Two deliveries, and the receiver's acknowledgement means durable |
+| 0013 | [0055](0055-no-pseudonymisation-keys-by-default.md) | No pseudonymisation keys by default |
+| 0014 | [0056](0056-lock-modes-and-store-tiers.md) | Lock modes and store tiers: the lock is demanded where a framework demands it |
+| 0015 | [0057](0057-schema-ids-on-github-pages.md) | Schema identifiers on GitHub Pages, the old ones kept as aliases |
+| 0016 | [0058](0058-three-parts-installed-independently.md) | Three parts, installed independently; the bucket layout is the contract |
+| 0017 | [0059](0059-sink-durability-and-transports.md) | Sink durability: the acknowledgement says how durable, and the start-up refuses less |
+| 0018 | [0060](0060-v1-bucket-layout.md) | The v1 bucket layout, and v0 is dropped |
+| 0019 | [0061](0061-seals.md) | Seals: JOSE ES384, chained, per profile, tenant and hour |
+| 0020 | [0062](0062-observe-follows-the-bucket.md) | Observe follows the bucket by cursor; notifications only wake it |
+| 0021 | [0063](0063-one-validated-configuration-file.md) | One configuration file, validated against a schema |
+| 0022 | [0064](0064-contracts-proto-and-connect.md) | Contracts are proto and Connect; Lambda RPCs are unary |
+| 0023 | [0065](0065-archive-retention-and-lifecycle.md) | Archive retention: Object Lock compliance as the target, governance first |
+| 0024 | [0066](0066-indexer-and-query-are-separate-processes.md) | The indexer and the query service are separate processes, under separate database roles |
+| 0025 | [0067](0067-configuration-is-immutable-per-instance.md) | Configuration is immutable per instance; credentials and State are read live |
 
 ## Template
 

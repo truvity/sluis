@@ -1,0 +1,66 @@
+# Record reference
+
+Source of truth: [record.proto](../../../audit/proto/audit/v1/record.proto), which is
+also where a reader goes for what each field means.
+
+Its JSON Schema is generated from that proto by a buf plugin during
+`just generate` and published as
+[`gen/jsonschema/record.v1.schema.json`](../../../audit/gen/jsonschema/record.v1.schema.json),
+under the identifier `https://truvity.github.io/audit/schemas/v1/record.schema.json`.
+It describes the form this project writes — proto field names, enums as names,
+64-bit integers as strings, unpopulated fields absent — and carries every proto
+comment as a description, so that a reader outside Go can both validate an
+archived record and understand it without this repository. The writer archives
+the proto of a record's major beside the schema on first use. A proto change not
+followed by `just generate` leaves the tree dirty, which CI reads as a failure.
+
+Which profile copies carry a field is decided by the profile's framework profiles
+([framework profiles](profiles.md)); `audit profile explain <name>` prints the result. The
+record does not say.
+
+| field | set by | notes |
+|---|---|---|
+| `id` | emitter | UUIDv7; idempotency key at every hop |
+| `occurred_at` | emitter | RFC 3339 UTC |
+| `recorded_at` | writer | drives the tail cursor |
+| `schema_version` | emitter | `major.minor` |
+| `catalogue_version` | emitter | resolves extension schemas |
+| `source` | emitter | namespace of `action` |
+| `observer` | writer | verified publisher identity, version, instance |
+| `sequence` | emitter | monotonic per instance |
+| `action` | emitter | `resource.verb` under `source` |
+| `operation` | emitter | seven values |
+| `outcome` | emitter | result, reason, code |
+| `tenant_id` | emitter | legal entity; `@platform` for the installation's own records |
+| `subject` | emitter | kind and id; treated by kind category |
+| `actor` | emitter | kind, id, session, auth method, credential hash, attributes |
+| `targets[]` | emitter | type, id, name (non-person only), attributes |
+| `context` | emitter | address chain, user agent, request, trace, span, areas |
+| `capture` | emitter | level-gated request and response, truncated flag |
+| `previous_attributes` | emitter | update actions only |
+| `data` | emitter | extension slot keyed by action; each property carries its own class |
+| `meter` | emitter | name, quantity, unit, kind, dimensions |
+| `attributes` | emitter | bounded map |
+| `unmapped` | emitter or adapter | what could not be mapped |
+| `origin_hash` | writer | SHA-256 of the wide record |
+| `profile` | writer | which copy this is |
+
+## Bounds (enforced by the emitter library, defaults)
+
+| what | bound |
+|---|---|
+| `attributes` | 50 keys, key 64 chars, value 512 chars |
+| `outcome.reason` | 512 chars |
+| `context.user_agent` | 256 chars |
+| `context.client_addresses` | 8 entries |
+| `capture.request`, `capture.response` | 64 KiB each; a larger body is dropped by the emitter. Bodies stay in the record: only the security profile keeps `capture`, so there is nothing to share between copies |
+| `targets` | 32 entries |
+| truncation order | response, request, unmapped, attributes, reason |
+
+## Negative list (refused by the emitter library)
+
+Secrets, tokens, passwords, private keys, connection strings, card numbers,
+bank account numbers, session identifiers in clear, presented attribute
+values, user content, names, e-mail addresses. Property names containing
+`password`, `secret`, `token`, `authorization` are refused in extension
+schemas unless annotated `x-audit-sensitive: redact`.

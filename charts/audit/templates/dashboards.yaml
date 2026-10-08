@@ -5,7 +5,7 @@ the cluster Grafana's sidecar reads. A Grafana on one cluster and an install on
 another is the usual shape, so the dashboards are shipped as their own release
 into Grafana's namespace (`dashboards.namespace`), labelled for the sidecar.
 
-The dashboard holds to truvity/observability's contract, audit/docs/dashboards.md,
+The dashboard holds to truvity/observability's contract, docs/audit/dashboards.md,
 and `just telemetry` runs that repository's own `dashboardlint` over it:
 a `datasource` variable that every panel uses, a `cluster` variable chained
 off it and filled by label_values(), `$cluster` in the title and in every
