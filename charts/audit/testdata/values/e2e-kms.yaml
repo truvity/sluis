@@ -1,0 +1,30 @@
+# Laid over e2e.yaml for the "services in the cluster" tier: the same NATS,
+# PostgreSQL and S3 endpoint, plus the notary signing seals with an AWS KMS key.
+# The pods reach KMS through the SDK's default credential chain; the endpoint
+# and the credentials arrive as environment variables from Kubernetes Secrets,
+# which is how a secret manager's operator would deliver them. Nothing reads SSM.
+jobs:
+  notary:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      deployment: /etc/audit/deployment.yaml
+      keys:
+        adapter: kms
+        seal:
+          key: alias/audit-seal
+      sink:
+        url: http://audit-e2e:8080
+    secretEnv:
+      - name: AWS_ENDPOINT_URL_KMS
+        secretName: audit-e2e-kms
+        key: AWS_ENDPOINT_URL_KMS
+      - name: AWS_REGION
+        secretName: audit-e2e-kms
+        key: AWS_REGION
+      - name: AWS_ACCESS_KEY_ID
+        secretName: audit-e2e-s3-credentials
+        key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        secretName: audit-e2e-s3-credentials
+        key: AWS_SECRET_ACCESS_KEY

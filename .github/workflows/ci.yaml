@@ -158,7 +158,11 @@ jobs:
       - run: hack/audit-service-tests.sh
 
   # The local cluster, stood up from nothing on truvity/policy's kind box; the
-  # chart is installed from the package a snapshot release builds.
+  # chart is installed from the package a snapshot release builds. Two lanes, each
+  # on a box of its own: the chart on NATS, PostgreSQL and an S3 endpoint; and the
+  # same with the notary signing under an AWS KMS key (a LocalStack stand-in), the
+  # services-in-the-cluster tier, where nothing reads SQS, DynamoDB or SSM and the
+  # pods get their endpoints and credentials from Kubernetes Secrets.
   audit-cluster:
     needs: plan
     if: needs.plan.outputs.audit == 'true'
@@ -177,6 +181,12 @@ jobs:
             "build": "devbox run -- just audit-e2e-snapshot",
             "install": "devbox run -- just audit-e2e-fixture && devbox run -- just audit-e2e-install",
             "test": "devbox run -- just audit-e2e-smoke"
+          },
+          {
+            "name": "audit-kms",
+            "build": "devbox run -- just audit-e2e-snapshot",
+            "install": "devbox run -- just audit-e2e-fixture && devbox run -- just audit-e2e-kms-fixture && EXTRA_VALUES=../charts/audit/testdata/values/e2e-kms.yaml devbox run -- just audit-e2e-install",
+            "test": "E2E_KMS=1 devbox run -- just audit-e2e-smoke"
           }
         ]
 
