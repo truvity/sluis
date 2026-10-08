@@ -106,14 +106,14 @@ func (d *Deployment) ProfileNeeds(frameworks map[string]*Framework) (map[string]
 			if !ok {
 				return nil, fmt.Errorf("profile %s: no framework profile named %q", name, fw)
 			}
-			min := f.MinPreset
-			if min == "" {
-				min = Operational
+			need := f.MinPreset
+			if need == "" {
+				need = Operational
 			}
 			switch {
-			case min.Rank() > n.Preset.Rank():
-				n = Needs{Preset: min, By: []string{fw}}
-			case min == n.Preset && min.Rank() > 0:
+			case need.Rank() > n.Preset.Rank():
+				n = Needs{Preset: need, By: []string{fw}}
+			case need == n.Preset && need.Rank() > 0:
 				n.By = append(n.By, fw)
 			}
 		}

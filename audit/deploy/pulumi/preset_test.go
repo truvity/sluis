@@ -1,9 +1,10 @@
 package auditpulumi_test
 
 import (
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"strings"
 	"testing"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/truvity/sluis/audit/deploy/pulumi"
 )
