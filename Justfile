@@ -198,6 +198,14 @@ release-check tag="": console
     goreleaser check
     goreleaser build --snapshot --clean --single-target
 
+# The release commit's one edit: the root go.mod's requires of the repository's
+# own modules (storage, audit/sdk) set to the release, the replaces kept. Then
+# commit it and tag THAT commit (`git tag vX.Y.Z`); the release workflow pins the
+# other modules itself. `just release-pin v1.74.0-rc.1`.
+release-pin version:
+    ./hack/modules.py pin-root {{version}}
+    ./hack/modules.py check {{version}} --release
+
 # The cheap half of release-check, for `check`: it reads a file and
 # needs no compiler, so it costs nothing to run on every push.
 archive-check:

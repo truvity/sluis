@@ -38,7 +38,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: ./hack/modules.py check "$GITHUB_REF_NAME"
+      # --release: the root tag was pushed by hand, so its go.mod must already
+      # require the release (`just release-pin`)
+      - run: ./hack/modules.py check "$GITHUB_REF_NAME" --release
 
   release:
     needs: gate
