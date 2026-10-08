@@ -78,7 +78,13 @@ func presetStorage() m {
 		"endpoint":    str("The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only."),
 		"path_style":  boolean("Address the bucket as endpoint/bucket/key, for a store whose certificate does not cover a bucket subdomain. Only with `endpoint`."),
 		"credentials": str("The address, below the installation's state root, of the static credentials of a store at an endpoint: a JSON object {accessKeyID, secretAccessKey} in the state store, read with the process's own identity. Only with `endpoint`: on AWS the workload's identity is the credential."),
-		"key_alias":   m{"type": "string", "pattern": "^alias/[A-Za-z0-9/_-]+$", "description": "The alias of the KMS key this preset's objects are encrypted with, a name and never a key id or ARN. Empty is the installation's archive key, or the bucket's default encryption. Only on AWS S3."},
+		"credentials_preset": obj("Instead of static credentials, mint the store's R2 credentials for this process: it clones a disabled Cloudflare prototype token with the minter token and renews with a third of the lifetime left (and mints again once after a 403). Exclusive with `credentials`; only with `endpoint`. The static `credentials` stay the default and need no Cloudflare account.", m{
+			"account":   str("The Cloudflare account id."),
+			"minter":    str("The address, below the installation's state root, of the minter credential: a `cloudflare-minter/v1` document {schema, token} holding an account token with Account API Tokens Read and Write. It can mint anything the account owner can, so its custody is the owner's; the refusal list in the minting code is the only guard."),
+			"prototype": str("The id of the DISABLED account token whose policies and condition every minted token copies. An active prototype, or one granting token admin, billing, account settings, memberships or Access identity providers, is refused at every mint."),
+			"lifetime":  duration("How long each minted token lives, at least a minute.", ""),
+		}, "account", "minter", "prototype", "lifetime"),
+		"key_alias": m{"type": "string", "pattern": "^alias/[A-Za-z0-9/_-]+$", "description": "The alias of the KMS key this preset's objects are encrypted with, a name and never a key id or ARN. Empty is the installation's archive key, or the bucket's default encryption. Only on AWS S3."},
 	}, "bucket")
 }
 

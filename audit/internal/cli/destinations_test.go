@@ -1,3 +1,4 @@
+//nolint:lll // fixtures and table rows are one-line documents
 package cli
 
 import (
@@ -125,5 +126,34 @@ func TestThePresetPrefixIsPrependedToTheBucketLayout(t *testing.T) {
 		if got := s3store.KeyFor(plans[profile.Standard].Options, "seals/security/acme/2026/10/08/12.jws"); got != strings.TrimSuffix(want, "records/security/acme/2026/10/08/12/01")+"seals/security/acme/2026/10/08/12.jws" { //nolint:lll // a table row
 			t.Errorf("prefix %q: seal key %q", prefix, got)
 		}
+	}
+}
+
+// minted: the operational preset on R2, with credentials minted from a
+// Cloudflare preset instead of a static document.
+const mintedLike = `
+presets:
+  operational: {bucket: edge-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials_preset: {account: acct, minter: internal/cloudflare/main/minter, prototype: proto-r2-00001, lifetime: 15m}}
+profiles:
+  activity: {frameworks: [history], categories: [activity]}
+`
+
+func TestAPresetStoreMintsItsCredentialsAndTheStaticPathStaysTheDefault(t *testing.T) {
+	a := config.Archive{StateRoot: "/audit/main"}
+	plans, err := PlanPresets(deploymentFor(t, mintedLike), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := plans[profile.Operational]
+	if p.Credentials != nil || p.Minted == nil || p.Minted.Root != "/audit/main" || p.Minted.Spec.Minter != "internal/cloudflare/main/minter" {
+		t.Errorf("minted plan: %+v / %+v", p.Credentials, p.Minted)
+	}
+	if _, err = PlanPresets(deploymentFor(t, mintedLike), config.Archive{}); err == nil || !strings.Contains(err.Error(), "stateRoot") {
+		t.Errorf("no state root: %v", err)
+	}
+	// The static document is unchanged and involves nothing of Cloudflare.
+	plans, err = PlanPresets(deploymentFor(t, endpointLike), a)
+	if err != nil || plans[profile.Operational].Minted != nil || plans[profile.Operational].Credentials == nil {
+		t.Errorf("static plan: %+v %v", plans[profile.Operational], err)
 	}
 }

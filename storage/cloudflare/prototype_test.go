@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/sluis/internal/cloudflare"
+	"github.com/truvity/sluis/storage/cloudflare"
 )
 
 func TestForbiddenGroups(t *testing.T) {
