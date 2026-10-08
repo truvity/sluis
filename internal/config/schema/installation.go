@@ -107,6 +107,7 @@ func installationSchema() m {
 		"keys":        serveProps["keys"],
 		"directory":   serveProps["directory"],
 		"audit":       serveProps["audit"],
+		"cloudflare":  installationCloudflare(serveProps["cloudflare"].(m)),
 		"exchange":    exchange,
 		"apps":        policyAppsSchema(),
 		"controllers": controllers,
@@ -164,4 +165,13 @@ func relaxRequired(v any, name string) {
 			relaxRequired(x, name)
 		}
 	}
+}
+
+// installationCloudflare is the service document's `cloudflare` section with the
+// policy document's grants beside it: the installation holds both.
+func installationCloudflare(service m) m {
+	out := clone(service)
+	grants := policyCloudflareSchema()["properties"].(m)["grants"]
+	out["properties"].(m)["grants"] = grants
+	return out
 }
