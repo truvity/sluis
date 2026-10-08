@@ -1,6 +1,7 @@
 name: evidence-etsi
 framework: "ETSI EN 319 401 V3.2.1 clause 7.10 (collection of evidence) and 7.9.1; ETSI EN 319 411-1 V1.5.1 clauses 6.4.5–6.4.6; ETSI EN 319 411-2; ETSI TS 119 461; eIDAS Regulation (EU) 2024/1183 Art. 24(2)(h)"
 version: "2026.09"
+min_preset: attested
 summary: The legal-evidence profile for trust-service and credential-lifecycle facts. What a conformity assessment body and a court read.
 disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:

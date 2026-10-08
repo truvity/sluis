@@ -1,0 +1,4 @@
+# refuse: not a framework profile this chart knows
+profiles:
+  security:
+    frameworks: [no-such-framework]

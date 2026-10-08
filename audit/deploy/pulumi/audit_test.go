@@ -283,6 +283,7 @@ func TestTheIngestSendersAreRequiredUnlessAnyoneInTheAccountIsAcknowledged(t *te
 	// With the ingest side off there is no queue and nothing to name.
 	if _, _, err := build(t, func(a *auditpulumi.Args) {
 		a.Ingest.Senders, a.Ingest.Disabled, a.Writer = nil, true, auditpulumi.WriterArgs{}
+		a.Preset = auditpulumi.PresetStandard
 	}); err != nil {
 		t.Errorf("senders required with Ingest.Disabled: %v", err)
 	}
@@ -653,7 +654,7 @@ func TestNothingIsCreatedForArgumentsThatCannotWork(t *testing.T) {
 		"no profiles":   {func(a *auditpulumi.Args) { a.Archive.Profiles = nil }, "Profiles"},
 		"a bad profile": {func(a *auditpulumi.Args) { a.Archive.Profiles = []string{"a/b"} }, "key component"},
 		"a mode":        {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "OFF" }, "NONE, GOVERNANCE or COMPLIANCE"},
-		"no mode":       {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "" }, "ObjectLockMode is required"},
+		"no mode":       {func(a *auditpulumi.Args) { a.Archive.ObjectLockMode = "" }, "needs a lock"},
 		"retention, no lock": {func(a *auditpulumi.Args) {
 			a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = auditpulumi.None, 30
 		}, "needs a lock"},

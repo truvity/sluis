@@ -8,6 +8,7 @@
     "name",
     "framework",
     "version",
+    "min_preset",
     "disclaimer",
     "citations",
     "field_classes",
@@ -27,6 +28,14 @@
     },
     "version": {
       "type": "string"
+    },
+    "min_preset": {
+      "enum": [
+        "operational",
+        "standard",
+        "attested"
+      ],
+      "description": "The lowest install preset an installation may keep a profile composed from this framework profile under: operational (writer, archive, deduplication, intake), standard (adds the notary, its seal key and alarms) or attested (adds compliance Object Lock and pseudonym keys). The installation's preset is the highest of its framework profiles' minimums."
     },
     "summary": {
       "type": "string"

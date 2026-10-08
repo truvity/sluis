@@ -51,6 +51,27 @@ Composition rules:
 | `review.cadence` | most frequent |
 | `pipeline` | longest windows; shortest `close_after_hours` |
 
+## Install presets
+
+An **install preset** says how much of the system an installation provisions. It is not a
+framework profile and not a grant preset.
+
+| preset | provisions |
+|---|---|
+| `operational` | the writer, the archive, deduplication, queue or HTTP intake. No notary, seal key, Object Lock or pseudonym keys; alarms off |
+| `standard` | adds the notary and its seal key, and the alarms |
+| `attested` | adds compliance Object Lock and the pseudonym keys |
+
+The preset is derived. Each framework profile states the lowest preset it can be kept under as
+`min_preset` (`history` is `operational`; `security` and `billing-nl` are `standard`; `dora`,
+`pci-dss`, `nen-7513` and `evidence-etsi` are `attested`), and the installation's preset is the
+highest minimum over every profile it composes. With nothing chosen it is `operational`. A
+deployment may set `preset:` (the chart's `preset`, the Pulumi library's `Args.Preset`) to a
+stronger one; a weaker one is refused, naming the profile and the framework profiles that need
+more. The rule is `profile.Deployment.ResolvePreset`; the writer and every job apply it when they
+compose the deployment document, the Pulumi library calls it, and the chart uses a table
+generated from the `min_preset` lines (`just audit-config-schemas`).
+
 ## What a copy carries
 
 A framework profile names fields as JSON pointers in three lists, and **anything it does

@@ -1,6 +1,7 @@
 name: security
 framework: "NIS2 (Directive (EU) 2022/2555) with Implementing Regulation (EU) 2024/2690 Annex §3.2; ISO/IEC 27001:2022 Annex A 8.15, 8.16, 8.17; PCI DSS v4.0.1 Requirement 10 as the prescriptive floor"
 version: "2026.09"
+min_preset: standard
 summary: The security operations profile. What a SOC, an incident responder or an ISMS auditor reads.
 disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:

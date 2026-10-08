@@ -66,6 +66,15 @@ route nothing can reach, and without the query service it has no backend. */ -}}
 {{- fail "audit: set `profiles`. A writer with no profile keeps nothing, and every record it took would be dead-lettered." -}}
 {{- end -}}
 
+{{- /* The install preset is derived from the profiles (audit.preset, which
+refuses a `preset` weaker than they need). What it leaves out is not
+rendered, and asking for it anyway is refused: a notary job under a preset
+that has no seal key would sign with nothing to sign with. */ -}}
+{{- $preset := include "audit.preset" . -}}
+{{- if and .Values.jobs.notary.enabled (eq $preset "operational") -}}
+{{- fail "audit: `jobs.notary.enabled` is true and the install preset is operational, which has no notary and no seal key. The profiles need nothing more; set `preset: standard` (or compose a profile that needs it, such as `security`) to run the notary." -}}
+{{- end -}}
+
 {{- /* secretFiles project a Secret's keys under /etc/audit/secrets, which is where a
 config's `secrets: {source: file}` has to look for them. A config that names a
 different root, or another source, would read nothing the chart put there, and
@@ -133,7 +142,7 @@ two numbers must say the same thing. */}}
 {{- if .Values.extensions.billing.enabled -}}
   {{- $metering := false -}}
   {{- range $name, $profile := .Values.profiles -}}
-    {{- range $profile.profiles -}}
+    {{- range $profile.frameworks -}}
       {{- if hasPrefix "billing" . -}}{{- $metering = true -}}{{- end -}}
     {{- end -}}
   {{- end -}}
