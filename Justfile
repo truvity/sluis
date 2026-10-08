@@ -84,6 +84,26 @@ test-s3:
     STORAGE_LOCALSTACK_URL=http://localhost:4566 hack/storage-conformance.sh
     KEYS_KMS_URL=http://localhost:4566 hack/keys-conformance.sh
 
+# The OpenBao development server the storage module's KV and transit backends
+# are tested against. Pinned by digest; keep it equal to the `openbao` service
+# in .github/workflows/ci.yaml.
+openbao_image := "ghcr.io/openbao/openbao@sha256:11fd73a2102cda9c55d5d881a8c3210303146a7ec1e8ac76f526e175c6d24641"
+
+# The storage OpenBao backends against a dev server started with `docker run`
+# (no testcontainers) and removed afterwards. Fails if a test skipped
+# (hack/openbao-conformance.sh).
+test-openbao:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker rm -f sluis-openbao >/dev/null 2>&1 || true
+    docker run -d --name sluis-openbao -p 127.0.0.1:8200:8200 -e BAO_DEV_ROOT_TOKEN_ID=root {{openbao_image}} >/dev/null
+    trap 'docker rm -f sluis-openbao >/dev/null 2>&1 || true' EXIT
+    for i in $(seq 1 30); do
+        curl -sf -m 3 http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1 && break
+        sleep 1
+    done
+    STORAGE_OPENBAO_ADDR=http://127.0.0.1:8200 STORAGE_OPENBAO_ROOT_TOKEN=root hack/openbao-conformance.sh
+
 # Run linters. `config verify` first: `run` accepts unknown top-level keys
 # silently, so a settings block in the wrong place is otherwise invisible.
 lint: console
