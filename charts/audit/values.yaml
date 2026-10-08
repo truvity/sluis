@@ -252,9 +252,11 @@ replicas: 1
 # Each component below has the same three, and `config`.
 
 writer:
-  # Host the write path in this release. Set false when the writer runs
-  # elsewhere, typically the AWS Lambda behind SQS that deploy/pulumi builds
-  # (cmd/audit-writer-lambda): the chart then renders no writer, no receiver, no
+  # Host the write path in this release; the default, and the shape that needs
+  # nothing from AWS but a bucket and a key (NATS, PostgreSQL and OpenBAO run in
+  # the cluster: see examples/in-cluster-services.yaml). Set false when the
+  # writer runs elsewhere, for instance the AWS Lambda behind SQS that
+  # deploy/pulumi builds (cmd/audit-writer-lambda): the chart then renders no writer, no receiver, no
   # stream consumers and no writer Service, and `serviceAccount` (the writer's
   # identity), `keysVolume`, `workloadIdentity` and `mode: stream` do not apply.
   # Everything in this release that records (the query service's reads, the
@@ -360,7 +362,8 @@ profiles: {}
 #     key_alias: alias/audit-archive
 #
 # Mixed: standard copies in a bucket of their own, attested ones in a bucket
-# with Object Lock (the bucket's own setting, which the chart does not create):
+# with Object Lock (the bucket's own setting, which the chart does not create).
+# Object Lock is AWS S3's, so `attested` stays on AWS S3 whatever the others use:
 #
 # presets:
 #   standard:
@@ -370,6 +373,18 @@ profiles: {}
 #     bucket: audit-attested
 #     region: eu-example-1
 #     key_alias: alias/audit-attested
+#
+# The same without AWS for the weaker presets: `standard` on an S3-compatible
+# store (here Cloudflare R2, or a MinIO in the cluster) and no `attested`. The
+# access key reaches the pods as AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+# from a Secret (`secretEnv`):
+#
+# presets:
+#   standard:
+#     bucket: audit-standard
+#     region: auto
+#     endpoint: https://account.r2.example.test
+#   # a MinIO: endpoint: http://minio.storage.svc:9000, region: us-east-1, path_style: true
 presets: {}
 
 # Whether the identifiers this installation receives for people outside the
