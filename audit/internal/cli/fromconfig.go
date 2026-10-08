@@ -111,7 +111,8 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 		switch {
 		case st.External():
 			if name == profile.Attested {
-				problems = append(problems, fmt.Errorf("preset attested is on the S3-compatible endpoint %s, which has no Object Lock: Object Lock is S3 only", st.Endpoint))
+				problems = append(problems, fmt.Errorf("preset attested is on the S3-compatible endpoint %s, "+
+					"which has no Object Lock: Object Lock is S3 only", st.Endpoint))
 			}
 			if st.Credentials != "" {
 				if a.StateRoot == "" {
@@ -139,7 +140,8 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 // its preset. A profile whose preset is not configured is refused, naming both,
 // and so is one whose framework profiles demand a stricter Object Lock than its
 // preset's bucket gives.
-func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string]*profile.Profile, a config.Archive, secrets *config.Secrets) (*routed.Store, error) {
+func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string]*profile.Profile,
+	a config.Archive, secrets *config.Secrets) (*routed.Store, error) {
 	frameworks, err := profile.Builtin()
 	if err != nil {
 		return nil, err

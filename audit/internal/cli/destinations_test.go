@@ -122,7 +122,7 @@ func TestThePresetPrefixIsPrependedToTheBucketLayout(t *testing.T) {
 		if got := s3store.KeyFor(plans[profile.Standard].Options, "records/security/acme/2026/10/08/12/01"); got != want {
 			t.Errorf("prefix %q: key %q, want %q", prefix, got, want)
 		}
-		if got := s3store.KeyFor(plans[profile.Standard].Options, "seals/security/acme/2026/10/08/12.jws"); got != strings.TrimSuffix(want, "records/security/acme/2026/10/08/12/01")+"seals/security/acme/2026/10/08/12.jws" {
+		if got := s3store.KeyFor(plans[profile.Standard].Options, "seals/security/acme/2026/10/08/12.jws"); got != strings.TrimSuffix(want, "records/security/acme/2026/10/08/12/01")+"seals/security/acme/2026/10/08/12.jws" { //nolint:lll // a table row
 			t.Errorf("prefix %q: seal key %q", prefix, got)
 		}
 	}

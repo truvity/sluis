@@ -179,6 +179,7 @@ data:
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
   deployment.yaml: |
+    apiVersion: audit.truvity.github.io/audit-deployment/v2
     external_identifiers_are_opaque: false
     profiles:
       billing-nl:
@@ -594,7 +595,7 @@ spec:
         app.kubernetes.io/component: observe
       annotations:
         checksum/config: 919d976eade95e506c9b5dddbac53b451e9453ba500ce97aa741f1ed00bc490a
-        checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+        checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
     spec:
       serviceAccountName: audit-observe
       
@@ -720,7 +721,7 @@ spec:
         checksum/grants: 64a2af7a257e3558f4c717cd5961046d26a7a78787c31965c503d3e1aa5589a9
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+        checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
     spec:
       serviceAccountName: audit-query
       
@@ -862,7 +863,7 @@ spec:
         checksum/config: 4eabcb30bb73786cc5bfa42cff1f39925f04f70c1f23818fae2e778c0af2b2ff
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+        checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 0096193e035e4003ff3940211abf0b4dfdb7c9fcdbad2524453bd17047f897c3
     spec:
@@ -1002,7 +1003,7 @@ spec:
         checksum/config: f11c7715af7d82aad72d804d97392350a26d0c87a9819f4c05b9dc8352d77b83
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+        checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 0096193e035e4003ff3940211abf0b4dfdb7c9fcdbad2524453bd17047f897c3
     spec:
@@ -1142,7 +1143,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: d73baff1dc65743730fcba563caaf91cd6e85b6224fe860a5369ab09edd7102b
-            checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+            checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-notary
@@ -1227,7 +1228,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 93a9f7b12b084c68d3df3ef7a35b9c34ea7e0432c9b045a85b44b37ca02967f2
-            checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+            checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify
@@ -1323,7 +1324,7 @@ spec:
             app.kubernetes.io/instance: audit
           annotations:
             checksum/config: 69e5ada0a572d7cd24d8934681427788d47b2fcfc7fcd14580e0808d104e79f6
-            checksum/deployment: e37279ac5be69d98cb4c38a86308e1a1869a836a67f5d639fcbd57b6cc50152b
+            checksum/deployment: 39c280a6cd7cdaad883bfffe0473bab658a58810358a835e8925fb0d2ec1626e
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-purge

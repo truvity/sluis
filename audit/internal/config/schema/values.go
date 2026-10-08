@@ -133,7 +133,7 @@ func Values() []byte {
 			})),
 		"receiver": obj("Stream mode: the receiver, which serves the sink and publishes to the stream.",
 			with(platform("audit-writer", true, true), m{"serviceAccount": def("serviceAccount")})),
-		"profiles":                     m{"type": "object", "description": "The profile document a config names as `deployment`: each profile composed from framework profiles.", "additionalProperties": m{"type": "object"}},
+		"profiles": m{"type": "object", "description": "The profile document a config names as `deployment`: each profile composed from framework profiles.", "additionalProperties": m{"type": "object"}},
 		"presets": func() m {
 			// The chart's default is no preset configured, which the render refuses with
 			// the profile named; the schema lets the default through.

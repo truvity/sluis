@@ -142,9 +142,3 @@ func (c *Args) checkArchive() error {
 	}
 	return nil
 }
-
-// defaultKey reports whether a default archive key is in use: Keys.Archive or
-// Archive.KeyArn with Encryption "kms".
-func (c *Args) defaultKey() bool {
-	return c.Archive.Encryption == EncryptionKMS && (c.Keys.Archive != "" || c.Archive.KeyArn != "")
-}

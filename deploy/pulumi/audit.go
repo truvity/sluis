@@ -306,7 +306,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 		if pr.ReuseBlobStore {
 			b := a.Storage.External
 			if b == nil {
-				return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Presets[%s].ReuseBlobStore is set and the blobs are not on an S3-compatible store (StorageArgs.Blobs)", name)
+				return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit.Presets[%s].ReuseBlobStore is set and the blobs are not on an S3-compatible store (StorageArgs.Blobs)", name) //nolint:lll // a table row
 			}
 			st.Endpoint, st.PathStyle = b.Endpoint, b.PathStyle
 			if st.Region == "" && b.Region != "" {

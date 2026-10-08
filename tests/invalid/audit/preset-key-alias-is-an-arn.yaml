@@ -2,4 +2,4 @@
 presets:
   standard:
     bucket: audit-archive
-    key_alias: arn:aws:kms:eu-example-1:111111111111:key/abc
+    key_alias: 1234abcd-12ab-34cd-56ef-1234567890ab

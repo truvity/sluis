@@ -382,7 +382,7 @@ func layerFiles(t *testing.T, r *recorder, function string) map[string]string {
 // Lock is the attested preset's bucket alone. Then edit is applied.
 func attested(edit func(*auditpulumi.Args)) func(*auditpulumi.Args) {
 	return func(a *auditpulumi.Args) {
-		a.Writer.DeploymentYAML = "profiles:\n  security:\n    frameworks: [security]\n  billing-nl:\n    frameworks: [billing-nl]\n  pay:\n    frameworks: [pci-dss]\n"
+		a.Writer.DeploymentYAML = "profiles:\n  security:\n    frameworks: [security]\n  billing-nl:\n    frameworks: [billing-nl]\n  pay:\n    frameworks: [pci-dss]\n" //nolint:lll // a table row
 		a.Presets["attested"] = auditpulumi.PresetStorage{Bucket: "acme-audit-attested", Create: true}
 		a.Archive.ObjectLockMode, a.Archive.AcknowledgeCompliance, a.Archive.DefaultRetentionDays = auditpulumi.Compliance, true, 30
 		if edit != nil {

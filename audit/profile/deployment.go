@@ -190,7 +190,8 @@ func (s PresetStorage) check(name Preset) []error {
 		problems = append(problems, fmt.Errorf("deployment: preset %s: key_alias %q must be an alias (alias/<name>), never a key id or ARN", name, s.KeyAlias))
 	}
 	if s.Prefix != "" && (strings.HasPrefix(s.Prefix, "/") || !strings.HasSuffix(s.Prefix, "/")) {
-		problems = append(problems, fmt.Errorf("deployment: preset %s: prefix %q is a path ending in a slash and not starting with one (operational/)", name, s.Prefix))
+		problems = append(problems, fmt.Errorf("deployment: preset %s: prefix %q is a path ending in a slash "+
+			"and not starting with one (operational/)", name, s.Prefix))
 	}
 	if s.External() {
 		if u, err := url.Parse(s.Endpoint); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {

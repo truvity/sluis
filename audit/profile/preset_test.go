@@ -110,9 +110,9 @@ func TestAWeakerProfilePresetIsRefused(t *testing.T) {
 func TestPresetStorageRefusals(t *testing.T) {
 	for name, c := range map[string]struct{ doc, want string }{
 		"attested on an endpoint":   {"presets:\n  attested: {bucket: b, endpoint: \"https://x.example\"}\nprofiles:\n  p: {frameworks: [pci-dss]}\n", "Object Lock"},
-		"ARN as key alias":          {"presets:\n  standard: {bucket: b, key_alias: \"arn:aws:kms:eu-central-1:111122223333:key/abc\"}\nprofiles:\n  p: {frameworks: [security]}\n", "never a key id or ARN"},
-		"key alias on endpoint":     {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", key_alias: alias/k}\nprofiles:\n  p: {frameworks: [security]}\n", "key_alias"},
-		"credentials on AWS":        {"presets:\n  standard: {bucket: b, credentials: internal/x}\nprofiles:\n  p: {frameworks: [security]}\n", "workload's identity"},
+		"ARN as key alias":          {"presets:\n  standard: {bucket: b, key_alias: \"1234abcd-12ab-34cd-56ef-1234567890ab\"}\nprofiles:\n  p: {frameworks: [security]}\n", "never a key id or ARN"}, //nolint:lll // a table row
+		"key alias on endpoint":     {"presets:\n  standard: {bucket: b, endpoint: \"https://x.example\", key_alias: alias/k}\nprofiles:\n  p: {frameworks: [security]}\n", "key_alias"},             //nolint:lll // a table row
+		"credentials on AWS":        {"presets:\n  standard: {bucket: b, credentials: internal/x}\nprofiles:\n  p: {frameworks: [security]}\n", "workload's identity"},                               //nolint:lll // a table row
 		"no bucket":                 {"presets:\n  standard: {prefix: standard/}\nprofiles:\n  p: {frameworks: [security]}\n", "bucket is required"},
 		"unknown preset":            {"presets:\n  gold: {bucket: b}\nprofiles:\n  p: {frameworks: [security]}\n", "gold"},
 		"prefix without slash":      {"presets:\n  standard: {bucket: b, prefix: standard}\nprofiles:\n  p: {frameworks: [security]}\n", "ending in a slash"},
@@ -134,9 +134,9 @@ func TestFeaturesAreWhatAnyConfiguredPresetNeeds(t *testing.T) {
 		doc  string
 		want Features
 	}{
-		"endpoint":    {endpointLike, Features{}},
+		"endpoint": {endpointLike, Features{}},
 		"standard": {standardLike, Features{Notary: true, Alarms: true}},
-		"mixed":   {mixed, Features{Notary: true, Alarms: true, ObjectLock: true, PseudonymKeys: true}},
+		"mixed":    {mixed, Features{Notary: true, Alarms: true, ObjectLock: true, PseudonymKeys: true}},
 	} {
 		if got := deployment(t, c.doc).Features(); got != c.want {
 			t.Errorf("%s: %+v, want %+v", name, got, c.want)
