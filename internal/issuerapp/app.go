@@ -44,6 +44,8 @@ import (
 	"github.com/truvity/sluis/internal/verify"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/keys"
+	keysbackend "github.com/truvity/sluis/storage/keys/kms"
 )
 
 // Config is what a deployment decides. It is built from the configuration
@@ -101,6 +103,10 @@ type Config struct {
 	// kmsWrapped, when set, replaces signingKeyFile: key pairs KMS generates
 	// and wraps under one symmetric key (the `kms-wrapped` adapter).
 	kmsWrapped *config.SigningKeyKMSWrapped
+	// keys says which key serves which purpose; instance is bound into the
+	// default encryption context. The wrapped ring wraps under `keys.sign`.
+	keys     *keys.Config
+	instance string
 	// verifyOnly are public keys published and never signed with.
 	verifyOnly []config.SigningKeyVerifyOnly
 
@@ -154,6 +160,8 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 		// unqualified subject rather than an invented one.
 		cluster: f.Cluster,
 	}
+	c.keys = f.Keys
+	c.instance = orDefault(f.Instance, c.release)
 	c.githubOwners = p.GitHubOwners()
 	c.clusters = p.Clusters()
 	c.aws = p.AWS()
@@ -360,9 +368,9 @@ type Deps struct {
 	// KMS is the client for signingKey.kms. Nil builds one from the AWS
 	// default credential chain; a test supplies a fake.
 	KMS issuer.KMSAPI
-	// KMSWrapped is the client for signingKey.kmsWrapped. Nil builds one from
-	// the AWS default credential chain; a test supplies a fake.
-	KMSWrapped issuer.KMSWrapAPI
+	// Keys is the key service behind `keys` (the sign key of the wrapped ring).
+	// Nil opens the one `keys.adapter` names; a test supplies the local one.
+	Keys keys.Backend
 	// Stores is the storage ports, built once from configuration and shared
 	// with the directory half. Nil is a process with no shared state and no
 	// cluster: logins in progress are kept in this process, and recovery is
@@ -579,6 +587,9 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	case cfg.kmsWrapped != nil:
 		wrapped, key, kmsMore, err = wrappedSigningKeys(ctx, cfg, deps, stores, shared, log)
 	case len(cfg.kmsKeys) > 0:
+		log.WarnContext(ctx, "signingKey.kms (direct asymmetric KMS signing) is deprecated and goes in a later release: "+
+			"move to the wrapped ring (signingKey.kmsWrapped with keys.sign), keeping the old public keys under "+
+			"signingKey.verifyOnly for the overlap (docs/explanation/signing-on-aws.md)")
 		kmsRefs, kmsRest, key, kmsMore, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
 	default:
 		key, err = signingKey(ctx, cfg, log)
@@ -1490,7 +1501,6 @@ func wrappedFromPort(k *port.KMSWrappedSigning) (*config.SigningKeyKMSWrapped, e
 func (c Config) wrappedConfig() (issuer.WrappedConfig, error) {
 	k := c.kmsWrapped
 	out := issuer.WrappedConfig{
-		KeyID:       strings.TrimSpace(k.KeyID),
 		RotateEvery: dur(k.RotateEvery, issuer.DefaultWrappedRotateEvery),
 		Prepublish:  dur(k.Prepublish, c.keyActivationDelay),
 		Retain:      dur(k.Retain, c.keyOverlap),
@@ -1498,6 +1508,9 @@ func (c Config) wrappedConfig() (issuer.WrappedConfig, error) {
 	}
 	if k.StateSecret == "" {
 		return out, errors.New("signingKey.kmsWrapped.stateSecret is required")
+	}
+	if _, _, err := c.signKeys(); err != nil {
+		return out, err
 	}
 	algs := k.Algorithms
 	if len(algs) == 0 {
@@ -1510,6 +1523,87 @@ func (c Config) wrappedConfig() (issuer.WrappedConfig, error) {
 		return out, fmt.Errorf("signingKey.kmsWrapped.prepublish (%v) must be at least signingKey.pollInterval (%v)", out.Prepublish, c.keyPollInterval)
 	}
 	return out, out.Validate(c.tokenLifetime)
+}
+
+// signKeys is the `keys` block the wrapped ring wraps under, and the warnings
+// to log about how it was spelled. `keys.sign` is the key. The deprecated
+// `signingKey.kmsWrapped.keyId` is mapped onto it when it is an alias and no
+// `keys.sign` is set; an ARN or an id is refused, as `keys` refuses them.
+func (c Config) signKeys() (keys.Config, []string, error) {
+	var warnings []string
+	legacy := strings.TrimSpace(c.kmsWrapped.KeyID)
+	if legacy != "" {
+		warnings = append(warnings, "signingKey.kmsWrapped.keyId is deprecated and goes in a later release: "+
+			"name the symmetric key as keys.sign (keys: {adapter: kms, sign: "+legacy+"})")
+	}
+	if c.keys != nil {
+		if _, ok := c.keys.Keys[keys.Sign]; ok {
+			if legacy != "" {
+				warnings = append(warnings, "signingKey.kmsWrapped.keyId is ignored: keys.sign is set")
+			}
+			return *c.keys, warnings, nil
+		}
+	}
+	if legacy == "" {
+		return keys.Config{}, nil, errors.New("signingKey.kmsWrapped needs the key that wraps the signing keys: " +
+			"set keys.sign (keys: {adapter: kms, sign: alias/<name>})")
+	}
+	if !strings.HasPrefix(legacy, "alias/") {
+		return keys.Config{}, nil, fmt.Errorf("signingKey.kmsWrapped.keyId %q is not an alias: name the key by alias as keys.sign "+
+			"(keys: {adapter: kms, sign: alias/<name>}); an id or an ARN is no longer accepted", legacy)
+	}
+	out := keys.Config{Adapter: "kms", Keys: map[keys.Purpose]keys.Entry{keys.Sign: {Key: legacy}}}
+	if c.keys != nil {
+		// Other purposes stay; only the sign key is mapped.
+		out.Adapter = c.keys.Adapter
+		for p, e := range c.keys.Keys {
+			out.Keys[p] = e
+		}
+		out.Keys[keys.Sign] = keys.Entry{Key: legacy}
+	}
+	return out, warnings, out.Validate()
+}
+
+// openKMSKeys opens the key service for adapter "kms": storage/keys/kms over
+// the AWS default credential chain.
+var openKMSKeys = func(ctx context.Context, region string) (keys.Backend, error) {
+	var loaders []func(*awsconfig.LoadOptions) error
+	if region != "" {
+		loaders = append(loaders, awsconfig.WithRegion(region))
+	}
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
+	if err != nil {
+		return nil, fmt.Errorf("load the AWS configuration for keys.adapter kms: %w", err)
+	}
+	return keysbackend.New(kms.NewFromConfig(awsCfg)), nil
+}
+
+// signKey opens the key behind `keys.sign`.
+func signKey(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*keys.Key, error) {
+	kc, warnings, err := cfg.signKeys()
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range warnings {
+		log.WarnContext(ctx, w)
+	}
+	backend := deps.Keys
+	if backend == nil {
+		switch kc.Adapter {
+		case "kms":
+			backend, err = openKMSKeys(ctx, cfg.kmsWrapped.Region)
+		default:
+			err = fmt.Errorf("keys.adapter %q cannot be opened by the issuer here (kms is the adapter of a deployment)", kc.Adapter)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	set, err := keys.Open(kc, keys.Options{Backend: backend, Instance: cfg.instance})
+	if err != nil {
+		return nil, err
+	}
+	return set.For(keys.Sign)
 }
 
 // wrappedSigningKeys opens the KMS-wrapped signing at start: the client, the
@@ -1530,17 +1624,9 @@ func wrappedSigningKeys(
 	if err = checkStateSecret(ctx, state, seed); err != nil {
 		return nil, nil, nil, err
 	}
-	api := deps.KMSWrapped
-	if api == nil {
-		var loaders []func(*awsconfig.LoadOptions) error
-		if cfg.kmsWrapped.Region != "" {
-			loaders = append(loaders, awsconfig.WithRegion(cfg.kmsWrapped.Region))
-		}
-		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("load the AWS configuration for signingKey.kmsWrapped: %w", err)
-		}
-		api = kms.NewFromConfig(awsCfg)
+	key, err := signKey(ctx, cfg, deps, log)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	// The lease is on the State port, as every controller's is: a Create with a
 	// lifetime. Without a shared store (a local run) it is this process's own.
@@ -1557,7 +1643,7 @@ func wrappedSigningKeys(
 		}
 		return ran, inner
 	}
-	ws, err := issuer.NewWrappedSigning(wcfg, api, seed, lease, log)
+	ws, err := issuer.NewWrappedSigning(wcfg, key, seed, lease, log)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1565,7 +1651,7 @@ func wrappedSigningKeys(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	log.InfoContext(ctx, "signing with KMS-wrapped keys", "key", wcfg.KeyID, "algorithms", wcfg.Algorithms,
+	log.InfoContext(ctx, "signing with wrapped keys", "purpose", keys.Sign, "context", key.Context(), "algorithms", wcfg.Algorithms,
 		"rotateEvery", wcfg.RotateEvery, "prepublish", wcfg.Prepublish, "retain", wcfg.Retain,
 		"kid", primary.ID(), "algorithm", primary.SignatureAlgorithm())
 	return ws, primary, more, nil

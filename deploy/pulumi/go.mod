@@ -88,6 +88,7 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
+	github.com/truvity/sluis/storage v0.0.0-00010101000000-000000000000 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
@@ -134,3 +135,7 @@ require (
 // deploy/pulumi/vX.Y.Z at a commit whose require is vX.Y.Z
 // (hack/pin-pulumi-require.sh).
 replace github.com/truvity/sluis => ../..
+
+// The storage module is developed beside the root module and released with it
+// (the root module requires it); this checkout builds against it by path.
+replace github.com/truvity/sluis/storage => ../../storage

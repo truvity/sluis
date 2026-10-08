@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+
+	storageschemas "github.com/truvity/sluis/storage/schemas"
 )
 
 // idBase is where the schemas are named: the identifier is a name, and nothing
@@ -249,6 +251,8 @@ func serveSchema() m {
 		"apiVersion":    apiVersion("serve"),
 		"issuerURL":     m{"$ref": "#/$defs/url", "description": "The issuer: baked into every token and every relying party's trust, so there is no default. No trailing slash is kept."},
 		"release":       strDefault("The name this installation's objects carry: the Kubernetes object names (`<release>-github-orgs`, ...) and the prefix of its keys in a shared store. The chart requires it to be the release's full name.", "sluis"),
+		"instance":      m{"type": "string", "pattern": `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "description": "The installation's name, bound into the default encryption context of `keys` ({instance, purpose}): stable and not secret, because a ciphertext made under it opens only with it. Unset is `release`."},
+		"keys":          keysSchema(),
 		"cluster":       str("Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject."),
 		"allowInsecure": boolean("Accept a plain-http issuer URL, for a local run."),
 		"demo":          boolean("Two tenants held in memory, which need no credential and no network."),
@@ -331,7 +335,7 @@ func serveSchema() m {
 				"stateSecret": secretField("The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex (`openssl rand -base64 32`), the same in every replica (a replica whose secret differs refuses to start), from which the sign-in state is derived: a KMS key has no private bytes to derive from."),
 			}, "keys", "stateSecret"),
 			"kmsWrapped": obj("Sign with key pairs AWS KMS generates and wraps under ONE symmetric key (the `kms-wrapped` adapter): a new pair per algorithm every `rotateEvery`, published before it signs and kept after it is replaced. The private key is decrypted into process memory to sign. Exclusive with `file` and `kms`.", m{
-				"keyId":       str("The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing."),
+				"keyId":       m{"type": "string", "deprecated": true, "description": "DEPRECATED, accepted for one release with a warning: name the symmetric key as `keys.sign` instead. An alias given here is mapped onto `keys.sign`; an ARN or an id is refused."},
 				"region":      str("The key's region. Unset follows the AWS SDK's own resolution."),
 				"stateSecret": secretField("The secret (`issuer/state-secret`) holding at least 32 random bytes as base64 or hex, the same in every replica, from which the sign-in state is derived: a wrapped key is replaced daily and the state must outlive it."),
 				"algorithms": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"enum": []string{"ES384", "RS256"}},
@@ -339,7 +343,7 @@ func serveSchema() m {
 				"rotateEvery": duration("How often a new key pair is generated for each algorithm. Longer than `prepublish`, at most 168h.", "24h"),
 				"prepublish":  duration("How long a new key is published before anything signs with it: longer than a verifier caches the key set (Envoy's jwt_authn: 10m). Unset is `activationDelay`.", "15m"),
 				"retain":      duration("How long a replaced key stays published: at least `lifetimes.token` plus a skew margin. Unset is `overlap`.", ""),
-			}, "keyId", "stateSecret"),
+			}, "stateSecret"),
 			"additionalFiles": list("Every OTHER algorithm this installation signs with at once, one file per algorithm.", str("A key file.")),
 			"verifyOnly": list("PUBLIC keys published in the JWKS and never signed with, so tokens an earlier signer issued keep verifying until they expire: the overlap of a cutover from file keys to `kmsWrapped`. Each is dropped from the JWKS at its `until`. A private key stops the start.",
 				obj("One public key.", m{
@@ -624,4 +628,17 @@ func adaptersSchema() m {
 		"schedule": choice("the schedule of passes"),
 		"audit":    choice("the audit sink"),
 	})
+}
+
+// keysSchema is the `keys` block: storage/schemas/keys.schema.json, embedded as
+// a resource of its own (its `$id` is kept, so its `#/$defs` references resolve
+// inside it). The block is one definition for sluis and audit; it is not
+// restated here.
+func keysSchema() m {
+	var out m
+	if err := json.Unmarshal(storageschemas.Keys, &out); err != nil {
+		panic("keys.schema.json is not JSON: " + err.Error())
+	}
+	delete(out, "$schema")
+	return out
 }

@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.70.0
-	github.com/aws/aws-sdk-go-v2/service/kms v1.61.1
+	github.com/aws/aws-sdk-go-v2/service/kms v1.61.2
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.110.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.1
@@ -25,6 +25,7 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/truvity/audit/sdk v0.6.1
 	github.com/truvity/policy v1.45.0
+	github.com/truvity/sluis/storage v0.0.0-00010101000000-000000000000
 	github.com/zitadel/oidc/v3 v3.49.6
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 	go.opentelemetry.io/otel v1.46.0
@@ -128,3 +129,8 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
+
+// The storage module is developed beside this one and released with it. Until
+// storage/vX is tagged the require above is a placeholder that this replace
+// resolves.
+replace github.com/truvity/sluis/storage => ./storage

@@ -1618,9 +1618,116 @@
           "description": "Prove recovery against the cluster the pod runs in. Set by a deployment that turns recovery on.",
           "type": "boolean"
         },
+        "instance": {
+          "description": "The installation's name, bound into the default encryption context of `keys` ({instance, purpose}): stable and not secret, because a ciphertext made under it opens only with it. Unset is `release`.",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+          "type": "string"
+        },
         "issuerURL": {
           "$ref": "#/definitions/config-sluis.url",
           "description": "The issuer: baked into every token and every relying party's trust, so there is no default. No trailing slash is kept."
+        },
+        "keys": {
+          "$defs": {
+            "context": {
+              "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+              "oneOf": [
+                {
+                  "enum": [
+                    "default",
+                    "off"
+                  ]
+                },
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "minProperties": 1,
+                  "type": "object"
+                }
+              ]
+            },
+            "entry": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/config-sluis.keyName"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "context": {
+                      "$ref": "#/definitions/config-sluis.context"
+                    },
+                    "key": {
+                      "$ref": "#/definitions/config-sluis.keyName"
+                    }
+                  },
+                  "required": [
+                    "key"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "keyName": {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            }
+          },
+          "$id": "https://github.com/truvity/sluis/storage/schemas/keys.schema.json",
+          "additionalProperties": false,
+          "description": "Which key serves which purpose. Keys are named by alias (KMS) or by name (transit), never by ARN or key id. See the package documentation of github.com/truvity/sluis/storage/keys.",
+          "minProperties": 2,
+          "properties": {
+            "adapter": {
+              "description": "The key service.",
+              "enum": [
+                "kms",
+                "local",
+                "transit"
+              ]
+            },
+            "archive": {
+              "$ref": "#/definitions/config-sluis.entry",
+              "description": "Long-term storage."
+            },
+            "conceal": {
+              "$ref": "#/definitions/config-sluis.entry",
+              "description": "Values that must be recoverable."
+            },
+            "pseudonym": {
+              "$ref": "#/definitions/config-sluis.entry",
+              "description": "Per-tenant pseudonyms."
+            },
+            "seal": {
+              "$ref": "#/definitions/config-sluis.entry",
+              "description": "Sealing the audit trail."
+            },
+            "sign": {
+              "$ref": "#/definitions/config-sluis.entry",
+              "description": "Token signing (asymmetric)."
+            }
+          },
+          "required": [
+            "adapter"
+          ],
+          "title": "keys",
+          "type": "object"
         },
         "lifetimes": {
           "additionalProperties": false,
@@ -2361,8 +2468,8 @@
                   "uniqueItems": true
                 },
                 "keyId": {
-                  "description": "The symmetric application key (SYMMETRIC_DEFAULT, ENCRYPT_DECRYPT), as an id, an ARN or an alias. The role needs kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on it, with the encryption context purpose=sluis-signing.",
-                  "minLength": 1,
+                  "deprecated": true,
+                  "description": "DEPRECATED, accepted for one release with a warning: name the symmetric key as `keys.sign` instead. An alias given here is mapped onto `keys.sign`; an ARN or an id is refused.",
                   "type": "string"
                 },
                 "prepublish": {
@@ -2390,7 +2497,6 @@
                 }
               },
               "required": [
-                "keyId",
                 "stateSecret"
               ],
               "type": "object"

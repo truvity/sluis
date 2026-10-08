@@ -63,7 +63,10 @@ type SigningKey struct {
 	// key the `kms-wrapped` adapter generated: the ring records it beside the
 	// public half so that any replica can unwrap it. activateNow asks the ring
 	// to skip the pre-publish wait for it (see [KeyRing.record]).
-	wrapped     []byte
+	wrapped []byte
+	// wrapContext is the encryption context wrapped was made under, recorded
+	// with it; nil is an entry from before contexts were recorded.
+	wrapContext *map[string]string
 	activateNow bool
 }
 

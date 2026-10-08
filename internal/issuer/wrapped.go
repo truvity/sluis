@@ -16,33 +16,37 @@ import (
 	"slices"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/aws/smithy-go"
 	jose "github.com/go-jose/go-jose/v4"
+
+	"github.com/truvity/sluis/storage/keys"
 )
 
-// Signing with KMS-wrapped keys.
+// Signing with wrapped keys.
 //
-// One symmetric "application" KMS key per estate, and a key pair per
-// algorithm and per rotation period. KMS generates the pair
-// (kms:GenerateDataKeyPairWithoutPlaintext) and returns the public key and the
-// private key encrypted under the symmetric key. The wrapped private key and
-// the public key are recorded in the issuer's key ring, in the shared state,
-// beside the schedule every replica agrees on. A replica that has to sign with
-// a key calls kms:Decrypt with the same encryption context, parses the key and
+// One symmetric key per installation, asked for by purpose (`keys.sign`, see
+// [keys.Key]), and a key pair per algorithm and per rotation period. The
+// issuer generates the pair, encrypts the PKCS#8 private key under the sign
+// key with the key's encryption context, and records the ciphertext, the
+// context it was made under and the public key in the issuer's key ring, in the
+// shared state, beside the schedule every replica agrees on. A replica that has
+// to sign with a key decrypts it with the recorded context, parses the key and
 // keeps it in memory; tokens are signed locally. Nothing but the ciphertext is
 // ever logged, persisted or returned.
 //
-// The trade against the `kms` adapter: a wrapped key is decrypted into the
-// memory of every process that signs, so a leaked role (or a process dump) can
-// forge tokens until the key rotates out; a `kms` key is non-extractable. In
-// exchange there is no per-token KMS call, no key to provision, and rotation
-// is automatic and free (a new data key every [WrappedConfig.RotateEvery]).
+// An entry written before contexts were recorded was made under
+// {purpose: sluis-signing, alg, kid}; it carries no record, and is opened with
+// that context ([EncryptionContext]) without being re-wrapped. A new entry
+// records the sign key's own context (by default {instance, purpose: sign}).
+//
+// The trade against a non-extractable asymmetric key: a wrapped key is
+// decrypted into the memory of every process that signs, so a leaked role (or a
+// process dump) can forge tokens until the key rotates out. In exchange there
+// is no per-token KMS call, no key to provision, and rotation is automatic and
+// free (a new data key every [WrappedConfig.RotateEvery]).
 
-// WrapPurpose is the `purpose` of every encryption context this adapter uses.
-// The key policy and the IAM grants pin it (deploy/pulumi).
+// WrapPurpose is the `purpose` of the encryption context of an entry made
+// before contexts were recorded. The key policy and the IAM grants keep it
+// while such entries exist (deploy/pulumi).
 const WrapPurpose = "sluis-signing"
 
 const (
@@ -60,19 +64,8 @@ const (
 	wrapGenerateTimeout = 20 * time.Second
 )
 
-// KMSWrapAPI is the part of the AWS KMS client the wrapped signing adapter
-// calls. It is narrow so that a test supplies a fake that generates real key
-// pairs locally.
-type KMSWrapAPI interface {
-	GenerateDataKeyPairWithoutPlaintext(ctx context.Context, in *kms.GenerateDataKeyPairWithoutPlaintextInput,
-		opts ...func(*kms.Options)) (*kms.GenerateDataKeyPairWithoutPlaintextOutput, error)
-	Decrypt(ctx context.Context, in *kms.DecryptInput, opts ...func(*kms.Options)) (*kms.DecryptOutput, error)
-}
-
 // WrappedConfig is `signingKey.kmsWrapped`, resolved.
 type WrappedConfig struct {
-	// KeyID is the symmetric key: an id, an ARN or an alias.
-	KeyID string
 	// Algorithms are the algorithms to sign with; the first is the installation
 	// default. ES384 and RS256 are supported.
 	Algorithms []jose.SignatureAlgorithm
@@ -91,9 +84,6 @@ type WrappedConfig struct {
 
 // Validate refuses a configuration that cannot rotate safely.
 func (c WrappedConfig) Validate(tokenLifetime time.Duration) error {
-	if c.KeyID == "" {
-		return errors.New("signingKey.kmsWrapped.keyId is required")
-	}
 	if len(c.Algorithms) == 0 {
 		return errors.New("signingKey.kmsWrapped.algorithms needs at least one algorithm")
 	}
@@ -137,7 +127,7 @@ type WrappedLease func(ctx context.Context, alg jose.SignatureAlgorithm, fn func
 // material itself: a key lives in the [KeyRing] that schedules it.
 type WrappedSigning struct {
 	cfg   WrappedConfig
-	api   KMSWrapAPI
+	key   *keys.Key
 	seed  []byte
 	lease WrappedLease
 	log   *slog.Logger
@@ -147,9 +137,9 @@ type WrappedSigning struct {
 // NewWrappedSigning returns the adapter. seed is the state secret
 // [SigningKey.Derive] works from: a wrapped key is replaced daily, and the
 // sign-in state must outlive that.
-func NewWrappedSigning(cfg WrappedConfig, api KMSWrapAPI, seed []byte, lease WrappedLease, log *slog.Logger) (*WrappedSigning, error) {
-	if api == nil {
-		return nil, errors.New("issuer: wrapped signing needs a KMS client")
+func NewWrappedSigning(cfg WrappedConfig, key *keys.Key, seed []byte, lease WrappedLease, log *slog.Logger) (*WrappedSigning, error) {
+	if key == nil {
+		return nil, errors.New("issuer: wrapped signing needs the sign key (keys.sign)")
 	}
 	if len(seed) < 32 {
 		return nil, errors.New("issuer: the wrapped signing key's state secret must be at least 32 bytes")
@@ -163,26 +153,16 @@ func NewWrappedSigning(cfg WrappedConfig, api KMSWrapAPI, seed []byte, lease Wra
 	if cfg.Interval <= 0 {
 		cfg.Interval = DefaultKeyPollInterval
 	}
-	return &WrappedSigning{cfg: cfg, api: api, seed: append([]byte(nil), seed...), lease: lease, log: log, now: time.Now}, nil
+	return &WrappedSigning{cfg: cfg, key: key, seed: append([]byte(nil), seed...), lease: lease, log: log, now: time.Now}, nil
 }
 
-// EncryptionContext is the context a key is wrapped under, and unwrapped with:
-// the same three pairs, exactly. KMS generates the pair, so the kid cannot be
-// the public key's thumbprint; it is a random 128-bit id chosen first, which
-// binds a ciphertext to the entry that records it (a wrapped key moved under
-// another kid, or another algorithm, does not decrypt).
+// EncryptionContext is the context an entry made before contexts were recorded
+// was wrapped under: three pairs, exactly. The kid is a random 128-bit id
+// chosen first (not the public key's thumbprint), which bound a ciphertext to
+// the entry that records it. New entries are wrapped under the sign key's own
+// context instead and record it; this one is only for opening the old.
 func EncryptionContext(alg jose.SignatureAlgorithm, kid string) map[string]string {
 	return map[string]string{"purpose": WrapPurpose, "alg": string(alg), "kid": kid}
-}
-
-func keyPairSpec(alg jose.SignatureAlgorithm) (types.DataKeyPairSpec, error) {
-	switch alg {
-	case jose.ES384:
-		return types.DataKeyPairSpecEccNistP384, nil
-	case jose.RS256:
-		return types.DataKeyPairSpecRsa3072, nil
-	}
-	return "", fmt.Errorf("issuer: a wrapped key signs ES384 or RS256, not %s", alg)
 }
 
 func newKid() (string, error) {
@@ -193,74 +173,88 @@ func newKid() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
 
-// wrapError names the permission a denied call needs.
+// wrapError says what a failed call on the sign key most likely needs.
 func wrapError(call string, err error) error {
-	var apiErr smithy.APIError
-	if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "AccessDeniedException" || apiErr.ErrorCode() == "AccessDenied") {
-		return fmt.Errorf("issuer: this role may not call kms:%s: grant kms:GenerateDataKeyPairWithoutPlaintext and kms:Decrypt on the "+
-			"application key with the encryption context purpose=%s (docs/explanation/signing-on-aws.md): %w", call, WrapPurpose, err)
-	}
-	return fmt.Errorf("issuer: kms:%s: %w", call, err)
+	return fmt.Errorf("issuer: %s with keys.sign: %w (the role needs encrypt, decrypt and generate-data-key on the sign key, "+
+		"conditioned on its encryption context; docs/explanation/signing-on-aws.md)", call, err)
 }
 
-// generate asks KMS for a key pair for alg and returns the key, already
-// unwrapped: the immediate kms:Decrypt proves this role can open what it just
-// made, so a missing permission fails here and not a pre-publish period later.
-func (w *WrappedSigning) generate(ctx context.Context, alg jose.SignatureAlgorithm) (*SigningKey, error) {
-	spec, err := keyPairSpec(alg)
-	if err != nil {
-		return nil, err
+// newPair generates the key pair for alg here: the sign key only wraps it.
+func newPair(alg jose.SignatureAlgorithm) (crypto.Signer, error) {
+	switch alg {
+	case jose.ES384:
+		return ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	case jose.RS256:
+		return rsa.GenerateKey(rand.Reader, wrapRSABits)
 	}
+	return nil, fmt.Errorf("issuer: a wrapped key signs ES384 or RS256, not %s", alg)
+}
+
+// generate makes a key pair for alg, wraps its private half under the sign key
+// and returns the key, already unwrapped: the immediate decrypt proves this
+// role can open what it just made, so a missing permission fails here and not a
+// pre-publish period later.
+func (w *WrappedSigning) generate(ctx context.Context, alg jose.SignatureAlgorithm) (*SigningKey, error) {
 	kid, err := newKid()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, wrapGenerateTimeout)
 	defer cancel()
-	out, err := w.api.GenerateDataKeyPairWithoutPlaintext(ctx, &kms.GenerateDataKeyPairWithoutPlaintextInput{
-		KeyId:             aws.String(w.cfg.KeyID),
-		KeyPairSpec:       spec,
-		EncryptionContext: EncryptionContext(alg, kid),
-	})
+	pair, err := newPair(alg)
 	if err != nil {
-		return nil, wrapError("GenerateDataKeyPairWithoutPlaintext", err)
+		return nil, fmt.Errorf("issuer: generate a %s key pair: %w", alg, err)
 	}
-	if len(out.PrivateKeyCiphertextBlob) == 0 || len(out.PublicKey) == 0 {
-		return nil, errors.New("issuer: KMS returned no wrapped key or no public key")
-	}
-	pub, err := x509.ParsePKIXPublicKey(out.PublicKey)
+	der, err := x509.MarshalPKCS8PrivateKey(pair)
 	if err != nil {
-		return nil, fmt.Errorf("issuer: read the generated public key: %w", err)
+		return nil, fmt.Errorf("issuer: encode the generated key: %w", err)
 	}
-	key, err := w.unwrap(ctx, alg, kid, pub, out.PrivateKeyCiphertextBlob)
+	defer clear(der)
+	wrapped, err := w.key.Encrypt(ctx, der)
+	if err != nil {
+		return nil, wrapError("encrypt", err)
+	}
+	// The context is recorded with the entry; an empty (non-nil) map says
+	// "none", which an absent record does not.
+	wc := w.key.Context()
+	if wc == nil {
+		wc = map[string]string{}
+	}
+	key, err := w.unwrap(ctx, alg, kid, pair.Public(), wrapped, &wc)
 	if err != nil {
 		return nil, fmt.Errorf("issuer: the key just generated cannot be unwrapped: %w", err)
 	}
 	return key, nil
 }
 
-// unwrap decrypts one wrapped key with the context it was made under and
-// returns it as a [SigningKey] that signs locally. pub is the public half the
-// key ring published for kid: the decrypted key must be its pair, and of the
-// shape alg needs.
-func (w *WrappedSigning) unwrap(ctx context.Context, alg jose.SignatureAlgorithm, kid string, pub crypto.PublicKey, wrapped []byte) (*SigningKey, error) {
+// unwrap decrypts one wrapped key with the context its entry recorded (nil: an
+// entry from before contexts were recorded, opened with [EncryptionContext])
+// and returns it as a [SigningKey] that signs locally. pub is the public half
+// the key ring published for kid: the decrypted key must be its pair, and of
+// the shape alg needs.
+func (w *WrappedSigning) unwrap(ctx context.Context, alg jose.SignatureAlgorithm, kid string, pub crypto.PublicKey,
+	wrapped []byte, wc *map[string]string) (*SigningKey, error) {
 	if len(wrapped) == 0 {
 		return nil, errors.New("issuer: no wrapped key")
 	}
 	ctx, cancel := context.WithTimeout(ctx, wrapGenerateTimeout)
 	defer cancel()
-	out, err := w.api.Decrypt(ctx, &kms.DecryptInput{
-		CiphertextBlob:      wrapped,
-		KeyId:               aws.String(w.cfg.KeyID),
-		EncryptionAlgorithm: types.EncryptionAlgorithmSpecSymmetricDefault,
-		EncryptionContext:   EncryptionContext(alg, kid),
-	})
+	var opt keys.DecryptOption
+	switch {
+	case wc == nil:
+		opt = keys.WithContext(EncryptionContext(alg, kid))
+	case len(*wc) == 0:
+		opt = keys.WithoutContext()
+	default:
+		opt = keys.WithContext(*wc)
+	}
+	plain, err := w.key.Decrypt(ctx, wrapped, opt)
 	if err != nil {
-		return nil, wrapError("Decrypt", err)
+		return nil, wrapError("decrypt", err)
 	}
 	// The plaintext is the one copy outside the parsed key: wipe it.
-	defer clear(out.Plaintext)
-	parsed, err := x509.ParsePKCS8PrivateKey(out.Plaintext)
+	defer clear(plain)
+	parsed, err := x509.ParsePKCS8PrivateKey(plain)
 	if err != nil {
 		return nil, fmt.Errorf("issuer: read the unwrapped key %s: %w", kid, err)
 	}
@@ -288,6 +282,7 @@ func (w *WrappedSigning) unwrap(ctx context.Context, alg jose.SignatureAlgorithm
 	return &SigningKey{
 		id: kid, key: signer, pub: signer.Public(), alg: alg,
 		seed: append([]byte(nil), w.seed...), wrapped: append([]byte(nil), wrapped...),
+		wrapContext: cloneWrapContext(wc),
 	}, nil
 }
 
@@ -400,7 +395,7 @@ func (w *WrappedSigning) loadExisting(ctx context.Context, state State, alg jose
 		if e.ActivateAt.After(now) && len(wrapped) > 1 {
 			continue
 		}
-		key, err := w.unwrap(ctx, alg, e.ID, e.JWK.Key, e.Wrapped)
+		key, err := w.unwrap(ctx, alg, e.ID, e.JWK.Key, e.Wrapped, e.WrapContext)
 		if err == nil {
 			return key, nil
 		}
@@ -433,4 +428,15 @@ func readRingEntries(ctx context.Context, state State, alg jose.SignatureAlgorit
 		}
 	}
 	return out, nil
+}
+
+func cloneWrapContext(wc *map[string]string) *map[string]string {
+	if wc == nil {
+		return nil
+	}
+	m := make(map[string]string, len(*wc))
+	for k, v := range *wc {
+		m[k] = v
+	}
+	return &m
 }

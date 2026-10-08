@@ -6,6 +6,7 @@ instance: full
 shape: kubernetes
 preset: k8s-aws
 release: sluis
+keys: {adapter: kms, sign: alias/example-sign}
 cluster: staging
 policyFile: /var/run/access-issuer/policy/policy.yaml
 issuer:
@@ -35,7 +36,7 @@ openbao:
 adapters:
   state: {adapter: dynamodb, settings: {table: other-table}}
 signingKey:
-  kmsWrapped: {keyId: alias/example-signing, region: eu-central-1, stateSecret: issuer/state-secret, algorithms: [ES384], rotateEvery: 24h, prepublish: 15m, retain: 25h}
+  kmsWrapped: {region: eu-central-1, stateSecret: issuer/state-secret, algorithms: [ES384], rotateEvery: 24h, prepublish: 15m, retain: 25h}
   pollInterval: 30s
   activationDelay: 15m
   overlap: 25h

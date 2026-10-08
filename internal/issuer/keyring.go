@@ -147,6 +147,10 @@ type ringEntry struct {
 	// (purpose, algorithm and kid) opens it. Empty for a key read from a file
 	// or a KMS signing key.
 	Wrapped []byte `json:"wrapped,omitempty"`
+	// WrapContext is the encryption context Wrapped was made under: `{}` is
+	// none. Absent is an entry from before contexts were recorded, made under
+	// {purpose: sluis-signing, alg, kid} ([EncryptionContext]).
+	WrapContext *map[string]string `json:"wrapContext,omitempty"`
 
 	// signer is set only where THIS replica holds the private half: the
 	// key it read from its own mounted file. An entry learned of only
@@ -386,12 +390,13 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) (*
 	}
 
 	entry := &ringEntry{
-		ID:         key.id,
-		JWK:        jose.JSONWebKey{Key: key.pub, KeyID: key.id, Algorithm: string(key.alg), Use: "sig"},
-		Algorithm:  key.alg,
-		SeenAt:     now,
-		ActivateAt: activateAt,
-		Wrapped:    key.wrapped,
+		ID:          key.id,
+		JWK:         jose.JSONWebKey{Key: key.pub, KeyID: key.id, Algorithm: string(key.alg), Use: "sig"},
+		Algorithm:   key.alg,
+		SeenAt:      now,
+		ActivateAt:  activateAt,
+		Wrapped:     key.wrapped,
+		WrapContext: key.wrapContext,
 	}
 
 	encoded, err := json.Marshal(entry)
