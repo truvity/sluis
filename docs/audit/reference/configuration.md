@@ -57,7 +57,7 @@ warning, and is read for one more minor; how to move off it is in
 [the v0.13 upgrade](../how-to/upgrade/v0.13.md). Another version or another kind's is refused, so that a later shape
 arrives by a version and not by a file that quietly means something else. The
 version-2 schemas are `schemas/config/<kind>.schema.json`
-(`$id` `https://truvity.github.io/audit/schemas/v2/config/<kind>.schema.json`);
+(`$id` `https://truvity.github.io/sluis/schemas/audit/v2/config/<kind>.schema.json`);
 version 1's are kept, frozen, in `schemas/config/v1/`. The `audit-deployment`
 document moved to the new group and nothing else.
 

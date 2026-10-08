@@ -1,0 +1,100 @@
+# The documentation site, built from docs/ and served at
+# https://truvity.github.io/sluis/ (.github/workflows/pages.yaml). The pages
+# are plain Markdown that reads the same on GitHub; this file only adds search
+# and navigation. Build locally with:
+#
+#   pip install -r hack/pages-requirements.txt
+#   mkdocs build --strict -d _site && hack/pages-site.sh _site
+#
+site_name: sluis
+site_url: https://truvity.github.io/sluis/
+site_description: Documentation for sluis, audit and storage
+repo_url: https://github.com/truvity/sluis
+edit_uri: edit/master/docs/
+docs_dir: docs
+site_dir: _site
+strict: true
+
+# Strict mode turns every warning into an error. These keep the checks on while
+# naming what each one covers.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to the system setting
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.path
+    - navigation.footer
+    - navigation.prune
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+    - content.action.view
+    - search.suggest
+    - search.highlight
+    - search.share
+
+# The navigation is built from the directory tree by awesome-nav: every page is
+# in the sidebar, a directory's README.md is its section page, and a page's
+# title is its first heading. Where order or a title matters, a .nav.yaml in
+# that directory says so (see the one at the root of docs/).
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - awesome-nav
+  - privacy
+  - redirects:
+      redirect_maps: {}
+
+hooks:
+  - hack/mkdocs_hooks.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+      # GitHub's heading ids, so an anchor that works on GitHub works here.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ['.', 'docs']
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true

@@ -1,6 +1,6 @@
 # 0057 — Schema identifiers on GitHub Pages, the old ones kept as aliases
 
-**Status:** accepted
+**Status:** accepted; the base moved to the sluis site by [0069](0069-schema-ids-move-to-the-sluis-site.md)
 **Date:** 2026-09-30
 
 ## Context

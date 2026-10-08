@@ -30,8 +30,8 @@ const Version = 2
 // BaseID is where the schemas are served: the same site as the record's, under
 // the version of the shape (v2), and LegacyBaseID the version-1 copies.
 const (
-	BaseID       = "https://truvity.github.io/audit/schemas/v2/config/"
-	LegacyBaseID = "https://truvity.github.io/audit/schemas/v1/config/"
+	BaseID       = "https://truvity.github.io/sluis/schemas/audit/v2/config/"
+	LegacyBaseID = "https://truvity.github.io/sluis/schemas/audit/v1/config/"
 )
 
 // The shared shapes this repository takes from truvity/policy, by the `$id`

@@ -7,9 +7,10 @@ import (
 
 func TestCanonicalID(t *testing.T) {
 	for in, want := range map[string]string{
-		"https://schemas.truvity.com/audit/v1/common/seal-written.json": SchemaBase + "common/seal-written.json",
-		SchemaBase + "common/seal-written.json":                         SchemaBase + "common/seal-written.json",
-		"https://schemas.example/wallet/credential-issued.json":         "https://schemas.example/wallet/credential-issued.json",
+		"https://schemas.truvity.com/audit/v1/common/seal-written.json":       SchemaBase + "common/seal-written.json",
+		"https://truvity.github.io/audit/schemas/v1/common/seal-written.json": SchemaBase + "common/seal-written.json",
+		SchemaBase + "common/seal-written.json":                               SchemaBase + "common/seal-written.json",
+		"https://schemas.example/wallet/credential-issued.json":               "https://schemas.example/wallet/credential-issued.json",
 	} {
 		if got := CanonicalID(in); got != want {
 			t.Errorf("CanonicalID(%q) = %q, want %q", in, got, want)
@@ -24,6 +25,13 @@ func TestLegacyIDsStillLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, legacy := range legacySchemaBases {
+		testLegacyIDsLoad(t, c, legacy)
+	}
+}
+
+func testLegacyIDsLoad(t *testing.T, c *Catalogue, legacySchemaBase string) {
+	t.Helper()
 	doc := strings.ReplaceAll(string(c.Document()), SchemaBase, legacySchemaBase)
 	var schemas [][]byte
 	for _, raw := range c.Schemas() {
