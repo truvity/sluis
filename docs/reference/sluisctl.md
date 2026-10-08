@@ -80,8 +80,9 @@ and needs no config, session or `HOME`.
 | `github-token` | a GitHub App installation token, under the catalogue's grants | below |
 | `kube-token` | a Kubernetes exec credential (run by `kubectl`) | [caches](#where-things-are-kept) |
 | `aws` | an AWS credential-process answer (run by the AWS SDKs) | [caches](#where-things-are-kept) |
+| `cloudflare token\|r2` | a Cloudflare API token, or R2 credentials as an AWS credential-process answer, minted for you | [below](#cloudflare-token-and-cloudflare-r2) |
 | `exchange` | the raw exchange: a token in, a token for an audience out | below |
-| `bao`, `r2`, `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
+| `bao`, `r2` (deprecated), `psql`, `pg`, `ssh known-hosts` | authenticate, then run another program | [wrappers](sluisctl-wrappers.md) |
 | `clients rotate\|show\|purge` | look after a generated client's secret | [clients](#clients-rotate-show-purge) |
 | `render` | an installation in, the service and policy documents out | [render](#render-an-installation-in-the-two-documents-out) |
 | `policy render` | the one policy document an installation reads, from its layers | [policy render](#policy-render-the-one-policy-document) |
@@ -100,6 +101,32 @@ asks for exactly what the grant allows), and `--json` to print
 `{"token", "expires_at", "repositories", "permissions"}` — what GitHub
 granted — instead of the bare token. It takes `--issuer` and `--client`
 like the rest.
+
+### `cloudflare token` and `cloudflare r2`
+
+`sluisctl cloudflare token <preset> [--format env|json] [--lifetime <duration>]`
+asks the issuer for an account token of the preset, minted for you from its
+prototype ([how-to](../how-to/cloudflare-tokens.md)). `--format env` (the
+default) prints `CLOUDFLARE_API_TOKEN=<token>`; `--format json` prints
+`{"token", "expires_on"}`. A preset that hands out R2 credentials is refused
+with the command to use instead.
+
+`sluisctl cloudflare r2 <preset> [--lifetime <duration>] [--file <path>]` prints
+what the AWS SDKs read from `credential_process`:
+`{"Version":1,"AccessKeyId","SecretAccessKey","Expiration"}`, no
+`SessionToken`. `--file` reads the `cloudflare/v1` document a secrets operator
+projected, signs in to nothing, and refuses an expired one.
+
+Both take `--issuer` and `--client`, and answer from a job's own identity in CI
+and from the sign-in on a laptop. `--lifetime` is at most the preset's (the
+default). Exit codes as the rest: 4 when the preset is not granted (or does not
+exist, which is the same answer), 5 when the issuer cannot be reached.
+
+`aws-config` adds a profile `<preset>@r2` for each granted R2 preset, with
+`credential_process = sluisctl cloudflare r2 <preset> --issuer <issuer>`,
+`endpoint_url`, `region = auto`, `request_checksum_calculation = when_required`,
+`response_checksum_validation = when_required` and `s3 =` with
+`addressing_style = path`. `whoami` lists the granted presets.
 
 **`sluisctl credential ssh|db|client` was removed in v1.34.0**
 ([ADR 0013](../decisions/0013-openbao-access-through-the-bao-cli.md)):
@@ -225,6 +252,7 @@ provider process of a tool like Pulumi runs the credential process:
 |---|---|---|---|
 | `kube-token` | `<config>/kube/<hash>.json` | the issuer, the client id and the audience, hashed together — the same audience at another issuer is a different credential | a minute before the token's expiry, which is when client-go re-runs the plugin |
 | `aws` | `<config>/aws/<hash>.json` | the audience and the role ARN, hashed — an account id is not something to scatter across a filesystem | five minutes before the credential's expiry, when the AWS SDK would refresh its own copy |
+| `cloudflare` | `<config>/cloudflare/<hash>.json` | the issuer, the client id, the preset and the lifetime asked for, hashed together | with a third of the credential's lifetime left (the lifetime is stored beside it) |
 | `r2` | `<config>/r2/<hash>.json` | the issuer, the client id and the audience, hashed together — the same key `kube-token` uses, because an R2-broker token is the same kind of credential | a minute before the token's expiry, the same margin `kube-token` uses |
 
 Each file is `0600` in a directory made `0700`, written to a temporary

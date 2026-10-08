@@ -216,7 +216,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// What the caller's own groups open, for `sluisctl kubeconfig` and
 	// `aws-config`. The same verifier, so a bearer cannot mean one thing
 	// here and another to the session service.
-	mux.Handle(GrantsPath, grantsHandler(iss.Policy(), func(ctx context.Context, bearer string) (string, []string, error) {
+	mux.Handle(GrantsPath, grantsHandler(iss.Policy(), iss, func(ctx context.Context, bearer string) (string, []string, error) {
 		claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](ctx, bearer, verifier)
 		if err != nil {
 			return "", nil, err
@@ -250,6 +250,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// has no proof rules to share, so it serves the library alone.
 	if own, ok := storage.(*Storage); ok {
 		protocol = githubTokens(iss, own, provider, protocol)
+		protocol = cloudflareTokens(iss, own, provider, protocol)
 	}
 	mux.Handle("/", neverCached(protocol))
 

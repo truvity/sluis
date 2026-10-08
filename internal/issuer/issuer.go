@@ -7,6 +7,7 @@ package issuer
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -153,6 +154,9 @@ type Issuer struct {
 	// githubApps are the catalogue Apps installation tokens are minted
 	// for. Nil refuses every such request.
 	githubApps *GitHubApps
+	// cloudflare mints Cloudflare credentials on demand; unset refuses every
+	// such request.
+	cloudflare atomic.Pointer[CloudflareMinter]
 }
 
 // UseAudit gives the issuer the service's recorder. The directory half

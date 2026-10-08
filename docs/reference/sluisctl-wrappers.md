@@ -105,6 +105,8 @@ call is bao's own answer, unchanged.
 
 ## `r2`: authenticate, then run the real `r2broker` CLI unchanged
 
+**Deprecated.** `sluisctl cloudflare r2 <preset>` mints R2 credentials in sluis itself and needs no broker ([how-to](../how-to/cloudflare-tokens.md)). `r2` prints a notice on stderr and goes with the broker.
+
 `sluisctl r2 [flags] [-- <r2broker args…>]` exists only to put a valid
 bearer token in front of the real `r2broker` binary — the CLI for an R2
 credential broker (temporary, prefix-scoped object-storage credentials).

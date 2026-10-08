@@ -166,32 +166,43 @@ func mintSessionToken(ctx context.Context, cfg Config, session Session) (tokens.
 
 // grantsOf asks the issuer what this identity's groups open.
 func grantsOf(ctx context.Context, cfg Config, token string) ([]grant, error) {
+	answer, err := accessOf(ctx, cfg, token)
+	return answer.Grants, err
+}
+
+// accessAnswer is what `/.access/grants` says: the clients the groups admit
+// to, and the Cloudflare presets they open.
+type accessAnswer struct {
+	Grants     []grant           `json:"grants"`
+	Cloudflare []cloudflareGrant `json:"cloudflare"`
+}
+
+// accessOf is the whole answer, for the commands that list Cloudflare presets.
+func accessOf(ctx context.Context, cfg Config, token string) (accessAnswer, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.Issuer+"/.access/grants", nil)
 	if err != nil {
-		return nil, fmt.Errorf("build the grants request: %w", err)
+		return accessAnswer{}, fmt.Errorf("build the grants request: %w", err)
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUnreachable, err)
+		return accessAnswer{}, fmt.Errorf("%w: %w", errUnreachable, err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode == http.StatusUnauthorized {
-		return nil, errNotSignedIn
+		return accessAnswer{}, errNotSignedIn
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("the issuer answered %s asking what you are granted", response.Status)
+		return accessAnswer{}, fmt.Errorf("the issuer answered %s asking what you are granted", response.Status)
 	}
 
-	var answer struct {
-		Grants []grant `json:"grants"`
-	}
+	var answer accessAnswer
 	if err = json.NewDecoder(response.Body).Decode(&answer); err != nil {
-		return nil, fmt.Errorf("parse the grants: %w", err)
+		return accessAnswer{}, fmt.Errorf("parse the grants: %w", err)
 	}
-	return answer.Grants, nil
+	return answer, nil
 }
 
 // grant is one client this identity may be issued a token for.
@@ -217,18 +228,21 @@ func whoami(args []string) error {
 		_, _ = fmt.Fprintln(stdout, who)
 	}
 
-	grants, err := grantsOf(context.Background(), cfg, token.AccessToken)
+	access, err := accessOf(context.Background(), cfg, token.AccessToken)
 	if err != nil {
 		return err
 	}
-	if len(grants) == 0 {
+	if len(access.Grants) == 0 && len(access.Cloudflare) == 0 {
 		_, _ = fmt.Fprintln(stdout, "\nYour groups open nothing yet.")
 		return nil
 	}
-	_, _ = fmt.Fprintln(stdout, "\nYou are granted:")
-	for _, one := range grants {
-		_, _ = fmt.Fprintf(stdout, "  %-28s through %s\n", one.Audience, strings.Join(one.Through, ", "))
+	if len(access.Grants) > 0 {
+		_, _ = fmt.Fprintln(stdout, "\nYou are granted:")
+		for _, one := range access.Grants {
+			_, _ = fmt.Fprintf(stdout, "  %-28s through %s\n", one.Audience, strings.Join(one.Through, ", "))
+		}
 	}
+	writeCloudflareGrants(stdout, access.Cloudflare)
 	return nil
 }
 
