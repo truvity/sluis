@@ -23,7 +23,9 @@ freeze, the switch and the rollback, is [the cutover](cutover.md); this page is 
 - From a workstation: `--kubeconfig`, `--kube-context` and `--namespace` (default: the pod's ServiceAccount) read the
   source namespace, and the source's Valkey is reached through the address its file names, a port-forward from there.
 - A destination layout older than v3 for SSM config parameters is moved first with `sluis migrate ssm-layout --to-root
-  /sluis/<instance>` (it copies, deletes nothing, and takes `--dry-run`).
+  /sluis/<instance>` (it copies, deletes nothing, and takes `--dry-run`). A destination whose installation document says
+  `secrets.layout: v4` receives the secrets in layout v4 directly; v3 as a destination is deprecated
+  ([move the secrets to layout v4](migrate-secrets-layout.md)).
 
 ## Before you start
 

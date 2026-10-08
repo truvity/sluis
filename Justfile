@@ -83,6 +83,7 @@ test-s3:
     ACCESS_ROSTER_DYNAMODB_URL=http://localhost:4566 hack/dynamodb-conformance.sh
     STORAGE_LOCALSTACK_URL=http://localhost:4566 hack/storage-conformance.sh
     KEYS_KMS_URL=http://localhost:4566 hack/keys-conformance.sh
+    STORAGE_LOCALSTACK_URL=http://localhost:4566 hack/secrets-layout-conformance.sh
 
 # The OpenBao development server the storage module's KV and transit backends
 # are tested against. Pinned by digest; keep it equal to the `openbao` service

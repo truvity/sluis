@@ -85,6 +85,20 @@ The SSM parameters move from `private/` and `export/` to `internal/` and `extern
 below `internal/` are `private/`'s, and `external/<kind>/<id>` is a typed document, not an export copy. The table and
 the contract are in [secrets](secrets.md#ssm-layout-v4). State (DynamoDB), below, is unchanged.
 
+An installation moves with `sluis migrate secrets-layout --to v4`, which copies every v3 item to its v4 address and reads it
+back, and later `--delete-v3`; a legacy in-cluster installation moves with `sluis migrate` straight into v4. The mapping
+of each v3 item and the rollback are in [move the secrets to layout v4](../how-to/migrate-secrets-layout.md).
+
+| v3 | v4 address |
+|---|---|
+| `private/config/<name>` | `internal/config/<name>` |
+| `private/config/clients/<id>/secret`, `private/credentials/oidc-client/<id>/secret` | `external/oidc/<id>` |
+| `private/credentials/github-runner-app/<tier>/<org>/<ref>` (installed) | `external/github/runner-<tier>-<org>` |
+| `private/credentials/github-app/<id>/<ref>` (installed, `export: true`) | `external/github/<id>` |
+| the bot token in `private/credentials/slack-app/<id>/<ref>` | `external/slack/<id>` |
+| every other `private/credentials/<kind>/<id>/<ref>` | `internal/credentials/<kind>/<id>/<ref>` |
+| `export/<name>` | none: the exports copies do not exist in v4 |
+
 ## DynamoDB (the `dynamodb` State, Index and Trigger adapter)
 
 One table, `pk` (string, hash) and `sk` (string, range). Every State item has the

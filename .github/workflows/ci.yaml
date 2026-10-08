@@ -84,6 +84,8 @@ jobs:
         run: hack/storage-conformance.sh
       - name: the keys KMS backend against LocalStack, and no skips
         run: hack/keys-conformance.sh
+      - name: the secrets layout move (sluis migrate secrets-layout) against LocalStack, and no skips
+        run: hack/secrets-layout-conformance.sh
       - name: the storage OpenBao backends (KV v2 state, transit keys) against a dev server, and no skips
         run: hack/openbao-conformance.sh
 

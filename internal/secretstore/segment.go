@@ -20,3 +20,11 @@ func segment(s string) string {
 	}
 	return s
 }
+
+// Segment is [segment] for the callers that must name a store key themselves
+// (the migration of the layout reads the revision history of an address).
+func Segment(s string) string { return segment(s) }
+
+// Unsegment undoes [Segment]: a `u-` spelling is the bytes it hexes; any other
+// segment is itself.
+func Unsegment(s string) string { return unsegment(s) }

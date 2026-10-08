@@ -116,6 +116,9 @@ func migrateCmd(out io.Writer, args []string) error {
 	if len(args) > 0 && args[0] == "ssm-layout" {
 		return migrateSSMLayout(out, args[1:])
 	}
+	if len(args) > 0 && args[0] == "secrets-layout" {
+		return migrateSecretsLayout(out, args[1:])
+	}
 	f, done, err := parseMigrate(args, out)
 	if err != nil || done {
 		return err
@@ -134,12 +137,12 @@ func migrateCmd(out io.Writer, args []string) error {
 			return kube.FromKubeconfig(release, f.kubeconfig, f.kubeContext, f.namespace)
 		}
 	}
-	from, err := openSide(ctx, f.from, log, kc)
+	from, _, err := openSide(ctx, f.from, log, kc)
 	if err != nil {
 		return fmt.Errorf("--from %s: %w", f.from, err)
 	}
 	defer from.Stores.Close()
-	to, err := openSide(ctx, f.to, log, nil)
+	to, exported, err := openSide(ctx, f.to, log, nil)
 	if err != nil {
 		return fmt.Errorf("--to %s: %w", f.to, err)
 	}
@@ -154,6 +157,7 @@ func migrateCmd(out io.Writer, args []string) error {
 	report, err := migrate.Run(ctx, from, to, migrate.Options{
 		DryRun: f.dryRun, Overwrite: f.overwrite, Sessions: f.withSessions, WritersStopped: f.writersStopped,
 		Skip: skip, Blobs: migrate.BlobMode(f.blobs), ReportBlob: f.reportBlob, Log: log,
+		ExportedGitHubApp: exported,
 	})
 	if report != nil {
 		_, _ = out.Write(report.JSON())
@@ -163,25 +167,41 @@ func migrateCmd(out io.Writer, args []string) error {
 }
 
 // openSide reads one configuration and opens its storage.
-func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string) (*kube.Client, error)) (migrate.Side, error) {
+//
+// It also returns which of the side's catalogue GitHub Apps have `export: true`,
+// from the policy the document names (layout v4 puts those keys at
+// external/github/<app>).
+func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string) (*kube.Client, error)) (migrate.Side, func(string) bool, error) {
 	one, err := config.Load[config.Sluis](file)
 	if err != nil {
-		return migrate.Side{}, err
+		return migrate.Side{}, nil, err
 	}
 	cfg := &one.Serve
 	sc, err := store.FromServe(cfg)
 	if err != nil {
-		return migrate.Side{}, err
+		return migrate.Side{}, nil, err
 	}
 	if sc.Secrets, err = secrets.Open(ctx, cfg); err != nil {
-		return migrate.Side{}, err
+		return migrate.Side{}, nil, err
 	}
 	sc.KubeClient = kc
 	st, err := store.Open(ctx, sc, log)
 	if err != nil {
-		return migrate.Side{}, err
+		return migrate.Side{}, nil, err
 	}
-	return migrate.Side{Name: file, Stores: st, BlobID: migrate.BlobID(sc)}, nil
+	side := migrate.Side{Name: file, Stores: st, BlobID: migrate.BlobID(sc)}
+	if cfg.Secrets != nil && cfg.Secrets.Source == "ssm" {
+		if side.SecretsLayout = cfg.Secrets.Layout; side.SecretsLayout == "" {
+			side.SecretsLayout = config.SecretsLayoutV3
+		}
+	}
+	pol, err := config.PolicyOf(one, nil)
+	if err != nil {
+		// Only layout v4 needs the catalogue (to know which Apps are exported).
+		log.WarnContext(ctx, "the policy document could not be read: no catalogue App is treated as exported", "file", file, "error", err.Error())
+		return side, nil, nil
+	}
+	return side, pol.GitHubCatalogue().Exported, nil
 }
 
 // printSummary says, per concern, what the run found, for the operator who reads
