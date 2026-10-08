@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+
 ---
 # Source: sluis/templates/serviceaccount.yaml
 # The account a recovery token is minted for. Deliberately bound to
@@ -118,6 +119,7 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
+
 ---
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -137,6 +139,7 @@ subjects:
   - kind: ServiceAccount
     name: sluis
     namespace: default
+
 ---
 # Source: sluis/templates/serviceaccount.yaml
 # The directory store is plain Kubernetes objects in THIS namespace:
@@ -156,6 +159,7 @@ rules:
   - apiGroups: [""]
     resources: ["secrets", "configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
 ---
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -175,6 +179,7 @@ subjects:
   - kind: ServiceAccount
     name: sluis
     namespace: default
+
 ---
 # Source: sluis/templates/service.yaml
 apiVersion: v1
@@ -374,6 +379,7 @@ spec:
           name: sluis
           port: 8080
           weight: 1
+
 ---
 # Source: sluis/templates/httproute.yaml
 # The console's own route, and the reason it is a SEPARATE object rather

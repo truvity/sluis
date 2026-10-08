@@ -39,7 +39,7 @@ Run it while secrets.layout is transition, then set secrets.layout: v4.
 
 --delete-v3 removes the v3 items, and is a separate, later step: it refuses unless
 the installation's secrets.layout is already v4 and every v3 item has its v4 address.
-The exports copies (<root>/export/...) are left alone.
+The exports copies (<root>/export/...) are retired: they are not copied, and --delete-v3 removes them.
 
 --dry-run prints the addresses and what would happen, never a value.
 The report is JSON on stdout. The AWS credentials are the SDK's own.

@@ -111,7 +111,8 @@ type SecretsLayoutReport struct {
 	Written   int          `json:"written"`
 	Verified  int          `json:"verified"`
 	Deleted   int          `json:"deleted,omitempty"`
-	// Skipped are v3 paths left alone on purpose (the exports copies).
+	// Skipped are v3 paths not migrated on purpose (the retired exports
+	// copies); DeleteV3 removes them.
 	Skipped []string `json:"skipped,omitempty"`
 	OK      bool     `json:"ok"`
 	Error   string   `json:"error,omitempty"`
@@ -210,7 +211,10 @@ func (p *planner) build(ctx context.Context) error {
 	}
 	for _, path := range paths {
 		if strings.HasPrefix(path, port.ExportPrefix) {
+			// Layout v3's exports are retired: not copied, and removed
+			// with the rest of v3 by [DeleteV3].
 			p.skip = append(p.skip, path)
+			p.residue = append(p.residue, path)
 			continue
 		}
 		if err = p.item(ctx, path); err != nil {

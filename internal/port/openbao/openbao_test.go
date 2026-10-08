@@ -213,15 +213,6 @@ func (f *fake) read(ns, path string) (map[string]string, bool) {
 	return out, true
 }
 
-func (f *fake) versions(ns, path string) int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if s := f.secrets[ns+"|"+path]; s != nil {
-		return s.versions
-	}
-	return 0
-}
-
 // newServer is a TLS server: the adapter takes https only. The client trusts it.
 func newServer(t *testing.T, f *fake) (string, *http.Client) {
 	t.Helper()

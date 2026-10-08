@@ -149,18 +149,3 @@ var s3CredentialsCodec = documentCodec[S3Credentialsv1]{
 }
 
 var _ state.Codec[OIDCv1] = oidcCodec
-
-type textDoc struct {
-	Value string `json:"value"`
-}
-
-// textCodec stores a string as {"value": "<text>"}, the internal values'
-// single field.
-type textCodec struct{}
-
-func (textCodec) Marshal(s string) ([]byte, error) { return json.Marshal(textDoc{Value: s}) }
-func (textCodec) Unmarshal(b []byte) (string, error) {
-	var d textDoc
-	err := json.Unmarshal(b, &d)
-	return d.Value, err
-}

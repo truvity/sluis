@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/instance: sluis
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
+
 ---
 # Source: sluis/templates/serviceaccount.yaml
 # The account a recovery token is minted for. Deliberately bound to
@@ -475,6 +476,7 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
+
 ---
 # Source: sluis/templates/serviceaccount.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -494,6 +496,7 @@ subjects:
   - kind: ServiceAccount
     name: sluis
     namespace: sluis
+
 ---
 # Source: sluis/templates/controllers.yaml
 # What the controllers in this process may do to the cluster, bound to the
@@ -526,6 +529,7 @@ rules:
     resources: ["secrets"]
     resourceNames: ["sluis-github-links"]
     verbs: ["get", "update"]
+
 ---
 # Source: sluis/templates/controllers.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -782,6 +786,7 @@ spec:
     name: "internal-ca"
     kind: "ClusterIssuer"
     group: cert-manager.io
+
 ---
 # Source: sluis/templates/httproute.yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -809,6 +814,7 @@ spec:
           - group: ""
             kind: Secret
             name: sluis-tls
+
 ---
 # Source: sluis/templates/httproute.yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -839,6 +845,7 @@ spec:
           name: sluis
           port: 8080
           weight: 1
+
 ---
 # Source: sluis/templates/httproute.yaml
 # The console's own route, and the reason it is a SEPARATE object rather

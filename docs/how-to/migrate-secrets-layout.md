@@ -23,7 +23,7 @@ The steps are separate on purpose: nothing deletes v3 until the installation has
 
    The report is JSON on stdout: each v3 source, the v4 address it goes to, and whether that address is `new`,
    `unchanged` or a `conflict`. It names addresses and versions and never a value. The exports copies under `export/` are
-   listed as skipped: the exports controller owns them until it is retired.
+   listed as skipped: the exports are retired, so they are not copied.
 3. **Copy.**
 
    ```sh
@@ -59,7 +59,7 @@ The steps are separate on purpose: nothing deletes v3 until the installation has
    ```
 
    It refuses unless `secrets.layout` is `v4`, and refuses naming the addresses if any v3 item has nothing at its v4
-   address. It deletes `private/` only; `export/` is left for the exports retirement.
+   address. It deletes `private/` and the retired `export/` copies.
 
 **Rollback** is to set `secrets.layout` back to `transition` (or `v3`) and roll. Until step 6 v3 is untouched and, in
 `transition`, still written, so it holds everything. After step 6 there is no v3 to return to: restore from a backup
