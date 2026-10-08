@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/storage/state"
 )
 
@@ -79,4 +80,34 @@ func (i Internal) S3Credentials(ref string) (state.Value[S3Credentialsv1], error
 		return state.Value[S3Credentialsv1]{}, err
 	}
 	return state.NewValue(i.s, addr, state.Codec[S3Credentialsv1](s3CredentialsCodec)), nil
+}
+
+// CloudflareMinter is the minter credential of a Cloudflare account, at the
+// internal address ref (`cloudflare.accounts.<name>.minter`, below internal/).
+func (i Internal) CloudflareMinter(ref string) (state.Value[CloudflareMinterv1], error) {
+	if err := config.CheckCloudflareMinterRef(ref); err != nil {
+		return state.Value[CloudflareMinterv1]{}, fmt.Errorf("%w: %w", ErrRef, err)
+	}
+	return state.NewValue(i.s, strings.TrimPrefix(ref, "internal/"), state.Codec[CloudflareMinterv1](cloudflareMinterCodec)), nil
+}
+
+// CloudflareMintedToken is one Cloudflare token sluis minted and has not yet
+// deleted.
+type CloudflareMintedToken struct {
+	ID        string    `json:"id"`
+	ExpiresOn time.Time `json:"expires_on"`
+}
+
+// CloudflareMinted is the record of the tokens sluis minted for a preset, which
+// the sweep deletes by id. Cloudflare hides an expired token from its list while
+// still counting it toward the account's 500, so a sweep that listed would never
+// find what it must delete. The ids are not secrets.
+type CloudflareMinted struct {
+	Tokens []CloudflareMintedToken `json:"tokens"`
+}
+
+// CloudflareMinted is the record of a preset's minted tokens, at
+// cloudflare-minted/<preset>.
+func (i Internal) CloudflareMinted(preset string) state.Value[CloudflareMinted] {
+	return state.NewValue(i.s, "cloudflare-minted/"+segment(preset), state.JSON[CloudflareMinted]())
 }

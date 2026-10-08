@@ -122,6 +122,7 @@ func TestThePolicySchemaAndTheTypesDescribeTheSameKeys(t *testing.T) {
 		"exchange":    reflect.TypeFor[config.PolicyExchange](),
 		"apps":        reflect.TypeFor[config.PolicyApps](),
 		"controllers": reflect.TypeFor[config.PolicyControllers](),
+		"cloudflare":  reflect.TypeFor[config.PolicyCloudflare](),
 	}
 	tables := reflect.TypeFor[policy.Policy]()
 	for i := range tables.NumField() {

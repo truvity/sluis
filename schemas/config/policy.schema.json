@@ -404,6 +404,57 @@
       "description": "Who may be issued a token, by client id.",
       "type": "object"
     },
+    "cloudflare": {
+      "additionalProperties": false,
+      "description": "Who may ask for a Cloudflare preset (the presets are the service document's `cloudflare.presets`). A preset named here and not there stops the service.",
+      "properties": {
+        "grants": {
+          "description": "One row per group or CI job.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A grant: exactly one of `group` and `job`.",
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "group",
+                    "job"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "group": {
+                "description": "An internal group of this policy: every holder may ask, from the console or `sluisctl`.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "job": {
+                "description": "A GitHub Actions job, `github:<owner>/<repo>:<job>`, proved by its OIDC token.",
+                "pattern": "^github:[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}/[A-Za-z0-9._-]{1,100}:[A-Za-z0-9_][A-Za-z0-9_. -]{0,99}$",
+                "type": "string"
+              },
+              "presets": {
+                "description": "The presets the row opens.",
+                "items": {
+                  "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "presets"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "controllers": {
       "additionalProperties": false,
       "description": "What each controller may CHANGE. Everything else the policy binds is derived every pass and shown with what would happen, and left alone: an organisation or workspace is born disabled.",

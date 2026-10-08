@@ -229,6 +229,89 @@
       },
       "type": "object"
     },
+    "cloudflare": {
+      "additionalProperties": false,
+      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/how-to/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.",
+      "properties": {
+        "accounts": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One account.",
+            "properties": {
+              "id": {
+                "description": "The account id.",
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              "minter": {
+                "description": "The internal address of the minter credential, `internal/cloudflare/<account>/minter`: a cloudflare-minter/v1 document holding an account token that has Account API Tokens Read and Edit and nothing else. It is never an external address: nobody but sluis is granted it.",
+                "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}(/[a-z0-9][a-z0-9._-]{0,62}){1,3}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "minter"
+            ],
+            "type": "object"
+          },
+          "description": "The Cloudflare accounts sluis mints in, by the name presets use.",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"
+          },
+          "type": "object"
+        },
+        "presets": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One preset: a prototype token and how long its clones live.",
+            "properties": {
+              "account": {
+                "description": "A key of `accounts`.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "description": {
+                "description": "What the preset is for. Shown by the console and `sluisctl whoami`.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "endpoint": {
+                "$ref": "#/$defs/url",
+                "description": "Makes this an R2 preset: the S3 endpoint of the account (`https://<account-id>.r2.cloudflarestorage.com`, or `https://<account-id>.eu.r2.cloudflarestorage.com` for an EU jurisdiction). The stored document then holds an access key and secret instead of a token."
+              },
+              "lifetime": {
+                "$ref": "#/$defs/duration",
+                "description": "How long each minted token lives: its `expires_on`. At least 1m, at most 24h. Past it sluis deletes the token in Cloudflare."
+              },
+              "prototype": {
+                "description": "The id of the prototype: an account token in Cloudflare that is DISABLED and whose policies and condition are the preset's rights. An active prototype is refused (it would be a usable token that never expires), and so is one granting Account API Tokens Edit, Billing, Account Settings, Memberships or Access identity providers. It is read at every mint, so editing it applies at the next rotation.",
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string"
+              },
+              "rotation": {
+                "$ref": "#/$defs/duration",
+                "description": "How often the stored token is replaced. At least 1m and shorter than `lifetime`: `lifetime - rotation` is the time consumers have to pick up a new token."
+              }
+            },
+            "required": [
+              "account",
+              "prototype",
+              "description",
+              "lifetime",
+              "rotation"
+            ],
+            "type": "object"
+          },
+          "description": "What may be minted, by name (a DNS label). The name is in the external address, `external/cloudflare/<preset>`, and in the name of every token minted for it.",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "cluster": {
       "description": "Names this cluster in a ServiceAccount's subject. A pod cannot discover it; unset keeps the older unqualified subject.",
       "minLength": 1,
@@ -1121,19 +1204,43 @@
             "s3": {
               "additionalProperties": false,
               "dependentRequired": {
+                "credentials": [
+                  "endpoint"
+                ],
                 "credentialsRef": [
                   "endpoint"
                 ]
               },
               "description": "Where the S3 adapter keeps its objects. Credentials are the platform's (EKS Pod Identity, IRSA, a Lambda role) and are never configured here.",
+              "not": {
+                "required": [
+                  "credentialsRef",
+                  "credentials"
+                ]
+              },
               "properties": {
                 "bucket": {
                   "description": "The bucket. It must exist, with public access blocked.",
                   "minLength": 1,
                   "type": "string"
                 },
+                "credentials": {
+                  "additionalProperties": false,
+                  "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, `secrets.layout` v4 or transition, and the `cloudflare` section.",
+                  "properties": {
+                    "preset": {
+                      "description": "A key of `cloudflare.presets` that has an `endpoint` (an R2 preset).",
+                      "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "preset"
+                  ],
+                  "type": "object"
+                },
                 "credentialsRef": {
-                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused.",
+                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
                   "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
                   "type": "string"
                 },

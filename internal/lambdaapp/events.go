@@ -159,10 +159,26 @@ type RefreshResult struct {
 	Failed     int    `json:"failed"`
 }
 
+// KindCloudflare is the event an EventBridge Scheduler schedule sends the `http`
+// function to rotate the Cloudflare credentials that are due:
+// {"kind":"cloudflare"}. A minute's schedule costs one read of the secrets store
+// per preset until a rotation is due.
+const KindCloudflare = "cloudflare"
+
+// CloudflareResult is what a cloudflare invocation returns.
+type CloudflareResult struct {
+	Kind    string `json:"kind"`
+	Presets string `json:"presets"`
+	Failed  int    `json:"failed"`
+}
+
 // scheduled handles an event of the http function that is not a request.
 func (h *HTTP) scheduled(ctx context.Context, kind string) (any, error) {
 	if kind == KindRefresh {
 		return h.refreshDirectory(ctx)
+	}
+	if kind == KindCloudflare {
+		return h.tickCloudflare(ctx)
 	}
 	return nil, fmt.Errorf("the event's kind is %q: the function takes API Gateway events and {\"kind\":%q|%q|%q}",
 		oneLine(kind), KindTick, KindRun, KindRefresh)
@@ -215,4 +231,24 @@ func (h *HTTP) controller(ctx context.Context, payload json.RawMessage) (any, er
 		return nil, fmt.Errorf("the target %q is declared by no controller this function runs", oneLine(event.Target))
 	}
 	return c.Handle(ctx, payload)
+}
+
+// tickCloudflare runs one pass over the Cloudflare presets. A preset that did
+// not rotate is an error the schedule sees: the stored credential is still the
+// last good one, but a rotation that keeps failing ends in an expired one.
+func (h *HTTP) tickCloudflare(ctx context.Context) (any, error) {
+	if h.cloudflare == nil {
+		return nil, errors.New("this function has no cloudflare section")
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	res, summary, err := h.cloudflare(ctx)
+	out := CloudflareResult{Kind: KindCloudflare, Presets: summary, Failed: res}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

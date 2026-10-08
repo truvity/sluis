@@ -225,6 +225,32 @@ spec:
               port errors on the State.
             {{- include "sluis.runbook" (dict "root" $ "alert" "AccessRosterLeaseLost") | nindent 12 }}
         {{- end }}
+        {{- if $r.cloudflareRotationStale.enabled }}
+        # The time since a Cloudflare preset's stored credential was minted, against
+        # `factor` (2) times that preset's own rotation, both published by the
+        # service. The credential lives for `lifetime`, longer than one rotation, so
+        # one missed rotation is survived; two in a row means the schedule (the
+        # EventBridge rule on Lambda, the loop in a cluster) or Cloudflare is failing
+        # and consumers will soon read an expired token. `last_over_time` over a day
+        # keeps a stopped preset visible. A preset the service no longer declares fires
+        # for at most a day.
+        - alert: AccessRosterCloudflareRotationStale
+          expr: >-
+            time() - max by ({{ $c }}, namespace, preset) (last_over_time(sluis_cloudflare_rotation_last_timestamp_seconds{ {{- $w -}} }[1d]))
+            > {{ $r.cloudflareRotationStale.factor }} * max by ({{ $c }}, namespace, preset) (last_over_time(sluis_cloudflare_rotation_interval_seconds{ {{- $w -}} }[1d]))
+          for: {{ $r.cloudflareRotationStale.for }}
+          labels:
+            {{- include "sluis.ruleLabels" (dict "root" $ "cfg" $r.cloudflareRotationStale) | nindent 12 }}
+          annotations:
+            summary: 'The Cloudflare credential of preset {{ "{{ $labels.preset }}" }} was last rotated {{ "{{ $value | humanizeDuration }}" }} ago, past its allowance'
+            description: >-
+              The stored credential of this preset is older than {{ $r.cloudflareRotationStale.factor }} times
+              its rotation. Look at the log for "a Cloudflare token was not minted" (its
+              reason says whether the prototype was refused, the minter credential is
+              missing or Cloudflare answered an error), at the scheduled invocation on
+              Lambda, and at the preset's prototype in Cloudflare.
+            {{- include "sluis.runbook" (dict "root" $ "alert" "AccessRosterCloudflareRotationStale") | nindent 12 }}
+        {{- end }}
         {{- if $r.rateLimitLow.enabled }}
         # GitHub's budget left, as last reported on a response. An App's core budget is
         # thousands of requests an hour, and the controller waits out a limit itself, so

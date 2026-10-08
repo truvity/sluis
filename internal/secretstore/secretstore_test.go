@@ -380,3 +380,115 @@ func TestS3CredentialsDocument(t *testing.T) {
 		}
 	}
 }
+
+// A Cloudflare credential is one schema with two shapes: a token, or R2
+// credentials. Both are golden and held to the one schema's properties.
+func TestCloudflareDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
+	ctx := context.Background()
+	st, root := newStores(t)
+	var schema struct {
+		Required   []string                  `json:"required"`
+		Properties map[string]map[string]any `json:"properties"`
+	}
+	if err := json.Unmarshal(readFile(t, "..", "..", "schemas", "external", "cloudflare.v1.schema.json"), &schema); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		golden, preset string
+		doc            secretstore.Cloudflarev1
+	}{
+		{"cloudflare.v1.golden.json", "dns-example", secretstore.Cloudflarev1{Token: "example-cloudflare-token", ExpiresOn: "2026-10-08T12:15:00Z"}},
+		{"cloudflare-r2.v1.golden.json", "r2-example", secretstore.Cloudflarev1{
+			AccessKeyID: "example-token-id", SecretAccessKey: "example-derived-secret",
+			Endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com", ExpiresOn: "2026-10-08T12:15:00Z",
+		}},
+	} {
+		if _, err := st.External.Cloudflare(tc.preset).Put(ctx, tc.doc, ""); err != nil {
+			t.Fatalf("%s: %v", tc.preset, err)
+		}
+		it, err := root.Child("external").Get(ctx, "cloudflare/"+tc.preset)
+		if err != nil {
+			t.Fatalf("not at external/cloudflare/%s: %v", tc.preset, err)
+		}
+		if golden := readFile(t, "testdata", tc.golden); string(it.Value) != string(golden) {
+			t.Fatalf("encoder output changed:\n got %s\nwant %s\nchanging a field is breaking: move the schema version", it.Value, golden)
+		}
+		var m map[string]any
+		if err = json.Unmarshal(it.Value, &m); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range schema.Required {
+			if _, ok := m[f].(string); !ok {
+				t.Errorf("%s: required field %q is missing or not a string", tc.preset, f)
+			}
+		}
+		for f := range m {
+			if _, ok := schema.Properties[f]; !ok {
+				t.Errorf("%s: field %q is not in the schema", tc.preset, f)
+			}
+		}
+		if got, _, err := st.External.Cloudflare(tc.preset).Get(ctx); err != nil || got.Token != tc.doc.Token || got.SecretAccessKey != tc.doc.SecretAccessKey {
+			t.Fatalf("%s: read back = %+v, %v", tc.preset, got, err)
+		}
+	}
+	for name, doc := range map[string]secretstore.Cloudflarev1{
+		"no expiry":                 {Token: "t"},
+		"an expiry that is no time": {Token: "t", ExpiresOn: "tomorrow"},
+		"neither shape":             {ExpiresOn: "2026-10-08T12:15:00Z"},
+		"both shapes":               {Token: "t", AccessKeyID: "a", SecretAccessKey: "s", Endpoint: "https://e", ExpiresOn: "2026-10-08T12:15:00Z"},
+		"half an R2 shape":          {AccessKeyID: "a", ExpiresOn: "2026-10-08T12:15:00Z"},
+	} {
+		if _, err := st.External.Cloudflare("bad").Put(ctx, doc, ""); !errors.Is(err, secretstore.ErrSchema) {
+			t.Errorf("%s: %v, want ErrSchema", name, err)
+		}
+	}
+}
+
+// The minter credential: golden, matching its schema, internal only.
+func TestCloudflareMinterDocument(t *testing.T) {
+	ctx := context.Background()
+	st, root := newStores(t)
+	doc, err := st.Internal.CloudflareMinter("internal/cloudflare/main/minter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = doc.Put(ctx, secretstore.CloudflareMinterv1{Token: "example-minter-token"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	it, err := root.Child("internal").Get(ctx, "cloudflare/main/minter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if golden := readFile(t, "testdata", "cloudflare-minter.v1.golden.json"); string(it.Value) != string(golden) {
+		t.Fatalf("encoder output changed:\n got %s\nwant %s", it.Value, golden)
+	}
+	var schema struct {
+		Required   []string                  `json:"required"`
+		Properties map[string]map[string]any `json:"properties"`
+	}
+	if err = json.Unmarshal(readFile(t, "..", "..", "schemas", "internal", "cloudflare-minter.v1.schema.json"), &schema); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err = json.Unmarshal(it.Value, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range schema.Required {
+		if _, ok := m[f].(string); !ok {
+			t.Errorf("required field %q is missing or not a string", f)
+		}
+	}
+	for f := range m {
+		if _, ok := schema.Properties[f]; !ok {
+			t.Errorf("field %q is not in the schema", f)
+		}
+	}
+	if _, err = doc.Put(ctx, secretstore.CloudflareMinterv1{}, ""); !errors.Is(err, secretstore.ErrSchema) {
+		t.Errorf("an empty minter: %v, want ErrSchema", err)
+	}
+	for _, ref := range []string{"external/cloudflare/main", "internal/../x/y", "internal/a", "x"} {
+		if _, err = st.Internal.CloudflareMinter(ref); !errors.Is(err, secretstore.ErrRef) {
+			t.Errorf("%q: %v, want ErrRef", ref, err)
+		}
+	}
+}

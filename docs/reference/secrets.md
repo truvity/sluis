@@ -106,6 +106,7 @@ Each kind has a JSON Schema under `schemas/external/` and a golden document in
 | `oidc/v1` | `external/oidc/<client>` | `schema`, `client-id`, `client-secret` | [`oidc.v1.schema.json`](../../schemas/external/oidc.v1.schema.json) |
 | `github/v1` | `external/github/<app>`; a runner App is `external/github/runner-<tier>-<org>` | `schema`, `app_id`, `installation_id`, `private_key` | [`github.v1.schema.json`](../../schemas/external/github.v1.schema.json) |
 | `slack/v1` | `external/slack/<app>` | `schema`, `bot_token` | [`slack.v1.schema.json`](../../schemas/external/slack.v1.schema.json) |
+| `cloudflare/v1` | `external/cloudflare/<preset>` | `schema`, `expires_on`, and `token` or `access_key_id`, `secret_access_key`, `endpoint` | [`cloudflare.v1.schema.json`](../../schemas/external/cloudflare.v1.schema.json) |
 
 ```json
 {"schema":"oidc/v1","client-id":"example-rp","client-secret":"example-secret-value"}
