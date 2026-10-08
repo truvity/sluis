@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truvity/sluis/storage/schemas/keys.schema.json",
+  "title": "keys",
+  "description": "Which key serves which purpose. Keys are named by alias (KMS) or by name (transit), never by ARN or key id. See the package documentation of github.com/truvity/sluis/storage/keys.",
+  "type": "object",
+  "required": ["adapter"],
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "description": "The key service.",
+      "enum": ["kms", "local", "transit"]
+    },
+    "sign": { "$ref": "#/$defs/entry", "description": "Token signing (asymmetric)." },
+    "seal": { "$ref": "#/$defs/entry", "description": "Sealing the audit trail." },
+    "pseudonym": { "$ref": "#/$defs/entry", "description": "Per-tenant pseudonyms." },
+    "conceal": { "$ref": "#/$defs/entry", "description": "Values that must be recoverable." },
+    "archive": { "$ref": "#/$defs/entry", "description": "Long-term storage." }
+  },
+  "minProperties": 2,
+  "$defs": {
+    "keyName": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s]+$",
+      "not": {
+        "anyOf": [
+          { "pattern": "^arn:" },
+          { "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$" },
+          { "pattern": "^(?i:mrk-[0-9a-f]{32})$" }
+        ]
+      },
+      "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused."
+    },
+    "context": {
+      "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+      "oneOf": [
+        { "enum": ["default", "off"] },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        }
+      ]
+    },
+    "entry": {
+      "oneOf": [
+        { "$ref": "#/$defs/keyName" },
+        {
+          "type": "object",
+          "required": ["key"],
+          "additionalProperties": false,
+          "properties": {
+            "key": { "$ref": "#/$defs/keyName" },
+            "context": { "$ref": "#/$defs/context" }
+          }
+        }
+      ]
+    }
+  }
+}
