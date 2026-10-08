@@ -1658,68 +1658,6 @@
       "type": "object"
     },
     "keys": {
-      "$defs": {
-        "context": {
-          "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
-          "oneOf": [
-            {
-              "enum": [
-                "default",
-                "off"
-              ]
-            },
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "minProperties": 1,
-              "type": "object"
-            }
-          ]
-        },
-        "entry": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/keyName"
-            },
-            {
-              "additionalProperties": false,
-              "properties": {
-                "context": {
-                  "$ref": "#/$defs/context"
-                },
-                "key": {
-                  "$ref": "#/$defs/keyName"
-                }
-              },
-              "required": [
-                "key"
-              ],
-              "type": "object"
-            }
-          ]
-        },
-        "keyName": {
-          "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
-          "minLength": 1,
-          "not": {
-            "anyOf": [
-              {
-                "pattern": "^arn:"
-              },
-              {
-                "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
-              },
-              {
-                "pattern": "^(?i:mrk-[0-9a-f]{32})$"
-              }
-            ]
-          },
-          "pattern": "^[^\\s]+$",
-          "type": "string"
-        }
-      },
-      "$id": "https://github.com/truvity/sluis/storage/schemas/keys.schema.json",
       "additionalProperties": false,
       "description": "Which key serves which purpose. Keys are named by alias (KMS) or by name (transit), never by ARN or key id. See the package documentation of github.com/truvity/sluis/storage/keys.",
       "minProperties": 2,
@@ -1733,24 +1671,354 @@
           ]
         },
         "archive": {
-          "$ref": "#/$defs/entry",
-          "description": "Long-term storage."
+          "description": "Long-term storage.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
         },
         "conceal": {
-          "$ref": "#/$defs/entry",
-          "description": "Values that must be recoverable."
+          "description": "Values that must be recoverable.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
         },
         "pseudonym": {
-          "$ref": "#/$defs/entry",
-          "description": "Per-tenant pseudonyms."
+          "description": "Per-tenant pseudonyms.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
         },
         "seal": {
-          "$ref": "#/$defs/entry",
-          "description": "Sealing the audit trail."
+          "description": "Sealing the audit trail.",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
         },
         "sign": {
-          "$ref": "#/$defs/entry",
-          "description": "Token signing (asymmetric)."
+          "description": "Token signing (asymmetric).",
+          "oneOf": [
+            {
+              "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+              "minLength": 1,
+              "not": {
+                "anyOf": [
+                  {
+                    "pattern": "^arn:"
+                  },
+                  {
+                    "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                  },
+                  {
+                    "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                  }
+                ]
+              },
+              "pattern": "^[^\\s]+$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "default",
+                        "off"
+                      ]
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  ]
+                },
+                "key": {
+                  "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+                  "minLength": 1,
+                  "not": {
+                    "anyOf": [
+                      {
+                        "pattern": "^arn:"
+                      },
+                      {
+                        "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+                      },
+                      {
+                        "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+                      }
+                    ]
+                  },
+                  "pattern": "^[^\\s]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
         }
       },
       "required": [

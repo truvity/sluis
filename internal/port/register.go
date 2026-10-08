@@ -79,7 +79,8 @@ func init() {
 				return nil, err
 			}
 			if k.StateSecret == "" {
-				return nil, errors.New("the kms-wrapped adapter needs stateSecret (set `signingKey.kmsWrapped` or `adapters.signing.settings`); the wrapping key is `keys.sign`")
+				return nil, errors.New("the kms-wrapped adapter needs stateSecret (set `signingKey.kmsWrapped` or " +
+					"`adapters.signing.settings`); the wrapping key is `keys.sign`")
 			}
 			return &k, nil
 		},

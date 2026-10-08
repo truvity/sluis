@@ -630,15 +630,49 @@ func adaptersSchema() m {
 	})
 }
 
-// keysSchema is the `keys` block: storage/schemas/keys.schema.json, embedded as
-// a resource of its own (its `$id` is kept, so its `#/$defs` references resolve
-// inside it). The block is one definition for sluis and audit; it is not
-// restated here.
+// keysSchema is the `keys` block: storage/schemas/keys.schema.json, one
+// definition for sluis and audit, with its `#/$defs` references inlined so that
+// the block carries no `$id` or `$defs` of its own (the chart's values schema
+// rewrites definitions and would lose them).
 func keysSchema() m {
 	var out m
 	if err := json.Unmarshal(storageschemas.Keys, &out); err != nil {
 		panic("keys.schema.json is not JSON: " + err.Error())
 	}
+	defs, _ := out["$defs"].(map[string]any)
 	delete(out, "$schema")
-	return out
+	delete(out, "$id")
+	delete(out, "$defs")
+	return inlineDefs(out, defs).(map[string]any)
+}
+
+func inlineDefs(v any, defs map[string]any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		if r, ok := t["$ref"].(string); ok && strings.HasPrefix(r, "#/$defs/") {
+			target, _ := inlineDefs(defs[strings.TrimPrefix(r, "#/$defs/")], defs).(map[string]any)
+			merged := map[string]any{}
+			for k, x := range target {
+				merged[k] = x
+			}
+			for k, x := range t {
+				if k != "$ref" {
+					merged[k] = x
+				}
+			}
+			return merged
+		}
+		out := make(map[string]any, len(t))
+		for k, x := range t {
+			out[k] = inlineDefs(x, defs)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, x := range t {
+			out[i] = inlineDefs(x, defs)
+		}
+		return out
+	}
+	return v
 }

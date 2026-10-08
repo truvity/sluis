@@ -89,6 +89,7 @@ data:
       audience: sluis
     groupsScoping: enforce
     inCluster: true
+    instance: staging
     issuerURL: https://access.example.test
     lifetimes:
       absolute: 24h
@@ -632,7 +633,7 @@ spec:
         # is read once, at start, so a change to either is a rollout. One
         # checksum per document this process reads: the service document (the
         # controllers' sections are in it) and the policy.
-        checksum/config: d91e2faf41d0d02c191dc4b2caa384636e6cdb397b7e383b13f43a855170e499
+        checksum/config: bfbccadb5a543706ea753ecc22edbdbbe3dff64525abaecf6b5bd4a971f3538c
         checksum/policy: 1442e9cc1ed9c53fbdcaa21a1b11c09ce53dee507ea12529b2a98ab88e98c665
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
