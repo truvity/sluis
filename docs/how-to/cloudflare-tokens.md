@@ -119,12 +119,25 @@ cloudflare:
   grants:
     - group: all:infra:dns-editors
       presets: [dns-example]
-    - job: github:example-org/example-repo:release
+    - group: all:ci:release
       presets: [dns-example, r2-archive]
 ```
 
-A row names exactly one of `group` (an internal group of the policy) and `job`
-(a GitHub Actions job, `github:<owner>/<repo>:<job>`).
+A row names a `group` of the policy, and everyone who holds it may ask. A CI job
+is such a group, declared like any other with `github` matchers on what the
+verified identity token says (`repository`, `ref`, `event_name`,
+`job_workflow_ref`): a job that can be started from any branch by anyone who can
+push is not one to grant a token to, so pin it, for example:
+
+```yaml
+groups:
+  all:ci:release:
+    matchers:
+      - github:
+          repository: example-org/example-repo
+          ref: refs/tags/v*
+          job_workflow_ref: example-org/example-repo/.github/workflows/release.yml@refs/tags/v*
+```
 
 ## How it runs
 

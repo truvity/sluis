@@ -254,7 +254,7 @@ func TestAMissingPrototypeAndAMissingMinterAreRefusedPlainly(t *testing.T) {
 func TestOnDemandMintingChecksTheGrantsAndTheLifetime(t *testing.T) {
 	e := setup(t,
 		config.CloudflareGrant{Group: "all:infra:dns", Presets: []string{"dns"}},
-		config.CloudflareGrant{Job: "github:example-org/example-repo:release", Presets: []string{"dns"}})
+		config.CloudflareGrant{Group: "all:ci:release", Presets: []string{"dns"}})
 	person := minter.Caller{Actor: audit.Person("user@example.com"), Groups: []string{"all:infra:dns"}}
 
 	got, err := e.m.MintFor(ctx, "dns", person, 5*time.Minute)
@@ -269,8 +269,8 @@ func TestOnDemandMintingChecksTheGrantsAndTheLifetime(t *testing.T) {
 		t.Fatalf("default lifetime: %+v %v", got, err)
 	}
 	// A job.
-	job := minter.Caller{Actor: audit.CI("github:example-org/example-repo"), Job: "github:example-org/example-repo:release"}
-	if got, err = e.m.MintFor(ctx, "dns", job, 0); err != nil || !strings.Contains(got.Name, "github:example-org_example-repo:release") {
+	job := minter.Caller{Actor: audit.CI("github:example-org/example-repo"), Groups: []string{"all:ci:release"}}
+	if got, err = e.m.MintFor(ctx, "dns", job, 0); err != nil || !strings.Contains(got.Name, "github:example-org_example-repo") {
 		t.Fatalf("job: %+v %v", got, err)
 	}
 	// Refusals.

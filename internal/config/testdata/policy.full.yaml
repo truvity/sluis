@@ -11,6 +11,7 @@ vocabulary:
       roles:
         operator: [viewer]
         viewer: []
+        releaser: []
     shop:
       scopes: [prod]
       roles:
@@ -25,6 +26,9 @@ groups:
     matchers:
       - aws: {account: "111122223333", role: sluis-github}
       - email_domain: example.com
+  all:access-roster:releaser:
+    matchers:
+      - github: {repository: example-org/example-repo, ref: "refs/tags/v*", job_workflow_ref: "example-org/example-repo/.github/workflows/release.yml@refs/tags/v*"}
   prod:shop:deployer:
     matchers:
       - email: ada@example.com
@@ -99,5 +103,5 @@ cloudflare:
   grants:
     - group: "all:access-roster:operator"
       presets: [dns-example, r2-archive]
-    - job: "github:example-org/example-repo:release"
+    - group: "all:access-roster:releaser"
       presets: [dns-example]

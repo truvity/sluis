@@ -182,8 +182,6 @@ type Caller struct {
 	// Groups are the groups the caller holds (a person's, from the verified
 	// session or token).
 	Groups []string
-	// Job is a CI job, github:<owner>/<repo>:<job>, where the caller is one.
-	Job string
 }
 
 // Granted are the presets the policy opens to the caller, sorted. It is what
@@ -191,7 +189,7 @@ type Caller struct {
 func (m *Minter) Granted(c Caller) []PresetInfo {
 	var out []PresetInfo
 	for _, name := range m.cfg.Cloudflare.PresetNames() {
-		if m.cfg.Grants.Allows(name, c.Groups, c.Job) {
+		if m.cfg.Grants.Allows(name, c.Groups) {
 			out = append(out, infoOf(name, m.cfg.Cloudflare.Presets[name]))
 		}
 	}
@@ -243,7 +241,7 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 		m.refused(ctx, caller.Actor, preset, audit.CloudflareOnDemand, "unknown_preset", "", true)
 		return nil, fmt.Errorf("%w: %q", ErrUnknownPreset, preset)
 	}
-	if !m.cfg.Grants.Allows(preset, caller.Groups, caller.Job) {
+	if !m.cfg.Grants.Allows(preset, caller.Groups) {
 		m.refused(ctx, caller.Actor, preset, audit.CloudflareOnDemand, "not_granted", "", true)
 		return nil, fmt.Errorf("%w: %s", ErrNotGranted, preset)
 	}
@@ -256,9 +254,6 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 		return nil, fmt.Errorf("%w: %s, want %s to %s", ErrLifetime, lifetime, config.CloudflareMinLifetime, p.Lifetime.D())
 	}
 	who := caller.Actor.ID
-	if caller.Job != "" {
-		who = caller.Job
-	}
 	now := m.now()
 	out, err := m.mint(ctx, preset, p, cloudflare.OnDemandName(m.cfg.Instance, preset, who, now), now, lifetime)
 	if err != nil {
