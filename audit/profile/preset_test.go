@@ -144,3 +144,30 @@ func TestAProfileThatPseudonymisesNeedsThePseudonymKey(t *testing.T) {
 		t.Errorf("the security profile keeps no pseudonym: %v (identity %v)", got, composed["trail"].Identity)
 	}
 }
+
+// A framework profile that demands Object Lock keeps its copies where they cannot
+// be deleted, which is what the attested preset is: so its minimum has to be
+// attested, or the writer would put such a copy where it can be.
+func TestEveryFrameworkThatDemandsALockNeedsTheAttestedPreset(t *testing.T) {
+	for name, f := range builtin(t) {
+		if LockRank(f.Integrity.ObjectLockMode) > LockRank(LockNone) && f.MinPreset != Attested {
+			t.Errorf("%s demands %s Object Lock and has min_preset %s", name, f.Integrity.ObjectLockMode, f.MinPreset)
+		}
+	}
+}
+
+func TestADestinationsOwnPreset(t *testing.T) {
+	fw := builtin(t)
+	d := deployment(t, "profiles:\n  a: {frameworks: [history], preset: attested}\n  b: {frameworks: [security]}\n")
+	got, err := d.Compose(fw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["a"].Preset != Attested || got["b"].Preset != Standard {
+		t.Errorf("presets: a %s, b %s", got["a"].Preset, got["b"].Preset)
+	}
+	d = deployment(t, "profiles:\n  p: {frameworks: [pci-dss], preset: standard}\n")
+	if _, err := d.Compose(fw); err == nil || !strings.Contains(err.Error(), "profile p") {
+		t.Errorf("a destination weaker than its frameworks: %v", err)
+	}
+}

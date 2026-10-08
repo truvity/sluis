@@ -101,10 +101,20 @@ type MeterDef struct {
 // Action is one thing that can happen, and everything the system needs to know
 // about it without reading the code that emits it.
 type Action struct {
-	Summary      string            `json:"summary"`
-	Operation    string            `json:"operation"`
-	Categories   []string          `json:"categories,omitempty"`
-	Profiles     []string          `json:"profiles"`
+	Summary    string   `json:"summary"`
+	Operation  string   `json:"operation"`
+	Categories []string `json:"categories,omitempty"`
+	// Category is what routes the action: a destination in the installation's
+	// deployment document takes the actions of the categories it lists, and
+	// keeps its own projection of each record. It is not Categories, which are
+	// the framework event categories an action satisfies. An action declares one.
+	Category string `json:"category,omitempty"`
+	// Profiles names the destinations that keep the action's records.
+	//
+	// Deprecated: declare Category and let each destination say which
+	// categories it takes. An action with no Category is still kept by the
+	// destinations it names here.
+	Profiles     []string          `json:"profiles,omitempty"`
 	CaptureLevel string            `json:"capture_level,omitempty"`
 	Delivery     string            `json:"delivery,omitempty"`
 	TargetTypes  []string          `json:"target_types,omitempty"`
@@ -447,17 +457,24 @@ func (c *Catalogue) messageArguments(a Action) map[string]bool {
 	return allowed
 }
 
+// Takes reports whether a destination keeps the action's records: the
+// destination lists the action's Category among the categories it takes, or the
+// action names the destination in the deprecated Profiles.
+func (a Action) Takes(destination string, categories []string) bool {
+	return (a.Category != "" && contains(categories, a.Category)) || contains(a.Profiles, destination)
+}
+
 // MissingCategories reports the framework categories a profile requires that no
 // catalogue emitting into it covers.
 //
 // This is the check that keeps a framework profile honest at deploy time: a profile may
 // claim to satisfy a framework only if something in the installation actually
 // records the events that framework asks for.
-func MissingCategories(profile string, required []string, catalogues []*Catalogue) []string {
+func MissingCategories(profile string, takes, required []string, catalogues []*Catalogue) []string {
 	covered := map[string]bool{}
 	for _, c := range catalogues {
 		for _, a := range c.Actions {
-			if !contains(a.Profiles, profile) {
+			if !a.Takes(profile, takes) {
 				continue
 			}
 			for _, cat := range a.Categories {

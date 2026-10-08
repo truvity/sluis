@@ -117,6 +117,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	destinations, err := cli.OpenDestinations(ctx, cfg.Archive, profiles, cfg.SecretReader())
+	if err != nil {
+		return err
+	}
 	provider, err := cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader())
 	if err != nil {
 		return err
@@ -164,6 +168,7 @@ func run() error {
 	}
 	w, err := writer.Open(ctx, writer.Config{
 		Archive:          archive,
+		Destinations:     destinations,
 		Profiles:         profiles,
 		Keys:             provider,
 		Catalogues:       found,

@@ -109,6 +109,7 @@ func run() error {
 	}
 
 	var archive store.Store
+	var destinations map[string]store.Store
 	var provider keys.Provider
 	if cfg.Mode == "writer" {
 		// A profile whose frameworks demand a lock this store does not
@@ -118,6 +119,9 @@ func run() error {
 			return err
 		}
 		if archive, err = cli.OpenArchiveFrom(ctx, *cfg.Archive, cfg.SecretReader()); err != nil {
+			return err
+		}
+		if destinations, err = cli.OpenDestinations(ctx, *cfg.Archive, profiles, cfg.SecretReader()); err != nil {
 			return err
 		}
 		if provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader()); err != nil {
@@ -226,6 +230,7 @@ func run() error {
 		}
 		w, err := writer.Open(ctx, writer.Config{
 			Archive:          archive,
+			Destinations:     destinations,
 			Profiles:         profiles,
 			Keys:             provider,
 			Catalogues:       found,

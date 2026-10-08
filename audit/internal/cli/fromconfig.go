@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -13,9 +15,11 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/sink/sqssink"
+	"github.com/truvity/sluis/audit/store"
 	"github.com/truvity/sluis/audit/store/s3store"
 )
 
@@ -90,6 +94,85 @@ func OpenArchiveFrom(ctx context.Context, a config.Archive, secrets *config.Secr
 		Bucket: a.Bucket.Name, Prefix: a.Prefix, Lock: lock, KMSKeyID: a.KMSKey,
 		Endpoint: a.Bucket.Endpoint, PathStyle: a.Bucket.PathStyle,
 	})
+}
+
+// DestinationPlan is how one destination writes the archive: the Object Lock
+// mode of its objects and the key they are encrypted under.
+type DestinationPlan struct {
+	Lock   s3store.LockMode
+	KMSKey string
+}
+
+// PlanDestinations decides how each destination writes. Object Lock is the
+// archive's lock mode for a destination whose preset is attested and none for
+// every other, so a destination that asked for no more than the standard
+// preset writes nothing it cannot clear. An attested destination on an archive
+// that writes no lock, or on an S3-compatible endpoint, which has no Object
+// Lock to give, is refused naming the destination. The key is the destination's
+// alias, or the archive's.
+func PlanDestinations(a config.Archive, profiles map[string]*profile.Profile) (map[string]DestinationPlan, error) {
+	lock, err := s3store.ParseLockMode(a.LockMode)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(profiles))
+	for name := range profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	plans := make(map[string]DestinationPlan, len(profiles))
+	var problems []error
+	for _, name := range names {
+		p := profiles[name]
+		plan := DestinationPlan{Lock: s3store.None, KMSKey: a.KMSKey}
+		if p.KeyAlias != "" {
+			plan.KMSKey = p.KeyAlias
+		}
+		if p.Preset == profile.Attested {
+			switch {
+			case a.Bucket.Endpoint != "":
+				problems = append(problems, fmt.Errorf("destination %s is attested, which keeps its objects under Object Lock, "+
+					"and the archive is on an S3-compatible endpoint (%s), which has none: Object Lock is S3 only. "+
+					"Keep it on S3, or compose it from framework profiles that need less", name, a.Bucket.Endpoint))
+			case lock == s3store.None:
+				problems = append(problems, fmt.Errorf("destination %s is attested, which keeps its objects under Object Lock, "+
+					"and the archive writes none (archive.lockMode is none)", name))
+			default:
+				plan.Lock = lock
+			}
+		}
+		plans[name] = plan
+	}
+	return plans, errors.Join(problems...)
+}
+
+// OpenDestinations opens a store for each destination whose plan differs from
+// the archive's own, sharing one client per distinct plan.
+func OpenDestinations(ctx context.Context, a config.Archive, profiles map[string]*profile.Profile, secrets *config.Secrets) (map[string]store.Store, error) {
+	plans, err := PlanDestinations(a, profiles)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := awsConfig(ctx, a.Bucket, a.Credentials, secrets)
+	if err != nil {
+		return nil, err
+	}
+	opened := map[DestinationPlan]store.Store{}
+	out := make(map[string]store.Store, len(plans))
+	for name, plan := range plans {
+		st, ok := opened[plan]
+		if !ok {
+			if st, err = s3store.FromConfig(cfg, s3store.Options{
+				Bucket: a.Bucket.Name, Prefix: a.Prefix, Lock: plan.Lock, KMSKeyID: plan.KMSKey,
+				Endpoint: a.Bucket.Endpoint, PathStyle: a.Bucket.PathStyle,
+			}); err != nil {
+				return nil, fmt.Errorf("destination %s: %w", name, err)
+			}
+			opened[plan] = st
+		}
+		out[name] = st
+	}
+	return out, nil
 }
 
 // OpenExportsFrom opens the exports bucket, which is a store of its own and has

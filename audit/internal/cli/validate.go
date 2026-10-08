@@ -86,7 +86,7 @@ func (v Validate) Run() (problems int) {
 	sort.Strings(names)
 	for _, name := range names {
 		p := profiles[name]
-		missing := catalogue.MissingCategories(name, p.RequiredCategories, catalogues)
+		missing := catalogue.MissingCategories(name, p.Categories, p.RequiredCategories, catalogues)
 		if len(missing) == 0 {
 			printf(out, "profile %s: composed, every required category is covered\n", name)
 			continue

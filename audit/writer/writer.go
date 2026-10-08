@@ -66,6 +66,11 @@ type Dedupe = inner.Dedupe
 type Config struct {
 	// Archive is where the copies go: the Object-Locked bucket.
 	Archive store.Store
+	// Destinations are the stores of destinations (profiles) that write
+	// differently from Archive: one below the attested preset puts no Object Lock,
+	// and one may encrypt under a key of its own. cli.OpenDestinations makes them.
+	// A destination not listed here is written to Archive.
+	Destinations map[string]store.Store
 	// Profiles are the deployment's profiles, composed from the framework profiles —
 	// framework profile.ParseDeployment and Compose read the same document the chart
 	// renders.
@@ -294,7 +299,7 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 		Catalogues: resolver{local: local, shared: shared},
 		Splitter:   &inner.Splitter{Profiles: c.Profiles, Keys: c.Keys, Identities: identities},
 		Roller: &inner.Roller{
-			Store: c.Archive, Instance: instance, Interval: c.RollInterval,
+			Store: c.Archive, Stores: c.Destinations, Instance: instance, Interval: c.RollInterval,
 			Held: holds.Held,
 			OnPut: func(key string, n int) {
 				log.Info("object written", "key", key, "records", n)

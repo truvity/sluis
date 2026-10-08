@@ -100,6 +100,10 @@ type Args struct {
 	// pseudonyms. See StateArgs.
 	State StateArgs
 
+	// destinations are the profiles of Writer.DeploymentYAML as destinations of
+	// the archive, filled in by withDefaults.
+	destinations []destination
+
 	Archive   ArchiveArgs
 	Ingest    IngestArgs
 	Writer    WriterArgs
@@ -215,10 +219,13 @@ type ArchiveArgs struct {
 	// "kms" one of Keys.Archive and KeyArn is required: the library creates no key.
 	KeyArn string
 
-	// Profiles are the deployment's profile names. Required (except with
-	// Endpoint, where the lifecycle is the store's): a lifecycle rule is
-	// written for each `records/<profile>/` prefix, and the profile is the first
-	// component of the key for exactly that reason (ADR 0018).
+	// Profiles are the deployment's profile names, the destinations of the
+	// archive. Optional: unset, they are the profiles of Writer.DeploymentYAML. On
+	// an AWS S3 bucket the library creates, a lifecycle rule is written for each
+	// `records/<profile>/` prefix (with an Endpoint the lifecycle is the store's,
+	// and none is written); the profile is the first component of the key for
+	// exactly that reason (ADR 0018). Where the destination's framework profiles
+	// fix a retention, the rule expires the prefix's objects when it ends.
 	Profiles []string
 	// GlacierIRDays is when a record object moves to Glacier Instant Retrieval:
 	// still readable by observe's reindex and by `audit verify` without a
@@ -540,11 +547,11 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		return nil, fmt.Errorf("auditpulumi: AccountID %q must be the 12 digits of an AWS account id", c.AccountID)
 	}
 
-	preset, err := resolvePreset(&c)
+	preset, dests, err := resolvePreset(&c)
 	if err != nil {
 		return nil, err
 	}
-	if err := applyPreset(&c, preset); err != nil {
+	if err := applyPreset(&c, preset, dests); err != nil {
 		return nil, err
 	}
 
@@ -561,6 +568,11 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 	ar := &c.Archive
 	if ar.BucketName == "" {
 		return nil, errors.New("auditpulumi: Archive.BucketName is required")
+	}
+	if len(ar.Profiles) == 0 {
+		for _, d := range c.destinations {
+			ar.Profiles = append(ar.Profiles, d.Name)
+		}
 	}
 	if ar.Endpoint != "" {
 		if err := c.checkExternalArchive(); err != nil {

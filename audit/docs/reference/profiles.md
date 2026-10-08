@@ -72,6 +72,48 @@ more. The rule is `profile.Deployment.ResolvePreset`; the writer and every job a
 compose the deployment document, the Pulumi library calls it, and the chart uses a table
 generated from the `min_preset` lines (`just audit-config-schemas`).
 
+## Destinations
+
+An installation has one archive bucket, and each profile of its deployment document is a
+**destination**: a prefix of it (`records/<profile>/`) with its own framework profiles, its own
+retention, optionally its own key, and its own projection of every record.
+
+```yaml
+profiles:
+  security:
+    frameworks: [security]
+    categories: [security]
+    key_alias: alias/acme-security
+  activity:
+    frameworks: [history]
+    categories: [activity]
+  billing:
+    frameworks: [billing-nl]
+    categories: [billing]
+  evidence:
+    frameworks: [evidence-etsi]
+    categories: [security, billing]
+```
+
+- A catalogue declares one `category` per action (not `categories`, which are the framework event
+  categories an action satisfies). The emitter sends a record once, with every field; the writer
+  stores a projection of it, only the fields that destination's profile keeps, under every
+  destination whose `categories` include the action's category. The deprecated `profiles` list on an
+  action still names destinations directly. A category nobody takes is reported once per action.
+- `categories` are lower-case names. A destination that lists none keeps only the actions that
+  name it in `profiles`.
+- `key_alias` is the alias of the key the destination's objects are encrypted under; the Pulumi
+  library creates a key for each and grants every role that reads or writes the archive all of them.
+  Unset is the archive's key.
+- Retention is the destination's framework profiles' (`retention`): the Pulumi library writes an S3
+  lifecycle rule per prefix that expires its objects when a fixed retention ends, with the
+  Glacier steps before it.
+- Each destination has its own install preset (the highest `min_preset` of its framework profiles,
+  or a stronger `preset:` it asks for). **Object Lock is written only for a destination whose preset is
+  attested**, and only on S3: an attested destination on an S3-compatible endpoint, or on an archive that
+  writes no lock, is refused when the writer starts, naming the destination. The others write objects
+  they can clear, whatever the bucket's default retention says.
+
 ## What a copy carries
 
 A framework profile names fields as JSON pointers in three lists, and **anything it does

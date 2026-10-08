@@ -24,6 +24,7 @@ package auditpulumi
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -364,7 +365,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	empty := pulumi.String("").ToStringOutput()
 	observeArn, archiveWriterArn := empty, empty
 	if a.Observe != nil {
-		role, err := newObserveReader(ctx, name, a, bucket, archiveKeyArn, tags, child)
+		role, err := newObserveReader(ctx, name, a, bucket, grantKeys, tags, child)
 		if err != nil {
 			return nil, err
 		}
@@ -376,14 +377,14 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		if ingest {
 			qa = queue.Arn
 		}
-		role, err := newQuery(ctx, name, a, bucket, archiveKeyArn, qa, tags, child)
+		role, err := newQuery(ctx, name, a, bucket, grantKeys, qa, tags, child)
 		if err != nil {
 			return nil, err
 		}
 		queryArn = role.Arn
 	}
 	if a.ArchiveWriter != nil {
-		role, err := newArchiveWriter(ctx, name, a, bucket, archiveKeyArn, tags, child)
+		role, err := newArchiveWriter(ctx, name, a, bucket, grantKeys, tags, child)
 		if err != nil {
 			return nil, err
 		}
@@ -558,16 +559,38 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, keyArn pulumi.StringO
 	// so that lifecycle can differ by it. Objects below the storage class's
 	// minimum billable size stay where they are (the S3 default).
 	rules := s3.BucketLifecycleConfigurationRuleArray{}
+	retention := map[string]int{}
+	for _, d := range a.destinations {
+		retention[d.Name] = d.RetentionDays
+	}
 	for _, p := range ar.Profiles {
-		rules = append(rules, &s3.BucketLifecycleConfigurationRuleArgs{
+		rule := &s3.BucketLifecycleConfigurationRuleArgs{
 			Id:     pulumi.String("records-" + p),
 			Status: pulumi.String("Enabled"),
 			Filter: &s3.BucketLifecycleConfigurationRuleFilterArgs{Prefix: pulumi.String("records/" + p + "/")},
-			Transitions: s3.BucketLifecycleConfigurationRuleTransitionArray{
-				&s3.BucketLifecycleConfigurationRuleTransitionArgs{Days: pulumi.Int(ar.GlacierIRDays), StorageClass: pulumi.String("GLACIER_IR")},
-				&s3.BucketLifecycleConfigurationRuleTransitionArgs{Days: pulumi.Int(ar.DeepArchiveDays), StorageClass: pulumi.String("DEEP_ARCHIVE")},
-			},
-		})
+		}
+		// A transition must come before the expiration the destination's
+		// retention sets; one that would not is left out.
+		days := retention[p]
+		transitions := s3.BucketLifecycleConfigurationRuleTransitionArray{}
+		for _, t := range []struct {
+			after int
+			class string
+		}{{ar.GlacierIRDays, "GLACIER_IR"}, {ar.DeepArchiveDays, "DEEP_ARCHIVE"}} {
+			if days == 0 || t.after < days {
+				transitions = append(transitions, &s3.BucketLifecycleConfigurationRuleTransitionArgs{
+					Days: pulumi.Int(t.after), StorageClass: pulumi.String(t.class),
+				})
+			}
+		}
+		rule.Transitions = transitions
+		if days > 0 {
+			rule.Expiration = &s3.BucketLifecycleConfigurationRuleExpirationArgs{Days: pulumi.Int(days)}
+			rule.NoncurrentVersionExpiration = &s3.BucketLifecycleConfigurationRuleNoncurrentVersionExpirationArgs{
+				NoncurrentDays: pulumi.Int(days),
+			}
+		}
+		rules = append(rules, rule)
 	}
 	rules = append(rules, &s3.BucketLifecycleConfigurationRuleArgs{
 		Id:     pulumi.String("abort-incomplete-multipart-uploads"),

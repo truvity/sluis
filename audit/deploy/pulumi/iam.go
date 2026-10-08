@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // A policy document is built from ARNs that exist only once the resources do, so
@@ -117,11 +118,14 @@ func writerPolicy(bucketArn, archiveKeyArn, tableArn, queueArn, logGroupArn stri
 
 // archiveKeyStatements is the grant on the archive key, and nothing when there is
 // no key (Archive.Encryption "s3": the empty ARN).
+//
+// The argument is one ARN, or several joined with commas: the archive key and the
+// keys of the destinations that have one of their own.
 func archiveKeyStatements(archiveKeyArn string, actions ...string) []statement {
 	if archiveKeyArn == "" {
 		return nil
 	}
-	return []statement{allow(actions, []string{archiveKeyArn}, nil)}
+	return []statement{allow(actions, strings.Split(archiveKeyArn, ","), nil)}
 }
 
 // notaryPolicy is what the notary function may do: read the records it seals and

@@ -27,6 +27,15 @@
         "additionalProperties": false,
         "description": "One profile's composition.",
         "properties": {
+          "categories": {
+            "description": "The action categories (an action's `category`) this destination takes. The writer stores a projection of each record, only this destination's fields, under every destination that takes its category. Unset keeps only the actions that name the profile in their deprecated `profiles`.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
           "frameworks": {
             "description": "The framework profiles the profile is composed from.",
             "items": {
@@ -35,6 +44,19 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "key_alias": {
+            "description": "The alias of the key this destination's objects are encrypted with. Empty is the archive's key.",
+            "pattern": "^alias/[A-Za-z0-9/_-]+$",
+            "type": "string"
+          },
+          "preset": {
+            "description": "This destination's install preset, when it asks for more than its framework profiles need. Object Lock is the writer's only for a destination whose preset is attested.",
+            "enum": [
+              "operational",
+              "standard",
+              "attested"
+            ]
           }
         },
         "required": [

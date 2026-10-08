@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
@@ -176,5 +177,62 @@ func TestThePresetInTheDeploymentAndInTheArgumentsMustAgree(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "set one of them") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func ruleFor(t *testing.T, rec *recorder, prefix string) map[string]resource.PropertyValue {
+	t.Helper()
+	lc := rec.one(t, "aws:s3/bucketLifecycleConfiguration:BucketLifecycleConfiguration", "audit-archive")
+	for _, r := range prop(lc, "rules").ArrayValue() {
+		o := r.ObjectValue()
+		if f := o["filter"]; f.IsObject() && f.ObjectValue()["prefix"].StringValue() == prefix {
+			out := map[string]resource.PropertyValue{}
+			for k, v := range o {
+				out[string(k)] = v
+			}
+			return out
+		}
+	}
+	t.Fatalf("no lifecycle rule for %s", prefix)
+	return nil
+}
+
+func TestEachDestinationHasAPrefixAnExpiryAndAKeyOfItsOwn(t *testing.T) {
+	rec, _, err := build(t, func(a *auditpulumi.Args) {
+		a.Archive.Profiles = nil // the destinations are the deployment's profiles
+		a.Writer.DeploymentYAML = "profiles:\n" +
+			"  security:\n    frameworks: [security]\n    key_alias: alias/acme-security\n" +
+			"  billing:\n    frameworks: [billing-nl]\n    key_alias: alias/acme-billing\n" +
+			"  activity:\n    frameworks: [history]\n"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for prefix, days := range map[string]float64{"records/security/": 365, "records/billing/": 2557, "records/activity/": 365} {
+		r := ruleFor(t, rec, prefix)
+		if got := r["expiration"].ObjectValue()["days"].NumberValue(); got != days {
+			t.Errorf("%s expires after %v days, want %v", prefix, got, days)
+		}
+	}
+	// Two destination keys, under the aliases the document names; activity has
+	// none and is encrypted under the archive's.
+	aliases := map[string]bool{}
+	for _, a := range rec.ofType("aws:kms/alias:Alias") {
+		aliases[prop(a, "name").StringValue()] = true
+	}
+	for _, want := range []string{"alias/acme-security", "alias/acme-billing", "alias/audit-archive"} {
+		if !aliases[want] {
+			t.Errorf("no alias %s: %v", want, aliases)
+		}
+	}
+	// The writer may use every destination's key.
+	grant := ""
+	for _, st := range policy(t, rec, "audit-writer") {
+		if strings.Contains(strings.Join(strs(st["Action"]), " "), "kms:GenerateDataKey") {
+			grant = strings.Join(strs(st["Resource"]), " ")
+		}
+	}
+	if n := len(strings.Fields(grant)); n != 3 {
+		t.Errorf("the writer may use %d keys, want 3: %s", n, grant)
 	}
 }
