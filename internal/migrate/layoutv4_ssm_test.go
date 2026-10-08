@@ -75,11 +75,11 @@ func TestSecretsLayoutOnLocalStack(t *testing.T) {
 
 	o.Layout = "v4"
 	del, err := migrate.DeleteV3(ctx, o)
-	if err != nil || del.Deleted != 4 {
+	if err != nil || del.Deleted != 5 {
 		t.Fatalf("delete = %v\n%s", err, del.JSON())
 	}
 	left, err := v3.List(ctx, "")
-	if err != nil || len(left) != 1 || left[0] != "export/old-copy" {
-		t.Errorf("v3 holds %v (%v), want only the exports copy", left, err)
+	if err != nil || len(left) != 0 {
+		t.Errorf("v3 holds %v (%v), want nothing: the retired exports copy goes with it", left, err)
 	}
 }
