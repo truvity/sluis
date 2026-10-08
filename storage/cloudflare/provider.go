@@ -73,6 +73,7 @@ type Provider struct {
 	now func() time.Time
 
 	mu       sync.Mutex
+	lastRe   time.Time // when Reauthenticate last minted
 	access   string
 	secret   string
 	expires  time.Time
@@ -139,6 +140,27 @@ func (p *Provider) Remint(ctx context.Context) (aws.Credentials, error) {
 		return aws.Credentials{}, err
 	}
 	return p.credentials(), nil
+}
+
+// MinReauth is the least time between two mints that [Provider.Reauthenticate]
+// makes: a store that answers 403 for a reason new credentials do not cure is
+// not asked again.
+const MinReauth = 30 * time.Second
+
+// Reauthenticate mints new credentials because the store answered 403, unless it
+// did so less than [MinReauth] ago, and reports whether it did. A caller holding
+// the credentials in a cache invalidates it when this answers true.
+func (p *Provider) Reauthenticate(ctx context.Context) (bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.lastRe.IsZero() && p.now().Sub(p.lastRe) < MinReauth {
+		return false, nil
+	}
+	if err := p.mintLocked(ctx); err != nil {
+		return false, err
+	}
+	p.lastRe = p.now()
+	return true, nil
 }
 
 func (p *Provider) credentials() aws.Credentials {

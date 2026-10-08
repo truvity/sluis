@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/store/s3store"
 	"github.com/truvity/sluis/storage/cloudflare"
 	skeys "github.com/truvity/sluis/storage/keys"
 	kmskeys "github.com/truvity/sluis/storage/keys/kms"
@@ -205,4 +207,17 @@ func readMinter(ctx context.Context, st state.Store, address string) (string, er
 		return "", fmt.Errorf("credentials_preset.minter: %s is not a cloudflare-minter/v1 document with a token", address)
 	}
 	return d.Token, nil
+}
+
+// reauthenticate is what the store does after a 403: mint new credentials (at
+// most once in cloudflare.MinReauth) and drop the cached ones so the request is
+// signed anew. It answers false when nothing was replaced.
+func reauthenticate(prov *cloudflare.Provider, cache *aws.CredentialsCache) s3store.Reauth {
+	return s3store.ReauthFunc(func(ctx context.Context) (bool, error) {
+		replaced, err := prov.Reauthenticate(ctx)
+		if replaced {
+			cache.Invalidate()
+		}
+		return replaced, err
+	})
 }

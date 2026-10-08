@@ -70,7 +70,7 @@ func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, sec
 	// is the store's credential; it renews itself, so it is not read once.
 	for _, p := range minted {
 		if p != nil {
-			opts = append(opts, awsconfig.WithCredentialsProvider(aws.NewCredentialsCache(p)))
+			opts = append(opts, awsconfig.WithCredentialsProvider(p))
 		}
 	}
 	if creds != nil {
@@ -194,10 +194,14 @@ func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string
 	for _, name := range sortedPresets(plans) {
 		plan := plans[name]
 		var minted aws.CredentialsProvider
+		options := plan.Options
 		if plan.Minted != nil {
-			if minted, err = mintedProvider(ctx, *plan.Minted); err != nil {
+			prov, err := mintedProvider(ctx, *plan.Minted)
+			if err != nil {
 				return nil, fmt.Errorf("preset %s: %w", name, err)
 			}
+			cache := aws.NewCredentialsCache(prov)
+			minted, options.Reauth = cache, reauthenticate(prov, cache)
 		}
 		cfg, err := awsConfig(ctx, config.Bucket{
 			Name: plan.Storage.Bucket, Region: plan.Storage.Region, Endpoint: plan.Storage.Endpoint,
@@ -206,7 +210,7 @@ func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string
 		if err != nil {
 			return nil, fmt.Errorf("preset %s: %w", name, err)
 		}
-		st, err := s3store.FromConfig(cfg, plan.Options)
+		st, err := s3store.FromConfig(cfg, options)
 		if err != nil {
 			return nil, fmt.Errorf("preset %s: %w", name, err)
 		}

@@ -1,3 +1,4 @@
+//nolint:lll // fixtures and table rows are one-line
 package auditpulumi_test
 
 import (
@@ -5,6 +6,7 @@ import (
 	"testing"
 
 	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
+	"github.com/truvity/sluis/audit/profile"
 )
 
 const r2Endpoint = "https://account.r2.example.test"
@@ -308,4 +310,92 @@ func TestTheWriterIsGrantedThePseudonymAndConcealKeysByContext(t *testing.T) {
 		}
 	}
 	validateConfigs(t, rec, map[string]string{"audit-writer": "audit-writer-lambda", "audit-notary": "audit-notary"})
+}
+
+func mintedPreset() *profile.CredentialsPreset {
+	return &profile.CredentialsPreset{Account: "0123456789abcdef0123456789abcdef", Minter: "internal/cloudflare/main/minter", Prototype: "proto-r2-00001", Lifetime: "15m"}
+}
+
+// A preset that mints its R2 credentials reads the minter at its one address and
+// reads and writes the record of the tokens it minted at one, and the
+// writer has no grant on the static document, which does not exist.
+func TestAPresetThatMintsItsCredentialsIsGrantedTheMinterAndTheRecordOnly(t *testing.T) {
+	rec, out, err := build(t, func(a *auditpulumi.Args) {
+		onR2(a)
+		a.Presets = map[string]auditpulumi.PresetStorage{"operational": {Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsPreset: mintedPreset()}}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	minter := "/audit/audit/internal/cloudflare/main/minter"
+	record := "/audit/audit/cloudflare-minted/operational"
+	g := grants(policy(t, rec, "audit-writer"))
+	hasSuffix := func(list []string, suffix string) bool {
+		for _, r := range list {
+			if strings.HasSuffix(r, ":parameter"+suffix) {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasSuffix(g["ssm:GetParameter"], minter) || !hasSuffix(g["ssm:GetParameter"], record) {
+		t.Errorf("the writer's reads: %v", g["ssm:GetParameter"])
+	}
+	if got := g["ssm:PutParameter"]; len(got) != 1 || !strings.HasSuffix(got[0], ":parameter"+record) {
+		t.Errorf("the writer may write only the record, wrote %v", got)
+	}
+	for _, r := range g["ssm:GetParameter"] {
+		if strings.HasSuffix(r, "/internal/archive/operational") || strings.HasSuffix(r, "/*") {
+			t.Errorf("a grant that is not exact: %s", r)
+		}
+	}
+	if out["credentialsPaths"] != "operational="+minter {
+		t.Errorf("credentials paths = %q", out["credentialsPaths"])
+	}
+	files := layerFiles(t, rec, "audit-writer")
+	for _, want := range []string{"credentials_preset:", "minter: internal/cloudflare/main/minter", "lifetime: 15m"} {
+		if !strings.Contains(files["deployment.yaml"], want) {
+			t.Errorf("the deployment document lacks %q:\n%s", want, files["deployment.yaml"])
+		}
+	}
+	if strings.Contains(files["deployment.yaml"], "credentials: internal/") {
+		t.Errorf("a static address beside the preset:\n%s", files["deployment.yaml"])
+	}
+	validateConfigs(t, rec, map[string]string{"audit-writer": "audit-writer-lambda"})
+}
+
+// Static credentials stay as they were: no write, no Cloudflare path.
+func TestStaticCredentialsGrantNoMinterAndNoRecord(t *testing.T) {
+	rec, _, err := build(t, onR2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := grants(policy(t, rec, "audit-writer"))
+	for _, r := range append(g["ssm:GetParameter"], g["ssm:PutParameter"]...) {
+		if strings.Contains(r, "cloudflare") {
+			t.Errorf("a Cloudflare grant without a preset: %s", r)
+		}
+	}
+}
+
+func TestACredentialsPresetIsRefusedWhereItCannotWork(t *testing.T) {
+	for name, mut := range map[string]func(*auditpulumi.PresetStorage){
+		"on AWS":            func(s *auditpulumi.PresetStorage) { s.Endpoint, s.PathStyle = "", false },
+		"with a static one": func(s *auditpulumi.PresetStorage) { s.CredentialsAddress = "internal/archive/x" },
+		"a minter outside":  func(s *auditpulumi.PresetStorage) { s.CredentialsPreset.Minter = "external/x" },
+		"a short lifetime":  func(s *auditpulumi.PresetStorage) { s.CredentialsPreset.Lifetime = "5s" },
+		"no prototype":      func(s *auditpulumi.PresetStorage) { s.CredentialsPreset.Prototype = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := build(t, func(a *auditpulumi.Args) {
+				onR2(a)
+				s := auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsPreset: mintedPreset()}
+				mut(&s)
+				a.Presets = map[string]auditpulumi.PresetStorage{"operational": s}
+			})
+			if err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
 }

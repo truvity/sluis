@@ -190,8 +190,12 @@ presets:
   account settings, memberships or Access identity providers, is refused at every mint. The
   process records the ids of the tokens it mints at `cloudflare-minted/<preset>` in the same
   store and deletes the expired ones at its next mint, because Cloudflare hides an expired
-  token from its list while still counting it. The process's role needs `ssm:GetParameter` on
-  the minter address and read and write on `cloudflare-minted/*` below the state root. The
+  token from its list while still counting it. The Pulumi library
+  (`PresetStorage.CredentialsPreset`) grants the writer and the notary read on exactly the minter
+  address and read and write on exactly `cloudflare-minted/<preset>` below the state root (the
+  secrets key through SSM, as for the rest), and only for a preset that uses it. When the store
+  answers 403 the request is sent once more with new credentials, at most once per request and one
+  mint per 30 seconds. The
   code is `github.com/truvity/sluis/storage/cloudflare`, shared with sluis itself.
 - **A private CA.** `archive.ca` is the path to a bundle trusted for the endpoint, mounted by
   the platform (the chart's `trust` puts one at `/etc/audit/trust/<key>`).
