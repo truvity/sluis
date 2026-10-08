@@ -9,6 +9,7 @@ require (
 	github.com/truvity/policy v1.45.0
 	github.com/truvity/sluis v1.74.0-rc.1
 	github.com/truvity/sluis/audit/deploy/pulumi v1.74.0-rc.1
+	github.com/truvity/sluis/storage v1.74.0-rc.1
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -91,7 +92,6 @@ require (
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
 	github.com/truvity/sluis/audit v1.74.0-rc.1 // indirect
 	github.com/truvity/sluis/audit/sdk v1.74.0-rc.1 // indirect
-	github.com/truvity/sluis/storage v1.74.0-rc.1 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
@@ -116,7 +116,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
