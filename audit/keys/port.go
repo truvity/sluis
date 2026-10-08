@@ -32,10 +32,20 @@ import (
 // port's tenant, which keeps the property the first releases had: the same
 // person has an unrelated pseudonym in every profile.
 //
-// What it cannot do is Destroy. A port key is one key for the installation, not
-// one per tenant, so there is no key of a tenant's to destroy; ending a tenant's
-// pseudonyms is deleting its wrapped secrets from the state store, which the
-// port does not offer as an operation yet.
+// Destroy ends a tenant's pseudonyms for a profile: it calls Key.Destroy on the
+// pseudonym key for the same port tenant Pseudonym uses, which removes the
+// per-tenant secret and leaves a tombstone, after which Pseudonym and Seal and
+// Open for that tenant and purpose return ErrDestroyed. What it can do depends
+// on the backend (kms and local can; transit returns ErrUnsupported, see
+// github.com/truvity/sluis/storage/keys/transit), and an ErrUnsupported is not
+// an erasure.
+//
+// Seal and Open use one conceal key for the installation, so a sealed
+// identifier is not shredded by Destroy: this provider refuses to Seal or open
+// it once the tenant's pseudonym key is destroyed, but the ciphertext stays
+// readable to whoever holds the conceal key. Where the sealed identifiers must
+// be unreadable by cryptography, not by this refusal, do not configure a
+// conceal key.
 type PortProvider struct {
 	PseudonymKey *skeys.Key
 	ConcealKey   *skeys.Key
@@ -92,16 +102,46 @@ func (p *PortProvider) Pseudonym(ctx context.Context, tenant string, purpose Pur
 		return "", fmt.Errorf("keys: no pseudonym key is configured (keys.pseudonym): %w", skeys.ErrNotConfigured)
 	}
 	mac, err := p.PseudonymKey.MAC(ctx, scope(tenant, purpose), []byte(identifier))
+	if errors.Is(err, skeys.ErrDestroyed) {
+		return "", fmt.Errorf("%w: %s/%s", ErrDestroyed, purpose, tenant)
+	}
 	if err != nil {
 		return "", fmt.Errorf("keys: pseudonym for %s/%s: %w", purpose, tenant, err)
 	}
 	return PseudonymPrefix + base64.RawURLEncoding.EncodeToString(mac), nil
 }
 
-// Destroy implements Provider. It is refused: see PortProvider.
-func (p *PortProvider) Destroy(_ context.Context, tenant string, purpose Purpose) error {
-	return fmt.Errorf("keys: cannot destroy the key of %s/%s: the keys of an installation are named by purpose, not per tenant, "+
-		"so there is no key of a tenant's to destroy through the storage port: %w", purpose, tenant, skeys.ErrUnsupported)
+// Destroy implements Provider.
+func (p *PortProvider) Destroy(ctx context.Context, tenant string, purpose Purpose) error {
+	if err := checkName(tenant, purpose); err != nil {
+		return err
+	}
+	if p.PseudonymKey == nil {
+		return fmt.Errorf("keys: no pseudonym key is configured (keys.pseudonym), so there is nothing to destroy: %w", skeys.ErrNotConfigured)
+	}
+	if err := p.PseudonymKey.Destroy(ctx, scope(tenant, purpose)); err != nil {
+		return fmt.Errorf("keys: destroy the key of %s/%s: %w", purpose, tenant, err)
+	}
+	return nil
+}
+
+// refuseDestroyed is ErrDestroyed when the tenant's pseudonym key is gone. A
+// provider with no pseudonym key, or a backend that cannot tell, refuses
+// nothing.
+func (p *PortProvider) refuseDestroyed(ctx context.Context, tenant string, purpose Purpose) error {
+	if p.PseudonymKey == nil {
+		return nil
+	}
+	gone, err := p.PseudonymKey.Destroyed(ctx, scope(tenant, purpose))
+	switch {
+	case errors.Is(err, skeys.ErrUnsupported):
+		return nil
+	case err != nil:
+		return fmt.Errorf("keys: is %s/%s destroyed: %w", purpose, tenant, err)
+	case gone:
+		return fmt.Errorf("%w: %s/%s", ErrDestroyed, purpose, tenant)
+	}
+	return nil
 }
 
 // Close implements Provider.
@@ -117,6 +157,9 @@ func (p *PortProvider) Seal(ctx context.Context, tenant string, purpose Purpose,
 	if p.ConcealKey == nil {
 		return nil, fmt.Errorf("keys: no conceal key is configured (keys.conceal): %w", skeys.ErrNotConfigured)
 	}
+	if err := p.refuseDestroyed(ctx, tenant, purpose); err != nil {
+		return nil, err
+	}
 	return p.ConcealKey.Encrypt(ctx, append([]byte(scope(tenant, purpose)+"\x00"), plaintext...))
 }
 
@@ -127,6 +170,9 @@ func (p *PortProvider) Open(ctx context.Context, tenant string, purpose Purpose,
 	}
 	if p.ConcealKey == nil {
 		return nil, fmt.Errorf("keys: no conceal key is configured (keys.conceal): %w", skeys.ErrNotConfigured)
+	}
+	if err := p.refuseDestroyed(ctx, tenant, purpose); err != nil {
+		return nil, err
 	}
 	plain, err := p.ConcealKey.Decrypt(ctx, sealed)
 	if err != nil {

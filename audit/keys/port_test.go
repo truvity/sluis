@@ -75,10 +75,38 @@ func TestAPortSealsAnIdentityToItsTenantAndPurpose(t *testing.T) {
 	}
 }
 
-func TestAPortCannotDestroyATenantsKey(t *testing.T) {
+func TestAPortDestroysATenantsPseudonyms(t *testing.T) {
+	ctx := context.Background()
 	p, _ := keys.NewPortProvider(port(t))
-	if err := p.Destroy(context.Background(), "acme", "security"); !errors.Is(err, skeys.ErrUnsupported) {
-		t.Fatalf("destroy = %v, want ErrUnsupported", err)
+	if _, err := p.Pseudonym(ctx, "acme", "security", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := p.Pseudonym(ctx, "globex", "security", "alice")
+	sealed, err := p.Seal(ctx, "acme", "security", []byte("alice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Destroy(ctx, "acme", "security"); err != nil {
+		t.Fatalf("destroy = %v", err)
+	}
+	if err := p.Destroy(ctx, "acme", "security"); err != nil {
+		t.Fatalf("a second destroy = %v", err)
+	}
+	if _, err := p.Pseudonym(ctx, "acme", "security", "alice"); !errors.Is(err, keys.ErrDestroyed) {
+		t.Fatalf("pseudonym after destroy = %v, want ErrDestroyed", err)
+	}
+	if _, err := p.Open(ctx, "acme", "security", sealed); !errors.Is(err, keys.ErrDestroyed) {
+		t.Fatalf("open after destroy = %v, want ErrDestroyed", err)
+	}
+	if _, err := p.Seal(ctx, "acme", "security", []byte("bob")); !errors.Is(err, keys.ErrDestroyed) {
+		t.Fatalf("seal after destroy = %v, want ErrDestroyed", err)
+	}
+	// Another profile of the same tenant, and another tenant, are untouched.
+	if _, err := p.Pseudonym(ctx, "acme", "billing", "alice"); err != nil {
+		t.Fatalf("another purpose: %v", err)
+	}
+	if got, err := p.Pseudonym(ctx, "globex", "security", "alice"); err != nil || got != other {
+		t.Fatalf("another tenant: %q, %v", got, err)
 	}
 }
 

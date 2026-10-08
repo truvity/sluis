@@ -891,10 +891,12 @@ func keyCmd(args []string) error {
 	}
 	flags := flag.NewFlagSet("key destroy", flag.ContinueOnError)
 	var (
-		tenant  = flags.String("tenant", "", "the tenant whose key is destroyed")
-		purpose = flags.String("purpose", "", "the purpose the key is for")
-		by      = flags.String("by", "", "who is destroying it, as this deployment names them")
-		reason  = flags.String("reason", "", "why, recorded with the erasure")
+		tenant       = flags.String("tenant", "", "the tenant whose key is destroyed")
+		purpose      = flags.String("purpose", "", "the purpose the key is for")
+		by           = flags.String("by", "", "who is destroying it, as this deployment names them")
+		reason       = flags.String("reason", "", "why, recorded with the erasure")
+		writerConfig = flags.String("writer-config", "", "the writer's configuration file: its keys block names the keys, "+
+			"including the storage-shaped one (kms, transit, local adapters); instead of the --key-* flags")
 		sinkURL = flags.String("sink", "", "the writer the erasure is recorded through")
 	)
 	keyFlags := cli.NewKeyFlags(flags, nil)
@@ -907,8 +909,8 @@ func keyCmd(args []string) error {
 		return errors.New("name the archive's bucket with --bucket: the holds are read from it")
 	case *sinkURL == "":
 		return errors.New("give the writer with --sink: an erasure nobody recorded is one nobody can prove was lawful")
-	case !keyFlags.Configured():
-		return errors.New("name the keys: --key-root (and --key-dir), or --key-provider transit with --transit-address")
+	case *writerConfig == "" && !keyFlags.Configured():
+		return errors.New("name the keys: --writer-config, or --key-root (and --key-dir), or --key-provider transit with --transit-address")
 	}
 
 	ctx := context.Background()
@@ -916,8 +918,17 @@ func keyCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	provider, err := keyFlags.Open(ctx)
-	if err != nil {
+	var provider keys.Provider
+	if *writerConfig != "" {
+		cfg, err := auditconfig.LoadWriter(*writerConfig)
+		if err != nil {
+			return err
+		}
+		provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader())
+		if err != nil {
+			return err
+		}
+	} else if provider, err = keyFlags.Open(ctx); err != nil {
 		return err
 	}
 	if provider == nil {
