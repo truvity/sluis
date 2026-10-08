@@ -246,29 +246,14 @@
           "description": "Who may ask for a Cloudflare preset (the presets are the service document's `cloudflare.presets`). A preset named here and not there stops the service.",
           "properties": {
             "grants": {
-              "description": "One row per group or CI job.",
+              "description": "One row per group.",
               "items": {
                 "additionalProperties": false,
-                "description": "A grant: exactly one of `group` and `job`.",
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "group",
-                        "job"
-                      ]
-                    }
-                  ]
-                },
+                "description": "A grant.",
                 "properties": {
                   "group": {
-                    "description": "An internal group of this policy: every holder may ask, from the console or `sluisctl`.",
+                    "description": "A group of this policy: every holder may ask, a person from the console or `sluisctl`, a CI job through the exchange. A CI job is a group declared with `github` matchers.",
                     "minLength": 1,
-                    "type": "string"
-                  },
-                  "job": {
-                    "description": "A GitHub Actions job, `github:<owner>/<repo>:<job>`, proved by its OIDC token.",
-                    "pattern": "^github:[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}/[A-Za-z0-9._-]{1,100}:[A-Za-z0-9_][A-Za-z0-9_. -]{0,99}$",
                     "type": "string"
                   },
                   "presets": {
@@ -283,6 +268,7 @@
                   }
                 },
                 "required": [
+                  "group",
                   "presets"
                 ],
                 "type": "object"

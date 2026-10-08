@@ -107,7 +107,7 @@ func TestACloudflareSectionIsRefusedWhenItCannotWork(t *testing.T) {
 
 func cloudflarePolicy(t *testing.T, grants ...config.CloudflareGrant) *config.PolicyDocument {
 	t.Helper()
-	d := config.NewPolicyDocument(policy.Policy{Groups: map[string]policy.Group{"all:infra:dns-editors": {}}})
+	d := config.NewPolicyDocument(policy.Policy{Groups: map[string]policy.Group{"all:infra:dns-editors": {}, "all:infra:release": {}}})
 	d.CloudflareGrants = &config.PolicyCloudflare{Grants: grants}
 	return d
 }
@@ -115,7 +115,7 @@ func cloudflarePolicy(t *testing.T, grants ...config.CloudflareGrant) *config.Po
 func TestCloudflareGrantsAreHeldToTheirGroupsAndPresets(t *testing.T) {
 	good := cloudflarePolicy(t,
 		config.CloudflareGrant{Group: "all:infra:dns-editors", Presets: []string{"dns-example"}},
-		config.CloudflareGrant{Job: "github:example-org/example-repo:release", Presets: []string{"dns-example"}})
+		config.CloudflareGrant{Group: "all:infra:release", Presets: []string{"dns-example"}})
 	if err := good.Validate(); err != nil {
 		t.Fatalf("good grants: %v", err)
 	}
@@ -126,10 +126,8 @@ func TestCloudflareGrantsAreHeldToTheirGroupsAndPresets(t *testing.T) {
 		grant config.CloudflareGrant
 		want  string
 	}{
-		"both group and job":    {config.CloudflareGrant{Group: "all:infra:dns-editors", Job: "github:o/r:j", Presets: []string{"a"}}, "exactly one"},
-		"neither":               {config.CloudflareGrant{Presets: []string{"a"}}, "exactly one"},
+		"no group":              {config.CloudflareGrant{Presets: []string{"a"}}, "name the group"},
 		"an undeclared group":   {config.CloudflareGrant{Group: "nobody", Presets: []string{"a"}}, "not declared"},
-		"a job that is no job":  {config.CloudflareGrant{Job: "example-org/repo", Presets: []string{"a"}}, "github:<owner>/<repo>:<job>"},
 		"a row with no presets": {config.CloudflareGrant{Group: "all:infra:dns-editors"}, "grants nothing"},
 	} {
 		err := cloudflarePolicy(t, tc.grant).Validate()
@@ -145,18 +143,12 @@ func TestCloudflareGrantsAreHeldToTheirGroupsAndPresets(t *testing.T) {
 func TestWhoMayAskForWhat(t *testing.T) {
 	p := cloudflarePolicy(t,
 		config.CloudflareGrant{Group: "all:infra:dns-editors", Presets: []string{"b", "a"}},
-		config.CloudflareGrant{Job: "github:example-org/example-repo:release", Presets: []string{"a"}})
+		config.CloudflareGrant{Group: "all:infra:release", Presets: []string{"a"}})
 	g := p.Cloudflare()
 	if got := g.PresetsForGroups([]string{"x", "all:infra:dns-editors"}); strings.Join(got, ",") != "a,b" {
 		t.Errorf("groups: %v", got)
 	}
-	if got := g.PresetsForJob("github:example-org/example-repo:release"); strings.Join(got, ",") != "a" {
-		t.Errorf("job: %v", got)
-	}
-	if !g.Allows("a", nil, "github:example-org/example-repo:release") || g.Allows("b", nil, "github:example-org/example-repo:release") || g.Allows("a", []string{"x"}, "") {
+	if !g.Allows("a", []string{"all:infra:release"}) || g.Allows("b", []string{"all:infra:release"}) || g.Allows("a", []string{"x"}) {
 		t.Error("Allows disagrees with the rows")
-	}
-	if _, _, err := config.ParseCloudflareJob("github:example-org/example-repo:release"); err != nil {
-		t.Error(err)
 	}
 }
