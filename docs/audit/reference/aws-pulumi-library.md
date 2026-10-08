@@ -176,6 +176,10 @@ The function gets `S3Bucket`, `S3Key`, `S3ObjectVersion` and `SourceCodeHash` (t
 
 Downloads are cached by SHA-256 under the user cache directory (`os.UserCacheDir()/sluis/artifacts`), so a preview does not download again; `GITHUB_TOKEN`, when set, is sent to github.com. After the deploy, `WriterCodeSha256Matches` / `NotaryCodeSha256Matches` is true when the code Lambda reports has the SHA-256 of the zip the library verified.
 
+## The live alias
+
+Each function publishes a version on every change of its code or configuration, and the alias `live` points at the newest. The writer's event source mapping, the notary's schedule, the scheduler role's invoke grant (the alias ARN alone, not `:*`) and the notary's asynchronous-invoke configuration (no retries) use the alias, so a change moves them together and the previous version is kept for a rollback. Outputs: `WriterLiveAliasArn`, `NotaryLiveAliasArn`, `WriterLiveVersion`, `NotaryLiveVersion`. Canary rollouts through CodeDeploy are planned for a later release; the alias moves in one step today.
+
 ## Outputs
 
 <!-- generated: aws-library-outputs -->

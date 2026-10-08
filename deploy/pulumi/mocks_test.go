@@ -73,12 +73,19 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		set("result", "Ab0Oc1lIdEfGhJkMnPqRsTuVwXyZaBcDeFgHjKmN")
 	case "aws:lambda/function:Function":
 		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+physical)
+		set("version", "7")
 		if h, ok := a.Inputs["sourceCodeHash"]; ok && h.IsString() {
 			set("codeSha256", h.StringValue())
 		}
 		if r.wrongCode {
 			set("codeSha256", "bogus")
 		}
+	case "aws:lambda/alias:Alias":
+		fnName := ""
+		if v, ok := a.Inputs["functionName"]; ok && v.IsString() {
+			fnName = v.StringValue()
+		}
+		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+fnName+":"+physical)
 	case "aws:cloudwatch/logGroup:LogGroup":
 		set("arn", arnp+"logs:eu-west-1:"+account+":log-group:"+physical)
 	case "aws:s3/bucketObjectv2:BucketObjectv2":

@@ -406,10 +406,15 @@ func ownTrigger(doc map[string]any, a *LambdaArgs) error {
 	if err != nil {
 		return err
 	}
+	// A run-now invokes the alias, so that it runs the version the schedules and
+	// the API run. The document may name the function (as a rendered
+	// installation does) or the alias; anything else is another function.
+	live := a.FunctionName + ":" + LiveAlias
 	for _, kind := range []string{"github", "slack"} {
-		if err = own(settings, "Config: adapters.trigger.settings", kind, a.FunctionName); err != nil {
-			return err
+		if v, set := settings[kind]; set && v != a.FunctionName && v != live {
+			return fmt.Errorf("sluispulumi: LambdaArgs.Config: adapters.trigger.settings.%s is %v, and the library writes %s: leave it out", kind, v, live)
 		}
+		settings[kind] = live
 	}
 	return nil
 }

@@ -228,7 +228,7 @@ func TestCloudflarePresetsGetTheRotationScheduleAndTheGrants(t *testing.T) {
 	s := rec.one(t, "aws:scheduler/schedule:Schedule", "staging-cloudflare-rotation")
 	tgt := prop(s, "target").ObjectValue()
 	if prop(s, "scheduleExpression").StringValue() != "rate(1 minute)" || tgt["input"].StringValue() != `{"kind":"cloudflare"}` ||
-		!strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http") {
+		!strings.HasSuffix(tgt["arn"].StringValue(), ":function:sluis-http:live") {
 		t.Errorf("rotation schedule: %v", s.Inputs)
 	}
 	root := arnp + "ssm:" + region + ":" + account + ":parameter/sluis/example"

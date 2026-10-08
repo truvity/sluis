@@ -83,6 +83,7 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		set("keyId", a.Name)
 	case "aws:lambda/function:Function":
 		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+physical)
+		set("version", "7")
 		if h, ok := a.Inputs["sourceCodeHash"]; ok && h.IsString() {
 			set("codeSha256", h.StringValue())
 		}
@@ -95,6 +96,12 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		} else {
 			set("versionId", "ver-"+a.Name)
 		}
+	case "aws:lambda/alias:Alias":
+		fnName := ""
+		if v, ok := a.Inputs["functionName"]; ok && v.IsString() {
+			fnName = v.StringValue()
+		}
+		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+fnName+":"+physical)
 	case "aws:cloudwatch/logGroup:LogGroup":
 		set("arn", arnp+"logs:eu-west-1:"+account+":log-group:"+physical)
 	case "aws:dynamodb/table:Table":
@@ -272,7 +279,8 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 			"archiveKeyArn": a.ArchiveKeyArn, "sealKeyArn": a.SealKeyArn, "deploymentYaml": a.DeploymentYAML,
 			"sealKeyAlias": a.SealKeyAlias, "queueUrl": a.QueueURL, "queueArn": a.QueueArn, "dlqUrl": a.DlqURL, "dlqArn": a.DlqArn,
 			"archiveWriterRole": a.ArchiveWriterRoleArn,
-			"dedupe":            a.DedupeTableName, "writerFn": a.WriterFunctionArn, "notaryFn": a.NotaryFunctionArn,
+			"dedupe":            a.DedupeTableName, "writerFn": a.WriterFunctionArn, "writerLiveAliasArn": a.WriterLiveAliasArn, "notaryLiveAliasArn": a.NotaryLiveAliasArn,
+			"writerLiveVersion": a.WriterLiveVersion, "notaryLiveVersion": a.NotaryLiveVersion, "notaryFn": a.NotaryFunctionArn,
 			"writerRole": a.WriterRoleArn, "notaryRole": a.NotaryRoleArn, "observeRole": a.ObserveReaderRoleArn, "queryRole": a.QueryRoleArn,
 			"topic": a.AlarmTopicArn, "schedule": a.ScheduleArn,
 		} {

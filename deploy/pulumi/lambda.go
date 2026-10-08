@@ -25,6 +25,9 @@ import (
 )
 
 // LambdaType is the Pulumi type token of the Lambda component.
+// LiveAlias is the alias of the function that every caller uses.
+const LiveAlias = sluisconfig.LiveAlias
+
 const LambdaType = "sluis:aws:Lambda"
 
 // DefaultSigningKeyAlias is the token-signing key's alias when
@@ -530,7 +533,11 @@ type Lambda struct {
 	// has the SHA-256 of the release zip the library verified: the assurance,
 	// after the deploy, that what runs is what the release's checksums name.
 	CodeSha256Matches pulumi.BoolOutput
-	RoleArn, RoleName pulumi.StringOutput
+	// LiveAliasArn is the alias callers invoke (`...:function:<name>:live`) and
+	// LiveVersion the function version it points at. Canary rollouts through
+	// CodeDeploy come later; today the alias moves to each new version at once.
+	LiveAliasArn, LiveVersion pulumi.StringOutput
+	RoleArn, RoleName         pulumi.StringOutput
 
 	// APIID, APIStageName and APIURL are the HTTP API, its stage and its default
 	// endpoint (which answers only with API.KeepDefaultEndpoint). A front door
@@ -1035,7 +1042,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis log group: %w", err)
 	}
-	role, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, signKeyArn, secretsKeyArn, logs.Arn, fnArn, tags, child)
+	role, err := newFunctionRole(ctx, name, fnName, &a, signingArns, wrappedArn, signKeyArn, secretsKeyArn, logs.Arn, fnArn+":"+LiveAlias, tags, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis role: %w", err)
 	}
@@ -1079,6 +1086,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 	layers = append(layers, layer.Arn)
 	fnArgs := &lambda.FunctionArgs{
+		// A version on every change of the code or the configuration; the alias
+		// below is what callers use.
+		Publish:       pulumi.Bool(true),
 		Name:          pulumi.String(fnName),
 		Role:          role.Arn,
 		Runtime:       pulumi.String("provided.al2023"),
@@ -1103,10 +1113,23 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis function: %w", err)
 	}
+	// The alias is what callers invoke: the API, the schedules, a run-now. It
+	// follows the version just published, so a change of code or configuration
+	// moves every caller at once, and the previous version stays to point it back.
+	live, err := lambda.NewAlias(ctx, name+"-live", &lambda.AliasArgs{
+		Name:            pulumi.String(LiveAlias),
+		Description:     pulumi.String("The version callers invoke."),
+		FunctionName:    fn.Name,
+		FunctionVersion: fn.Version,
+	}, child)
+	if err != nil {
+		return nil, fmt.Errorf("sluis alias: %w", err)
+	}
 	// A pass that failed is the next tick's: no retry, so that "run a pass now"
-	// and a tick never run twice because of a transient error.
+	// and a tick never run twice because of a transient error. Asynchronous
+	// invokes are configured per qualifier, and the callers use the alias.
 	if _, err := lambda.NewFunctionEventInvokeConfig(ctx, name+"-http", &lambda.FunctionEventInvokeConfigArgs{
-		FunctionName: fn.Name, MaximumRetryAttempts: pulumi.Int(0),
+		FunctionName: fn.Name, Qualifier: live.Name, MaximumRetryAttempts: pulumi.Int(0),
 	}, child); err != nil {
 		return nil, fmt.Errorf("sluis invoke config: %w", err)
 	}
@@ -1125,7 +1148,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		}
 		out.AccessLogGroupName = accessLogs.Name
 	}
-	api, stage, err := newAPI(ctx, name, &a, fn, accessLogs, tags, child)
+	api, stage, err := newAPI(ctx, name, &a, fn, live, accessLogs, tags, child)
 	if err != nil {
 		return nil, err
 	}
@@ -1158,7 +1181,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	}
 
 	// ---- the schedules
-	schedRole, schedNames, err := newSchedules(ctx, name, &a, fn, tags, child)
+	schedRole, schedNames, err := newSchedules(ctx, name, &a, live, tags, child)
 	if err != nil {
 		return nil, err
 	}
@@ -1220,6 +1243,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.WrappedSigningKeyArn, out.WrappedSigningKeyAlias = wrappedKeyArn, wrappedAlias
 	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
 	out.FunctionArn, out.FunctionName = fn.Arn, fn.Name
+	out.LiveAliasArn, out.LiveVersion = live.Arn, live.FunctionVersion
 	out.CodeSha256Matches = artifact.Matches(fn.CodeSha256, pkg.CodeSHA256)
 	out.RoleArn, out.RoleName = role.Arn, role.Name
 	out.APIID, out.APIURL = api.ID().ToStringOutput(), api.ApiEndpoint
@@ -1234,7 +1258,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
-		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches, "roleArn": out.RoleArn, "roleName": out.RoleName,
+		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches, "liveAliasArn": out.LiveAliasArn, "liveVersion": out.LiveVersion, "roleArn": out.RoleArn, "roleName": out.RoleName,
 		"apiId": out.APIID, "apiStageName": out.APIStageName, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,
@@ -1332,7 +1356,7 @@ const truststoreKey = "truststore/client-ca.pem"
 // newAPI is the HTTP API, its integration with the function, its $default
 // route and stage and the permission to invoke the function. Nothing in front
 // of it: that is a front door's (FrontDoor).
-func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, accessLogs *cloudwatch.LogGroup, tags pulumi.StringMapInput,
+func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Function, live *lambda.Alias, accessLogs *cloudwatch.LogGroup, tags pulumi.StringMapInput,
 	opts ...pulumi.ResourceOption) (*apigatewayv2.Api, *apigatewayv2.Stage, error) {
 	api, err := apigatewayv2.NewApi(ctx, name+"-api", &apigatewayv2.ApiArgs{
 		Name:                      pulumi.String(a.FunctionNamePrefix),
@@ -1346,7 +1370,7 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 	integ, err := apigatewayv2.NewIntegration(ctx, name+"-api-integration", &apigatewayv2.IntegrationArgs{
 		ApiId:                api.ID(),
 		IntegrationType:      pulumi.String("AWS_PROXY"),
-		IntegrationUri:       http.Arn,
+		IntegrationUri:       live.Arn,
 		IntegrationMethod:    pulumi.String("POST"),
 		PayloadFormatVersion: pulumi.String("2.0"),
 	}, opts...)
@@ -1376,6 +1400,7 @@ func newAPI(ctx *pulumi.Context, name string, a *LambdaArgs, http *lambda.Functi
 	if _, err := lambda.NewPermission(ctx, name+"-api-invoke", &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  http.Name,
+		Qualifier: live.Name,
 		Principal: pulumi.String("apigateway.amazonaws.com"),
 		SourceArn: pulumi.Sprintf("%s/*/*", api.ExecutionArn),
 	}, opts...); err != nil {
@@ -1473,7 +1498,7 @@ func newLegacyDomain(ctx *pulumi.Context, name string, a *LambdaArgs, api *apiga
 // newSchedules is the scheduler's role, which may invoke the function and
 // nothing else, and one schedule per target and one for the
 // directory refresh.
-func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Function,
+func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, live *lambda.Alias,
 	tags pulumi.StringMapInput, opts ...pulumi.ResourceOption) (*iam.Role, pulumi.StringArrayOutput, error) {
 	var none pulumi.StringArrayOutput
 	trust, _ := json.Marshal(map[string]any{
@@ -1493,7 +1518,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 	}
 	if _, err := iam.NewRolePolicy(ctx, name+"-scheduler-policy", &iam.RolePolicyArgs{
 		Name: pulumi.String(a.FunctionNamePrefix + "-scheduler"), Role: role.Name,
-		Policy: fn.Arn.ApplyT(func(arn string) (string, error) {
+		Policy: live.Arn.ApplyT(func(arn string) (string, error) {
 			return document([]statement{{
 				"Sid": "SluisTick", "Effect": "Allow", "Action": lambdaInvokeFunction,
 				"Resource": []string{arn},
@@ -1528,7 +1553,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			State:                      scheduleState(a.Schedule.Paused),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
-				Arn:     fn.Arn,
+				Arn:     live.Arn,
 				RoleArn: role.Arn,
 				Input:   pulumi.String(string(payload)),
 				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
@@ -1550,7 +1575,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			State:                      scheduleState(a.DirectoryRefresh.Paused),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
-				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
+				Arn: live.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"refresh"}`),
 				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
 					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
 				},
@@ -1570,7 +1595,7 @@ func newSchedules(ctx *pulumi.Context, name string, a *LambdaArgs, fn *lambda.Fu
 			State:                      scheduleState(a.CloudflareRotation.Paused),
 			FlexibleTimeWindow:         &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 			Target: &scheduler.ScheduleTargetArgs{
-				Arn: fn.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"cloudflare"}`),
+				Arn: live.Arn, RoleArn: role.Arn, Input: pulumi.String(`{"kind":"cloudflare"}`),
 				RetryPolicy: &scheduler.ScheduleTargetRetryPolicyArgs{
 					MaximumRetryAttempts: pulumi.Int(0), MaximumEventAgeInSeconds: pulumi.Int(3600),
 				},

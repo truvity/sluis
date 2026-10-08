@@ -395,3 +395,38 @@ func TestReleaseVersionNamesTheReleaseWhenBuildInfoDoesNot(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// ---- the live alias
+
+func TestEachFunctionPublishesAVersionAndItsCallersUseTheLiveAlias(t *testing.T) {
+	rec, out, err := build(t, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"audit-writer", "audit-notary"} {
+		fn := rec.one(t, "aws:lambda/function:Function", name)
+		if v := fn.Inputs["publish"]; !v.IsBool() || !v.BoolValue() {
+			t.Errorf("%s does not publish a version: %v", name, fn.Inputs)
+		}
+		al := rec.one(t, "aws:lambda/alias:Alias", name+"-live")
+		if str(t, al, "name") != "live" || str(t, al, "functionName") != name || str(t, al, "functionVersion") != "7" {
+			t.Errorf("%s alias %v", name, al.Inputs)
+		}
+	}
+	if out["writerLiveAliasArn"] != out["writerFn"]+":live" || out["notaryLiveAliasArn"] != out["notaryFn"]+":live" ||
+		out["writerLiveVersion"] != "7" || out["notaryLiveVersion"] != "7" {
+		t.Errorf("outputs %v", out)
+	}
+	esm := rec.one(t, "aws:lambda/eventSourceMapping:EventSourceMapping", "audit-writer")
+	if got := str(t, esm, "functionName"); got != out["writerFn"]+":live" {
+		t.Errorf("the writer's event source invokes %q", got)
+	}
+	s := rec.one(t, "aws:scheduler/schedule:Schedule", "audit-notary")
+	if got := s.Inputs["target"].ObjectValue()["arn"].StringValue(); got != out["notaryFn"]+":live" {
+		t.Errorf("the notary's schedule invokes %q", got)
+	}
+	cfg := rec.one(t, "aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig", "audit-notary")
+	if str(t, cfg, "qualifier") != "live" {
+		t.Errorf("async config %v", cfg.Inputs)
+	}
+}
