@@ -152,7 +152,8 @@ func FromConfig(f *config.ControllerSlack, p *config.PolicyDocument) (Config, er
 // FromService builds the settings of the Slack controller that the one service
 // document runs (`controllers.slack`), from the document and the policy it
 // names. The controller shares the process's release, policy, ports, adapters,
-// audit installation and log level, and, with the `ssm` secrets source, its root.
+// audit installation and log level, and, with the `ssm` secrets source, its
+// secrets settings (root, layout, KMS key, region, endpoint, grace).
 func FromService(s *config.Sluis, p *config.PolicyDocument) (Config, error) {
 	f := s.SlackController()
 	if f == nil {
@@ -162,9 +163,7 @@ func FromService(s *config.Sluis, p *config.PolicyDocument) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if sec := s.Secrets; sec != nil && sec.Source == "ssm" {
-		c.stores.SecretsRoot = sec.Root
-	}
+	c.stores.SetSecrets(s.Secrets)
 	return c, nil
 }
 

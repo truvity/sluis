@@ -150,7 +150,8 @@ func FromConfig(f *config.ControllerGitHub, p *config.PolicyDocument) (Config, e
 // FromService builds the settings of the GitHub controller that the one service
 // document runs (`controllers.github`), from the document and the policy it
 // names. The controller shares the process's release, policy, ports, adapters,
-// audit installation and log level, and, with the `ssm` secrets source, its root.
+// audit installation and log level, and, with the `ssm` secrets source, its
+// secrets settings (root, layout, KMS key, region, endpoint, grace).
 func FromService(s *config.Sluis, p *config.PolicyDocument) (Config, error) {
 	f := s.GitHubController()
 	if f == nil {
@@ -160,9 +161,7 @@ func FromService(s *config.Sluis, p *config.PolicyDocument) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if sec := s.Secrets; sec != nil && sec.Source == "ssm" {
-		c.stores.SecretsRoot = sec.Root
-	}
+	c.stores.SetSecrets(s.Secrets)
 	return c, nil
 }
 
