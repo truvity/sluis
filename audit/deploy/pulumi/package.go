@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-		"path"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
