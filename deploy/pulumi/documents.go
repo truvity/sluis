@@ -159,16 +159,15 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 	return added, nil
 }
 
-// withoutRuntimeKeys drops the keys ownRuntime writes that the service document's
-// schema does not carry yet, for the loader check: the library holds the rest of
-// the document to the loader and these to its own validation.
+// withoutRuntimeKeys drops the one key ownRuntime writes that the service
+// document's schema does not carry yet (ports.blob.s3.credentialsRef), for the
+// loader check: the library holds the rest of the document to the loader and it
+// to its own validation.
 func withoutRuntimeKeys(raw string) (string, error) {
 	var doc map[string]any
 	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
 		return "", err
 	}
-	delete(doc, "keys")
-	delete(doc, "instance")
 	if ports, ok := doc["ports"].(map[string]any); ok {
 		if blob, ok := ports["blob"].(map[string]any); ok {
 			if s3, ok := blob["s3"].(map[string]any); ok {
