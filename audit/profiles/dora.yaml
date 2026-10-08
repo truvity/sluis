@@ -2,7 +2,7 @@ name: dora
 framework: "DORA (Regulation (EU) 2022/2554) and Commission Delegated Regulation (EU) 2024/1774 Art. 12 (logging)"
 version: "2026.09"
 summary: Add-on for suppliers to financial entities. Adds the logging-failure detection and reference-time-source expectations that flow down through contracts.
-disclaimer: "This preset is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
+disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:
   - clause: "CDR (EU) 2024/1774 Art. 12(2)(a)–(c) — identify events to log, retention period and measures to secure logs; level of detail sufficient to detect anomalies; log access control, identity management, capacity, change management, operations, network traffic"
     url: https://eur-lex.europa.eu/eli/reg_del/2024/1774/oj/eng
@@ -55,7 +55,7 @@ retention:
   configurable: true
   minimum_days: 180
   delete_at_end: true
-  note: "DORA leaves the period to the entity's ICT risk assessment. The default is the security preset's; a financial-entity customer may contractually require more."
+  note: "DORA leaves the period to the entity's ICT risk assessment. The default is the security framework profile's; a financial-entity customer may contractually require more."
 integrity:
   digest: required
   object_lock_mode: compliance

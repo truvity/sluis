@@ -24,7 +24,7 @@ put, `PutObjectRetention` and `PutObjectLegalHold`. A store without them
 refuses a put that names a lock mode outright, so a writer that always names
 one cannot write to such a store at all, however good its digest chain is.
 
-**Not every framework demands the lock.** The presets read seven frameworks,
+**Not every framework demands the lock.** The framework profiles read seven frameworks,
 and they divide. PCI DSS 10.3.2 and 10.3.3, NEN 7513, the DORA RTS on ICT
 risk management (Art. 12) and ETSI EN 319 401 7.10 each require that logs or
 evidence be protected against tampering and deletion in front of a named
@@ -61,12 +61,12 @@ yet sealed, and the operator's own ability to delete — is covered by the
 compensating controls below, or not at all, and the profile says whether
 that is acceptable.
 
-Every preset's `object_lock_mode` is now the **least** lock its framework
+Every framework profile's `object_lock_mode` is now the **least** lock its framework
 demands: `compliance`, `governance` or `none`. Composition takes the
-strictest, so a profile composed from any preset that demands compliance
+strictest, so a profile composed from any framework profile that demands compliance
 demands it. `pci-dss`, `nen-7513`, `dora` and `evidence-etsi` demand
 `compliance`; `security`, `history` and `billing-nl` demand `none`. Each
-preset carries a one-line `note` saying why.
+framework profile carries a one-line `note` saying why.
 
 The deployment's lock mode (`--lock-mode`, the chart's `lockMode`) is what
 the writer, the digest job and the verify job write with:

@@ -14,7 +14,7 @@ import (
 	"github.com/truvity/sluis/audit/index/s3scan"
 	"github.com/truvity/sluis/audit/internal/writer"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -105,11 +105,11 @@ func buildExtendingOn(t *testing.T, archive *storetest.Memory, records writer.Lo
 	registry.Register(issuer)
 	registry.Register(common)
 
-	builtin, err := preset.Builtin()
+	builtin, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	evidence, err := preset.Compose(preset.Composition{Name: "evidence", Presets: []string{"evidence-etsi"}}, builtin)
+	evidence, err := profile.Compose(profile.Composition{Name: "evidence", Frameworks: []string{"evidence-etsi"}}, builtin)
 	if err != nil {
 		t.Fatal(err)
 	}

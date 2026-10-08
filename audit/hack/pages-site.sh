@@ -23,7 +23,7 @@ publish() { # <source file> <path under schemas/>, as the $id names it
 }
 
 publish gen/jsonschema/record.v1.schema.json v1/record.schema.json
-for f in catalogue extension preset; do
+for f in catalogue extension profile; do
   publish "sdk/schemas/$f.schema.json" "v1/$f.schema.json"
 done
 # The configuration schemas are versioned by the shape of the document: v2 is

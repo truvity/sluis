@@ -164,7 +164,7 @@ that reads them validates against it and then decodes strictly:
 |---|---|---|
 | `deployment` | the profile configuration: which framework profiles each profile is composed from, and `externalIdentifiersAreOpaque` | `/etc/audit/deployment.yaml`, from `profiles` and `externalIdentifiersAreOpaque` |
 | `workloads` | the issuers trusted to name a workload, and which service account speaks for which source ([Workload identity](configuration-writer.md#workload-identity)) | `/etc/audit/workloads.yaml`, from `workloadIdentity` |
-| `grants` | the query service's issuers, framework profiles and rules ([Query service](configuration-observe-query.md#query-service)) | `/etc/audit/grants.yaml`, from `query.grants` |
+| `grants` | the query service's issuers, presets and rules ([Query service](configuration-observe-query.md#query-service)) | `/etc/audit/grants.yaml`, from `query.grants` |
 | `catalogues` | a directory of catalogue documents registered at start-up | `/etc/audit/catalogues`, from `catalogues` |
 
 ## Shared blocks

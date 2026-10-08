@@ -35,9 +35,9 @@ computed from the same records that make the trail evidence. How it works and wh
    audit:
      profiles:
        security:
-         presets: [security]
+         frameworks: [security]
        billing:
-         presets: [billing-nl]
+         frameworks: [billing-nl]
      extensions:
        billing:
          enabled: true

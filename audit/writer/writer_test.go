@@ -7,35 +7,35 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/store/storetest"
 	"github.com/truvity/sluis/audit/writer"
 )
 
-func profiles(t *testing.T) map[string]*preset.Profile {
+func profiles(t *testing.T) map[string]*profile.Profile {
 	t.Helper()
-	return compose(t, "profiles:\n  security:\n    presets: [security]\n")
+	return compose(t, "profiles:\n  security:\n    frameworks: [security]\n")
 }
 
 // opaqueProfiles is the same deployment declaring that the identifiers it
 // receives for people outside the organisation are ones an application
 // minted. Nothing is pseudonymised, so nothing needs a key.
-func opaqueProfiles(t *testing.T) map[string]*preset.Profile {
+func opaqueProfiles(t *testing.T) map[string]*profile.Profile {
 	t.Helper()
-	return compose(t, "external_identifiers_are_opaque: true\nprofiles:\n  security:\n    presets: [security]\n")
+	return compose(t, "external_identifiers_are_opaque: true\nprofiles:\n  security:\n    frameworks: [security]\n")
 }
 
-func compose(t *testing.T, document string) map[string]*preset.Profile {
+func compose(t *testing.T, document string) map[string]*profile.Profile {
 	t.Helper()
-	d, err := preset.ParseDeployment([]byte(document))
+	d, err := profile.ParseDeployment([]byte(document))
 	if err != nil {
 		t.Fatal(err)
 	}
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := d.Compose(presets)
+	out, err := d.Compose(frameworks)
 	if err != nil {
 		t.Fatal(err)
 	}

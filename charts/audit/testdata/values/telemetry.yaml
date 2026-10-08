@@ -7,11 +7,11 @@ mode: stream
 replicas: 2
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
   billing-nl:
-    presets: [billing-nl]
+    frameworks: [billing-nl]
   history:
-    presets: [history]
+    frameworks: [history]
 
 x-database: &database
   url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full

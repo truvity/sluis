@@ -52,7 +52,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/registry"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -95,7 +95,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	profiles, err := d.Compose(presets)
+	profiles, err := d.Compose(frameworks)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func run() error {
 		// A profile whose frameworks demand a lock this store does not
 		// write is refused here, before a single copy lands where it could
 		// be deleted: docs/decisions/0014-lock-modes-and-store-tiers.md.
-		if err := preset.CheckLockMode(profiles, cfg.Archive.LockMode); err != nil {
+		if err := profile.CheckLockMode(profiles, cfg.Archive.LockMode); err != nil {
 			return err
 		}
 		if archive, err = cli.OpenArchiveFrom(ctx, *cfg.Archive, cfg.SecretReader()); err != nil {

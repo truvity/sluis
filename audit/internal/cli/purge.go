@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/audit/index"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 )
 
 // Marker is the part of the deduplication store a purge needs.
@@ -30,10 +30,10 @@ type Marker interface {
 type Purge struct {
 	Index    index.Indexer
 	Dedupe   Marker
-	Profiles map[string]*preset.Profile
+	Profiles map[string]*profile.Profile
 	// IdentifyingAfter is how long the index keeps who an event happened to,
 	// as opposed to what happened. It has no default and no framework number
-	// behind it: the presets this repository ships cite retention for the
+	// behind it: the framework profiles this repository ships cite retention for the
 	// record, and none of them states a separate, shorter life for the actor
 	// and subject columns. Left at zero, nothing is forgotten early — which is
 	// not the same as nothing needing to be.

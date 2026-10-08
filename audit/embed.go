@@ -1,5 +1,5 @@
 // Package audit carries the files this repository publishes as data: the
-// framework presets, the proto and its generated JSON Schema, and the
+// framework profiles, the proto and its generated JSON Schema, and the
 // binaries' configuration schemas. The meta-schemas and the common catalogue are the SDK's (github.com/truvity/sluis/audit/sdk).
 //
 // They are embedded so that a deployment gets them from the binary it already
@@ -8,10 +8,10 @@ package audit
 
 import "embed"
 
-// Presets are the framework presets under presets/.
+// Profiles are the framework profiles under profiles/.
 //
-//go:embed presets/*.yaml
-var Presets embed.FS
+//go:embed profiles/*.yaml
+var Profiles embed.FS
 
 // Proto is the schema of record itself. The writer copies the proto of a
 // record's major beside the record's JSON Schema on first use, so the archive

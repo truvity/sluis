@@ -42,7 +42,7 @@ A page belongs to one directory of `docs/`, by what the reader is doing:
   not edit inside the markers by hand.
 - The CHANGELOG describes the state of the repository, not the journey, and a **Breaking:** entry
   links its upgrade page.
-- A compliance bundle is a **profile**; the files in `presets/` are *framework profiles*, and the
+- A compliance bundle is a **profile**; the files in `profiles/` are *framework profiles*, and the
   directory keeps its name until a code change renames it.
 - Framework profiles cite the clause they implement and carry the disclaimer that they
   are an engineering reading, not legal advice.
@@ -106,5 +106,5 @@ that cannot be told apart from the built thing is worse than a gap.
 ## Commits and pull requests
 
 Small, reviewable pull requests. A pull request that changes a contract
-(`proto/`, `schemas/`, `presets/`) updates the matching reference page and,
+(`proto/`, `schemas/`, `profiles/`) updates the matching reference page and,
 if the change is not additive, a decision record.

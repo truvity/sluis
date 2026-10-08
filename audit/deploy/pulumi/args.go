@@ -229,7 +229,7 @@ type WriterArgs struct {
 	// the one named, so nothing is deployed that was not checked.
 	PackageSHA256 string
 	// DeploymentYAML is the profile configuration (`deployment:` in the
-	// function's configuration), which presets each profile is composed from.
+	// function's configuration), which framework profiles each profile is composed from.
 	// Required, and the same document the chart renders.
 	DeploymentYAML string
 	// Catalogues are the application catalogues the writer registers at start-up,

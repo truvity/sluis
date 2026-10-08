@@ -118,7 +118,7 @@ metadata:
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
 data:
-  # The document a config names as `deployment`: which presets each profile is
+  # The document a config names as `deployment`: which framework profiles each profile is
   # composed from, and where its copies land. Every component that reads
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
@@ -126,10 +126,10 @@ data:
     external_identifiers_are_opaque: true
     profiles:
       billing:
-        presets:
+        frameworks:
         - billing-nl
       security:
-        presets:
+        frameworks:
         - security
   # The document a writer's config names as `workloads`: the issuers trusted to
   # name a calling workload, and the source each speaks for.
@@ -586,7 +586,7 @@ spec:
         checksum/grants: e03b3dce56c32adc0160430a0d5b208943ddf4cdcd353d3ae69cb9bf517ba9d3
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: ddcd327e308189800c648f51bb82c037fb1bcd193d835c253a841ad7e16d087f
+        checksum/deployment: e1ac2bcefa528157d6b99f7b8f41f431d1f9d03c907179eb07251cc697337758
     spec:
       serviceAccountName: audit-query
       
@@ -709,7 +709,7 @@ spec:
         checksum/config: 71331dec888421ed0b26a7d6af2353652eca72e8ce98412bab0655d12b4f82fc
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: ddcd327e308189800c648f51bb82c037fb1bcd193d835c253a841ad7e16d087f
+        checksum/deployment: e1ac2bcefa528157d6b99f7b8f41f431d1f9d03c907179eb07251cc697337758
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:
@@ -843,7 +843,7 @@ spec:
         checksum/config: 754440d96e5c5f63377c030aa0b5201a428e53d65a7f1fbc2ed62c11469dda79
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: ddcd327e308189800c648f51bb82c037fb1bcd193d835c253a841ad7e16d087f
+        checksum/deployment: e1ac2bcefa528157d6b99f7b8f41f431d1f9d03c907179eb07251cc697337758
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:

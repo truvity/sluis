@@ -7,11 +7,11 @@ import (
 	"os"
 
 	"github.com/truvity/sluis/audit/internal/config"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 )
 
 // LoadDeployment reads a deployment's profile configuration from a file.
-func LoadDeployment(path string) (*preset.Deployment, error) {
+func LoadDeployment(path string) (*profile.Deployment, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -19,7 +19,7 @@ func LoadDeployment(path string) (*preset.Deployment, error) {
 	if err := config.ValidateDocument("audit-deployment", raw); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	d, err := preset.ParseDeployment(raw)
+	d, err := profile.ParseDeployment(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}

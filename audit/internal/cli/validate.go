@@ -9,18 +9,18 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 )
 
-// Validate holds every preset and catalogue under the given paths to the
+// Validate holds every framework profile and catalogue under the given paths to the
 // contracts this repository publishes, and reports everything wrong at once
 // rather than the first thing.
 type Validate struct {
-	PresetDirs   []string
-	CatalogueDoc []string
-	Deployment   string
-	Out          io.Writer
+	FrameworkDirs []string
+	CatalogueDoc  []string
+	Deployment    string
+	Out           io.Writer
 }
 
 // Run reports the number of problems found.
@@ -29,24 +29,24 @@ func (v Validate) Run() (problems int) {
 	if out == nil {
 		out = os.Stdout
 	}
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
-		printf(out, "presets (built in): %v\n", err)
+		printf(out, "framework profiles (built in): %v\n", err)
 		problems++
-		presets = map[string]*preset.Preset{}
+		frameworks = map[string]*profile.Framework{}
 	} else {
-		printf(out, "presets (built in): %d loaded\n", len(presets))
+		printf(out, "framework profiles (built in): %d loaded\n", len(frameworks))
 	}
-	for _, dir := range v.PresetDirs {
-		loaded, err := preset.LoadDir(os.DirFS(dir), ".")
+	for _, dir := range v.FrameworkDirs {
+		loaded, err := profile.LoadDir(os.DirFS(dir), ".")
 		if err != nil {
-			printf(out, "presets %s: %v\n", dir, err)
+			printf(out, "framework profiles %s: %v\n", dir, err)
 			problems++
 			continue
 		}
-		printf(out, "presets %s: %d loaded\n", dir, len(loaded))
+		printf(out, "framework profiles %s: %d loaded\n", dir, len(loaded))
 		for name, p := range loaded {
-			presets[name] = p
+			frameworks[name] = p
 		}
 	}
 
@@ -74,7 +74,7 @@ func (v Validate) Run() (problems int) {
 		printf(out, "deployment: %v\n", err)
 		return problems + 1
 	}
-	profiles, err := d.Compose(presets)
+	profiles, err := d.Compose(frameworks)
 	if err != nil {
 		printf(out, "deployment: %v\n", err)
 		return problems + 1

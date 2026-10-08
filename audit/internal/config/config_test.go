@@ -823,14 +823,14 @@ func TestTheDocumentSchemasAcceptWhatTheCodeAcceptsAndRefuseWhatItWouldNot(t *te
 		name, doc string
 		ok        bool
 	}{
-		{"audit-deployment", "profiles:\n  security: {presets: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {presets: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v2\nprofiles:\n  security: {presets: [iso27001]}\n", true},
-		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v2\nprofiles:\n  security: {presets: [iso27001]}\n", false},
-		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {presets: [iso27001]}\n", false},
+		{"audit-deployment", "profiles:\n  security: {frameworks: [iso27001]}\n", true},
+		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
+		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v2\nprofiles:\n  security: {frameworks: [iso27001]}\n", true},
+		{"audit-deployment", "apiVersion: truvity.github.io/audit-deployment/v2\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
+		{"audit-deployment", "apiVersion: audit.truvity.github.io/audit-deployment/v1\nprofiles:\n  security: {frameworks: [iso27001]}\n", false},
 		{"audit-deployment", "profiles: {}\n", false},
-		{"audit-deployment", "profiles:\n  a/b: {presets: [iso27001]}\n", false},
-		{"audit-deployment", "profiles:\n  security: {presets: [iso27001], retention: 1}\n", false},
+		{"audit-deployment", "profiles:\n  a/b: {frameworks: [iso27001]}\n", false},
+		{"audit-deployment", "profiles:\n  security: {frameworks: [iso27001], retention: 1}\n", false},
 		{"audit-grants", "rules:\n  - name: r\n    grant: {all_tenants: true, profiles: [security], operations: [search]}\n", true},
 		{"audit-grants", "rules:\n  - name: r\n    grant: {all_tenants: true, profiles: [security], operations: [serach]}\n", false},
 		{"audit-grants", "presets: [{name: other}]\n", false},

@@ -312,7 +312,7 @@ func writerSchema() m {
 		"mode": m{"enum": []string{"writer", "receiver"}, "default": "writer",
 			"description": "`writer` serves the sink, writes the archive and consumes the stream when there is one. `receiver` serves the sink and publishes to the stream and nothing else: it holds no archive and no keys, because a receiver holding either would be a writer."},
 		"listen":          listen(),
-		"deployment":      str("Path to the profile configuration: which presets each profile is composed from."),
+		"deployment":      str("Path to the profile configuration: which framework profiles each profile is composed from."),
 		"workloads":       str("Path to the file naming the issuers trusted to say which workload is publishing, and which source each speaks for. Exactly one of `workloads` and `anonymousWrites`."),
 		"anonymousWrites": m{"const": true, "description": "Accept writes over HTTP from callers nobody verified, stamped with no observer. For a trial install only."},
 		"catalogues":      str("A directory of catalogues to register at start-up."),
@@ -388,7 +388,7 @@ func writerSchema() m {
 
 func writerLambdaSchema() m {
 	props := m{
-		"deployment":       str("Path to the profile configuration: which presets each profile is composed from. In the function's package, at `/var/task/deployment.yaml` in the shipped layout."),
+		"deployment":       str("Path to the profile configuration: which framework profiles each profile is composed from. In the function's package, at `/var/task/deployment.yaml` in the shipped layout."),
 		"catalogues":       str("A directory of catalogues to register at start-up."),
 		"archive":          archive(true, true),
 		"keys":             def("keys"),
@@ -400,7 +400,7 @@ func writerLambdaSchema() m {
 				"dynamodb": obj("A DynamoDB table with a string hash key `pk` and TTL on `expires_at`. One item per written record id, written by a conditional put once the copies are durable. Credentials are the function role's.", m{
 					"table":  str("The table's name."),
 					"region": str("The table's region. Unset is the SDK's: AWS_REGION, which Lambda sets."),
-					"window": duration("How long a written record's id is remembered. Unset is the widest window any profile's presets ask for. It wants to be at least as long as the queue keeps a message (SQS: at most 14 days).", ""),
+					"window": duration("How long a written record's id is remembered. Unset is the widest window any profile's framework profiles ask for. It wants to be at least as long as the queue keeps a message (SQS: at most 14 days).", ""),
 				}, "table"),
 			},
 			"oneOf": []any{m{"required": []string{"dynamodb"}}},
@@ -544,7 +544,7 @@ func purgeSchema() m {
 	props := m{
 		"deployment":       str("Path to the profile configuration."),
 		"database":         def("postgres"),
-		"identifyingAfter": duration("How long the index keeps who an event happened to, as opposed to what happened. Unset forgets nothing early: no shipped preset states a schedule, so the number is a deployment's own policy.", ""),
+		"identifyingAfter": duration("How long the index keeps who an event happened to, as opposed to what happened. Unset forgets nothing early: no shipped framework profile states a schedule, so the number is a deployment's own policy.", ""),
 		"dedupeWindow":     duration("How long a written identifier is remembered. Unset is the widest window the profiles ask for.", ""),
 	}
 	return document("audit-purge", "audit purge",

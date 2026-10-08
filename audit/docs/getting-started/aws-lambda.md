@@ -28,7 +28,7 @@ apiVersion: audit.truvity.github.io/audit-deployment/v2
 external_identifiers_are_opaque: true
 profiles:
   security:
-    presets: [security]   # `presets` is the key's name; each is a framework profile
+    frameworks: [security]   # each is a framework profile
 ```
 
 Which framework profiles to compose is a policy decision

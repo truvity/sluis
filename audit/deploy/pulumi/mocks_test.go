@@ -193,7 +193,7 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 		Writer: auditpulumi.WriterArgs{
 			Package:        writerZip,
 			PackageSHA256:  writerSHA,
-			DeploymentYAML: "profiles:\n  security:\n    presets: [security]\n",
+			DeploymentYAML: "profiles:\n  security:\n    frameworks: [security]\n",
 		},
 		Notary: auditpulumi.NotaryArgs{Package: notaryZip, PackageSHA256: notarySHA},
 		Telemetry: &auditpulumi.TelemetryArgs{

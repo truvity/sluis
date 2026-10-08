@@ -49,7 +49,7 @@ audit:
   replicas: 2                              # writer.config.replicas must say the same
   profiles:
     security:
-      presets: [security]                  # the key is `presets`; each is a framework profile
+      frameworks: [security]                  # each is a framework profile
   externalIdentifiersAreOpaque: true
   workloadIdentity:
     issuers: [{url: https://oidc.example.com/id/CLUSTER}]

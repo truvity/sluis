@@ -30,7 +30,7 @@ Three identifier tiers with different rules:
   profile may carry the source's own scoped identifier because the tenant
   legitimately knows its users.
 
-Actor kinds are a registry; each kind declares its category, and presets
+Actor kinds are a registry; each kind declares its category, and framework profiles
 set the treatment per category. The rule follows the kind, never a field.
 
 Emitters send canonical identifiers and hold no keys. The **split writer**

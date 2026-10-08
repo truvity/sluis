@@ -2,7 +2,7 @@
   "$id": "https://truvity.github.io/audit/schemas/v1/config/audit-deployment.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The profile document a configuration names as `deployment`: which presets each profile is composed from. Every component that reads profiles reads this one, because retention is a property of the profile and every one of them has to agree about it.",
+  "description": "The profile document a configuration names as `deployment`: which framework profiles each profile is composed from. Every component that reads profiles reads this one, because retention is a property of the profile and every one of them has to agree about it.",
   "properties": {
     "apiVersion": {
       "default": "truvity.github.io/audit-deployment/v1",
@@ -20,10 +20,10 @@
         "additionalProperties": false,
         "description": "One profile's composition.",
         "properties": {
-          "presets": {
-            "description": "The presets the profile is composed from.",
+          "frameworks": {
+            "description": "The framework profiles the profile is composed from.",
             "items": {
-              "description": "A preset's name.",
+              "description": "A framework profile's name.",
               "minLength": 1,
               "type": "string"
             },
@@ -31,7 +31,7 @@
           }
         },
         "required": [
-          "presets"
+          "frameworks"
         ],
         "type": "object"
       },

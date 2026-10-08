@@ -8,7 +8,7 @@ changed** to say so, and this index repeats it.
 | id | title | Status |
 |---|---|---|
 | [0001](0001-record-schema-proto-with-json-schema-slots.md) | Record schema in Protocol Buffers with JSON Schema extension slots | accepted |
-| [0002](0002-profiles-and-framework-presets.md) | Profiles composed from framework presets, one copy per profile | accepted; the compliance bundle this record calls a framework preset is now a *framework profile* (a *preset* is a named bundle of adapter or deployment choices, per truvity/policy decision 0012); the `presets/` directory and key keep the old name until a code change renames them |
+| [0002](0002-profiles-and-framework-framework profiles.md) | Profiles composed from framework profiles, one copy per profile | accepted; the compliance bundle this record calls a framework profile is now a *framework profile* (a *framework profile* is a named bundle of adapter or deployment choices, per truvity/policy decision 0012); the `profiles/` directory and key keep the old name until a code change renames them |
 | [0003](0003-s3-object-lock-as-the-record.md) | S3 Object Lock in compliance mode is the record; everything else is a projection | accepted; the object layout is superseded by [0018](0018-v1-bucket-layout.md), and retention is extended by [0023](0023-archive-retention-and-lifecycle.md) |
 | [0004](0004-sink-interface-and-transports.md) | One sink interface at every hop; the queue is invisible | accepted; the delivery modes are superseded by [0012](0012-two-deliveries-and-a-durable-ack.md), itself superseded by [0017](0017-sink-durability-and-transports.md), which extends this |
 | [0005](0005-identity-tiers-and-pseudonymisation.md) | Identity tiers and per-purpose pseudonymisation in the split writer | accepted |

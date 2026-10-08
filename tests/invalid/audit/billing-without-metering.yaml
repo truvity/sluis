@@ -1,4 +1,4 @@
-# refuse: no profile composes a metering preset
+# refuse: no profile composes a metering framework profile
 extensions:
   billing:
     enabled: true

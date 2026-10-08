@@ -2,7 +2,7 @@ name: pci-dss
 framework: "PCI DSS v4.0.1 Requirement 10"
 version: "2026.09"
 summary: Add-on for deployments in cardholder-data scope. Raises the security minimums to PCI's numbers and adds daily review.
-disclaimer: "This preset is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
+disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:
   - clause: "10.2.1.1–10.2.1.7 — events: user access to cardholder data, administrative actions, access to audit logs, invalid access attempts, credential and privilege changes, starting and stopping of audit logs, creation and deletion of system objects"
     url: https://www.pcisecuritystandards.org/document_library/

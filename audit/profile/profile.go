@@ -1,4 +1,4 @@
-package preset
+package profile
 
 import (
 	"errors"
@@ -8,21 +8,21 @@ import (
 	"time"
 )
 
-// Composition is what a deployment declares: a profile name and the presets it
+// Composition is what a deployment declares: a profile name and the framework profiles it
 // is made of. The name is also the first component of the key every copy lands
 // under (records/<profile>/..., docs/reference/bucket-contract.md), so it has
 // no slash in it.
 type Composition struct {
-	Name    string   `json:"name"`
-	Presets []string `json:"presets"`
+	Name       string   `json:"name"`
+	Frameworks []string `json:"frameworks"`
 }
 
 // Profile is a composition resolved: what a copy under it carries, how
 // identities in it are treated, how long it is kept, and what must be true of
 // the store it lands in.
 type Profile struct {
-	Name    string
-	Presets []string
+	Name       string
+	Frameworks []string
 
 	Classes            map[Class]bool
 	RequiredFields     []string
@@ -43,25 +43,25 @@ type Profile struct {
 	Pipeline       Pipeline
 }
 
-// Compose resolves a composition against the presets available.
+// Compose resolves a composition against the framework profiles available.
 //
 // Every rule is a union of what the frameworks ask for, resolved towards the
 // stricter reading: the strictest identity treatment, the longest retention,
 // required over recommended, the most frequent review. A profile is therefore
 // never weaker than any framework it claims to satisfy.
-func Compose(c Composition, available map[string]*Preset) (*Profile, error) {
+func Compose(c Composition, available map[string]*Framework) (*Profile, error) {
 	if c.Name == "" {
 		return nil, errors.New("profile: name is required")
 	}
 	if strings.Contains(c.Name, "/") {
 		return nil, fmt.Errorf("profile %q: a name is the first component of every key under it and has no slash", c.Name)
 	}
-	if len(c.Presets) == 0 {
-		return nil, fmt.Errorf("profile %s: at least one preset is required", c.Name)
+	if len(c.Frameworks) == 0 {
+		return nil, fmt.Errorf("profile %s: at least one framework profile is required", c.Name)
 	}
 	p := &Profile{
 		Name:         c.Name,
-		Presets:      append([]string(nil), c.Presets...),
+		Frameworks:   append([]string(nil), c.Frameworks...),
 		Classes:      map[Class]bool{},
 		ForbiddenPII: map[string]bool{},
 		Identity:     map[Category]Treatment{},
@@ -69,10 +69,10 @@ func Compose(c Composition, available map[string]*Preset) (*Profile, error) {
 	required, optional, forbidden := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	categories := map[string]bool{}
 
-	for _, name := range c.Presets {
+	for _, name := range c.Frameworks {
 		src, ok := available[name]
 		if !ok {
-			return nil, fmt.Errorf("profile %s: no preset named %q", c.Name, name)
+			return nil, fmt.Errorf("profile %s: no framework profile named %q", c.Name, name)
 		}
 		for _, cl := range src.FieldClasses {
 			p.Classes[cl] = true
@@ -114,7 +114,7 @@ func Compose(c Composition, available map[string]*Preset) (*Profile, error) {
 		for r := range required {
 			if r == f || isUnder(r, f) {
 				problems = append(problems, fmt.Errorf(
-					"field %s is required by one preset and forbidden by another (as %s)", r, f))
+					"field %s is required by one framework profile and forbidden by another (as %s)", r, f))
 			}
 		}
 		for o := range optional {
@@ -135,7 +135,7 @@ func Compose(c Composition, available map[string]*Preset) (*Profile, error) {
 }
 
 // KeepsField reports whether a core field survives into a copy under this
-// profile. A field named by no preset is dropped: a copy carries what its
+// profile. A field named by no framework profile is dropped: a copy carries what its
 // purpose justifies, and nothing more.
 func KeepsField(p *Profile, pointer string) bool { return p.KeepsField(pointer) }
 
@@ -194,7 +194,7 @@ func (p *Profile) RetainUntil(written time.Time, expiry *time.Time) time.Time {
 }
 
 // Keeps is every core field a copy under this profile carries, in order and
-// without repeats: a field may be required by one preset and optional in
+// without repeats: a field may be required by one framework profile and optional in
 // another, and a reader wants the set, not the bookkeeping.
 func (p *Profile) Keeps() []string {
 	seen := map[string]bool{}
@@ -210,7 +210,7 @@ func (p *Profile) Keeps() []string {
 func (p *Profile) Explain() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "profile %s\n", p.Name)
-	fmt.Fprintf(&b, "  presets   %s\n", strings.Join(p.Presets, ", "))
+	fmt.Fprintf(&b, "  framework profiles   %s\n", strings.Join(p.Frameworks, ", "))
 	fmt.Fprintf(&b, "  prefix    records/%s/\n", p.Name)
 	classes := make([]string, 0, len(p.Classes))
 	for c := range p.Classes {
@@ -288,7 +288,7 @@ func stricterIntegrity(a, b Integrity) Integrity {
 	}
 }
 
-// lockNote keeps the note of whichever preset's lock reading won, so that the
+// lockNote keeps the note of whichever framework profile's lock reading won, so that the
 // composed profile explains the mode it ended up with and not the one it
 // discarded. Equal readings keep the first, as the retention note does.
 func lockNote(a, b Integrity) string {

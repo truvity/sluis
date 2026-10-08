@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/truvity/sluis/audit/internal/config"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/auth"
 )
 
@@ -77,7 +77,7 @@ type Access struct {
 // deployment's, by name with the presets each is built from; a preset turns
 // roles into profiles through it, and a file naming a preset is refused
 // without it.
-func LoadAccess(path string, profiles map[string]*preset.Profile) (Access, error) {
+func LoadAccess(path string, profiles map[string]*profile.Profile) (Access, error) {
 	file, err := readGrants(path)
 	if err != nil {
 		return Access{}, err
@@ -97,7 +97,7 @@ func LoadAccess(path string, profiles map[string]*preset.Profile) (Access, error
 		}
 		composed := make(map[string][]string, len(profiles))
 		for name, p := range profiles {
-			composed[name] = append([]string(nil), p.Presets...)
+			composed[name] = append([]string(nil), p.Frameworks...)
 		}
 		rules.Presets = append(rules.Presets, authn.AccessRoster{
 			From: entry.Issuer, Claim: entry.Claim, Profiles: composed,

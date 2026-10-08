@@ -1,5 +1,5 @@
 // Command audit is the tool that holds a deployment to the contracts this
-// repository publishes: it validates catalogues and presets, explains what a
+// repository publishes: it validates catalogues and framework profiles, explains what a
 // profile keeps, and checks that the code and the catalogue still agree.
 //
 // It runs in an application's own tests, so that a catalogue is wrong in a pull
@@ -29,7 +29,7 @@ import (
 	auditconfig "github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/internal/seal"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
@@ -40,7 +40,7 @@ const usage = `audit — the audit trail toolchain
 
 usage:
   audit validate [flags] [catalogue.yaml ...]
-        Hold presets, catalogues and a deployment's profiles to their contracts.
+        Hold frameworks, catalogues and a deployment's profiles to their contracts.
 
   audit profile explain <name> [flags]
         Print what a profile keeps, how it treats identities, and how long it
@@ -132,7 +132,7 @@ func main() {
 	case "validate":
 		err = validate(os.Args[2:])
 	case "profile":
-		err = profile(os.Args[2:])
+		err = explainProfile(os.Args[2:])
 	case "check-emitters":
 		err = checkEmitters(os.Args[2:])
 	case "messages":
@@ -171,8 +171,8 @@ func main() {
 
 func validate(args []string) error {
 	flags := flag.NewFlagSet("validate", flag.ContinueOnError)
-	var presets stringList
-	flags.Var(&presets, "presets", "directory of preset files, repeatable")
+	var frameworks stringList
+	flags.Var(&frameworks, "profiles", "directory of framework profile files, repeatable")
 	deployment := flags.String("deployment", "", "a deployment's profile configuration")
 	scan := flags.String("scan", "", "find catalogue documents under this directory")
 	docs, err := parse(flags, args)
@@ -186,14 +186,14 @@ func validate(args []string) error {
 		}
 		docs = append(docs, found...)
 	}
-	v := cli.Validate{PresetDirs: presets, CatalogueDoc: docs, Deployment: *deployment}
+	v := cli.Validate{FrameworkDirs: frameworks, CatalogueDoc: docs, Deployment: *deployment}
 	if problems := v.Run(); problems > 0 {
 		return fmt.Errorf("%d problems", problems)
 	}
 	return nil
 }
 
-func profile(args []string) error {
+func explainProfile(args []string) error {
 	if len(args) == 0 || args[0] != "explain" {
 		return fmt.Errorf("usage: audit profile explain <name> [--deployment file]")
 	}
@@ -203,17 +203,17 @@ func profile(args []string) error {
 	if err != nil {
 		return err
 	}
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		return err
 	}
-	d := preset.DefaultDeployment(presets)
+	d := profile.DefaultDeployment(frameworks)
 	if *deployment != "" {
 		if d, err = cli.LoadDeployment(*deployment); err != nil {
 			return err
 		}
 	}
-	profiles, err := d.Compose(presets)
+	profiles, err := d.Compose(frameworks)
 	if err != nil {
 		return err
 	}
@@ -593,7 +593,7 @@ func (r *repeated) Set(v string) error { *r = append(*r, v); return nil }
 
 // dedupeFor is how long a written identifier is remembered: what was asked
 // for, else the widest window the profiles ask for.
-func dedupeFor(profiles map[string]*preset.Profile, asked time.Duration) time.Duration {
+func dedupeFor(profiles map[string]*profile.Profile, asked time.Duration) time.Duration {
 	if asked != 0 {
 		return asked
 	}
@@ -608,7 +608,7 @@ func dedupeFor(profiles map[string]*preset.Profile, asked time.Duration) time.Du
 
 // requiredLocks is what each composed profile demands of the store's lock,
 // which verify holds every object to.
-func requiredLocks(profiles map[string]*preset.Profile) map[string]string {
+func requiredLocks(profiles map[string]*profile.Profile) map[string]string {
 	out := make(map[string]string, len(profiles))
 	for name, p := range profiles {
 		if p.Integrity.ObjectLockMode != "" {
@@ -620,8 +620,8 @@ func requiredLocks(profiles map[string]*preset.Profile) map[string]string {
 
 // profilesFor composes the deployment's profiles, which is what says how long
 // anything is kept.
-func profilesFor(path string) (map[string]*preset.Profile, error) {
-	presets, err := preset.Builtin()
+func profilesFor(path string) (map[string]*profile.Profile, error) {
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +629,7 @@ func profilesFor(path string) (map[string]*preset.Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return d.Compose(presets)
+	return d.Compose(frameworks)
 }
 
 // transitOptions names an OpenBAO transit signing key and how to reach it.
@@ -737,7 +737,7 @@ func purge(args []string) error {
 		deployment  = flags.String("deployment", "", "the profile configuration")
 		database    = flags.String("database", "", "the Postgres URL of the index")
 		identifying = flags.Duration("identifying-after", 0,
-			"how long the index keeps who an event happened to; your policy, as no shipped preset states one")
+			"how long the index keeps who an event happened to; your policy, as no shipped framework profile states one")
 		dedupeWindow = flags.Duration("dedupe-window", 0,
 			"how long a written identifier is remembered; default the widest the profiles ask for")
 		dryRun     = flags.Bool("dry-run", false, "report what would be purged and purge nothing")

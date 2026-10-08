@@ -78,7 +78,7 @@ be joined on a person and erasure is key destruction.
 A **framework profile** is what one framework requires: fields, categories, identity
 treatment, retention, integrity, review, with citations. A **profile** is a
 deployment's composition of framework profiles plus a destination. The split writer
-produces one copy per profile. See [framework profiles](../../presets/README.md).
+produces one copy per profile. See [framework profiles](../../profiles/README.md).
 
 ## Prefixes
 

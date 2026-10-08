@@ -10,7 +10,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/writer"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/store/storetest"
@@ -18,7 +18,7 @@ import (
 
 // start is one start of a writer on an archive that outlives it, which is what
 // a restart is.
-func start(t *testing.T, s *storetest.Memory, profiles map[string]*preset.Profile, versions map[string]string) error {
+func start(t *testing.T, s *storetest.Memory, profiles map[string]*profile.Profile, versions map[string]string) error {
 	t.Helper()
 	common, err := catalogue.Common()
 	if err != nil {
@@ -150,9 +150,9 @@ func TestAChangedProfileIsRecordedAndTheOldCompositionKept(t *testing.T) {
 	}
 }
 
-// A new preset version is a change of meaning nobody typed, and is recorded as
+// A new framework profile version is a change of meaning nobody typed, and is recorded as
 // such even when the rules it composes to are the same.
-func TestAPresetVersionBumpIsRecorded(t *testing.T) {
+func TestAFrameworkVersionBumpIsRecorded(t *testing.T) {
 	s := storetest.NewMemory()
 	if err := start(t, s, profiles(t), versions()); err != nil {
 		t.Fatal(err)

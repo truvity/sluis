@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/auth"
 )
 
@@ -138,9 +138,9 @@ presets: [{name: access-roster}]
 	if _, err := LoadAccess(grantsFile(t, body), nil); err == nil || !strings.Contains(err.Error(), "--deployment") {
 		t.Fatalf("a preset without profiles was accepted: %v", err)
 	}
-	profiles := map[string]*preset.Profile{
-		"sec":  {Name: "sec", Presets: []string{"security"}},
-		"hist": {Name: "hist", Presets: []string{"history"}},
+	profiles := map[string]*profile.Profile{
+		"sec":  {Name: "sec", Frameworks: []string{"security"}},
+		"hist": {Name: "hist", Frameworks: []string{"history"}},
 	}
 	access, err := LoadAccess(grantsFile(t, body), profiles)
 	if err != nil {

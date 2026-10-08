@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/store"
@@ -38,11 +38,11 @@ type Composition struct {
 	// Fingerprint is SHA-256 of the composed profile: every rule it applies.
 	Fingerprint string    `json:"fingerprint"`
 	ComposedAt  time.Time `json:"composed_at"`
-	// Presets are the presets it is composed from, by version. A preset moves
+	// Framework profiles are the framework profiles it is composed from, by version. A framework profile moves
 	// when the library is upgraded, which changes what a profile means without
 	// anybody editing the profile.
-	Presets  map[string]string `json:"presets"`
-	Composed *preset.Profile   `json:"composed"`
+	Frameworks map[string]string `json:"frameworks"`
+	Composed   *profile.Profile  `json:"composed"`
 }
 
 // compositionPrefix is where a profile's compositions live, under the schema
@@ -52,10 +52,10 @@ func compositionPrefix(profile string) string {
 }
 
 // Fingerprint is a composed profile's identity: equal for equal rules, whatever
-// the profile is called. The preset versions are not in it — a new preset
+// the profile is called. The framework profile versions are not in it — a new framework profile
 // version that composes to the same rules changes no record's meaning, and is
-// recorded as a preset change instead.
-func Fingerprint(p *preset.Profile) (string, error) {
+// recorded as a framework profile change instead.
+func Fingerprint(p *profile.Profile) (string, error) {
 	body, err := json.Marshal(p)
 	if err != nil {
 		return "", fmt.Errorf("writer: fingerprinting profile %s: %w", p.Name, err)
@@ -69,18 +69,18 @@ func Fingerprint(p *preset.Profile) (string, error) {
 //
 // It is called once at start-up, outside any write: it records through the
 // writer itself, synchronously, and a call from inside a batch would wait on
-// its own flush. versions is every preset's version by name.
+// its own flush. versions is every framework profile's version by name.
 //
 // The first composition a deployment ever records is not a change and emits
 // nothing, or the first start of every deployment would claim one. A profile
-// whose rules and preset versions are those last recorded writes nothing.
+// whose rules and framework profile versions are those last recorded writes nothing.
 // Otherwise the events are confirmed first and the composition written after:
 // a writer that stops between the two records the change again on its next
 // start, and a duplicate event is the safer failure than a change the trail
 // never mentions — which the other order would risk. A change the trail cannot
 // take stops the writer, because these actions are declared block.
 func (w *Writer) RecordCompositions(
-	ctx context.Context, profiles map[string]*preset.Profile, versions map[string]string,
+	ctx context.Context, profiles map[string]*profile.Profile, versions map[string]string,
 ) error {
 	if w.Archive == nil || w.Archive.Store == nil {
 		return errors.New("writer: recording compositions needs the schema archive")
@@ -98,13 +98,13 @@ func (w *Writer) RecordCompositions(
 	return nil
 }
 
-func (w *Writer) recordComposition(ctx context.Context, p *preset.Profile, versions map[string]string) error {
+func (w *Writer) recordComposition(ctx context.Context, p *profile.Profile, versions map[string]string) error {
 	fingerprint, err := Fingerprint(p)
 	if err != nil {
 		return err
 	}
-	used := make(map[string]string, len(p.Presets))
-	for _, name := range p.Presets {
+	used := make(map[string]string, len(p.Frameworks))
+	for _, name := range p.Frameworks {
 		used[name] = versions[name]
 	}
 	previous, err := w.latestComposition(ctx, p.Name)
@@ -113,10 +113,10 @@ func (w *Writer) recordComposition(ctx context.Context, p *preset.Profile, versi
 	}
 	next := Composition{
 		Profile: p.Name, Sequence: 1, Fingerprint: fingerprint,
-		ComposedAt: w.now(), Presets: used, Composed: p,
+		ComposedAt: w.now(), Frameworks: used, Composed: p,
 	}
 	if previous != nil {
-		if previous.Fingerprint == fingerprint && sameVersions(previous.Presets, used) {
+		if previous.Fingerprint == fingerprint && sameVersions(previous.Frameworks, used) {
 			return nil
 		}
 		next.Sequence = previous.Sequence + 1
@@ -164,13 +164,13 @@ func (w *Writer) confirmChanges(ctx context.Context, previous, next *Composition
 			return fmt.Errorf("writer: profile %s changed and the trail could not record it: %w", next.Profile, err)
 		}
 	}
-	names := make([]string, 0, len(next.Presets))
-	for name := range next.Presets {
+	names := make([]string, 0, len(next.Frameworks))
+	for name := range next.Frameworks {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		was, now := previous.Presets[name], next.Presets[name]
+		was, now := previous.Frameworks[name], next.Frameworks[name]
 		if was == now {
 			continue
 		}
@@ -183,7 +183,7 @@ func (w *Writer) confirmChanges(ctx context.Context, previous, next *Composition
 		r.Data = data
 		r.Outcome = &record.Outcome{Result: auditv1.Outcome_RESULT_SUCCESS}
 		if err := w.confirm(ctx, r); err != nil {
-			return fmt.Errorf("writer: preset %s changed and the trail could not record it: %w", name, err)
+			return fmt.Errorf("writer: framework profile %s changed and the trail could not record it: %w", name, err)
 		}
 	}
 	return nil

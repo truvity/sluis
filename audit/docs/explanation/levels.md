@@ -12,13 +12,13 @@ reaches the bucket; the level says what protects it once there.
 `log` is the entry point: an application emits with the SDK and its log pipeline
 keeps the lines. Moving up changes configuration, not records.
 
-## Presets
+## Framework profiles
 
-The decision-tree presets (named bundles of deployment choices, not compliance bundles: those are
+The decision-tree framework profiles (named bundles of deployment choices, not compliance bundles: those are
 [profiles](../reference/profiles.md)), and the level each normally gives. The names are
 vocabulary for choosing a deployment, not chart or library options.
 
-| preset | what it is | level | built from |
+| framework profile | what it is | level | built from |
 |---|---|---|---|
 | `aws-serverless` | writer and notary Lambdas, S3, DynamoDB dedupe; observe and query where you like | `full` (lock on) or `lite` | [AWS](../reference/aws-pulumi-library.md) library |
 | `aws-eks` | the chart on EKS, Pod Identity, S3, notary job on KMS | `full` | chart, [direct](direct-mode.md) or [stream](stream-mode.md) |

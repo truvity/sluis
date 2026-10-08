@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 )
 
-// The repository's own presets and catalogue are the first thing the toolchain
+// The repository's own framework profiles and catalogue are the first thing the toolchain
 // is held to.
 func TestValidateAcceptsThisRepository(t *testing.T) {
 	root := repoRoot(t)
 	var out bytes.Buffer
 	v := Validate{
-		PresetDirs:   []string{filepath.Join(root, "presets")},
-		CatalogueDoc: []string{filepath.Join(root, "sdk", "catalogue", "common.yaml")},
-		Out:          &out,
+		FrameworkDirs: []string{filepath.Join(root, "profiles")},
+		CatalogueDoc:  []string{filepath.Join(root, "sdk", "catalogue", "common.yaml")},
+		Out:           &out,
 	}
 	if problems := v.Run(); problems != 0 {
 		t.Fatalf("%d problems:\n%s", problems, out.String())
@@ -34,7 +34,7 @@ func TestValidateAcceptsThisRepository(t *testing.T) {
 func TestValidateReportsUncoveredCategories(t *testing.T) {
 	root := repoRoot(t)
 	deployment := filepath.Join(t.TempDir(), "deployment.yaml")
-	if err := os.WriteFile(deployment, []byte("profiles:\n  security:\n    presets: [security]\n"), 0o600); err != nil {
+	if err := os.WriteFile(deployment, []byte("profiles:\n  security:\n    frameworks: [security]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
@@ -51,17 +51,17 @@ func TestValidateReportsUncoveredCategories(t *testing.T) {
 	}
 }
 
-func TestDefaultDeploymentComposesEveryPreset(t *testing.T) {
-	presets, err := preset.Builtin()
+func TestDefaultDeploymentComposesEveryFramework(t *testing.T) {
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles, err := preset.DefaultDeployment(presets).Compose(presets)
+	profiles, err := profile.DefaultDeployment(frameworks).Compose(frameworks)
 	if err != nil {
-		t.Fatalf("a preset does not compose on its own: %v", err)
+		t.Fatalf("a framework profile does not compose on its own: %v", err)
 	}
-	if len(profiles) != len(presets) {
-		t.Fatalf("composed %d profiles from %d presets", len(profiles), len(presets))
+	if len(profiles) != len(frameworks) {
+		t.Fatalf("composed %d profiles from %d framework profiles", len(profiles), len(frameworks))
 	}
 }
 

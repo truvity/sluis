@@ -2,15 +2,15 @@
 # Lock, so the record objects's own sha256 and per-record hashes are the integrity
 # control; an endpoint and path-style addressing; static credentials, since
 # the store has no pod identity; and the query service with an exports bucket
-# on a store of its own. The profile composes only presets whose frameworks
+# on a store of its own. The profile composes only framework profiles whose frameworks
 # do not demand the lock, or the writer would refuse to start.
 mode: direct
 externalIdentifiersAreOpaque: true
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
   history:
-    presets: [history]
+    frameworks: [history]
 writer:
   config:
     deployment: /etc/audit/deployment.yaml

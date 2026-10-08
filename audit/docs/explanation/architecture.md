@@ -82,7 +82,7 @@ flowchart LR
 ```
 
 - **One per application, not shared.** What is shared, and shipped here, is
-  the format and the [framework profiles](../../presets/README.md) that profiles are
+  the format and the [framework profiles](../../profiles/README.md) that profiles are
   composed from. A catalogue names profiles; it never defines them.
 - **Versioned with the code.** Every record names the catalogue version it
   was written under, and the archive keeps a copy of every version, so a

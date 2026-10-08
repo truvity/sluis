@@ -133,12 +133,12 @@ two numbers must say the same thing. */}}
 {{- if .Values.extensions.billing.enabled -}}
   {{- $metering := false -}}
   {{- range $name, $profile := .Values.profiles -}}
-    {{- range $profile.presets -}}
+    {{- range $profile.profiles -}}
       {{- if hasPrefix "billing" . -}}{{- $metering = true -}}{{- end -}}
     {{- end -}}
   {{- end -}}
   {{- if not $metering -}}
-  {{- fail "audit: `extensions.billing.enabled` and no profile composes a metering preset. The statement is computed from the billing copy of each record, and without a profile that keeps one there is nothing to compute from." -}}
+  {{- fail "audit: `extensions.billing.enabled` and no profile composes a metering framework profile. The statement is computed from the billing copy of each record, and without a profile that keeps one there is nothing to compute from." -}}
   {{- end -}}
 {{- end -}}
 

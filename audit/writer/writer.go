@@ -15,7 +15,7 @@
 //
 //	w, err := writer.Open(ctx, writer.Config{
 //		Archive:  archive,  // an s3store.Store on the Object-Locked bucket
-//		Profiles: profiles, // preset.ParseDeployment(doc) then Compose
+//		Profiles: profiles, // framework profile.ParseDeployment(doc) then Compose
 //		Keys:     provider, // keys.NewTransit or keys.NewLocal
 //	})
 //	defer w.Close(ctx)
@@ -44,7 +44,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	inner "github.com/truvity/sluis/audit/internal/writer"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -66,10 +66,10 @@ type Dedupe = inner.Dedupe
 type Config struct {
 	// Archive is where the copies go: the Object-Locked bucket.
 	Archive store.Store
-	// Profiles are the deployment's profiles, composed from the presets —
-	// preset.ParseDeployment and Compose read the same document the chart
+	// Profiles are the deployment's profiles, composed from the framework profiles —
+	// framework profile.ParseDeployment and Compose read the same document the chart
 	// renders.
-	Profiles map[string]*preset.Profile
+	Profiles map[string]*profile.Profile
 	// Keys pseudonymise identifiers. With a provider that can also seal
 	// (keys.Transit, keys.Local), the identity behind each pseudonym is kept
 	// sealed under the same key, for resolve; see ForgetIdentities.
@@ -348,12 +348,12 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	// changed since the last composition recorded. A writer that cannot
 	// record a change does not start, since every record it wrote would mean
 	// something the trail does not say.
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		return nil, err
 	}
-	versions := make(map[string]string, len(presets))
-	for name, p := range presets {
+	versions := make(map[string]string, len(frameworks))
+	for name, p := range frameworks {
 		versions[name] = p.Version
 	}
 	if err := w.RecordCompositions(ctx, c.Profiles, versions); err != nil {
@@ -468,8 +468,8 @@ func logSafe(s string, limit int) string {
 }
 
 // longestDedupe is how long a written identifier is remembered: the widest
-// window any profile's presets ask for, since one table serves them all.
-func longestDedupe(profiles map[string]*preset.Profile) time.Duration {
+// window any profile's framework profiles ask for, since one table serves them all.
+func longestDedupe(profiles map[string]*profile.Profile) time.Duration {
 	var longest time.Duration
 	for _, p := range profiles {
 		if d := time.Duration(p.Pipeline.DedupeWindowDays) * 24 * time.Hour; d > longest {
@@ -481,7 +481,7 @@ func longestDedupe(profiles map[string]*preset.Profile) time.Duration {
 
 // longestRetention is how long the longest-lived profile keeps a copy, which
 // is what anything that has to outlive every record is kept for.
-func longestRetention(profiles map[string]*preset.Profile) time.Duration {
+func longestRetention(profiles map[string]*profile.Profile) time.Duration {
 	now := time.Now().UTC()
 	var longest time.Duration
 	for _, p := range profiles {

@@ -6,10 +6,11 @@ identities are treated, how long copies are kept, what integrity applies and how
 reviewed). Each cites the clauses it reads and carries a disclaimer. A deployment composes them
 into its own **profiles**.
 
-The directory is called `presets/` for now. A compliance bundle is a **profile**, not a preset; the
-name stays here, in the `presets:` key of the deployment document and in the `preset` package until a
-code change renames them. Everything about them, including the table of the seven and the composition
+The directory and the `profile` package carry the name; the deployment document lists the framework
+profiles each of its profiles is composed from under the key `frameworks:`. A *preset* is something else (a named bundle of adapter or deployment
+choices, per truvity/policy decision 0012), and the old `presets:` key is refused with a message
+that names `frameworks:`. Everything about them, including the table of the seven and the composition
 rules, is in [the profiles reference](../docs/reference/profiles.md); which to compose is
 [which profiles to compose](../docs/explanation/which-profiles-to-compose.md). The format is
-[`sdk/schemas/preset.schema.json`](../sdk/schemas/preset.schema.json), and `audit profile explain <name>`
+[`sdk/schemas/profile.schema.json`](../sdk/schemas/profile.schema.json), and `audit profile explain <name>`
 prints what a profile keeps.

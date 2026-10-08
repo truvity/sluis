@@ -1,14 +1,14 @@
-// Package preset reads the framework presets and composes them into profiles.
+// Package profile reads the framework profiles and composes them into profiles.
 //
-// A preset says what one framework requires of a copy: which fields it carries,
+// A framework profile says what one framework requires of a copy: which fields it carries,
 // how identities are treated, how long it is kept, what integrity controls
 // apply, and how often it is reviewed. A profile is a deployment's composition
-// of presets and is what the split writer produces one copy for.
+// of framework profiles and is what the split writer produces one copy for.
 //
-// Nothing here is legal advice. A preset is an engineering reading of the
+// Nothing here is legal advice. A framework profile is an engineering reading of the
 // clauses it cites, and a deployer confirms applicability with its own
 // assessor.
-package preset
+package profile
 
 import (
 	"errors"
@@ -26,7 +26,7 @@ import (
 )
 
 // Treatment is what happens to an identifier of a given actor category in a
-// copy under this preset.
+// copy under this framework profile.
 type Treatment string
 
 const (
@@ -43,12 +43,12 @@ const (
 	Omit Treatment = "omit"
 )
 
-// strictness orders treatments so that composing presets can take the strictest.
+// strictness orders treatments so that composing framework profiles can take the strictest.
 var strictness = map[Treatment]int{Clear: 0, Scoped: 1, Pseudonym: 2, Omit: 3}
 
 // Category, Class and their values are defined by the catalogue, which declares
 // them on its actor kinds and extension properties; they are re-exported here
-// because a preset sets a treatment for each.
+// because a framework profile sets a treatment for each.
 type (
 	// Category is the kind of actor a treatment applies to.
 	Category = catalogue.Category
@@ -56,7 +56,7 @@ type (
 	Class = catalogue.Class
 )
 
-// Internal, External and Machine are the actor categories a preset sets a
+// Internal, External and Machine are the actor categories a framework profile sets a
 // treatment for.
 const (
 	Internal = catalogue.Internal
@@ -65,7 +65,7 @@ const (
 )
 
 // Shared, Audit, Metering, History and Evidence are the field classes an
-// extension property declares and a preset keeps.
+// extension property declares and a framework profile keeps.
 const (
 	Shared   = catalogue.Shared
 	Audit    = catalogue.Audit
@@ -74,8 +74,8 @@ const (
 	Evidence = catalogue.Evidence
 )
 
-// Preset is one framework's requirements.
-type Preset struct {
+// Framework is one framework's requirements.
+type Framework struct {
 	Name       string     `json:"name"`
 	Framework  string     `json:"framework"`
 	Version    string     `json:"version"`
@@ -97,7 +97,7 @@ type Preset struct {
 	Pipeline  Pipeline               `json:"pipeline,omitempty"`
 }
 
-// Citation is the clause a preset reads and where to read it.
+// Citation is the clause a framework profile reads and where to read it.
 type Citation struct {
 	Clause string `json:"clause"`
 	URL    string `json:"url"`
@@ -133,14 +133,14 @@ type Integrity struct {
 	LegalHold       string `json:"legal_hold,omitempty"`       // available | recommended
 	ClockSyncEvent  string `json:"clock_sync_event,omitempty"` // none | daily
 	LogAccessLogged bool   `json:"log_access_logged,omitempty"`
-	// Note says why the preset reads its framework as it does on the lock,
+	// Note says why the framework profile reads its framework as it does on the lock,
 	// for the reviewer of a composed profile.
 	Note string `json:"note,omitempty"`
 }
 
-// The lock modes a preset may demand, weakest first. The names are the
+// The lock modes a framework profile may demand, weakest first. The names are the
 // store's own (s3store.LockMode spells them the same way), kept as strings
-// here because a preset knows what a framework demands and nothing about
+// here because a framework profile knows what a framework demands and nothing about
 // where the copies land.
 const (
 	LockNone       = "none"
@@ -188,10 +188,10 @@ func CheckLockMode(profiles map[string]*Profile, deployment string) error {
 			continue
 		}
 		problems = append(problems, fmt.Errorf(
-			"profile %s is composed from presets that demand Object Lock in %s mode, and this deployment "+
+			"profile %s is composed from framework profiles that demand Object Lock in %s mode, and this deployment "+
 				"writes with lock mode %s: its copies could be deleted before their retention ends, "+
 				"which is what the framework forbids. Run it on a store locked in %s mode, or compose "+
-				"the profile from presets whose frameworks do not demand the lock",
+				"the profile from framework profiles whose frameworks do not demand the lock",
 			name, want, deployment, want))
 	}
 	return errors.Join(problems...)
@@ -205,35 +205,35 @@ type Review struct {
 	Evidence          string `json:"evidence,omitempty"`
 }
 
-// Pipeline is what the write path must guarantee for this preset.
+// Pipeline is what the write path must guarantee for this framework profile.
 type Pipeline struct {
 	DedupeWindowDays  int `json:"dedupe_window_days,omitempty"`
 	StreamHorizonDays int `json:"stream_horizon_days,omitempty"`
 	CloseAfterHours   int `json:"close_after_hours,omitempty"`
 }
 
-// Load reads and validates one preset document.
-func Load(data []byte) (*Preset, error) {
-	if err := metaschema.Validate("preset.schema.json", data); err != nil {
+// Load reads and validates one framework profile document.
+func Load(data []byte) (*Framework, error) {
+	if err := metaschema.Validate("profile.schema.json", data); err != nil {
 		return nil, err
 	}
-	var p Preset
+	var p Framework
 	if err := yaml.UnmarshalStrict(data, &p); err != nil {
-		return nil, fmt.Errorf("preset: %w", err)
+		return nil, fmt.Errorf("framework profile: %w", err)
 	}
 	if err := p.check(); err != nil {
-		return nil, fmt.Errorf("preset %s: %w", p.Name, err)
+		return nil, fmt.Errorf("framework profile %s: %w", p.Name, err)
 	}
 	return &p, nil
 }
 
-// LoadDir reads every .yaml preset in a directory.
-func LoadDir(fsys fs.FS, dir string) (map[string]*Preset, error) {
+// LoadDir reads every .yaml framework profile in a directory.
+func LoadDir(fsys fs.FS, dir string) (map[string]*Framework, error) {
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]*Preset, len(entries))
+	out := make(map[string]*Framework, len(entries))
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
@@ -247,18 +247,18 @@ func LoadDir(fsys fs.FS, dir string) (map[string]*Preset, error) {
 			return nil, fmt.Errorf("%s: %w", e.Name(), err)
 		}
 		if _, seen := out[p.Name]; seen {
-			return nil, fmt.Errorf("preset %s is declared twice", p.Name)
+			return nil, fmt.Errorf("framework profile %s is declared twice", p.Name)
 		}
 		out[p.Name] = p
 	}
 	return out, nil
 }
 
-// Builtin returns the presets this repository ships.
-func Builtin() (map[string]*Preset, error) { return LoadDir(audit.Presets, "presets") }
+// Builtin returns the framework profiles this repository ships.
+func Builtin() (map[string]*Framework, error) { return LoadDir(audit.Profiles, "profiles") }
 
 // check is what the meta-schema cannot express.
-func (p *Preset) check() error {
+func (p *Framework) check() error {
 	var problems []error
 	req := index(p.RequiredFields)
 	for _, f := range p.ForbiddenFields {
@@ -290,10 +290,10 @@ func (p *Preset) check() error {
 		}
 	}
 	if len(p.Citations) == 0 {
-		problems = append(problems, errors.New("a preset states what a framework requires and must cite it"))
+		problems = append(problems, errors.New("a framework profile states what a framework requires and must cite it"))
 	}
 	if strings.TrimSpace(p.Disclaimer) == "" {
-		problems = append(problems, errors.New("a preset is an engineering reading and must say so"))
+		problems = append(problems, errors.New("a framework profile is an engineering reading and must say so"))
 	}
 	return errors.Join(problems...)
 }

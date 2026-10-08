@@ -6,7 +6,7 @@
 ## Context
 
 Every schema this project publishes names itself by `$id`: the record's
-JSON Schema, the catalogue, preset and extension meta-schemas, and the
+JSON Schema, the catalogue, framework profile and extension meta-schemas, and the
 common catalogue's payload schemas. Those identifiers were under
 `https://schemas.truvity.com/audit/v1/`, a name that was never served, and
 that belongs to the publisher's organisation rather than to this

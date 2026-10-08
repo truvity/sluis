@@ -10,7 +10,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/recobj"
 	"github.com/truvity/sluis/audit/internal/ulid"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/store"
 )
@@ -64,7 +64,7 @@ type partition struct {
 }
 
 type batch struct {
-	profile *preset.Profile
+	profile *profile.Profile
 	opened  time.Time
 	bytes   int
 	// lines are the object's lines, hash and record, in the order the copies
@@ -82,7 +82,7 @@ var ErrKeyComponent = errors.New("writer: not usable in a key")
 //
 // Nothing here indexes: the index is observe's, which follows the bucket
 // (docs/decisions/0020), so an object is complete when it is put.
-func (r *Roller) Add(ctx context.Context, p *preset.Profile, c *record.Record) error {
+func (r *Roller) Add(ctx context.Context, p *profile.Profile, c *record.Record) error {
 	return r.AddExpiring(ctx, p, c, nil)
 }
 
@@ -93,7 +93,7 @@ func (r *Roller) Add(ctx context.Context, p *preset.Profile, c *record.Record) e
 // record in it must outlive what relies on it. Under any other profile the
 // expiry changes nothing.
 func (r *Roller) AddExpiring(
-	ctx context.Context, p *preset.Profile, c *record.Record, expiry *time.Time,
+	ctx context.Context, p *profile.Profile, c *record.Record, expiry *time.Time,
 ) error {
 	line, err := record.Canonical(c)
 	if err != nil {
