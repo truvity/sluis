@@ -39,8 +39,9 @@
                 "type": "string"
               },
               "lifetime": {
-                "$ref": "#/$defs/duration",
-                "description": "How long each minted token lives, at least a minute."
+                "description": "How long each minted token lives, a Go duration of at least a minute (`15m`). The credentials are renewed with a third of it left.",
+                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+                "type": "string"
               },
               "minter": {
                 "description": "The address, below the installation's state root, of the minter credential: a `cloudflare-minter/v1` document {schema, token} holding an account token with Account API Tokens Read and Write. It can mint anything the account owner can, so its custody is the owner's; the refusal list in the minting code is the only guard.",
