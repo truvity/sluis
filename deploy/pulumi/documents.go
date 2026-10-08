@@ -125,9 +125,6 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 			if err != nil {
 				return false, err
 			}
-			if _, set := secrets["kmsKeyId"]; !set {
-				added = true // the renderer wrote it for an Installation
-			}
 			if err := own(secrets, "Config: secrets", "kmsKeyId", alias); err != nil {
 				return false, err
 			}
