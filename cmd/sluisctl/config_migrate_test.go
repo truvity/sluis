@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -55,6 +56,7 @@ func lines(s string) []string {
 func TestConfigDirIsSluisctlUnderUserConfigDir(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	legacyMigration = sync.Once{}
 	got, err := configDir()
 	if err != nil {
 		t.Fatal(err)
@@ -64,266 +66,450 @@ func TestConfigDirIsSluisctlUnderUserConfigDir(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacyConfigDirCopiesTree(t *testing.T) {
+type legacyDirs struct{ root, old, nw string }
+
+func newLegacyDirs(t *testing.T) legacyDirs {
+	t.Helper()
 	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
+	return legacyDirs{root, filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")}
+}
 
-	var out bytes.Buffer
-	migrateLegacyConfigDir(old, nw, &out)
-
-	for rel, want := range map[string]string{
-		"config.yaml":                 "issuer: https://x\n",
-		"sessions/a-1234.json":        `{"refresh_token":"r"}`,
-		"credentials/aws/deep/c.json": "cred",
-	} {
-		if got := readTestFile(t, filepath.Join(nw, rel)); got != want {
-			t.Errorf("%s = %q, want %q", rel, got, want)
+// stagingDirs lists leftover staging directories beside the new dir.
+func stagingDirs(t *testing.T, root string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), stagingPrefix) {
+			out = append(out, e.Name())
 		}
 	}
-	if !exists(filepath.Join(nw, legacyMigratedMarker)) {
+	return out
+}
+
+func snapshotTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	m := map[string]string{}
+	err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		v := info.Mode().String()
+		if info.Mode().IsRegular() {
+			v += readTestFile(t, p)
+		}
+		m[p] = v
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func equalSnapshots(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+var legacyWant = map[string]string{
+	"config.yaml":                 "issuer: https://x\n",
+	"sessions/a-1234.json":        `{"refresh_token":"r"}`,
+	"credentials/aws/deep/c.json": "cred",
+}
+
+func TestMigrateLegacyConfigDirSuccess(t *testing.T) {
+	d := newLegacyDirs(t)
+	populateLegacy(t, d.old)
+	before := snapshotTree(t, d.old)
+	if exists(d.nw) {
+		t.Fatal("new dir present before migration")
+	}
+
+	var out bytes.Buffer
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+
+	for rel, want := range legacyWant {
+		p := filepath.Join(d.nw, rel)
+		if got := readTestFile(t, p); got != want {
+			t.Errorf("%s = %q, want %q", rel, got, want)
+		}
+		if info, _ := os.Stat(p); info.Mode().Perm() != 0o600 {
+			t.Errorf("%s mode = %o, want 600", rel, info.Mode().Perm())
+		}
+	}
+	for _, rel := range []string{".", "sessions", "credentials", "credentials/aws/deep"} {
+		info, err := os.Stat(filepath.Join(d.nw, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Errorf("dir %s mode = %o, want 700", rel, info.Mode().Perm())
+		}
+	}
+	if !exists(filepath.Join(d.nw, legacyMigratedMarker)) {
 		t.Error("marker missing")
+	}
+	if s := stagingDirs(t, d.root); len(s) > 0 {
+		t.Errorf("staging left behind: %v", s)
 	}
 	if l := lines(out.String()); len(l) != 1 {
 		t.Errorf("want exactly one output line, got %q", out.String())
 	}
-}
-
-func TestMigrateLegacyConfigDirLeavesOldUnchanged(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	snapshot := func() map[string]string {
-		m := map[string]string{}
-		_ = filepath.Walk(old, func(p string, info os.FileInfo, err error) error {
-			if err != nil {
-				t.Fatal(err)
-			}
-			v := info.Mode().String()
-			if info.Mode().IsRegular() {
-				v += readTestFile(t, p)
-			}
-			m[p] = v
-			return nil
-		})
-		return m
-	}
-	before := snapshot()
-	migrateLegacyConfigDir(old, nw, &bytes.Buffer{})
-	after := snapshot()
-	if len(before) != len(after) {
-		t.Fatalf("old tree changed: %v -> %v", before, after)
-	}
-	for k, v := range before {
-		if after[k] != v {
-			t.Errorf("%s changed: %q -> %q", k, v, after[k])
-		}
+	if !equalSnapshots(before, snapshotTree(t, d.old)) {
+		t.Error("old tree changed")
 	}
 }
 
-func TestMigrateLegacyConfigDirModes(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	migrateLegacyConfigDir(old, nw, &bytes.Buffer{})
+func TestMigrateLegacyConfigDirCopyFailureRetries(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permissions are not enforced for root")
+	}
+	d := newLegacyDirs(t)
+	populateLegacy(t, d.old)
+	bad := filepath.Join(d.old, "sessions", "unreadable.json")
+	writeTestFile(t, bad, "x", 0o000)
 
-	for rel, want := range map[string]os.FileMode{
-		"config.yaml":                 0o600,
-		"sessions/a-1234.json":        0o600, // was 0644
-		"credentials/aws/deep/c.json": 0o600,
-		"sessions":                    0o700,
-		"credentials/aws/deep":        0o700,
-		".":                           0o700,
-	} {
-		info, err := os.Stat(filepath.Join(nw, rel))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := info.Mode().Perm(); got != want {
-			t.Errorf("%s mode = %o, want %o", rel, got, want)
-		}
+	var out bytes.Buffer
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+
+	if exists(d.nw) {
+		t.Error("new dir exists after a failed copy")
+	}
+	if s := stagingDirs(t, d.root); len(s) > 0 {
+		t.Errorf("staging left behind: %v", s)
+	}
+	if l := lines(out.String()); len(l) != 1 || !strings.Contains(l[0], "will retry") {
+		t.Errorf("want one warning containing %q, got %q", "will retry", out.String())
+	}
+
+	if err := os.Chmod(bad, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	if got := readTestFile(t, filepath.Join(d.nw, "sessions", "unreadable.json")); got != "x" {
+		t.Errorf("retry did not copy: %q", got)
+	}
+	if !exists(filepath.Join(d.nw, legacyMigratedMarker)) {
+		t.Error("marker missing after retry")
+	}
+	if l := lines(out.String()); len(l) != 1 || strings.Contains(l[0], "will retry") {
+		t.Errorf("want the success line only, got %q", out.String())
+	}
+}
+
+func TestMigrateLegacyConfigDirNoRegularFilesIsNoop(t *testing.T) {
+	d := newLegacyDirs(t)
+	if err := os.MkdirAll(filepath.Join(d.old, "empty-sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(d.root, "elsewhere")
+	writeTestFile(t, target, "t", 0o600)
+	if err := os.Symlink(target, filepath.Join(d.old, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var out bytes.Buffer
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	if out.Len() != 0 || exists(d.nw) {
+		t.Errorf("want no-op; output %q, new exists %v", out.String(), exists(d.nw))
+	}
+	if s := stagingDirs(t, d.root); len(s) > 0 {
+		t.Errorf("staging left behind: %v", s)
 	}
 }
 
 func TestMigrateLegacyConfigDirNonEmptyNewIsUntouched(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	writeTestFile(t, filepath.Join(nw, "other"), "mine", 0o600)
-
-	var out bytes.Buffer
-	migrateLegacyConfigDir(old, nw, &out)
-
-	if out.Len() != 0 {
-		t.Errorf("unexpected output %q", out.String())
-	}
-	if exists(filepath.Join(nw, legacyMigratedMarker)) || exists(filepath.Join(nw, "config.yaml")) || exists(filepath.Join(nw, "sessions")) {
-		t.Error("migration ran into a non-empty directory")
+	for name, files := range map[string][]string{
+		"other file":  {"other"},
+		"marker only": {legacyMigratedMarker},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newLegacyDirs(t)
+			populateLegacy(t, d.old)
+			for _, f := range files {
+				writeTestFile(t, filepath.Join(d.nw, f), "mine", 0o600)
+			}
+			before := snapshotTree(t, d.nw)
+			var out bytes.Buffer
+			migrateLegacyConfigDir(d.old, d.nw, &out)
+			if out.Len() != 0 {
+				t.Errorf("unexpected output %q", out.String())
+			}
+			if !equalSnapshots(before, snapshotTree(t, d.nw)) {
+				t.Error("new dir changed")
+			}
+			if s := stagingDirs(t, d.root); len(s) > 0 {
+				t.Errorf("staging left behind: %v", s)
+			}
+		})
 	}
 }
 
 func TestMigrateLegacyConfigDirEmptyNewMigrates(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	if err := os.MkdirAll(nw, 0o700); err != nil {
+	d := newLegacyDirs(t)
+	populateLegacy(t, d.old)
+	if err := os.MkdirAll(d.nw, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	migrateLegacyConfigDir(old, nw, &bytes.Buffer{})
-	if got := readTestFile(t, filepath.Join(nw, "config.yaml")); got != "issuer: https://x\n" {
-		t.Errorf("config.yaml = %q", got)
+	var out bytes.Buffer
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	for rel, want := range legacyWant {
+		if got := readTestFile(t, filepath.Join(d.nw, rel)); got != want {
+			t.Errorf("%s = %q, want %q", rel, got, want)
+		}
 	}
-}
-
-func TestCopyFileNoClobberKeepsExisting(t *testing.T) {
-	root := t.TempDir()
-	src, dst := filepath.Join(root, "src"), filepath.Join(root, "dst")
-	writeTestFile(t, src, "old", 0o600)
-	writeTestFile(t, dst, "new", 0o600)
-	ok, err := copyFileNoClobber(src, dst)
-	if err != nil || ok {
-		t.Fatalf("copyFileNoClobber = %v, %v; want false, nil", ok, err)
+	if l := lines(out.String()); len(l) != 1 || strings.Contains(l[0], "could not") {
+		t.Errorf("want one success line, got %q", out.String())
 	}
-	if got := readTestFile(t, dst); got != "new" {
-		t.Errorf("dst overwritten: %q", got)
-	}
-}
-
-func TestMigrateLegacyConfigDirDoesNotOverwriteWithinTree(t *testing.T) {
-	root := t.TempDir()
-	src, dst := filepath.Join(root, "src"), filepath.Join(root, "dst")
-	writeTestFile(t, filepath.Join(src, "a"), "old-a", 0o600)
-	writeTestFile(t, filepath.Join(src, "b"), "old-b", 0o600)
-	writeTestFile(t, filepath.Join(dst, "a"), "new-a", 0o600)
-	n, err := copyTreeNoClobber(src, dst)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Errorf("copied %d, want 1", n)
-	}
-	if readTestFile(t, filepath.Join(dst, "a")) != "new-a" || readTestFile(t, filepath.Join(dst, "b")) != "old-b" {
-		t.Error("unexpected content after no-clobber copy")
+	if s := stagingDirs(t, d.root); len(s) > 0 {
+		t.Errorf("staging left behind: %v", s)
 	}
 }
 
 func TestMigrateLegacyConfigDirNeitherExists(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
+	d := newLegacyDirs(t)
 	var out bytes.Buffer
-	migrateLegacyConfigDir(old, nw, &out)
-	if out.Len() != 0 || exists(nw) {
-		t.Errorf("want no-op; output %q, new exists %v", out.String(), exists(nw))
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	if out.Len() != 0 || exists(d.nw) {
+		t.Errorf("want no-op; output %q, new exists %v", out.String(), exists(d.nw))
 	}
 }
 
 func TestMigrateLegacyConfigDirEmptyOldIsNoop(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	if err := os.MkdirAll(old, 0o700); err != nil {
+	d := newLegacyDirs(t)
+	if err := os.MkdirAll(d.old, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	migrateLegacyConfigDir(old, nw, &out)
-	if out.Len() != 0 || exists(nw) {
-		t.Errorf("want no-op; output %q, new exists %v", out.String(), exists(nw))
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	if out.Len() != 0 || exists(d.nw) {
+		t.Errorf("want no-op; output %q, new exists %v", out.String(), exists(d.nw))
 	}
 }
 
-func TestMigrateLegacyConfigDirSecondCallIsNoop(t *testing.T) {
+func TestMigrateLegacyConfigDirFollowsSymlinkedOldDirSkipsInnerLinks(t *testing.T) {
+	d := newLegacyDirs(t)
+	real := filepath.Join(d.root, "real-accessctl")
+	populateLegacy(t, real)
+	outside := filepath.Join(d.root, "outside")
+	writeTestFile(t, filepath.Join(outside, "secret"), "s", 0o600)
+	if err := os.Symlink(real, d.old); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(real, "link-file")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(real, "link-dir")); err != nil {
+		t.Fatal(err)
+	}
+
+	migrateLegacyConfigDir(d.old, d.nw, &bytes.Buffer{})
+
+	for rel, want := range legacyWant {
+		if got := readTestFile(t, filepath.Join(d.nw, rel)); got != want {
+			t.Errorf("%s = %q, want %q", rel, got, want)
+		}
+	}
+	for _, name := range []string{"link-file", "link-dir"} {
+		if exists(filepath.Join(d.nw, name)) {
+			t.Errorf("%s was migrated", name)
+		}
+	}
+}
+
+func TestRemoveStaleStaging(t *testing.T) {
 	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	migrateLegacyConfigDir(old, nw, &bytes.Buffer{})
+	stale := filepath.Join(root, stagingPrefix+"stale")
+	fresh := filepath.Join(root, stagingPrefix+"fresh")
+	unrelated := filepath.Join(root, "keepme")
+	for _, p := range []string{stale, fresh, unrelated} {
+		writeTestFile(t, filepath.Join(p, "f"), "x", 0o600)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(unrelated, old, old); err != nil {
+		t.Fatal(err)
+	}
+	removeStaleStaging(root, time.Hour)
+	if exists(stale) {
+		t.Error("stale staging dir kept")
+	}
+	if !exists(fresh) {
+		t.Error("fresh staging dir removed")
+	}
+	if !exists(unrelated) {
+		t.Error("unrelated old dir removed")
+	}
+}
+
+func TestMigrateLegacyConfigDirRemovesStaleStagingOnAttempt(t *testing.T) {
+	d := newLegacyDirs(t)
+	populateLegacy(t, d.old)
+	stale := filepath.Join(d.root, stagingPrefix+"crashed")
+	fresh := filepath.Join(d.root, stagingPrefix+"inflight")
+	writeTestFile(t, filepath.Join(stale, "f"), "x", 0o600)
+	writeTestFile(t, filepath.Join(fresh, "f"), "x", 0o600)
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	migrateLegacyConfigDir(d.old, d.nw, &bytes.Buffer{})
+	if exists(stale) {
+		t.Error("stale staging dir kept")
+	}
+	if !exists(fresh) {
+		t.Error("fresh staging dir removed")
+	}
+}
+
+func TestMigrateLegacyConfigDirMarkerAndDeletion(t *testing.T) {
+	d := newLegacyDirs(t)
+	populateLegacy(t, d.old)
+	migrateLegacyConfigDir(d.old, d.nw, &bytes.Buffer{})
 
 	var out bytes.Buffer
-	migrateLegacyConfigDir(old, nw, &out)
+	migrateLegacyConfigDir(d.old, d.nw, &out)
 	if out.Len() != 0 {
 		t.Errorf("second call wrote %q", out.String())
 	}
 
-	// A sign-out that empties the directory except for the marker must not
-	// bring the old state back.
-	entries, err := os.ReadDir(nw)
+	// A sign-out that leaves only the marker is not undone.
+	entries, err := os.ReadDir(d.nw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
 		if e.Name() != legacyMigratedMarker {
-			if err := os.RemoveAll(filepath.Join(nw, e.Name())); err != nil {
+			if err := os.RemoveAll(filepath.Join(d.nw, e.Name())); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	migrateLegacyConfigDir(old, nw, &out)
-	if out.Len() != 0 || exists(filepath.Join(nw, "config.yaml")) || exists(filepath.Join(nw, "sessions")) {
-		t.Errorf("state came back after sign-out; output %q", out.String())
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	if out.Len() != 0 || exists(filepath.Join(d.nw, "config.yaml")) || exists(filepath.Join(d.nw, "sessions")) {
+		t.Errorf("state came back with the marker present; output %q", out.String())
 	}
-}
 
-func TestMigrateLegacyConfigDirSkipsSymlinks(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	outside := filepath.Join(root, "outside")
-	writeTestFile(t, filepath.Join(outside, "secret"), "s", 0o600)
-	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(old, "link-file")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
-	if err := os.Symlink(outside, filepath.Join(old, "link-dir")); err != nil {
+	// Deleting the whole directory re-runs the migration.
+	if err := os.RemoveAll(d.nw); err != nil {
 		t.Fatal(err)
 	}
-	migrateLegacyConfigDir(old, nw, &bytes.Buffer{})
-
-	for _, name := range []string{"link-file", "link-dir"} {
-		if exists(filepath.Join(nw, name)) {
-			t.Errorf("%s was migrated", name)
-		}
-	}
-	if !exists(filepath.Join(nw, "config.yaml")) {
-		t.Error("regular files not copied")
+	migrateLegacyConfigDir(d.old, d.nw, &out)
+	if got := readTestFile(t, filepath.Join(d.nw, "config.yaml")); got != legacyWant["config.yaml"] {
+		t.Errorf("not re-migrated after deleting the dir: %q", got)
 	}
 }
 
-func TestMigrateLegacyConfigDirUnreadableSourceWarns(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permissions are not enforced for root")
+// captureStderr runs f with os.Stderr redirected and returns what was written.
+func captureStderr(t *testing.T, f func()) string {
+	t.Helper()
+	tmp, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
 	}
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	bad := filepath.Join(old, "sessions", "unreadable.json")
-	writeTestFile(t, bad, "x", 0o000)
-
-	var out bytes.Buffer
-	migrateLegacyConfigDir(old, nw, &out)
-
-	if !strings.Contains(out.String(), "incomplete") {
-		t.Errorf("want an incomplete-migration warning, got %q", out.String())
-	}
-	if exists(filepath.Join(nw, "sessions", "unreadable.json")) {
-		t.Error("unreadable file appeared in the new directory")
-	}
-	if got := readTestFile(t, filepath.Join(nw, "config.yaml")); got != "issuer: https://x\n" {
-		t.Errorf("readable files not copied: %q", got)
-	}
+	saved := os.Stderr
+	os.Stderr = tmp
+	defer func() { os.Stderr = saved }()
+	f()
+	_ = tmp.Close()
+	return readTestFile(t, tmp.Name())
 }
 
-func TestMigrateLegacyConfigDirLeavesNoTempFiles(t *testing.T) {
-	root := t.TempDir()
-	old, nw := filepath.Join(root, "accessctl"), filepath.Join(root, "sluisctl")
-	populateLegacy(t, old)
-	migrateLegacyConfigDir(old, nw, &bytes.Buffer{})
+func TestConfigDirMigratesAtMostOncePerProcess(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	populateLegacy(t, filepath.Join(xdg, "accessctl"))
+	legacyMigration = sync.Once{}
 
-	var stray []string
-	_ = filepath.Walk(nw, func(p string, _ os.FileInfo, _ error) error {
-		if strings.HasPrefix(filepath.Base(p), ".migrate-") {
-			stray = append(stray, p)
+	got := captureStderr(t, func() {
+		for i := 0; i < 2; i++ {
+			if _, err := configDir(); err != nil {
+				t.Fatal(err)
+			}
 		}
-		return nil
 	})
-	if len(stray) > 0 {
-		t.Errorf("temp files left behind: %v", stray)
+	if l := lines(got); len(l) != 1 {
+		t.Errorf("want one stderr line over two calls, got %q", got)
+	}
+
+	// Even with the directory deleted, the Once holds until it is reset.
+	if err := os.RemoveAll(filepath.Join(xdg, "sluisctl")); err != nil {
+		t.Fatal(err)
+	}
+	got = captureStderr(t, func() { _, _ = configDir() })
+	if got != "" || exists(filepath.Join(xdg, "sluisctl")) {
+		t.Errorf("migrated twice in one process; stderr %q", got)
+	}
+
+	legacyMigration = sync.Once{}
+	got = captureStderr(t, func() { _, _ = configDir() })
+	if len(lines(got)) != 1 || !exists(filepath.Join(xdg, "sluisctl", "config.yaml")) {
+		t.Errorf("reset Once did not re-run; stderr %q", got)
+	}
+}
+
+func TestCopyFileRefusesNonRegularSourceAndExistingDest(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	writeTestFile(t, src, "data", 0o644)
+
+	dst := filepath.Join(root, "dst")
+	if err := copyFile(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(dst); info.Mode().Perm() != 0o600 {
+		t.Errorf("dst mode = %o, want 600", info.Mode().Perm())
+	}
+	if got := readTestFile(t, dst); got != "data" {
+		t.Errorf("dst = %q", got)
+	}
+
+	writeTestFile(t, dst, "mine", 0o600)
+	if err := copyFile(src, dst); err == nil {
+		t.Error("copyFile overwrote an existing destination without error")
+	}
+	if got := readTestFile(t, dst); got != "mine" {
+		t.Errorf("existing destination changed: %q", got)
+	}
+
+	if err := copyFile(root, filepath.Join(root, "d2")); err == nil {
+		t.Error("copyFile accepted a directory")
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(src, link); err == nil {
+		if err := copyFile(link, filepath.Join(root, "d3")); err == nil {
+			t.Error("copyFile accepted a symlink")
+		}
+	}
+}
+
+func TestCopyTreeCopiesFilesAndDirsOnly(t *testing.T) {
+	root := t.TempDir()
+	src, dst := filepath.Join(root, "src"), filepath.Join(root, "dst")
+	writeTestFile(t, filepath.Join(src, "a", "b"), "b", 0o644)
+	if err := os.Mkdir(dst, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Symlink(filepath.Join(src, "a", "b"), filepath.Join(src, "ln"))
+	n, err := copyTree(src, dst)
+	if err != nil || n != 1 {
+		t.Fatalf("copyTree = %d, %v; want 1, nil", n, err)
+	}
+	if readTestFile(t, filepath.Join(dst, "a", "b")) != "b" || exists(filepath.Join(dst, "ln")) {
+		t.Error("unexpected tree content")
 	}
 }
 
@@ -332,11 +518,11 @@ func TestMigrateLegacyConfigDirLeavesNoTempFiles(t *testing.T) {
 func TestConfigDirMigrationFeedsLoadSession(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	legacyMigration = sync.Once{}
 	const issuer = "https://sluis.example.test"
 	oldSession := filepath.Join(xdg, "accessctl", "sessions", sessionFileName(issuer)+".json")
 	writeTestFile(t, oldSession,
-		`{"refresh_token":"rt-old","email":"a@example.test","issuer":"`+issuer+`","expires":"`+time.Now().Add(time.Hour).Format(time.RFC3339)+`"}`,
-		0o600)
+		`{"refresh_token":"rt-old","email":"a@example.test","issuer":"`+issuer+`"}`, 0o600)
 
 	got, err := loadSession(issuer)
 	if err != nil {
