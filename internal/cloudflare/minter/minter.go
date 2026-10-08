@@ -264,6 +264,13 @@ func (m *Minter) MintFor(ctx context.Context, preset string, caller Caller, life
 		Variant: audit.CloudflareOnDemand, R2: p.R2(), Account: p.Account, TokenID: out.TokenID, ExpiresOn: out.ExpiresOn,
 	}))
 	meters.mint(ctx, preset, audit.CloudflareOnDemand, "ok")
+	// A derived R2 credential is refused (403) for a few seconds after the
+	// token is created: the caller is handed it when it works.
+	if p.R2() {
+		if err = m.settle(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return out, nil
 }
 

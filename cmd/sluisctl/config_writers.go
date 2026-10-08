@@ -124,10 +124,11 @@ func awsConfig(args []string) error {
 	if err != nil {
 		return err
 	}
-	grants, err := grantsOf(context.Background(), cfg, token.AccessToken)
+	access, err := accessOf(context.Background(), cfg, token.AccessToken)
 	if err != nil {
 		return err
 	}
+	grants := access.Grants
 
 	binary, err := os.Executable()
 	if err != nil {
@@ -154,6 +155,13 @@ func awsConfig(args []string) error {
 		written++
 		_, _ = fmt.Fprintf(stdout, "profile %s\n", name)
 	}
+
+	r2Profiles, r2Names := r2AWSProfiles(binary, cfg.Issuer, access.Cloudflare)
+	profiles.WriteString(r2Profiles)
+	for _, name := range r2Names {
+		_, _ = fmt.Fprintf(stdout, "profile %s\n", name)
+	}
+	written += len(r2Names)
 
 	if written == 0 {
 		_, _ = fmt.Fprintln(stdout, "No cloud roles are granted to you.")

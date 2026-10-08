@@ -168,14 +168,90 @@ API for 5 minutes) and 500 account tokens per account. At a 15 minute lifetime a
 5 minute rotation a preset has about three live tokens and costs a few calls per
 rotation.
 
-## On demand and revoke
+## On demand: people and CI
 
-A granted caller (a person signed in to the console or `sluisctl`, or a CI job
-with its GitHub OIDC token) can have a token of its own, minted from the same
-prototype with a lifetime up to the preset's and named
-`sluis/<instance>/<preset>/<caller>/<time>`. To revoke a live token, delete it by
-id from the console or the CLI; if it was the stored one, a replacement is
-minted at once.
+A granted caller has a token of its own, minted from the same prototype with a
+lifetime up to the preset's and named `sluis/<instance>/<preset>/<caller>/<time>`.
+Who is granted is the policy's `cloudflare.grants`; whether the caller is who
+they say is the issuer's usual proof (a sign-in, or a GitHub Actions identity
+token). The mint is audited with the caller. An unknown preset and a preset the
+caller is not granted get the same answer, so a refusal does not say which presets exist.
+
+A CI job is a **group** of the policy like any other, declared with `github`
+matchers on what the verified identity token says, and a grant names that group.
+The workflow's display name is not used: anyone who can push a branch can
+choose it.
+
+### A person
+
+```sh
+sluisctl login
+sluisctl whoami                       # lists the Cloudflare presets you are granted
+sluisctl cloudflare token dns-example # CLOUDFLARE_API_TOKEN=...
+eval "export $(sluisctl cloudflare token dns-example)"
+sluisctl cloudflare token dns-example --format json --lifetime 5m
+```
+
+For R2, let the AWS tools ask for the credentials themselves:
+
+```sh
+sluisctl aws-config                   # adds a profile r2-archive@r2 per granted R2 preset
+aws --profile r2-archive@r2 s3 ls s3://example-archive/
+```
+
+The profile runs `sluisctl cloudflare r2 r2-archive` as its `credential_process`
+and sets what R2 needs: `endpoint_url`, `region = auto`,
+`request_checksum_calculation` and `response_checksum_validation` as
+`when_required`, and path-style addressing.
+
+### A CI job
+
+In a workflow with `permissions: id-token: write`, the same commands run with
+the job's own identity and nothing to sign in to:
+
+```yaml
+- run: echo "CLOUDFLARE_API_TOKEN=$(sluisctl cloudflare token dns-example --format json | jq -r .token)" >> "$GITHUB_ENV"
+```
+
+and the policy declares the job as a group, pinned to the workflow file and ref,
+and grants the preset to the group:
+
+```yaml
+groups:
+  all:ci:release:
+    matchers:
+      - github:
+          repository: example-org/example-repo
+          ref: refs/tags/v*
+          job_workflow_ref: example-org/example-repo/.github/workflows/release.yml@refs/tags/v*
+cloudflare:
+  grants:
+    - group: all:ci:release
+      presets: [dns-example]
+```
+
+### A workload with the projected document
+
+A pod that gets `external/cloudflare/<preset>` from a secrets operator needs no
+identity. `--file` turns the document into an AWS credential process answer and
+refuses one that has expired (a stalled sync is better said here than as a 403):
+
+```ini
+[profile archive]
+credential_process = sluisctl cloudflare r2 r2-archive --file /var/run/secrets/cloudflare/r2-archive.json
+```
+
+`sluisctl cloudflare` caches what it minted in `<config>/cloudflare/` (0600, one
+file per issuer, client, preset and asked-for lifetime) and mints again when a
+third of the lifetime is left. Delete the directory to force a fresh token.
+
+`sluisctl r2` (the wrapper for the `r2broker` service) is deprecated in favour of
+`sluisctl cloudflare r2`.
+
+### Revoke
+
+To revoke a live token, delete it by id from the console or the CLI; if it was
+the stored one, a replacement is minted at the next pass.
 
 ## sluis's own R2 credentials, without a static document
 

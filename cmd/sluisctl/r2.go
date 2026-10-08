@@ -32,7 +32,13 @@ const (
 // here. Everything after the sign-in is r2broker's own syntax: its
 // subcommands, its flags, its bugs and its fixes stay upstream, and a
 // release of this tool never has to catch up with a release of that one.
+//
+// Deprecated: `sluisctl cloudflare r2 <preset>` mints R2 credentials in sluis
+// itself and needs no r2broker; this wrapper stays for an installation that
+// still runs the broker, and goes with it.
 func r2(args []string) error {
+	_, _ = fmt.Fprintln(os.Stderr, "sluisctl: `r2` is deprecated: use `sluisctl cloudflare r2 <preset>` "+
+		"(R2 credentials minted by sluis, no r2broker). See docs/how-to/cloudflare-tokens.md.")
 	request, rest, err := parseR2Flags(args)
 	if err != nil {
 		return err
