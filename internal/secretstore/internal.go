@@ -9,13 +9,6 @@ import (
 	"github.com/truvity/sluis/storage/state"
 )
 
-// OAuthClient is the OAuth client of an identity provider the directory signs
-// people in with.
-type OAuthClient struct {
-	ClientID     string `json:"client-id"`
-	ClientSecret string `json:"client-secret"`
-}
-
 // PersonToken is the token pair a person's authorization of a linked system
 // left. A system that rotates its refresh token on every use makes this the
 // one copy: a pair issued and not kept is a link that can never be checked
@@ -30,6 +23,10 @@ type PersonToken struct {
 // Internal is what only sluis reads: the store rooted at <root>/internal. The
 // addresses below it are sluis's own and not a contract; they keep v3's names
 // so the migration is a prefix move.
+//
+// internal/config/<name> is not here: those names are plain text, as Pulumi and
+// an operator write them, and are read through the secrets source
+// (internal/secrets), so that directory has one shape.
 type Internal struct{ s state.Store }
 
 // NewInternal returns the view of s, which is rooted at <root>/internal.
@@ -37,24 +34,6 @@ func NewInternal(s state.Store) Internal { return Internal{s: s} }
 
 // Store is the store the view is over.
 func (i Internal) Store() state.Store { return i.s }
-
-// RecoveryPassword is the recovery password (v3: config/recovery/password).
-func (i Internal) RecoveryPassword() state.Value[string] {
-	return state.NewValue(i.s, "config/recovery/password", state.Codec[string](textCodec{}))
-}
-
-// StateSecret is the issuer's sign-in state secret, 32 random bytes (v3:
-// config/issuer/state-secret).
-func (i Internal) StateSecret() state.Value[[]byte] {
-	return state.NewValue(i.s, "config/issuer/state-secret", state.Raw())
-}
-
-// OAuthProvider is the Google OAuth client the directory uses, named by the
-// `oauthClient.provider` setting (v3: config/providers/google/<name>/client-id
-// and client-secret, now one document).
-func (i Internal) OAuthProvider(name string) state.Value[OAuthClient] {
-	return state.NewValue(i.s, "config/providers/google/"+segment(name), state.JSON[OAuthClient]())
-}
 
 // ConsoleSessionKey is the key the console signs its sessions with (v3:
 // credentials/console/session-key).

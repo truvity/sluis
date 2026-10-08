@@ -335,8 +335,8 @@ func TestV3IsDeletedOnlyOnceTheInstallationIsOnV4(t *testing.T) {
 		t.Fatalf("delete = %v\n%s", err, rep.JSON())
 	}
 	left, _ := e.set.Secrets.List(ctx, "")
-	if len(left) != 1 || left[0] != "export/old-copy" {
-		t.Errorf("v3 still holds %v, want only the exports copy", left)
+	if len(left) != 0 {
+		t.Errorf("v3 still holds %v, want nothing (the retired exports copy goes too)", left)
 	}
 	// What the callers read is all still there.
 	sec := secretstore.NewSecrets(e.dest, nil, 0)

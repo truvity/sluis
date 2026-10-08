@@ -173,9 +173,6 @@ func TestAddresses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	must(st.Internal.RecoveryPassword().Put(ctx, "pw", ""))
-	must(st.Internal.StateSecret().Put(ctx, []byte{1, 2, 3}, ""))
-	must(st.Internal.OAuthProvider("default").Put(ctx, secretstore.OAuthClient{ClientID: "i", ClientSecret: "s"}, ""))
 	must(st.Internal.ConsoleSessionKey().Put(ctx, []byte("k"), ""))
 	must(st.Internal.PersonToken("4711", "github").Put(ctx, secretstore.PersonToken{AccessToken: "a", RefreshToken: "r"}, ""))
 	must(st.Internal.Directory("example.org").Put(ctx, []byte(`{}`), ""))
@@ -195,7 +192,6 @@ func TestAddresses(t *testing.T) {
 			}
 		}
 		for _, p := range []string{
-			prefix + "/config/recovery", prefix + "/config/issuer", prefix + "/config/providers/google",
 			prefix + "/credentials/console", prefix + "/credentials/github-link",
 			prefix + "/credentials/directory/google", prefix + "/oidc", prefix + "/slack",
 		} {
@@ -207,9 +203,6 @@ func TestAddresses(t *testing.T) {
 	want := []string{
 		"external/oidc/rp",
 		"external/slack/alerts",
-		"internal/config/issuer/state-secret",
-		"internal/config/providers/google/default",
-		"internal/config/recovery/password",
 		"internal/credentials/console/session-key",
 		"internal/credentials/directory/google/example.org",
 		"internal/credentials/directory/google/u-612f62",
@@ -226,18 +219,6 @@ func TestInternalValuesRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	st, _ := newStores(t)
 
-	if _, err := st.Internal.RecoveryPassword().Put(ctx, "p w", ""); err != nil {
-		t.Fatal(err)
-	}
-	if got, _, err := st.Internal.RecoveryPassword().Get(ctx); err != nil || got != "p w" {
-		t.Fatalf("recovery password = %q, %v", got, err)
-	}
-	if _, err := st.Internal.StateSecret().Put(ctx, []byte{0, 255, 7}, ""); err != nil {
-		t.Fatal(err)
-	}
-	if got, _, err := st.Internal.StateSecret().Get(ctx); err != nil || !reflect.DeepEqual(got, []byte{0, 255, 7}) {
-		t.Fatalf("state secret = %v, %v", got, err)
-	}
 	exp := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	tok := secretstore.PersonToken{AccessToken: "a", AccessExpires: exp, RefreshToken: "r", RefreshExpires: exp.Add(time.Hour)}
 	if _, err := st.Internal.PersonToken("1", "github").Put(ctx, tok, ""); err != nil {
