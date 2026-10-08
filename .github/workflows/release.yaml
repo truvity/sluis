@@ -159,6 +159,165 @@ jobs:
             description="DEPRECATED: renamed to @truvity/sluis, the same code under its new name. Install @truvity/sluis."
           npm publish --tag "$dist"
 
+  # Supply-chain assurance, after the release and audit jobs have put every
+  # asset on the GitHub release. It is a job of this workflow rather than a
+  # step of the shared one because signing and attesting need the workflow's
+  # OIDC token (`id-token: write`), which the shared workflow does not
+  # request and a caller cannot widen. The certificate's identity is then
+  # THIS file at the tag, which is what hack/release-verify.sh checks.
+  #
+  # Keyless: every signature and attestation is recorded in Sigstore's public
+  # transparency log (Rekor), and so is the workflow identity that made it.
+  #
+  #   checksums.txt        signed once, AFTER the release and audit lines are
+  #                        combined (the audit job), as checksums.txt.sigstore.json
+  #   every release asset  a build-provenance attestation
+  #   every SBOM           bound to its archive by an SBOM attestation (matrix)
+  #   every image digest   signed, with provenance and an SBOM attestation
+  attest:
+    needs: [release, audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # the signature bundle is added to the release
+      id-token: write
+      attestations: write
+    outputs:
+      sboms: ${{ steps.plan.outputs.sboms }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: truvity/ci-actions/public-runners@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
+        with:
+          runners: ubuntu-latest
+          visibility: ${{ github.event.repository.visibility }}
+      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download the release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets out
+          gh release download "$GITHUB_REF_NAME" --dir assets
+          ls -l assets
+      - name: Sign checksums.txt (keyless)
+        run: |
+          set -euo pipefail
+          devbox run -- cosign sign-blob --yes \
+            --bundle out/checksums.txt.sigstore.json assets/checksums.txt
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: assets/*
+      - name: Publish the signature bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" out/checksums.txt.sigstore.json --clobber
+      - name: Plan the SBOM attestations
+        id: plan
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(assets/*.sbom.spdx.json)
+          test "${#files[@]}" -gt 0 || { echo "no SBOM among the release assets" >&2; exit 1; }
+          echo "sboms=$(printf '%s\n' "${files[@]##*/}" | jq -Rnc '[inputs]')" >> "$GITHUB_OUTPUT"
+
+  # One SBOM bound to the archive it describes (actions/attest-sbom).
+  attest-sboms:
+    needs: attest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        sbom: ${{ fromJSON(needs.attest.outputs.sboms) }}
+    steps:
+      - name: Download the archive and its SBOM
+        id: subject
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SBOM: ${{ matrix.sbom }}
+        run: |
+          set -euo pipefail
+          subject="${SBOM%.sbom.spdx.json}"
+          gh release download "$GITHUB_REF_NAME" --repo "$REPO" --dir assets --pattern "$subject" --pattern "$SBOM"
+          echo "path=assets/$subject" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: ${{ steps.subject.outputs.path }}
+          sbom-path: assets/${{ matrix.sbom }}
+
+  # Every image the release pushes, by digest: a keyless cosign signature, a
+  # build-provenance attestation and an SPDX SBOM attestation, all pushed to
+  # the registry beside the image. This list is the second place the set of
+  # images is written down (the first is the kos of the two goreleaser
+  # configs); hack/release-verify.sh reads the same one.
+  attest-images:
+    needs: [release, audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ghcr.io/truvity/sluis/sluis
+          - ghcr.io/truvity/sluis/resource-proxy
+          - ghcr.io/truvity/audit/audit
+          - ghcr.io/truvity/audit/audit-query
+          - ghcr.io/truvity/audit/audit-notary
+          - ghcr.io/truvity/audit/audit-observe
+          - ghcr.io/truvity/audit/audit-writer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: truvity/ci-actions/public-runners@598251d570fd99ba403b99bfa65ae4472ed25e73 # v1.8.0
+        with:
+          runners: ubuntu-latest
+          visibility: ${{ github.event.repository.visibility }}
+      - uses: truvity/ci-actions/setup-devbox@0fcf84dbeb8d406bce34d969e6cc32592af5cb5b # v1.15.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GHCR
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+      - name: Resolve the digest, sign it, write its SBOM
+        id: image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "$IMAGE:${GITHUB_REF_NAME#v}" --format '{{json .Manifest}}' | jq -r .digest)
+          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) echo "no digest for $IMAGE: $digest" >&2; exit 1 ;; esac
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          devbox run -- cosign sign --yes "$IMAGE@$digest"
+          devbox run -- syft "$IMAGE@$digest" --output "spdx-json=$RUNNER_TEMP/image.sbom.spdx.json"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/image.sbom.spdx.json
+          push-to-registry: true
+
   # The modules other than the root, once the release itself succeeded.
   #
   # The tags are pushed with an installation token of the catalogue App, not
