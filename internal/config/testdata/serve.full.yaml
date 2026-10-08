@@ -67,6 +67,7 @@ preset: aws-hybrid
 adapters:
   state: {adapter: dynamodb, settings: {table: sluis, region: eu-west-1}}
 cloudflare:
+  forbiddenPermissionGroups: [Workers Scripts Write]
   accounts:
     main:
       id: 0123456789abcdef0123456789abcdef

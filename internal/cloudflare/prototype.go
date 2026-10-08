@@ -62,8 +62,18 @@ var forbiddenName = []*regexp.Regexp{
 
 // ForbiddenGroup reports whether a permission group of that name may never be
 // cloned.
-func ForbiddenGroup(name string) bool {
+func ForbiddenGroup(name string) bool { return ForbiddenGroupWith(name, nil) }
+
+// ForbiddenGroupWith is [ForbiddenGroup] with names of the installation's own
+// added (cloudflare.forbiddenPermissionGroups): they extend the built-in list
+// and nothing here lets one shorten it.
+func ForbiddenGroupWith(name string, extra []string) bool {
 	n := strings.ToLower(strings.Join(strings.Fields(name), " "))
+	for _, e := range extra {
+		if n == strings.ToLower(strings.Join(strings.Fields(e), " ")) {
+			return true
+		}
+	}
 	for _, re := range forbiddenName {
 		if re.MatchString(n) {
 			return true
@@ -118,7 +128,7 @@ func GroupIDs(policies json.RawMessage) ([]string, error) {
 // permission group id to its name, from the account's permission groups; a group
 // it does not know is judged by the name the policy itself carries, and refused
 // when there is none, since what cannot be named cannot be vetted.
-func CheckPrototype(tok Token, names map[string]string) error {
+func CheckPrototype(tok Token, names map[string]string, extra ...string) error {
 	if tok.ID == "" {
 		return &PrototypeError{Reason: ReasonPrototypeMissing, Detail: "the prototype token does not exist"}
 	}
@@ -145,7 +155,7 @@ func CheckPrototype(tok Token, names map[string]string) error {
 			switch {
 			case name == "":
 				unknown = append(unknown, g.ID)
-			case ForbiddenGroup(name):
+			case ForbiddenGroupWith(name, extra):
 				forbidden = append(forbidden, name)
 			}
 		}

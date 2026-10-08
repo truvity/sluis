@@ -261,6 +261,14 @@
           },
           "type": "object"
         },
+        "forbiddenPermissionGroups": {
+          "description": "Permission groups, by the name Cloudflare lists them under, that a prototype may never grant, IN ADDITION to the built-in list: Account API Tokens Edit (Write), Billing, Account Settings, Memberships, and Access: Organizations, Identity Providers, and Groups. The built-in list is the only thing between the minter and everything its creator could do, so it cannot be shortened by configuration, only extended.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
         "presets": {
           "additionalProperties": {
             "additionalProperties": false,

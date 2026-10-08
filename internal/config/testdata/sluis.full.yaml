@@ -88,6 +88,7 @@ controllers:
     credentialsDir: /var/run/slack-roster/credentials
     interval: 10m
 cloudflare:
+  forbiddenPermissionGroups: [Workers Scripts Write]
   accounts:
     main:
       id: 0123456789abcdef0123456789abcdef

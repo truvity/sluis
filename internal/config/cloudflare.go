@@ -22,6 +22,12 @@ type Cloudflare struct {
 	Accounts map[string]CloudflareAccount `json:"accounts,omitempty"`
 	// Presets are what may be minted, by name.
 	Presets map[string]CloudflarePreset `json:"presets,omitempty"`
+	// ForbiddenPermissionGroups ADD to the built-in list of permission groups
+	// a prototype may never grant (token admin, billing, account settings,
+	// memberships, Access identity providers), by the name Cloudflare lists
+	// them under. They cannot remove from it: nothing in a document shortens
+	// the built-in list.
+	ForbiddenPermissionGroups []string `json:"forbiddenPermissionGroups,omitempty"`
 }
 
 // CloudflareAccount is one Cloudflare account.
@@ -92,6 +98,11 @@ func (c *Cloudflare) Validate() error {
 		return nil
 	}
 	var errs []error
+	for i, g := range c.ForbiddenPermissionGroups {
+		if strings.TrimSpace(g) == "" {
+			errs = append(errs, fmt.Errorf("cloudflare.forbiddenPermissionGroups[%d] is empty", i))
+		}
+	}
 	minters := map[string]string{}
 	for _, name := range sortedKeys(c.Accounts) {
 		a := c.Accounts[name]

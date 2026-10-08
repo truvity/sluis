@@ -121,3 +121,18 @@ func TestClonePoliciesKeepsTheRightsAndDropsWhatCloudflareGenerated(t *testing.T
 		t.Error(got)
 	}
 }
+
+// The installation may ADD to the built-in list and cannot shorten it.
+func TestConfigurationOnlyAddsToTheBuiltInList(t *testing.T) {
+	names := map[string]string{"a": "Workers Scripts Write", "b": "Billing Write"}
+	if err := cloudflare.CheckPrototype(proto("disabled", "a"), names); err != nil {
+		t.Fatalf("not forbidden by default: %v", err)
+	}
+	if _, ok := cloudflare.IsPrototypeError(cloudflare.CheckPrototype(proto("disabled", "a"), names, "workers  scripts write")); !ok {
+		t.Error("an added name did not refuse")
+	}
+	// An extra list that names something else leaves Billing refused.
+	if _, ok := cloudflare.IsPrototypeError(cloudflare.CheckPrototype(proto("disabled", "b"), names, "DNS Write")); !ok {
+		t.Error("an extra list shortened the built-in one")
+	}
+}

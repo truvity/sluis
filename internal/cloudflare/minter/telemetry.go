@@ -1,3 +1,4 @@
+//nolint:lll // metric descriptions are prose
 package minter
 
 import (
@@ -25,6 +26,7 @@ type instruments struct {
 	rotation     metric.Int64Gauge
 	minted       metric.Int64Counter
 	sweptTokens  metric.Int64Counter
+	refused      metric.Int64Counter
 }
 
 var meters = newInstruments()
@@ -41,7 +43,9 @@ func newInstruments() instruments {
 		metric.WithDescription("Cloudflare credentials minted, by preset, variant (stored or on_demand) and outcome (ok, refused or failed)."))
 	swept, _ := meter.Int64Counter("sluis.cloudflare.tokens.swept",
 		metric.WithDescription("Expired Cloudflare tokens sluis deleted, by preset."))
-	return instruments{lastRotation: last, rotation: interval, minted: minted, sweptTokens: swept}
+	refused, _ := meter.Int64Counter("sluis.cloudflare.prototype.refused",
+		metric.WithDescription("Prototypes refused at a mint or a check, by preset and reason (prototype_active, prototype_forbidden, prototype_missing). Any is an error to look at."))
+	return instruments{lastRotation: last, rotation: interval, minted: minted, sweptTokens: swept, refused: refused}
 }
 
 func (i instruments) lastRotationAt(ctx context.Context, preset string, at time.Time) {
@@ -59,4 +63,8 @@ func (i instruments) swept(ctx context.Context, preset string, n int) {
 
 func (i instruments) interval(ctx context.Context, preset string, d time.Duration) {
 	i.rotation.Record(ctx, int64(d.Seconds()), metric.WithAttributes(attribute.String("preset", preset)))
+}
+
+func (i instruments) prototypeRefused(ctx context.Context, preset, reason string) {
+	i.refused.Add(ctx, 1, metric.WithAttributes(attribute.String("preset", preset), attribute.String("reason", reason)))
 }

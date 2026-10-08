@@ -150,6 +150,7 @@ Source: `internal/clientcreds/telemetry.go`. No client id is ever a label, so a 
 | `sluis.cloudflare.rotation.interval` | gauge, `s` | `preset` | The preset's configured `rotation`. |
 | `sluis.cloudflare.tokens.minted` | counter | `preset`, `variant`, `outcome` | Credentials minted. `variant` is `stored` or `on_demand`; `outcome` is `ok`, `refused` (a prototype or a grant said no) or `failed`. |
 | `sluis.cloudflare.tokens.swept` | counter | `preset` | Expired tokens deleted. |
+| `sluis.cloudflare.prototype.refused` | counter | `preset`, `reason` | Prototypes refused at a mint or at the check on start (`prototype_active`, `prototype_forbidden`, `prototype_missing`). Any is an error to look at. |
 
 ### The controllers and the rails
 
