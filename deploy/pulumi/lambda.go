@@ -20,6 +20,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	auditpulumi "github.com/truvity/sluis/audit/deploy/pulumi"
+	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
 	sluisconfig "github.com/truvity/sluis/config"
 )
 
@@ -73,11 +74,27 @@ type LambdaArgs struct {
 	// Package is the released zip, `sluis-lambda_<version>_linux_arm64.zip`, with
 	// `bootstrap` at its root: a path on disk or an https URL, read when the
 	// stack is evaluated. It is the functions' code byte for byte: nothing is
-	// added to it. Required.
+	// added to it. Left empty, it is the release of this library itself: the
+	// version it was built at (from the program's build information, or
+	// Release.Version), downloaded from the project's releases, with its digest
+	// from that release's checksums.txt unless PackageSHA256 pins one (which
+	// always wins). A development build or a replaced module is refused.
 	Package string
 	// PackageSHA256 is the zip's SHA-256, in hex, from the release's checksums.
-	// Required: a package that does not have it is refused.
+	// Required, unless Release.ResolveChecksums reads it from there: a package
+	// that does not have it is refused.
 	PackageSHA256 string
+	// Artifacts, when set, ships the function's code and the configuration layer
+	// through the estate's versioned artifacts bucket instead of uploading the
+	// code with the function: the verified zip is uploaded as it is, at
+	// <prefix><version>/<sha256>-<name>, and the function is created from that
+	// object version with the zip's digest as its sourceCodeHash. The bucket
+	// must be versioned. Left out, the code is uploaded with the function.
+	Artifacts *ArtifactsArgs
+	// Release finds the digest of a package whose PackageSHA256 is empty in the
+	// release's checksums.txt (Release.ResolveChecksums). Off unless set; the
+	// library never takes the digest of the release it came from by itself.
+	Release *ReleaseArgs
 	// PackageVersion is the release the package is, when its file name does not
 	// say (sluis-lambda_<version>_linux_<arch>.zip). A package older than this
 	// library is refused: it cannot read the configuration layer.
@@ -509,7 +526,11 @@ type Lambda struct {
 
 	// The function and its role.
 	FunctionArn, FunctionName pulumi.StringOutput
-	RoleArn, RoleName         pulumi.StringOutput
+	// CodeSha256Matches is true when the code Lambda reports for the function
+	// has the SHA-256 of the release zip the library verified: the assurance,
+	// after the deploy, that what runs is what the release's checksums name.
+	CodeSha256Matches pulumi.BoolOutput
+	RoleArn, RoleName pulumi.StringOutput
 
 	// APIID, APIStageName and APIURL are the HTTP API, its stage and its default
 	// endpoint (which answers only with API.KeepDefaultEndpoint). A front door
@@ -634,10 +655,31 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	case auditOff:
 		out.AuditQueueArn = pulumi.String("")
 	}
+	if out.Package == "" {
+		// No package is named: this library's own release (its build information,
+		// or Release.Version), and its digest from the release's checksums.txt
+		// unless the estate pinned one, which always wins.
+		v, err := artifact.ReleaseOf(out.Release, libraryModule, readBuildInfo, "LambdaArgs.Package")
+		if err != nil {
+			return out, fmt.Errorf("sluispulumi: LambdaArgs.Package: %w", err)
+		}
+		var base string
+		if out.Release != nil {
+			base = out.Release.BaseURL
+		}
+		out.Package = artifact.AssetURL(base, v, "sluis-lambda_"+v+"_linux_arm64.zip")
+		if out.PackageVersion == "" {
+			out.PackageVersion = v
+		}
+		if out.PackageSHA256 == "" {
+			cp := artifact.Release{ResolveChecksums: true, Version: v, BaseURL: base}
+			out.Release = &cp
+		}
+	}
 	var missing []string
 	for k, v := range map[string]string{
 		"Region": out.Region, "AccountID": out.AccountID, "Instance": out.Instance,
-		"Package": out.Package, "PackageSHA256": out.PackageSHA256, "Config": strings.TrimSpace(out.Config),
+		"Package": out.Package, "PackageSHA256": resolvedDigest(out), "Config": strings.TrimSpace(out.Config),
 	} {
 		if v == "" {
 			missing = append(missing, k)
@@ -675,6 +717,13 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	}
 	if err := checkVersion(out.Package, out.PackageVersion); err != nil {
 		return out, err
+	}
+	if out.Artifacts != nil {
+		norm, err := out.Artifacts.Normalize("sluis")
+		if err != nil {
+			return out, fmt.Errorf("sluispulumi: LambdaArgs: %w", err)
+		}
+		out.Artifacts = &norm
 	}
 	if out.SigningKeyAlias == "" {
 		out.SigningKeyAlias = DefaultSigningKeyAlias
@@ -812,7 +861,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, err
 	}
-	pkg, err := loadPackage(a.Package, a.PackageSHA256)
+	pkg, err := loadPackage(a.Package, a.PackageSHA256, packageRelease(a.Package, a.PackageVersion), a.Release)
 	if err != nil {
 		return nil, err
 	}
@@ -934,14 +983,40 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	// new version (and the functions move to it, every instance at once); the
 	// old one is kept (SkipDestroy), which is what makes re-pointing a function
 	// at it a rollback.
-	layer, err := lambda.NewLayerVersion(ctx, name+"-config", &lambda.LayerVersionArgs{
+	layerArgs := &lambda.LayerVersionArgs{
 		LayerName:               pulumi.String(a.FunctionNamePrefix + "-config"),
 		Description:             pulumi.String(name + " configuration: the service document and the policy, at " + LayerRoot),
 		CompatibleRuntimes:      pulumi.StringArray{pulumi.String("provided.al2023")},
 		CompatibleArchitectures: pulumi.StringArray{pulumi.String("arm64")},
-		Code:                    pulumi.NewAssetArchive(layerAssets(docs, a.VerifyOnly)),
 		SkipDestroy:             pulumi.Bool(true),
-	}, child)
+	}
+	var code *artifact.Object
+	if a.Artifacts != nil {
+		// From the artifacts bucket: the release zip as it is, and the layer as a
+		// zip of its own that is the same bytes, and so the same key, on every run.
+		if code, err = uploadArtifact(ctx, name+"-code", a.Artifacts, pkg, child); err != nil {
+			return nil, fmt.Errorf("sluis artifacts: %w", err)
+		}
+		layerZip, err := artifact.Zip(layerFiles(docs, a.VerifyOnly))
+		if err != nil {
+			return nil, fmt.Errorf("sluis configuration layer: %w", err)
+		}
+		sum := artifact.Sum(layerZip)
+		local, err := artifact.WriteTemp("sluis-layer-", "config.zip", layerZip)
+		if err != nil {
+			return nil, fmt.Errorf("sluis configuration layer: %w", err)
+		}
+		obj, err := artifact.Upload(ctx, name+"-config-code", *a.Artifacts,
+			a.Artifacts.Key(pkg.Version, sum, a.FunctionNamePrefix+"-config.zip"), local, sum, child)
+		if err != nil {
+			return nil, fmt.Errorf("sluis artifacts: %w", err)
+		}
+		layerArgs.S3Bucket, layerArgs.S3Key, layerArgs.S3ObjectVersion = pulumi.String(obj.Bucket), pulumi.String(obj.Key), obj.VersionID
+		layerArgs.SourceCodeHash = pulumi.String(obj.CodeSHA256)
+	} else {
+		layerArgs.Code = pulumi.NewAssetArchive(layerAssets(docs, a.VerifyOnly))
+	}
+	layer, err := lambda.NewLayerVersion(ctx, name+"-config", layerArgs, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis configuration layer: %w", err)
 	}
@@ -1003,13 +1078,12 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		layers = append(layers, a.Telemetry.LayerArn)
 	}
 	layers = append(layers, layer.Arn)
-	fn, err := lambda.NewFunction(ctx, name+"-http", &lambda.FunctionArgs{
+	fnArgs := &lambda.FunctionArgs{
 		Name:          pulumi.String(fnName),
 		Role:          role.Arn,
 		Runtime:       pulumi.String("provided.al2023"),
 		Handler:       pulumi.String("bootstrap"),
 		Architectures: pulumi.StringArray{pulumi.String("arm64")},
-		Code:          pulumi.NewFileArchive(pkg),
 		MemorySize:    pulumi.Int(a.Function.MemoryMB),
 		Timeout:       pulumi.Int(a.Function.TimeoutSeconds),
 		Layers:        layers,
@@ -1018,7 +1092,14 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		Tags:          tags,
 		// No VpcConfig: the function reaches DynamoDB, S3, SSM, SQS and KMS over
 		// its public regional endpoints with the role's credentials.
-	}, child, pulumi.DependsOn([]pulumi.Resource{logs}))
+	}
+	if code != nil {
+		fnArgs.S3Bucket, fnArgs.S3Key, fnArgs.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID
+		fnArgs.SourceCodeHash = pulumi.String(code.CodeSHA256)
+	} else {
+		fnArgs.Code = pulumi.NewFileArchive(pkg.Path)
+	}
+	fn, err := lambda.NewFunction(ctx, name+"-http", fnArgs, child, pulumi.DependsOn([]pulumi.Resource{logs}))
 	if err != nil {
 		return nil, fmt.Errorf("sluis function: %w", err)
 	}
@@ -1139,6 +1220,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	out.WrappedSigningKeyArn, out.WrappedSigningKeyAlias = wrappedKeyArn, wrappedAlias
 	out.SigningKeyRS256Arn, out.SigningKeyRS256ID, out.SigningKeyRS256Alias = rsArn, rsID, rsAlias
 	out.FunctionArn, out.FunctionName = fn.Arn, fn.Name
+	out.CodeSha256Matches = artifact.Matches(fn.CodeSha256, pkg.CodeSHA256)
 	out.RoleArn, out.RoleName = role.Arn, role.Name
 	out.APIID, out.APIURL = api.ID().ToStringOutput(), api.ApiEndpoint
 	out.APIStageName = stage.Name
@@ -1152,7 +1234,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		"signingKeyArn": out.SigningKeyArn, "signingKeyId": out.SigningKeyID, "signingKeyAlias": out.SigningKeyAlias,
 		"wrappedSigningKeyArn": out.WrappedSigningKeyArn, "wrappedSigningKeyAlias": out.WrappedSigningKeyAlias,
 		"signingKeyRs256Arn": out.SigningKeyRS256Arn, "signingKeyRs256Id": out.SigningKeyRS256ID, "signingKeyRs256Alias": out.SigningKeyRS256Alias,
-		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "roleArn": out.RoleArn, "roleName": out.RoleName,
+		"functionArn": out.FunctionArn, "functionName": out.FunctionName, "codeSha256Matches": out.CodeSha256Matches, "roleArn": out.RoleArn, "roleName": out.RoleName,
 		"apiId": out.APIID, "apiStageName": out.APIStageName, "apiUrl": out.APIURL, "accessLogGroupName": out.AccessLogGroupName,
 		"domainTarget": out.DomainTarget, "domainHostedZoneId": out.DomainHostedZoneID,
 		"truststoreBucketName": out.TruststoreBucketName, "truststoreUri": out.TruststoreURI,

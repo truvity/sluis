@@ -10,14 +10,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
-	"os"
-	"path"
+		"path"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
-	"time"
+
+	"github.com/truvity/sluis/audit/deploy/pulumi/artifact"
 )
 
 // What the release publishes and the library takes as a function's code: the
@@ -50,6 +50,8 @@ type releasePackage struct {
 	// with `-s -w -trimpath`, and the toolchain then leaves the linker flags, and
 	// with them the stamp, out of the build information it records.
 	Version string
+	// Name is the zip's file name, which the artifact key ends with.
+	Name string
 }
 
 // loadPackage reads the released zip from a path or an https URL and checks it:
@@ -58,17 +60,41 @@ type releasePackage struct {
 // arm64 Linux executable, and the program it was built from, so that the
 // notary's zip cannot be given as the writer's. cmd is that program: the
 // command's directory name, `audit-writer-lambda`.
-func loadPackage(field, src, sha, cmd string) (*releasePackage, error) {
+func loadPackage(field, src, sha, cmd string, rel *artifact.Release) (*releasePackage, error) {
 	if src == "" {
-		return nil, fmt.Errorf("auditpulumi: %s.Package is required: the release's %s_<version>_linux_arm64.zip", field, cmd)
+		// No package is named: the release this library is, from its own build
+		// information (or Release.Version), and its digest from the release's
+		// checksums.txt unless the estate pinned one, which always wins.
+		v, err := artifact.ReleaseOf(rel, libraryModule, readBuildInfo, field+".Package")
+		if err != nil {
+			return nil, fmt.Errorf("auditpulumi: %s.Package: %w", field, err)
+		}
+		src = artifact.AssetURL(baseOf(rel), v, cmd+"_"+v+"_linux_arm64.zip")
+		if sha == "" {
+			cp := artifact.Release{ResolveChecksums: true, Version: v}
+			if rel != nil {
+				cp.BaseURL = rel.BaseURL
+			}
+			rel = &cp
+		}
+	}
+	if sha == "" && rel != nil && rel.ResolveChecksums {
+		version := rel.Version
+		if version == "" {
+			version = versionFromName(src, cmd)
+		}
+		var err error
+		if sha, err = artifact.ResolveSHA256(rel.BaseURL, version, fileName(src)); err != nil {
+			return nil, fmt.Errorf("auditpulumi: %s.PackageSHA256: %w", field, err)
+		}
 	}
 	if !shaRE.MatchString(sha) {
 		return nil, fmt.Errorf("auditpulumi: %s.PackageSHA256 is required: the zip's SHA-256 in hex, from the release's checksums.txt "+
 			"(64 hex digits); nothing is deployed that was not checked against it", field)
 	}
-	raw, err := fetchPackage(field, src)
+	raw, err := artifact.Fetch(src, sha)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("auditpulumi: %s.Package: %w", field, err)
 	}
 	sum := sha256.Sum256(raw)
 	if !strings.EqualFold(hex.EncodeToString(sum[:]), sha) {
@@ -77,57 +103,26 @@ func loadPackage(field, src, sha, cmd string) (*releasePackage, error) {
 	if err := readBootstrap(field, raw, cmd); err != nil {
 		return nil, err
 	}
-	dir, err := os.MkdirTemp("", "audit-package-")
+	artifact.Remember(sha, raw)
+	p, err := artifact.WriteTemp("audit-package-", "package.zip", raw)
 	if err != nil {
-		return nil, fmt.Errorf("auditpulumi: %w", err)
-	}
-	p := filepath.Join(dir, "package.zip")
-	if err := os.WriteFile(p, raw, 0o600); err != nil {
 		return nil, fmt.Errorf("auditpulumi: %w", err)
 	}
 	return &releasePackage{
 		Path: p, SHA256: strings.ToLower(sha), CodeSHA256: base64.StdEncoding.EncodeToString(sum[:]),
-		Version: versionFromName(src, cmd),
+		Version: versionFromName(src, cmd), Name: fileName(src),
 	}, nil
 }
 
-var shaRE = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
-
-func fetchPackage(field, src string) ([]byte, error) {
-	if !strings.Contains(src, "://") {
-		raw, err := os.ReadFile(src)
-		if err != nil {
-			return nil, fmt.Errorf("auditpulumi: %s.Package: %w", field, err)
-		}
-		return raw, nil
+// fileName is the last element of a path or of a URL's path.
+func fileName(src string) string {
+	if u, err := url.Parse(src); err == nil && strings.Contains(src, "://") {
+		src = u.Path
 	}
-	u, err := url.Parse(src)
-	if err != nil {
-		return nil, fmt.Errorf("auditpulumi: %s.Package: %w", field, err)
-	}
-	host := u.Hostname()
-	loopback := host == "127.0.0.1" || host == "localhost" || host == "::1"
-	if u.Scheme != "https" && (u.Scheme != "http" || !loopback) {
-		return nil, fmt.Errorf("auditpulumi: %s.Package: %q is not an https URL", field, src)
-	}
-	client := &http.Client{Timeout: 2 * time.Minute}
-	resp, err := client.Get(src)
-	if err != nil {
-		return nil, fmt.Errorf("auditpulumi: %s.Package: %w", field, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("auditpulumi: %s.Package: %s answered %s", field, src, resp.Status)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxPackageBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("auditpulumi: %s.Package: %w", field, err)
-	}
-	if len(raw) > maxPackageBytes {
-		return nil, fmt.Errorf("auditpulumi: %s.Package: %s is larger than %d bytes", field, src, maxPackageBytes)
-	}
-	return raw, nil
+	return path.Base(filepath.ToSlash(src))
 }
+
+var shaRE = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 
 // readBootstrap checks the zip: `bootstrap` at its root, an arm64 Linux
 // executable, built from the command it is wanted as.
@@ -192,4 +187,14 @@ func versionFromName(src, cmd string) string {
 		return ""
 	}
 	return strings.TrimPrefix(m[2], "v")
+}
+
+// readBuildInfo is where the library reads its own release; a test replaces it.
+var readBuildInfo = debug.ReadBuildInfo
+
+func baseOf(rel *artifact.Release) string {
+	if rel == nil {
+		return ""
+	}
+	return rel.BaseURL
 }
