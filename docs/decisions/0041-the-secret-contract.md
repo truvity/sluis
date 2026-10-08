@@ -1,6 +1,6 @@
 # 0041 — The secret contract: internal and external, one storage module, keys by purpose
 
-**Status:** Proposed (the owner's decisions of 2026-10-08; nothing is built before the owner accepts it). Once
+**Status:** Accepted (2026-10-08). Once
 carried out it amends [0034](0034-exports-go-to-openbao-directly.md) (the export copies, their schedule and the
 recovery bundles are retired), [0036](0036-configuration-is-immutable-per-instance.md) (layout v3 becomes v4) and
 [0039](0039-the-issuer-generates-confidential-client-secrets.md) (where a generated secret and its previous value

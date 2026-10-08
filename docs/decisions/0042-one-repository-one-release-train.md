@@ -1,6 +1,6 @@
 # 0042 — One repository, one release train: audit moves into sluis and is installed by preset to destinations
 
-**Status:** Proposed (the owner's decisions of 2026-10-08; nothing is built before the owner accepts it). Companion of
+**Status:** Accepted (2026-10-08). Companion of
 [0041](0041-the-secret-contract.md), which decides secrets, storage, keys and deployment shapes for both products.
 **Date:** 2026-10-08
 
