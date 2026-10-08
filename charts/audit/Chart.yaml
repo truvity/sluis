@@ -1,0 +1,13 @@
+apiVersion: v2
+name: audit
+description: One installation of the audit trail - the writer, the indexer and query service, and the jobs that seal, verify and prune what it writes.
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://github.com/truvity/sluis
+sources:
+  - https://github.com/truvity/sluis
+keywords:
+  - audit
+  - compliance
+  - object-lock

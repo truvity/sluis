@@ -1,0 +1,211 @@
+package cli
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/truvity/sluis/audit/authn"
+
+	"sigs.k8s.io/yaml"
+
+	"github.com/truvity/sluis/audit/internal/config"
+	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/sdk/auth"
+)
+
+// GrantsFile is what a deployment writes to say who may read what.
+//
+// It is a file rather than a call to a policy engine because a mapping an
+// auditor can read is worth more here than one a service can compute, and
+// because the engine is a dependency a deployment should choose rather than
+// inherit.
+type GrantsFile struct {
+	// APIVersion is `truvity.github.io/<kind>/v1`, or absent, which means the same.
+	APIVersion string `json:"apiVersion,omitempty"`
+	// Issuers are the token issuers trusted to say who a caller is. They live
+	// in this file, beside the rules, because a rule is only as safe as the
+	// issuers able to satisfy it; see auth.Rule.Issuer.
+	Issuers []IssuerEntry `json:"issuers,omitempty"`
+	// Presets read grants out of a claim's vocabulary rather than one value
+	// each. Only access-roster's exists.
+	Presets []PresetEntry `json:"presets,omitempty"`
+	Rules   []GrantRule   `json:"rules,omitempty"`
+}
+
+// PresetEntry names a grant preset and the issuer whose claims it reads.
+type PresetEntry struct {
+	Name   string `json:"name"`
+	Issuer string `json:"issuer,omitempty"`
+	Claim  string `json:"claim,omitempty"`
+}
+
+// IssuerEntry is one trusted issuer.
+type IssuerEntry struct {
+	URL      string `json:"url"`
+	Audience string `json:"audience"`
+}
+
+// GrantRule maps a claim value to a grant.
+type GrantRule struct {
+	Name   string `json:"name"`
+	Issuer string `json:"issuer,omitempty"`
+	Claim  string `json:"claim,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Grant  struct {
+		AllTenants bool     `json:"all_tenants,omitempty"`
+		Tenants    []string `json:"tenants,omitempty"`
+		Profiles   []string `json:"profiles"`
+		Operations []string `json:"operations"`
+		// From and Until bound what the rule's holders may read, by when
+		// records happened: an external assessor is given the period under
+		// assessment, not the archive. RFC 3339; empty is unbounded.
+		From  string `json:"from,omitempty"`
+		Until string `json:"until,omitempty"`
+	} `json:"grant"`
+}
+
+// Access is a grants file read and checked: who may authenticate, and what each
+// of them may see.
+type Access struct {
+	Issuers []authn.Issuer
+	Rules   auth.Declarative
+}
+
+// LoadAccess reads a grants file with its issuers, and refuses a rule set that
+// would let one issuer satisfy a rule meant for another. profiles is the
+// deployment's, by name with the presets each is built from; a preset turns
+// roles into profiles through it, and a file naming a preset is refused
+// without it.
+func LoadAccess(path string, profiles map[string]*preset.Profile) (Access, error) {
+	file, err := readGrants(path)
+	if err != nil {
+		return Access{}, err
+	}
+	rules, err := file.rules(path)
+	if err != nil {
+		return Access{}, err
+	}
+	for _, entry := range file.Presets {
+		if entry.Name != "access-roster" {
+			return Access{}, fmt.Errorf("%s: preset %q does not exist; access-roster is the one there is", path, entry.Name)
+		}
+		if len(profiles) == 0 {
+			return Access{}, fmt.Errorf(
+				"%s: preset %s needs the deployment's profiles to turn a role into profile names; "+
+					"give --deployment", path, entry.Name)
+		}
+		composed := make(map[string][]string, len(profiles))
+		for name, p := range profiles {
+			composed[name] = append([]string(nil), p.Presets...)
+		}
+		rules.Presets = append(rules.Presets, authn.AccessRoster{
+			From: entry.Issuer, Claim: entry.Claim, Profiles: composed,
+		})
+	}
+	out := Access{Rules: rules}
+	names := make([]string, 0, len(file.Issuers))
+	for _, is := range file.Issuers {
+		out.Issuers = append(out.Issuers, authn.Issuer{URL: is.URL, Audience: is.Audience})
+		names = append(names, is.URL)
+	}
+	if err := rules.BoundTo(names); err != nil {
+		return Access{}, fmt.Errorf("%s: %w", path, err)
+	}
+	return out, nil
+}
+
+// operations are the names a grant may carry, so that a misspelt one is an
+// error at start-up rather than a grant that silently allows nothing.
+var operations = map[auth.Operation]bool{
+	auth.Search: true, auth.Facets: true, auth.Get: true,
+	auth.Export: true, auth.Tail: true, auth.Resolve: true,
+}
+
+// LoadGrants reads the mapping. An empty path is not a default-allow: it is a
+// deployment that has granted nobody anything, and every request is denied.
+func LoadGrants(path string) (auth.Declarative, error) {
+	file, err := readGrants(path)
+	if err != nil {
+		return auth.Declarative{}, err
+	}
+	return file.rules(path)
+}
+
+// instant reads an RFC 3339 time; empty is the zero time, which a grant reads
+// as unbounded.
+func instant(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	at, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return at.UTC(), nil
+}
+
+// readGrants parses a grants file; an empty path is an empty file.
+func readGrants(path string) (GrantsFile, error) {
+	var file GrantsFile
+	if path == "" {
+		return file, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return file, err
+	}
+	if err := config.ValidateDocument("audit-grants", raw); err != nil {
+		return file, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := yaml.UnmarshalStrict(raw, &file); err != nil {
+		return file, fmt.Errorf("%s: %w", path, err)
+	}
+	return file, nil
+}
+
+// rules checks and converts a file's rules.
+func (file GrantsFile) rules(path string) (auth.Declarative, error) {
+	out := auth.Declarative{}
+	for _, r := range file.Rules {
+		if len(r.Grant.Profiles) == 0 || len(r.Grant.Operations) == 0 {
+			return auth.Declarative{}, fmt.Errorf(
+				"%s: rule %q grants no profile or no operation, which grants nothing; "+
+					"remove it or say what it is for", path, r.Name)
+		}
+		if !r.Grant.AllTenants && len(r.Grant.Tenants) == 0 {
+			return auth.Declarative{}, fmt.Errorf(
+				"%s: rule %q names no tenant; say `all_tenants: true` if that is what is meant",
+				path, r.Name)
+		}
+		ops := make([]auth.Operation, 0, len(r.Grant.Operations))
+		for _, o := range r.Grant.Operations {
+			if !operations[auth.Operation(o)] {
+				return auth.Declarative{}, fmt.Errorf(
+					"%s: rule %q grants %q, which is not an operation", path, r.Name, o)
+			}
+			ops = append(ops, auth.Operation(o))
+		}
+		from, err := instant(r.Grant.From)
+		if err != nil {
+			return auth.Declarative{}, fmt.Errorf("%s: rule %q: from: %w", path, r.Name, err)
+		}
+		until, err := instant(r.Grant.Until)
+		if err != nil {
+			return auth.Declarative{}, fmt.Errorf("%s: rule %q: until: %w", path, r.Name, err)
+		}
+		if !from.IsZero() && !until.IsZero() && !from.Before(until) {
+			return auth.Declarative{}, fmt.Errorf(
+				"%s: rule %q: its window ends before it starts, so it grants nothing", path, r.Name)
+		}
+		out.Rules = append(out.Rules, auth.Rule{
+			Name: r.Name, Issuer: r.Issuer, Claim: r.Claim, Value: r.Value,
+			Grant: auth.Grant{
+				AllTenants: r.Grant.AllTenants, Tenants: r.Grant.Tenants,
+				Profiles: r.Grant.Profiles, Operations: ops,
+				From: from, Until: until,
+			},
+		})
+	}
+	return out, nil
+}

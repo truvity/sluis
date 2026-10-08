@@ -25,4 +25,4 @@ jobs:
   govulncheck:
     uses: truvity/ci-workflows/.github/workflows/check.yaml@b38472fac2bff567c7b138654cebc7da485170ca # v3.26.1
     with:
-      recipes: '["vuln"]'
+      recipes: '["vuln","audit-vuln"]'

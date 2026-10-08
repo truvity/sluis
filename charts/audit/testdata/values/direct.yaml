@@ -1,0 +1,39 @@
+# Direct mode: the front door and the write path in one process, no stream, one
+# writer, and the jobs that need no database. A trial install, so the writer
+# takes writes from callers it cannot verify.
+mode: direct
+externalIdentifiersAreOpaque: true
+writer:
+  config:
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    archive:
+      bucket:
+        name: audit-archive
+jobs:
+  notary:
+    enabled: true
+    config:
+      archive:
+        bucket:
+          name: audit-archive
+      signer:
+        kms:
+          key: alias/audit-seal
+      sink:
+        url: http://audit:8080
+  verify:
+    config:
+      deployment: /etc/audit/deployment.yaml
+      archive:
+        bucket:
+          name: audit-archive
+      sink:
+        url: http://audit:8080
+  purge:
+    enabled: false
+  clockSync:
+    config:
+      ntp: [time.cloudflare.com]
+      sink:
+        url: http://audit:8080

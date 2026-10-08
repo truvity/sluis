@@ -1,0 +1,232 @@
+# A product's installation: a receiver in front, writers consuming behind, and
+# the index as one more database in the product's existing Postgres.
+#
+# This is what an application's chart sets under the `audit:` key when it takes
+# this chart as a dependency. Everything not named here has a default. Each
+# `config:` block is the binary's own configuration, key for key
+# (audit/docs/reference/configuration.md); a secret is never in one.
+mode: stream
+
+profiles:
+  security:
+    presets: [security]
+  billing:
+    presets: [billing-nl]
+externalIdentifiersAreOpaque: true
+
+# Receivers scale with the application's request rate; they validate, publish
+# and answer. Writers scale with the record rate, because they are the ones
+# that touch S3 and Postgres.
+replicas: 2
+
+workloadIdentity:
+  issuers:
+    - url: https://oidc.example.com/id/CLUSTER
+  workloads:
+    - subject: system:serviceaccount:app:api
+      source: app
+
+migrate:
+  enabled: true
+  config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    # The OWNER of the tables, which no part connects as. Each role below must
+    # exist, and is granted what its part needs and nothing else.
+    database:
+      url: postgres://audit_owner@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: database-password
+    writer: audit_writer
+    observe: audit_observe
+    reader: audit_query
+    purge: audit_purge
+  secretFiles:
+    - name: database-password
+      secretName: audit-db-owner
+      key: password
+
+# The receiver holds neither the bucket nor a key, so a compromised front door
+# cannot reach the archive.
+receiver:
+  config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    mode: receiver
+    deployment: /etc/audit/deployment.yaml
+    workloads: /etc/audit/workloads.yaml
+    database:
+      url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: database-password
+    stream:
+      nats:
+        url: nats://nats.app.svc:4222
+        # The broker verifies who connects: the receiver and the writers
+        # present a projected service-account token of the broker's audience,
+        # and the broker's auth callout reviews it and maps this namespace to
+        # the application's account.
+        tokenFile: /var/run/audit/stream/token
+      name: AUDIT
+  secretFiles:
+    - name: database-password
+      secretName: audit-db
+      key: password
+  tokens:
+    - audience: nats
+      mountPath: /var/run/audit/stream
+
+writer:
+  consumers: 3
+  config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    deployment: /etc/audit/deployment.yaml
+    workloads: /etc/audit/workloads.yaml
+    replicas: 3
+    archive:
+      bucket:
+        name: audit-eu-example-1
+        region: eu-example-1
+      prefix: audit/app
+      kmsKey: alias/audit-archive
+    database:
+      url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: database-password
+    stream:
+      nats:
+        url: nats://nats.app.svc:4222
+        tokenFile: /var/run/audit/stream/token
+      name: AUDIT
+      consumer: audit-writer
+      batch: 100
+      # Must exceed roll.interval plus the longest a put can take, or the
+      # stream offers records a writer is still gathering to a second writer.
+      ackWait: 2m
+    # How much a writer gathers from the stream before it writes, which is
+    # what decides how many objects a day of records becomes.
+    roll:
+      interval: 30s
+      maxRecords: 5000
+  secretFiles:
+    - name: database-password
+      secretName: audit-db
+      key: password
+  tokens:
+    - audience: nats
+      mountPath: /var/run/audit/stream
+
+# The indexer: follows the archive by listing and writes the index the query
+# service reads. A Deployment of its own, as a database role of its own
+# (`migrate.config.observe`) and under its own ServiceAccount, because the
+# writer holds neither the index nor this identity.
+observe:
+  enabled: true
+  config:
+    apiVersion: audit.truvity.github.io/audit-observe/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    archive:
+      bucket:
+        name: audit-eu-example-1
+        region: eu-example-1
+      prefix: audit/app
+    database:
+      url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: observe-database-password
+    settle: 2m
+  secretFiles:
+    - name: observe-database-password
+      secretName: audit-db-observe
+      key: password
+
+query:
+  enabled: true
+  replicas: 2
+  grants:
+    issuers:
+      # The gateway in front of the console issues the token the page carries.
+      - url: https://gateway.example.com
+        audience: audit
+  config:
+    apiVersion: audit.truvity.github.io/audit-query/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    deployment: /etc/audit/deployment.yaml
+    grants: /etc/audit/grants.yaml
+    sink:
+      url: http://audit:8080
+      tokenFile: /var/run/audit/token
+    database:
+      url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: query-database-password
+    archive:
+      bucket:
+        name: audit-eu-example-1
+        region: eu-example-1
+      prefix: audit/app
+  secretFiles:
+    - name: query-database-password
+      secretName: audit-db-reader
+      key: password
+  tokens:
+    - audience: audit
+      mountPath: /var/run/audit
+
+jobs:
+  verify:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
+      deployment: /etc/audit/deployment.yaml
+      archive:
+        bucket:
+          name: audit-eu-example-1
+          region: eu-example-1
+        prefix: audit/app
+      sink:
+        url: http://audit:8080
+        tokenFile: /var/run/audit/token
+    tokens:
+      - audience: audit
+        mountPath: /var/run/audit
+  purge:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-purge/v2
+      secrets:
+        source: file
+        root: /etc/audit/secrets
+      deployment: /etc/audit/deployment.yaml
+      database:
+        url: postgres://audit_purge@db.example.com:5432/audit?sslmode=verify-full
+        passwordSecret: database-password
+    secretFiles:
+      - name: database-password
+        secretName: audit-db-purge
+        key: password
+  clockSync:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-clock-sync/v2
+      ntp: ["169.254.169.123"]
+      sink:
+        url: http://audit:8080
+        tokenFile: /var/run/audit/token
+    tokens:
+      - audience: audit
+        mountPath: /var/run/audit
+
+# Both render nothing yet. They are here so that a deployment's values do not
+# change when the work that fills them lands.
+extensions:
+  billing:
+    enabled: false
+  quotas:
+    enabled: false

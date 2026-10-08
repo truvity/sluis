@@ -24,13 +24,23 @@
 #     role ARNs from an audience the caller supplies. Any other ARN still
 #     matches, including one with no account (an S3 bucket's).
 #   - '/secrets/' skips '/var/run/secrets/', the root Kubernetes mounts a
-#     pod's ServiceAccount token and projected volumes under. It is a path
-#     inside the container, not an SSM parameter.
+#     pod's ServiceAccount token and projected volumes under, and
+#     '/etc/audit/secrets/', where the audit chart projects a Secret's keys.
+#     Both are paths inside the container, not SSM parameters.
+#   - 'arn:aws' also skips an ARN whose region and account fields are each
+#     empty or a <placeholder>, the shape the audit documentation and Go
+#     comments write ('arn:aws:iam::<account>:role/...', 's3:::<bucket>').
+#     A real account id in the same ARN still matches.
 #   - The internal-hostname pattern skips the label key prefix earlier
 #     releases wrote, in the two files that must spell it and nowhere
 #     else: internal/kube/legacy_labels.go, which moves objects off it at
 #     start, and CHANGELOG.md, whose rollback note moves them back. Any
 #     other file naming it, or any other host in those two, still matches.
+#
+#   - The internal-hostname pattern also skips 'schemas.truvity.com/audit/',
+#     the legacy schema identifier base that audit's loader still accepts
+#     (audit/docs/decisions/0015), in the audit tree only. It is a name that
+#     was never served, kept for the compatibility of archived records.
 #
 # Estate-internal names (a pattern group added with the neutral-names
 # change): the owner's rule is that this public tree names no estate, so
@@ -54,6 +64,9 @@ documented_placeholders='\b(111122223333|444455556666)\b'
 composed_arn='arn:aws(-[a-z]+)?:[a-z0-9-]*:[a-z0-9-]*:(%s|111122223333|444455556666):'
 legacy_label_files='^(internal/kube/legacy_labels\.go|CHANGELOG\.md):'
 legacy_label_prefix='directory-roster\.truvity\.com/'
+legacy_schema_files='^(audit/[^:]*):'
+legacy_schema_base='schemas\.truvity\.com/audit/'
+placeholder_arn='arn:aws(-[a-z]+)?:[a-z0-9-]*:(<[a-z-]+>)?:(<[a-z-]+>)?:'
 
 # The 12-digit patterns are anchored on word boundaries. Without them,
 # `[0-9]{12}` also matches a 12-digit run that happens to fall inside a
@@ -80,6 +93,7 @@ patterns=(
   'excavador\.xyz'                     # estate domain
   '\.truvity\.private\b'               # private hostnames
   'truvity/gitops'                     # the private estate repository
+  'INF-[0-9]+'                         # tracker keys (audit/): a key points at a board nobody outside can open
 )
 
 # Name patterns match case-insensitively; every other pattern is exact.
@@ -98,11 +112,11 @@ mask() {
     "$account_id" | "$ecr_host")
       sed -E "s/$documented_placeholders/<placeholder>/g" ;;
     "$arn")
-      sed -E "s/$composed_arn/<composed-arn>/g" ;;
+      sed -E "s/$composed_arn/<composed-arn>/g; s/$placeholder_arn/<placeholder-arn>/g" ;;
     "$secret_path")
-      sed -E 's#/var/run/secrets/#<pod-mount>/#g' ;;
+      sed -E 's#/(var/run|etc/audit)/secrets/#<pod-mount>/#g' ;;
     "$internal_host")
-      sed -E "\\#$legacy_label_files#s#$legacy_label_prefix#<legacy-label-prefix>/#g" ;;
+      sed -E "\\#$legacy_label_files#s#$legacy_label_prefix#<legacy-label-prefix>/#g; \\#$legacy_schema_files#s#$legacy_schema_base#<legacy-schema-base>/#g" ;;
     *)
       cat ;;
   esac

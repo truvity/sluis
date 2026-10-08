@@ -1,0 +1,188 @@
+{{- if eq .Values.renders "app" -}}
+{{- if .Values.query.enabled }}
+# Who may sign in to the query service, and what each caller may read. A
+# changed file must reach a running service, so the pods carry its checksum.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "audit.fullname" . }}-grants
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: query
+data:
+  grants.yaml: |
+    {{- toYaml .Values.query.grants | nindent 4 }}
+---
+{{ include "audit.configMap" (dict "root" . "name" "query" "config" .Values.query.config) }}
+---
+# The read path. It reads the index as a role that does not own the tables, so
+# the tenant policies bind it; it reads the archive for provenance; it records
+# every read through the writer before answering; and it holds the keys only
+# if it may resolve.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "audit.fullname" . }}-query
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: query
+spec:
+  replicas: {{ .Values.query.replicas }}
+  selector:
+    matchLabels:
+      {{- include "audit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: query
+  template:
+    metadata:
+      labels:
+        {{- include "audit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: query
+      annotations:
+        checksum/config: {{ toYaml .Values.query.config | sha256sum }}
+        checksum/grants: {{ toYaml .Values.query.grants | sha256sum }}
+        # A grant preset turns roles into profiles, so the profiles are part
+        # of what a grant means.
+        checksum/deployment: {{ include "audit.deploymentDocument" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "audit.queryServiceAccountName" . }}
+      {{- include "audit.podDefaults" . | nindent 6 }}
+      containers:
+        - name: query
+          image: {{ include "audit.queryImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config=/etc/audit/config.yaml
+          {{- with include "audit.env" (dict "root" . "comp" .Values.query "service" "audit-query") }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ include "audit.port" .Values.query.config }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            # The checks together are bounded at 2s (internal/health); the default wait of 1s would fail a slow answer.
+            timeoutSeconds: 3
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "audit.configMount" . | nindent 12 }}
+            {{- include "audit.deploymentMount" . | nindent 12 }}
+            - name: grants
+              mountPath: /etc/audit/grants.yaml
+              subPath: grants.yaml
+              readOnly: true
+            {{- if .Values.query.keysVolume }}
+            - name: keys
+              mountPath: /var/lib/audit/keys
+              readOnly: true
+            {{- end }}
+            {{- include "audit.trustMount" . | nindent 12 }}
+            {{- include "audit.extraMounts" .Values.query | nindent 12 }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- include "audit.configVolume" (dict "root" . "name" "query") | nindent 8 }}
+        {{- include "audit.deploymentVolume" . | nindent 8 }}
+        - name: grants
+          configMap:
+            name: {{ include "audit.fullname" . }}-grants
+        {{- if .Values.query.keysVolume }}
+        - name: keys
+          persistentVolumeClaim:
+            claimName: {{ include "audit.keysClaim" . }}
+            readOnly: true
+        {{- end }}
+        {{- include "audit.trustVolume" . | nindent 8 }}
+        {{- include "audit.extraVolumes" .Values.query | nindent 8 }}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "audit.fullname" . }}-query
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: query
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "audit.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: query
+  ports:
+    - name: http
+      port: {{ .Values.query.service.port }}
+      targetPort: http
+{{- with .Values.query.route }}
+{{- if .enabled }}
+{{- $prefix := .pathPrefix | default "" }}
+---
+# The query service on a public name. Only the Connect service's own path is
+# routed, so /healthz and /readyz, which answer without a token, are not
+# reachable through it. The service knows nothing of a path prefix, so the
+# route strips it. backendRefs carries its weight: the API server
+# defaults it, and a manifest without it differs from the live object for ever.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "audit.fullname" $ }}-query
+  labels:
+    {{- include "audit.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: query
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .parentRefs | nindent 4 }}
+  hostnames:
+    {{- toYaml .hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ printf "%s/audit.v1.QueryService" $prefix | quote }}
+      {{- if $prefix }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /audit.v1.QueryService
+      {{- end }}
+      backendRefs:
+        - name: {{ include "audit.fullname" $ }}-query
+          port: {{ $.Values.query.service.port }}
+          weight: 1
+{{- if .securityPolicy }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ include "audit.fullname" $ }}-query
+  labels:
+    {{- include "audit.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: query
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ include "audit.fullname" $ }}-query
+  {{- toYaml .securityPolicy | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}{{ end }}

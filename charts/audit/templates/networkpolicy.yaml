@@ -1,0 +1,60 @@
+{{- if eq .Values.renders "app" -}}
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.writer.enabled }}
+# The writer is the single trusted consumer of the stream and the only thing
+# that puts to the bucket. Saying so here is what keeps a second writer from
+# appearing quietly: a deployment that can run one anyway is a deployment whose
+# seals vouch for an hour that something else was still writing into.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "audit.fullname" . }}
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "audit.writerSelectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # This release's own pods: the jobs and the query service record
+        # themselves through the writer.
+        - podSelector:
+            matchLabels:
+              {{- include "audit.selectorLabels" . | nindent 14 }}
+        {{- with .Values.networkPolicy.ingressFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ include "audit.port" (index .Values (include "audit.frontName" .)).config }}
+{{- end }}
+{{- if and .Values.query.enabled .Values.networkPolicy.queryIngressFrom }}
+{{- if .Values.writer.enabled }}
+---
+{{- end }}
+# The query service takes callers from whatever fronts it, normally the
+# gateway that terminates their sign-in. Without selectors it is left open
+# inside the cluster: every caller still has to present a token it verifies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "audit.fullname" . }}-query
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: query
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "audit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: query
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml .Values.networkPolicy.queryIngressFrom | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ include "audit.port" .Values.query.config }}
+{{- end }}
+{{- end }}{{ end }}

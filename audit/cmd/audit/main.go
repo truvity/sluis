@@ -1,0 +1,1015 @@
+// Command audit is the tool that holds a deployment to the contracts this
+// repository publishes: it validates catalogues and presets, explains what a
+// profile keeps, and checks that the code and the catalogue still agree.
+//
+// It runs in an application's own tests, so that a catalogue is wrong in a pull
+// request rather than in an archive nobody can rewrite.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/truvity/sluis/audit/index/postgres"
+	"github.com/truvity/sluis/audit/internal/cli"
+	auditconfig "github.com/truvity/sluis/audit/internal/config"
+	"github.com/truvity/sluis/audit/internal/seal"
+	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/sdk/auth"
+	"github.com/truvity/sluis/audit/sdk/catalogue"
+	"github.com/truvity/sluis/audit/sdk/gen/audit/v1/auditv1connect"
+	"github.com/truvity/sluis/audit/sdk/record"
+)
+
+const usage = `audit — the audit trail toolchain
+
+usage:
+  audit validate [flags] [catalogue.yaml ...]
+        Hold presets, catalogues and a deployment's profiles to their contracts.
+
+  audit profile explain <name> [flags]
+        Print what a profile keeps, how it treats identities, and how long it
+        is kept.
+
+  audit check-emitters <dir> --catalogue <file>
+        Check that the actions the code emits are the actions the catalogue
+        declares.
+
+  audit conformance --query <url> --profile <name>... [flags]
+        Hold a running query service to what the search contract promises —
+        paging, order, get against search, filters, refusals — over the
+        records it already holds. It reads and never writes.
+
+  audit messages <catalogue.yaml>...
+        Print what a viewer needs to render a catalogue's records as
+        sentences — each action's summary and templates — as JSON, for
+        @truvity/audit's viewer.
+
+  audit verify --profile <name> --from <date> --to <date> [flags]
+        Check a profile's record objects over a range of ingest time against
+        the bucket contract: each object's key and metadata, the sha256 of its
+        bytes and the hash on every record. Needs the archive and nothing that
+        has to be trusted. With --deployment it also holds each object's lock
+        to what the profile demands. With --root it checks the seals too: their
+        signatures against the roots you pin, the chain, each hour's count and
+        root against the objects, and that no due seal is missing.
+
+  audit replay --dlq --from <date> --to <date> [flags]
+        Send dead letters back to a writer once the cause is fixed. Without
+        --sink it reads and summarises them and sends nothing.
+
+  audit purge --deployment <file> --database <url> [flags]
+        Bring the index and the deduplication table back within what the
+        profiles allow. It never touches the archive: those objects are
+        released by their object lock, not by this.
+
+  audit clock-sync --ntp <server> [--sink <url>] [flags]
+        Compare this machine's clock with UTC and record the answer. Run it
+        daily. It does not set the clock: whatever runs the machine does that,
+        and recording the times of things is a separate job from setting them.
+
+  audit key destroy --tenant <id> --purpose <p> --by <who> [flags]
+        Destroy a tenant's pseudonymisation key. The copies stay and their
+        pseudonyms can never be recomputed again: this is what erasure means
+        here, and it cannot be undone.
+
+  audit key public --key <file>|--kms-key <id>|--transit-key <name> [--thumbprint|--jwks]
+        Print the public half of a signing key: as PEM, as the RFC 7638
+        thumbprint a verifier pins (--thumbprint), or as the JWK Set that goes
+        in keys/roots.jwks (--jwks).
+
+  audit hold place|release|list [flags]
+        Place a legal hold on a profile's copies, or a tenant's within it, and
+        record who did and why. A hold keeps objects undeletable whatever
+        their retention says, until somebody takes it off.
+
+  audit migrate --database <url> [--writer <role>] [--observe <role>] [--reader <role>] [--purge <role>]
+        Apply the index schema and grant each named role what its part needs:
+        the write path the deduplication table and the registry, the indexer
+        the index and its cursors, the query service select on the index.
+        Run it before the parts that will use it, and from one place: several
+        replicas migrating at once is a race they cannot see.
+
+  audit reindex --profile <name> --from <date> --to <date> [flags]
+  audit reindex --profile <name> --reset-cursor [--tenant <id>] --database <url>
+        Repair a profile's index from the archive: a batch over a range of
+        ingest days, or, with --reset-cursor, a rewind that makes audit-observe
+        read the profile again from the start. Safe over a range that is
+        already indexed.
+
+  audit version
+
+The scheduled jobs (verify, purge, clock-sync, migrate) also take
+--config <file> in place of every other flag: one file, validated against
+schemas/config/audit-<job>.schema.json, with secrets named by environment
+variable and never held in it. That is how the chart runs them.
+
+Run a command with -h for its flags.
+`
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
+	var err error
+	switch os.Args[1] {
+	case "validate":
+		err = validate(os.Args[2:])
+	case "profile":
+		err = profile(os.Args[2:])
+	case "check-emitters":
+		err = checkEmitters(os.Args[2:])
+	case "messages":
+		err = messages(os.Args[2:], os.Stdout)
+	case "conformance":
+		err = conformance(os.Args[2:])
+	case "verify":
+		err = verify(os.Args[2:])
+	case "replay":
+		err = replay(os.Args[2:])
+	case "key":
+		err = keyCmd(os.Args[2:])
+	case "hold":
+		err = holdCmd(os.Args[2:])
+	case "clock-sync":
+		err = clockSync(os.Args[2:])
+	case "purge":
+		err = purge(os.Args[2:])
+	case "migrate":
+		err = migrate(os.Args[2:])
+	case "reindex":
+		err = reindex(os.Args[2:])
+	case "version":
+		fmt.Printf("audit, record schema %s\n", record.SchemaVersion)
+	case "-h", "--help", "help":
+		fmt.Print(usage)
+	default:
+		fmt.Fprintf(os.Stderr, "audit: no command %q\n\n%s", os.Args[1], usage)
+		os.Exit(2)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "audit: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func validate(args []string) error {
+	flags := flag.NewFlagSet("validate", flag.ContinueOnError)
+	var presets stringList
+	flags.Var(&presets, "presets", "directory of preset files, repeatable")
+	deployment := flags.String("deployment", "", "a deployment's profile configuration")
+	scan := flags.String("scan", "", "find catalogue documents under this directory")
+	docs, err := parse(flags, args)
+	if err != nil {
+		return err
+	}
+	if *scan != "" {
+		found, err := cli.FindCatalogues(*scan)
+		if err != nil {
+			return err
+		}
+		docs = append(docs, found...)
+	}
+	v := cli.Validate{PresetDirs: presets, CatalogueDoc: docs, Deployment: *deployment}
+	if problems := v.Run(); problems > 0 {
+		return fmt.Errorf("%d problems", problems)
+	}
+	return nil
+}
+
+func profile(args []string) error {
+	if len(args) == 0 || args[0] != "explain" {
+		return fmt.Errorf("usage: audit profile explain <name> [--deployment file]")
+	}
+	flags := flag.NewFlagSet("profile explain", flag.ContinueOnError)
+	deployment := flags.String("deployment", "", "a deployment's profile configuration")
+	names, err := parse(flags, args[1:])
+	if err != nil {
+		return err
+	}
+	presets, err := preset.Builtin()
+	if err != nil {
+		return err
+	}
+	d := preset.DefaultDeployment(presets)
+	if *deployment != "" {
+		if d, err = cli.LoadDeployment(*deployment); err != nil {
+			return err
+		}
+	}
+	profiles, err := d.Compose(presets)
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		available := make([]string, 0, len(profiles))
+		for n := range profiles {
+			available = append(available, n)
+		}
+		sort.Strings(available)
+		return fmt.Errorf("name a profile: %s", strings.Join(available, ", "))
+	}
+	p, ok := profiles[names[0]]
+	if !ok {
+		return fmt.Errorf("no profile %q in this deployment", names[0])
+	}
+	fmt.Print(p.Explain())
+	return nil
+}
+
+func checkEmitters(args []string) error {
+	flags := flag.NewFlagSet("check-emitters", flag.ContinueOnError)
+	cat := flags.String("catalogue", "", "the catalogue the code is held to")
+	dirs, err := parse(flags, args)
+	if err != nil {
+		return err
+	}
+	if len(dirs) != 1 || *cat == "" {
+		return fmt.Errorf("usage: audit check-emitters <dir> --catalogue <file>")
+	}
+	c := cli.CheckEmitters{Root: dirs[0], Catalogue: *cat}
+	if problems := c.Run(); problems > 0 {
+		return fmt.Errorf("%d problems", problems)
+	}
+	return nil
+}
+
+func verify(args []string) error {
+	flags := flag.NewFlagSet("verify", flag.ContinueOnError)
+	var (
+		profile    = flags.String("profile", "", "the profile whose objects to check")
+		from       = flags.String("from", "", "start of the range of ingest time, a date or a timestamp")
+		to         = flags.String("to", "", "end of the range of ingest time, a date or a timestamp; not included")
+		deployment = flags.String("deployment", "",
+			"the profile configuration; with it, each object's lock is held to what the profile demands")
+		last = flags.Duration("last", 0,
+			"check the windows of the last this long, ending at the hour that has closed; instead of --from and --to")
+		sinkURL = flags.String("sink", "", "the writer this job records what it checked through")
+		pins    = flags.String("root", "",
+			"also check the seals, trusting only the root keys with these thumbprints, comma separated "+
+				"(`audit key public --thumbprint` prints one); nothing else in the bucket is trusted")
+		settle = flags.Duration("settle", auditconfig.DefaultSettle,
+			"with --root: the notary's settle window; keep it equal to the notary's")
+		grace = flags.Duration("grace", auditconfig.DefaultGrace,
+			"with --root: how long after an hour is sealable its seal may still be missing before that is a finding")
+		instance   = flags.String("instance", "", "the name this job records itself under")
+		asJSON     = flags.Bool("json", false, "print the report as JSON")
+		configFile = flags.String("config", "", configUsage)
+	)
+	archiveFlags := cli.NewArchiveFlags(flags, env, cli.Reads)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	if file := jobConfig(flags, *configFile); file != "" {
+		if err := onlyConfig(flags); err != nil {
+			return err
+		}
+		return verifyFromConfig(file, *asJSON)
+	}
+	switch {
+	case *profile == "":
+		return errors.New("name a profile with --profile")
+	case *archiveFlags.Bucket == "":
+		return errors.New("name the archive's bucket with --bucket")
+	}
+	// A scheduled run says "the last day"; an auditor names the range. The
+	// image the jobs run from has no shell, so the arithmetic lives here.
+	var start, end time.Time
+	var err error
+	switch {
+	case *last > 0 && (*from != "" || *to != ""):
+		return errors.New("give --last, or --from and --to, not both")
+	case *last > 0:
+		end = time.Now().UTC().Truncate(time.Hour)
+		start = end.Add(-*last)
+	default:
+		if start, err = cli.ParseDay(*from); err != nil {
+			return fmt.Errorf("--from: %w", err)
+		}
+		if end, err = cli.ParseDay(*to); err != nil {
+			return fmt.Errorf("--to: %w", err)
+		}
+	}
+	ctx := context.Background()
+	archive, err := archiveFlags.Open(ctx)
+	if err != nil {
+		return err
+	}
+
+	run := cli.Verify{
+		Store: archive, Profile: *profile,
+		From: start, To: end, JSON: *asJSON, Instance: *instance,
+	}
+	// With the deployment, the check knows what lock each profile demands:
+	// an object with none is then INVALID under a profile that demands one
+	// and `unlocked` under one that does not.
+	if *deployment != "" {
+		profiles, err := profilesFor(*deployment)
+		if err != nil {
+			return err
+		}
+		if _, ok := profiles[*profile]; !ok {
+			return fmt.Errorf("the deployment has no profile %q", *profile)
+		}
+		run.RequiredLock = requiredLocks(profiles)
+	}
+	if *pins != "" {
+		run.Seals = &cli.SealCheck{Roots: strings.Split(*pins, ","), Settle: *settle, Grace: *grace}
+	}
+	if *sinkURL != "" {
+		if run.Catalogue, err = catalogue.Common(); err != nil {
+			return err
+		}
+		run.Sink = cli.WriterClient(*sinkURL)
+	}
+	problems, err := run.Run(ctx)
+	if err != nil {
+		return err
+	}
+	if problems > 0 {
+		return fmt.Errorf("%d problems", problems)
+	}
+	return nil
+}
+
+// parse takes flags and arguments in any order. The standard library stops at
+// the first argument, which turns a misplaced flag into a file path and a
+// confusing error; a command should not care where its flags were typed.
+func parse(flags *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	for len(args) > 0 {
+		if err := flags.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := flags.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
+	return positional, nil
+}
+
+type stringList []string
+
+func (s *stringList) String() string { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
+func replay(args []string) error {
+	flags := flag.NewFlagSet("replay", flag.ContinueOnError)
+	var (
+		dlq = flags.Bool("dlq", false,
+			"replay the dead-letter prefix; naming the source is required so that a later one cannot become the default")
+		from    = flags.String("from", "", "start of the range, a date or a timestamp")
+		to      = flags.String("to", "", "end of the range, a date or a timestamp")
+		reason  = flags.String("reason", "", "keep only dead letters whose reason contains this text")
+		action  = flags.String("action", "", "keep only dead letters of this action")
+		sinkURL = flags.String("sink", "", "the writer's base URL; without it nothing is sent")
+		batch   = flags.Int("batch", 100, "how many records to send at a time")
+		asJSON  = flags.Bool("json", false, "print the report as JSON")
+	)
+	archiveFlags := cli.NewArchiveFlags(flags, env, cli.Writes)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	switch {
+	case !*dlq:
+		return errors.New("name the source with --dlq")
+	case *archiveFlags.Bucket == "":
+		return errors.New("name the archive's bucket with --bucket")
+	}
+	start, err := cli.ParseDay(*from)
+	if err != nil {
+		return fmt.Errorf("--from: %w", err)
+	}
+	end, err := cli.ParseDay(*to)
+	if err != nil {
+		return fmt.Errorf("--to: %w", err)
+	}
+
+	ctx := context.Background()
+	archive, err := archiveFlags.Open(ctx)
+	if err != nil {
+		return err
+	}
+
+	r := cli.Replay{
+		Store: archive, From: start, To: end,
+		Reason: *reason, Action: *action, Batch: *batch,
+	}
+	if *sinkURL != "" {
+		r.Sink = cli.WriterClient(*sinkURL)
+	}
+	report, err := r.Run(ctx)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		body, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s\n", body)
+	}
+	if report.DeadEnd > 0 {
+		return fmt.Errorf("%d records could not be processed and are back under the dead-letter prefix", report.DeadEnd)
+	}
+	return nil
+}
+
+// migrate applies the index schema.
+//
+// It is a command of its own rather than something a writer does on start-up
+// because several replicas migrating at once is a race, and because a schema
+// change to the index should be a step an operator takes deliberately. Nothing
+// in it touches the archive: the index is a projection, and this is the
+// database that holds it.
+func migrate(args []string) error {
+	flags := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	var (
+		database = flags.String("database", "", "the Postgres URL of the index")
+		printSQL = flags.Bool("print", false, "print the schema and apply nothing")
+		reader   = flags.String("reader", "", "a role to grant what the query service needs: select on the index, nothing else")
+		writer   = flags.String("writer", "", "a role to grant what the write path needs: the deduplication table and the registry, none of the index")
+		observer = flags.String("observe", "", "a role to grant what the indexer needs: read and write on the index and its cursors")
+		purger   = flags.String("purge", "", "a role to grant what the purge job needs: to delete from the index and the deduplication table")
+		cfgFile  = flags.String("config", "", configUsage)
+	)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	if file := jobConfig(flags, *cfgFile); file != "" {
+		if err := onlyConfig(flags); err != nil {
+			return err
+		}
+		return migrateFromConfig(file)
+	}
+	if *printSQL {
+		fmt.Print(postgres.Schema())
+		return nil
+	}
+	if *database == "" {
+		return errors.New("give the index's Postgres URL with --database, or use --print")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, *database)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	return applyMigration(ctx, pool, postgres.Roles{Writer: *writer, Observe: *observer, Reader: *reader, Purge: *purger})
+}
+
+// applyMigration applies the schema and grants each named role what its part
+// needs and no more.
+func applyMigration(ctx context.Context, pool *pgxpool.Pool, roles postgres.Roles) error {
+	if err := postgres.Migrate(ctx, pool); err != nil {
+		return err
+	}
+	fmt.Printf("index schema version %d applied\n", postgres.Version)
+	if err := postgres.GrantRoles(ctx, pool, roles); err != nil {
+		return err
+	}
+	for part, role := range map[string]string{
+		"the write path (deduplication and registry, not the index)": roles.Writer,
+		"the indexer (the index and its cursors)":                    roles.Observe,
+		"the query service (select on the index)":                    roles.Reader,
+		"the purge job (forget index rows and deduplication)":        roles.Purge,
+	} {
+		if role != "" {
+			fmt.Printf("%s is granted what %s needs\n", role, part)
+		}
+	}
+	return nil
+}
+
+// reindex repairs a profile's index from the archive: a batch over a range of
+// days, or, with --reset-cursor, a rewind of the indexer's cursor so that
+// audit-observe reads the prefix again and catches up.
+func reindex(args []string) error {
+	flags := flag.NewFlagSet("reindex", flag.ContinueOnError)
+	var (
+		profile   = flags.String("profile", "", "the profile to rebuild")
+		tenant    = flags.String("tenant", "", "with --reset-cursor, one tenant of the profile; unset is every tenant")
+		reset     = flags.Bool("reset-cursor", false, "forget where audit-observe had read the profile to, so that it reads it again; needs no range and no archive")
+		from      = flags.String("from", "", "start of the range, a date or a timestamp")
+		to        = flags.String("to", "", "end of the range, a date or a timestamp")
+		database  = flags.String("database", "", "the Postgres URL of the index")
+		batchSize = flags.Int("batch", 0, "how many rows to index at a time")
+		asJSON    = flags.Bool("json", false, "print the report as JSON")
+	)
+	archiveFlags := cli.NewArchiveFlags(flags, env, cli.Reads)
+	var catalogueFiles repeated
+	flags.Var(&catalogueFiles, "catalogue",
+		"a catalogue document, repeatable; the index takes its indexed properties from these, "+
+			"and from the archive's own copy of any catalogue they do not include")
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	switch {
+	case *profile == "":
+		return errors.New("name a profile with --profile")
+	case *database == "":
+		return errors.New("give the index's Postgres URL with --database")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, *database)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := postgres.CheckVersion(ctx, pool); err != nil {
+		return err
+	}
+	target, err := postgres.New(pool)
+	if err != nil {
+		return err
+	}
+
+	if *reset {
+		if err := cli.Reset(ctx, target, *profile, *tenant); err != nil {
+			return err
+		}
+		fmt.Printf("the cursor of %s is reset: audit-observe reads it again from the start\n", *profile)
+		return nil
+	}
+	if *archiveFlags.Bucket == "" {
+		return errors.New("name the archive's bucket with --bucket")
+	}
+	start, err := cli.ParseDay(*from)
+	if err != nil {
+		return fmt.Errorf("--from: %w", err)
+	}
+	end, err := cli.ParseDay(*to)
+	if err != nil {
+		return fmt.Errorf("--to: %w", err)
+	}
+	archive, err := archiveFlags.Open(ctx)
+	if err != nil {
+		return err
+	}
+	fields, err := cli.CatalogueFields(catalogueFiles, archive)
+	if err != nil {
+		return err
+	}
+
+	_, err = cli.Reindex{
+		Store: archive, Index: target, Fields: fields,
+		Profile: *profile, From: start, To: end,
+		Batch: *batchSize, JSON: *asJSON,
+	}.Run(ctx)
+	return err
+}
+
+// repeated collects a flag that may be given more than once, which is how a
+// deployment names its catalogues: it has several, and they are separate files.
+type repeated []string
+
+func (r *repeated) String() string     { return strings.Join(*r, ", ") }
+func (r *repeated) Set(v string) error { *r = append(*r, v); return nil }
+
+// dedupeFor is how long a written identifier is remembered: what was asked
+// for, else the widest window the profiles ask for.
+func dedupeFor(profiles map[string]*preset.Profile, asked time.Duration) time.Duration {
+	if asked != 0 {
+		return asked
+	}
+	var widest time.Duration
+	for _, p := range profiles {
+		if d := time.Duration(p.Pipeline.DedupeWindowDays) * 24 * time.Hour; d > widest {
+			widest = d
+		}
+	}
+	return widest
+}
+
+// requiredLocks is what each composed profile demands of the store's lock,
+// which verify holds every object to.
+func requiredLocks(profiles map[string]*preset.Profile) map[string]string {
+	out := make(map[string]string, len(profiles))
+	for name, p := range profiles {
+		if p.Integrity.ObjectLockMode != "" {
+			out[name] = p.Integrity.ObjectLockMode
+		}
+	}
+	return out
+}
+
+// profilesFor composes the deployment's profiles, which is what says how long
+// anything is kept.
+func profilesFor(path string) (map[string]*preset.Profile, error) {
+	presets, err := preset.Builtin()
+	if err != nil {
+		return nil, err
+	}
+	d, err := cli.LoadDeployment(path)
+	if err != nil {
+		return nil, err
+	}
+	return d.Compose(presets)
+}
+
+// transitOptions names an OpenBAO transit signing key and how to reach it.
+type transitOptions struct {
+	key     *string
+	openbao *cli.OpenBAOFlags
+}
+
+func transitFlags(flags *flag.FlagSet) transitOptions {
+	return transitOptions{
+		key:     flags.String("transit-key", "", "an OpenBAO transit ecdsa-p384 key to sign with"),
+		openbao: cli.NewOpenBAOFlags(flags, nil),
+	}
+}
+
+// given counts the options that were set.
+func given(values ...string) int {
+	n := 0
+	for _, v := range values {
+		if v != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// signerFor is the signer a command was given: a key file, a KMS key or
+// a transit key — the last two keeping the private half out of the archive's
+// reach.
+func signerFor(ctx context.Context, keyFile, keyID, kmsKey, region string, transit transitOptions) (keys.Signer, error) {
+	switch {
+	case kmsKey != "":
+		cfg, err := config.LoadDefaultConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if region != "" {
+			cfg.Region = region
+		}
+		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg), Key: kmsKey}, nil
+	case transit.key != nil && *transit.key != "":
+		o := transit.openbao
+		login, token, tokenFile := o.Credentials()
+		return keys.NewTransitSigner(ctx, &keys.TransitSigner{
+			Address: *o.Address, Mount: *o.Mount, Namespace: *o.Namespace, CAFile: *o.CAFile, Key: *transit.key,
+			Login: login, Token: token, TokenFile: tokenFile,
+		})
+	default:
+		return keys.LoadLocalSignerFile(keyID, keyFile)
+	}
+}
+
+// keyPublic prints the public half of a signing key, which is all an
+// auditor needs to verify the chain.
+func keyPublic(args []string) error {
+	flags := flag.NewFlagSet("key public", flag.ContinueOnError)
+	var (
+		key     = flags.String("key", "", "PEM private key file")
+		kmsKey  = flags.String("kms-key", "", "an AWS KMS signing key")
+		region  = flags.String("region", env("AWS_REGION", ""), "the region, when it is not in the environment")
+		transit = transitFlags(flags)
+		pin     = flags.Bool("thumbprint", false, "print the RFC 7638 thumbprint, which is what a verifier pins, and not the PEM")
+		jwks    = flags.Bool("jwks", false, "print the key as a JWK Set, the form of keys/roots.jwks, and not the PEM")
+	)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	if given(*key, *kmsKey, *transit.key) != 1 {
+		return errors.New("give exactly one of --key, --kms-key and --transit-key")
+	}
+	ctx := context.Background()
+	signer, err := signerFor(ctx, *key, "", *kmsKey, *region, transit)
+	if err != nil {
+		return err
+	}
+	public, err := signer.PublicKey(ctx)
+	if err != nil {
+		return err
+	}
+	if !*pin && !*jwks {
+		_, err = os.Stdout.Write(public)
+		return err
+	}
+	// A seal key is P-384; any other key has no thumbprint a verifier could pin.
+	pub, err := keys.ParseECPublic(public)
+	if err != nil {
+		return err
+	}
+	if *pin {
+		_, err = fmt.Fprintln(os.Stdout, seal.Thumbprint(pub))
+		return err
+	}
+	body, err := seal.MarshalJWKS(pub)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(os.Stdout, "%s\n", body)
+	return err
+}
+
+// purge brings the index and the deduplication table within the profiles.
+func purge(args []string) error {
+	flags := flag.NewFlagSet("purge", flag.ContinueOnError)
+	var (
+		deployment  = flags.String("deployment", "", "the profile configuration")
+		database    = flags.String("database", "", "the Postgres URL of the index")
+		identifying = flags.Duration("identifying-after", 0,
+			"how long the index keeps who an event happened to; your policy, as no shipped preset states one")
+		dedupeWindow = flags.Duration("dedupe-window", 0,
+			"how long a written identifier is remembered; default the widest the profiles ask for")
+		dryRun     = flags.Bool("dry-run", false, "report what would be purged and purge nothing")
+		asJSON     = flags.Bool("json", false, "print the report as JSON")
+		configFile = flags.String("config", "", configUsage)
+	)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	if file := jobConfig(flags, *configFile); file != "" {
+		if err := onlyConfig(flags); err != nil {
+			return err
+		}
+		return purgeFromConfig(file, *asJSON)
+	}
+	switch {
+	case *deployment == "":
+		return errors.New("give the profile configuration with --deployment")
+	case *database == "":
+		return errors.New("give the index's Postgres URL with --database")
+	}
+
+	profiles, err := profilesFor(*deployment)
+	if err != nil {
+		return err
+	}
+	window := dedupeFor(profiles, *dedupeWindow)
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, *database)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := postgres.CheckVersion(ctx, pool); err != nil {
+		return err
+	}
+	target, err := postgres.New(pool)
+	if err != nil {
+		return err
+	}
+	dedupe, err := postgres.NewDedupe(pool, window)
+	if err != nil {
+		return err
+	}
+
+	_, err = cli.Purge{
+		Index: target, Dedupe: dedupe, Profiles: profiles,
+		IdentifyingAfter: *identifying, DedupeWindow: window,
+		DryRun: *dryRun, JSON: *asJSON,
+	}.Run(ctx)
+	return err
+}
+
+// clockSync checks the clock against UTC and records what it found.
+func clockSync(args []string) error {
+	flags := flag.NewFlagSet("clock-sync", flag.ContinueOnError)
+	var servers repeated
+	flags.Var(&servers, "ntp", "a time reference, repeatable; the quickest to answer is believed")
+	var (
+		sinkURL   = flags.String("sink", "", "the writer the reading is recorded through")
+		maxOffset = flags.Duration("max-offset", time.Second,
+			"how far the clock may be out before the run fails; 0 accepts any offset and only records it")
+		timeout    = flags.Duration("timeout", 5*time.Second, "how long to wait for a reference")
+		instance   = flags.String("instance", "", "the name this job records itself under")
+		version    = flags.String("version", "dev", "this build's version")
+		asJSON     = flags.Bool("json", false, "print the report as JSON")
+		configFile = flags.String("config", "", configUsage)
+	)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	if file := jobConfig(flags, *configFile); file != "" {
+		if err := onlyConfig(flags); err != nil {
+			return err
+		}
+		return clockSyncFromConfig(file, *asJSON)
+	}
+	if len(servers) == 0 {
+		return errors.New("name at least one time reference with --ntp")
+	}
+
+	common, err := catalogue.Common()
+	if err != nil {
+		return err
+	}
+	name := *instance
+	if name == "" {
+		name = record.InstanceName()
+	}
+
+	run := cli.ClockSync{
+		Catalogue: common, Servers: servers, MaxOffset: *maxOffset,
+		Timeout: *timeout, Version: *version, Instance: name, JSON: *asJSON,
+	}
+	if *sinkURL != "" {
+		run.Sink = cli.WriterClient(*sinkURL)
+	}
+	_, err = run.Run(context.Background())
+	return err
+}
+
+// holdCmd places, releases and lists legal holds.
+func holdCmd(args []string) error {
+	if len(args) == 0 {
+		return errors.New("audit hold needs place, release or list")
+	}
+	flags := flag.NewFlagSet("hold "+args[0], flag.ContinueOnError)
+	var (
+		profile = flags.String("profile", "", "the profile to hold")
+		tenant  = flags.String("tenant", "", "narrow the hold to one tenant")
+		reason  = flags.String("reason", "", "why the hold is placed; it is recorded and cannot be blank")
+		id      = flags.String("id", "", "the hold's identifier")
+		by      = flags.String("by", "", "who is placing or releasing it, as this deployment names them")
+		sinkURL = flags.String("sink", "", "the writer this action is recorded through")
+		asJSON  = flags.Bool("json", false, "print as JSON")
+	)
+	archiveFlags := cli.NewArchiveFlags(flags, env, cli.Writes)
+	if _, err := parse(flags, args[1:]); err != nil {
+		return err
+	}
+	if *archiveFlags.Bucket == "" {
+		return errors.New("name the archive's bucket with --bucket")
+	}
+
+	ctx := context.Background()
+	archive, err := archiveFlags.Open(ctx)
+	if err != nil {
+		return err
+	}
+	run := cli.Hold{
+		Store: archive, Profile: *profile, Tenant: *tenant,
+		Reason: *reason, ID: *id, By: *by, JSON: *asJSON,
+	}
+	if *sinkURL != "" {
+		if run.Catalogue, err = catalogue.Common(); err != nil {
+			return err
+		}
+		run.Sink = cli.WriterClient(*sinkURL)
+	}
+	return run.Run(ctx, args[0])
+}
+
+// keyCmd is the key lifecycle. Only destroy is built.
+func keyCmd(args []string) error {
+	if len(args) > 0 && args[0] == "public" {
+		return keyPublic(args[1:])
+	}
+	if len(args) == 0 || args[0] != "destroy" {
+		return errors.New("audit key needs destroy or public")
+	}
+	flags := flag.NewFlagSet("key destroy", flag.ContinueOnError)
+	var (
+		tenant  = flags.String("tenant", "", "the tenant whose key is destroyed")
+		purpose = flags.String("purpose", "", "the purpose the key is for")
+		by      = flags.String("by", "", "who is destroying it, as this deployment names them")
+		reason  = flags.String("reason", "", "why, recorded with the erasure")
+		sinkURL = flags.String("sink", "", "the writer the erasure is recorded through")
+	)
+	keyFlags := cli.NewKeyFlags(flags, nil)
+	archiveFlags := cli.NewArchiveFlags(flags, env, cli.Reads)
+	if _, err := parse(flags, args[1:]); err != nil {
+		return err
+	}
+	switch {
+	case *archiveFlags.Bucket == "":
+		return errors.New("name the archive's bucket with --bucket: the holds are read from it")
+	case *sinkURL == "":
+		return errors.New("give the writer with --sink: an erasure nobody recorded is one nobody can prove was lawful")
+	case !keyFlags.Configured():
+		return errors.New("name the keys: --key-root (and --key-dir), or --key-provider transit with --transit-address")
+	}
+
+	ctx := context.Background()
+	archive, err := archiveFlags.Open(ctx)
+	if err != nil {
+		return err
+	}
+	provider, err := keyFlags.Open(ctx)
+	if err != nil {
+		return err
+	}
+	if provider == nil {
+		return errors.New(
+			"this needs a key provider: name one with --key-provider, since the default is none " +
+				"and a deployment without keys has nothing to destroy or resolve")
+	}
+	defer provider.Close() //nolint:errcheck // shutting down
+	common, err := catalogue.Common()
+	if err != nil {
+		return err
+	}
+
+	return cli.KeyDestroy{
+		Provider: provider, Store: archive, Sink: cli.WriterClient(*sinkURL),
+		Catalogue: common, Tenant: *tenant, Purpose: *purpose, By: *by, Reason: *reason,
+	}.Run(ctx)
+}
+
+// messages prints the sentences of one or more catalogues as JSON: one object
+// for one catalogue, an array for several.
+func messages(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("name at least one catalogue: audit messages <catalogue.yaml>")
+	}
+	var all []catalogue.Sentences
+	for _, path := range args {
+		c, err := catalogue.LoadFS(os.DirFS(filepath.Dir(path)), filepath.Base(path))
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		all = append(all, c.Sentences())
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	if len(all) == 1 {
+		return enc.Encode(all[0])
+	}
+	return enc.Encode(all)
+}
+
+// conformance runs the read-only conformance checks against a query service.
+func conformance(args []string) error {
+	flags := flag.NewFlagSet("conformance", flag.ContinueOnError)
+	var profiles stringList
+	flags.Var(&profiles, "profile", "a profile to check; repeat for several")
+	var (
+		url       = flags.String("query", "", "the query service's base URL")
+		tokenFile = flags.String("token-file", os.Getenv(cli.TokenFileEnv),
+			"a file holding the bearer token to call it with, read on every request; default AUDIT_TOKEN_FILE")
+		limit    = flags.Int("max", 1000, "how many records of each profile the walk reads at most")
+		verified = flags.Duration("verified-before", 0,
+			"require sampled records older than this to carry a verified_at, which seals set; 0 checks nothing")
+		asJSON = flags.Bool("json", false, "print the report as JSON")
+	)
+	if _, err := parse(flags, args); err != nil {
+		return err
+	}
+	switch {
+	case *url == "":
+		return errors.New("name the query service with --query")
+	case len(profiles) == 0:
+		return errors.New("name at least one profile with --profile")
+	}
+	httpClient := http.DefaultClient
+	if *tokenFile != "" {
+		httpClient = auth.TokenFile(*tokenFile)
+	}
+	failed, err := cli.Conformance{
+		Client:         auditv1connect.NewQueryServiceClient(httpClient, *url),
+		Profiles:       profiles,
+		Max:            *limit,
+		VerifiedBefore: *verified,
+		JSON:           *asJSON,
+	}.Run(context.Background())
+	if err != nil {
+		return err
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d checks failed", failed)
+	}
+	return nil
+}
+
+// env is a flag's default taken from the environment: here only AWS_REGION. The
+// archive flags of the interactive commands read AUDIT_BUCKET, AUDIT_PREFIX and
+// the rest through cli.NewArchiveFlags, for a person at a terminal. The jobs a
+// chart runs read none of them: they are configured by one file, --config or
+// AUDIT_CONFIG, whose `archive` block names the bucket.
+func env(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
+}

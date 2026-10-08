@@ -1,0 +1,221 @@
+# An internal service's installation: the front door and the write path in one
+# process, no stream, and an index in a small Postgres of its own.
+#
+# This is what an application's chart sets under the `audit:` key when it takes
+# this chart as a dependency. Everything not named here has a default. Each
+# `config:` block is the binary's own configuration, key for key
+# (audit/docs/reference/configuration.md): the chart passes it through, and the same
+# schema validates it here and when the process starts. A secret is never in
+# one: the file names a secret, `secrets` says they are files under
+# /etc/audit/secrets, and `secretFiles` puts a Secret's key at each name. The
+# sink URL names the writer's Service, which is the release's full name:
+# `audit` here, and `<release>-audit` under an application's own.
+mode: direct
+
+# Two pods. The writer is told how many there are, because it refuses to run
+# several without the database that makes it safe.
+replicas: 2
+
+profiles:
+  security:
+    presets: [security]
+
+# No pseudonymisation keys: staff are kept in clear, and people outside arrive
+# as identifiers this application minted.
+externalIdentifiersAreOpaque: true
+
+# Who may register a catalogue, and as what. A workload not listed here cannot.
+workloadIdentity:
+  issuers:
+    - url: https://oidc.example.com/id/CLUSTER
+  workloads:
+    - subject: system:serviceaccount:app:api
+      source: app
+
+# The schema, applied before the parts roll, and what each part's database
+# role is granted. The migration connects as the OWNER of the tables, which no
+# part does: an owner is bound by no grant and no row-level security. Each role
+# named here must exist, and gets what its part needs and nothing else: the
+# writer the deduplication table and the registry, the indexer the index, the
+# query service a read of it, the purge job the deletes.
+migrate:
+  enabled: true
+  config:
+    apiVersion: audit.truvity.github.io/audit-migrate/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    database:
+      url: postgres://audit_owner@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: database-password
+    writer: audit_writer
+    observe: audit_observe
+    reader: audit_query
+    purge: audit_purge
+  secretFiles:
+    - name: database-password
+      secretName: audit-db-owner
+      key: password
+
+writer:
+  config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    deployment: /etc/audit/deployment.yaml
+    workloads: /etc/audit/workloads.yaml
+    replicas: 2
+    archive:
+      bucket:
+        name: audit-eu-example-1
+        region: eu-example-1
+      # Required wherever the bucket is shared: it is what keeps two
+      # applications' archives apart, and what each role's IAM is scoped to.
+      prefix: audit/app
+      kmsKey: alias/audit-archive
+    database:
+      url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: database-password
+  secretFiles:
+    - name: database-password
+      secretName: audit-db
+      key: password
+
+# The indexer: follows the archive by listing and writes the index the query
+# service reads. A Deployment of its own, as a database role of its own
+# (`migrate.config.observe`) and under its own ServiceAccount, because the
+# writer holds neither the index nor this identity. `settle` is how far
+# behind now it stays: longer than a put can take, and the least time between
+# a record's acknowledgement and its appearance in search.
+observe:
+  enabled: true
+  config:
+    apiVersion: audit.truvity.github.io/audit-observe/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    archive:
+      bucket:
+        name: audit-eu-example-1
+        region: eu-example-1
+      prefix: audit/app
+    database:
+      url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: observe-database-password
+    settle: 2m
+    interval: 30s
+  secretFiles:
+    - name: observe-database-password
+      secretName: audit-db-observe
+      key: password
+
+query:
+  enabled: true
+  replicas: 1
+  grants:
+    issuers:
+      - url: https://console.example.com
+        audience: audit
+  config:
+    apiVersion: audit.truvity.github.io/audit-query/v2
+    secrets:
+      source: file
+      root: /etc/audit/secrets
+    deployment: /etc/audit/deployment.yaml
+    grants: /etc/audit/grants.yaml
+    sink:
+      url: http://audit:8080
+      tokenFile: /var/run/audit/token
+    database:
+      url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: query-database-password
+    archive:
+      bucket:
+        name: audit-eu-example-1
+        region: eu-example-1
+      prefix: audit/app
+  secretFiles:
+    - name: query-database-password
+      secretName: audit-db-reader
+      key: password
+  tokens:
+    - audience: audit
+      mountPath: /var/run/audit
+
+jobs:
+  # Seals each closed hour into a signed chain. Its own identity: bind the cloud
+  # role that may use the seal key (and put under audit/app/seals/) to this
+  # account, never the writer's.
+  notary:
+    enabled: true
+    serviceAccount:
+      annotations:
+        example.test/cloud-role: audit-notary
+    config:
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      archive:
+        bucket:
+          name: audit-eu-example-1
+          region: eu-example-1
+        prefix: audit/app
+        kmsKey: alias/audit-archive
+      signer:
+        kms:
+          key: alias/audit-seal
+      settle: 10m
+      sink:
+        url: http://audit:8080
+        tokenFile: /var/run/audit/token
+    tokens:
+      - audience: audit
+        mountPath: /var/run/audit
+  verify:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-verify/v2
+      deployment: /etc/audit/deployment.yaml
+      archive:
+        bucket:
+          name: audit-eu-example-1
+          region: eu-example-1
+        prefix: audit/app
+      # The roots this check trusts, by thumbprint
+      # (`audit key public --kms-key alias/audit-seal --thumbprint`). Nothing else
+      # in the bucket is believed.
+      seals:
+        roots: [4fVY0m1lq1mWnE7yOa0zYk0o1lq9n2h8bVd3sLQ4wXk]
+      sink:
+        url: http://audit:8080
+        tokenFile: /var/run/audit/token
+    tokens:
+      - audience: audit
+        mountPath: /var/run/audit
+  purge:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-purge/v2
+      secrets:
+        source: file
+        root: /etc/audit/secrets
+      deployment: /etc/audit/deployment.yaml
+      database:
+        url: postgres://audit_purge@db.example.com:5432/audit?sslmode=verify-full
+        passwordSecret: database-password
+    secretFiles:
+      - name: database-password
+        secretName: audit-db-purge
+        key: password
+  clockSync:
+    enabled: true
+    config:
+      apiVersion: audit.truvity.github.io/audit-clock-sync/v2
+      # Required by every preset with a compliance obligation. On AWS this is
+      # the instance's own time service.
+      ntp: ["169.254.169.123"]
+      sink:
+        url: http://audit:8080
+        tokenFile: /var/run/audit/token
+    tokens:
+      - audience: audit
+        mountPath: /var/run/audit

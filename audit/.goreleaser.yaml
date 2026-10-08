@@ -1,0 +1,233 @@
+# Releases: the `audit` toolchain as archives, so that an auditor can run
+# `verify` with their own copy and nothing that has to be trusted; and one
+# image per binary, built by ko without a container runtime. The images are
+# distroless and have no shell, which is why every job in the chart is a
+# command with arguments and never a script.
+#
+# hack/e2e-snapshot.sh runs this SAME file, unmodified but for
+# GITHUB_RELEASE_DISABLED and KO_DOCKER_REPO (both read below): the local
+# and CI kind tier gets the exact release a tag builds, pointed at the
+# box's own registry instead of ghcr.io, with no GitHub release cut —
+# ported from truvity/policy's identical local loop.
+version: 2
+project_name: audit
+
+# The version comes from the root `vX.Y.Z` tag only. The sdk/ and
+# deploy/pulumi/ module tags sit at the same commit and must never be
+# picked as the version (an annotated `sdk/v0.7.0` once was, and ko refused
+# it as an image tag).
+git:
+  ignore_tags:
+    - "sdk/*"
+    - "deploy/*"
+
+builds:
+  - id: audit
+    main: ./cmd/audit
+    binary: audit
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+  - id: audit-query
+    main: ./cmd/audit-query
+    binary: audit-query
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+  - id: audit-observe
+    main: ./cmd/audit-observe
+    binary: audit-observe
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+  - id: audit-notary
+    main: ./cmd/audit-notary
+    binary: audit-notary
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+  - id: audit-writer
+    main: ./cmd/audit-writer
+    binary: audit-writer
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+
+  # The two Lambda functions, as the zip a function's package is built from:
+  # `bootstrap` is the name the provided.al2023 runtime runs. arm64 only, which
+  # is what the Pulumi library (deploy/pulumi) creates the functions as. The
+  # package the library ships holds this binary and the function's rendered
+  # configuration; the zip here is the binary alone.
+  - id: audit-writer-lambda
+    main: ./cmd/audit-writer-lambda
+    binary: bootstrap
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+  - id: audit-notary-lambda
+    main: ./cmd/audit-notary-lambda
+    binary: bootstrap
+    env: [CGO_ENABLED=0, GOEXPERIMENT=jsonv2]
+    goos: [linux]
+    goarch: [arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/truvity/sluis/audit/internal/buildinfo.Version={{ .Version }}"]
+
+# One archive shape for every platform. Mixed formats are what breaks the
+# download step of whatever installs these.
+archives:
+  - id: audit
+    ids: [audit]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  # A Lambda package is a zip with the binary at its root.
+  - id: audit-writer-lambda
+    ids: [audit-writer-lambda]
+    formats: [zip]
+    name_template: "audit-writer-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
+  - id: audit-notary-lambda
+    ids: [audit-notary-lambda]
+    formats: [zip]
+    name_template: "audit-notary-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
+
+kos:
+  - id: audit-writer
+    build: audit-writer
+    # Named here as well as in KO_DOCKER_REPO, and the same value in both,
+    # so `goreleaser check` validates in a checkout that has no env — the
+    # lint recipe runs it without one.
+    repositories: [ghcr.io/truvity/audit]
+    bare: true
+    preserve_import_paths: false
+    # The image name is the command's import-path base appended to
+    # KO_DOCKER_REPO, which the shared release workflow exports as
+    # ghcr.io/truvity/audit — so ./cmd/audit-writer publishes
+    # ghcr.io/truvity/audit/audit-writer. A per-ko `repositories:` list does
+    # NOT win over that env var: v0.1.0 set one and ko still pushed
+    # to ghcr.io/truvity itself, which the registry answered with a
+    # 400. This is the shape access-roster publishes its two images
+    # with, and the chart's defaults name the same paths.
+    base_import_paths: true
+    base_image: cgr.dev/chainguard/static:latest
+    platforms: [linux/amd64, linux/arm64]
+    tags: ["{{ .Version }}", latest]
+    sbom: spdx
+  - id: audit-query
+    build: audit-query
+    # Named here as well as in KO_DOCKER_REPO, and the same value in both,
+    # so `goreleaser check` validates in a checkout that has no env — the
+    # lint recipe runs it without one.
+    repositories: [ghcr.io/truvity/audit]
+    bare: true
+    preserve_import_paths: false
+    # The image name is the command's import-path base appended to
+    # KO_DOCKER_REPO, which the shared release workflow exports as
+    # ghcr.io/truvity/audit — so ./cmd/audit-query publishes
+    # ghcr.io/truvity/audit/audit-query. A per-ko `repositories:` list does
+    # NOT win over that env var: v0.1.0 set one and ko still pushed
+    # to ghcr.io/truvity itself, which the registry answered with a
+    # 400. This is the shape access-roster publishes its two images
+    # with, and the chart's defaults name the same paths.
+    base_import_paths: true
+    base_image: cgr.dev/chainguard/static:latest
+    platforms: [linux/amd64, linux/arm64]
+    tags: ["{{ .Version }}", latest]
+    sbom: spdx
+  - id: audit-notary
+    build: audit-notary
+    # Named here as well as in KO_DOCKER_REPO, and the same value in both,
+    # so `goreleaser check` validates in a checkout that has no env — the
+    # lint recipe runs it without one.
+    repositories: [ghcr.io/truvity/audit]
+    bare: true
+    preserve_import_paths: false
+    # The image name is the command's import-path base appended to
+    # KO_DOCKER_REPO, which the shared release workflow exports as
+    # ghcr.io/truvity/audit — so ./cmd/audit-notary publishes
+    # ghcr.io/truvity/audit/audit-notary. A per-ko `repositories:` list does
+    # NOT win over that env var: v0.1.0 set one and ko still pushed
+    # to ghcr.io/truvity itself, which the registry answered with a
+    # 400. This is the shape access-roster publishes its two images
+    # with, and the chart's defaults name the same paths.
+    base_import_paths: true
+    base_image: cgr.dev/chainguard/static:latest
+    platforms: [linux/amd64, linux/arm64]
+    tags: ["{{ .Version }}", latest]
+    sbom: spdx
+  - id: audit-observe
+    build: audit-observe
+    # Named here as well as in KO_DOCKER_REPO, and the same value in both,
+    # so `goreleaser check` validates in a checkout that has no env — the
+    # lint recipe runs it without one.
+    repositories: [ghcr.io/truvity/audit]
+    bare: true
+    preserve_import_paths: false
+    # The image name is the command's import-path base appended to
+    # KO_DOCKER_REPO, which the shared release workflow exports as
+    # ghcr.io/truvity/audit — so ./cmd/audit-observe publishes
+    # ghcr.io/truvity/audit/audit-observe. A per-ko `repositories:` list does
+    # NOT win over that env var: v0.1.0 set one and ko still pushed
+    # to ghcr.io/truvity itself, which the registry answered with a
+    # 400. This is the shape access-roster publishes its two images
+    # with, and the chart's defaults name the same paths.
+    base_import_paths: true
+    base_image: cgr.dev/chainguard/static:latest
+    platforms: [linux/amd64, linux/arm64]
+    tags: ["{{ .Version }}", latest]
+    sbom: spdx
+  - id: audit
+    build: audit
+    # Named here as well as in KO_DOCKER_REPO, and the same value in both,
+    # so `goreleaser check` validates in a checkout that has no env — the
+    # lint recipe runs it without one.
+    repositories: [ghcr.io/truvity/audit]
+    bare: true
+    preserve_import_paths: false
+    # The image name is the command's import-path base appended to
+    # KO_DOCKER_REPO, which the shared release workflow exports as
+    # ghcr.io/truvity/audit — so ./cmd/audit publishes
+    # ghcr.io/truvity/audit/audit. A per-ko `repositories:` list does
+    # NOT win over that env var: v0.1.0 set one and ko still pushed
+    # to ghcr.io/truvity itself, which the registry answered with a
+    # 400. This is the shape access-roster publishes its two images
+    # with, and the chart's defaults name the same paths.
+    base_import_paths: true
+    base_image: cgr.dev/chainguard/static:latest
+    platforms: [linux/amd64, linux/arm64]
+    tags: ["{{ .Version }}", latest]
+    sbom: spdx
+
+# Named rather than inferred from the remote, so the config validates in a
+# checkout that has none.
+release:
+  github:
+    owner: truvity
+    name: audit
+  # Set by hack/e2e-snapshot.sh only: a commit that is not a tag has
+  # nothing to attach a GitHub release to, and the kind tier's snapshot
+  # build needs none. Empty (the default, every real release) leaves this
+  # exactly as it always was.
+  disable: "{{ .Env.GITHUB_RELEASE_DISABLED }}"
+
+checksum:
+  name_template: checksums.txt
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+# CHANGELOG.md is written by hand and says what changed; a list of commit
+# subjects would say less and stand beside it.
+changelog:
+  disable: true

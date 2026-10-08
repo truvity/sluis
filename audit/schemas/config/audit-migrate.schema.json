@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "postgres": {
+      "allOf": [
+        {
+          "$ref": "https://github.com/truvity/policy/schemas/fragments/postgres.json"
+        },
+        {
+          "properties": {
+            "url": {
+              "not": {
+                "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://[^/?#@]*:[^/?#@]*@"
+              }
+            }
+          }
+        }
+      ],
+      "description": "A PostgreSQL connection. The URL carries no password: a password in it is refused, and `passwordSecret` names the secret that holds it."
+    },
+    "secrets": {
+      "allOf": [
+        {
+          "$ref": "https://github.com/truvity/policy/schemas/fragments/secrets.json"
+        },
+        {
+          "properties": {
+            "source": {
+              "enum": [
+                "env",
+                "file",
+                "ssm"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Where a field named `...Secret` finds the secret it names. One source for the whole file: `env` (the name is an environment variable), `file` (the name is a path under `root`, one file per secret: a mounted Kubernetes Secret) or `ssm` (the name is a SecureString under `root` in AWS Systems Manager Parameter Store, read with the process's own identity). On AWS Lambda use `ssm`: the function's environment is never a place for a secret. Unset is `env`."
+    }
+  },
+  "$id": "https://truvity.github.io/audit/schemas/v2/config/audit-migrate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The configuration of `audit migrate --config`, which applies the schema and grants each part's database role what it needs and no more. Secrets are never in this file: a field named ...Secret holds the NAME of a secret, which the `secrets` block says how to find (an environment variable, a file or an SSM parameter). Telemetry is the OTEL_* environment, not configuration.",
+  "properties": {
+    "apiVersion": {
+      "description": "The version of this document's shape, `audit.truvity.github.io/audit-migrate/v2`. Absent means version 1, which is deprecated and read for one minor (`truvity.github.io/audit-migrate/v1`); another value is refused, so that a later shape arrives by a version and not by a file that quietly means something else.",
+      "enum": [
+        "audit.truvity.github.io/audit-migrate/v2"
+      ]
+    },
+    "database": {
+      "$ref": "#/$defs/postgres"
+    },
+    "observe": {
+      "description": "A role to grant what the indexer needs: read and write on the index and its cursors, and the creation of monthly partitions through one function. Must exist and be none of the other roles.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "purge": {
+      "description": "A role to grant what the purge job needs: to delete from the index and the deduplication table. Must exist and be none of the other roles.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "reader": {
+      "description": "A role to grant what the query service needs: usage on the schema and select on the index's tables, and nothing else. The role must already exist and must not own the tables.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "secrets": {
+      "$ref": "#/$defs/secrets"
+    },
+    "writer": {
+      "description": "A role to grant what the write path needs: the deduplication table, the catalogue registry and the key directory, and none of the index. Must exist and be none of the other roles.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "database"
+  ],
+  "title": "audit migrate",
+  "type": "object"
+}

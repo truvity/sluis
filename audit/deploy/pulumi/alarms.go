@@ -1,0 +1,168 @@
+package auditpulumi
+
+import (
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sns"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sqs"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+)
+
+// alarmTargets are what the alarms watch. The ingest side (Queue, Dlq, Writer)
+// is nil when Ingest.Disabled and the notary when Notary.Disabled, and an alarm
+// on a part that is not there is not created.
+type alarmTargets struct {
+	Queue, Dlq     *sqs.Queue
+	Writer, Notary *lambda.Function
+	// WriterLogs is the writer's log group, which the unknown-catalogue alarm
+	// reads through a metric filter.
+	WriterLogs *cloudwatch.LogGroup
+}
+
+// unknownCatalogueWords is the field the writer's log line for a record that names
+// a catalogue version it does not have carries (writer/writer.go). The writer keeps
+// the characters of anything a record said from spelling it (`=` is not logged), so
+// an emitter cannot raise the alarm with a string; the metric filter matches it, so
+// it is a contract with the binary: change both together.
+const unknownCatalogueWords = "event=unknown_catalogue"
+
+// unknownCatalogueMetric is the metric the filter publishes, in the namespace
+// `Audit/<name>`.
+const unknownCatalogueMetric = "UnknownCatalogueVersion"
+
+// AlarmNames lists the CloudWatch alarms the library creates, as the suffix after
+// `<name>-`: the alarm set the AWS design calls for. Each publishes to the alarm topic on
+// ALARM and on OK, and the topic is subscribed to alert-ingress over HTTPS.
+//
+//	writer-throttles, notary-throttles   Lambda throttled an invocation: the writer is not keeping up, or the account's concurrency is spent
+//	ingest-dlq-not-empty                 a message was delivered MaxReceiveCount times and moved aside: a record is not in the archive
+//	ingest-oldest-message-age            the oldest message in the queue is older than the threshold: the writer is behind or stopped
+//	writer-errors, notary-errors         an invocation failed
+//	writer-unknown-catalogue             the writer refused a record for naming a catalogue version it does not have: a writer and its emitters are out of step
+//	notary-silent                        the notary has not been invoked for NotarySilenceHours: the schedule or the function is gone
+//
+// "Silent on OTLP" is the notary's silence, not a metric of the OTLP path
+// itself: a function that stops being invoked sends nothing, and an alarm on the
+// platform's own Invocations metric is the one that does not depend on the thing
+// that is broken.
+//
+// With Ingest.Disabled the writer's, the queue's and the dead-letter queue's are
+// not created; with Notary.Disabled the notary's three are not. The list below is
+// the full set.
+var AlarmNames = []string{
+	"writer-throttles", "notary-throttles", "ingest-dlq-not-empty", "ingest-oldest-message-age",
+	"writer-errors", "notary-errors", "notary-silent", "writer-unknown-catalogue",
+}
+
+// newAlarms returns a nil topic, and creates nothing, when neither part exists:
+// there is then nothing for an alarm to watch.
+func newAlarms(ctx *pulumi.Context, name string, a *Args, t alarmTargets, tags pulumi.StringMap, opts ...pulumi.ResourceOption) (*sns.Topic, error) {
+	if t.Writer == nil && t.Notary == nil {
+		return nil, nil
+	}
+	// The topic is not encrypted with a customer key: CloudWatch could not publish
+	// to one without a key policy of its own, and an alarm's body names a queue and
+	// a function and carries no record.
+	topic, err := sns.NewTopic(ctx, name+"-alarms", &sns.TopicArgs{Name: pulumi.String(name + "-alarms"), Tags: tags}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if a.Alerts.EndpointURL != nil {
+		// alert-ingress must confirm: SNS POSTs a SubscriptionConfirmation to the
+		// URL, and the subscription stays pending until it is followed.
+		if _, err := sns.NewTopicSubscription(ctx, name+"-alert-ingress", &sns.TopicSubscriptionArgs{
+			Topic:                topic.Arn,
+			Protocol:             pulumi.String("https"),
+			Endpoint:             a.Alerts.EndpointURL,
+			EndpointAutoConfirms: pulumi.Bool(false),
+		}, opts...); err != nil {
+			return nil, err
+		}
+	}
+	actions := pulumi.Array{topic.Arn}
+
+	type alarm struct {
+		suffix, desc, namespace, metric, stat, operator string
+		dims                                            pulumi.StringMap
+		threshold                                       float64
+		period, evaluations, datapoints                 int
+		missing                                         string
+	}
+	fnDims := func(f *lambda.Function) pulumi.StringMap { return pulumi.StringMap{"FunctionName": f.Name} }
+	queueDims := func(q *sqs.Queue) pulumi.StringMap { return pulumi.StringMap{"QueueName": q.Name} }
+	var alarms []alarm
+	if t.Writer != nil && t.WriterLogs != nil {
+		// A record that names a catalogue version the writer does not have is
+		// dead-lettered in the archive and acknowledged, so the queue's and the
+		// dead-letter queue's alarms never see it: this is the signal. The writer
+		// logs it with fixed words and the source and version; the filter turns each
+		// line into a datapoint.
+		if _, err := cloudwatch.NewLogMetricFilter(ctx, name+"-unknown-catalogue", &cloudwatch.LogMetricFilterArgs{
+			Name:         pulumi.String(name + "-unknown-catalogue"),
+			LogGroupName: t.WriterLogs.Name,
+			Pattern:      pulumi.String(`"` + unknownCatalogueWords + `"`),
+			MetricTransformation: &cloudwatch.LogMetricFilterMetricTransformationArgs{
+				Name:      pulumi.String(unknownCatalogueMetric),
+				Namespace: pulumi.String("Audit/" + name),
+				Value:     pulumi.String("1"),
+			},
+		}, opts...); err != nil {
+			return nil, err
+		}
+		alarms = append(alarms, alarm{"writer-unknown-catalogue",
+			"The writer refused a record for naming a catalogue version it does not have: the writer and its emitters are out of step on a catalogue. " +
+				"The log line names the source and version; deploy the catalogue (or the emitter's release) that matches.",
+			"Audit/" + name, unknownCatalogueMetric, "Sum", "GreaterThanThreshold", nil, 0, 300, 1, 1, "notBreaching"})
+	}
+	if t.Writer != nil {
+		alarms = append(alarms,
+			alarm{"writer-throttles", "The writer was throttled: it is not keeping up, or the account's Lambda concurrency is spent.",
+				"AWS/Lambda", "Throttles", "Sum", "GreaterThanThreshold", fnDims(t.Writer), 0, 300, 1, 1, "notBreaching"},
+			alarm{"ingest-dlq-not-empty", "A message reached the dead-letter queue: a record was delivered the allowed number of times and is not in the archive.",
+				"AWS/SQS", "ApproximateNumberOfMessagesVisible", "Maximum", "GreaterThanThreshold", queueDims(t.Dlq), 0, 300, 1, 1, "notBreaching"},
+			alarm{"ingest-oldest-message-age", "The oldest message in the ingest queue is older than the threshold: the writer is behind or not running.",
+				"AWS/SQS", "ApproximateAgeOfOldestMessage", "Maximum", "GreaterThanThreshold", queueDims(t.Queue),
+				float64(a.Alerts.OldestMessageAgeSeconds), 300, 1, 1, "notBreaching"},
+			alarm{"writer-errors", "A writer invocation failed.",
+				"AWS/Lambda", "Errors", "Sum", "GreaterThanThreshold", fnDims(t.Writer), 0, 300, 1, 1, "notBreaching"},
+		)
+	}
+	if t.Notary != nil {
+		alarms = append(alarms,
+			alarm{"notary-throttles", "The notary was throttled.",
+				"AWS/Lambda", "Throttles", "Sum", "GreaterThanThreshold", fnDims(t.Notary), 0, 300, 1, 1, "notBreaching"},
+			// The notary runs once an hour, so an hour is its natural period.
+			alarm{"notary-errors", "A notary run failed: a tenant could not be sealed, or the signer failed.",
+				"AWS/Lambda", "Errors", "Sum", "GreaterThanThreshold", fnDims(t.Notary), 0, 3600, 1, 1, "notBreaching"},
+			// Lambda publishes no Invocations datapoint for an hour with none, so the
+			// missing data IS the signal: treat it as breaching, and every one of the
+			// last NotarySilenceHours hours must be silent.
+			alarm{"notary-silent", "The notary has not been invoked for the silence window: the schedule or the function is gone, " +
+				"and the chain of seals is growing a gap.",
+				"AWS/Lambda", "Invocations", "Sum", "LessThanThreshold", fnDims(t.Notary), 1, 3600,
+				a.Alerts.NotarySilenceHours, a.Alerts.NotarySilenceHours, "breaching"},
+		)
+	}
+	for _, al := range alarms {
+		if _, err := cloudwatch.NewMetricAlarm(ctx, name+"-"+al.suffix, &cloudwatch.MetricAlarmArgs{
+			Name:               pulumi.String(name + "-" + al.suffix),
+			AlarmDescription:   pulumi.String(al.desc),
+			Namespace:          pulumi.String(al.namespace),
+			MetricName:         pulumi.String(al.metric),
+			Dimensions:         al.dims,
+			Statistic:          pulumi.String(al.stat),
+			ComparisonOperator: pulumi.String(al.operator),
+			Threshold:          pulumi.Float64(al.threshold),
+			Period:             pulumi.Int(al.period),
+			EvaluationPeriods:  pulumi.Int(al.evaluations),
+			DatapointsToAlarm:  pulumi.Int(al.datapoints),
+			TreatMissingData:   pulumi.String(al.missing),
+			AlarmActions:       actions,
+			OkActions:          actions,
+			Tags:               tags,
+		}, opts...); err != nil {
+			return nil, err
+		}
+	}
+	return topic, nil
+}

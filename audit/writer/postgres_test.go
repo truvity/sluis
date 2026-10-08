@@ -1,0 +1,119 @@
+package writer_test
+
+import (
+	"context"
+	"crypto/rand"
+	"strings"
+	"testing"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/truvity/sluis/audit/internal/pgtest"
+	"github.com/truvity/sluis/audit/internal/recobj"
+	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/sdk/catalogue"
+	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
+	"github.com/truvity/sluis/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/sink"
+	"github.com/truvity/sluis/audit/store"
+	"github.com/truvity/sluis/audit/store/storetest"
+	"github.com/truvity/sluis/audit/writer"
+)
+
+// With a database, replicas share one deduplication table, and a replica that
+// brings a key directory other than the deployment's is refused: it would give
+// the same person a second pseudonym.
+func TestReplicasShareTheDatabaseAndItsKeyDirectory(t *testing.T) {
+	pool := pgtest.Open(t)
+	ctx := context.Background()
+	archive := storetest.NewMemory()
+	root := make([]byte, 32)
+	if _, err := rand.Read(root); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	open := func(instance, keyDir string) (*writer.Writer, error) {
+		provider, err := keys.NewLocal(root, keyDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = provider.Close() })
+		return writer.Open(ctx, writer.Config{
+			Archive: archive, Profiles: profiles(t), Keys: provider,
+			Database: pool, Replicas: 2, Instance: instance, Self: "workload:test",
+		})
+	}
+
+	one, err := open("writer-1", dir)
+	if err != nil {
+		t.Fatalf("the first replica: %v", err)
+	}
+	two, err := open("writer-2", dir)
+	if err != nil {
+		t.Fatalf("a second replica on the same directory: %v", err)
+	}
+	if _, err := open("writer-3", t.TempDir()); err == nil || !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("a replica with its own key directory was let in: %v", err)
+	}
+
+	common, err := catalogue.Common()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &record.Record{
+		Id:               record.NewID(),
+		Source:           common.Source,
+		CatalogueVersion: common.Version,
+		SchemaVersion:    record.SchemaVersion,
+		Action:           "audit.writer.started",
+		Operation:        auditv1.Operation_OPERATION_CREATE,
+		TenantId:         record.TenantPlatform,
+		Actor:            &record.Actor{Kind: "system", Id: "test"},
+		Outcome:          &record.Outcome{Result: auditv1.Outcome_RESULT_SUCCESS},
+		Observer:         &record.Observer{Version: "1", Instance: "test"},
+	}
+	r.OccurredAt = timestamppb.Now()
+	for _, w := range []*writer.Writer{one, two} {
+		if _, err := w.Write(ctx, &sink.Request{Records: []*record.Record{r}, Delivery: sink.Block}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The second replica found the record in the shared table and wrote nothing,
+	// so the archive holds one copy per profile and not two.
+	copies := map[string]int{}
+	for _, key := range archive.Keys() {
+		if !strings.HasPrefix(key, store.RecordsPrefix) {
+			continue
+		}
+		body, err := archive.Get(ctx, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines, err := recobj.Decode(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range lines {
+			c, err := line.Decoded()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.GetId() == r.GetId() {
+				copies[c.GetProfile()]++
+			}
+		}
+	}
+	if len(copies) == 0 {
+		t.Fatal("the record reached no profile")
+	}
+	for profile, n := range copies {
+		if n != 1 {
+			t.Fatalf("the same record through two replicas is kept %d times under %s, want once", n, profile)
+		}
+	}
+	for _, w := range []*writer.Writer{one, two} {
+		if err := w.Close(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

@@ -1,0 +1,512 @@
+// Package writer is the audit writer as a library: the thing that takes records,
+// splits them into the copies their profiles keep, pseudonymises, and puts them
+// into the locked archive.
+//
+// This is what the audit-writer binary runs: that binary is built on this
+// package, and the promises are the writer's rather than the binary's. Nothing
+// is acknowledged before it is in the archive, a record the writer cannot take
+// is dead-lettered and never dropped, and the writer keeps an account of
+// itself in the archive it writes.
+//
+// It is exported because the binary needs it and a test may. It is not a way
+// to deploy: a writer inside an application puts the archive's credentials in
+// the application's pods and makes every fix an application release, which
+// docs/decisions/0011-one-installation-per-service-or-product.md rules out.
+//
+//	w, err := writer.Open(ctx, writer.Config{
+//		Archive:  archive,  // an s3store.Store on the Object-Locked bucket
+//		Profiles: profiles, // preset.ParseDeployment(doc) then Compose
+//		Keys:     provider, // keys.NewTransit or keys.NewLocal
+//	})
+//	defer w.Close(ctx)
+package writer
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/truvity/sluis/audit/sinkserver"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/truvity/sluis/audit/index/postgres"
+	"github.com/truvity/sluis/audit/index/s3scan"
+	"github.com/truvity/sluis/audit/internal/hold"
+	"github.com/truvity/sluis/audit/internal/identity"
+	"github.com/truvity/sluis/audit/internal/registry"
+	"github.com/truvity/sluis/audit/internal/telemetry"
+	inner "github.com/truvity/sluis/audit/internal/writer"
+	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/sdk/auth"
+	"github.com/truvity/sluis/audit/sdk/catalogue"
+	"github.com/truvity/sluis/audit/sdk/record"
+	"github.com/truvity/sluis/audit/sdk/sink"
+	"github.com/truvity/sluis/audit/store"
+)
+
+// Evidence is what a writer reports of its configuration in its start-up
+// record (audit.writer.started).
+type Evidence = inner.Evidence
+
+// Dedupe is the writer's record of what it has written: Seen asks and marks
+// nothing, Mark is called once the copies are durable, Purge forgets. See
+// dedupe/dynamodbdedupe and index/postgres for the shared ones.
+type Dedupe = inner.Dedupe
+
+// Config is what a writer needs. Archive and Profiles are required;
+// everything else has a default that is safe for one instance.
+type Config struct {
+	// Archive is where the copies go: the Object-Locked bucket.
+	Archive store.Store
+	// Profiles are the deployment's profiles, composed from the presets —
+	// preset.ParseDeployment and Compose read the same document the chart
+	// renders.
+	Profiles map[string]*preset.Profile
+	// Keys pseudonymise identifiers. With a provider that can also seal
+	// (keys.Transit, keys.Local), the identity behind each pseudonym is kept
+	// sealed under the same key, for resolve; see ForgetIdentities.
+	//
+	// Optional, and nil is the default a deployment should have to argue
+	// itself out of rather than into: most trails are of an organisation's
+	// own staff, who are kept in clear because that is what accountability
+	// is for. Open refuses nil only when a composed profile would actually
+	// pseudonymise, which is what GuardKeys decides.
+	Keys keys.Provider
+	// Catalogues are the application's own. The common catalogue, which
+	// describes the writer's own actions, is always registered.
+	Catalogues []*catalogue.Catalogue
+
+	// Database, when given, is the deduplication table shared by every
+	// replica, and where catalogues registered through the registry service
+	// are read from. The writer's role needs those tables and none of the
+	// index: observe indexes, by following the bucket. Without a database
+	// the writer deduplicates in process, and so may run as one instance
+	// only.
+	Database *pgxpool.Pool
+	// Dedupe, when given, is the deduplication store, in place of the one
+	// Database provides: for a deployment that has no database, such as the
+	// writer on a function platform, where it is a DynamoDB table
+	// (dedupe/dynamodbdedupe). It is shared by every replica, so it lifts the
+	// one-instance limit as Database does. Give it or Database, not both.
+	Dedupe Dedupe
+	// Replicas is how many writers share one stream of records. Above one it
+	// needs Database, and keys every replica sees the same way.
+	Replicas int
+
+	// Self is this writer's own name as an observer, stamped on records that
+	// reach it in process — an embedding application's emitter is the
+	// application itself, so this names it. A record that arrives over HTTP
+	// carries the caller the auth middleware verified instead.
+	Self string
+	// ForgetIdentities keeps no sealed identities, which makes resolve
+	// impossible for everything this writer writes.
+	ForgetIdentities bool
+	// Instance names this writer in its own records. It is not in any object
+	// key: the key's ULID is what keeps two writers apart.
+	// Default: the host name and process id.
+	Instance string
+	// RollInterval is how long an object stays open within a batch. Default
+	// 5 minutes; every batch is flushed before it is acknowledged regardless.
+	RollInterval time.Duration
+	// Version names this build in the writer's own records.
+	Version string
+	// Evidence says, in the writer's start-up record, which configuration it
+	// ran under: digests of the files it read. Empty says nothing.
+	Evidence Evidence
+	// FromStream says this writer consumes a stream its own installation's
+	// receivers publish to, so a record arriving already stamped keeps that
+	// stamp. A consumer reading messages has no caller to verify, and
+	// re-stamping would replace the identity the receiver checked with
+	// nothing. It has no effect on records reaching the sink's own port.
+	FromStream bool
+
+	// Logger, default slog.Default().
+	Logger *slog.Logger
+	// Meter is where the writer's counters go, default the global provider.
+	Meter metric.MeterProvider
+}
+
+// Writer is an open writer. It is a sink.Sink: hand it to an emitter, or serve
+// it over HTTP with Handler.
+type Writer struct {
+	inner   *inner.Writer
+	holds   *hold.Watcher
+	stop    context.CancelFunc
+	watcher sync.WaitGroup
+	closed  sync.Once
+	closeEr error
+}
+
+// Open checks the configuration, reads the legal holds, records each profile's
+// composition, and returns a writer ready to take records.
+//
+// It refuses rather than degrades: a writer that could not read the holds, or
+// could not record a change of profile, or whose replicas would pseudonymise
+// the same person differently, does not start.
+func Open(ctx context.Context, c Config) (*Writer, error) {
+	switch {
+	case c.Archive == nil:
+		return nil, errors.New("writer: an archive is required")
+	case len(c.Profiles) == 0:
+		return nil, errors.New("writer: at least one profile is required: a writer with none keeps nothing")
+	}
+	// No check for a key provider here. Whether one is needed depends on what
+	// the composed profiles actually do, which GuardKeys and GuardHashes
+	// decide below; a deployment whose profiles keep everyone in clear needs
+	// no keys and must not be asked for any.
+	log := c.Logger
+	if log == nil {
+		log = slog.Default()
+	}
+	meter := c.Meter
+	if meter == nil {
+		meter = otel.GetMeterProvider()
+	}
+	replicas := c.Replicas
+	if replicas <= 0 {
+		replicas = 1
+	}
+	instance := c.Instance
+	if instance == "" {
+		instance = record.InstanceName()
+	}
+
+	common, err := catalogue.Common()
+	if err != nil {
+		return nil, err
+	}
+	local := &inner.Registry{}
+	local.Register(common)
+	for _, cat := range c.Catalogues {
+		local.Register(cat)
+	}
+
+	if c.Dedupe != nil && c.Database != nil {
+		return nil, errors.New("writer: a deduplication store and a database are both given: " +
+			"the database is the deduplication store when there is one, so give one of them")
+	}
+	dedupe := inner.Dedupe(&inner.MemoryDedupe{})
+	if c.Dedupe != nil {
+		dedupe = c.Dedupe
+	}
+	var shared *registry.Registry
+	if c.Database != nil {
+		// A writer whose database is at another schema version refuses to
+		// start. Migrating is a step an operator takes, not something several
+		// replicas race each other to do.
+		if err := postgres.CheckVersion(ctx, c.Database); err != nil {
+			return nil, err
+		}
+		shared = &registry.Registry{Store: registry.Postgres{DB: c.Database}}
+		if dedupe, err = postgres.NewDedupe(c.Database, longestDedupe(c.Profiles)); err != nil {
+			return nil, err
+		}
+		// Every writer of a deployment must hold the same key directory: one
+		// with its own mints its own keys, and the same person gets a second
+		// pseudonym on it. The database is the one place all replicas can
+		// compare, so each binds its directory there and one that brings
+		// another is refused.
+		if l, ok := c.Keys.(*keys.Local); ok && l.Dir != "" {
+			id, err := l.DirectoryID()
+			if err != nil {
+				return nil, err
+			}
+			if err := postgres.BindKeyDirectory(ctx, c.Database, id); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := inner.GuardReplicas(replicas, dedupe); err != nil {
+		return nil, err
+	}
+	if err := inner.GuardKeys(c.Profiles, c.Keys != nil); err != nil {
+		return nil, err
+	}
+	if err := inner.GuardHashes(c.Catalogues, c.Keys != nil); err != nil {
+		return nil, err
+	}
+	if l, ok := c.Keys.(*keys.Local); ok && replicas > 1 && l.Dir == "" {
+		return nil, errors.New(
+			"writer: more than one replica with keys held only in memory: each replica would mint " +
+				"its own keys and the same person would get a different pseudonym on each")
+	}
+
+	longest := longestRetention(c.Profiles)
+	keep := func(at time.Time) time.Time { return at.Add(longest) }
+
+	// Legal holds. A hold is placed on a prefix and objects keep arriving under
+	// it, so the writer has to know: an object held only by a later sweep was
+	// deletable in between, which is the window the hold exists to close.
+	holds := &hold.Watcher{Holds: hold.Store{Store: c.Archive, RetainUntil: keep}, Every: time.Minute}
+	// Read once before anything is written. After that, a failed refresh
+	// keeps the last answer: forgetting a hold is worse than acting on a list
+	// a minute old.
+	if err := holds.Refresh(ctx); err != nil {
+		return nil, fmt.Errorf("writer: reading the legal holds: %w", err)
+	}
+
+	counts, err := telemetry.NewWriter(meter)
+	if err != nil {
+		return nil, err
+	}
+
+	// The way back from a pseudonym, sealed under the same key, for resolve.
+	var identities inner.Remembering
+	if sealer, ok := c.Keys.(keys.Sealer); ok && !c.ForgetIdentities {
+		identities = &identity.Map{Store: c.Archive, Keys: sealer, RetainUntil: keep}
+	}
+
+	// An addendum names earlier records by id. The writer has no index to ask
+	// (observe's, which lags the archive by its settle window and which this
+	// role may not read), so a scan of the archive looks within its budget.
+	var records inner.Locator = &s3scan.Scanner{Store: c.Archive}
+
+	// The catalogues this writer runs with are written to the bucket now, once
+	// each, and compared when they are already there: a catalogue version that
+	// means something else than what the archive holds under it is a writer
+	// that refuses to run, not one that finds out on its first record
+	// (docs/reference/bucket-contract.md, Catalogue).
+	described := &inner.SchemaArchive{Store: c.Archive, RetainUntil: keep}
+	for _, cat := range append([]*catalogue.Catalogue{common}, c.Catalogues...) {
+		if err := described.EnsureCatalogue(ctx, cat); err != nil {
+			return nil, fmt.Errorf("writer: catalogue %s %s: %w", cat.Source, cat.Version, err)
+		}
+	}
+
+	self := c.Self
+	w, err := inner.New(&inner.Writer{
+		KeepUpstreamStamp: c.FromStream,
+		Identity: func(ctx context.Context) string {
+			if subject := auth.SubjectFrom(ctx); subject != "" {
+				return subject
+			}
+			return self
+		},
+		Records:    records,
+		Catalogues: resolver{local: local, shared: shared},
+		Splitter:   &inner.Splitter{Profiles: c.Profiles, Keys: c.Keys, Identities: identities},
+		Roller: &inner.Roller{
+			Store: c.Archive, Instance: instance, Interval: c.RollInterval,
+			Held: holds.Held,
+			OnPut: func(key string, n int) {
+				log.Info("object written", "key", key, "records", n)
+				counts.Written(key, n)
+			},
+		},
+		Dedupe:     dedupe,
+		DeadLetter: &inner.StoreDeadLetter{Store: c.Archive, Instance: instance, RetainUntil: keep},
+		// What describes records outlives the longest of them.
+		Archive:  described,
+		Meta:     common,
+		Version:  c.Version,
+		Evidence: c.Evidence,
+		Hooks: inner.Hooks{
+			OnDeadLettered: func(r *record.Record, reason string) {
+				log.Error("dead letter", "id", logSafe(r.GetId(), 128), "action", logSafe(r.GetAction(), 128), "reason", logSafe(reason, 512))
+				counts.DeadLettered()
+			},
+			OnUnknownCatalogue: func(source, version string) {
+				// `event=unknown_catalogue` is the field an alarm on the log group matches
+				// (the Pulumi library's metric filter): keep it, and keep it out of
+				// anything a record can say (logSafe).
+				log.Error("a record names a catalogue version this writer does not have, and is dead-lettered",
+					"event", "unknown_catalogue", "source", logSafe(source, 128), "catalogue_version", logSafe(version, 128))
+				counts.UnknownCatalogue(source, version)
+			},
+			OnDuplicatesLikely: func(ids []string, err error) {
+				log.Warn("records written but not marked; a redelivery will be written again",
+					"records", len(ids), "error", err)
+				counts.DuplicatesLikely(len(ids))
+			},
+			OnUnhandled: func(action string, missing, kept []string) {
+				reportUnhandled(log, action, missing, kept)
+			},
+			OnMetaDropped: func(action, reason string) {
+				log.Error("the writer could not record itself", "action", action, "reason", reason)
+				counts.MetaDropped()
+			},
+			OnRetentionNotExtended: func(profile, id string, err error) {
+				log.Error("an addendum could not lengthen the lock on an earlier record",
+					"profile", profile, "record", id, "error", err)
+				counts.RetentionNotExtended(profile)
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Before the first record: what each profile keeps now, and whether that
+	// changed since the last composition recorded. A writer that cannot
+	// record a change does not start, since every record it wrote would mean
+	// something the trail does not say.
+	presets, err := preset.Builtin()
+	if err != nil {
+		return nil, err
+	}
+	versions := make(map[string]string, len(presets))
+	for name, p := range presets {
+		versions[name] = p.Version
+	}
+	if err := w.RecordCompositions(ctx, c.Profiles, versions); err != nil {
+		_ = w.Close(context.Background())
+		return nil, err
+	}
+
+	out := &Writer{inner: w, holds: holds}
+	watching, stop := context.WithCancel(context.Background())
+	out.stop = stop
+	out.watcher.Add(1)
+	go func() {
+		defer out.watcher.Done()
+		holds.Run(watching, func(err error) {
+			log.Error("could not refresh the legal holds; keeping the last answer", "error", err)
+		})
+	}()
+
+	// Said once the writer is built, so that the record means what a reader
+	// will take it to mean.
+	w.Started(ctx)
+	w.Registered(ctx, common)
+	for _, cat := range c.Catalogues {
+		w.Registered(ctx, cat)
+	}
+	return out, nil
+}
+
+// Guarantees implements sink.Guarantor.
+func (w *Writer) Guarantees() sink.Durability { return w.inner.Guarantees() }
+
+// Write implements sink.Sink. It returns only once every record in the batch
+// is in the archive, seen before, or dead-lettered, and reports Archived.
+func (w *Writer) Write(ctx context.Context, req *sink.Request) (*sink.Result, error) {
+	return w.inner.Write(ctx, req)
+}
+
+// Handler serves the writer as the sink's Connect service, for emitters in
+// other processes. With an authenticator, every caller must present a token
+// it verifies, and the verified subject is stamped as the record's observer;
+// nil accepts anybody, under no name.
+func (w *Writer) Handler(a auth.Authenticator) (string, http.Handler) {
+	path, handler := sinkserver.NewHandler(w)
+	if a != nil {
+		handler = auth.Middleware(a, handler)
+	}
+	return path, handler
+}
+
+// RefreshHolds reads the legal holds now. The writer refreshes them every minute
+// in the background, which a process that is frozen between invocations does
+// not get: its clock keeps running while it is stopped, and the first write
+// after a thaw could act on a list that is older than it looks. A function
+// calls this at the start of each invocation. An error leaves the last answer
+// in force, the way a failed background refresh does.
+func (w *Writer) RefreshHolds(ctx context.Context) error { return w.holds.Refresh(ctx) }
+
+// Close records that the writer stopped, writes whatever is still gathered,
+// and stops watching the legal holds. Nothing is taken after it.
+func (w *Writer) Close(ctx context.Context) error {
+	w.closed.Do(func() {
+		w.closeEr = w.inner.Close(ctx)
+		w.stop()
+		w.watcher.Wait()
+	})
+	return w.closeEr
+}
+
+// resolver answers the writer's question about a record's catalogue: those
+// given in the configuration first, then whatever was registered in the
+// database — on hand first, because that is what a deployment with no
+// registry has, and what an operator repairing a bad registration reaches for.
+type resolver struct {
+	local  *inner.Registry
+	shared *registry.Registry
+}
+
+func (r resolver) Get(ctx context.Context, source, version string) (*catalogue.Catalogue, error) {
+	c, err := r.local.Get(ctx, source, version)
+	if err == nil || r.shared == nil {
+		return c, err
+	}
+	c, err = r.shared.Get(ctx, source, version)
+	if errors.Is(err, registry.ErrNotFound) {
+		// Neither the files nor the registry has it: the one answer the writer
+		// raises an alarm for.
+		return nil, &inner.UnknownCatalogueError{Source: source, Version: version}
+	}
+	return c, err
+}
+
+// logSafe makes what a record names safe to put in a log line, where an alarm
+// matches the fixed field `event=unknown_catalogue`: control characters become
+// spaces, so one record cannot forge a line of its own, `=` becomes `:`, so that
+// text an emitter chose cannot spell a field, and the length is bounded.
+func logSafe(s string, limit int) string {
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		if len(out) >= limit {
+			out = append(out, '…')
+			break
+		}
+		switch {
+		case r < 0x20 || r == 0x7f:
+			r = ' '
+		case r == '=':
+			r = ':'
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
+// longestDedupe is how long a written identifier is remembered: the widest
+// window any profile's presets ask for, since one table serves them all.
+func longestDedupe(profiles map[string]*preset.Profile) time.Duration {
+	var longest time.Duration
+	for _, p := range profiles {
+		if d := time.Duration(p.Pipeline.DedupeWindowDays) * 24 * time.Hour; d > longest {
+			longest = d
+		}
+	}
+	return longest
+}
+
+// longestRetention is how long the longest-lived profile keeps a copy, which
+// is what anything that has to outlive every record is kept for.
+func longestRetention(profiles map[string]*preset.Profile) time.Duration {
+	now := time.Now().UTC()
+	var longest time.Duration
+	for _, p := range profiles {
+		if d := p.RetainUntil(now, nil).Sub(now); d > longest {
+			longest = d
+		}
+	}
+	if longest == 0 {
+		longest = 10 * 365 * 24 * time.Hour
+	}
+	return longest
+}
+
+// reportUnhandled says what a configuration that lacks some of the profiles an
+// action names means for that action. A catalogue may name a profile only some
+// deployments configure (a trust service's evidence profile, say); when another
+// profile named keeps the records, nothing is lost and that is a debug line.
+// Only when none of them is configured are the records dropped, which an
+// operator must hear about.
+func reportUnhandled(log *slog.Logger, action string, missing, kept []string) {
+	if len(kept) == 0 {
+		log.Warn("no configured profile keeps this action; its records are dead-lettered",
+			"action", action, "profiles", missing)
+		return
+	}
+	log.Debug("some profiles this action names are not configured; its records are kept by the others",
+		"action", action, "kept", kept, "not_configured", missing)
+}

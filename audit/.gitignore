@@ -1,0 +1,39 @@
+# Binaries and build output. `go build ./cmd/<name>` from the root drops the
+# binary here; these names keep it out of a commit, and `just lint` refuses
+# any large file that gets past them.
+bin/
+/dist/
+/audit
+/audit-query
+/audit-observe
+/audit-notary
+/audit-registry
+/audit-writer
+/embed
+/read
+/protoc-gen-audit-jsonschema
+coverage.out
+
+# `gen/` is NOT ignored. Generated code is committed — the `drift` recipe
+# regenerates it and fails on a diff, which is how the proto and the code stay
+# in step, and a consumer of this module gets the generated packages without
+# needing buf. Ignoring it made `git diff -- gen` compare nothing, so the gate
+# passed on every run while checking nothing, and a fresh clone could not build
+# at all.
+
+# TypeScript
+ts/node_modules/
+ts/dist/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Devbox
+.devbox/
+/_site/

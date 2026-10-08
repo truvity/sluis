@@ -1,0 +1,51 @@
+{{- if eq .Values.renders "app" -}}
+{{- include "audit.checks" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "audit.fullname" . }}-deployment
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+data:
+  # The document a config names as `deployment`: which presets each profile is
+  # composed from, and where its copies land. Every component that reads
+  # profiles reads this one, because retention is a property of the profile and
+  # every one of them needs to agree about it.
+  deployment.yaml: |
+    {{- include "audit.deploymentDocument" . | nindent 4 }}
+  {{- if .Values.workloadIdentity.issuers }}
+  # The document a writer's config names as `workloads`: the issuers trusted to
+  # name a calling workload, and the source each speaks for.
+  workloads.yaml: |
+    issuers:
+      {{- range .Values.workloadIdentity.issuers }}
+      - url: {{ .url | quote }}
+        audience: {{ .audience | default $.Values.workloadIdentity.audience | quote }}
+      {{- end }}
+    {{- with .Values.workloadIdentity.workloads }}
+    workloads:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
+{{- if .Values.writer.enabled }}
+---
+{{ include "audit.configMap" (dict "root" . "name" "writer" "config" .Values.writer.config) }}
+{{- end }}
+{{- if and .Values.writer.enabled (eq .Values.mode "stream") }}
+---
+{{ include "audit.configMap" (dict "root" . "name" "receiver" "config" .Values.receiver.config) }}
+{{- end }}
+{{- if .Values.catalogues }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "audit.fullname" . }}-catalogues
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+data:
+  {{- range $name, $doc := .Values.catalogues }}
+  {{ $name }}: |
+    {{- $doc | nindent 4 }}
+  {{- end }}
+{{- end }}{{ end }}
