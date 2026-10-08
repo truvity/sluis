@@ -119,7 +119,7 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 	if a.Keys != nil {
 		// A document rendered from an Installation already carries the library's
 		// own block (withKeys), and that alone may be there.
-		if cur, set := doc["keys"]; set && !(a.Installation != nil && reflect.DeepEqual(cur, a.Keys.keysBlock())) {
+		if cur, set := doc["keys"]; set && (a.Installation == nil || !reflect.DeepEqual(cur, a.Keys.keysBlock())) {
 			return false, errors.New("sluispulumi: LambdaArgs.Config names keys and LambdaArgs.Keys is set: leave it out, the library writes it")
 		}
 		doc["keys"] = a.Keys.keysBlock()
