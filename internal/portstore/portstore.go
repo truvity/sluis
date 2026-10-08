@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/internal/secretstore"
 )
 
 // ErrBusy is a record that kept changing under every retry of a
@@ -65,6 +66,11 @@ type Base struct {
 	State   port.State
 	Secrets port.Secrets
 	Now     func() time.Time
+
+	// v4 and exportApp put the Apps' exported credentials on layout v4 (see
+	// [Base.WithV4]).
+	v4        *secretstore.Stores
+	exportApp func(id string) bool
 }
 
 // New returns the base over a set of ports.

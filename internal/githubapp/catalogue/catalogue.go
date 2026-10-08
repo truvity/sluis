@@ -84,6 +84,10 @@ type App struct {
 	Events []string `yaml:"events,omitempty"`
 	// Installation is all or selected; empty is selected.
 	Installation string `yaml:"installation,omitempty"`
+	// Export places an installed App's key at external/github/<id> for a
+	// consumer to read (layout v4, ADR 0041). Unset keeps the key internal.
+	// A runner App is always exported, and is not in the catalogue.
+	Export bool `yaml:"export,omitempty"`
 	// Grants say which groups may ask for tokens of this App, for which
 	// repositories and with at most which permissions.
 	Grants []Grant `yaml:"grants,omitempty"`
@@ -122,6 +126,19 @@ var (
 // external/github/runner-<tier>-<org> (ADR 0041), so a catalogue App's id may
 // not begin with it.
 const RunnerPrefix = "runner-"
+
+// Exported reports whether the App with the id is declared `export: true`.
+func (c *Catalogue) Exported(id string) bool {
+	if c == nil {
+		return false
+	}
+	for i := range c.Apps {
+		if c.Apps[i].ID == id {
+			return c.Apps[i].Export
+		}
+	}
+	return false
+}
 
 // ValidID reports whether an id can name an App and its keys.
 func ValidID(id string) bool { return idPattern.MatchString(id) }

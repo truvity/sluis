@@ -33,6 +33,9 @@ const readTimeout = 20 * time.Second
 // names live: `<root>/private/config/<name>` (layout v3).
 const ConfigPrefix = "/private/config/"
 
+// ConfigPrefixV4 is the same under layout v4 (ADR 0041): `<root>/internal/config/<name>`.
+const ConfigPrefixV4 = "/internal/config/"
+
 // ParametersAPI is the part of the SSM client the source calls.
 type ParametersAPI interface {
 	GetParametersByPath(ctx context.Context, in *awsssm.GetParametersByPathInput, opts ...func(*awsssm.Options)) (*awsssm.GetParametersByPathOutput, error)
@@ -49,6 +52,10 @@ type SSM struct {
 	API     ParametersAPI
 	Root    string
 	Refresh time.Duration
+	// Layout is the installation's secrets layout: "" or "v3" reads
+	// <root>/private/config/, "v4" reads <root>/internal/config/ and
+	// "transition" reads both, v4 first.
+	Layout string
 	// MaxStale is how old a copy may grow while reads fail. Zero is
 	// DefaultMaxStale.
 	MaxStale time.Duration
@@ -103,8 +110,8 @@ func checkRoot(root string) error {
 // no segment of it may be `private` or `export`.
 func CheckRoot(root string) error {
 	for _, seg := range strings.Split(strings.Trim(root, "/"), "/") {
-		if seg == "private" || seg == "export" {
-			return fmt.Errorf("the root has a segment %q: an instance may not be named private or export, "+
+		if seg == "private" || seg == "export" || seg == "internal" || seg == "external" {
+			return fmt.Errorf("the root has a segment %q: an instance may not be named private, export, internal or external, "+
 				"which would put its parameters under another tree", seg)
 		}
 	}
@@ -122,13 +129,25 @@ func (s *SSM) Get(ctx context.Context, name string) (string, error) {
 	}
 	v, ok := values[name]
 	if !ok || v == "" {
-		return "", fmt.Errorf("%w: %s (no parameter %s)", ErrNotFound, name, s.Root+ConfigPrefix+name)
+		return "", fmt.Errorf("%w: %s (no parameter %s)", ErrNotFound, name, s.Root+s.prefixes()[0]+name)
 	}
 	return v, nil
 }
 
 // Describe implements [Source].
-func (s *SSM) Describe(name string) string { return "ssm " + s.Root + ConfigPrefix + name }
+func (s *SSM) Describe(name string) string { return "ssm " + s.Root + s.prefixes()[0] + name }
+
+// prefixes are the config prefixes the layout reads, the one that wins first.
+func (s *SSM) prefixes() []string {
+	switch s.Layout {
+	case "v4":
+		return []string{ConfigPrefixV4}
+	case "transition":
+		return []string{ConfigPrefixV4, ConfigPrefix}
+	default:
+		return []string{ConfigPrefix}
+	}
+}
 
 // current is the copy, read again when it is older than the refresh.
 func (s *SSM) current(ctx context.Context) (map[string]string, error) {
@@ -205,8 +224,18 @@ func (s *SSM) now() time.Time {
 func (s *SSM) read(ctx context.Context) (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, readTimeout)
 	defer cancel()
-	prefix := s.Root + ConfigPrefix
 	values := map[string]string{}
+	// The first prefix wins: read the others first and let it overwrite.
+	prefixes := s.prefixes()
+	for i := len(prefixes) - 1; i >= 0; i-- {
+		if err := s.readPrefix(ctx, s.Root+prefixes[i], values); err != nil {
+			return nil, err
+		}
+	}
+	return values, nil
+}
+
+func (s *SSM) readPrefix(ctx context.Context, prefix string, values map[string]string) error {
 	var token *string
 	for {
 		out, err := s.API.GetParametersByPath(ctx, &awsssm.GetParametersByPathInput{
@@ -214,7 +243,7 @@ func (s *SSM) read(ctx context.Context) (map[string]string, error) {
 			WithDecryption: aws.Bool(true), NextToken: token,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("secrets: ssm: reading %s: %w", prefix, err)
+			return fmt.Errorf("secrets: ssm: reading %s: %w", prefix, err)
 		}
 		for _, p := range out.Parameters {
 			if name, ok := strings.CutPrefix(aws.ToString(p.Name), prefix); ok {
@@ -222,7 +251,7 @@ func (s *SSM) read(ctx context.Context) (map[string]string, error) {
 			}
 		}
 		if out.NextToken == nil || *out.NextToken == "" {
-			return values, nil
+			return nil
 		}
 		token = out.NextToken
 	}

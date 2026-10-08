@@ -57,6 +57,10 @@
                     },
                     "type": "array"
                   },
+                  "export": {
+                    "description": "Place the installed App's key at `external/github/<id>` for a consumer to read (secrets layout v4). Unset keeps it internal. An id may not begin `runner-`.",
+                    "type": "boolean"
+                  },
                   "grants": {
                     "description": "Who may ask for tokens of it, and for how much.",
                     "items": {

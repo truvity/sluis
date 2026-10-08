@@ -1414,6 +1414,11 @@
                   "required": [
                     "layout"
                   ]
+                },
+                {
+                  "required": [
+                    "grace"
+                  ]
                 }
               ]
             }
@@ -1425,6 +1430,11 @@
         "endpoint": {
           "$ref": "#/$defs/url",
           "description": "`ssm`: overrides the SSM address, for LocalStack."
+        },
+        "grace": {
+          "$ref": "#/$defs/duration",
+          "default": "24h",
+          "description": "`ssm`, layout `transition` or `v4`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
         },
         "kmsKeyId": {
           "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",

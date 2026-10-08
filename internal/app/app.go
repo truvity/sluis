@@ -480,7 +480,7 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 // is still the cluster's: the token review, and the declared OAuth client
 // a deployment mounts, which is an input and not a record this service writes.
 func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (stores, error) {
-	base := portstore.New(st.Ports)
+	base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(cfg.githubCatalogue.Exported)
 	if err := base.CheckSecrets(ctx); err != nil {
 		return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
 	}

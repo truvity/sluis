@@ -512,3 +512,28 @@ func (b *lockedBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+// A replica that cached the pair before a rotation re-reads once before the
+// token check refuses, but not more often than the floor allows.
+func TestRereadSeesARotationTheCacheMissed(t *testing.T) {
+	t.Parallel()
+	store := memory.NewSecrets()
+	putRecord(t, store, "grafana", Record{Current: "one", Created: t0})
+	r, c := newResolver(store, nil)
+	if got, _ := r.Resolve(ctx0, "grafana"); got.Current != "one" {
+		t.Fatalf("got %+v", got)
+	}
+	putRecord(t, store, "grafana", Record{Current: "two", Previous: "one", PreviousValidUntil: t0.Add(time.Hour), Created: t0})
+	if got, _ := r.Resolve(ctx0, "grafana"); got.Current != "one" {
+		t.Fatalf("the cache was not used: %+v", got)
+	}
+	// The cached read is younger than the floor: nothing new to see.
+	if got, _ := r.Reread(ctx0, "grafana"); got.Current != "one" {
+		t.Fatalf("a read inside the floor went to the store: %+v", got)
+	}
+	c.t = c.t.Add(RereadFloor)
+	got, ok := r.Reread(ctx0, "grafana")
+	if !ok || got.Current != "two" || got.Previous != "one" {
+		t.Fatalf("Reread = %+v, %v", got, ok)
+	}
+}

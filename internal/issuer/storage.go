@@ -674,10 +674,34 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 		return nil
 	}
 	want, ok := s.secrets.Resolve(ctx, clientID)
-	// Constant time: the comparison must not tell a caller how much of a
-	// guess was right, nor whether the client has a previous secret. Both
-	// slots are compared every time; with no previous one the guess is
-	// compared with a buffer of its own length, whose answer is ignored.
+	if slot := s.matchSecret(want, ok, secret); slot != clientcreds.SlotNone {
+		clientcreds.CountAuth(ctx, slot)
+		return nil
+	}
+	// A replica that cached the pair before a rotation would refuse the old
+	// secret during the overlap, or the new one at once: read it fresh, once,
+	// before refusing (ADR 0041, "Rotation").
+	if r, can := s.secrets.(interface {
+		Reread(ctx context.Context, clientID string) (clientcreds.Secrets, bool)
+	}); can {
+		if again, found := r.Reread(ctx, clientID); found {
+			if slot := s.matchSecret(again, found, secret); slot != clientcreds.SlotNone {
+				clientcreds.CountAuth(ctx, slot)
+				return nil
+			}
+		}
+	}
+	clientcreds.CountAuth(ctx, clientcreds.SlotNone)
+	return errors.New("the client secret does not match")
+}
+
+// matchSecret says which slot of want the presented secret matches.
+//
+// Constant time: the comparison must not tell a caller how much of a guess was
+// right, nor whether the client has a previous secret. Both slots are compared
+// every time; with no previous one the guess is compared with a buffer of its
+// own length, whose answer is ignored.
+func (s *Storage) matchSecret(want clientcreds.Secrets, ok bool, secret string) string {
 	got := []byte(secret)
 	current := subtle.ConstantTimeCompare([]byte(want.Current), got) == 1
 	previous := want.Previous
@@ -692,14 +716,11 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 	previousLive := hasPrevious && s.now().Before(want.PreviousValidUntil)
 	switch {
 	case ok && want.Current != "" && current:
-		clientcreds.CountAuth(ctx, clientcreds.SlotCurrent)
-		return nil
+		return clientcreds.SlotCurrent
 	case ok && previousLive && previousMatch:
-		clientcreds.CountAuth(ctx, clientcreds.SlotPrevious)
-		return nil
+		return clientcreds.SlotPrevious
 	}
-	clientcreds.CountAuth(ctx, clientcreds.SlotNone)
-	return errors.New("the client secret does not match")
+	return clientcreds.SlotNone
 }
 
 // --------------------------------------------------------- auth requests
