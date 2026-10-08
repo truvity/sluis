@@ -18,6 +18,7 @@ secrets:
   region: eu-west-1    # ssm only
   refresh: 5m          # ssm only
   kmsKeyId: alias/example   # ssm only: the key the service's own writes are encrypted with
+  layout: v3           # ssm only: v3 (default) | transition | v4, see "SSM layout v4"
 ```
 
 | `source` | A name is delivered as | Read |
@@ -71,3 +72,47 @@ report is JSON and names parameters, never a value), then `sluis migrate` for th
 destination is absent, refuses one that holds another value unless `--overwrite`, deletes nothing, and encrypts each copy
 with the source parameter's own KMS key unless `--kms-key` names one. The steps, with their checks and rollbacks:
 [upgrade to v1.62](../how-to/upgrade/v1.62.md).
+
+## SSM layout v4
+
+Layout v4 (ADR 0041, the secret contract) keeps every value once, in one of two namespaces of the
+same root:
+
+```text
+/sluis/<instance>/internal/config/<name>                   what an operator seeds: the names above (was private/config/)
+/sluis/<instance>/internal/credentials/<kind>/<id>/<ref>   what sluis writes (was private/credentials/)
+/sluis/<instance>/external/<kind>/<id>                     one typed document per address: the public contract
+```
+
+`internal/` is read by sluis only and is never granted to anyone. `external/` holds what something outside sluis reads,
+whoever wrote it, and is granted to each consumer on its exact addresses. `internal` and `external` join `private` and
+`export` as names an instance may not take. The exports copies of layout v3 do not exist in v4: sluis reads an external
+value from its external address, so what a consumer reads is what sluis uses.
+
+`secrets.layout` says which layout an installation is on: `v3` (the default), `transition` (read v4 first and fall back to
+v3; every write goes to v4 and then to v3) or `v4`. It is changed by `sluis migrate secrets-layout`, never by a start-time
+upgrade. The key is accepted by the `ssm` source only.
+
+### The external documents
+
+Every field is a JSON string, so both backends hand a consumer the same text. `schema` names the kind and version; a
+breaking change is a new address, `external/<kind>.v2/<id>`, written beside the old one. Adding a field is not breaking.
+Each kind has a JSON Schema under `schemas/external/` and a golden document in
+`internal/secretstore/testdata/`; changing a field fails the test unless the schema version moves.
+
+| Kind | Address | Fields | Schema |
+|---|---|---|---|
+| `oidc/v1` | `external/oidc/<client>` | `schema`, `client-id`, `client-secret` | [`oidc.v1.schema.json`](../../schemas/external/oidc.v1.schema.json) |
+| `github/v1` | `external/github/<app>`; a runner App is `external/github/runner-<tier>-<org>` | `schema`, `app_id`, `installation_id`, `private_key` | [`github.v1.schema.json`](../../schemas/external/github.v1.schema.json) |
+| `slack/v1` | `external/slack/<app>` | `schema`, `bot_token` | [`slack.v1.schema.json`](../../schemas/external/slack.v1.schema.json) |
+
+```json
+{"schema":"oidc/v1","client-id":"example-rp","client-secret":"example-secret-value"}
+```
+
+A catalogue GitHub App's id may not begin `runner-`: that prefix names a runner App's document. A consumer reads one
+field with External Secrets' `remoteRef: {key: <address>, property: <field>}` and names the key of its own Secret
+itself.
+
+The Go side is `internal/secretstore`: `Internal` and `External` over a `state.Store`, with a typed `state.Value` for each
+address. The token check of a rotating client secret reads `External.OIDC(client).Rotating(grace)`.

@@ -1404,8 +1404,17 @@
           },
           "then": {
             "not": {
-              "required": [
-                "kmsKeyId"
+              "anyOf": [
+                {
+                  "required": [
+                    "kmsKeyId"
+                  ]
+                },
+                {
+                  "required": [
+                    "layout"
+                  ]
+                }
               ]
             }
           }
@@ -1421,6 +1430,15 @@
           "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials and exports) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
           "minLength": 1,
           "type": "string"
+        },
+        "layout": {
+          "default": "v3",
+          "description": "`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/` and the exports controller's copies under `<root>/export/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.",
+          "enum": [
+            "v3",
+            "transition",
+            "v4"
+          ]
         },
         "refresh": {
           "$ref": "#/$defs/duration",

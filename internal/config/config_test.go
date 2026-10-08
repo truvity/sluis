@@ -243,6 +243,8 @@ func TestTheSchemaRefusesWhatTheEnvironmentWasTrustedWith(t *testing.T) {
 		"a signing key list that is a string": "signingKey: {additionalFiles: /k}\n",
 		"a kms key that is not a string":      "secrets: {source: ssm, root: /sluis/example, kmsKeyId: [a]}\n",
 		"a kms key on a file source":          "secrets: {source: file, root: /run/secrets, kmsKeyId: alias/example}\n",
+		"a layout that is not one":            "secrets: {source: ssm, root: /sluis/example, layout: v5}\n",
+		"a layout on a file source":           "secrets: {source: file, root: /run/secrets, layout: v4}\n",
 	} {
 		if _, err := config.Load[config.Serve](write(t, minimalIssuer+extra)); err == nil {
 			t.Errorf("%s was accepted", name)

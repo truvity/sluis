@@ -79,6 +79,12 @@ and deletes nothing; `sluis migrate` moves the credentials
 `SLUIS_SECRET_FILES` entries it named are gone, replaced by the documents' secret names.
 IAM follows the root: every grant is under `/sluis/<instance>/`.
 
+### Layout v4 (`secrets.layout: v4`)
+
+The SSM parameters move from `private/` and `export/` to `internal/` and `external/` under the same root; the paths
+below `internal/` are `private/`'s, and `external/<kind>/<id>` is a typed document, not an export copy. The table and
+the contract are in [secrets](secrets.md#ssm-layout-v4). State (DynamoDB), below, is unchanged.
+
 ## DynamoDB (the `dynamodb` State, Index and Trigger adapter)
 
 One table, `pk` (string, hash) and `sk` (string, range). Every State item has the

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truvity/sluis/schemas/external/github.v1.schema.json",
+  "title": "github/v1",
+  "description": "An installed GitHub App, at <root>/external/github/<app>; a runner App is github/runner-<tier>-<org>. Every field is a string. Adding a field is not breaking; removing, renaming or re-typing one is, and takes a new address, github.v2/<app>.",
+  "type": "object",
+  "required": ["schema", "app_id", "installation_id", "private_key"],
+  "properties": {
+    "schema": { "const": "github/v1" },
+    "app_id": { "type": "string", "minLength": 1, "description": "The App's id, as a string." },
+    "installation_id": { "type": "string", "minLength": 1, "description": "The installation's id, as a string." },
+    "private_key": { "type": "string", "minLength": 1, "description": "The App's private key, PEM." }
+  }
+}
