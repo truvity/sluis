@@ -118,6 +118,11 @@ var (
 	repositoryPattern = regexp.MustCompile(`^[A-Za-z0-9._*?\[\]^!-]+$`)
 )
 
+// RunnerPrefix begins the name of a runner App's secret at
+// external/github/runner-<tier>-<org> (ADR 0041), so a catalogue App's id may
+// not begin with it.
+const RunnerPrefix = "runner-"
+
 // ValidID reports whether an id can name an App and its keys.
 func ValidID(id string) bool { return idPattern.MatchString(id) }
 
@@ -210,6 +215,9 @@ func (a *App) Validate() error {
 	fail := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
 	if !ValidID(a.ID) {
 		fail("id %q is not lower-case letters, digits and dashes, at most 32", a.ID)
+	}
+	if strings.HasPrefix(a.ID, RunnerPrefix) {
+		fail("id %q begins %q, which names a runner App's secret", a.ID, RunnerPrefix)
 	}
 	if !loginPattern.MatchString(a.Org) {
 		fail("org %q is not an organisation login", a.Org)

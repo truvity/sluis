@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truvity/sluis/schemas/external/oidc.v1.schema.json",
+  "title": "oidc/v1",
+  "description": "A confidential OIDC client's secret, at <root>/external/oidc/<client>. Every field is a string. Adding a field is not breaking; removing, renaming or re-typing one is, and takes a new address, oidc.v2/<client>.",
+  "type": "object",
+  "required": ["schema", "client-id", "client-secret"],
+  "properties": {
+    "schema": { "const": "oidc/v1" },
+    "client-id": { "type": "string", "minLength": 1, "description": "The client's id." },
+    "client-secret": { "type": "string", "minLength": 1, "description": "The client's current secret. The previous one is never in the document." }
+  }
+}

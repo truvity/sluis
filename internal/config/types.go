@@ -322,6 +322,9 @@ type (
 		// KMSKeyID is `ssm`'s customer-managed key for the parameters the
 		// service writes (credentials, exports). Unset is the AWS-managed key.
 		KMSKeyID string `json:"kmsKeyId,omitempty"`
+		// Layout is the storage layout of an `ssm` installation: `v3` (the
+		// default), `transition` or `v4` (ADR 0041).
+		Layout string `json:"layout,omitempty"`
 	}
 
 	// PolicyRef names the one policy document a process decides by: the
@@ -576,3 +579,10 @@ func (s *Sluis) SlackController() *ControllerSlack {
 	r.APIVersion = APIVersion("controller-slack")
 	return &ControllerSlack{Roster: r, CredentialsDir: g.CredentialsDir}
 }
+
+// The values of [Secrets].Layout.
+const (
+	SecretsLayoutV3         = "v3"
+	SecretsLayoutTransition = "transition"
+	SecretsLayoutV4         = "v4"
+)

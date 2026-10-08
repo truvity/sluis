@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truvity/sluis/schemas/external/slack.v1.schema.json",
+  "title": "slack/v1",
+  "description": "A Slack App's bot token, at <root>/external/slack/<app>. Every field is a string. Adding a field is not breaking; removing, renaming or re-typing one is, and takes a new address, slack.v2/<app>.",
+  "type": "object",
+  "required": ["schema", "bot_token"],
+  "properties": {
+    "schema": { "const": "slack/v1" },
+    "bot_token": { "type": "string", "minLength": 1, "description": "The bot token." }
+  }
+}
