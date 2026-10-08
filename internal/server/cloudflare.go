@@ -22,10 +22,11 @@ import (
 // it (*minter.Minter). It is an interface so the handlers are tested with a
 // fake, and so the console never reaches Cloudflare itself.
 //
-// TODO: on-demand minting goes through the minter's MintFor directly. The
-// token exchange (a CI job's way to the same minter) is its own PR; when it
-// lands, both call one function that maps a verified caller to a
-// [minter.Caller], and GetCloudflareCredential uses it.
+// On-demand minting shares its code path with the token exchange
+// (internal/issuer): both end at [minter.Minter.MintFor], which checks the
+// grant and the lifetime and audits. What differs is only how the caller is
+// established (a console session here, a verified proof there), which is why
+// each builds its own [minter.Caller].
 type CloudflareSTS interface {
 	Accounts() []minter.AccountInfo
 	Presets() []minter.PresetInfo
