@@ -187,3 +187,38 @@ emptying; the domain moves in step 5 as before.
 **Rollback.** Before step 5, revert the program. After it, restore the four inputs and apply: the library builds its
 own truststore bucket again (the old bucket's name must be free, so do not delete it first) and the domain is updated
 back in place.
+
+## Moving a stack from library-created keys to supplied ones
+
+A stack whose `NewLambda` created its own signing keys (`SigningKeyAlias`, `SigningKeyRS256Alias`, `WrappedSigning`) moves to
+keys the estate supplies (`LambdaArgs.Keys`) without the next apply deleting a key. The aliases the library created keep
+pointing at the same keys, so supplying those aliases adopts them.
+
+1. **Decide the aliases.** `Keys.Sign` is a symmetric key's alias. To keep an existing symmetric key, use the alias of the
+   wrapped-signing key (`alias/sluis-signing-wrapped` unless you changed it). The asymmetric keys of remote signing do not
+   fit: the runtime wraps locally, so supply a symmetric key. The key policy must admit the function's role, and, for the
+   older ring entries, carry `WrappedKeyPolicyStatements` while `LegacySigningContext` is true.
+2. **Unprotect the keys.** They were created with `Protect(true)`. With the Lambda component's name `<l>` (read the URNs with
+   `pulumi stack --show-urns`):
+
+   ```sh
+   pulumi state unprotect 'urn:pulumi:<stack>::<project>::sluis:aws:Lambda$aws:kms/key:Key::<l>-signing-key-wrapped'
+   ```
+
+   Repeat for each library-created key you keep (`-signing-key`, `-signing-key-rs256`, `-signing-key-wrapped`).
+3. **Drop them from state without deleting them.** For each key and its alias resource (`<l>-signing-alias`,
+   `-signing-alias-rs256`, `-signing-alias-wrapped`):
+
+   ```sh
+   pulumi state delete --target-dependents 'urn:…::aws:kms/alias:Alias::<l>-signing-alias-wrapped'
+   pulumi state delete 'urn:…::aws:kms/key:Key::<l>-signing-key-wrapped'
+   ```
+
+   The key and alias stay in AWS. A role policy that depends on the key blocks the delete; add `--force` or follow the state
+   surgery in [AWS Lambda](upgrade/v1.62.md#6-retire-the-asymmetric-signing-keys-only-when-moving-from-kms-to-wrappedsigning).
+4. **Set `Keys`** and remove `WrappedSigning`, `SigningKeyAlias`, `SigningKeyRS256Alias` and `DisableSigningKeyRS256`.
+5. **Preview, and read it.** Expect the role policy updated (the supplied-key grants), the configuration layer
+   republished (`instance` and `keys:`), and **no key or alias deleted or created**. A `delete` of a `kms:Key` means a key
+   is still in state: stop.
+6. **Apply**, then once the ring has rotated past the entries written before the runtime wrapped locally, set
+   `LegacySigningContext` to false.

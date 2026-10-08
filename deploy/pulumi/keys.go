@@ -18,16 +18,13 @@ const (
 	// runtime generates a pair locally and wraps its private half with
 	// kms:Encrypt under {instance, purpose: sign}.
 	SignPurpose = "sign"
-	// SecretsPurpose is the key that wraps the secrets store's values: the
-	// keys block's `conceal` purpose (values that must be recoverable).
-	SecretsPurpose = "conceal"
 )
 
 // KeysArgs are the KMS keys the ESTATE supplies, named by alias: the library
 // creates no key for them, resolves each alias to the key behind it
 // (aws.kms.LookupAlias) to grant IAM on that key's ARN, and passes the aliases
 // to the runtime in the service document's `keys:` block
-// (`keys: {adapter: kms, sign: alias/…, conceal: alias/…}`). An alias is not a
+// (`keys: {adapter: kms, sign: alias/…}`, and Secrets as `secrets.kmsKeyId`). An alias is not a
 // permission: the grant is on the key, and re-pointing an alias moves the
 // function to the new key at the next apply.
 //
@@ -39,10 +36,12 @@ type KeysArgs struct {
 	// kms:GenerateDataKey with it only under the context
 	// {instance: <Instance>, purpose: sign} and no other context keys.
 	Sign string
-	// Secrets is the alias of the key that wraps the secrets store's values (the
-	// `conceal` purpose). Optional: unset, the secrets use SSM's own key
-	// (ParameterKeyArn, or the AWS-managed one). Same grant, under
-	// {instance, purpose: conceal}.
+	// Secrets is the alias of the key the SSM secrets store encrypts its
+	// SecureString parameters with: the service document's `secrets.kmsKeyId`,
+	// passed as KeyId on PutParameter. Optional: unset, the secrets use
+	// ParameterKeyArn or the AWS-managed key. Exclusive with ParameterKeyArn.
+	// SSM encrypts under the context {PARAMETER_ARN}, so the grant is through SSM
+	// only, for the installation's parameters, and has no instance/purpose context.
 	Secrets string
 	// LegacySigningContext keeps the grant on the Sign key under the older
 	// context {purpose: sluis-signing, alg, kid} (GenerateDataKeyPair and
@@ -98,6 +97,24 @@ func contextStatement(sid, keyArn, instance, purpose string) statement {
 	}
 }
 
+// secretsKeyStatement is the use of the secrets key by the function: through SSM
+// only (`kms:ViaService`), for the parameters under the installation's root
+// (SSM puts the parameter's ARN in the encryption context).
+func secretsKeyStatement(keyArn, region, account, instance string) statement {
+	return statement{
+		"Sid":      sidKeysSecrets,
+		"Effect":   "Allow",
+		"Action":   []string{kmsEncrypt, kmsDecrypt, kmsGenerateDK},
+		"Resource": keyArn,
+		"Condition": map[string]any{
+			"StringEquals": map[string]any{"kms:ViaService": "ssm." + region + ".amazonaws.com"},
+			"StringLike": map[string]any{
+				"kms:EncryptionContext:PARAMETER_ARN": arnPrefix + "ssm:" + region + ":" + account + ":parameter" + SSMRoot(instance) + "/*",
+			},
+		},
+	}
+}
+
 const (
 	kmsGenerateDK  = "kms:GenerateDataKey"
 	sidKeysSign    = "SluisKeysSign"
@@ -110,7 +127,7 @@ type keyGrants struct {
 	legacy              bool
 }
 
-func (g *keyGrants) statements(instance string) []statement {
+func (g *keyGrants) statements(region, account, instance string) []statement {
 	if g == nil {
 		return nil
 	}
@@ -119,7 +136,7 @@ func (g *keyGrants) statements(instance string) []statement {
 		st = append(st, wrappedSigningStatement(g.signArn))
 	}
 	if g.secretsArn != "" {
-		st = append(st, contextStatement(sidKeysSecrets, g.secretsArn, instance, SecretsPurpose))
+		st = append(st, secretsKeyStatement(g.secretsArn, region, account, instance))
 	}
 	return st
 }
@@ -139,11 +156,7 @@ func lookupKeys(ctx *pulumi.Context, k *KeysArgs, opts ...pulumi.InvokeOption) (
 
 // keysBlock is the service document's `keys:` block.
 func (k *KeysArgs) keysBlock() map[string]any {
-	b := map[string]any{"adapter": "kms", "sign": k.Sign}
-	if k.Secrets != "" {
-		b["conceal"] = k.Secrets
-	}
-	return b
+	return map[string]any{"adapter": "kms", "sign": k.Sign}
 }
 
 // grantsOf is the resolved grants of Keys, nil without Keys.

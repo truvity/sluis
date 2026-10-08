@@ -1,6 +1,7 @@
 package sluispulumi_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -18,6 +19,8 @@ func r2() *arp.ExternalBlobs {
 func suppliedKeys() *arp.KeysArgs {
 	return &arp.KeysArgs{Sign: "alias/acme-sign", Secrets: "alias/acme-secrets"}
 }
+
+func secretsJSON(s map[string]any) string { return fmt.Sprint(s["Condition"]) }
 
 func statementBySid(t *testing.T, rec *recorder, sid string) map[string]any {
 	t.Helper()
@@ -61,9 +64,16 @@ func TestSuppliedKeysCreateNoKeyAndGrantUnderTheContext(t *testing.T) {
 		t.Error("kms:Sign is granted: the runtime wraps locally and does not sign with KMS")
 	}
 	secrets := statementBySid(t, rec, "SluisKeysSecrets")
-	if secrets == nil || secrets["Condition"].(map[string]any)["StringEquals"].(map[string]any)["kms:EncryptionContext:purpose"] != "conceal" ||
-		strs(secrets["Resource"])[0] != arnp+"kms:eu-west-1:"+account+":key/acme-secrets" {
-		t.Errorf("secrets grant: %v", secrets)
+	if secrets == nil || strs(secrets["Resource"])[0] != arnp+"kms:eu-west-1:"+account+":key/acme-secrets" {
+		t.Fatalf("secrets grant: %v", secrets)
+	}
+	scond := secrets["Condition"].(map[string]any)
+	if scond["StringEquals"].(map[string]any)["kms:ViaService"] != "ssm."+region+".amazonaws.com" ||
+		scond["StringLike"].(map[string]any)["kms:EncryptionContext:PARAMETER_ARN"] != arnp+"ssm:"+region+":"+account+":parameter/sluis/staging/*" {
+		t.Errorf("secrets condition: %v", scond)
+	}
+	if strings.Contains(strings.Join(strs(secrets["Action"]), ","), "Sign") || strings.Contains(secretsJSON(secrets), "instance") {
+		t.Errorf("the secrets grant carries a signing action or an instance context: %v", secrets)
 	}
 	// The older ring entries keep opening until the estate says they are gone.
 	if legacy := statementBySid(t, rec, "SluisWrappedSigning"); legacy == nil ||
@@ -71,7 +81,10 @@ func TestSuppliedKeysCreateNoKeyAndGrantUnderTheContext(t *testing.T) {
 		t.Errorf("legacy signing grant: %v", legacy)
 	}
 	doc := layerFiles(t, rec)["sluis/sluis.yaml"]
-	for _, want := range []string{"instance: staging", "adapter: kms", "sign: alias/acme-sign", "conceal: alias/acme-secrets"} {
+	if strings.Contains(doc, "conceal") {
+		t.Errorf("the keys block names conceal, an audit purpose:\n%s", doc)
+	}
+	for _, want := range []string{"instance: staging", "adapter: kms", "sign: alias/acme-sign", "kmsKeyId: alias/acme-secrets"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the service document lacks %q:\n%s", want, doc)
 		}
@@ -108,6 +121,10 @@ func TestLibraryCreatedKeysStayWhenNoKeysAreSupplied(t *testing.T) {
 
 func TestSuppliedKeysAreRefused(t *testing.T) {
 	for name, mutate := range map[string]func(*arp.LambdaArgs){
+		"secrets and parameter key": func(a *arp.LambdaArgs) {
+			a.Keys = suppliedKeys()
+			a.ParameterKeyArn = arnp + "kms:eu-west-1:" + account + ":key/p"
+		},
 		"no sign alias":    func(a *arp.LambdaArgs) { a.Keys = &arp.KeysArgs{} },
 		"an ARN":           func(a *arp.LambdaArgs) { a.Keys = &arp.KeysArgs{Sign: arnp + "kms:eu-west-1:" + account + ":key/x"} },
 		"an AWS alias":     func(a *arp.LambdaArgs) { a.Keys = &arp.KeysArgs{Sign: "alias/aws/ssm"} },
@@ -259,9 +276,6 @@ func TestExternalReadPolicyNamesExactAddresses(t *testing.T) {
 	if got := strs(st[0]["Resource"]); strings.Join(got, ",") != strings.Join(want, ",") || st[0]["Action"] != "ssm:GetParameter" {
 		t.Errorf("parameters: %v %v", st[0]["Action"], got)
 	}
-	if strings.Contains(doc, "*") && !strings.Contains(doc, "ForAllValues") {
-		t.Errorf("a wildcard in %s", doc)
-	}
 	for _, s := range st {
 		for _, r := range strs(s["Resource"]) {
 			if strings.Contains(r, "*") {
@@ -271,9 +285,12 @@ func TestExternalReadPolicyNamesExactAddresses(t *testing.T) {
 	}
 	k := st[1]
 	eq := k["Condition"].(map[string]any)["StringEquals"].(map[string]any)
-	if k["Action"] != "kms:Decrypt" || strs(k["Resource"])[0] != key ||
-		eq["kms:EncryptionContext:instance"] != "acme" || eq["kms:EncryptionContext:purpose"] != "conceal" {
+	if k["Action"] != "kms:Decrypt" || strs(k["Resource"])[0] != key || eq["kms:ViaService"] != "ssm."+region+".amazonaws.com" ||
+		strings.Join(strs(eq["kms:EncryptionContext:PARAMETER_ARN"]), ",") != strings.Join(want, ",") {
 		t.Errorf("key grant: %v", k)
+	}
+	if strings.Contains(fmt.Sprint(k), "purpose") || strings.Contains(fmt.Sprint(k["Condition"]), "instance") {
+		t.Errorf("an instance or purpose context on the reader's key grant: %v", k)
 	}
 }
 
