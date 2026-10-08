@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/audit/internal/registry"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 )
 
@@ -39,7 +39,7 @@ actions:
     message: { en: "{actor} issued a credential" }
 `
 
-func registryFor(t *testing.T, profiles map[string]*preset.Profile, who string) *registry.Registry {
+func registryFor(t *testing.T, profiles map[string]*profile.Profile, who string) *registry.Registry {
 	t.Helper()
 	return &registry.Registry{
 		Store:    &registry.Memory{},
@@ -156,7 +156,7 @@ func TestAnUnverifiedCallerIsRefused(t *testing.T) {
 // Coverage is the deployment's: a gap is reported, and the application that
 // registered while it was open is not refused for it.
 func TestAnUncoveredCategoryIsReportedNotRefused(t *testing.T) {
-	profiles := map[string]*preset.Profile{
+	profiles := map[string]*profile.Profile{
 		"needs-auth": {Name: "needs-auth", RequiredCategories: []string{"authentication", "log_access"}},
 	}
 	r := registryFor(t, profiles, "wallet")
@@ -194,7 +194,7 @@ actions:
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles := map[string]*preset.Profile{
+	profiles := map[string]*profile.Profile{
 		"needs-auth": {Name: "needs-auth", RequiredCategories: []string{"data_change", "log_access"}},
 	}
 	r := registryFor(t, profiles, "wallet")

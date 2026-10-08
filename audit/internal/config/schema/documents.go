@@ -48,15 +48,15 @@ func document2(name, title, description string, props m, required []string) m {
 
 func deploymentSchema() m {
 	return document2("audit-deployment", "audit deployment",
-		"The profile document a configuration names as `deployment`: which presets each profile is composed from. Every component that reads profiles reads this one, because retention is a property of the profile and every one of them has to agree about it.",
+		"The profile document a configuration names as `deployment`: which framework profiles each profile is composed from. Every component that reads profiles reads this one, because retention is a property of the profile and every one of them has to agree about it.",
 		m{
 			"profiles": m{
 				"type": "object", "minProperties": 1,
 				"description":   "The profiles, by name. A name is the first component of the bucket key, so it holds no `/`.",
 				"propertyNames": m{"pattern": `^[^/]+$`},
 				"additionalProperties": obj("One profile's composition.", m{
-					"presets": m{"type": "array", "items": str("A preset's name."), "description": "The presets the profile is composed from."},
-				}, "presets"),
+					"frameworks": m{"type": "array", "items": str("A framework profile's name."), "description": "The framework profiles the profile is composed from."},
+				}, "frameworks"),
 			},
 			"external_identifiers_are_opaque": boolean("The identifiers this deployment receives for people outside the organisation are already pseudonyms an application minted, so a profile asking for `external: pseudonym` gets `clear`. Defaults to false: a deployment arrives at clear identifiers by saying so and not by omission."),
 		}, []string{"profiles"})

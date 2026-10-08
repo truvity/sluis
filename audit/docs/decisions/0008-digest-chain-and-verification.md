@@ -42,8 +42,8 @@ what to sign. A deployment that must answer an assessor uses a managed key,
 and the verifier is the same either way.
 
 Time-stamp anchoring of the chain head with an RFC 3161 or ETSI time-stamp
-is a preset option, required by none of the shipped presets and
-recommended by the evidence preset.
+is a framework profile option, required by none of the shipped framework profiles and
+recommended by the evidence framework profile.
 
 ## Consequences
 

@@ -1,5 +1,5 @@
 // Package metaschema validates a document against one of the meta-schemas this
-// repository publishes: the catalogue format, the preset format, and the
+// repository publishes: the catalogue format, the framework profile format, and the
 // constraints every extension-slot schema must satisfy.
 package metaschema
 

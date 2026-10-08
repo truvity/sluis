@@ -14,7 +14,7 @@ mode: stream
 
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
 externalIdentifiersAreOpaque: true
 
 replicas: 2

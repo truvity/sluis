@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 )
 
@@ -36,7 +36,7 @@ func GuardReplicas(replicas int, dedupe Dedupe) error {
 // GuardKeys refuses a deployment that would write identifiers it never decided
 // how to treat.
 //
-// A profile composed from a framework preset usually asks for external people
+// A profile composed from a framework profile usually asks for external people
 // to become pseudonyms. With no key provider there are two honest answers, and
 // the deployment has to pick one: configure a provider, or declare that the
 // identifiers it receives are already opaque — an identifier an application
@@ -45,13 +45,13 @@ func GuardReplicas(replicas int, dedupe Dedupe) error {
 // The third possibility is the one this refuses: starting without keys, never
 // saying anything, and writing whatever arrives into an archive nothing can
 // edit. See docs/decisions/0013-no-pseudonymisation-keys-by-default.md.
-func GuardKeys(profiles map[string]*preset.Profile, hasProvider bool) error {
+func GuardKeys(profiles map[string]*profile.Profile, hasProvider bool) error {
 	if hasProvider {
 		return nil
 	}
 	names := make([]string, 0, len(profiles))
 	for name, p := range profiles {
-		if p.Identity[preset.External] == preset.Pseudonym {
+		if p.Identity[profile.External] == profile.Pseudonym {
 			names = append(names, name)
 		}
 	}

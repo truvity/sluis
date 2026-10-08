@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/record"
 )
@@ -47,7 +47,7 @@ var clearField = map[string]func(*record.Record){
 }
 
 // CoreFields is every core field a profile may name, in order. Exported so that
-// a validator can tell a preset that names /acotr it has made a typo, rather
+// a validator can tell a framework profile that names /acotr it has made a typo, rather
 // than silently keeping nothing.
 func CoreFields() []string {
 	out := make([]string, 0, len(clearField))
@@ -61,7 +61,7 @@ func CoreFields() []string {
 // Splitter turns one record into the copies its action's profiles keep.
 type Splitter struct {
 	// Profiles the deployment has, by name.
-	Profiles map[string]*preset.Profile
+	Profiles map[string]*profile.Profile
 	// Keys gives the pseudonyms. A splitter without one cannot produce a copy
 	// for a profile that pseudonymises, and says so rather than writing the
 	// identifier in clear.
@@ -81,7 +81,7 @@ type Remembering interface {
 // Split returns one copy per profile the action belongs to and the deployment
 // has, in a stable order.
 //
-// A copy is default-deny: every core field a preset does not name is removed,
+// A copy is default-deny: every core field a framework profile does not name is removed,
 // and an extension property survives only if its class is one the profile keeps
 // and its PII level is not one the profile refuses. Adding a field to the
 // record therefore cannot quietly widen a copy of it.
@@ -133,7 +133,7 @@ func (s *Splitter) Handled(x *catalogue.Composed) []string {
 }
 
 func (s *Splitter) copyFor(
-	ctx context.Context, r *record.Record, x *catalogue.Composed, p *preset.Profile,
+	ctx context.Context, r *record.Record, x *catalogue.Composed, p *profile.Profile,
 ) (*record.Record, error) {
 	c := proto.Clone(r).(*record.Record)
 	c.Profile = p.Name
@@ -142,7 +142,7 @@ func (s *Splitter) copyFor(
 		if field == "/origin_hash" && !p.KeepsField(field) {
 			// Without it, two copies of one event cannot be shown to descend
 			// from the same original, which is the only thing that relates
-			// them once the identifiers differ. A preset may not drop it.
+			// them once the identifiers differ. A framework profile may not drop it.
 			continue
 		}
 		if !p.KeepsField(field) {
@@ -164,7 +164,7 @@ func (s *Splitter) copyFor(
 // The treatment follows the actor kind's category, never a field name, so a
 // source that adds a kind cannot widen what is kept by choosing a name.
 func (s *Splitter) treatIdentities(
-	ctx context.Context, c *record.Record, x *catalogue.Composed, p *preset.Profile,
+	ctx context.Context, c *record.Record, x *catalogue.Composed, p *profile.Profile,
 ) error {
 	tenant := c.GetTenantId()
 	if tenant == "" {
@@ -198,7 +198,7 @@ func (s *Splitter) treatIdentities(
 		if !x.TargetIsPerson(t.GetType()) {
 			continue
 		}
-		id, err := s.treat(ctx, tenant, p, preset.External, t.GetId())
+		id, err := s.treat(ctx, tenant, p, profile.External, t.GetId())
 		if err != nil {
 			return fmt.Errorf("targets[%d]: %w", i, err)
 		}
@@ -209,21 +209,21 @@ func (s *Splitter) treatIdentities(
 
 // treat applies one treatment to one identifier.
 func (s *Splitter) treat(
-	ctx context.Context, tenant string, p *preset.Profile, category preset.Category, id string,
+	ctx context.Context, tenant string, p *profile.Profile, category profile.Category, id string,
 ) (string, error) {
 	if id == "" {
 		return "", nil
 	}
-	if category == preset.External && p.OpaqueExternal && looksDirect(id) {
+	if category == profile.External && p.OpaqueExternal && looksDirect(id) {
 		return "", fmt.Errorf(
 			"the deployment declares external identifiers opaque and %q is not one: it reads as "+
 				"something that names a person by itself. Send the identifier the application "+
 				"minted, or configure a key provider and let the writer pseudonymise", id)
 	}
 	switch p.Identity[category] {
-	case preset.Omit:
+	case profile.Omit:
 		return "", nil
-	case preset.Pseudonym:
+	case profile.Pseudonym:
 		if s.Keys == nil {
 			return "", fmt.Errorf(
 				"profile %s pseudonymises %s identifiers and no key provider is configured", p.Name, category)
@@ -251,7 +251,7 @@ func (s *Splitter) treat(
 // filterSlots removes from every extension slot what the profile does not keep,
 // and treats what it keeps but must not leave readable.
 func (s *Splitter) filterSlots(
-	ctx context.Context, c *record.Record, x *catalogue.Composed, p *preset.Profile,
+	ctx context.Context, c *record.Record, x *catalogue.Composed, p *profile.Profile,
 ) error {
 	tenant := c.GetTenantId()
 	if tenant == "" {
@@ -266,12 +266,12 @@ func (s *Splitter) filterSlots(
 	} else if c.GetData() != nil {
 		// No schema means no annotations, and an unannotated property has no
 		// account of what it is. It is kept only where the bags are.
-		if !p.KeepsProperty(preset.Audit, "none") {
+		if !p.KeepsProperty(profile.Audit, "none") {
 			c.Data = nil
 		}
 	}
 	// The bags carry no annotations at all, so they follow the audit class.
-	if !p.KeepsProperty(preset.Audit, "none") {
+	if !p.KeepsProperty(profile.Audit, "none") {
 		c.Attributes = nil
 		c.Unmapped = nil
 	}
@@ -280,7 +280,7 @@ func (s *Splitter) filterSlots(
 
 // filter walks one slot, keeping what the profile keeps.
 func (s *Splitter) filter(
-	ctx context.Context, tenant string, p *preset.Profile,
+	ctx context.Context, tenant string, p *profile.Profile,
 	schema *catalogue.Schema, value *structpb.Struct, prefix string,
 ) (*structpb.Struct, error) {
 	if value == nil {

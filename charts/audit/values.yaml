@@ -294,7 +294,7 @@ receiver:
   tokens: []
 
 # The profiles this deployment keeps, as the document `deployment` in a config
-# names (/etc/audit/deployment.yaml). Each is composed from the presets the
+# names (/etc/audit/deployment.yaml). Each is composed from the framework profiles the
 # library ships. Adding a profile here is additive: Helm merges maps, so a
 # values file that names one profile gets this one as well. Name every profile
 # the installation should keep.
@@ -303,7 +303,7 @@ receiver:
 # which of the others a deployment should compose, and what each costs.
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
 
 # Whether the identifiers this installation receives for people outside the
 # organisation are already opaque — ones an application minted, which name
@@ -335,7 +335,7 @@ query:
   secretMounts: []
   tokens: []
   # The grants file (`grants` in the config names /etc/audit/grants.yaml): the
-  # issuers trusted to sign callers in, presets, and rules. See
+  # issuers trusted to sign callers in, framework profiles, and rules. See
   # audit/docs/how-to/read-the-trail.md#access. Without an issuer nobody can sign in, and the
   # service refuses to start.
   grants: {}
@@ -452,7 +452,7 @@ workloadIdentity:
 # lands.
 extensions:
   # Rollups at index time and a monthly immutable statement. Needs a profile
-  # composed from a metering preset, or there is no copy to compute from.
+  # composed from a metering framework profile, or there is no copy to compute from.
   billing:
     enabled: false
   # A usage consumer counting into a cache, an hourly reconciler, and the

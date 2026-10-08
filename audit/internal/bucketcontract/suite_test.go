@@ -19,7 +19,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/s3test"
 	"github.com/truvity/sluis/audit/internal/ulid"
 	"github.com/truvity/sluis/audit/internal/writer"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/record"
@@ -72,15 +72,15 @@ func common(t *testing.T) *catalogue.Catalogue {
 	return c
 }
 
-func profiles(t *testing.T) map[string]*preset.Profile {
+func profiles(t *testing.T) map[string]*profile.Profile {
 	t.Helper()
-	builtin, err := preset.Builtin()
+	builtin, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := map[string]*preset.Profile{}
-	for name, presets := range map[string][]string{"security": {"security"}, "billing": {"billing-nl"}} {
-		p, err := preset.Compose(preset.Composition{Name: name, Presets: presets}, builtin)
+	out := map[string]*profile.Profile{}
+	for name, frameworks := range map[string][]string{"security": {"security"}, "billing": {"billing-nl"}} {
+		p, err := profile.Compose(profile.Composition{Name: name, Frameworks: frameworks}, builtin)
 		if err != nil {
 			t.Fatal(err)
 		}

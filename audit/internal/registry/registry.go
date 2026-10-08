@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 )
 
@@ -56,7 +56,7 @@ type Registry struct {
 	Store Store
 	// Profiles are the deployment's, whose required categories the registered
 	// catalogues together are checked against.
-	Profiles map[string]*preset.Profile
+	Profiles map[string]*profile.Profile
 	// Builtin are catalogues every deployment has without registering them:
 	// the component's own. They count toward coverage.
 	Builtin []*catalogue.Catalogue
@@ -282,7 +282,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
-func sortedProfiles(m map[string]*preset.Profile) []string {
+func sortedProfiles(m map[string]*profile.Profile) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

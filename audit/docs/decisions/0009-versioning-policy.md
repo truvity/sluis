@@ -22,7 +22,7 @@ change, including incompatibly.
   Removing one is a decision that must show no object of that major
   remains.
 - Catalogues carry their own version on the record (`catalogue_version`);
-  per-action payloads version inside the catalogue. Presets, profiles and
+  per-action payloads version inside the catalogue. Framework profiles, profiles and
   the digest format version independently.
 - Every schema and catalogue version is copied into the archive on first
   use, together with the proto of the record's major, so the archive is

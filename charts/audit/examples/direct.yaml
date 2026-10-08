@@ -18,7 +18,7 @@ replicas: 2
 
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
 
 # No pseudonymisation keys: staff are kept in clear, and people outside arrive
 # as identifiers this application minted.
@@ -210,7 +210,7 @@ jobs:
     enabled: true
     config:
       apiVersion: audit.truvity.github.io/audit-clock-sync/v2
-      # Required by every preset with a compliance obligation. On AWS this is
+      # Required by every framework profile with a compliance obligation. On AWS this is
       # the instance's own time service.
       ntp: ["169.254.169.123"]
       sink:

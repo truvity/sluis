@@ -9,9 +9,9 @@ mode: stream
 
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
   billing:
-    presets: [billing-nl]
+    frameworks: [billing-nl]
 externalIdentifiersAreOpaque: true
 
 # Receivers scale with the application's request rate; they validate, publish

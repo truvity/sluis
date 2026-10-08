@@ -19,7 +19,7 @@ writer:
 
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
 externalIdentifiersAreOpaque: true
 
 # The migration still runs, as a hook, against the index: it needs only the

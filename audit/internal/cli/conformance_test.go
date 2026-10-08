@@ -18,7 +18,7 @@ import (
 	"github.com/truvity/sluis/audit/index/s3scan"
 	"github.com/truvity/sluis/audit/internal/cli"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/query"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
@@ -42,15 +42,15 @@ func deployment(t *testing.T, searcher func(store.Store) index.Searcher) string 
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := preset.ParseDeployment([]byte("profiles:\n  security:\n    presets: [security]\n"))
+	d, err := profile.ParseDeployment([]byte("profiles:\n  security:\n    frameworks: [security]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles, err := d.Compose(presets)
+	profiles, err := d.Compose(frameworks)
 	if err != nil {
 		t.Fatal(err)
 	}

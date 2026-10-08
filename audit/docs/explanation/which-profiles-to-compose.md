@@ -1,6 +1,6 @@
 # Which framework profiles a deployment composes
 
-This repository ships seven [framework profiles](../../presets/README.md). A
+This repository ships seven [framework profiles](../../profiles/README.md). A
 deployment does not compose all of them. This page says which ones an
 installation is expected to turn on, which are kept for a contract that asks,
 and what each one costs to run.
@@ -14,8 +14,8 @@ procedure, a review cadence somebody performs.
 
 | framework profile | what it keeps | retention | identities | demands | compose it |
 |---|---|---|---|---|---|
-| `security` | authentication, authorisation, privileged access, configuration change, key and secret use, every read of the trail | 365 days, 90 hot (minimum 180) | staff clear, external pseudonym | daily clock-synchronisation event, integrity (seals), compliance lock, reads logged | **always** |
-| `billing-nl` | quantities per tenant and meter; no actor, no subject | 7 years | both omitted | integrity (seals), compliance lock | **when the installation meters** |
+| `security` | authentication, authorisation, privileged access, configuration change, key and secret use, every read of the trail | 365 days, 90 hot (minimum 180) | staff clear, external pseudonym | daily clock-synchronisation event, integrity (seals), reads logged; no Object Lock (`object_lock_mode: none`) | **always** |
+| `billing-nl` | quantities per tenant and meter; no actor, no subject | 7 years | both omitted | integrity (seals); no Object Lock (`object_lock_mode: none`) | **when the installation meters** |
 | `history` | what a tenant's own administrator changed, as sentences | 365 days | staff by role (see below), tenant's own people scoped | nothing beyond integrity (seals) | when a product shows activity to its tenants |
 | `evidence-etsi` | credential and trust-service lifecycle facts | 7 years after the credential expires (10-year fallback) | staff clear, external pseudonym | daily clock-synchronisation, timestamp anchor recommended, quarterly verification report | a trust-service deployment under audit |
 | `pci-dss` | the security set, at PCI's floor | 12 months, 3 hot (minimum 365 days) | staff clear, external pseudonym | **daily** review with dispositions | a deployment in cardholder-data scope |

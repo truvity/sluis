@@ -13,7 +13,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/writer"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/record"
 )
@@ -96,19 +96,19 @@ func composed(t *testing.T) *catalogue.Composed {
 	return x
 }
 
-func profiles(t *testing.T) map[string]*preset.Profile {
+func profiles(t *testing.T) map[string]*profile.Profile {
 	t.Helper()
-	builtin, err := preset.Builtin()
+	builtin, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := map[string]*preset.Profile{}
-	for name, presets := range map[string][]string{
+	out := map[string]*profile.Profile{}
+	for name, frameworks := range map[string][]string{
 		"security": {"security"},
 		"billing":  {"billing-nl"},
 		"history":  {"history"},
 	} {
-		p, err := preset.Compose(preset.Composition{Name: name, Presets: presets}, builtin)
+		p, err := profile.Compose(profile.Composition{Name: name, Frameworks: frameworks}, builtin)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -409,7 +409,7 @@ func TestSplitRefusesToPseudonymiseWithNoKeys(t *testing.T) {
 	}
 }
 
-// Every core field must be nameable by a preset, or a preset that names one
+// Every core field must be nameable by a framework profile, or a framework profile that names one
 // keeps nothing and nobody notices.
 func TestCoreFieldsCoverTheRecord(t *testing.T) {
 	fields := map[string]bool{}
@@ -423,7 +423,7 @@ func TestCoreFieldsCoverTheRecord(t *testing.T) {
 		"/previous_attributes", "/data", "/meter", "/attributes", "/unmapped", "/origin_hash",
 	} {
 		if !fields[want] {
-			t.Errorf("%s cannot be named by a preset", want)
+			t.Errorf("%s cannot be named by a framework profile", want)
 		}
 	}
 }
@@ -433,12 +433,12 @@ func TestCoreFieldsCoverTheRecord(t *testing.T) {
 // written in clear, into an archive nothing can edit, because the declaration
 // turned the profile's pseudonym into clear.
 func TestSplitRefusesADirectIdentifierWhereTheyAreDeclaredOpaque(t *testing.T) {
-	builtin, err := preset.Builtin()
+	builtin, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := &preset.Deployment{
-		Profiles:                     map[string]preset.ProfileConfig{"security": {Presets: []string{"security"}}},
+	d := &profile.Deployment{
+		Profiles:                     map[string]profile.Entry{"security": {Frameworks: []string{"security"}}},
 		ExternalIdentifiersAreOpaque: true,
 	}
 	opaque, err := d.Compose(builtin)

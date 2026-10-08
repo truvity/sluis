@@ -5,7 +5,7 @@ package catalogue
 // field name.
 type Category string
 
-// Internal, External and Machine are the actor categories a preset sets a
+// Internal, External and Machine are the actor categories a framework profile sets a
 // treatment for.
 const (
 	Internal Category = "internal" // staff, operators
@@ -17,7 +17,7 @@ const (
 type Class string
 
 // Shared, Audit, Metering, History and Evidence are the field classes an
-// extension property declares and a preset keeps.
+// extension property declares and a framework profile keeps.
 const (
 	Shared   Class = "shared"
 	Audit    Class = "audit"

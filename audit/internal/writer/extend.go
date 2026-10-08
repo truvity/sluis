@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/truvity/sluis/audit/index"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 	"github.com/truvity/sluis/audit/sdk/record"
 )
@@ -44,7 +44,7 @@ type Locator interface {
 type extension struct {
 	record  string
 	tenant  string
-	profile *preset.Profile
+	profile *profile.Profile
 	earlier []string
 	until   time.Time
 }

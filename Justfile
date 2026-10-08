@@ -746,7 +746,7 @@ audit-sdk-closure:
 # jobs' events sat on that list unnoticed until the tool was pointed at home.
 [working-directory: 'audit']
 audit-schemas:
-    go run ./cmd/audit validate --presets presets sdk/catalogue/common.yaml
+    go run ./cmd/audit validate --profiles profiles sdk/catalogue/common.yaml
     go run ./cmd/audit check-emitters . --catalogue sdk/catalogue/common.yaml
 
 # The Pulumi library (deploy/pulumi) is a module of its own so that Pulumi is

@@ -56,7 +56,7 @@ integration workflow stands the box up itself for every pull request: see
   installs with `lockMode: none`: LocalStack Community's Object Lock
   support is partial, and the `security` profile this tier composes is one
   of the framework profiles whose framework does not demand a lock
-  (`presets/security.yaml`: `integrity.object_lock_mode: none`). A
+  (`profiles/security.yaml`: `integrity.object_lock_mode: none`). A
   deployment composing a profile that DOES demand one (`pci-dss`,
   `nen-7513`, `dora`, `evidence-etsi`) is proved on a real bucket with
   Object Lock enabled — this tier cannot stand in for that, and does not

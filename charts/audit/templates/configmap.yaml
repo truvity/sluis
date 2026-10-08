@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "audit.labels" . | nindent 4 }}
 data:
-  # The document a config names as `deployment`: which presets each profile is
+  # The document a config names as `deployment`: which framework profiles each profile is
   # composed from, and where its copies land. Every component that reads
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.

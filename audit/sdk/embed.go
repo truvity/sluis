@@ -1,5 +1,5 @@
 // Package sdk carries the files the consumer SDK publishes as data: the
-// meta-schemas that govern catalogues, presets and extension slots, and the
+// meta-schemas that govern catalogues, framework profiles and extension slots, and the
 // common catalogue of the component's own events.
 //
 // They are embedded so that a deployment gets them from the binary it already
@@ -10,7 +10,7 @@ package sdk
 
 import "embed"
 
-// Schemas are the meta-schemas under schemas/: catalogue, preset, extension.
+// Schemas are the meta-schemas under schemas/: catalogue, framework profile, extension.
 //
 //go:embed schemas/*.json
 var Schemas embed.FS

@@ -1,4 +1,4 @@
-package preset
+package profile
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Deployment is what a deployment declares about its profiles: which presets
+// Deployment is what a deployment declares about its profiles: which framework profiles
 // each is composed from and where its copies land. It is the document the
 // chart renders and the writer reads, and the jobs read the same one, because
 // retention is a property of the profile and every one of them has to agree
@@ -17,8 +17,8 @@ type Deployment struct {
 	// APIVersion is `audit.truvity.github.io/audit-deployment/v2`. The version
 	// before it, `truvity.github.io/audit-deployment/v1`, or absent, means the
 	// same document and is read with a deprecation warning.
-	APIVersion string                   `json:"apiVersion,omitempty"`
-	Profiles   map[string]ProfileConfig `json:"profiles"`
+	APIVersion string           `json:"apiVersion,omitempty"`
+	Profiles   map[string]Entry `json:"profiles"`
 	// ExternalIdentifiersAreOpaque is the deployment saying that the
 	// identifiers it receives for people outside the organisation are already
 	// pseudonyms: identifiers an application minted, which name nobody without
@@ -35,9 +35,9 @@ type Deployment struct {
 	ExternalIdentifiersAreOpaque bool `json:"external_identifiers_are_opaque,omitempty"`
 }
 
-// ProfileConfig is one profile's composition.
-type ProfileConfig struct {
-	Presets []string `json:"presets"`
+// Entry is one profile's composition.
+type Entry struct {
+	Frameworks []string `json:"frameworks"`
 }
 
 // DeploymentAPIVersion is the version of the deployment document this build
@@ -51,6 +51,9 @@ const (
 // ParseDeployment reads a deployment document. Unknown keys are refused: a
 // misspelt field in a document that decides retention is not one to ignore.
 func ParseDeployment(raw []byte) (*Deployment, error) {
+	if err := refuseOldKey(raw); err != nil {
+		return nil, err
+	}
 	var d Deployment
 	if err := yaml.UnmarshalStrict(raw, &d); err != nil {
 		return nil, fmt.Errorf("deployment: %w", err)
@@ -70,16 +73,35 @@ func ParseDeployment(raw []byte) (*Deployment, error) {
 	return &d, nil
 }
 
+// refuseOldKey names the new key to a document that still uses the old one.
+// A profile's framework profiles were listed under `presets:` before the
+// rename; strict parsing would call the key unknown and say nothing of where it
+// went, and "preset" now means something else.
+func refuseOldKey(raw []byte) error {
+	var doc struct {
+		Profiles map[string]map[string]any `json:"profiles"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil // the strict parse says what is wrong with it
+	}
+	for name, entry := range doc.Profiles {
+		if _, old := entry["presets"]; old {
+			return fmt.Errorf("deployment: profile %s: the key `presets` is now `frameworks` (the framework profiles it is composed from); rename it", name)
+		}
+	}
+	return nil
+}
+
 // Compose resolves every profile a deployment declares.
 //
 // This is where ExternalIdentifiersAreOpaque takes effect, so that what a
 // profile says it keeps is what it keeps: `audit profile explain` prints the
 // composed profile, and a treatment the deployment has relaxed should not be
 // something a reader has to know to subtract.
-func (d *Deployment) Compose(presets map[string]*Preset) (map[string]*Profile, error) {
+func (d *Deployment) Compose(frameworks map[string]*Framework) (map[string]*Profile, error) {
 	out := make(map[string]*Profile, len(d.Profiles))
 	for name, c := range d.Profiles {
-		p, err := Compose(Composition{Name: name, Presets: c.Presets}, presets)
+		p, err := Compose(Composition{Name: name, Frameworks: c.Frameworks}, frameworks)
 		if err != nil {
 			return nil, err
 		}
@@ -93,12 +115,12 @@ func (d *Deployment) Compose(presets map[string]*Preset) (map[string]*Profile, e
 }
 
 // DefaultDeployment is what a deployment gets when it declares nothing: one
-// profile per preset, named for the preset. It is a starting point for
-// looking at what the presets keep, not a recommendation.
-func DefaultDeployment(presets map[string]*Preset) *Deployment {
-	d := &Deployment{Profiles: map[string]ProfileConfig{}}
-	for name := range presets {
-		d.Profiles[name] = ProfileConfig{Presets: []string{name}}
+// profile per framework profile, named for the framework profile. It is a starting point for
+// looking at what the framework profiles keep, not a recommendation.
+func DefaultDeployment(frameworks map[string]*Framework) *Deployment {
+	d := &Deployment{Profiles: map[string]Entry{}}
+	for name := range frameworks {
+		d.Profiles[name] = Entry{Frameworks: []string{name}}
 	}
 	return d
 }

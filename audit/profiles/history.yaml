@@ -2,7 +2,7 @@ name: history
 framework: "Product policy for tenant-facing activity history; GDPR Art. 5(1)(c) and 5(1)(e)"
 version: "2026.09"
 summary: The tenant administrator's view. Who in their organisation changed what, with sentences and diffs. Staff appear as roles, never names.
-disclaimer: "This preset is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
+disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:
   - clause: "GDPR Art. 5(1)(c) data minimisation; Art. 5(1)(e) storage limitation"
     url: https://gdpr-info.eu/art-5-gdpr/

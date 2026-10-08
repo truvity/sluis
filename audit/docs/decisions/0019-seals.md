@@ -82,7 +82,7 @@ hash against its listing, and each object's lock.
 - **Only the pin in observe's configuration is the root of trust**, so the
   archive's writer, however compromised, cannot choose who signs.
 - ES384 is fixed. A new algorithm is a new `typ` and a new decision.
-- Time-stamp anchoring of the chain head, which 0008 offered as a preset
+- Time-stamp anchoring of the chain head, which 0008 offered as a framework profile
   option, is unchanged and not part of the seal.
 
 ## Alternatives considered

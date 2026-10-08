@@ -88,7 +88,7 @@ metadata:
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
 data:
-  # The document a config names as `deployment`: which presets each profile is
+  # The document a config names as `deployment`: which framework profiles each profile is
   # composed from, and where its copies land. Every component that reads
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
@@ -96,7 +96,7 @@ data:
     external_identifiers_are_opaque: false
     profiles:
       security:
-        presets:
+        frameworks:
         - security
 
 ---
@@ -375,7 +375,7 @@ spec:
         checksum/grants: c6e926709c6176bc66b906eaad228b9bb32e6760036c8733b2758355055342a1
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
-        checksum/deployment: 9bc55d85e6652dab5ec3bf4840304b22a20656aa3e509162ef41360d86154234
+        checksum/deployment: 1b63740da88ff0200f20e5ec42295c73f94ef925cf51ef69ef60c5845c41d6e1
     spec:
       serviceAccountName: audit-query
       
@@ -498,7 +498,7 @@ spec:
         checksum/config: 409635b392d5dbbc9b5e77d53313d7d8bb982eab22903f3a9d495b72cfd499ad
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 9bc55d85e6652dab5ec3bf4840304b22a20656aa3e509162ef41360d86154234
+        checksum/deployment: 1b63740da88ff0200f20e5ec42295c73f94ef925cf51ef69ef60c5845c41d6e1
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:

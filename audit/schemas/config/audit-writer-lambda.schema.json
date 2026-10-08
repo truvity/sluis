@@ -305,7 +305,7 @@
             },
             "window": {
               "$ref": "#/$defs/duration",
-              "description": "How long a written record's id is remembered. Unset is the widest window any profile's presets ask for. It wants to be at least as long as the queue keeps a message (SQS: at most 14 days)."
+              "description": "How long a written record's id is remembered. Unset is the widest window any profile's framework profiles ask for. It wants to be at least as long as the queue keeps a message (SQS: at most 14 days)."
             }
           },
           "required": [
@@ -317,7 +317,7 @@
       "type": "object"
     },
     "deployment": {
-      "description": "Path to the profile configuration: which presets each profile is composed from. In the function's package, at `/var/task/deployment.yaml` in the shipped layout.",
+      "description": "Path to the profile configuration: which framework profiles each profile is composed from. In the function's package, at `/var/task/deployment.yaml` in the shipped layout.",
       "minLength": 1,
       "type": "string"
     },

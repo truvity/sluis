@@ -21,11 +21,11 @@ reason: a workspace's module graph is one graph. Run its tests with
 proto/audit/v1/       the contracts: record, sink, registry, query, seal (seals, delegations, revocations)
 gen/jsonschema/       the record's JSON Schema, generated, committed
 schemas/config/       each binary's configuration file schema
-presets/              the framework profiles (the directory keeps its old name)
+profiles/              the framework profiles (the directory keeps its old name)
 
 sdk/                  MODULE github.com/truvity/sluis/audit/sdk, tagged sdk/vX.Y.Z
   gen/                generated Go (ts/src/gen is the generated TypeScript), committed
-  schemas/            meta-schemas: catalogue, preset, extension slot
+  schemas/            meta-schemas: catalogue, framework profile, extension slot
   catalogue/          catalogue loading, validation, composition, sentences;
                       common.yaml, the component's own actions
   record/             the canonical record: identifiers, bounds, negative list, canonical form
@@ -50,7 +50,7 @@ cmd/audit-writer-lambda/, cmd/audit-notary-lambda/
 deploy/pulumi/        MODULE github.com/truvity/sluis/audit/deploy/pulumi, tagged deploy/pulumi/vX.Y.Z:
                       the AWS shape as a Pulumi Go library; it imports nothing of this
                       repository, and `just pulumi-test` runs it against Pulumi's mocks
-preset/               presets, profile composition, the deployment document
+framework profile/               framework profiles, profile composition, the deployment document
 keys/                 pseudonymisation providers (local, OpenBAO transit) and signers, for seals
                       (P-384 key file, AWS KMS ECC_NIST_P384, OpenBAO transit ecdsa-p384)
 store/                the object store interface and the v1 archive layout, seals and keys
@@ -175,9 +175,9 @@ Where each piece went, and why:
   share (`Principal`, `Grant`, `Rule`, `TokenFile`, `Middleware`) are in the
   SDK; the JWT authenticator and the `access-roster` grants preset, which need the JWT
   library and sluis's group grammar, are `authn/` in the root.
-- **`catalogue` needed `Category` and `Class`,** which were in `preset`, and
+- **`catalogue` needed `Category` and `Class`,** which were in `profile`, and
   the meta-schemas, which were embedded from the root. The two types are now
-  defined in `catalogue` and re-exported by `preset`; the three meta-schemas
+  defined in `catalogue` and re-exported by `profile`; the three meta-schemas
   moved to `sdk/schemas/`, because a module cannot embed a file outside its own
   directory. `schemas/config/` stays at the root with the binaries it describes.
 - **`internal/telemetry` is split:** the span attribute names, the allowlist
@@ -208,7 +208,7 @@ tag.
 
 **Public and internal.** A package a third party implements against or an
 application imports is a top-level package and part of the compatibility
-promise: `sdk/record`, `sdk/catalogue`, `preset`, `sdk/emit`, `sdk/sink`, `keys`,
+promise: `sdk/record`, `sdk/catalogue`, `profile`, `sdk/emit`, `sdk/sink`, `keys`,
 `store`, `index`, `sdk/auth`, `authn`, `writer`, `query`. Everything only this repository's own
 binaries use is under `internal/`. A helper only a test should use lives in a
 `*test` package beside what it helps (`store/storetest`, `index/indextest`).

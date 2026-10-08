@@ -2,7 +2,7 @@ name: security
 framework: "NIS2 (Directive (EU) 2022/2555) with Implementing Regulation (EU) 2024/2690 Annex §3.2; ISO/IEC 27001:2022 Annex A 8.15, 8.16, 8.17; PCI DSS v4.0.1 Requirement 10 as the prescriptive floor"
 version: "2026.09"
 summary: The security operations profile. What a SOC, an incident responder or an ISMS auditor reads.
-disclaimer: "This preset is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
+disclaimer: "This framework profile is an engineering reading of the cited clauses, not legal advice. A deployer confirms applicability, numbers and scope with its own assessor, auditor or counsel."
 citations:
   - clause: "CIR (EU) 2024/2690 Annex 3.2.3 — events to log: user lifecycle, access to systems and applications, authentication, all privileged access, changes to critical configuration, access to logs"
     url: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202402690
@@ -67,7 +67,7 @@ retention:
   configurable: true
   minimum_days: 180
   delete_at_end: true
-  note: "PCI DSS fixes 12 months with 3 hot; NIS2, ISO 27001 and DORA leave the number to the entity; French CNIL guidance suggests 6 months extendable to 12 for logs with personal data. 365 is the defended default; deployments in PCI scope compose the pci-dss preset which raises the minimum."
+  note: "PCI DSS fixes 12 months with 3 hot; NIS2, ISO 27001 and DORA leave the number to the entity; French CNIL guidance suggests 6 months extendable to 12 for logs with personal data. 365 is the defended default; deployments in PCI scope compose the pci-dss framework profile which raises the minimum."
 integrity:
   digest: required
   object_lock_mode: none

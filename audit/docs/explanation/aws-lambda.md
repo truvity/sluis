@@ -69,7 +69,7 @@ What changes is the shell:
     has always had: a crash between the put and the mark costs a second copy of
     the record and never a hole.
   - The table's TTL attribute is `expires_at`, so it cleans itself.
-  - The window is the widest any profile's presets ask for unless the
+  - The window is the widest any profile's framework profiles ask for unless the
     configuration says (`dedupe.dynamodb.window`). It wants to be at least the
     queue's retention, which is 14 days at most.
 - **Configuration.** One file, `/opt/audit/audit.yaml`, in an immutable layer

@@ -210,7 +210,7 @@ func LoadFS(fsys fs.FS, doc string) (*Catalogue, error) {
 }
 
 // Common is the catalogue of the component's own events: reads and exports of
-// the trail, registrations, profile and preset changes, key destruction, legal
+// the trail, registrations, profile and framework profile changes, key destruction, legal
 // holds, seals, writer lifecycle and the daily clock check. Every deployment
 // carries it.
 func Common() (*Catalogue, error) { return LoadFS(sdk.Catalogue, "catalogue/common.yaml") }
@@ -238,7 +238,7 @@ func (c *Catalogue) ActionNames() []string {
 }
 
 // Categories returns every framework category this catalogue covers, which is
-// what a preset's required categories are checked against.
+// what a framework profile's required categories are checked against.
 func (c *Catalogue) Categories() map[string]bool {
 	out := map[string]bool{}
 	for _, a := range c.Actions {
@@ -450,7 +450,7 @@ func (c *Catalogue) messageArguments(a Action) map[string]bool {
 // MissingCategories reports the framework categories a profile requires that no
 // catalogue emitting into it covers.
 //
-// This is the check that keeps a preset honest at deploy time: a profile may
+// This is the check that keeps a framework profile honest at deploy time: a profile may
 // claim to satisfy a framework only if something in the installation actually
 // records the events that framework asks for.
 func MissingCategories(profile string, required []string, catalogues []*Catalogue) []string {

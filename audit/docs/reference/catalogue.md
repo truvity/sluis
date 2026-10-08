@@ -15,7 +15,7 @@ receiver copies every version into the archive on first use.
 
 One catalogue belongs to one application, and an installation admits one
 application. What is shared between applications is this format and the
-[framework profiles](../../presets/README.md) that profiles are composed from, never a
+[framework profiles](../../profiles/README.md) that profiles are composed from, never a
 catalogue.
 
 ## Fields

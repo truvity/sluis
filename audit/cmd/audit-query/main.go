@@ -31,7 +31,7 @@ import (
 	readiness "github.com/truvity/sluis/audit/internal/health"
 	"github.com/truvity/sluis/audit/internal/telemetry"
 	"github.com/truvity/sluis/audit/keys"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/query"
 	"github.com/truvity/sluis/audit/store"
 )
@@ -72,9 +72,9 @@ func run() error {
 	}
 	defer stopTelemetry(context.Background()) //nolint:errcheck // shutting down
 
-	var profiles map[string]*preset.Profile
+	var profiles map[string]*profile.Profile
 	if cfg.Deployment != "" {
-		presets, err := preset.Builtin()
+		frameworks, err := profile.Builtin()
 		if err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		if profiles, err = d.Compose(presets); err != nil {
+		if profiles, err = d.Compose(frameworks); err != nil {
 			return err
 		}
 	}

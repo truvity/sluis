@@ -4,16 +4,18 @@ What a framework profile says, what composing several into a profile produces, a
 deployment may relax.
 
 **Terminology.** A **framework profile** is one standard's requirements as a file, such as
-`presets/pci-dss.yaml`: which record fields must, may and may never be kept, how identities are
+`profiles/pci-dss.yaml`: which record fields must, may and may never be kept, how identities are
 treated, how long copies live, what integrity applies and how often the trail is reviewed. A
 **profile** is a deployment's own named copy (`security`, `billing`), composed from one or more
-framework profiles; the split writer produces one copy per profile. These files used to be called
-*presets*: a compliance bundle is a profile, and a preset is a named bundle of adapter or
-deployment choices ([policy decision 0012](https://github.com/truvity/policy/blob/master/docs/decisions/0012-stabilization-amendments.md)).
-**The names in code stay as they were until a code change renames them:** the directory
-[`presets/`](../../presets/), the `presets:` key of the deployment document, the
-[`preset.schema.json`](../../sdk/schemas/preset.schema.json) meta-schema, the `preset` package and
-the event `audit.preset.changed`.
+framework profiles listed under the key `frameworks:`; the split writer produces one copy per profile. These
+files used to be called *presets* and the key `presets:`, which is now refused with a message naming
+`frameworks:`. A *preset* is reserved for a named bundle of adapter or deployment choices
+([policy decision 0012](https://github.com/truvity/policy/blob/master/docs/decisions/0012-stabilization-amendments.md)).
+The directory is [`profiles/`](../../profiles/), the meta-schema is
+[`profile.schema.json`](../../sdk/schemas/profile.schema.json), the Go package is `profile`. The
+event that records a framework profile's version changing keeps its name, `audit.preset.changed`
+(and its target type `preset`), because a catalogue's action names are archived and renaming one is a
+catalogue major version.
 
 Which framework profiles an installation is expected to compose, and what each costs to run, is
 [which profiles to compose](../explanation/which-profiles-to-compose.md).
@@ -27,13 +29,13 @@ and nothing else composes them.
 ```yaml
 profiles:
   security:
-    presets: [security, pci-dss]
+    frameworks: [security, pci-dss]
   billing:
-    presets: [billing-nl]
+    frameworks: [billing-nl]
   history:
-    presets: [history]
+    frameworks: [history]
   evidence:
-    presets: [evidence-etsi]
+    frameworks: [evidence-etsi]
 ```
 
 Composition rules:
@@ -138,7 +140,7 @@ writer stopped in between records the change again next time rather than never.
 
 ## The framework profiles
 
-The framework profiles this repository ships, from `presets/*.yaml`. Each cites the clauses it
+The framework profiles this repository ships, from `profiles/*.yaml`. Each cites the clauses it
 reads and carries a disclaimer. Where a framework gives no number (NIS2, ISO 27001 and DORA all say
 "define it yourself"), the file carries a defended default and marks it `configurable`.
 

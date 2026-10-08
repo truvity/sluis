@@ -69,7 +69,7 @@ contract that demands it, or a trail that unavoidably carries direct
 identifiers. Choosing one stays a deployment decision, recorded by the
 deployer.
 
-**The `history` preset stops depending on keys.** It treated internal
+**The `history` framework profile stops depending on keys.** It treated internal
 actors as pseudonyms, so a tenant-facing view of activity needed a key
 provider to render at all. It now omits internal actors: a staff actor is
 shown by kind and role, never by identity. `external: scoped` stays, so a

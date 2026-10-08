@@ -49,7 +49,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/cli"
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/internal/telemetry"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"github.com/truvity/sluis/audit/writer"
@@ -96,7 +96,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		return err
 	}
@@ -104,13 +104,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	profiles, err := d.Compose(presets)
+	profiles, err := d.Compose(frameworks)
 	if err != nil {
 		return err
 	}
 	// A profile whose frameworks demand a lock this bucket is not written with
 	// is refused before a copy lands where it could be deleted (ADR 0014).
-	if err := preset.CheckLockMode(profiles, cfg.Archive.LockMode); err != nil {
+	if err := profile.CheckLockMode(profiles, cfg.Archive.LockMode); err != nil {
 		return err
 	}
 	archive, err := cli.OpenArchiveFrom(ctx, cfg.Archive, cfg.SecretReader())
@@ -240,9 +240,9 @@ func guard(front sink.Sink, require string) (sink.Sink, error) {
 }
 
 // widestDedupeWindow is how long a written identifier is remembered when the
-// file does not say: the widest window any profile's presets ask for, since one
+// file does not say: the widest window any profile's framework profiles ask for, since one
 // table serves them all.
-func widestDedupeWindow(profiles map[string]*preset.Profile) time.Duration {
+func widestDedupeWindow(profiles map[string]*profile.Profile) time.Duration {
 	var longest time.Duration
 	for _, p := range profiles {
 		if d := time.Duration(p.Pipeline.DedupeWindowDays) * 24 * time.Hour; d > longest {

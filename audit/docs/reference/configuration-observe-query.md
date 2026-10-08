@@ -115,7 +115,7 @@ presets:
     claim: groups                        # the default
 ```
 
-The `access-roster` preset reads groups named `<scope>:audit:<role>`, the
+The `access-roster` framework profile reads groups named `<scope>:audit:<role>`, the
 estate's grant grammar from sluis (`access-roster` is the identifier the code gives it,
 from sluis's former name, and stays until a code change renames it). The scope is `all` or an audit tenant id, byte for
 byte; an environment is never in the name, because each deployment's query

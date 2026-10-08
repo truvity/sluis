@@ -59,7 +59,7 @@ metadata:
     app.kubernetes.io/version: "0.0.0"
     app.kubernetes.io/managed-by: Helm
 data:
-  # The document a config names as `deployment`: which presets each profile is
+  # The document a config names as `deployment`: which framework profiles each profile is
   # composed from, and where its copies land. Every component that reads
   # profiles reads this one, because retention is a property of the profile and
   # every one of them needs to agree about it.
@@ -67,7 +67,7 @@ data:
     external_identifiers_are_opaque: true
     profiles:
       security:
-        presets:
+        frameworks:
         - security
   # The document a writer's config names as `workloads`: the issuers trusted to
   # name a calling workload, and the source each speaks for.
@@ -346,7 +346,7 @@ spec:
         checksum/config: e54f8fbdfcaf7afcfc6a9188b122c6a199d0070710b902f8b643b7a600bb73d5
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 3cf5d4189a49067986764efdfb49280818d399f4d2e1cef580a4e37d1b9d7a52
+        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:
@@ -470,7 +470,7 @@ spec:
         checksum/config: c58797a864822312694cf54703f9e4c3425750cfd64c7583a8c8ce25b2a1431f
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 3cf5d4189a49067986764efdfb49280818d399f4d2e1cef580a4e37d1b9d7a52
+        checksum/deployment: 07ce04de54981d2db59836ebca88f462300d11f48be19aadde7469c71114ff9b
         # And who may write: a changed issuer or mapping must reach it.
         checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
     spec:

@@ -138,7 +138,7 @@
             ]
           },
           "categories": {
-            "description": "Framework event categories the action satisfies; presets require categories, not actions.",
+            "description": "Framework event categories the action satisfies; framework profiles require categories, not actions.",
             "type": "array",
             "items": {
               "enum": [

@@ -32,7 +32,7 @@ export const file_audit_v1_record: GenFile = /*@__PURE__*/
  * Record is one thing that happened, as seen by one source.
  *
  * Which copies carry a given core field is decided by the profile a copy is
- * written under, through the presets it is composed from (docs/concepts.md);
+ * written under, through the framework profiles it is composed from (docs/concepts.md);
  * the record itself does not say. An extension property, by contrast, carries
  * its class as an annotation on its schema.
  *

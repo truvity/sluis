@@ -8,7 +8,7 @@ import (
 
 	"github.com/truvity/sluis/audit/index"
 	"github.com/truvity/sluis/audit/internal/cli"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 )
 
 // marker stands in for the deduplication table, which a purge only tells a
@@ -22,13 +22,13 @@ func (m *marker) Purge(_ context.Context, before time.Time) error {
 
 func purger(t *testing.T, target index.Indexer, dedupe cli.Marker, now time.Time) cli.Purge {
 	t.Helper()
-	presets, err := preset.Builtin()
+	frameworks, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles, err := (&preset.Deployment{
-		Profiles: map[string]preset.ProfileConfig{"security": {Presets: []string{"security"}}},
-	}).Compose(presets)
+	profiles, err := (&profile.Deployment{
+		Profiles: map[string]profile.Entry{"security": {Frameworks: []string{"security"}}},
+	}).Compose(frameworks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestPurgeRemovesOnlyWhatIsPastRetention(t *testing.T) {
 	}
 }
 
-// No shipped preset states a separate, shorter life for who an event happened
+// No shipped framework profile states a separate, shorter life for who an event happened
 // to. Rather than invent one, the command forgets nothing early unless a
 // deployment says how long — and then it keeps the event.
 func TestPurgeForgetsIdentitiesOnlyWhenToldHowLong(t *testing.T) {

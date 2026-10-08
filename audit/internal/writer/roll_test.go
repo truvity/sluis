@@ -11,7 +11,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/recobj"
 	"github.com/truvity/sluis/audit/internal/writer"
-	"github.com/truvity/sluis/audit/preset"
+	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/audit/store"
 	"github.com/truvity/sluis/audit/store/storetest"
@@ -386,11 +386,11 @@ func TestAFailedPutKeepsTheCopies(t *testing.T) {
 // needs, and never less than the fallback — a short-lived credential still
 // gets the profile's floor.
 func TestAnEvidenceObjectIsLockedUntilItsLatestExpiryPlusTheYears(t *testing.T) {
-	builtin, err := preset.Builtin()
+	builtin, err := profile.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	evidence, err := preset.Compose(preset.Composition{Name: "evidence", Presets: []string{"evidence-etsi"}}, builtin)
+	evidence, err := profile.Compose(profile.Composition{Name: "evidence", Frameworks: []string{"evidence-etsi"}}, builtin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestAnEvidenceObjectIsLockedUntilItsLatestExpiryPlusTheYears(t *testing.T) 
 	expiring := func(v string) *time.Time { at := day(t, v); return &at }
 	for _, c := range []struct {
 		name     string
-		profile  *preset.Profile
+		profile  *profile.Profile
 		expiries []*time.Time
 		want     time.Time
 	}{

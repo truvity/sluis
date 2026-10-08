@@ -25,7 +25,7 @@ externalIdentifiersAreOpaque: true
 
 profiles:
   security:
-    presets: [security]
+    frameworks: [security]
 
 # What the receiver and the writers share, written once and reused below.
 # The writer's role: the deduplication table and the registry, none of the
@@ -45,8 +45,8 @@ x-stream: &stream
 # The box's S3 stand-in (see truvity/policy's hack/kind/localstack.yaml) has
 # no Object Lock support worth proving against — LocalStack Community's is
 # partial — so this tier writes with no lock at all. `security` (composed
-# above) is one of the presets whose framework does not demand one
-# (presets/security.yaml: integrity.object_lock_mode: none); a profile that
+# above) is one of the framework profiles whose framework does not demand one
+# (profiles/security.yaml: integrity.object_lock_mode: none); a profile that
 # demanded compliance or governance could not run here, and audit/docs/how-to/test-the-kind-tier.md
 # says so.
 x-bucket: &bucket
