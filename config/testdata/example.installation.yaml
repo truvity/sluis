@@ -26,9 +26,10 @@ aws:
   bucket: example-sluis-111122223333
   auditQueueURL: https://sqs.eu-central-1.amazonaws.com/111122223333/example-audit-ingest
 
+keys: {adapter: kms, sign: alias/example-sign}
 signingKey:
   kmsWrapped:
-    keyId: alias/example-unseal
+    algorithms: [ES384]
   pollInterval: 30s
   activationDelay: 30s
 

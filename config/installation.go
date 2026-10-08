@@ -12,6 +12,7 @@ import (
 	sluis "github.com/truvity/sluis"
 	internal "github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/keys"
 )
 
 // InstallationVersion is the apiVersion of the installation document.
@@ -87,6 +88,10 @@ type Installation struct {
 	// above give.
 	Adapters map[string]AdapterChoice `json:"adapters,omitempty"`
 
+	// Keys says which key serves which purpose (the service document's
+	// `keys`). With `signingKey.kmsWrapped` and no `keys`, the sign key is
+	// alias/sluis-<instance>-sign on kms.
+	Keys        *keys.Config `json:"keys,omitempty"`
 	SigningKey  *SigningKey  `json:"signingKey,omitempty"`
 	Recovery    *Recovery    `json:"recovery,omitempty"`
 	Login       *Login       `json:"login,omitempty"`

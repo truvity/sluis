@@ -26,7 +26,8 @@ type KMSSigningAlg struct {
 // `signingKey.kmsWrapped`. The durations are Go duration strings; an empty one
 // takes the default.
 type KMSWrappedSigning struct {
-	KeyID       string   `json:"keyId"`
+	// KeyID is deprecated: `keys.sign` names the key.
+	KeyID       string   `json:"keyId,omitempty"`
 	Region      string   `json:"region,omitempty"`
 	StateSecret string   `json:"stateSecret"`
 	Algorithms  []string `json:"algorithms,omitempty"`
@@ -77,8 +78,8 @@ func init() {
 			if err := s.Decode(&k); err != nil {
 				return nil, err
 			}
-			if k.KeyID == "" || k.StateSecret == "" {
-				return nil, errors.New("the kms-wrapped adapter needs keyId and stateSecret (set `signingKey.kmsWrapped` or `adapters.signing.settings`)")
+			if k.StateSecret == "" {
+				return nil, errors.New("the kms-wrapped adapter needs stateSecret (set `signingKey.kmsWrapped` or `adapters.signing.settings`); the wrapping key is `keys.sign`")
 			}
 			return &k, nil
 		},

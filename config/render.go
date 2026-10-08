@@ -17,7 +17,12 @@ import (
 
 	internal "github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/port"
+	"github.com/truvity/sluis/storage/keys"
 )
+
+// DefaultSignKeyAlias is the alias of an installation's `keys.sign` key when the
+// installation names none: the one the Pulumi library's grants are written for.
+func DefaultSignKeyAlias(instance string) string { return "alias/sluis-" + instance + "-sign" }
 
 // The names layout v3 gives the secrets sluis itself writes. They are fixed,
 // so an installation never repeats them.
@@ -112,8 +117,10 @@ func (in *Installation) check() error {
 	if in.Shape == ShapeLambda && (in.AWS == nil || in.AWS.Region == "") {
 		errs = append(errs, errors.New("aws.region is required for shape lambda: it names the SSM parameters and the resources"))
 	}
-	if k := in.SigningKey; k != nil && k.KMSWrapped != nil && k.KMSWrapped.KeyID == "" {
-		errs = append(errs, errors.New("signingKey.kmsWrapped.keyId is required"))
+	if in.Keys != nil {
+		if err := in.Keys.Validate(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if in.Console != nil && in.Console.Client != "" && in.Access != nil && len(in.Access.Clients) > 0 {
 		if _, ok := in.Access.Clients[in.Console.Client]; !ok {
@@ -178,6 +185,7 @@ func (in *Installation) service() (*internal.Sluis, error) {
 	s.APIVersion = internal.APIVersion("sluis")
 	s.IssuerURL = strings.TrimSpace(in.Issuer.URL)
 	s.Release = in.Release
+	s.Instance = in.Instance
 	s.Cluster = in.Cluster
 	s.InCluster = in.Shape == ShapeKubernetes
 	s.Preset = in.preset()
@@ -203,6 +211,7 @@ func (in *Installation) service() (*internal.Sluis, error) {
 	s.Audit = copyOf(in.Audit)
 	s.Recovery = copyOf(in.Recovery)
 	s.SigningKey = copyOf(in.SigningKey)
+	s.Keys = copyOf(in.Keys)
 	if in.Exchange != nil && in.Exchange.Audience != "" {
 		s.Exchange = &internal.Exchange{Audience: in.Exchange.Audience}
 	}
@@ -280,6 +289,13 @@ func (in *Installation) signing(s *internal.Sluis) error {
 		}
 	}
 	if w := k.KMSWrapped; w != nil {
+		// The ring's wrapping key is `keys.sign`; unnamed, it is the one the
+		// Pulumi library's grants are written for.
+		if s.Keys == nil && w.KeyID == "" {
+			s.Keys = &keys.Config{Adapter: "kms", Keys: map[keys.Purpose]keys.Entry{
+				keys.Sign: {Key: DefaultSignKeyAlias(in.Instance)},
+			}}
+		}
 		if w.StateSecret == "" {
 			w.StateSecret = StateSecretName
 		}

@@ -73,6 +73,35 @@ EdDSA is not supported yet: KMS can generate `ECC_NIST_EDWARDS25519` pairs and
 go-jose signs EdDSA, but the policy's `signing_alg`, the issuer's verifiers and
 discovery know only RSA and ECDSA; it is refused with a message that says so.
 
+## The sign key, and moving between signers
+
+The key that wraps the ring is `keys.sign` in the service document, by alias:
+
+```yaml
+keys:
+  adapter: kms
+  sign: alias/sluis-<instance>-sign      # or {key: alias/..., context: off | {..}}
+```
+
+A new entry is wrapped under the key's default encryption context
+`{instance, purpose: sign}` (the instance is the document's `instance`, or its
+`release`) and records that context beside the ciphertext. An entry written by
+an earlier release records none and is opened with its old context
+`{purpose: sluis-signing, alg, kid}`, without being re-wrapped; the ring turns
+over within `rotateEvery` plus `retain`, so no entry has to be migrated. While
+old entries exist the key policy and the signing role must admit both contexts.
+`signingKey.kmsWrapped.keyId` is the deprecated spelling of `keys.sign`: an
+alias given there is mapped onto it with a warning for one release, and an ARN
+or a key id is refused.
+
+**From direct KMS signing (`signingKey.kms`) to the ring.** Direct signing is
+deprecated (a warning at start). To move: export the public key of each direct
+key and list it under `signingKey.verifyOnly` with its `kid` and an `until`
+that covers the tokens it signed plus the verifiers' cache; replace
+`signingKey.kms` with `signingKey.kmsWrapped` and `keys.sign`. The ring signs
+from the first start, the old keys stay in the JWKS as verify-only until
+`until`, and tokens signed before the switch keep verifying.
+
 ## Trust boundary
 
 **A shared key.** A principal with `kms:PutKeyPolicy` on the

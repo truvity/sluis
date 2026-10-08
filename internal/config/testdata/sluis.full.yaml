@@ -2,6 +2,8 @@
 apiVersion: sluis.truvity.github.io/sluis/v3
 issuerURL: https://access.example
 release: access-issuer
+instance: acme
+keys: {adapter: kms, sign: alias/sluis-acme-sign}
 cluster: devel
 allowInsecure: true
 demo: true

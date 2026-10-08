@@ -104,6 +104,7 @@ func installationSchema() m {
 		"console":     serveProps["console"],
 		"oauthClient": serveProps["oauthClient"],
 		"valkey":      serveProps["valkey"],
+		"keys":        serveProps["keys"],
 		"directory":   serveProps["directory"],
 		"audit":       serveProps["audit"],
 		"exchange":    exchange,

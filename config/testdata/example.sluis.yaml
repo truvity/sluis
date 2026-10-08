@@ -41,7 +41,11 @@ freshness:
   probeInterval: 5m
   refreshInterval: 15m
 groupsScoping: report
+instance: example
 issuerURL: https://access.example.test
+keys:
+  adapter: kms
+  sign: alias/example-sign
 lifetimes:
   absolute: 24h
   hold: 4h
@@ -71,7 +75,8 @@ secureCookies: true
 signingKey:
   activationDelay: 30s
   kmsWrapped:
-    keyId: alias/example-unseal
+    algorithms:
+      - ES384
     region: eu-central-1
     stateSecret: issuer/state-secret
   pollInterval: 30s

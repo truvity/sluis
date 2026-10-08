@@ -32,6 +32,7 @@ package config
 import (
 	"github.com/truvity/sluis/internal/config/duration"
 	"github.com/truvity/sluis/internal/exportspec"
+	"github.com/truvity/sluis/storage/keys"
 )
 
 // Duration is a time span as the file spells it: a Go duration string such as
@@ -178,8 +179,10 @@ type (
 	// SigningKeyKMSWrapped is the `kms-wrapped` signing adapter's settings: one
 	// symmetric KMS key, the algorithms signed with, and the rotation schedule.
 	SigningKeyKMSWrapped struct {
-		// KeyID is the symmetric application key: an id, an ARN or an alias.
-		KeyID  string `json:"keyId"`
+		// KeyID is DEPRECATED: the symmetric application key. `keys.sign`
+		// replaces it; an alias given here is mapped onto `keys.sign` with a
+		// warning for one release.
+		KeyID  string `json:"keyId,omitempty"`
 		Region string `json:"region,omitempty"`
 		// StateSecret names the sign-in state's secret, as for `kms`.
 		StateSecret string `json:"stateSecret,omitempty"`
@@ -392,6 +395,12 @@ type Serve struct {
 	AllowInsecure bool   `json:"allowInsecure,omitempty"`
 	Demo          bool   `json:"demo,omitempty"`
 	InCluster     bool   `json:"inCluster,omitempty"`
+	// Instance names this installation in the default encryption context of
+	// `keys` ({instance, purpose}). Unset is `release`.
+	Instance string `json:"instance,omitempty"`
+	// Keys says which key serves which purpose (`keys.sign` wraps the signing
+	// key ring). Unset leaves every purpose to its older setting.
+	Keys *keys.Config `json:"keys,omitempty"`
 
 	Listen *Address `json:"listen,omitempty"`
 	Probes *Address `json:"probes,omitempty"`

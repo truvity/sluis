@@ -42,6 +42,7 @@ exchange:
   audience: sluis
 groupsScoping: enforce
 inCluster: true
+instance: staging
 issuerURL: https://access.example.test
 lifetimes:
   absolute: 24h

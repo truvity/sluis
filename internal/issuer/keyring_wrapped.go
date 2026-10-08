@@ -78,15 +78,16 @@ func (r *KeyRing) sync(ctx context.Context, h *wrapHooks) {
 		id      string
 		pub     crypto.PublicKey
 		wrapped []byte
+		wc      *map[string]string
 	)
 	if e, ok := r.entries[r.activeID]; ok && e.signer == nil && len(e.Wrapped) > 0 {
-		id, pub, wrapped = e.ID, e.JWK.Key, e.Wrapped
+		id, pub, wrapped, wc = e.ID, e.JWK.Key, e.Wrapped, e.WrapContext
 	}
 	r.mu.Unlock()
 	if wrapped == nil {
 		return
 	}
-	key, err := h.ws.unwrap(ctx, r.alg, id, pub, wrapped)
+	key, err := h.ws.unwrap(ctx, r.alg, id, pub, wrapped, wc)
 	if err != nil {
 		r.log.ErrorContext(ctx, "could not unwrap the active signing key; signing continues with the newest key this "+
 			"replica can sign with", "kid", id, "algorithm", string(r.alg), "error", err)
