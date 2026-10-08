@@ -44,8 +44,8 @@ func newFakeKMS(t *testing.T) *fakeKMS {
 	return &fakeKMS{Backend: b}
 }
 
-func (*fakeKMS) Name() string                   { return "kms" }
-func (*fakeKMS) ValidateName(name string) error { return nil }
+func (*fakeKMS) Name() string              { return "kms" }
+func (*fakeKMS) ValidateName(string) error { return nil }
 
 func (f *fakeKMS) Encrypt(ctx context.Context, key string, pt []byte, ec map[string]string) ([]byte, error) {
 	f.mu.Lock()
@@ -144,7 +144,8 @@ func TestKMSWrappedConfigIsValidated(t *testing.T) {
 			KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "alias/k", StateSecret: "s"}}, "exclusive"},
 		"no key":    {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{StateSecret: "s"}}, "keys.sign"},
 		"no secret": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "alias/k"}}, "stateSecret"},
-		"an ARN":    {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "arn:aws:kms:eu-west-1:111122223333:key/abc", StateSecret: "s"}}, "not an alias"},
+		"an ARN": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
+			KeyID: "arn:aws:kms:eu-west-1:111122223333:key/abc", StateSecret: "s"}}, "not an alias"},
 		"eddsa": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{
 			KeyID: "alias/k", StateSecret: "s", Algorithms: []string{"EdDSA"}}}, "EdDSA is not supported"},
 		"short retain": {&config.SigningKey{KMSWrapped: &config.SigningKeyKMSWrapped{KeyID: "alias/k", StateSecret: "s", Retain: d("30m")}}, "retain"},
