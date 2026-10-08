@@ -103,6 +103,19 @@ archives:
     name_template: "audit-notary-lambda_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
 
+# A software bill of materials for every archive (the binaries and the Lambda zips), SPDX JSON, by syft (devbox). Each is a release
+# asset beside its archive and is checksummed with it; the release workflow's
+# `attest` job binds it to the archive with `actions/attest-sbom`. The images'
+# SBOMs are attestations on the image digest, not a separate tag (the kos
+# below turn ko's own `sbom` off for that reason).
+sboms:
+  - id: archives
+    artifacts: archive
+    documents:
+      - "${artifact}.sbom.spdx.json"
+    cmd: syft
+    args: ["${artifact}", "--output", "spdx-json=${document}"]
+
 kos:
   - id: audit-writer
     build: audit-writer
@@ -124,7 +137,9 @@ kos:
     base_image: cgr.dev/chainguard/static:latest
     platforms: [linux/amd64, linux/arm64]
     tags: ["{{ .Version }}", latest]
-    sbom: spdx
+    # The SBOM is an attestation on the digest (release.yaml, `attest`), not
+    # a second tag in the registry.
+    sbom: none
   - id: audit-query
     build: audit-query
     # Named here as well as in KO_DOCKER_REPO, and the same value in both,
@@ -145,7 +160,9 @@ kos:
     base_image: cgr.dev/chainguard/static:latest
     platforms: [linux/amd64, linux/arm64]
     tags: ["{{ .Version }}", latest]
-    sbom: spdx
+    # The SBOM is an attestation on the digest (release.yaml, `attest`), not
+    # a second tag in the registry.
+    sbom: none
   - id: audit-notary
     build: audit-notary
     # Named here as well as in KO_DOCKER_REPO, and the same value in both,
@@ -166,7 +183,9 @@ kos:
     base_image: cgr.dev/chainguard/static:latest
     platforms: [linux/amd64, linux/arm64]
     tags: ["{{ .Version }}", latest]
-    sbom: spdx
+    # The SBOM is an attestation on the digest (release.yaml, `attest`), not
+    # a second tag in the registry.
+    sbom: none
   - id: audit-observe
     build: audit-observe
     # Named here as well as in KO_DOCKER_REPO, and the same value in both,
@@ -187,7 +206,9 @@ kos:
     base_image: cgr.dev/chainguard/static:latest
     platforms: [linux/amd64, linux/arm64]
     tags: ["{{ .Version }}", latest]
-    sbom: spdx
+    # The SBOM is an attestation on the digest (release.yaml, `attest`), not
+    # a second tag in the registry.
+    sbom: none
   - id: audit
     build: audit
     # Named here as well as in KO_DOCKER_REPO, and the same value in both,
@@ -208,7 +229,9 @@ kos:
     base_image: cgr.dev/chainguard/static:latest
     platforms: [linux/amd64, linux/arm64]
     tags: ["{{ .Version }}", latest]
-    sbom: spdx
+    # The SBOM is an attestation on the digest (release.yaml, `attest`), not
+    # a second tag in the registry.
+    sbom: none
 
 # Named rather than inferred from the remote, so the config validates in a
 # checkout that has none. The release is the repository's: the root config's run

@@ -208,6 +208,20 @@ checksum:
   # Every archive above, the two bundles included.
   algorithm: sha256
 
+# A software bill of materials for every archive (the Lambda zip, the
+# binaries, the two bundles), SPDX JSON, by syft (devbox). Each is a release
+# asset beside its archive and is checksummed with it; the release workflow's
+# `attest` job binds it to the archive with `actions/attest-sbom`. The images'
+# SBOMs are attestations on the image digest, not a separate tag (the kos
+# below turn ko's own `sbom` off for that reason).
+sboms:
+  - id: archives
+    artifacts: archive
+    documents:
+      - "${artifact}.sbom.spdx.json"
+    cmd: syft
+    args: ["${artifact}", "--output", "spdx-json=${document}"]
+
 kos:
   # base_import_paths appends the cmd directory's basename, so with the
   # caller's ko-docker-repo ghcr.io/truvity/sluis the published
@@ -227,7 +241,7 @@ kos:
     preserve_import_paths: false
     base_import_paths: true
     base_image: gcr.io/distroless/static:nonroot
-    sbom: none
+    sbom: none  # attested on the digest instead (release.yaml, `attest`)
     labels:
       org.opencontainers.image.title: sluis
       org.opencontainers.image.version: "{{ .Version }}"
@@ -246,7 +260,7 @@ kos:
     preserve_import_paths: false
     base_import_paths: true
     base_image: gcr.io/distroless/static:nonroot
-    sbom: none
+    sbom: none  # attested on the digest instead (release.yaml, `attest`)
     labels:
       org.opencontainers.image.title: resource-proxy
       org.opencontainers.image.version: "{{ .Version }}"

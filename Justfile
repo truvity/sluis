@@ -143,6 +143,7 @@ release-chain:
     hack/test-modules.sh
     hack/test-release-pin.sh
     hack/modules.py check v9.9.9 > /dev/null
+    hack/test-release-verify.sh
 
 # Test the storage module (storage/). Like deploy/pulumi it is a module of its
 # own that the root build, test and lint never see, so this recipe is its gate.
@@ -193,7 +194,7 @@ release-check tag="": console
     set -euo pipefail
     ./hack/modules.py check "{{ if tag == "" { "v9.9.9" } else { tag } }}"
     ./hack/check-archives.py
-    goreleaser check
+    just release-lint
     goreleaser build --snapshot --clean --single-target
     cd audit
     goreleaser check
@@ -211,6 +212,23 @@ release-pin version:
 # needs no compiler, so it costs nothing to run on every push.
 archive-check:
     ./hack/check-archives.py
+
+# The release machinery that a tag alone would otherwise exercise: both
+# goreleaser configs (SBOMs, checksums) validated, every workflow linted
+# (actionlint, with shellcheck on the run steps), and release-verify shown to
+# fail on a tampered asset. Part of `check`.
+release-lint:
+    KO_DOCKER_REPO=ghcr.io/truvity/sluis goreleaser check
+    cd audit && goreleaser check
+    actionlint
+    hack/test-release-verify.sh
+
+# Verify a published release: every asset against checksums.txt, the cosign
+# bundle of checksums.txt (keyless, the release workflow's identity) and the
+# GitHub attestations of every asset and image. Estates copy
+# hack/release-verify.sh into their CI. `just release-verify v1.74.0`.
+release-verify version:
+    hack/release-verify.sh {{version}}
 
 # The reason this repository can be public. Runs in CI as its own job.
 leak-canary:
@@ -492,7 +510,7 @@ audit-sentences:
 # `ts` is in here despite being slow: it typechecks and tests the
 # published package, which nothing else does. `console` arrives through
 # `build`, which needs it.
-check: build test pulumi-test storage-test lint chart-lint telemetry archive-check docs-check leak-canary audit-catalogue ts
+check: build test pulumi-test storage-test lint chart-lint telemetry archive-check release-lint docs-check leak-canary audit-catalogue ts
 
 # ---------------------------------------------------------------------------
 # audit/ — the audit trail component (moved here from truvity/audit).
