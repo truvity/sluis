@@ -294,7 +294,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	// ---- the archive: a bucket for each preset the library creates
 	var refs []bucketRef
 	bucketNames, bucketArns := pulumi.StringMap{}, pulumi.StringMap{}
-	for _, st := range a.stores {
+	for _, st := range a.stores { //nolint:gocritic // read-only configuration, copied once per preset
 		bucketNames[string(st.Preset)] = pulumi.String(st.Bucket)
 		if st.external() {
 			continue
