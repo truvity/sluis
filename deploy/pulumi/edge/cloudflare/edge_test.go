@@ -412,7 +412,7 @@ func TestEdgeRefuses(t *testing.T) {
 		"unversioned": {sluispulumi.StorageArgs{
 			BucketName: "acme-sluis-blobs", ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edge.Guard(apply...)},
 		}, "not versioned"},
-		"unguarded":   {sluispulumi.StorageArgs{BucketName: "acme-sluis-blobs", Versioning: true}, "does not guard"},
+		"unguarded": {sluispulumi.StorageArgs{BucketName: "acme-sluis-blobs", Versioning: true}, "does not guard"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := run(t, func(ctx *pulumi.Context, _ func(string, pulumi.StringInput)) error {
