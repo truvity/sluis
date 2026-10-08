@@ -233,7 +233,8 @@ func (a *LambdaArgs) planAudit() (*auditPlan, error) {
 		}
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit installs audit by default and is missing %v: the directory of sluis's audit catalogue (the release's sluis-audit-catalogue bundle). To send the records to an installation that "+
+		return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit installs audit by default and is missing %v: the directory of "+
+			"sluis's audit catalogue (the release's sluis-audit-catalogue bundle). To send the records to an installation that "+
 			"exists set Audit.Use; for none set Audit.Enabled to false", sortedStrings(missing))
 	}
 	if au.Profiles != nil && strings.TrimSpace(au.DeploymentYAML) != "" {
