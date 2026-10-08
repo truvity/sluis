@@ -27,12 +27,11 @@ const (
 
 // Encryption of the archive's objects.
 const (
-	// EncryptionKMS is SSE-KMS under a key the library creates (alias
-	// `<name>-archive`). The default.
+	// EncryptionKMS is SSE-KMS under the estate's archive key (Keys.Archive, or
+	// Archive.KeyArn); the library creates none. The default.
 	EncryptionKMS = "kms"
-	// EncryptionS3 is SSE-S3 (AES256): no archive key is created and no role is
-	// granted a kms action on one. The notary's seal key is a different key and
-	// is unaffected.
+	// EncryptionS3 is SSE-S3 (AES256): no role is granted a kms action on an
+	// archive key. The notary's seal key is a different key and is unaffected.
 	EncryptionS3 = "s3"
 	// EncryptionAWSManaged is SSE-KMS under the AWS-managed key `aws/s3`, with
 	// bucket keys: no key is created and no role is granted a kms action. S3
@@ -93,6 +92,14 @@ type Args struct {
 	// refused.
 	Preset string
 
+	// Keys are the installation's keys by purpose, named by KMS alias. The
+	// library creates none: see KeysArgs.
+	Keys KeysArgs
+	// State is the installation's state store (SSM parameters under a root): the
+	// archive's credentials on an S3-compatible store, and the secrets behind
+	// pseudonyms. See StateArgs.
+	State StateArgs
+
 	Archive   ArchiveArgs
 	Ingest    IngestArgs
 	Writer    WriterArgs
@@ -122,6 +129,32 @@ type ArchiveArgs struct {
 	// configuration, so it has to be known before anything is created, and a
 	// bucket name is global.
 	BucketName string
+
+	// Endpoint, when set, puts the archive on an S3-compatible store that is not
+	// AWS (Cloudflare R2 is the one this has been measured against): an https URL
+	// with a host and no path. The bucket is then the store's, made there by the
+	// estate: the library creates no bucket, no lifecycle rule and no encryption
+	// setting, and the roles it creates have no S3 or archive-key statements.
+	// Object Lock is an AWS S3 guarantee another store does not make, so the
+	// lock mode is NONE and an attested installation (which keeps the archive
+	// under compliance Object Lock) is refused; Encryption, KeyArn, Keys.Archive,
+	// DefaultRetentionDays, GlacierIRDays and DeepArchiveDays are the AWS
+	// bucket's and are refused. Observe, Query and ArchiveWriter are roles over
+	// an AWS bucket and are refused. The store's credentials are read by the
+	// functions from the installation's state store (State), at
+	// CredentialsAddress; no secret is here or in the stack's state.
+	Endpoint string
+	// StoreRegion is the region the store is addressed with. Default "auto",
+	// which is what R2 signs with. Only with Endpoint.
+	StoreRegion string
+	// PathStyle addresses the bucket as endpoint/bucket/key instead of
+	// bucket.endpoint/key, for a store whose certificate does not cover a bucket
+	// subdomain. Only with Endpoint.
+	PathStyle bool
+	// CredentialsAddress is where the store's credentials are, below State.Root:
+	// a JSON object {"accessKeyID": ..., "secretAccessKey": ...} written by the
+	// operator as a SecureString. Default "internal/archive". Only with Endpoint.
+	CredentialsAddress string
 
 	// ObjectLockMode is NONE, GOVERNANCE or COMPLIANCE. Unset, it is what the
 	// preset says: COMPLIANCE for attested, NONE for the presets below it. The
@@ -156,8 +189,8 @@ type ArchiveArgs struct {
 	// Refused with NONE, where there is no lock for it to be a rule of.
 	DefaultRetentionDays int
 
-	// Encryption is "kms" (the default: SSE-KMS under an archive key the library
-	// creates) or "s3" (SSE-S3). With "s3" there is no archive key, no
+	// Encryption is "kms" (the default: SSE-KMS under the estate's archive key,
+	// Keys.Archive) or "s3" (SSE-S3). With "s3" there is no archive key, no
 	// `kms:GenerateDataKey` or `kms:Decrypt` grant for it on any role, no
 	// `kmsKey` in the functions' configuration, and ArchiveKeyArn is empty. The
 	// trade is the key policy and its CloudTrail record of every decrypt. The
@@ -169,19 +202,21 @@ type ArchiveArgs struct {
 	// functions' configuration names no `kmsKey` (the bucket's default
 	// applies). With "kms" and KeyArn set, the key is the caller's, see KeyArn.
 	Encryption string
-	// KeyArn is an existing symmetric KMS key to encrypt the archive with, in
-	// place of the one the library creates. Only with Encryption "kms" (or empty);
-	// refused with "s3" and "aws-managed". No key or alias is created, and the
+	// KeyArn is an existing symmetric KMS key to encrypt the archive with, by ARN,
+	// in place of Keys.Archive (which names it by alias, the form to use). Only with
+	// Encryption "kms" (or empty); refused with "s3" and "aws-managed" and with
+	// Keys.Archive. No key or alias is created, and the
 	// writer, notary, observe reader and archive-writer roles are granted
 	// `kms:GenerateDataKey` / `kms:Decrypt` (the reader: `kms:Decrypt`) on THIS
 	// key through their IAM policies. The key's own policy must therefore allow
 	// IAM to grant access (the default policy's `arn:aws:iam::<account>:root`
 	// statement does); the library does not edit it and does not protect it.
-	// The functions are configured with this ARN as `kmsKey`. Default "": the
-	// library creates `alias/<name>-archive`.
+	// The functions are configured with this ARN as `kmsKey`. With Encryption
+	// "kms" one of Keys.Archive and KeyArn is required: the library creates no key.
 	KeyArn string
 
-	// Profiles are the deployment's profile names. Required: a lifecycle rule is
+	// Profiles are the deployment's profile names. Required (except with
+	// Endpoint, where the lifecycle is the store's): a lifecycle rule is
 	// written for each `records/<profile>/` prefix, and the profile is the first
 	// component of the key for exactly that reason (ADR 0018).
 	Profiles []string
@@ -513,65 +548,32 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		return nil, err
 	}
 
+	if c.State.Root == "" {
+		c.State.Root = "/audit/" + name
+	}
+	if err := checkStateRoot(c.State.Root, name); err != nil {
+		return nil, err
+	}
+	if c.State.KeyArn != "" && !kmsArnRE.MatchString(c.State.KeyArn) {
+		return nil, fmt.Errorf("auditpulumi: State.KeyArn %q must be the ARN of a KMS key", c.State.KeyArn)
+	}
+
 	ar := &c.Archive
 	if ar.BucketName == "" {
 		return nil, errors.New("auditpulumi: Archive.BucketName is required")
 	}
-	switch ar.ObjectLockMode {
-	case None, Governance, Compliance:
-	default:
-		return nil, fmt.Errorf("auditpulumi: Archive.ObjectLockMode %q must be NONE, GOVERNANCE or COMPLIANCE", ar.ObjectLockMode)
-	}
-	if ar.ObjectLockMode == Compliance && !ar.AcknowledgeCompliance {
-		return nil, errors.New("auditpulumi: Archive.ObjectLockMode is COMPLIANCE and Archive.AcknowledgeCompliance is false: " +
-			"compliance retention cannot be shortened by anyone, including the account's root, and a retention wrong in the long " +
-			"direction is paid for until it expires. Run the governance trial first, sign off the retentions, then set " +
-			"AcknowledgeCompliance on a NEW bucket (docs/decisions/0023-archive-retention-and-lifecycle.md)")
-	}
-	if ar.DefaultRetentionDays < 0 {
-		return nil, errors.New("auditpulumi: Archive.DefaultRetentionDays is not negative")
-	}
-	if ar.ObjectLockMode != None && ar.DefaultRetentionDays == 0 {
-		return nil, fmt.Errorf("auditpulumi: Archive.DefaultRetentionDays is required with Archive.ObjectLockMode %s: "+
-			"a lock with no default rule leaves an object put without its own retention unprotected (set it, as the floor)", ar.ObjectLockMode)
-	}
-	if ar.ObjectLockMode == None && ar.DefaultRetentionDays > 0 {
-		return nil, errors.New("auditpulumi: Archive.DefaultRetentionDays needs a lock: Archive.ObjectLockMode is NONE")
-	}
-	switch ar.Encryption {
-	case "":
-		ar.Encryption = EncryptionKMS
-	case EncryptionKMS, EncryptionS3, EncryptionAWSManaged:
-	default:
-		return nil, fmt.Errorf("auditpulumi: Archive.Encryption %q must be %q (the default), %q or %q",
-			ar.Encryption, EncryptionKMS, EncryptionAWSManaged, EncryptionS3)
-	}
-	if ar.KeyArn != "" {
-		if ar.Encryption != EncryptionKMS {
-			return nil, fmt.Errorf("auditpulumi: Archive.KeyArn is only for Archive.Encryption %q, not %q", EncryptionKMS, ar.Encryption)
-		}
-		if !keyArn.MatchString(ar.KeyArn) {
-			return nil, fmt.Errorf("auditpulumi: Archive.KeyArn %q is not a KMS key ARN (arn:<partition>:kms:<region>:<account>:key/<id>); "+
-				"an alias ARN cannot be granted in IAM", ar.KeyArn)
-		}
-	}
-	if len(ar.Profiles) == 0 {
-		return nil, errors.New("auditpulumi: Archive.Profiles is required: a lifecycle rule is written for each profile's prefix")
-	}
-	seen := map[string]bool{}
-	for _, p := range ar.Profiles {
-		if err := CheckProfile(p); err != nil {
+	if ar.Endpoint != "" {
+		if err := c.checkExternalArchive(); err != nil {
 			return nil, err
 		}
-		if seen[p] {
-			return nil, fmt.Errorf("auditpulumi: Archive.Profiles names %q twice", p)
+	} else {
+		if ar.StoreRegion != "" || ar.PathStyle || ar.CredentialsAddress != "" {
+			return nil, errors.New("auditpulumi: Archive.StoreRegion, Archive.PathStyle and Archive.CredentialsAddress are for a store at " +
+				"Archive.Endpoint; on AWS S3 the roles are the credential")
 		}
-		seen[p] = true
-	}
-	setInt(&ar.GlacierIRDays, 30)
-	setInt(&ar.DeepArchiveDays, 365)
-	if ar.DeepArchiveDays <= ar.GlacierIRDays {
-		return nil, fmt.Errorf("auditpulumi: Archive.DeepArchiveDays (%d) must be after GlacierIRDays (%d)", ar.DeepArchiveDays, ar.GlacierIRDays)
+		if err := c.checkAWSArchive(); err != nil {
+			return nil, err
+		}
 	}
 
 	in := &c.Ingest
@@ -684,6 +686,9 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 	setInt(&n.TimeoutSeconds, 900)
 	if n.TimeoutSeconds > 900 {
 		return nil, errors.New("auditpulumi: Notary.TimeoutSeconds is at most 900")
+	}
+	if err := c.checkKeys(preset); err != nil {
+		return nil, err
 	}
 
 	if t := c.Telemetry; t != nil {

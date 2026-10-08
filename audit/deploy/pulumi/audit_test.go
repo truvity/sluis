@@ -173,22 +173,48 @@ func TestComplianceNeedsAnAcknowledgementAndThenIsProtected(t *testing.T) {
 	}
 }
 
-func TestKeysAreAnArchiveKeyAndAP384SigningKeyOnlyTheNotaryCanUse(t *testing.T) {
-	rec, _, err := build(t, nil)
+// The library creates no key. The archive key and the seal key are the estate's,
+// named by alias and looked up; the notary alone is granted Sign on the seal key,
+// and the policy the estate puts on that key is the library's SealKeyPolicy.
+func TestTheLibraryCreatesNoKeyAndLooksUpTheEstatesByAlias(t *testing.T) {
+	rec, out, err := build(t, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ak := rec.one(t, "aws:kms/key:Key", "audit-archive")
-	if !prop(ak, "enableKeyRotation").BoolValue() || prop(ak, "keyUsage").IsString() {
-		t.Errorf("archive key: %v", ak.Inputs)
+	for _, typ := range []string{"aws:kms/key:Key", "aws:kms/alias:Alias"} {
+		if got := rec.ofType(typ); len(got) != 0 {
+			t.Errorf("created %v: the library creates no key", got)
+		}
 	}
-	sk := rec.one(t, "aws:kms/key:Key", "audit-seal")
-	if prop(sk, "customerMasterKeySpec").StringValue() != "ECC_NIST_P384" || prop(sk, "keyUsage").StringValue() != "SIGN_VERIFY" {
-		t.Errorf("seal key: %v", sk.Inputs)
+	looked := map[string]bool{}
+	for _, c := range rec.calls {
+		if c.Token == "aws:kms/getAlias:getAlias" {
+			looked[c.Token] = true
+		}
 	}
-	// The key policy names the notary and keeps the account root out of Sign.
-	pol := prop(sk, "policy").StringValue()
-	if !strings.Contains(pol, arnp+"iam::"+account+":role/audit/audit-notary") {
+	if len(looked) != 1 || len(rec.calls) == 0 {
+		t.Errorf("calls = %v", rec.calls)
+	}
+	if want := arnp + "kms:eu-west-1:" + account + ":key/audit-seal"; out["sealKeyArn"] != want || out["sealKeyAlias"] != "alias/audit-seal" {
+		t.Errorf("seal key %q alias %q, want %q and alias/audit-seal", out["sealKeyArn"], out["sealKeyAlias"], want)
+	}
+	if want := arnp + "kms:eu-west-1:" + account + ":key/audit-archive"; out["archiveKeyArn"] != want {
+		t.Errorf("archive key %q, want %q", out["archiveKeyArn"], want)
+	}
+	// Only the notary signs.
+	for role, signs := range map[string]bool{"audit-notary": true, "audit-writer": false} {
+		if got := len(grants(policy(t, rec, role))["kms:Sign"]) == 1; got != signs {
+			t.Errorf("%s may sign = %v, want %v", role, got, signs)
+		}
+	}
+}
+
+// SealKeyPolicy is what the estate puts on the seal key: the account's root
+// administers it and cannot sign, and only the notary's role signs.
+func TestTheSealKeyPolicyKeepsTheAccountRootOutOfSign(t *testing.T) {
+	notary := arnp + "iam::" + account + ":role/audit/audit-notary"
+	pol := auditpulumi.SealKeyPolicy(arnp+"iam::"+account+":root", notary)
+	if !strings.Contains(pol, notary) {
 		t.Errorf("the seal key's policy does not name the notary's role: %s", pol)
 	}
 	for _, s := range policyOf(t, pol) {
@@ -198,13 +224,6 @@ func TestKeysAreAnArchiveKeyAndAP384SigningKeyOnlyTheNotaryCanUse(t *testing.T) 
 				t.Errorf("the account root may %s with the seal key", a)
 			}
 		}
-	}
-	aliases := map[string]bool{}
-	for _, a := range rec.ofType("aws:kms/alias:Alias") {
-		aliases[prop(a, "name").StringValue()] = true
-	}
-	if !aliases["alias/audit-archive"] || !aliases["alias/audit-seal"] {
-		t.Errorf("aliases = %v", aliases)
 	}
 }
 
@@ -733,7 +752,7 @@ func TestTheLayerHoldsTheConfigurationAndTheProfilesAndCatalogues(t *testing.T) 
 		}
 	}
 	n := layerFiles(t, rec, "audit-notary")
-	for _, want := range []string{"key: alias/audit-seal", "lockMode: governance", "settle: 10m"} {
+	for _, want := range []string{"adapter: kms", "seal: alias/audit-seal", "instance: audit", "lockMode: governance", "settle: 10m"} {
 		if !strings.Contains(n["audit.yaml"], want) {
 			t.Errorf("the notary's configuration lacks %q:\n%s", want, n["audit.yaml"])
 		}
@@ -898,7 +917,6 @@ func TestSwitchingNoneToGovernanceOnlyAddsTheLockResource(t *testing.T) {
 	for _, c := range []struct{ typ, name string }{
 		{"aws:s3/bucket:Bucket", "audit-archive"},
 		{"aws:s3/bucketVersioning:BucketVersioning", "audit-archive"},
-		{"aws:kms/key:Key", "audit-archive"},
 	} {
 		b, a := before.one(t, c.typ, c.name), after.one(t, c.typ, c.name)
 		if !b.Inputs.DeepEquals(a.Inputs) {

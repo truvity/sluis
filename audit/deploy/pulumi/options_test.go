@@ -19,6 +19,7 @@ import (
 
 const (
 	callerIdentity = "aws:index/getCallerIdentity:getCallerIdentity"
+	aliasLookup    = "aws:kms/getAlias:getAlias"
 	issuerHost     = "k8s.example.test"
 )
 
@@ -55,9 +56,9 @@ func TestTheCallersProviderIsUsedForTheAccountLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	calls := rec.invokes(callerIdentity)
-	if len(calls) != 1 {
-		t.Fatalf("%d account lookups, want 1: %v", len(calls), rec.calls)
+	calls := rec.invokes(aliasLookup)
+	if len(calls) != 2 {
+		t.Fatalf("%d alias lookups, want 2 (archive, seal): %v", len(calls), rec.calls)
 	}
 	if calls[0].Provider == "" {
 		t.Error("the lookup went through the default provider, which a stack may have disabled")
@@ -78,12 +79,12 @@ func TestTheProvidersOptionIsUsedToo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := rec.invokes(callerIdentity); len(c) != 1 || !strings.Contains(c[0].Provider, "pulumi:providers:aws::alt") {
+	if c := rec.invokes(aliasLookup); len(c) != 2 || !strings.Contains(c[0].Provider, "pulumi:providers:aws::alt") {
 		t.Errorf("lookups: %v", c)
 	}
 }
 
-func TestAnAccountIDSkipsTheLookupAndIsInTheSealKeyPolicy(t *testing.T) {
+func TestAnAccountIDSkipsTheLookup(t *testing.T) {
 	rec, _, err := build(t, func(a *auditpulumi.Args) { a.AccountID = otherAccount })
 	if err != nil {
 		t.Fatal(err)
@@ -91,14 +92,10 @@ func TestAnAccountIDSkipsTheLookupAndIsInTheSealKeyPolicy(t *testing.T) {
 	if c := rec.invokes(callerIdentity); len(c) != 0 {
 		t.Errorf("an invoke was made although the account was given: %v", c)
 	}
-	pol := prop(rec.one(t, "aws:kms/key:Key", "audit-seal"), "policy").StringValue()
-	if !strings.Contains(pol, arnp+"iam::"+otherAccount+":root") {
-		t.Errorf("the seal key's policy does not name the given account: %s", pol)
-	}
 }
 
-func TestNoLookupIsMadeWithoutANotary(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Notary.Disabled = true })
+func TestNoAccountLookupIsMadeWhenNothingNeedsTheAccount(t *testing.T) {
+	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Notary.Disabled = true; a.Keys.Seal = "" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +147,7 @@ func TestTheDefaultEncryptionIsStillKMSUnderTheArchiveKey(t *testing.T) {
 func TestSSES3CreatesNoArchiveKeyAndNoRoleMayUseOne(t *testing.T) {
 	rec, out, err := build(t, func(a *auditpulumi.Args) {
 		a.Archive.Encryption = auditpulumi.EncryptionS3
+		a.Keys.Archive = ""
 		a.Observe.IRSA = irsa("audit", "observe")
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "digest")}
 	})
@@ -196,7 +194,7 @@ func TestSSES3CreatesNoArchiveKeyAndNoRoleMayUseOne(t *testing.T) {
 }
 
 func TestTheSSES3ConfigurationsValidateAgainstTheBinariesSchemas(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Archive.Encryption = auditpulumi.EncryptionS3 })
+	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Archive.Encryption, a.Keys.Archive = auditpulumi.EncryptionS3, "" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,33 +421,32 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 		want                 want
 	}{
 		"both": {false, false, want{
-			resources: 46,
+			resources: 42,
 			roles:     []string{"audit-notary", "audit-observe-reader", "audit-scheduler", "audit-writer"},
-			keys:      []string{"audit-archive", "audit-seal"}, functions: []string{"audit-notary", "audit-writer"},
+			keys:      nil, functions: []string{"audit-notary", "audit-writer"},
 			queues: []string{"audit-ingest", "audit-ingest-dlq"},
 			alarms: []string{"ingest-dlq-not-empty", "ingest-oldest-message-age", "notary-errors", "notary-silent",
 				"notary-throttles", "writer-errors", "writer-throttles", "writer-unknown-catalogue"},
 			table: true, schedule: true, mapping: true, topic: true,
 		}},
 		"ingest only (a self-hosted notary runs elsewhere)": {false, true, want{
-			resources: 32,
+			resources: 30,
 			roles:     []string{"audit-observe-reader", "audit-writer"},
-			keys:      []string{"audit-archive"}, functions: []string{"audit-writer"},
+			keys:      nil, functions: []string{"audit-writer"},
 			queues: []string{"audit-ingest", "audit-ingest-dlq"},
 			alarms: []string{"ingest-dlq-not-empty", "ingest-oldest-message-age", "writer-errors", "writer-throttles", "writer-unknown-catalogue"},
 			table:  true, mapping: true, topic: true,
 		}},
 		"notary only": {true, false, want{
-			resources: 29,
+			resources: 25,
 			roles:     []string{"audit-notary", "audit-observe-reader", "audit-scheduler"},
-			keys:      []string{"audit-archive", "audit-seal"}, functions: []string{"audit-notary"},
+			keys:      nil, functions: []string{"audit-notary"},
 			alarms:   []string{"notary-errors", "notary-silent", "notary-throttles"},
 			schedule: true, topic: true,
 		}},
 		"the archive alone (kernel K5b)": {true, true, want{
-			resources: 13,
+			resources: 11,
 			roles:     []string{"audit-observe-reader"},
-			keys:      []string{"audit-archive"},
 		}},
 	}
 	for name, c := range cases {
@@ -460,7 +457,7 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 					a.Writer = auditpulumi.WriterArgs{}
 				}
 				if c.notaryOff {
-					a.Notary = auditpulumi.NotaryArgs{}
+					a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{}, ""
 				}
 				a.Ingest.Disabled, a.Notary.Disabled = c.ingestOff, c.notaryOff
 				if c.ingestOff {
@@ -533,20 +530,8 @@ func TestEveryCombinationOfIngestAndNotary(t *testing.T) {
 	}
 }
 
-func TestTheSealKeyPolicyNamesTheNotaryOnlyWhenThereIsOne(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) {
-		a.Ingest.Disabled, a.Writer, a.Preset = true, auditpulumi.WriterArgs{}, auditpulumi.PresetStandard
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pol := prop(rec.one(t, "aws:kms/key:Key", "audit-seal"), "policy").StringValue(); !strings.Contains(pol, "audit-notary") {
-		t.Errorf("seal key policy: %s", pol)
-	}
-}
-
 func TestTheShippedConfigurationOfEachPartThatRemainsValidates(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Notary.Disabled = true })
+	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Notary.Disabled = true; a.Keys.Seal = "" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +545,7 @@ func TestTheShippedConfigurationOfEachPartThatRemainsValidates(t *testing.T) {
 
 func TestADisabledPartNeedsNoBinaryAndAnEnabledOneStillDoes(t *testing.T) {
 	// No notary, no notary binary.
-	if _, _, err := build(t, func(a *auditpulumi.Args) { a.Notary = auditpulumi.NotaryArgs{Disabled: true} }); err != nil {
+	if _, _, err := build(t, func(a *auditpulumi.Args) { a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{Disabled: true}, "" }); err != nil {
 		t.Errorf("a disabled notary needed a binary: %v", err)
 	}
 	// No ingest, no writer binary or deployment.
@@ -657,10 +642,10 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 			t.Errorf("%s is not in governance mode", fn)
 		}
 	}
-	if n := layerFiles(t, rec, "audit-notary")["audit.yaml"]; !strings.Contains(n, "key: alias/audit-seal") {
+	if n := layerFiles(t, rec, "audit-notary")["audit.yaml"]; !strings.Contains(n, "seal: alias/audit-seal") {
 		t.Errorf("the notary does not sign with the KMS seal key:\n%s", n)
 	}
-	if len(rec.ofType(scheduleType)) != 1 || len(rec.ofType(lockType)) != 1 || len(rec.ofType("aws:kms/key:Key")) != 2 {
+	if len(rec.ofType(scheduleType)) != 1 || len(rec.ofType(lockType)) != 1 || len(rec.ofType("aws:kms/key:Key")) != 0 {
 		t.Errorf("schedules %d, locks %d, keys %d", len(rec.ofType(scheduleType)), len(rec.ofType(lockType)), len(rec.ofType("aws:kms/key:Key")))
 	}
 }
@@ -670,8 +655,8 @@ func TestTheTruvityShapeIsExpressible(t *testing.T) {
 // and no schedule, and a role for the pod to put seals/ and keys/.
 func TestTheHiveShapeIsExpressible(t *testing.T) {
 	rec, out, err := build(t, func(a *auditpulumi.Args) {
-		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays, a.Archive.Encryption = auditpulumi.None, 0, auditpulumi.EncryptionS3
-		a.Notary = auditpulumi.NotaryArgs{Disabled: true}
+		a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays, a.Archive.Encryption, a.Keys.Archive = auditpulumi.None, 0, auditpulumi.EncryptionS3, ""
+		a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{Disabled: true}, ""
 		a.Telemetry = nil
 		a.Observe = &auditpulumi.ObserveArgs{IRSA: irsa("audit", "audit-observe")}
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "audit-notary")}

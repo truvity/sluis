@@ -7,13 +7,14 @@
 // the bucket's own configuration should be doing. See docs/how-to/prepare-the-bucket.md.
 //
 // The bucket need not be on AWS. Any store that speaks the S3 API takes the
-// same calls, at an endpoint of its own (Options.Endpoint); which of the
-// calls it needs to answer depends on the lock mode. A store written in
-// compliance or governance mode needs PutObjectRetention, PutObjectLegalHold
-// and the lock headers on PutObject, which is the Object Lock API and which
-// not every store has. A store written with no lock (Options.Lock = None)
-// needs PutObject, GetObject, HeadObject, ListObjectsV2 and presigning, which
-// every one of them has. See docs/decisions/0014-lock-modes-and-store-tiers.md.
+// same calls, at an endpoint of its own (Options.Endpoint): Cloudflare R2 is
+// the one this has been measured against. Such a store is written with no lock
+// (Options.Lock = None) and nothing else: Object Lock is an AWS S3 guarantee,
+// and an endpoint with a lock mode is refused (CheckEndpointLock) rather than
+// sent headers the store may accept without keeping the promise. It needs
+// PutObject, GetObject, HeadObject, ListObjectsV2 and presigning, which every
+// one of them has. With no region configured it is addressed as "auto"
+// (AutoRegion). See docs/decisions/0014-lock-modes-and-store-tiers.md.
 package s3store
 
 import (
@@ -145,6 +146,9 @@ func New(api API, o Options) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := CheckEndpointLock(o.Endpoint, mode); err != nil {
+		return nil, err
+	}
 	s := &Store{api: api, bucket: o.Bucket, prefix: o.Prefix, kmsKey: o.KMSKeyID}
 	switch mode {
 	case Compliance:
@@ -171,6 +175,27 @@ func FromConfig(cfg aws.Config, o Options) (*Store, error) {
 	// carries, which a bare API value does not have.
 	built.presign = s3.NewPresignClient(client)
 	return built, nil
+}
+
+// AutoRegion is the region an S3-compatible endpoint is addressed with when
+// none is configured: Cloudflare R2 signs with "auto", and a store that has no
+// regions ignores it.
+const AutoRegion = "auto"
+
+// CheckEndpointLock refuses an Object Lock mode on an S3-compatible endpoint.
+// The lock is an AWS S3 guarantee (compliance mode cannot be shortened by
+// anyone); a store at an endpoint of its own may accept the headers and keep
+// no such promise, or refuse them, and an archive that believes it is locked
+// when it is not is worse than one that says it is not. An endpoint is
+// therefore written with lock none; the integrity of such an archive rests on
+// the objects' hashes and the notary's seals.
+func CheckEndpointLock(endpoint string, mode LockMode) error {
+	if endpoint != "" && mode != None {
+		return fmt.Errorf("s3store: Object Lock (%s) is refused on an S3-compatible endpoint (%s): the lock is an AWS S3 guarantee "+
+			"that another store does not make. Set the lock mode to none for this archive, or use AWS S3 for an attested installation",
+			mode, endpoint)
+	}
+	return nil
 }
 
 // Lock is the mode this store writes in.

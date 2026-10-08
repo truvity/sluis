@@ -9,6 +9,67 @@
       "type": "string"
     },
     "keys": {
+      "$defs": {
+        "context": {
+          "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+          "oneOf": [
+            {
+              "enum": [
+                "default",
+                "off"
+              ]
+            },
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            }
+          ]
+        },
+        "entry": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/keys/$defs/keyName"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/keys/$defs/context"
+                },
+                "key": {
+                  "$ref": "#/$defs/keys/$defs/keyName"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyName": {
+          "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+          "minLength": 1,
+          "not": {
+            "anyOf": [
+              {
+                "pattern": "^arn:"
+              },
+              {
+                "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+              },
+              {
+                "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+              }
+            ]
+          },
+          "pattern": "^[^\\s]+$",
+          "type": "string"
+        }
+      },
       "additionalProperties": false,
       "allOf": [
         {
@@ -70,11 +131,60 @@
           }
         }
       ],
-      "description": "Where pseudonymisation keys live. Unset, or `none`, means no pseudonyms, no key material and no resolve.",
+      "description": "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. `provider` is the first releases' shape (a pseudonymisation provider), deprecated. Unset, or provider `none`, means no pseudonyms, no key material and no resolve.",
+      "oneOf": [
+        {
+          "properties": {
+            "local": false,
+            "provider": false,
+            "transit": false
+          },
+          "required": [
+            "adapter"
+          ]
+        },
+        {
+          "properties": {
+            "adapter": false,
+            "archive": false,
+            "conceal": false,
+            "instance": false,
+            "openbao": false,
+            "pseudonym": false,
+            "rootFile": false,
+            "seal": false,
+            "state": false
+          },
+          "required": [
+            "provider"
+          ]
+        }
+      ],
       "properties": {
+        "adapter": {
+          "description": "The key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBAO) or `local` (a root file; development).",
+          "enum": [
+            "kms",
+            "transit",
+            "local"
+          ]
+        },
+        "archive": {
+          "$ref": "#/$defs/keys/$defs/entry",
+          "description": "The key the archive's objects are encrypted with (for S3, the SSE-KMS alias)."
+        },
+        "conceal": {
+          "$ref": "#/$defs/keys/$defs/entry",
+          "description": "The key identities are sealed under, for the cases the law requires them to be recoverable."
+        },
+        "instance": {
+          "description": "Names the installation in the default encryption context ({instance, purpose}), so a ciphertext made for one installation does not open as another's under a shared key. Bound into ciphertexts: choose something stable and non-secret.",
+          "minLength": 1,
+          "type": "string"
+        },
         "local": {
           "additionalProperties": false,
-          "description": "The local provider.",
+          "description": "Deprecated (with `provider`): the local provider.",
           "properties": {
             "dir": {
               "description": "Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should.",
@@ -92,17 +202,55 @@
           ],
           "type": "object"
         },
+        "openbao": {
+          "$ref": "#/$defs/openbao"
+        },
         "provider": {
-          "description": "`none`, `local` (a root and a directory) or `transit` (OpenBAO).",
+          "deprecated": true,
+          "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose.",
           "enum": [
             "none",
             "local",
             "transit"
           ]
         },
+        "pseudonym": {
+          "$ref": "#/$defs/keys/$defs/entry",
+          "description": "The key the per-tenant pseudonym secrets are wrapped under. Provisioned only for an installation that pseudonymises (the attested preset, or a profile that needs pseudonyms)."
+        },
+        "rootFile": {
+          "description": "The local adapter's root: a file of 32 bytes.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "seal": {
+          "$ref": "#/$defs/keys/$defs/entry",
+          "description": "The notary's seal key: asymmetric ECC P-384 (ES384). It signs; it takes no encryption context."
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.",
+          "properties": {
+            "address": {
+              "description": "The key below the root, for example internal/pseudonym.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "address"
+          ],
+          "type": "object"
+        },
         "transit": {
           "additionalProperties": false,
-          "description": "The transit provider.",
+          "description": "Deprecated (with `provider`): the transit provider.",
           "properties": {
             "openbao": {
               "$ref": "#/$defs/openbao"
@@ -120,9 +268,6 @@
           "type": "object"
         }
       },
-      "required": [
-        "provider"
-      ],
       "type": "object"
     },
     "openbao": {
@@ -247,6 +392,27 @@
       "properties": {
         "bucket": {
           "$ref": "#/$defs/bucket"
+        },
+        "credentials": {
+          "additionalProperties": false,
+          "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+          "properties": {
+            "address": {
+              "description": "The key below the root, for example internal/archive.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "address"
+          ],
+          "type": "object"
         },
         "kmsKey": {
           "description": "The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.",

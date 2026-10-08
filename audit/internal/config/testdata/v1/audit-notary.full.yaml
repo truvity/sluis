@@ -9,7 +9,7 @@ archive:
       accessKeyID: AUDIT_NOTARY_ACCESS_KEY_ID
       secretAccessKey: AUDIT_NOTARY_SECRET_ACCESS_KEY
   prefix: app
-  lockMode: compliance
+  lockMode: none
   kmsKey: alias/audit-archive
 signer:
   transit:

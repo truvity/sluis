@@ -23,7 +23,7 @@ func archiveKeysCreated(rec *recorder) []string {
 
 func TestAnExistingKMSKeyIsUsedAndNoneIsCreated(t *testing.T) {
 	rec, out, err := build(t, func(a *auditpulumi.Args) {
-		a.Archive.KeyArn = givenKey
+		a.Archive.KeyArn, a.Keys.Archive = givenKey, ""
 		a.Observe.IRSA = irsa("audit", "observe")
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "digest")}
 	})
@@ -32,10 +32,6 @@ func TestAnExistingKMSKeyIsUsedAndNoneIsCreated(t *testing.T) {
 	}
 	if k := archiveKeysCreated(rec); len(k) != 0 {
 		t.Errorf("created %v beside a given key", k)
-	}
-	// The seal key is the library's own and stays.
-	if len(rec.ofType("aws:kms/key:Key")) != 1 {
-		t.Errorf("keys: %v", rec.names())
 	}
 	sse := rec.one(t, "aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration", "audit-archive")
 	rule := prop(sse, "rules").ArrayValue()[0].ObjectValue()
@@ -72,6 +68,7 @@ func TestAnExistingKMSKeyIsUsedAndNoneIsCreated(t *testing.T) {
 func TestAWSManagedKeyCreatesNoKeyAndGrantsNoKMS(t *testing.T) {
 	rec, out, err := build(t, func(a *auditpulumi.Args) {
 		a.Archive.Encryption = auditpulumi.EncryptionAWSManaged
+		a.Keys.Archive = ""
 		a.Observe.IRSA = irsa("audit", "observe")
 		a.ArchiveWriter = &auditpulumi.ArchiveWriterArgs{IRSA: *irsa("audit", "digest")}
 	})
@@ -111,13 +108,13 @@ func TestAWSManagedKeyCreatesNoKeyAndGrantsNoKMS(t *testing.T) {
 	}
 }
 
-func TestTheDefaultKMSModeStillCreatesTheKeyAndAlias(t *testing.T) {
+func TestTheDefaultKMSModeNamesTheEstatesKeyAndCreatesNone(t *testing.T) {
 	rec, _, err := build(t, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if k := archiveKeysCreated(rec); len(k) != 2 {
-		t.Errorf("created %v, want the key and the alias", k)
+	if k := archiveKeysCreated(rec); len(k) != 0 {
+		t.Errorf("created %v: the archive key is the estate's", k)
 	}
 	if body := layerFiles(t, rec, "audit-writer")["audit.yaml"]; !strings.Contains(body, "kmsKey: alias/audit-archive") {
 		t.Errorf("writer configuration:\n%s", body)
@@ -125,7 +122,7 @@ func TestTheDefaultKMSModeStillCreatesTheKeyAndAlias(t *testing.T) {
 }
 
 func TestSSES3ModeIsUnchangedByTheOtherModes(t *testing.T) {
-	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Archive.Encryption = auditpulumi.EncryptionS3 })
+	rec, _, err := build(t, func(a *auditpulumi.Args) { a.Archive.Encryption, a.Keys.Archive = auditpulumi.EncryptionS3, "" })
 	if err != nil {
 		t.Fatal(err)
 	}

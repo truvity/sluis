@@ -23,6 +23,13 @@ import (
 // one machine wants the KMS or transit provider instead, because a key that
 // exists in one place is a trail that can be made unreadable by one disk
 // failing — which is not erasure, but loss.
+//
+// Deprecated: name the keys in the configuration by purpose (keys.adapter: local,
+// or kms, transit) and open them through the storage port
+// (github.com/truvity/sluis/storage/keys); NewPortProvider adapts them to a
+// Provider. This provider is kept for the installations that already hold
+// per-tenant key files, whose Destroy is how a tenant is erased: the port's
+// keys are one per installation and offer no such operation yet.
 type Local struct {
 	// Root wraps the data keys. Without one a random root is generated and
 	// nothing survives the process, which is fine for a test and for nothing
@@ -42,6 +49,8 @@ type Local struct {
 // NewLocal returns a provider wrapping its keys under root. A root of the wrong
 // length is refused rather than stretched, because a silently weakened key is
 // worse than none.
+//
+// Deprecated: see Local.
 func NewLocal(root []byte, dir string) (*Local, error) {
 	if len(root) != 0 && len(root) != 32 {
 		return nil, fmt.Errorf("keys: a local root must be 32 bytes, got %d", len(root))

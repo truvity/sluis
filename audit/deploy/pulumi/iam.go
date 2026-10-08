@@ -82,24 +82,33 @@ func webIdentityStatement(audience string) statement {
 // no KMS Sign: whoever can write the archive and can also sign for it can choose
 // what to sign (ADR 0019). When its configuration names secrets it may read the
 // SSM parameters under its root and decrypt them, and read nothing else of SSM. With no Object Lock (locked false) the writer sends
-// no lock header, so it is granted neither permission.
+// no lock header, so it is granted neither permission. On an S3-compatible
+// store (bucketArn empty) there is no S3 statement at all: the store is reached
+// with the credentials in the state store, which extra grants the reading of.
+// extra is the grants on the installation's keys and state store.
 func writerPolicy(bucketArn, archiveKeyArn, tableArn, queueArn, logGroupArn string, audience string, locked bool,
-	secrets *secretGrant) string {
-	put := []string{"s3:PutObject"}
-	if locked {
-		put = append(put, "s3:PutObjectRetention", "s3:PutObjectLegalHold")
+	secrets *secretGrant, extra []statement) string {
+	var st []statement
+	if bucketArn != "" {
+		put := []string{"s3:PutObject"}
+		if locked {
+			put = append(put, "s3:PutObjectRetention", "s3:PutObjectLegalHold")
+		}
+		st = append(st,
+			allow(put, under(bucketArn, writerPrefixes...), nil),
+			allow([]string{"s3:GetObject"}, under(bucketArn, append(append([]string{}, writerPrefixes...), "holds/")...), nil),
+			allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
+		)
 	}
-	st := []statement{
-		allow(put, under(bucketArn, writerPrefixes...), nil),
-		allow([]string{"s3:GetObject"}, under(bucketArn, append(append([]string{}, writerPrefixes...), "holds/")...), nil),
-		allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
+	st = append(st,
 		allow([]string{"dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:PutItem"}, []string{tableArn}, nil),
 		allow([]string{"sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"},
 			[]string{queueArn}, nil),
 		logsStatement(logGroupArn),
-	}
+	)
 	st = append(st, archiveKeyStatements(archiveKeyArn, "kms:GenerateDataKey", "kms:Decrypt")...)
 	st = append(st, secrets.statements()...)
+	st = append(st, extra...)
 	if audience != "" {
 		st = append(st, webIdentityStatement(audience))
 	}
@@ -119,19 +128,25 @@ func archiveKeyStatements(archiveKeyArn string, actions ...string) []statement {
 // the seals it chains to, put seals and keys/roots.jwks, and sign with the seal
 // key and with nothing else. It cannot put a record, which is what makes a
 // compromised writer unable to seal what it wrote.
-func notaryPolicy(bucketArn, archiveKeyArn, sealKeyArn, logGroupArn string, audience string, locked bool) string {
-	put := []string{"s3:PutObject"}
-	if locked {
-		put = append(put, "s3:PutObjectRetention")
+func notaryPolicy(bucketArn, archiveKeyArn, sealKeyArn, logGroupArn string, audience string, locked bool, extra []statement) string {
+	var st []statement
+	if bucketArn != "" {
+		put := []string{"s3:PutObject"}
+		if locked {
+			put = append(put, "s3:PutObjectRetention")
+		}
+		st = append(st,
+			allow([]string{"s3:GetObject"}, under(bucketArn, "records/", "seals/", "keys/"), nil),
+			allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
+			allow(put, under(bucketArn, sealPrefixes...), nil),
+		)
 	}
-	st := []statement{
-		allow([]string{"s3:GetObject"}, under(bucketArn, "records/", "seals/", "keys/"), nil),
-		allow([]string{"s3:ListBucket"}, []string{bucketArn}, nil),
-		allow(put, under(bucketArn, sealPrefixes...), nil),
+	st = append(st,
 		allow([]string{"kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"}, []string{sealKeyArn}, nil),
 		logsStatement(logGroupArn),
-	}
+	)
 	st = append(st, archiveKeyStatements(archiveKeyArn, "kms:GenerateDataKey", "kms:Decrypt")...)
+	st = append(st, extra...)
 	if audience != "" {
 		st = append(st, webIdentityStatement(audience))
 	}
@@ -268,12 +283,22 @@ func invokePolicy(functionArn string) string {
 	return policyJSON(allow([]string{"lambda:InvokeFunction"}, []string{functionArn, functionArn + ":*"}, nil))
 }
 
-// sealKeyPolicy is the seal key's own policy. The default policy hands the key to
-// IAM, so any principal in the account with a kms:Sign allow could sign seals;
-// this one does not. The account's root administers the key and cannot use it,
-// and only the notary's role signs. (KMS policies are the one place an
-// administrator is held out of a key's use, and a key that signs the trail is
-// that place.)
+// SealKeyPolicy is the key policy the estate gives the seal key. The library
+// creates no key; this is the policy it would have been created with, for the
+// estate to put on its own. The default policy hands the key to IAM, so any
+// principal in the account with a kms:Sign allow could sign seals; this one does
+// not. The account's root administers the key and cannot use it, and only the
+// notary's role signs. (KMS policies are the one place an administrator is held
+// out of a key's use, and a key that signs the trail is that place.)
+//
+// The notary's role ARN is
+// arn:<partition>:iam::<account>:role<RolePath><name>-notary, which the estate
+// can write before the installation exists.
+func SealKeyPolicy(accountRootArn, notaryRoleArn string) string {
+	return sealKeyPolicy(accountRootArn, notaryRoleArn)
+}
+
+// sealKeyPolicy is SealKeyPolicy.
 func sealKeyPolicy(accountRootArn, notaryRoleArn string) string {
 	return policyJSON(
 		statement{

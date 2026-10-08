@@ -9,10 +9,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.70.0
-	github.com/aws/aws-sdk-go-v2/service/kms v1.61.1
+	github.com/aws/aws-sdk-go-v2/service/kms v1.61.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.1
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.73.6
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.0
 	github.com/aws/smithy-go v1.28.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -22,10 +22,11 @@ require (
 	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.53.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
-	github.com/truvity/sluis/audit/sdk v0.0.0
 	github.com/truvity/gateway-auth v0.7.1
 	github.com/truvity/gemaal v0.24.0
 	github.com/truvity/policy v1.45.0
+	github.com/truvity/sluis/audit/sdk v0.0.0
+	github.com/truvity/sluis/storage v0.0.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
@@ -102,3 +103,9 @@ tool github.com/truvity/ocictl/cmd/helmctl
 // against; the release workflow pins it to the release being cut and it is never
 // bumped by hand.
 replace github.com/truvity/sluis/audit/sdk => ./sdk
+
+// The storage port (state and keys by purpose) is a module of its own, beside
+// this one in the checkout, and imports nothing of sluis (internal/independence
+// holds that). The same holds for it: a consumer's build uses the require above,
+// which the release workflow pins to the release being cut.
+replace github.com/truvity/sluis/storage => ../storage

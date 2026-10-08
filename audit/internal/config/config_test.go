@@ -69,6 +69,8 @@ func TestTheTypesAndTheSchemasDescribeTheSameKeys(t *testing.T) {
 		{"observe", "audit-observe.full.yaml", &config.Observe{}, "audit-observe"},
 		{"notary", "audit-notary.full.yaml", &config.Notary{}, "audit-notary"},
 		{"writer as a Lambda", "audit-writer-lambda.full.yaml", &config.WriterLambda{}, "audit-writer-lambda"},
+		{"writer on an S3-compatible store, keys by purpose", "audit-writer-lambda.r2.full.yaml", &config.WriterLambda{}, "audit-writer-lambda"},
+		{"notary with the seal key by purpose", "audit-notary.keys.full.yaml", &config.Notary{}, "audit-notary"},
 		{"verify with seals", "audit-verify.full.yaml", &config.Verify{}, "audit-verify"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -954,4 +956,90 @@ func mustDoc(t *testing.T, body string) any {
 		t.Fatal(err)
 	}
 	return doc
+}
+
+// An archive at an endpoint of its own is an S3-compatible store: it takes the
+// region `auto`, no Object Lock, and static credentials from the installation's
+// state store rather than from the file.
+func TestAnS3CompatibleArchiveIsUnlockedAndAutoRegioned(t *testing.T) {
+	const head = "apiVersion: audit.truvity.github.io/audit-writer/v2\ndeployment: /d.yaml\nanonymousWrites: true\n"
+	w, err := config.LoadWriter(write(t, head+"archive:\n  bucket: {name: b, endpoint: 'https://r2.example.test'}\n  lockMode: none\n"+
+		"  credentials: {root: /audit/main, address: internal/archive}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Archive.Bucket.Region != "auto" {
+		t.Errorf("region = %q, want auto", w.Archive.Bucket.Region)
+	}
+	if w.Archive.Credentials == nil || w.Archive.Credentials.Address != "internal/archive" {
+		t.Errorf("credentials = %+v", w.Archive.Credentials)
+	}
+	for name, body := range map[string]string{
+		"a lock mode left to its default": "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}}\n",
+		"compliance":                      "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}, lockMode: compliance}\n",
+		"governance":                      "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}, lockMode: governance}\n",
+		"credentials on AWS":              "archive: {bucket: {name: b}, lockMode: none, credentials: {root: /a, address: internal/archive}}\n",
+		"credentials twice": "archive:\n  bucket: {name: b, endpoint: 'https://r2.example.test', credentialsSecret: {accessKeyID: a, secretAccessKey: s}}\n" +
+			"  lockMode: none\n  credentials: {root: /a, address: internal/archive}\n",
+		"credentials without an address": "archive: {bucket: {name: b, endpoint: 'https://r2.example.test'}, lockMode: none, credentials: {root: /a}}\n",
+	} {
+		_, err := config.LoadWriter(write(t, head+body))
+		if err == nil {
+			t.Errorf("%s: the file was accepted", name)
+			continue
+		}
+		t.Logf("%s: %v", name, err)
+	}
+}
+
+func TestKeysByPurposeAreHeldToTheirAdapter(t *testing.T) {
+	const head = "apiVersion: audit.truvity.github.io/audit-writer/v2\ndeployment: /d.yaml\nanonymousWrites: true\narchive: {bucket: {name: b}}\n"
+	good := []string{
+		"keys: {adapter: kms, instance: i, pseudonym: alias/p, state: {root: /a, address: internal/p}}\n",
+		"keys: {adapter: kms, instance: i, seal: alias/s, archive: alias/a}\n",
+		"keys: {adapter: transit, seal: s, openbao: {address: 'https://o.example.test', tokenSecret: t}}\n",
+		"keys: {adapter: local, seal: s, rootFile: /root}\n",
+		"keys: {provider: none}\n",
+	}
+	for _, body := range good {
+		if _, err := config.LoadWriter(write(t, head+body)); err != nil {
+			t.Errorf("%s: %v", body, err)
+		}
+	}
+	bad := map[string]string{
+		"an ARN":                  "keys: {adapter: kms, seal: 'arn:" + "x:kms'}\n",
+		"a key id":                "keys: {adapter: kms, seal: 0b8d4a55-0000-4000-8000-000000000000}\n",
+		"both shapes":             "keys: {adapter: kms, seal: alias/s, provider: none}\n",
+		"an unknown purpose":      "keys: {adapter: kms, sign: alias/s}\n",
+		"no purpose":              "keys: {adapter: kms}\n",
+		"pseudonym with no state": "keys: {adapter: kms, instance: i, pseudonym: alias/p}\n",
+		"transit with no server":  "keys: {adapter: transit, seal: s}\n",
+		"local with no root":      "keys: {adapter: local, seal: s}\n",
+		"kms with a server":       "keys: {adapter: kms, seal: alias/s, openbao: {address: 'https://o.example.test', tokenSecret: t}}\n",
+	}
+	for name, body := range bad {
+		if _, err := config.LoadWriter(write(t, head+body)); err == nil {
+			t.Errorf("%s: the file was accepted", name)
+		}
+	}
+}
+
+func TestTheNotaryNamesItsSealKeyOneWay(t *testing.T) {
+	const arch = "apiVersion: audit.truvity.github.io/audit-notary/v2\narchive: {bucket: {name: b}}\n"
+	n, err := config.LoadNotary(write(t, arch+"keys: {adapter: kms, instance: i, seal: alias/seal}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.Keys.Storage() || n.Keys.Seal.Key != "alias/seal" {
+		t.Errorf("keys = %+v", n.Keys)
+	}
+	for name, body := range map[string]string{
+		"both":                arch + "keys: {adapter: kms, instance: i, seal: alias/seal}\nsigner: {file: {path: /k.pem}}\n",
+		"keys without a seal": arch + "keys: {adapter: kms, instance: i, archive: alias/a}\n",
+		"neither":             arch,
+	} {
+		if _, err := config.LoadNotary(write(t, body)); err == nil {
+			t.Errorf("%s: the file was accepted", name)
+		}
+	}
 }

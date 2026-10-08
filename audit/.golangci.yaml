@@ -56,7 +56,8 @@ linters:
             - pkg: github.com/gofiber/fiber/v2
               desc: "github.com/gofiber/fiber/v3"
         # audit lives in the sluis repository and is used without it: it
-        # never imports sluis. These are the root module's packages; the
+        # never imports sluis (the storage port excepted). These are the root
+        # module's packages; the
         # complete guard is internal/independence, which fails on any other.
         sluis:
           deny:
@@ -95,6 +96,15 @@ linters:
     # gen/ is buf output, committed for `go get`-ability but never hand-edited.
     paths:
       - gen
+    rules:
+      # The first releases' key providers and signers (keys.Local, keys.Transit,
+      # keys.TransitSigner, keys.KMSSigner) are deprecated in favour of the
+      # storage port, and kept for the installations that hold their keys that
+      # way. Their own call sites, and the tests that hold them to their
+      # behaviour, are not findings.
+      - linters:
+          - staticcheck
+        text: 'SA1019: .*(KMSSigner|NewLocal|NewTransit|NewTransitSigner|keys\.Local|keys\.Transit|TransitSigner)'
 
 formatters:
   enable:

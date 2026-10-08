@@ -12,7 +12,7 @@ archive:
       accessKeyID: archive-access-key-id
       secretAccessKey: archive-secret-access-key
   prefix: app
-  lockMode: compliance
+  lockMode: none
   kmsKey: alias/audit-archive
 signer:
   transit:

@@ -19,6 +19,7 @@ import (
 	"github.com/truvity/sluis/audit"
 	"github.com/truvity/sluis/audit/internal/config/schema"
 	"github.com/truvity/sluis/audit/sdk/sink"
+	"github.com/truvity/sluis/audit/store/s3store"
 )
 
 // Group is the group of every apiVersion in this repository's documents:
@@ -342,6 +343,12 @@ func (w *WriterLambda) finish() error {
 	if err := w.Archive.finish(true); err != nil {
 		return err
 	}
+	if err := w.Keys.check(); err != nil {
+		return err
+	}
+	if err := w.Archive.adoptKey(w.Keys); err != nil {
+		return err
+	}
 	if w.Keys.local() && w.Keys.Local.Dir == "" {
 		return errors.New("keys.local with no dir keeps the keys in memory, and every invocation environment would mint " +
 			"its own: the same person would get a different pseudonym in each; use keys.transit")
@@ -374,6 +381,12 @@ func (w *Writer) finish() error {
 	}
 	if w.Mode == "writer" {
 		if err := w.Archive.finish(true); err != nil {
+			return err
+		}
+		if err := w.Keys.check(); err != nil {
+			return err
+		}
+		if err := w.Archive.adoptKey(w.Keys); err != nil {
 			return err
 		}
 		if w.Replicas > 1 && w.Keys.local() && w.Keys.Local.Dir == "" {
@@ -620,6 +633,9 @@ func (q *Query) finish() error {
 			return err
 		}
 	}
+	if err := q.Keys.check(); err != nil {
+		return err
+	}
 	if q.Keys.enabled() {
 		if q.Archive == nil {
 			return errors.New("keys turn resolve on, which needs archive: resolve opens what the writer sealed in the archive")
@@ -669,8 +685,20 @@ func (n *Notary) finish() error {
 	if n.Settle == 0 {
 		n.Settle = Duration(DefaultSettle)
 	}
-	if n.Archive.LockMode == "" {
-		n.Archive.LockMode = "compliance"
+	if err := n.Archive.finish(true); err != nil {
+		return err
+	}
+	if err := n.Keys.check(); err != nil {
+		return err
+	}
+	if err := n.Archive.adoptKey(n.Keys); err != nil {
+		return err
+	}
+	switch hasSigner, hasKey := n.Signer != (Signer{}), n.Keys != nil && n.Keys.Seal != nil; {
+	case hasSigner && hasKey:
+		return errors.New("the notary has a signer and keys.seal: name the seal key one way (keys.seal is the one to use)")
+	case !hasSigner && !hasKey:
+		return errors.New("the notary has no key to sign seals with: name keys.seal (or, in the first releases' shape, signer)")
 	}
 	return nil
 }
@@ -718,11 +746,102 @@ func (a *Archive) finish(writes bool) error {
 	if writes && a.LockMode == "" {
 		a.LockMode = "compliance"
 	}
+	if a.Bucket.Endpoint != "" {
+		// An S3-compatible store: addressed with the region `auto` unless the
+		// file says otherwise, and never under Object Lock, which is an AWS S3
+		// guarantee another store does not make.
+		if a.Bucket.Region == "" {
+			a.Bucket.Region = s3store.AutoRegion
+		}
+		if err := s3store.CheckEndpointLock(a.Bucket.Endpoint, s3store.LockMode(a.LockMode)); a.LockMode != "" && err != nil {
+			return fmt.Errorf("archive.lockMode: %w", err)
+		}
+	}
+	if c := a.Credentials; c != nil {
+		if a.Bucket.CredentialsSecret != nil {
+			return errors.New("archive.credentials and archive.bucket.credentialsSecret both name the store's credentials: use one")
+		}
+		if a.Bucket.Endpoint == "" {
+			return errors.New("archive.credentials are static credentials for a store at an endpoint of its own; " +
+				"on AWS the workload's identity is the credential (set archive.bucket.endpoint, or leave credentials out)")
+		}
+	}
 	return nil
 }
 
-func (k *Keys) enabled() bool { return k != nil && k.Provider != "" && k.Provider != "none" }
-func (k *Keys) local() bool   { return k != nil && k.Provider == "local" }
+// adoptKey makes the archive purpose of the keys block the key objects are
+// encrypted with (archive.kmsKey), so there is one place it is read from. Naming
+// it in both places differently is refused.
+func (a *Archive) adoptKey(k *Keys) error {
+	if k == nil || k.Archive == nil {
+		return nil
+	}
+	if a.KMSKey != "" && a.KMSKey != k.Archive.Key {
+		return fmt.Errorf("archive.kmsKey %q and keys.archive %q name different archive keys: name it once (keys.archive)", a.KMSKey, k.Archive.Key)
+	}
+	a.KMSKey = k.Archive.Key
+	return nil
+}
+
+// storage reports whether the keys block is in the storage shape (adapter).
+func (k *Keys) storage() bool { return k != nil && k.Adapter != "" }
+
+// Storage reports whether the keys are named by purpose through the storage
+// port, rather than by the first releases' provider.
+func (k *Keys) Storage() bool { return k.storage() }
+
+func (k *Keys) enabled() bool {
+	if k.storage() {
+		return k.Pseudonym != nil || k.Conceal != nil
+	}
+	return k != nil && k.Provider != "" && k.Provider != "none"
+}
+func (k *Keys) local() bool { return k != nil && !k.storage() && k.Provider == "local" }
+
+// check holds a keys block to what the schema's shape cannot say: one shape,
+// and what each adapter needs to reach its keys.
+func (k *Keys) check() error {
+	if k == nil {
+		return nil
+	}
+	legacy := k.Provider != "" || k.Local != nil || k.Transit != nil
+	switch {
+	case k.storage() && legacy:
+		return errors.New("keys names adapter and provider: use the adapter shape (provider is the first releases')")
+	case !k.storage() && !legacy:
+		return errors.New("keys names neither adapter nor provider")
+	case !k.storage():
+		return nil
+	}
+	if k.Seal == nil && k.Pseudonym == nil && k.Conceal == nil && k.Archive == nil {
+		return errors.New("keys.adapter is set and no purpose is: name seal, pseudonym, conceal or archive")
+	}
+	switch k.Adapter {
+	case "kms":
+		if k.Pseudonym != nil && k.State == nil {
+			return errors.New("keys.pseudonym with the kms adapter needs keys.state: the per-tenant secrets behind a pseudonym " +
+				"are generated once, wrapped under the key, and kept in the installation's state store")
+		}
+		if k.OpenBAO != nil || k.RootFile != "" {
+			return errors.New("keys.openbao and keys.rootFile are for the transit and local adapters, not kms")
+		}
+	case "transit":
+		if k.OpenBAO == nil {
+			return errors.New("keys.adapter transit needs keys.openbao")
+		}
+		if k.RootFile != "" || k.State != nil {
+			return errors.New("keys.rootFile and keys.state are for the local and kms adapters, not transit")
+		}
+	case "local":
+		if k.RootFile == "" {
+			return errors.New("keys.adapter local needs keys.rootFile")
+		}
+		if k.OpenBAO != nil || k.State != nil {
+			return errors.New("keys.openbao and keys.state are for the transit and kms adapters, not local")
+		}
+	}
+	return nil
+}
 
 // Enabled reports whether a key provider is named at all.
 func (k *Keys) Enabled() bool { return k.enabled() }

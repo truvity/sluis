@@ -1,0 +1,21 @@
+apiVersion: audit.truvity.github.io/audit-notary/v2
+archive:
+  bucket:
+    name: audit-archive
+    region: eu-central-1
+  prefix: app
+  lockMode: compliance
+  kmsKey: alias/audit-main-archive
+keys:
+  adapter: transit
+  seal: audit-seal
+  openbao:
+    address: https://openbao.example.test:8200
+    mount: transit
+    login:
+      mount: jwt-devel
+      role: audit-notary
+      jwtFile: /var/run/openbao/token
+profiles:
+  - security
+settle: 10m0s

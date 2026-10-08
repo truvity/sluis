@@ -144,3 +144,12 @@ These are what the deployment supplies in place of the lock, and the
 - **Governance mode as the attested tier.** It needs the Object Lock API
   the attested tier exists to do without, and it is bypassable by anyone
   holding the permission — which makes it the wrong name for "no lock".
+
+## Amendment: no Object Lock on an S3-compatible endpoint
+
+A store at an endpoint of its own (`archive.bucket.endpoint`) is written with
+`lockMode: none` and nothing else. Some such stores accept the lock headers, but
+the lock is an AWS S3 guarantee that they do not make as AWS does, and an archive
+that believes it is locked when it is not is worse than one that says it is not.
+A lock mode on an endpoint is refused by the configuration and by the store, and
+the attested preset is refused there. See [archive on R2](../how-to/archive-on-r2.md).

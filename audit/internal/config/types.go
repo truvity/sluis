@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/truvity/sluis/storage/keys"
 )
 
 // Duration is a time span as the file spells it: a Go duration string such as
@@ -126,11 +128,19 @@ type (
 	// Archive is where the archive is and how it is written. The lock mode is a
 	// property of what is written, so the query service, which only reads,
 	// takes none; and only the writer encrypts what it writes.
+	//
+	// Credentials, with a bucket at an endpoint of its own, say where the
+	// store's static credentials are kept: a JSON object {accessKeyID,
+	// secretAccessKey} at that address of the installation's state store. No
+	// secret is in the file, and none in the infrastructure code that wrote it.
+	// It replaces bucket.credentialsSecret, which names an environment variable,
+	// a file or an SSM parameter holding a lone value.
 	Archive struct {
-		Bucket   Bucket `json:"bucket"`
-		Prefix   string `json:"prefix,omitempty"`
-		LockMode string `json:"lockMode,omitempty"`
-		KMSKey   string `json:"kmsKey,omitempty"`
+		Bucket      Bucket    `json:"bucket"`
+		Prefix      string    `json:"prefix,omitempty"`
+		LockMode    string    `json:"lockMode,omitempty"`
+		KMSKey      string    `json:"kmsKey,omitempty"`
+		Credentials *StateRef `json:"credentials,omitempty"`
 	}
 
 	// Sink is the writer a process records through. Expect says what the
@@ -181,12 +191,53 @@ type (
 		OpenBAO OpenBAO `json:"openbao"`
 	}
 
-	// Keys is where pseudonymisation keys live. Without it, or with provider
-	// none, there are no pseudonyms and no resolve.
+	// Keys is where the keys live, in one of two shapes.
+	//
+	// The storage shape (`adapter`) names a key by purpose through
+	// github.com/truvity/sluis/storage/keys: seal, pseudonym, conceal and
+	// archive, each an alias (kms) or a transit key name. It is the shape to use.
+	//
+	// The legacy shape (`provider`) is the pseudonymisation provider of the first
+	// releases: local or transit, with a key per tenant and purpose. Without
+	// either, or with provider none, there are no pseudonyms and no resolve.
+	//
+	// Deprecated fields: Provider, Local and Transit. Use Adapter and the
+	// purposes.
 	Keys struct {
-		Provider string       `json:"provider"`
+		Provider string       `json:"provider,omitempty"`
 		Local    *LocalKeys   `json:"local,omitempty"`
 		Transit  *TransitKeys `json:"transit,omitempty"`
+
+		// Adapter is the key service of the storage shape: kms, transit or local.
+		Adapter string `json:"adapter,omitempty"`
+		// Instance names the installation in the default encryption context
+		// ({instance, purpose}). It is bound into ciphertexts, so a rename needs
+		// an override on decrypt; choose something stable and non-secret.
+		Instance string `json:"instance,omitempty"`
+		// Seal, Pseudonym, Conceal and Archive are the keys by purpose.
+		Seal      *keys.Entry `json:"seal,omitempty"`
+		Pseudonym *keys.Entry `json:"pseudonym,omitempty"`
+		Conceal   *keys.Entry `json:"conceal,omitempty"`
+		Archive   *keys.Entry `json:"archive,omitempty"`
+		// State is where the wrapped per-tenant secrets behind the pseudonym
+		// purpose are kept with the kms adapter (SSM Parameter Store, under
+		// Root). Nothing in it is usable without the pseudonym key.
+		State *StateRef `json:"state,omitempty"`
+		// OpenBAO is the transit adapter's server.
+		OpenBAO *OpenBAO `json:"openbao,omitempty"`
+		// RootFile is the local adapter's root, a file of 32 bytes.
+		RootFile string `json:"rootFile,omitempty"`
+	}
+
+	// StateRef is a place in the installation's state store (SSM Parameter Store
+	// on AWS, through github.com/truvity/sluis/storage/state): a root, which is
+	// the SSM path prefix of the installation, and an address below it. What the
+	// library keeps for itself is under `internal/`.
+	StateRef struct {
+		// Root is the prefix of the installation's parameters, "/audit/main".
+		Root string `json:"root"`
+		// Address is the key below the root, "internal/archive".
+		Address string `json:"address"`
 	}
 
 	// Stream is how a writer or a receiver reaches the wide stream.
@@ -382,7 +433,11 @@ type (
 type Notary struct {
 	Header
 	Archive Archive `json:"archive"`
-	Signer  Signer  `json:"signer"`
+	// Signer is the seal key by the first releases' shape. Exactly one of
+	// Signer and Keys.Seal; Keys is the shape to use.
+	Signer Signer `json:"signer,omitzero"`
+	// Keys, with its seal purpose, is the seal key through the storage port.
+	Keys *Keys `json:"keys,omitempty"`
 	// Profiles to seal; unset is every profile the archive has records for.
 	Profiles []string `json:"profiles,omitempty"`
 	// Settle is how long after an hour has ended it is sealed, so that a batch

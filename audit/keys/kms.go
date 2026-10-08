@@ -29,6 +29,13 @@ import (
 // same signature either way. Verify hashes the same way, so an auditor needs
 // only the public half this exports. An ECC_NIST_P256 key still signs
 // (ECDSA_SHA_256), for the callers that predate seals.
+//
+// Deprecated: name the seal key in the configuration (keys.seal with
+// keys.adapter: kms) and open it through the storage port; NewPortSigner
+// adapts it to a Signer. The port's KMS backend takes an alias and an
+// ECC_NIST_P384 or RSA key, where this one also takes an ARN or a key id and an
+// ECC_NIST_P256 key, which is why it stays for the installations that name
+// their key that way.
 type KMSSigner struct {
 	Client *kms.Client
 	// KeyID is the key's ARN, ID or alias. It is also what the operator's

@@ -56,8 +56,8 @@ update stop until the protection is lifted by hand.
 
 | Mode | Bucket default encryption | Key | Role grants | `kmsKey` in the functions' configuration | `ArchiveKeyArn` |
 |---|---|---|---|---|---|
-| `kms` (default, what every earlier version did) | SSE-KMS, bucket keys on | the library creates `alias/<name>-archive` (rotation on, protected) | `kms:GenerateDataKey`, `kms:Decrypt` on it (the read role: `Decrypt`) | the alias | the created key |
-| `kms` with `KeyArn` | SSE-KMS under `KeyArn`, bucket keys on | yours: none is created | the same grants, on `KeyArn` | `KeyArn` | `KeyArn` |
+| `kms` (default) | SSE-KMS, bucket keys on | the estate's, named by `Keys.Archive` (an alias, looked up): the library creates none | `kms:GenerateDataKey`, `kms:Decrypt` on it (the read role: `Decrypt`) | the alias | the key the alias points at |
+| `kms` with `KeyArn` | SSE-KMS under `KeyArn`, bucket keys on | yours, by ARN (instead of `Keys.Archive`) | the same grants, on `KeyArn` | `KeyArn` | `KeyArn` |
 | `aws-managed` | SSE-KMS under the AWS-managed key `aws/s3`, bucket keys on | none is created | none | none: the bucket default applies | empty |
 | `s3` | SSE-S3 (`AES256`) | none | none | none | empty |
 
@@ -167,7 +167,8 @@ Required inputs are marked. Anything not listed has the default stated.
 |---|---|
 | `BucketName`, `BucketArn` | the archive |
 | `ArchiveKeyArn` | the symmetric key objects are encrypted with (rotation on); the given `Archive.KeyArn` if set; empty with `Encryption: s3` or `aws-managed` |
-| `SealKeyArn`, `SealKeyAlias` | the `ECC_NIST_P384` `SIGN_VERIFY` key and its alias, `alias/<name>-seal`. `audit key public` reads its public half for `keys/roots.jwks` and the verifier's pin |
+| `ArchiveCredentialsPath` | the SSM parameter the functions read an S3-compatible store's credentials from; empty on AWS S3 |
+| `SealKeyArn`, `SealKeyAlias` | the estate's `ECC_NIST_P384` `SIGN_VERIFY` key (`Keys.Seal`) and its alias. `audit key public` reads its public half for `keys/roots.jwks` and the verifier's pin |
 | `QueueURL`, `QueueArn` | the ingest queue a receiver or an application sends to (`forward.sqs.queueUrl`), and what the chart's `sink.sqs` of the query service and the jobs names when the writer runs here ([observe and query in Kubernetes](../how-to/aws-run-readers-in-kubernetes.md)): `QueueURL` is the `queueUrl`, `QueueArn` the resource of `sqs:SendMessage` |
 | `DlqURL`, `DlqArn` | the dead-letter queue |
 | `DedupeTableName` | the DynamoDB table |
@@ -185,8 +186,7 @@ Required inputs are marked. Anything not listed has the default stated.
 | resource | notes |
 |---|---|
 | S3 bucket | versioning enabled in every mode, protected from a stack destroy in every mode, the bucket's own `objectLockEnabled` never set (it forces replacement), and Object Lock as a separate configuration resource that exists unless the mode is `NONE`; SSE-KMS under the archive key with bucket keys (the AWS-managed key with `aws-managed`, SSE-S3 with `s3`), all four public-access blocks, bucket-owner-enforced ownership, a policy that denies plain HTTP, a lifecycle rule per profile prefix and one that aborts incomplete multipart uploads after 7 days. `ForceDestroy` is never set |
-| KMS archive key | symmetric, rotation on, protected, alias `alias/<name>-archive`; only with `Encryption: kms` and no `KeyArn` |
-| KMS seal key | `ECC_NIST_P384`, `SIGN_VERIFY`, protected, alias `alias/<name>-seal`, and a key policy of its own (below) |
+| KMS keys | none: the library creates no key. The archive, seal, pseudonym and conceal keys are the estate's, named by alias in `Keys` and looked up (below) |
 | SQS ingest queue and DLQ | SSE-SQS, visibility timeout six times the writer's timeout, a redrive policy to the DLQ and a redrive-allow policy on the DLQ, a queue policy that denies plain HTTP and allows the named senders |
 | DynamoDB table `<name>-dedupe` | on-demand, hash key `pk` (string), TTL on `expires_at` |
 | Lambda `<name>-writer`, `<name>-notary` | `provided.al2023`, `arm64`, no VPC, a log group each, the extension layer when there is one |
@@ -328,3 +328,40 @@ is S3's default.
 - **A signed delegation.** The notary signs with a root, as everywhere
   ([0019](../decisions/0019-seals.md)).
 
+
+## Keys, state and an S3-compatible archive
+
+The library creates no key. `Args.Keys` names the estate's keys by KMS alias
+(`alias/<name>`; an ARN, a key id and an AWS-managed alias are refused) and the
+library resolves each with `kms.LookupAlias`:
+
+| field | purpose | required | the roles' grants |
+|---|---|---|---|
+| `Keys.Archive` | `archive`: SSE-KMS of the objects | with `Encryption: kms` unless `Archive.KeyArn` | `GenerateDataKey`, `Decrypt` (the readers: `Decrypt`), no context condition (S3 binds its own) |
+| `Keys.Seal` | `seal`: the P-384 key seals are signed with | with the notary; refused without one | the notary: `Sign`, `GetPublicKey`, `DescribeKey` |
+| `Keys.Pseudonym` | `pseudonym`: wraps the per-tenant secrets | never; refused unless the preset is `attested` or a profile of `Writer.DeploymentYAML` pseudonymises | the writer: `GenerateDataKey`, `Decrypt` where `kms:EncryptionContext:purpose` is `pseudonym` |
+| `Keys.Conceal` | `conceal`: identities that must be recoverable | never; needs `Keys.Pseudonym` | the writer: `Encrypt`, `Decrypt`, `GenerateDataKey` where the context is `{instance: Keys.Instance, purpose: conceal}` |
+
+`Keys.Instance` (default the component name) is the `instance` of the default
+encryption context of [`storage/keys`](../../../storage/keys/doc.go); it is
+bound into ciphertexts, so choose it once. The functions' configuration carries
+the aliases as `keys: {adapter: kms, instance, seal, pseudonym, conceal, state}`
+and, for the archive, `archive.kmsKey`. `SealKeyPolicy(accountRootArn,
+notaryRoleArn)` is the key policy the estate puts on the seal key: the account
+root administers and cannot sign, and only the notary's role signs. The notary
+role's ARN is `arn:<partition>:iam::<account>:role<RolePath><name>-notary`.
+
+`Args.State` is the installation's state store, SSM parameters under `Root`
+(default `/audit/<name>`; `KeyArn` for a customer-managed key): the archive's
+credentials at `Root/internal/archive` and the pseudonym secrets under
+`Root/internal/pseudonym/`. The library creates no parameter (it is not given a
+secret's value); the writer creates the pseudonym secrets, ciphertext under the
+pseudonym key, and may create but never replace them.
+
+`Archive.Endpoint` puts the archive on an S3-compatible store: no bucket, no
+lifecycle, no encryption setting and no S3 or archive-key statement is created;
+the lock mode is `NONE` and an attested installation is refused; `Observe`,
+`Query` and `ArchiveWriter` are refused (they are roles over an AWS bucket). The
+writer, and the notary when there is one, are granted `ssm:GetParameter` on the
+credentials parameter and nothing else of SSM. See
+[archive on R2](../how-to/archive-on-r2.md).
