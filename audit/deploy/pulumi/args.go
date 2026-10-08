@@ -545,6 +545,9 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 	if err := c.checkArchive(); err != nil {
 		return nil, err
 	}
+	if err := c.checkAdopted(); err != nil {
+		return nil, err
+	}
 
 	in := &c.Ingest
 	setInt(&in.MaxReceiveCount, 5)

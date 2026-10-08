@@ -288,7 +288,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 			continue
 		}
 		var arn pulumi.StringInput = pulumi.String(bucketARN(st.Bucket))
-		if st.Create {
+		if st.managed() {
 			key := presetKeys[st.Preset]
 			if key == "" {
 				key = defaultKeyArn
@@ -548,12 +548,21 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, st presetStore, keyAr
 	// accident. It is the only thing between a COMPLIANCE bucket and a destroy
 	// that S3 would refuse later anyway.
 	bopts := append([]pulumi.ResourceOption{pulumi.Protect(true)}, opts...)
-	bucket, err := s3.NewBucket(ctx, res, &s3.BucketArgs{
+	bargs := &s3.BucketArgs{
 		Bucket: pulumi.String(st.Bucket),
 		// A bucket with objects in it cannot be emptied by a destroy; never offer to.
 		ForceDestroy: pulumi.Bool(false),
 		Tags:         tags,
-	}, bopts...)
+	}
+	if st.Adopt {
+		// An existing bucket: imported by its name, with only the name as input (its
+		// tags are the estate's), and left in place by a destroy of the stack. Each
+		// setting below is imported by the same name.
+		bargs = &s3.BucketArgs{Bucket: pulumi.String(st.Bucket)}
+		bopts = append(bopts, pulumi.Import(pulumi.ID(st.Bucket)), pulumi.RetainOnDelete(true))
+		opts = append([]pulumi.ResourceOption{pulumi.Import(pulumi.ID(st.Bucket)), pulumi.RetainOnDelete(true)}, opts...)
+	}
+	bucket, err := s3.NewBucket(ctx, res, bargs, bopts...)
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +573,7 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, st presetStore, keyAr
 	if err != nil {
 		return nil, err
 	}
-	if st.Locked {
+	if st.Locked && !st.Adopt {
 		lock := &s3.BucketObjectLockConfigurationArgs{
 			Bucket: bucket.ID(), ObjectLockEnabled: pulumi.String("Enabled"),
 		}
@@ -635,6 +644,12 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, st presetStore, keyAr
 		}).(pulumi.StringOutput),
 	}, opts...); err != nil {
 		return nil, err
+	}
+
+	// An adopted bucket's lifecycle is the estate's: no lifecycle resource is
+	// declared, so the rules it has stay (and "never expire" is having none).
+	if st.Adopt {
+		return bucket, nil
 	}
 
 	// ADR 0065: Glacier Instant Retrieval after GlacierIRDays, which observe's

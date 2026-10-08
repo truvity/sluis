@@ -77,9 +77,35 @@ type PresetStorage struct {
 	// and to plain HTTP, encrypted as ArchiveArgs says, with a lifecycle rule for
 	// each `<Prefix>records/<profile>/` of the profiles kept under this preset,
 	// and, for the attested preset, compliance Object Lock. Only on AWS S3. False
-	// is an existing bucket, which the library only grants access to.
+	// is an existing bucket, which the library only grants access to (or adopts,
+	// see Adopt).
 	Create bool
+	// Adopt makes the library manage an EXISTING bucket's settings and leave its
+	// lifecycle exactly as it is: the bucket is imported by name (never created,
+	// Protect and RetainOnDelete: a destroy of the stack leaves it), and the
+	// library declares its versioning (Enabled), default encryption (as ArchiveArgs
+	// says), public-access block, ownership controls (BucketOwnerEnforced) and
+	// bucket policy (the TLS-only deny). It declares NO lifecycle configuration, so
+	// the rules the bucket has stay as they are: an estate whose archive must never
+	// expire says so by having no expiration rule there. Object Lock is not
+	// touched either (it is a property of how the bucket was made). The first
+	// `pulumi up` imports the bucket and its settings and then changes them to
+	// these; read the preview. The bucket policy is replaced as a whole by the
+	// library's, so statements the bucket already has must not be relied on after
+	// the import. Not with Create, not with Endpoint, and Archive.GlacierIRDays,
+	// Archive.DeepArchiveDays and the lock settings do not apply to it.
+	Adopt bool
+	// AcknowledgeLifecycle is the estate's statement, required with Adopt when a
+	// profile kept in this preset has a fixed minimum retention in its framework
+	// profiles, that the bucket's own lifecycle (and Object Lock) keeps objects at
+	// least that long. The library cannot read the bucket's lifecycle, so it
+	// cannot verify it; it refuses to adopt without the statement.
+	AcknowledgeLifecycle bool
 }
+
+// managed is a bucket whose settings the library declares: one it creates, or
+// one it adopts.
+func (s presetStore) managed() bool { return s.Create || s.Adopt }
 
 // PresetBucketName is the conventional name of a preset's bucket: the archive
 // bucket name (ArchiveBucketName) and the preset.
@@ -91,6 +117,9 @@ func PresetBucketName(archiveBucket, preset string) string { return archiveBucke
 type lifecycleProfile struct {
 	Name          string
 	RetentionDays int
+	// MinimumDays is the fixed retention its framework profiles demand, whether or
+	// not the objects are deleted at its end; 0 is none.
+	MinimumDays int
 }
 
 // presetStore is a configured preset with its defaults applied.
@@ -219,8 +248,11 @@ func resolvePresets(a *Args) error {
 		for _, name := range profiles {
 			c := composed[name]
 			lp := lifecycleProfile{Name: name}
-			if r := c.Retention; r.Policy == "fixed" && r.DeleteAtEnd {
-				lp.RetentionDays = r.Days
+			if r := c.Retention; r.Policy == "fixed" {
+				lp.MinimumDays = r.Days
+				if r.DeleteAtEnd {
+					lp.RetentionDays = r.Days
+				}
 			}
 			for i := range stores {
 				if stores[i].Preset == c.Preset {
@@ -266,6 +298,13 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 	if s.Prefix != "" && (strings.HasPrefix(s.Prefix, "/") || !strings.HasSuffix(s.Prefix, "/")) {
 		return s, fmt.Errorf("auditpulumi: %s %q is a path ending in a slash and not starting with one (%s/)", field("Prefix"), s.Prefix, name)
 	}
+	if s.Adopt && s.Create {
+		return s, fmt.Errorf("auditpulumi: %s and %s are both set: Create makes a bucket and writes its lifecycle, Adopt takes an existing bucket "+
+			"and leaves its lifecycle alone. Choose one", field("Create"), field("Adopt"))
+	}
+	if s.AcknowledgeLifecycle && !s.Adopt {
+		return s, fmt.Errorf("auditpulumi: %s is set without %s: it is the estate's statement about the lifecycle of a bucket it adopts", field("AcknowledgeLifecycle"), field("Adopt"))
+	}
 	if s.KeyAlias != "" {
 		if err := checkAlias(field("KeyAlias"), s.KeyAlias); err != nil {
 			return s, err
@@ -287,6 +326,9 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 	case name == profile.Attested:
 		return s, fmt.Errorf("auditpulumi: %s is set on the attested preset: it keeps its objects under compliance Object Lock, "+
 			"which is an AWS S3 guarantee the store at %s does not make. Keep the attested preset on AWS S3", field("Endpoint"), s.Endpoint)
+	case s.Adopt:
+		return s, fmt.Errorf("auditpulumi: %s is set with %s: the library adopts buckets on AWS S3 only, and the bucket at %s is the store's, "+
+			"made by the estate", field("Adopt"), field("Endpoint"), s.Endpoint)
 	case s.Create:
 		return s, fmt.Errorf("auditpulumi: %s is set with %s: the library creates buckets on AWS S3 only, and the bucket at %s is the store's, "+
 			"made by the estate", field("Create"), field("Endpoint"), s.Endpoint)
@@ -317,9 +359,9 @@ func checkPresetBuckets(stores []presetStore) error {
 				continue
 			}
 			switch {
-			case s.Create || t.Create:
-				return fmt.Errorf("auditpulumi: Presets[%q] and Presets[%q] both name the bucket %s and one has Create: "+
-					"a bucket the library creates is one preset's", t.Preset, s.Preset, s.Bucket)
+			case s.managed() || t.managed():
+				return fmt.Errorf("auditpulumi: Presets[%q] and Presets[%q] both name the bucket %s and one has Create or Adopt: "+
+					"a bucket the library manages is one preset's", t.Preset, s.Preset, s.Bucket)
 			case s.Preset == profile.Attested || t.Preset == profile.Attested:
 				return fmt.Errorf("auditpulumi: Presets[%q] and Presets[%q] both name the bucket %s: Object Lock is a property of the "+
 					"bucket, and the attested preset's is its own", t.Preset, s.Preset, s.Bucket)
@@ -368,6 +410,33 @@ func (a *Args) created() []presetStore {
 		}
 	}
 	return out
+}
+
+// adopted are the presets whose existing bucket the library adopts.
+func (a *Args) adopted() []presetStore {
+	var out []presetStore
+	for _, s := range a.stores {
+		if s.Adopt {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// checkAdopted holds an adopted bucket to the retention its profiles demand: the
+// library declares no lifecycle for it and cannot read the one it has, so the
+// estate states that it keeps objects long enough.
+func (a *Args) checkAdopted() error {
+	for _, s := range a.adopted() {
+		for _, lp := range s.Profiles {
+			if lp.MinimumDays > 0 && !s.AcknowledgeLifecycle {
+				return fmt.Errorf("auditpulumi: Presets[%q].Adopt leaves the bucket's lifecycle as it is, and the profile %q has a fixed minimum "+
+					"retention of %d days: the library cannot read the existing lifecycle to verify that it (and Object Lock) keeps objects that long. "+
+					"Set Presets[%q].AcknowledgeLifecycle once the estate has checked it, or use Create", s.Preset, lp.Name, lp.MinimumDays, s.Preset)
+			}
+		}
+	}
+	return nil
 }
 
 // applyFeatures sets what the configured presets decide and refuses what they

@@ -44,11 +44,13 @@ type mockCall struct{ Token, Provider string }
 type declared struct {
 	Type, Name string
 	Inputs     resource.PropertyMap
+	// ImportID is the id the resource was declared to import; "" is a new one.
+	ImportID string
 }
 
 func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
 	r.mu.Lock()
-	r.resources = append(r.resources, declared{Type: a.TypeToken, Name: a.Name, Inputs: a.Inputs.Copy()})
+	r.resources = append(r.resources, declared{Type: a.TypeToken, Name: a.Name, Inputs: a.Inputs.Copy(), ImportID: a.ID})
 	r.mu.Unlock()
 
 	out := a.Inputs.Copy()

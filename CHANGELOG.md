@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library: adopt an existing archive bucket and leave its lifecycle alone, `PresetStorage.Adopt`.** A preset with `Create` owns its bucket and derives a lifecycle from the profiles' retention (an expiration, a noncurrent-version expiration, no Deep Archive step before it); without `Create` the bucket is outside Pulumi. `Adopt: true` imports an existing bucket by name (`Protect`, `RetainOnDelete`) and manages its versioning, default encryption, public-access block, ownership controls and bucket policy (the TLS-only deny, replacing the bucket's policy as a whole), and declares **no lifecycle resource**, so an estate whose archive must never expire keeps its own rules (none that expire). Object Lock is not touched. Refused with `Create`, with `Endpoint` and for a bucket another preset names. Because the library cannot read the lifecycle it leaves alone, `Adopt` is refused when a profile kept in the preset has a fixed minimum retention unless `AcknowledgeLifecycle: true` states that the estate's lifecycle and lock keep objects that long. The `Create` path is unchanged. See [the library reference](docs/audit/reference/aws-pulumi-library.md#lifecycle).
+
 ## v1.74.0-rc.1
 
 ### Added
