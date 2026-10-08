@@ -73,7 +73,7 @@ test-s3:
     set -euo pipefail
     # A name of its own: other checkouts run LocalStack too.
     docker rm -f sluis-s3-dynamodb >/dev/null 2>&1 || true
-    docker run -d --name sluis-s3-dynamodb -p 4566:4566 -e SERVICES=s3,kms,sqs,dynamodb {{s3_image}} >/dev/null
+    docker run -d --name sluis-s3-dynamodb -p 4566:4566 -e SERVICES=s3,kms,sqs,dynamodb,ssm {{s3_image}} >/dev/null
     trap 'docker rm -f sluis-s3-dynamodb >/dev/null 2>&1 || true' EXIT
     for i in $(seq 1 40); do
         curl -sf -m 3 http://localhost:4566/_localstack/health >/dev/null 2>&1 && break
@@ -81,6 +81,7 @@ test-s3:
     done
     ACCESS_ROSTER_S3_URL=http://localhost:4566 hack/s3-conformance.sh
     ACCESS_ROSTER_DYNAMODB_URL=http://localhost:4566 hack/dynamodb-conformance.sh
+    STORAGE_LOCALSTACK_URL=http://localhost:4566 hack/storage-conformance.sh
 
 # Run linters. `config verify` first: `run` accepts unknown top-level keys
 # silently, so a settings block in the wrong place is otherwise invisible.

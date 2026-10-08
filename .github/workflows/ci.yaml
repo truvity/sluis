@@ -48,7 +48,7 @@ jobs:
       s3:
         image: localstack/localstack@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
         env:
-          SERVICES: s3,kms,sqs,dynamodb
+          SERVICES: s3,kms,sqs,dynamodb,ssm
         ports: ["4566:4566"]
         options: >-
           --health-cmd "curl -sf http://localhost:4566/_localstack/health"
@@ -56,6 +56,7 @@ jobs:
     env:
       ACCESS_ROSTER_S3_URL: http://localhost:4566
       ACCESS_ROSTER_DYNAMODB_URL: http://localhost:4566
+      STORAGE_LOCALSTACK_URL: http://localhost:4566
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -65,6 +66,8 @@ jobs:
         run: hack/s3-conformance.sh
       - name: the DynamoDB adapter against LocalStack, and no skips
         run: hack/dynamodb-conformance.sh
+      - name: the storage ssm and s3 state backends against LocalStack, and no skips
+        run: hack/storage-conformance.sh
 
   # Stable name for branch protection: the matrix reports as
   # "recipes / build" and so on, so a required context called "check"
