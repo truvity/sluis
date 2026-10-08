@@ -54,6 +54,11 @@ def files():
     for p in sorted(ROOT.rglob("*")):
         if not p.is_file() or any(part in SKIP_DIRS for part in p.relative_to(ROOT).parts):
             continue
+        # audit/ and its chart are a component with its own vocabulary and its
+        # own link check (audit/internal/docscheck); the retired-name rules
+        # here are sluis's.
+        if rel(p).startswith(("audit/", "charts/audit/")):
+            continue
         if p.suffix == ".md" or p.name == "Chart.yaml":
             out.append(p)
     return out

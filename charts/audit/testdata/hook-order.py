@@ -7,13 +7,13 @@ then never gets a Pod: the Job reports `serviceaccount "x" not found` and the
 release waits for a hook that can never run. It is not a render error, so
 nothing but an install finds it -- which is why it is asserted here.
 
-Reads rendered manifests on stdin. Exits non-zero naming the hook and the
+Reads rendered manifests on stdin as a JSON array of documents (`yq ea '[.]' -o=json`). Exits non-zero naming the hook and the
 account it would have waited for.
 """
 
 import sys
 
-import yaml
+import json
 
 HOOK = "helm.sh/hook"
 WEIGHT = "helm.sh/hook-weight"
@@ -37,7 +37,7 @@ def weight(doc):
 
 
 def main():
-    docs = [d for d in yaml.safe_load_all(sys.stdin) if d]
+    docs = [d for d in json.load(sys.stdin) if d]
     accounts = {
         d["metadata"]["name"]: d
         for d in docs

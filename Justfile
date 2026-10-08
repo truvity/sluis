@@ -755,50 +755,50 @@ audit-chart:
     AUDIT_REQUIRE_HELM=1 go test -count=1 ./tests/chart/
     bash ../charts/audit/testdata/refuse.sh
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/direct.yaml \
-        > tests/golden/audit/direct.yaml
+        > ../tests/golden/audit/direct.yaml
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/stream.yaml \
-        > tests/golden/audit/stream.yaml
+        > ../tests/golden/audit/stream.yaml
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/transit.yaml \
-        > tests/golden/audit/transit.yaml
+        > ../tests/golden/audit/transit.yaml
     # The attested tier on an S3-compatible store: no lock, an endpoint, path
     # style, static credentials, and an exports bucket on a store of its own.
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/attested.yaml \
-        > tests/golden/audit/attested.yaml
+        > ../tests/golden/audit/attested.yaml
     # The two shapes the deployment pages document, rendered from the very
     # files those pages show. The values above are trial installs with no
     # index, so without these the migration hook -- which only exists when
     # there is a database -- is never rendered at all.
     helm template audit ../charts/audit -f ../charts/audit/examples/direct.yaml \
-        > tests/golden/audit/example-direct.yaml
+        > ../tests/golden/audit/example-direct.yaml
     helm template audit ../charts/audit -f ../charts/audit/examples/stream.yaml \
-        > tests/golden/audit/example-stream.yaml
+        > ../tests/golden/audit/example-stream.yaml
     helm template audit ../charts/audit -f ../charts/audit/examples/sqs.yaml \
-        > tests/golden/audit/example-sqs.yaml
+        > ../tests/golden/audit/example-sqs.yaml
     # The writer elsewhere (the Lambda behind SQS): observe, query and a notary
     # in the cluster, every sink on the queue, and no write path rendered.
     helm template audit ../charts/audit -f ../charts/audit/examples/external-writer.yaml \
-        > tests/golden/audit/example-external-writer.yaml
+        > ../tests/golden/audit/example-external-writer.yaml
     # The OTLP endpoint value (decision N4a): with it set, every pod carries the
     # OpenTelemetry SDK environment, each with its own service name. The goldens
     # above, which set none, are what holds "empty renders nothing".
     helm lint ../charts/audit -f ../charts/audit/testdata/values/telemetry.yaml
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/telemetry.yaml \
-        > tests/golden/audit/telemetry.yaml
+        > ../tests/golden/audit/telemetry.yaml
     # The two other things the chart renders, each alone: the alert rules and
     # the Grafana dashboards (`renders: alerts`, `renders: dashboards`).
     helm lint ../charts/audit -f ../charts/audit/testdata/values/alerts.yaml
     helm lint ../charts/audit -f ../charts/audit/testdata/values/dashboards.yaml
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/alerts.yaml \
-        > tests/golden/audit/alerts.yaml
+        > ../tests/golden/audit/alerts.yaml
     helm template audit ../charts/audit -f ../charts/audit/testdata/values/dashboards.yaml \
-        > tests/golden/audit/dashboards.yaml
+        > ../tests/golden/audit/dashboards.yaml
     # A hook Pod whose service account the chart creates normally is admitted
     # and then never scheduled: only an install finds that, so assert it here.
     for shape in direct stream transit attested telemetry example-direct example-stream example-sqs example-external-writer; do \
-        python3 ../charts/audit/testdata/hook-order.py \
-            < tests/golden/audit/$shape.yaml; \
+        yq ea '[.]' -o=json ../tests/golden/audit/$shape.yaml \
+            | python3 ../charts/audit/testdata/hook-order.py; \
     done
-    git diff --exit-code -- tests/golden/audit
+    git diff --exit-code -- ../tests/golden/audit
 
 # The alert rules and the dashboard, held to the observability contract: the
 # generated dashboard is the committed one, passes the dashboard lint (and the
