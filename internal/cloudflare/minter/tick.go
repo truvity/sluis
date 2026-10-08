@@ -354,6 +354,15 @@ func (m *Minter) Revoke(ctx context.Context, preset, tokenID string, actor audit
 // are keyed by preset.
 func (m *Minter) Check(ctx context.Context) map[string]error {
 	out := map[string]error{}
+	defer func() {
+		// A refusal found at start is recorded as a refusal found at a mint is:
+		// an audit event, a metric and a log line.
+		for name, err := range out {
+			if _, ok := cloudflare.IsPrototypeError(err); ok {
+				m.fail(ctx, audit.System(), name, audit.CloudflareStored, err)
+			}
+		}
+	}()
 	for _, name := range m.sortedPresets() {
 		p := m.cfg.Cloudflare.Presets[name]
 		api, err := m.api(ctx, p.Account)
