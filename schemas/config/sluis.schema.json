@@ -802,7 +802,7 @@
           ]
         },
         "sign": {
-          "description": "Token signing (asymmetric).",
+          "description": "Token signing: the symmetric key that wraps a locally generated signing ring, or an asymmetric key that signs directly (deprecated).",
           "oneOf": [
             {
               "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
