@@ -1,5 +1,6 @@
 # refuse: every rule disabled
 renders: alerts
+preset: standard
 alerts:
   rules:
     deadLettered: {enabled: false}

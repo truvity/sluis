@@ -117,3 +117,8 @@ query:
     - audience: openbao
       mountPath: /var/run/openbao
       expirationSeconds: 600
+
+# The notary is the standard preset's, which `security` asks for.
+profiles:
+  security:
+    frameworks: [security]

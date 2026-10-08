@@ -339,7 +339,18 @@ external_identifiers_are_opaque: {{ .Values.externalIdentifiersAreOpaque }}
 preset: {{ .Values.preset }}
 {{- end }}
 profiles:
-  {{- toYaml .Values.profiles | nindent 2 }}
+  {{- include "audit.profiles" . | nindent 2 }}
+{{- end -}}
+
+{{/* The profiles in effect: the values', or, when none is chosen, a `history`
+profile, the one that keeps what a tenant's own history needs and asks for the
+operational preset. */}}
+{{- define "audit.profiles" -}}
+{{- if .Values.profiles -}}
+{{- toYaml .Values.profiles -}}
+{{- else -}}
+{{- toYaml (dict "history" (dict "frameworks" (list "history"))) -}}
+{{- end -}}
 {{- end -}}
 
 {{/* The profile document, which every component that reads profiles mounts. */}}

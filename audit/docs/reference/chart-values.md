@@ -42,7 +42,7 @@ The values that are not configuration of a binary:
 | value | meaning |
 |---|---|
 | `mode` | `direct` (one process: the front door and the write path) or `stream` (a receiver in front, `writer.consumers` writers behind). It decides which Deployments are rendered; the binaries' own `mode` is in `receiver.config` |
-| `preset` | the install preset ([presets](profiles.md#install-presets)), derived from `profiles` and best left unset; a weaker one than they need is refused, and `jobs.notary.enabled` is refused under `operational`. When set it is in the profile document too |
+| `preset` | the install preset ([presets](profiles.md#install-presets)), derived from `profiles` and best left unset; a weaker one than they need is refused, and `jobs.notary.enabled` and `renders: alerts` are refused under `operational`. With no `profiles` the chart renders a `history` profile, which is `operational`. When set it is in the profile document too |
 | `profiles`, `externalIdentifiersAreOpaque` | rendered as the profile document, `/etc/audit/deployment.yaml`, which every config's `deployment` names. `externalIdentifiersAreOpaque` declares that the identifiers the installation receives for external people mean nothing outside its own database, which relaxes a profile's `external: pseudonym` to `clear` ([framework profiles](profiles.md#what-a-deployment-can-relax)) |
 | `workloadIdentity.issuers`, `.audience`, `.workloads` | `audience` is the audience an issuer entry takes when it names none. Rendered as `/etc/audit/workloads.yaml`, which the writer's `workloads` names. The chart refuses an installation that keeps an index and verifies callers with no `workloads` mapping |
 | `query.grants` | rendered as `/etc/audit/grants.yaml`, which the query service's `grants` names |
@@ -77,7 +77,7 @@ component's `secretMounts` or `tokens` at the path you give them.
 The chart checks what only the platform can see, in
 `charts/audit/templates/_checks.tpl`:
 
-- `mode` is `direct` or `stream`, and `profiles` is not empty;
+- `mode` is `direct` or `stream`;
 - `writer.config.replicas` equals the number of writer pods the chart renders
   (`replicas` in direct mode, `writer.consumers` in stream mode): the writer
   refuses to run several without a database and refuses in-memory keys with

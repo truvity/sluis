@@ -62,9 +62,6 @@ route nothing can reach, and without the query service it has no backend. */ -}}
 {{- fail (printf "audit: `mode` is `direct` or `stream`, not %q." .Values.mode) -}}
 {{- end -}}
 
-{{- if not .Values.profiles -}}
-{{- fail "audit: set `profiles`. A writer with no profile keeps nothing, and every record it took would be dead-lettered." -}}
-{{- end -}}
 
 {{- /* The install preset is derived from the profiles (audit.preset, which
 refuses a `preset` weaker than they need). What it leaves out is not
@@ -141,7 +138,7 @@ two numbers must say the same thing. */}}
 
 {{- if .Values.extensions.billing.enabled -}}
   {{- $metering := false -}}
-  {{- range $name, $profile := .Values.profiles -}}
+  {{- range $name, $profile := (include "audit.profiles" . | fromYaml) -}}
     {{- range $profile.frameworks -}}
       {{- if hasPrefix "billing" . -}}{{- $metering = true -}}{{- end -}}
     {{- end -}}

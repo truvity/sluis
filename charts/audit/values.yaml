@@ -299,11 +299,11 @@ receiver:
 # values file that names one profile gets this one as well. Name every profile
 # the installation should keep.
 #
-# `security` is composed everywhere; see audit/docs/explanation/which-profiles-to-compose.md for
+# Nothing chosen is one `history` profile and the operational preset: audit for
+# yourself. An estate that needs the notary or a framework's controls names its
+# profiles, such as `security: {frameworks: [security]}`. See audit/docs/explanation/which-profiles-to-compose.md for
 # which of the others a deployment should compose, and what each costs.
-profiles:
-  security:
-    frameworks: [security]
+profiles: {}
 
 # The install preset: `operational` (the writer, the archive, deduplication and
 # intake), `standard` (adds the notary and its seal key, and the alarms) or
