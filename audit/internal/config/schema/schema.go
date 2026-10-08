@@ -165,6 +165,7 @@ func sharedDefs() map[string]m {
 			"description": "A Go duration: 30s, 2m, 168h.",
 		},
 		"secrets":  secretsDef(),
+		"signer":   signer(),
 		"bucket":   ref(policy + "fragments/bucket.json"),
 		"postgres": postgresDef(),
 		"sink": func() m {
@@ -204,30 +205,93 @@ func sharedDefs() map[string]m {
 				m{"required": []string{"tokenSecret"}},
 			},
 		},
-		"keys": map[string]any{
-			"type":                 "object",
-			"additionalProperties": false,
-			"description":          "Where pseudonymisation keys live. Unset, or `none`, means no pseudonyms, no key material and no resolve.",
-			"properties": m{
-				"provider": m{"enum": []string{"none", "local", "transit"}, "description": "`none`, `local` (a root and a directory) or `transit` (OpenBAO)."},
-				"local": obj("The local provider.", m{
-					"rootFile": str("A file holding the 32-byte root the data keys are wrapped under."),
-					"dir":      str("Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should."),
-				}, "rootFile"),
-				"transit": obj("The transit provider.", m{
-					"prefix":  strDefault("What every key's name starts with: <prefix>.<purpose>.<tenant>.", "audit"),
-					"openbao": def("openbao"),
-				}, "openbao"),
+		"keys": keysDef(),
+	}
+}
+
+// keyEntryDefs are the shapes of a key by purpose, as the storage port's
+// keys.schema.json states them (github.com/truvity/sluis/storage/schemas):
+// an alias (kms) or a transit key name, never an ARN or a key id, and an
+// encryption context. They are copied because a schema the loader reads has to
+// stand alone; internal/config's tests hold the copy to the port's.
+func keyEntryDefs() m {
+	return m{
+		"keyName": m{
+			"type":      "string",
+			"minLength": 1,
+			"pattern":   `^[^\s]+$`,
+			"not": m{"anyOf": []any{
+				m{"pattern": "^arn:"},
+				m{"pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},
+				m{"pattern": "^(?i:mrk-[0-9a-f]{32})$"},
+			}},
+			"description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+		},
+		"context": m{
+			"description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+			"oneOf": []any{
+				m{"enum": []string{"default", "off"}},
+				m{"type": "object", "minProperties": 1, "additionalProperties": m{"type": "string"}},
 			},
-			"required": []string{"provider"},
-			"allOf": []any{
-				m{"if": m{"properties": m{"provider": m{"const": "local"}}, "required": []string{"provider"}},
-					"then": m{"required": []string{"local"}, "properties": m{"transit": false}}},
-				m{"if": m{"properties": m{"provider": m{"const": "transit"}}, "required": []string{"provider"}},
-					"then": m{"required": []string{"transit"}, "properties": m{"local": false}}},
-				m{"if": m{"properties": m{"provider": m{"const": "none"}}, "required": []string{"provider"}},
-					"then": m{"properties": m{"local": false, "transit": false}}},
+		},
+		"entry": m{"oneOf": []any{
+			m{"$ref": "#/$defs/keys/$defs/keyName"},
+			m{
+				"type": "object", "required": []string{"key"}, "additionalProperties": false,
+				"properties": m{
+					"key":     m{"$ref": "#/$defs/keys/$defs/keyName"},
+					"context": m{"$ref": "#/$defs/keys/$defs/context"},
+				},
 			},
+		}},
+	}
+}
+
+// keysDef is the keys block: the storage port's shape (`adapter` and a key per
+// purpose), or the first releases' pseudonymisation provider (`provider`).
+func keysDef() m {
+	entry := func(desc string) m { return m{"$ref": "#/$defs/keys/$defs/entry", "description": desc} }
+	return m{
+		"type":                 "object",
+		"additionalProperties": false,
+		"description":          "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. `provider` is the first releases' shape (a pseudonymisation provider), deprecated. Unset, or provider `none`, means no pseudonyms, no key material and no resolve.",
+		"$defs":                keyEntryDefs(),
+		"properties": m{
+			"adapter":   m{"enum": []string{"kms", "transit", "local"}, "description": "The key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBAO) or `local` (a root file; development)."},
+			"instance":  str("Names the installation in the default encryption context ({instance, purpose}), so a ciphertext made for one installation does not open as another's under a shared key. Bound into ciphertexts: choose something stable and non-secret."),
+			"seal":      entry("The notary's seal key: asymmetric ECC P-384 (ES384). It signs; it takes no encryption context."),
+			"pseudonym": entry("The key the per-tenant pseudonym secrets are wrapped under. Provisioned only for an installation that pseudonymises (the attested preset, or a profile that needs pseudonyms)."),
+			"conceal":   entry("The key identities are sealed under, for the cases the law requires them to be recoverable."),
+			"archive":   entry("The key the archive's objects are encrypted with (for S3, the SSE-KMS alias)."),
+			"state": obj("Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.", m{
+				"root":    str("The SSM path prefix of the installation, for example /audit/main."),
+				"address": str("The key below the root, for example internal/pseudonym."),
+			}, "root", "address"),
+			"openbao":  def("openbao"),
+			"rootFile": str("The local adapter's root: a file of 32 bytes."),
+			"provider": m{"enum": []string{"none", "local", "transit"}, "deprecated": true, "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose."},
+			"local": obj("Deprecated (with `provider`): the local provider.", m{
+				"rootFile": str("A file holding the 32-byte root the data keys are wrapped under."),
+				"dir":      str("Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should."),
+			}, "rootFile"),
+			"transit": obj("Deprecated (with `provider`): the transit provider.", m{
+				"prefix":  strDefault("What every key's name starts with: <prefix>.<purpose>.<tenant>.", "audit"),
+				"openbao": def("openbao"),
+			}, "openbao"),
+		},
+		"oneOf": []any{
+			m{"required": []string{"adapter"}, "properties": m{"provider": false, "local": false, "transit": false}},
+			m{"required": []string{"provider"}, "properties": m{
+				"adapter": false, "instance": false, "seal": false, "pseudonym": false, "conceal": false, "archive": false,
+				"state": false, "openbao": false, "rootFile": false}},
+		},
+		"allOf": []any{
+			m{"if": m{"properties": m{"provider": m{"const": "local"}}, "required": []string{"provider"}},
+				"then": m{"required": []string{"local"}, "properties": m{"transit": false}}},
+			m{"if": m{"properties": m{"provider": m{"const": "transit"}}, "required": []string{"provider"}},
+				"then": m{"required": []string{"transit"}, "properties": m{"local": false}}},
+			m{"if": m{"properties": m{"provider": m{"const": "none"}}, "required": []string{"provider"}},
+				"then": m{"properties": m{"local": false, "transit": false}}},
 		},
 	}
 }
@@ -246,6 +310,10 @@ func archive(writes, encrypts bool) m {
 			"description": "The Object Lock mode every object is written in: compliance (the record tier), governance (a lock a privileged role can shorten), or none (the attested tier, for a store without Object Lock). A process refuses to start when a profile demands a stricter mode than this.",
 		}
 	}
+	props["credentials"] = obj("The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).", m{
+		"root":    str("The SSM path prefix of the installation, for example /audit/main."),
+		"address": str("The key below the root, for example internal/archive."),
+	}, "root", "address")
 	if encrypts {
 		props["kmsKey"] = str("The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.")
 	}
@@ -528,7 +596,8 @@ func signer() m {
 func notarySchema() m {
 	props := m{
 		"archive": archive(true, true),
-		"signer":  signer(),
+		"signer":  m{"$ref": "#/$defs/signer", "deprecated": true, "description": "The seal key in the first releases' shape. Use `keys.seal`; exactly one of the two."},
+		"keys":    m{"$ref": "#/$defs/keys", "description": "The seal key through the storage port: `keys.seal` names it, and the adapter says which service holds it. Exactly one of this and `signer`."},
 		"profiles": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": str("A profile name."),
 			"description": "The profiles to seal. Unset seals every profile the archive has records for."},
 		"settle":  duration("How long after an hour has ended it is sealed, so that a batch put late in the hour it is keyed by is in the seal. An hour is never sealed sooner.", "10m"),
@@ -537,7 +606,13 @@ func notarySchema() m {
 	}
 	return document("audit-notary", "audit-notary",
 		"The configuration of `audit-notary --config`, which seals the hours of the archive: one signed seal per profile, tenant and hour, chained through `prev`."+secretsNote,
-		props, []string{"archive", "signer"}, []string{"sink", "duration", "openbao"}, m{"dependentRequired": m{"require": []string{"sink"}}})
+		props, []string{"archive"}, []string{"sink", "duration", "openbao"}, m{
+			"dependentRequired": m{"require": []string{"sink"}},
+			"oneOf": []any{
+				m{"required": []string{"signer"}, "properties": m{"keys": false}},
+				m{"required": []string{"keys"}, "properties": m{"keys": m{"required": []string{"seal"}}}},
+			},
+		})
 }
 
 func purgeSchema() m {

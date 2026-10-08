@@ -84,6 +84,18 @@ func applyPreset(c *Args, preset profile.Preset) error {
 	}
 
 	ar := &c.Archive
+	if ar.Endpoint != "" {
+		// Object Lock is an AWS S3 guarantee; another store does not make it.
+		if f.ObjectLock {
+			return fmt.Errorf("auditpulumi: Archive.Endpoint is set and the preset is %s, which keeps the archive under compliance Object Lock: "+
+				"a store at an endpoint of its own does not make that guarantee. Use AWS S3 for this installation, or a preset below %s "+
+				"(compose profiles that need no more)", preset, profile.Attested)
+		}
+		if ar.ObjectLockMode != "" && ar.ObjectLockMode != None {
+			return fmt.Errorf("auditpulumi: Archive.ObjectLockMode is %s with Archive.Endpoint: Object Lock is refused on an S3-compatible store "+
+				"(NONE is the only mode there)", ar.ObjectLockMode)
+		}
+	}
 	switch {
 	case ar.ObjectLockMode == "" && f.ObjectLock:
 		ar.ObjectLockMode = Compliance

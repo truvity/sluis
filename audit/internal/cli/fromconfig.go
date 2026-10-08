@@ -26,10 +26,19 @@ import (
 // awsConfig is the SDK's configuration for one bucket: the ambient identity a
 // workload has, unless the file names secrets holding static credentials,
 // and a CA bundle when the store's certificate is not signed by a public root.
-func awsConfig(ctx context.Context, b config.Bucket, secrets *config.Secrets) (aws.Config, error) {
+//
+// A store at an endpoint of its own is addressed with the region "auto" when
+// the file names none. Its static credentials are either named secrets
+// (bucket.credentialsSecret) or, for the archive, the pair at an address of the
+// installation's state store (archive.credentials).
+func awsConfig(ctx context.Context, b config.Bucket, creds *config.StateRef, secrets *config.Secrets) (aws.Config, error) {
 	var opts []func(*awsconfig.LoadOptions) error
-	if b.Region != "" {
-		opts = append(opts, awsconfig.WithRegion(b.Region))
+	region := b.Region
+	if region == "" && b.Endpoint != "" {
+		region = s3store.AutoRegion
+	}
+	if region != "" {
+		opts = append(opts, awsconfig.WithRegion(region))
 	}
 	if b.CA != "" {
 		bundle, err := os.Open(b.CA)
@@ -51,6 +60,14 @@ func awsConfig(ctx context.Context, b config.Bucket, secrets *config.Secrets) (a
 		opts = append(opts, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(id, secret, "")))
 	}
+	if creds != nil {
+		id, secret, err := archiveCredentials(ctx, *creds)
+		if err != nil {
+			return aws.Config{}, err
+		}
+		opts = append(opts, awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(id, secret, "")))
+	}
 	return awsconfig.LoadDefaultConfig(ctx, opts...)
 }
 
@@ -60,7 +77,7 @@ func OpenArchiveFrom(ctx context.Context, a config.Archive, secrets *config.Secr
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := awsConfig(ctx, a.Bucket, secrets)
+	cfg, err := awsConfig(ctx, a.Bucket, a.Credentials, secrets)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +90,7 @@ func OpenArchiveFrom(ctx context.Context, a config.Archive, secrets *config.Secr
 // OpenExportsFrom opens the exports bucket, which is a store of its own and has
 // no lock: an export is a copy made to be taken away and then cleared.
 func OpenExportsFrom(ctx context.Context, b config.Bucket, secrets *config.Secrets) (*s3store.Store, error) {
-	cfg, err := awsConfig(ctx, b, secrets)
+	cfg, err := awsConfig(ctx, b, nil, secrets)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +129,8 @@ func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets) 
 	switch {
 	case !k.Enabled():
 		return nil, nil
+	case k.Storage():
+		return OpenPortProvider(ctx, k, secrets)
 	case k.IsLocal():
 		root, err := os.ReadFile(k.Local.RootFile)
 		if err != nil {
@@ -138,7 +157,17 @@ func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets) 
 // OpenSignerFrom opens the key the configuration says seals are signed with.
 // The private half of a managed key (kms, transit) never reaches this process;
 // the file is the exception, and the one to leave to development.
-func OpenSignerFrom(ctx context.Context, s config.Signer, secrets *config.Secrets) (keys.Signer, error) {
+//
+// With a keys block in the adapter shape, the seal purpose names the key and
+// the port opens it; the signer block is the first releases' shape.
+func OpenSignerFrom(ctx context.Context, s config.Signer, k *config.Keys, secrets *config.Secrets) (keys.Signer, error) {
+	if k != nil && k.Storage() && k.Seal != nil {
+		set, name, err := OpenKeyPort(ctx, k, secrets)
+		if err != nil {
+			return nil, err
+		}
+		return keys.NewPortSigner(set, name)
+	}
 	switch {
 	case s.KMS != nil:
 		cfg, err := awsconfig.LoadDefaultConfig(ctx)

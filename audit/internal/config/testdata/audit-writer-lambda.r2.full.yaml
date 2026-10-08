@@ -1,0 +1,37 @@
+apiVersion: audit.truvity.github.io/audit-writer-lambda/v2
+secrets:
+  source: ssm
+  root: /audit/main/private/config
+deployment: /var/task/deployment.yaml
+catalogues: /var/task/catalogues
+archive:
+  bucket:
+    name: audit-archive
+    region: auto
+    endpoint: https://account.r2.example.test
+    pathStyle: true
+  prefix: app
+  lockMode: none
+  credentials:
+    root: /audit/main
+    address: internal/archive
+keys:
+  adapter: kms
+  instance: audit-main
+  seal: alias/audit-main-seal
+  pseudonym: alias/audit-main-pseudonym
+  conceal:
+    key: alias/audit-main-conceal
+    context:
+      app: audit
+  archive: alias/audit-main-archive
+  state:
+    root: /audit/main
+    address: internal/pseudonym
+forgetIdentities: true
+dedupe:
+  dynamodb:
+    table: audit-dedupe
+    region: eu-central-1
+    window: 336h0m0s
+require: archived

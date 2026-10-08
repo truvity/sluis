@@ -95,7 +95,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	signer, err := cli.OpenSignerFrom(ctx, cfg.Signer, cfg.SecretReader())
+	signer, err := cli.OpenSignerFrom(ctx, cfg.Signer, cfg.Keys, cfg.SecretReader())
 	if err != nil {
 		return err
 	}

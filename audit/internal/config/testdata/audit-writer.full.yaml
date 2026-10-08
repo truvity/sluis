@@ -22,7 +22,7 @@ archive:
       accessKeyID: archive-access-key-id
       secretAccessKey: archive-secret-access-key
   prefix: app
-  lockMode: governance
+  lockMode: none
   kmsKey: alias/audit
 database:
   url: postgres://audit@db.example.test:5432/audit?sslmode=verify-full

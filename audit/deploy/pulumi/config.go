@@ -29,17 +29,30 @@ const (
 )
 
 // archiveConfig is the `archive` block of both functions: the bucket the library
-// created, the lock mode it was created with, and the key objects are encrypted
-// with, which is named by alias so that the file is known before the key exists.
-func archiveConfig(name string, a *Args) map[string]any {
+// created (or, on an S3-compatible store, the one the estate made, with its
+// endpoint, region and where its credentials are), the lock mode, and the key
+// objects are encrypted with, which is named by alias so that the file is known
+// before the key is looked up.
+func archiveConfig(a *Args) map[string]any {
+	if a.external() {
+		return map[string]any{
+			"bucket": map[string]any{
+				"name": a.Archive.BucketName, "endpoint": a.Archive.Endpoint,
+				"region": a.Archive.StoreRegion, "pathStyle": a.Archive.PathStyle,
+			},
+			"lockMode":    "none",
+			"credentials": map[string]any{"root": a.State.Root, "address": a.Archive.CredentialsAddress},
+		}
+	}
 	out := map[string]any{
 		"bucket":   map[string]any{"name": a.Archive.BucketName},
 		"lockMode": lowerMode(a.Archive.ObjectLockMode),
 	}
 	// With SSE-S3 and the AWS-managed key there is no key to name: the bucket's
-	// default encryption applies. A given key is named by its ARN.
+	// default encryption applies. The estate's key is named by alias; a key given
+	// by ARN is named by that.
 	if a.Archive.Encryption == EncryptionKMS {
-		out["kmsKey"] = archiveKeyAlias(name)
+		out["kmsKey"] = a.Keys.Archive
 		if a.Archive.KeyArn != "" {
 			out["kmsKey"] = a.Archive.KeyArn
 		}
@@ -57,9 +70,7 @@ func lowerMode(m string) string {
 	return "governance"
 }
 
-func archiveKeyAlias(name string) string { return "alias/" + name + "-archive" }
-func sealKeyAlias(name string) string    { return "alias/" + name + "-seal" }
-func dedupeTable(name string) string     { return name + "-dedupe" }
+func dedupeTable(name string) string { return name + "-dedupe" }
 
 // writerConfig is audit-writer-lambda's configuration file
 // (schemas/config/audit-writer-lambda.schema.json). It holds no secret and
@@ -74,7 +85,7 @@ func writerConfig(name string, a *Args) ([]byte, error) {
 	doc := map[string]any{
 		"apiVersion": apiVersionPrefix + "audit-writer-lambda/v2",
 		"deployment": configRoot + "/" + deploymentFile,
-		"archive":    archiveConfig(name, a),
+		"archive":    archiveConfig(a),
 		"dedupe":     map[string]any{"dynamodb": dyn},
 		"require":    "archived",
 	}
@@ -83,6 +94,20 @@ func writerConfig(name string, a *Args) ([]byte, error) {
 	}
 	if a.Writer.Keys != nil {
 		doc["keys"] = a.Writer.Keys
+	}
+	// The pseudonym and conceal keys, by purpose, through the storage port: the
+	// aliases, the instance the encryption context carries, and where the
+	// per-tenant secrets behind a pseudonym are kept.
+	if k := a.Keys; k.Pseudonym != "" || k.Conceal != "" {
+		keys := map[string]any{"adapter": "kms", "instance": a.instance(name)}
+		if k.Pseudonym != "" {
+			keys["pseudonym"] = k.Pseudonym
+			keys["state"] = map[string]any{"root": a.State.Root, "address": pseudonymStateAddress}
+		}
+		if k.Conceal != "" {
+			keys["conceal"] = k.Conceal
+		}
+		doc["keys"] = keys
 	}
 	// The secrets Keys names are read from SSM with the function's role. The
 	// function's environment holds none: what is here is a path.
@@ -96,12 +121,12 @@ func writerConfig(name string, a *Args) ([]byte, error) {
 }
 
 // notaryConfig is audit-notary's configuration file, as the Lambda reads it: the
-// same schema as the Job's, with `signer.kms` naming the seal key by alias.
+// same schema as the Job's, with `keys.seal` naming the seal key by alias.
 func notaryConfig(name string, a *Args) ([]byte, error) {
 	doc := map[string]any{
 		"apiVersion": apiVersionPrefix + "audit-notary/v2",
-		"archive":    archiveConfig(name, a),
-		"signer":     map[string]any{"kms": map[string]any{"key": sealKeyAlias(name)}},
+		"archive":    archiveConfig(a),
+		"keys":       map[string]any{"adapter": "kms", "instance": a.instance(name), "seal": a.Keys.Seal},
 		"settle":     a.Notary.Settle,
 	}
 	if len(a.Notary.Profiles) > 0 {

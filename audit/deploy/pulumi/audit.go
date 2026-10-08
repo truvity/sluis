@@ -30,7 +30,6 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/dynamodb"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/eks"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/kms"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
@@ -46,12 +45,14 @@ const ComponentType = "truvity:audit:Audit"
 type Audit struct {
 	pulumi.ResourceState
 
-	// BucketName and BucketArn are the archive bucket.
+	// BucketName and BucketArn are the archive bucket. On an S3-compatible store
+	// (Archive.Endpoint) BucketArn is empty: the bucket is the store's.
 	BucketName pulumi.StringOutput
 	BucketArn  pulumi.StringOutput
 	// ArchiveKeyArn is the symmetric key objects are encrypted with; SealKeyArn
 	// is the P-384 key seals are signed with, and SealKeyAlias its alias, which
-	// is what the notary's configuration names.
+	// is what the notary's configuration names. Both are the estate's keys
+	// (Keys.Archive, Keys.Seal), resolved from their aliases.
 	ArchiveKeyArn pulumi.StringOutput
 	SealKeyArn    pulumi.StringOutput
 	SealKeyAlias  pulumi.StringOutput
@@ -79,6 +80,12 @@ type Audit struct {
 	ArchiveWriterRoleArn pulumi.StringOutput
 	// QueryRoleArn is the Pod Identity role of audit-query, empty without Args.Query.
 	QueryRoleArn pulumi.StringOutput
+	// ArchiveCredentialsPath is the SSM parameter the functions read the
+	// S3-compatible store's credentials from: write a SecureString there, a JSON
+	// object {"accessKeyID": ..., "secretAccessKey": ...}, before the first record
+	// (docs/how-to/archive-on-r2.md). Empty on AWS S3, where the roles are the
+	// credential.
+	ArchiveCredentialsPath pulumi.StringOutput
 	// SecretsRoot is the SSM parameter path the writer reads the secrets its
 	// configuration names from: create the SecureStrings under it. Empty when the
 	// configuration names none (see WriterArgs.Secrets).
@@ -107,23 +114,31 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	child := pulumi.Parent(out)
 	tags := pulumi.ToStringMap(a.Tags)
 	ingest, notary := !a.Ingest.Disabled, !a.Notary.Disabled
-	// createArchiveKey: the library makes the archive key only for "kms" with no
-	// KeyArn given; a given key, the AWS-managed key and SSE-S3 make none.
-	createArchiveKey := a.Archive.Encryption == EncryptionKMS && a.Archive.KeyArn == ""
+	external := a.external()
+	// The library creates no key. The estate's keys are looked up by alias, as
+	// invokes made through the component's own provider, and their ARNs are what
+	// the policies name.
+	keyArns, err := lookupKeys(ctx, a, child)
+	if err != nil {
+		return nil, err
+	}
+	// What the installation keeps in its state store: the archive's credentials on
+	// an S3-compatible store (read by every function that opens the archive), and
+	// the per-tenant secrets behind pseudonyms (the writer's, which creates them).
+	needState := (external && (ingest || notary)) || (a.Keys.Pseudonym != "" && ingest)
 
 	// The account is looked up through the component's own provider: the invoke
 	// has the component as its parent, so it resolves the provider the caller
 	// gave New (pulumi.Provider, pulumi.Providers) or inherited. A stack with the
 	// default providers disabled has no other one. AccountID skips the lookup.
 	accountID := a.AccountID
-	if accountID == "" && (notary || a.Writer.Secrets != nil) {
+	if accountID == "" && (a.Writer.Secrets != nil || needState) {
 		identity, err := aws.GetCallerIdentity(ctx, nil, child)
 		if err != nil {
 			return nil, fmt.Errorf("auditpulumi: the caller's account (pass the AWS provider with pulumi.Provider, or set Args.AccountID): %w", err)
 		}
 		accountID = identity.AccountId
 	}
-	accountRoot := fmt.Sprintf("arn:%s:iam::%s:root", "aws", accountID)
 	// What the writer may read of SSM, when its configuration names secrets.
 	var grant *secretGrant
 	if s := a.Writer.Secrets; s != nil && ingest {
@@ -136,6 +151,36 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 			region = r.Region
 		}
 		grant = &secretGrant{Root: s.Root, Region: region, Account: accountID, KeyArn: s.KeyArn}
+	}
+
+	// What each function may read and write of the state store.
+	var writerState, notaryState *stateGrant
+	if needState {
+		region := a.Region
+		if region == "" {
+			r, err := aws.GetRegion(ctx, nil, child)
+			if err != nil {
+				return nil, fmt.Errorf("auditpulumi: the region for the SSM grant (pass the AWS provider with pulumi.Provider, or set Args.Region): %w", err)
+			}
+			region = r.Region
+		}
+		credentials := a.State.Root + "/" + a.Archive.CredentialsAddress
+		base := stateGrant{Region: region, Account: accountID, KeyArn: a.State.KeyArn}
+		if ingest {
+			g := base
+			if external {
+				g.Read = append(g.Read, credentials)
+			}
+			if a.Keys.Pseudonym != "" {
+				g.Write = append(g.Write, a.State.Root+"/"+pseudonymStateAddress+"/*")
+			}
+			writerState = &g
+		}
+		if notary && external {
+			g := base
+			g.Read = append(g.Read, credentials)
+			notaryState = &g
+		}
 	}
 
 	// The released packages are read and checked, and what each function's
@@ -186,62 +231,29 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 	}
 
-	// ---- keys
-	// Both are protected in every mode, like the bucket: a key scheduled for
-	// deletion makes everything it encrypted, or signed, unreadable or
-	// unverifiable.
-	protect := pulumi.Protect(true)
-	var archiveKey *kms.Key
-	if createArchiveKey {
-		archiveKey, err = kms.NewKey(ctx, name+"-archive", &kms.KeyArgs{
-			Description:          pulumi.Sprintf("%s: the key the archive's objects are encrypted with", name),
-			EnableKeyRotation:    pulumi.Bool(true),
-			DeletionWindowInDays: pulumi.Int(30),
-			Tags:                 tags,
-		}, child, protect)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := kms.NewAlias(ctx, name+"-archive", &kms.AliasArgs{
-			Name: pulumi.String(archiveKeyAlias(name)), TargetKeyId: archiveKey.KeyId,
-		}, child); err != nil {
-			return nil, err
-		}
-	}
-	var sealKey *kms.Key
-	if notary {
-		sealKey, err = kms.NewKey(ctx, name+"-seal", &kms.KeyArgs{
-			Description:           pulumi.Sprintf("%s: the P-384 key seals are signed with (ES384)", name),
-			CustomerMasterKeySpec: pulumi.String("ECC_NIST_P384"),
-			KeyUsage:              pulumi.String("SIGN_VERIFY"),
-			DeletionWindowInDays:  pulumi.Int(30),
-			Policy:                notaryRole.Arn.ApplyT(func(arn string) string { return sealKeyPolicy(accountRoot, arn) }).(pulumi.StringOutput),
-			Tags:                  tags,
-		}, child, protect)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := kms.NewAlias(ctx, name+"-seal", &kms.AliasArgs{
-			Name: pulumi.String(sealKeyAlias(name)), TargetKeyId: sealKey.KeyId,
-		}, child); err != nil {
-			return nil, err
-		}
-	}
-	// archiveKeyArn is the key's ARN (the created key's, or Archive.KeyArn), or
-	// the empty string with SSE-S3 and with the AWS-managed key, which is what
-	// every policy builder reads as "no key": neither needs an IAM grant.
+	// ---- the archive's key and the seal key are the estate's, looked up by alias
+	// archiveKeyArn is the key's ARN (Keys.Archive's, or Archive.KeyArn), or the
+	// empty string with SSE-S3, with the AWS-managed key and on an S3-compatible
+	// store, which is what every policy builder reads as "no key": none needs an
+	// IAM grant.
 	archiveKeyArn := pulumi.String("").ToStringOutput()
 	switch {
-	case createArchiveKey:
-		archiveKeyArn = archiveKey.Arn
+	case keyArns.Archive != "":
+		archiveKeyArn = pulumi.String(keyArns.Archive).ToStringOutput()
 	case a.Archive.KeyArn != "":
 		archiveKeyArn = pulumi.String(a.Archive.KeyArn).ToStringOutput()
 	}
 
 	// ---- the archive
-	bucket, err := newArchive(ctx, name, a, archiveKeyArn, tags, child)
-	if err != nil {
-		return nil, err
+	bucketName := pulumi.String(a.Archive.BucketName).ToStringOutput()
+	bucketArn := pulumi.String("").ToStringOutput()
+	var bucket *s3.Bucket
+	if !external {
+		bucket, err = newArchive(ctx, name, a, archiveKeyArn, tags, child)
+		if err != nil {
+			return nil, err
+		}
+		bucketName, bucketArn = bucket.Bucket, bucket.Arn
 	}
 
 	// ---- the queue, its dead-letter queue and the deduplication table
@@ -288,8 +300,9 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		writerLogsGroup = writerLogs
 		if _, err := iam.NewRolePolicy(ctx, name+"-writer", &iam.RolePolicyArgs{
 			Role: writerRole.Name,
-			Policy: pulumi.All(bucket.Arn, archiveKeyArn, table.Arn, queue.Arn, writerLogs.Arn).ApplyT(func(v []any) string {
-				return writerPolicy(v[0].(string), v[1].(string), v[2].(string), v[3].(string), v[4].(string), audience, locked, grant)
+			Policy: pulumi.All(bucketArn, archiveKeyArn, table.Arn, queue.Arn, writerLogs.Arn).ApplyT(func(v []any) string {
+				return writerPolicy(v[0].(string), v[1].(string), v[2].(string), v[3].(string), v[4].(string), audience, locked, grant,
+					append(writerKeyStatements(keyArns, a.instance(name)), writerState.statements()...))
 			}).(pulumi.StringOutput),
 		}, child); err != nil {
 			return nil, err
@@ -323,8 +336,8 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 		if _, err := iam.NewRolePolicy(ctx, name+"-notary", &iam.RolePolicyArgs{
 			Role: notaryRole.Name,
-			Policy: pulumi.All(bucket.Arn, archiveKeyArn, sealKey.Arn, notaryLogs.Arn).ApplyT(func(v []any) string {
-				return notaryPolicy(v[0].(string), v[1].(string), v[2].(string), v[3].(string), audience, locked)
+			Policy: pulumi.All(bucketArn, archiveKeyArn, notaryLogs.Arn).ApplyT(func(v []any) string {
+				return notaryPolicy(v[0].(string), v[1].(string), keyArns.Seal, v[2].(string), audience, locked, notaryState.statements())
 			}).(pulumi.StringOutput),
 		}, child); err != nil {
 			return nil, err
@@ -384,10 +397,14 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		}
 		return o()
 	}
-	out.BucketName, out.BucketArn = bucket.Bucket, bucket.Arn
+	out.BucketName, out.BucketArn = bucketName, bucketArn
 	out.ArchiveKeyArn = archiveKeyArn
-	out.SealKeyArn = pick(notary, func() pulumi.StringOutput { return sealKey.Arn })
-	out.SealKeyAlias = pick(notary, func() pulumi.StringOutput { return pulumi.String(sealKeyAlias(name)).ToStringOutput() })
+	out.SealKeyArn = pick(notary, func() pulumi.StringOutput { return pulumi.String(keyArns.Seal).ToStringOutput() })
+	out.SealKeyAlias = pick(notary, func() pulumi.StringOutput { return pulumi.String(a.Keys.Seal).ToStringOutput() })
+	out.ArchiveCredentialsPath = pulumi.String("").ToStringOutput()
+	if external && (ingest || notary) {
+		out.ArchiveCredentialsPath = pulumi.String(a.State.Root + "/" + a.Archive.CredentialsAddress).ToStringOutput()
+	}
 	out.QueueURL = pick(ingest, func() pulumi.StringOutput { return queue.Url })
 	out.QueueArn = pick(ingest, func() pulumi.StringOutput { return queue.Arn })
 	out.DlqURL = pick(ingest, func() pulumi.StringOutput { return dlq.Url })
@@ -413,8 +430,8 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		"writerFunctionArn": out.WriterFunctionArn, "notaryFunctionArn": out.NotaryFunctionArn,
 		"writerRoleArn": out.WriterRoleArn, "notaryRoleArn": out.NotaryRoleArn, "observeReaderRoleArn": out.ObserveReaderRoleArn,
 		"archiveWriterRoleArn": out.ArchiveWriterRoleArn, "queryRoleArn": out.QueryRoleArn,
-		"secretsRoot": out.SecretsRoot,
-		"preset":      out.Preset, "alarmTopicArn": out.AlarmTopicArn, "scheduleArn": out.ScheduleArn,
+		"secretsRoot": out.SecretsRoot, "archiveCredentialsPath": out.ArchiveCredentialsPath,
+		"preset": out.Preset, "alarmTopicArn": out.AlarmTopicArn, "scheduleArn": out.ScheduleArn,
 	}); err != nil {
 		return nil, err
 	}

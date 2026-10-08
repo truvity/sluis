@@ -4,7 +4,8 @@ audit lives in the sluis repository. Its recipes are the root Justfile's
 `audit-*` recipes (`just audit-check` is the gate; where this page says
 `just X` for audit, read `just audit-X`), its tools come from the root
 `devbox.json`, and its CI is the `audit*` jobs of the root `ci.yaml`. It
-never imports sluis.
+never imports sluis, with one exception: the `storage` module (state and keys by
+purpose), a port of its own that imports nothing of sluis.
 
 ## Ground rules for a public repository
 

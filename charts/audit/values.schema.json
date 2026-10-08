@@ -1043,6 +1043,28 @@
         ]
       },
       "description": "The configuration of `audit-notary --config`, which seals the hours of the archive: one signed seal per profile, tenant and hour, chained through `prev`. Secrets are never in this file: a field named ...Secret holds the NAME of a secret, which the `secrets` block says how to find (an environment variable, a file or an SSM parameter). Telemetry is the OTEL_* environment, not configuration.",
+      "oneOf": [
+        {
+          "properties": {
+            "keys": false
+          },
+          "required": [
+            "signer"
+          ]
+        },
+        {
+          "properties": {
+            "keys": {
+              "required": [
+                "seal"
+              ]
+            }
+          },
+          "required": [
+            "keys"
+          ]
+        }
+      ],
       "properties": {
         "apiVersion": {
           "description": "The version of this document's shape, `audit.truvity.github.io/audit-notary/v2`. Absent means version 1, which is deprecated and read for one minor (`truvity.github.io/audit-notary/v1`); another value is refused, so that a later shape arrives by a version and not by a file that quietly means something else.",
@@ -1056,6 +1078,27 @@
           "properties": {
             "bucket": {
               "$ref": "#/$defs/config-audit-notary.v2.bucket"
+            },
+            "credentials": {
+              "additionalProperties": false,
+              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+              "properties": {
+                "address": {
+                  "description": "The key below the root, for example internal/archive.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "root": {
+                  "description": "The SSM path prefix of the installation, for example /audit/main.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "root",
+                "address"
+              ],
+              "type": "object"
             },
             "kmsKey": {
               "description": "The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.",
@@ -1081,6 +1124,10 @@
             "bucket"
           ],
           "type": "object"
+        },
+        "keys": {
+          "$ref": "#/$defs/config-audit-notary.v2.keys",
+          "description": "The seal key through the storage port: `keys.seal` names it, and the adapter says which service holds it. Exactly one of this and `signer`."
         },
         "profiles": {
           "description": "The profiles to seal. Unset seals every profile the archive has records for.",
@@ -1110,82 +1157,9 @@
           "description": "How long after an hour has ended it is sealed, so that a batch put late in the hour it is keyed by is in the seal. An hour is never sealed sooner."
         },
         "signer": {
-          "additionalProperties": false,
-          "description": "The key seals are signed with, a P-384 key (ES384). The private half should never be on the notary's disk: a managed key (`kms`, `transit`) keeps it where the writer's role cannot reach it, which a `file` cannot.",
-          "oneOf": [
-            {
-              "required": [
-                "kms"
-              ]
-            },
-            {
-              "required": [
-                "transit"
-              ]
-            },
-            {
-              "required": [
-                "file"
-              ]
-            }
-          ],
-          "properties": {
-            "file": {
-              "additionalProperties": false,
-              "description": "A P-384 private key in a PEM file (PKCS#8 or SEC 1), for development.",
-              "properties": {
-                "path": {
-                  "description": "The file.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "path"
-              ],
-              "type": "object"
-            },
-            "kms": {
-              "additionalProperties": false,
-              "description": "An AWS KMS key: ECC_NIST_P384, SIGN_VERIFY, signing ECDSA_SHA_384. The credentials are the SDK's ambient ones: in a cluster, the notary's Pod Identity or IRSA role, which is not the writer's.",
-              "properties": {
-                "key": {
-                  "description": "The key's ARN, ID or alias.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "region": {
-                  "description": "The key's region, when it is not the SDK's.",
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "key"
-              ],
-              "type": "object"
-            },
-            "transit": {
-              "additionalProperties": false,
-              "description": "An OpenBAO transit key of type ecdsa-p384.",
-              "properties": {
-                "key": {
-                  "description": "The transit key's name.",
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "openbao": {
-                  "$ref": "#/$defs/config-audit-notary.v2.openbao"
-                }
-              },
-              "required": [
-                "key",
-                "openbao"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
+          "$ref": "#/$defs/config-audit-notary.v2.signer",
+          "deprecated": true,
+          "description": "The seal key in the first releases' shape. Use `keys.seal`; exactly one of the two."
         },
         "sink": {
           "$ref": "#/$defs/config-audit-notary.v2.sink",
@@ -1193,8 +1167,7 @@
         }
       },
       "required": [
-        "archive",
-        "signer"
+        "archive"
       ],
       "title": "audit-notary",
       "type": "object"
@@ -1259,6 +1232,268 @@
       "description": "A Go duration: 30s, 2m, 168h.",
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
       "type": "string"
+    },
+    "config-audit-notary.v2.keys": {
+      "$defs": {
+        "context": {
+          "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+          "oneOf": [
+            {
+              "enum": [
+                "default",
+                "off"
+              ]
+            },
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            }
+          ]
+        },
+        "entry": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/keyName"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/context"
+                },
+                "key": {
+                  "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/keyName"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyName": {
+          "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+          "minLength": 1,
+          "not": {
+            "anyOf": [
+              {
+                "pattern": "^arn:"
+              },
+              {
+                "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+              },
+              {
+                "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+              }
+            ]
+          },
+          "pattern": "^[^\\s]+$",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "local"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transit": false
+            },
+            "required": [
+              "local"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "transit"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          },
+          "then": {
+            "properties": {
+              "local": false
+            },
+            "required": [
+              "transit"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          },
+          "then": {
+            "properties": {
+              "local": false,
+              "transit": false
+            }
+          }
+        }
+      ],
+      "description": "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. `provider` is the first releases' shape (a pseudonymisation provider), deprecated. Unset, or provider `none`, means no pseudonyms, no key material and no resolve.",
+      "oneOf": [
+        {
+          "properties": {
+            "local": false,
+            "provider": false,
+            "transit": false
+          },
+          "required": [
+            "adapter"
+          ]
+        },
+        {
+          "properties": {
+            "adapter": false,
+            "archive": false,
+            "conceal": false,
+            "instance": false,
+            "openbao": false,
+            "pseudonym": false,
+            "rootFile": false,
+            "seal": false,
+            "state": false
+          },
+          "required": [
+            "provider"
+          ]
+        }
+      ],
+      "properties": {
+        "adapter": {
+          "description": "The key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBAO) or `local` (a root file; development).",
+          "enum": [
+            "kms",
+            "transit",
+            "local"
+          ]
+        },
+        "archive": {
+          "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/entry",
+          "description": "The key the archive's objects are encrypted with (for S3, the SSE-KMS alias)."
+        },
+        "conceal": {
+          "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/entry",
+          "description": "The key identities are sealed under, for the cases the law requires them to be recoverable."
+        },
+        "instance": {
+          "description": "Names the installation in the default encryption context ({instance, purpose}), so a ciphertext made for one installation does not open as another's under a shared key. Bound into ciphertexts: choose something stable and non-secret.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "local": {
+          "additionalProperties": false,
+          "description": "Deprecated (with `provider`): the local provider.",
+          "properties": {
+            "dir": {
+              "description": "Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "rootFile": {
+              "description": "A file holding the 32-byte root the data keys are wrapped under.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "rootFile"
+          ],
+          "type": "object"
+        },
+        "openbao": {
+          "$ref": "#/$defs/config-audit-notary.v2.openbao"
+        },
+        "provider": {
+          "deprecated": true,
+          "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose.",
+          "enum": [
+            "none",
+            "local",
+            "transit"
+          ]
+        },
+        "pseudonym": {
+          "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/entry",
+          "description": "The key the per-tenant pseudonym secrets are wrapped under. Provisioned only for an installation that pseudonymises (the attested preset, or a profile that needs pseudonyms)."
+        },
+        "rootFile": {
+          "description": "The local adapter's root: a file of 32 bytes.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "seal": {
+          "$ref": "#/$defs/config-audit-notary.v2.keys/$defs/entry",
+          "description": "The notary's seal key: asymmetric ECC P-384 (ES384). It signs; it takes no encryption context."
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.",
+          "properties": {
+            "address": {
+              "description": "The key below the root, for example internal/pseudonym.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "address"
+          ],
+          "type": "object"
+        },
+        "transit": {
+          "additionalProperties": false,
+          "description": "Deprecated (with `provider`): the transit provider.",
+          "properties": {
+            "openbao": {
+              "$ref": "#/$defs/config-audit-notary.v2.openbao"
+            },
+            "prefix": {
+              "default": "audit",
+              "description": "What every key's name starts with: <prefix>.<purpose>.<tenant>.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "openbao"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "config-audit-notary.v2.openbao": {
       "additionalProperties": false,
@@ -1478,6 +1713,84 @@
         }
       ],
       "description": "Where a field named `...Secret` finds the secret it names. One source for the whole file: `env` (the name is an environment variable), `file` (the name is a path under `root`, one file per secret: a mounted Kubernetes Secret) or `ssm` (the name is a SecureString under `root` in AWS Systems Manager Parameter Store, read with the process's own identity). On AWS Lambda use `ssm`: the function's environment is never a place for a secret. Unset is `env`."
+    },
+    "config-audit-notary.v2.signer": {
+      "additionalProperties": false,
+      "description": "The key seals are signed with, a P-384 key (ES384). The private half should never be on the notary's disk: a managed key (`kms`, `transit`) keeps it where the writer's role cannot reach it, which a `file` cannot.",
+      "oneOf": [
+        {
+          "required": [
+            "kms"
+          ]
+        },
+        {
+          "required": [
+            "transit"
+          ]
+        },
+        {
+          "required": [
+            "file"
+          ]
+        }
+      ],
+      "properties": {
+        "file": {
+          "additionalProperties": false,
+          "description": "A P-384 private key in a PEM file (PKCS#8 or SEC 1), for development.",
+          "properties": {
+            "path": {
+              "description": "The file.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        "kms": {
+          "additionalProperties": false,
+          "description": "An AWS KMS key: ECC_NIST_P384, SIGN_VERIFY, signing ECDSA_SHA_384. The credentials are the SDK's ambient ones: in a cluster, the notary's Pod Identity or IRSA role, which is not the writer's.",
+          "properties": {
+            "key": {
+              "description": "The key's ARN, ID or alias.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "region": {
+              "description": "The key's region, when it is not the SDK's.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "type": "object"
+        },
+        "transit": {
+          "additionalProperties": false,
+          "description": "An OpenBAO transit key of type ecdsa-p384.",
+          "properties": {
+            "key": {
+              "description": "The transit key's name.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "openbao": {
+              "$ref": "#/$defs/config-audit-notary.v2.openbao"
+            }
+          },
+          "required": [
+            "key",
+            "openbao"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "config-audit-notary.v2.sink": {
       "additionalProperties": false,
@@ -1879,6 +2192,27 @@
           "properties": {
             "bucket": {
               "$ref": "#/$defs/config-audit-observe.v2.bucket"
+            },
+            "credentials": {
+              "additionalProperties": false,
+              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+              "properties": {
+                "address": {
+                  "description": "The key below the root, for example internal/archive.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "root": {
+                  "description": "The SSM path prefix of the installation, for example /audit/main.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "root",
+                "address"
+              ],
+              "type": "object"
             },
             "prefix": {
               "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
@@ -3241,6 +3575,27 @@
             "bucket": {
               "$ref": "#/$defs/config-audit-query.v2.bucket"
             },
+            "credentials": {
+              "additionalProperties": false,
+              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+              "properties": {
+                "address": {
+                  "description": "The key below the root, for example internal/archive.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "root": {
+                  "description": "The SSM path prefix of the installation, for example /audit/main.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "root",
+                "address"
+              ],
+              "type": "object"
+            },
             "prefix": {
               "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
               "minLength": 1,
@@ -3400,6 +3755,67 @@
       "type": "string"
     },
     "config-audit-query.v2.keys": {
+      "$defs": {
+        "context": {
+          "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+          "oneOf": [
+            {
+              "enum": [
+                "default",
+                "off"
+              ]
+            },
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            }
+          ]
+        },
+        "entry": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/config-audit-query.v2.keys/$defs/keyName"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/config-audit-query.v2.keys/$defs/context"
+                },
+                "key": {
+                  "$ref": "#/$defs/config-audit-query.v2.keys/$defs/keyName"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyName": {
+          "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+          "minLength": 1,
+          "not": {
+            "anyOf": [
+              {
+                "pattern": "^arn:"
+              },
+              {
+                "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+              },
+              {
+                "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+              }
+            ]
+          },
+          "pattern": "^[^\\s]+$",
+          "type": "string"
+        }
+      },
       "additionalProperties": false,
       "allOf": [
         {
@@ -3461,11 +3877,60 @@
           }
         }
       ],
-      "description": "Where pseudonymisation keys live. Unset, or `none`, means no pseudonyms, no key material and no resolve.",
+      "description": "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. `provider` is the first releases' shape (a pseudonymisation provider), deprecated. Unset, or provider `none`, means no pseudonyms, no key material and no resolve.",
+      "oneOf": [
+        {
+          "properties": {
+            "local": false,
+            "provider": false,
+            "transit": false
+          },
+          "required": [
+            "adapter"
+          ]
+        },
+        {
+          "properties": {
+            "adapter": false,
+            "archive": false,
+            "conceal": false,
+            "instance": false,
+            "openbao": false,
+            "pseudonym": false,
+            "rootFile": false,
+            "seal": false,
+            "state": false
+          },
+          "required": [
+            "provider"
+          ]
+        }
+      ],
       "properties": {
+        "adapter": {
+          "description": "The key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBAO) or `local` (a root file; development).",
+          "enum": [
+            "kms",
+            "transit",
+            "local"
+          ]
+        },
+        "archive": {
+          "$ref": "#/$defs/config-audit-query.v2.keys/$defs/entry",
+          "description": "The key the archive's objects are encrypted with (for S3, the SSE-KMS alias)."
+        },
+        "conceal": {
+          "$ref": "#/$defs/config-audit-query.v2.keys/$defs/entry",
+          "description": "The key identities are sealed under, for the cases the law requires them to be recoverable."
+        },
+        "instance": {
+          "description": "Names the installation in the default encryption context ({instance, purpose}), so a ciphertext made for one installation does not open as another's under a shared key. Bound into ciphertexts: choose something stable and non-secret.",
+          "minLength": 1,
+          "type": "string"
+        },
         "local": {
           "additionalProperties": false,
-          "description": "The local provider.",
+          "description": "Deprecated (with `provider`): the local provider.",
           "properties": {
             "dir": {
               "description": "Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should.",
@@ -3483,17 +3948,55 @@
           ],
           "type": "object"
         },
+        "openbao": {
+          "$ref": "#/$defs/config-audit-query.v2.openbao"
+        },
         "provider": {
-          "description": "`none`, `local` (a root and a directory) or `transit` (OpenBAO).",
+          "deprecated": true,
+          "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose.",
           "enum": [
             "none",
             "local",
             "transit"
           ]
         },
+        "pseudonym": {
+          "$ref": "#/$defs/config-audit-query.v2.keys/$defs/entry",
+          "description": "The key the per-tenant pseudonym secrets are wrapped under. Provisioned only for an installation that pseudonymises (the attested preset, or a profile that needs pseudonyms)."
+        },
+        "rootFile": {
+          "description": "The local adapter's root: a file of 32 bytes.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "seal": {
+          "$ref": "#/$defs/config-audit-query.v2.keys/$defs/entry",
+          "description": "The notary's seal key: asymmetric ECC P-384 (ES384). It signs; it takes no encryption context."
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.",
+          "properties": {
+            "address": {
+              "description": "The key below the root, for example internal/pseudonym.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "address"
+          ],
+          "type": "object"
+        },
         "transit": {
           "additionalProperties": false,
-          "description": "The transit provider.",
+          "description": "Deprecated (with `provider`): the transit provider.",
           "properties": {
             "openbao": {
               "$ref": "#/$defs/config-audit-query.v2.openbao"
@@ -3511,9 +4014,6 @@
           "type": "object"
         }
       },
-      "required": [
-        "provider"
-      ],
       "type": "object"
     },
     "config-audit-query.v2.openbao": {
@@ -4142,6 +4642,27 @@
           "properties": {
             "bucket": {
               "$ref": "#/$defs/config-audit-verify.v2.bucket"
+            },
+            "credentials": {
+              "additionalProperties": false,
+              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+              "properties": {
+                "address": {
+                  "description": "The key below the root, for example internal/archive.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "root": {
+                  "description": "The SSM path prefix of the installation, for example /audit/main.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "root",
+                "address"
+              ],
+              "type": "object"
             },
             "prefix": {
               "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
@@ -5523,6 +6044,27 @@
             "bucket": {
               "$ref": "#/$defs/config-audit-writer.v2.bucket"
             },
+            "credentials": {
+              "additionalProperties": false,
+              "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+              "properties": {
+                "address": {
+                  "description": "The key below the root, for example internal/archive.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "root": {
+                  "description": "The SSM path prefix of the installation, for example /audit/main.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "root",
+                "address"
+              ],
+              "type": "object"
+            },
             "kmsKey": {
               "description": "The key objects are encrypted with. Unset uses the bucket's default encryption, which a deployment should still be setting.",
               "minLength": 1,
@@ -6025,6 +6567,67 @@
       "type": "string"
     },
     "config-audit-writer.v2.keys": {
+      "$defs": {
+        "context": {
+          "description": "The encryption context: \"default\" sends {instance, purpose}; \"off\" sends none; an object is sent as is.",
+          "oneOf": [
+            {
+              "enum": [
+                "default",
+                "off"
+              ]
+            },
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            }
+          ]
+        },
+        "entry": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/keyName"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/context"
+                },
+                "key": {
+                  "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/keyName"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyName": {
+          "description": "An alias such as alias/audit-seal (kms) or a transit key name. An ARN or a key id is refused.",
+          "minLength": 1,
+          "not": {
+            "anyOf": [
+              {
+                "pattern": "^arn:"
+              },
+              {
+                "pattern": "^(?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+              },
+              {
+                "pattern": "^(?i:mrk-[0-9a-f]{32})$"
+              }
+            ]
+          },
+          "pattern": "^[^\\s]+$",
+          "type": "string"
+        }
+      },
       "additionalProperties": false,
       "allOf": [
         {
@@ -6086,11 +6689,60 @@
           }
         }
       ],
-      "description": "Where pseudonymisation keys live. Unset, or `none`, means no pseudonyms, no key material and no resolve.",
+      "description": "Where the keys live. Use `adapter` and a key by purpose (seal, pseudonym, conceal, archive), the shape of the storage port. `provider` is the first releases' shape (a pseudonymisation provider), deprecated. Unset, or provider `none`, means no pseudonyms, no key material and no resolve.",
+      "oneOf": [
+        {
+          "properties": {
+            "local": false,
+            "provider": false,
+            "transit": false
+          },
+          "required": [
+            "adapter"
+          ]
+        },
+        {
+          "properties": {
+            "adapter": false,
+            "archive": false,
+            "conceal": false,
+            "instance": false,
+            "openbao": false,
+            "pseudonym": false,
+            "rootFile": false,
+            "seal": false,
+            "state": false
+          },
+          "required": [
+            "provider"
+          ]
+        }
+      ],
       "properties": {
+        "adapter": {
+          "description": "The key service: `kms` (AWS KMS, keys by alias), `transit` (OpenBAO) or `local` (a root file; development).",
+          "enum": [
+            "kms",
+            "transit",
+            "local"
+          ]
+        },
+        "archive": {
+          "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/entry",
+          "description": "The key the archive's objects are encrypted with (for S3, the SSE-KMS alias)."
+        },
+        "conceal": {
+          "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/entry",
+          "description": "The key identities are sealed under, for the cases the law requires them to be recoverable."
+        },
+        "instance": {
+          "description": "Names the installation in the default encryption context ({instance, purpose}), so a ciphertext made for one installation does not open as another's under a shared key. Bound into ciphertexts: choose something stable and non-secret.",
+          "minLength": 1,
+          "type": "string"
+        },
         "local": {
           "additionalProperties": false,
-          "description": "The local provider.",
+          "description": "Deprecated (with `provider`): the local provider.",
           "properties": {
             "dir": {
               "description": "Where the wrapped data keys are kept. They are random, not derived, so this directory is the only copy; unset keeps them in memory, which a trial install may do and nothing else should.",
@@ -6108,17 +6760,55 @@
           ],
           "type": "object"
         },
+        "openbao": {
+          "$ref": "#/$defs/config-audit-writer.v2.openbao"
+        },
         "provider": {
-          "description": "`none`, `local` (a root and a directory) or `transit` (OpenBAO).",
+          "deprecated": true,
+          "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose.",
           "enum": [
             "none",
             "local",
             "transit"
           ]
         },
+        "pseudonym": {
+          "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/entry",
+          "description": "The key the per-tenant pseudonym secrets are wrapped under. Provisioned only for an installation that pseudonymises (the attested preset, or a profile that needs pseudonyms)."
+        },
+        "rootFile": {
+          "description": "The local adapter's root: a file of 32 bytes.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "seal": {
+          "$ref": "#/$defs/config-audit-writer.v2.keys/$defs/entry",
+          "description": "The notary's seal key: asymmetric ECC P-384 (ES384). It signs; it takes no encryption context."
+        },
+        "state": {
+          "additionalProperties": false,
+          "description": "Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.",
+          "properties": {
+            "address": {
+              "description": "The key below the root, for example internal/pseudonym.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "address"
+          ],
+          "type": "object"
+        },
         "transit": {
           "additionalProperties": false,
-          "description": "The transit provider.",
+          "description": "Deprecated (with `provider`): the transit provider.",
           "properties": {
             "openbao": {
               "$ref": "#/$defs/config-audit-writer.v2.openbao"
@@ -6136,9 +6826,6 @@
           "type": "object"
         }
       },
-      "required": [
-        "provider"
-      ],
       "type": "object"
     },
     "config-audit-writer.v2.openbao": {

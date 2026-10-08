@@ -116,3 +116,31 @@ func TestParsePreset(t *testing.T) {
 		t.Fatal("gold accepted")
 	}
 }
+
+func TestAProfileThatPseudonymisesNeedsThePseudonymKey(t *testing.T) {
+	frameworks, err := Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := ParseDeployment([]byte("profiles:\n  activity:\n    frameworks: [history]\n  trail:\n    frameworks: [security]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := d.PseudonymProfiles(frameworks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	composed, _ := d.Compose(frameworks)
+	var want []string
+	for name, p := range composed {
+		if p.Pseudonymises() {
+			want = append(want, name)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("PseudonymProfiles = %v, composed profiles that pseudonymise = %v", got, want)
+	}
+	if !composed["trail"].Pseudonymises() || len(got) == 0 {
+		t.Errorf("the security profile keeps no pseudonym: %v (identity %v)", got, composed["trail"].Identity)
+	}
+}

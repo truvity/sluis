@@ -32,6 +32,12 @@ import (
 // nothing uses, which is what keeps a later call from creating a fresh key
 // under the old name and handing the same person a second identity — the
 // marker Local writes beside its files, kept by the engine instead.
+//
+// Deprecated: name the keys in the configuration by purpose (keys.adapter:
+// transit) and open them through the storage port
+// (github.com/truvity/sluis/storage/keys); NewPortProvider adapts them to a
+// Provider. This provider is kept for the installations whose transit keys are
+// per tenant, whose Destroy is how a tenant is erased: see Local.
 type Transit struct {
 	// Address is the server, e.g. https://openbao.example:8200.
 	Address string
@@ -67,6 +73,8 @@ var transitPurpose = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 // NewTransit returns a provider after checking that it can reach the engine
 // with the credentials it was given — a writer that finds out on its first
 // record has already accepted a batch it cannot pseudonymise.
+//
+// Deprecated: see Transit.
 func NewTransit(ctx context.Context, t *Transit) (*Transit, error) {
 	if t.Address == "" {
 		return nil, errors.New("keys: the transit provider needs an address")

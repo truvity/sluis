@@ -1,5 +1,6 @@
 // Package independence holds audit to the rule that lets it live inside the
-// sluis repository and still be used without it: audit never imports sluis.
+// sluis repository and still be used without it: audit never imports sluis,
+// except the storage port.
 package independence
 
 import (
@@ -16,15 +17,23 @@ import (
 const (
 	sluis = "github.com/truvity/sluis"
 	audit = "github.com/truvity/sluis/audit"
+	// storage is the shared port (state and keys). It is a module of its own
+	// that imports nothing of sluis, so audit may use it and still be used
+	// without sluis.
+	storage = "github.com/truvity/sluis/storage"
 )
 
 // ours reports whether an import path is audit's own: the audit module, the
 // SDK and the Pulumi library all live under it.
 func ours(path string) bool { return path == audit || strings.HasPrefix(path, audit+"/") }
 
+// port reports whether an import path is the storage port, the one part of the
+// repository audit shares with sluis.
+func port(path string) bool { return path == storage || strings.HasPrefix(path, storage+"/") }
+
 // theirs reports whether an import path is sluis's, which audit must not use.
 func theirs(path string) bool {
-	return (path == sluis || strings.HasPrefix(path, sluis+"/")) && !ours(path)
+	return (path == sluis || strings.HasPrefix(path, sluis+"/")) && !ours(path) && !port(path)
 }
 
 // root is the audit directory, two levels above this package.

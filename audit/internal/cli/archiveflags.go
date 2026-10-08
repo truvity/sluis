@@ -124,6 +124,9 @@ func OpenStore(ctx context.Context, region string, o s3store.Options) (*s3store.
 	if region != "" {
 		cfg.Region = region
 	}
+	if cfg.Region == "" && o.Endpoint != "" {
+		cfg.Region = s3store.AutoRegion
+	}
 	return s3store.FromConfig(cfg, o)
 }
 

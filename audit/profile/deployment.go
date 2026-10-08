@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"sigs.k8s.io/yaml"
 )
@@ -119,6 +120,36 @@ func (d *Deployment) Compose(frameworks map[string]*Framework) (map[string]*Prof
 		}
 		out[name] = p
 	}
+	return out, nil
+}
+
+// Pseudonymises reports whether the profile replaces any identity with a keyed
+// pseudonym, which is what needs the pseudonym key.
+func (p *Profile) Pseudonymises() bool {
+	for _, t := range p.Identity {
+		if t == Pseudonym {
+			return true
+		}
+	}
+	return false
+}
+
+// PseudonymProfiles names, sorted, the profiles of the deployment that
+// pseudonymise an identity (after ExternalIdentifiersAreOpaque is applied). An
+// installation provisions pseudonym keys when its preset does (attested) or
+// this is not empty.
+func (d *Deployment) PseudonymProfiles(frameworks map[string]*Framework) ([]string, error) {
+	composed, err := d.Compose(frameworks)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for name, p := range composed {
+		if p.Pseudonymises() {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
 	return out, nil
 }
 

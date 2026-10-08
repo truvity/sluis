@@ -63,6 +63,27 @@
         "bucket": {
           "$ref": "#/$defs/bucket"
         },
+        "credentials": {
+          "additionalProperties": false,
+          "description": "The static credentials of a store at an endpoint of its own, kept in the installation's state store (SSM Parameter Store, through the storage port) and read with the process's own identity: the value at `root`/`address` is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Not with `bucket.credentialsSecret`; needs `bucket.endpoint` (on AWS the workload's identity is the credential).",
+          "properties": {
+            "address": {
+              "description": "The key below the root, for example internal/archive.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "root": {
+              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "address"
+          ],
+          "type": "object"
+        },
         "prefix": {
           "description": "The prefix within the bucket. Required in a bucket shared with other installations: it is what keeps two of them apart.",
           "minLength": 1,

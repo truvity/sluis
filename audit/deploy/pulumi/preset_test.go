@@ -19,7 +19,7 @@ func profilesOf(frameworks string) string {
 // no notary, no seal key, no schedule, no alarms, and no lock.
 func operational(a *auditpulumi.Args) {
 	a.Writer.DeploymentYAML = profilesOf("history")
-	a.Notary = auditpulumi.NotaryArgs{}
+	a.Notary, a.Keys.Seal = auditpulumi.NotaryArgs{}, ""
 	a.Alerts = auditpulumi.AlertsArgs{}
 	a.Archive.ObjectLockMode, a.Archive.DefaultRetentionDays = "", 0
 }
@@ -64,7 +64,9 @@ func TestStandardIsDerivedFromSecurityAndHasTheNotaryAndAlarms(t *testing.T) {
 	if out["preset"] != "standard" {
 		t.Errorf("preset = %q", out["preset"])
 	}
-	rec.one(t, "aws:kms/key:Key", "audit-seal")
+	if out["sealKeyAlias"] != "alias/audit-seal" {
+		t.Errorf("seal key alias = %q", out["sealKeyAlias"])
+	}
 	rec.one(t, "aws:lambda/function:Function", "audit-notary")
 	if out["topic"] == "" {
 		t.Error("standard has no alarm topic")

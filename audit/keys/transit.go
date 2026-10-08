@@ -33,6 +33,10 @@ import (
 // pins every signature to it: the public half it exports and the signatures it
 // makes always belong together, and KeyID names the version, so a verifier can
 // tell which public half a seal wants after a rotation.
+//
+// Deprecated: name the seal key in the configuration (keys.seal with
+// keys.adapter: transit) and open it through the storage port;
+// NewPortSigner adapts it to a Signer.
 type TransitSigner struct {
 	// Address is the server, e.g. https://openbao.example:8200.
 	Address string
@@ -68,6 +72,8 @@ type TransitSigner struct {
 // name carries the key version, which is only known once the key has been read.
 // It also means a key of the wrong type, or a token that cannot read it, stops
 // the job before any window is sealed.
+//
+// Deprecated: see TransitSigner.
 func NewTransitSigner(ctx context.Context, s *TransitSigner) (*TransitSigner, error) {
 	if s.Address == "" || s.Key == "" {
 		return nil, errors.New("keys: a transit signer needs an address and a key")

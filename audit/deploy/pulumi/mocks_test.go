@@ -104,6 +104,16 @@ func (r *recorder) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 			"userId":    resource.NewStringProperty("AIDAMOCK"),
 		}, nil
 	}
+	if a.Token == "aws:kms/getAlias:getAlias" {
+		alias := a.Args["name"].StringValue()
+		id := strings.TrimPrefix(alias, "alias/")
+		return resource.PropertyMap{
+			"name": a.Args["name"], "id": a.Args["name"], "region": resource.NewStringProperty("eu-west-1"),
+			"arn":          resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":" + alias),
+			"targetKeyId":  resource.NewStringProperty(id),
+			"targetKeyArn": resource.NewStringProperty(arnp + "kms:eu-west-1:" + account + ":key/" + id),
+		}, nil
+	}
 	if a.Token == "aws:index/getRegion:getRegion" {
 		return resource.PropertyMap{
 			"region": resource.NewStringProperty("eu-west-1"), "name": resource.NewStringProperty("eu-west-1"),
@@ -186,6 +196,9 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 	writerZip, writerSHA := releaseZip(t, dir, "audit-writer-lambda", releaseVersion)
 	notaryZip, notarySHA := releaseZip(t, dir, "audit-notary-lambda", releaseVersion)
 	args := &auditpulumi.Args{
+		// The keys are the estate's, looked up by alias; the mock resolves
+		// alias/<name> to key/<name>.
+		Keys: auditpulumi.KeysArgs{Archive: "alias/audit-archive", Seal: "alias/audit-seal"},
 		Archive: auditpulumi.ArchiveArgs{
 			BucketName: "acme-audit", ObjectLockMode: auditpulumi.Governance, DefaultRetentionDays: 30,
 			Profiles: []string{"security", "billing-nl"},
@@ -226,8 +239,8 @@ func buildArchived(t *testing.T, archived map[string]string, edit func(*auditpul
 		for k, o := range map[string]pulumi.StringOutput{
 			"bucketName": a.BucketName, "bucketArn": a.BucketArn, "archiveKeyArn": a.ArchiveKeyArn, "sealKeyArn": a.SealKeyArn,
 			"sealKeyAlias": a.SealKeyAlias, "queueUrl": a.QueueURL, "queueArn": a.QueueArn, "dlqUrl": a.DlqURL, "dlqArn": a.DlqArn,
-			"archiveWriterRole": a.ArchiveWriterRoleArn,
-			"dedupe":            a.DedupeTableName, "writerFn": a.WriterFunctionArn, "notaryFn": a.NotaryFunctionArn,
+			"archiveWriterRole": a.ArchiveWriterRoleArn, "credentialsPath": a.ArchiveCredentialsPath,
+			"dedupe": a.DedupeTableName, "writerFn": a.WriterFunctionArn, "notaryFn": a.NotaryFunctionArn,
 			"writerRole": a.WriterRoleArn, "notaryRole": a.NotaryRoleArn, "observeRole": a.ObserveReaderRoleArn, "queryRole": a.QueryRoleArn,
 			"topic": a.AlarmTopicArn, "preset": a.Preset, "schedule": a.ScheduleArn,
 		} {
