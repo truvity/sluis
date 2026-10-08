@@ -4,7 +4,7 @@
 //
 // # Purposes
 //
-//	sign       sluis: signs tokens (asymmetric, ES384 or RS256)
+//	sign       sluis: wraps the signing ring (symmetric KMS key) or signs directly (deprecated)
 //	seal       audit: seals the trail
 //	pseudonym  audit: per-tenant pseudonyms (Key.MAC)
 //	conceal    audit: values that must be recoverable
