@@ -279,6 +279,7 @@ LocalStack test. The rules, the keys the library owns and the secrets are in
 | `Policy`, `PolicyPath` (deprecated) | exactly one, without `Installation` | The policy document, or a file or directory of layers rendered by sluis's renderer (`sluisctl policy render`); the layer holds it at `/opt/sluis/policy.yaml`. The GitHub and Slack catalogues are in it (`apps.github.catalogue`, `apps.slack.catalogue`). |
 | `AllowEndpoints` | false | Lets the documents name a service `endpoint`, for a LocalStack test. Off, one is refused. |
 | `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
+| `Artifacts`, `Release` | unset | Ship the code through a versioned artifacts bucket; resolve a missing digest or the library's own release from `checksums.txt`. See [Artifacts bucket](#artifacts-bucket-and-the-librarys-own-release). |
 | `Audit` | install | Where the service's audit records go: installed by default, `Use` an installation that exists, or `Enabled: false`. Needs `Installation`. See [Audit](#audit). |
 | `AuditQueueArn` (deprecated) | none | An audit installation's ingest queue that the estate installed itself and named in its installation (`aws.auditQueueURL`); the function may send to it, and the library installs nothing. Exclusive with `Audit`. Required with the deprecated `Config`; with `Installation`, set `Audit` instead. |
 | `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use: the ones the library creates and the ones the function writes at run time (its credentials and exports; the library writes it into the service document as `secrets.kmsKeyId`, and a document that names another key is refused). Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
@@ -318,6 +319,7 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `SigningKeyArn`, `SigningKeyID`, `SigningKeyAlias` | The ES384 token-signing key. |
 | `SigningKeyRS256Arn`, `SigningKeyRS256ID`, `SigningKeyRS256Alias` | The RS256 token-signing key (empty when disabled). |
 | `WrappedSigningKeyArn`, `WrappedSigningKeyAlias` | The symmetric key of `WrappedSigning` (`KeyArn` when given; the alias is empty then, and without `WrappedSigning`). |
+| `CodeSha256Matches` | True when the code Lambda reports has the SHA-256 of the verified release zip. |
 | `FunctionArn`, `FunctionName` | The function (replace `HTTP|GitHub|SlackFunctionArn` and the names). |
 | `RoleArn`, `RoleName` | Its role (replace `HTTP|GitHub|SlackRoleArn` and the names). |
 | `AccessLogGroupName` | The API access log group (empty without `AccessLogs`). |
@@ -328,6 +330,24 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 | `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
 | `Audit` | The audit installation the library installed (`*auditpulumi.Audit`: its queue, writer, archive bucket and preset); nil with `Audit.Use`, `Audit.Enabled: false` and `AuditQueueArn`. |
 | `AuditQueueURL`, `AuditQueueArn` | The queue the service publishes to (installed, or `Use`'s); empty when audit is off, and the URL is empty with the deprecated `AuditQueueArn`. |
+
+### Artifacts bucket and the library's own release
+
+By default the library uploads the function's code with the function. Set `Artifacts` and the verified zip is instead uploaded **as it is** (a file asset, never repacked) to the estate's versioned S3 bucket, and the function and the configuration layer are created from that object version.
+
+| input | default | meaning |
+|---|---|---|
+| `Artifacts.Bucket` | unset (direct upload) | The estate's artifacts bucket. It must be **versioned**: the function names the object version, and an unversioned bucket (the upload returns no version id) fails the apply with a message saying so. |
+| `Artifacts.Prefix` | `sluis/` | Starts every key: `<prefix><version>/<sha256>-<file name>`. The digest is in the key, so a key never holds two contents and a re-run uploads nothing new. |
+| `Release.ResolveChecksums` | false | Reads an empty `PackageSHA256` from `<BaseURL>/v<version>/checksums.txt`; a digest that is given is used as it is. |
+| `Release.Version` | from the file name | The release, when the name does not say; names the release when `Package` is empty. `(devel)` and empty are refused. |
+| `Release.BaseURL` | the project's GitHub releases | Where the release is published, for a mirror. |
+
+The function gets `S3Bucket`, `S3Key`, `S3ObjectVersion` and `SourceCodeHash` (the zip's SHA-256, base64). The configuration layer is built as a zip whose bytes are the same on every run (sorted names, no timestamps), uploaded under the same prefix and used the same way.
+
+**No package named.** With `Package` empty the library deploys its own release: the version of its module in the program's build information (or `Release.Version`), fetched from `<BaseURL>/v<version>/sluis-lambda_<version>_linux_arm64.zip`, with its digest from that release's `checksums.txt` unless `PackageSHA256` pins one. A pinned digest always wins; bytes that do not have it are refused. A development build (`(devel)`), a pseudo-version, a module replaced by a local copy and a program without build information have no release and are refused with a message naming `Package` and `Release.Version`.
+
+Downloads are cached by SHA-256 under the user cache directory (`os.UserCacheDir()/sluis/artifacts`), so a preview does not download again; `GITHUB_TOKEN`, when set, is sent to github.com. After the deploy, `CodeSha256Matches` is true when the code Lambda reports has the SHA-256 of the zip the library verified.
 
 ### Audit
 

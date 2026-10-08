@@ -43,9 +43,10 @@ type AuditArgs struct {
 	// starting with a letter.
 	Name string
 
-	// WriterPackage and WriterPackageSHA256 are the release's
+	// WriterPackage and WriterPackageSHA256 are (left empty: this library's own
+	// release, as LambdaArgs.Package) the release's
 	// `audit-writer-lambda_<version>_linux_arm64.zip` and its digest from the
-	// release's checksums.txt, as for LambdaArgs.Package. Required to install.
+	// release's checksums.txt, as for LambdaArgs.Package.
 	// The zip must be of the release this library is (the audit library checks
 	// it, see Guards).
 	WriterPackage       string
@@ -225,15 +226,14 @@ func (a *LambdaArgs) planAudit() (*auditPlan, error) {
 	}
 	var missing []string
 	for k, v := range map[string]string{
-		"WriterPackage": au.WriterPackage, "WriterPackageSHA256": au.WriterPackageSHA256, "CatalogueDir": au.CatalogueDir,
+		"CatalogueDir": au.CatalogueDir,
 	} {
 		if v == "" {
 			missing = append(missing, k)
 		}
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit installs audit by default and is missing %v: the audit writer's release zip and its digest, "+
-			"and the directory of sluis's audit catalogue (the release's sluis-audit-catalogue bundle). To send the records to an installation that "+
+		return nil, fmt.Errorf("sluispulumi: LambdaArgs.Audit installs audit by default and is missing %v: the directory of sluis's audit catalogue (the release's sluis-audit-catalogue bundle). To send the records to an installation that "+
 			"exists set Audit.Use; for none set Audit.Enabled to false", sortedStrings(missing))
 	}
 	if au.Profiles != nil && strings.TrimSpace(au.DeploymentYAML) != "" {
@@ -336,7 +336,16 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 		archive.Encryption = auditpulumi.EncryptionS3
 	}
 	senders := []pulumi.StringInput{role}
+	var artifacts *auditpulumi.ArtifactsArgs
+	if a.Artifacts != nil {
+		// The same bucket; the prefix is audit's own unless the estate chose one.
+		artifacts = &auditpulumi.ArtifactsArgs{Bucket: a.Artifacts.Bucket}
+		if a.Artifacts.Prefix != "sluis/" {
+			artifacts.Prefix = a.Artifacts.Prefix
+		}
+	}
 	return &auditpulumi.Args{
+		Artifacts: artifacts, Release: a.Release,
 		Tags: a.Tags, AccountID: a.AccountID, Region: a.Region,
 		LogRetentionDays: a.LogRetentionDays,
 		Keys:             au.Keys,

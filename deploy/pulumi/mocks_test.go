@@ -27,7 +27,13 @@ type recorder struct {
 	mu        sync.Mutex
 	resources []declared
 	protected map[string]bool
+	// unversioned makes the artifacts bucket answer an upload with no version id;
+	// wrongCode makes Lambda report other code than the function was given.
+	unversioned, wrongCode bool
 }
+
+// mockSetup, when set by a test, configures the next mock before the program runs.
+var mockSetup func(*recorder)
 
 type declared struct {
 	Type, Name string
@@ -67,10 +73,23 @@ func (r *recorder) NewResource(a pulumi.MockResourceArgs) (string, resource.Prop
 		set("result", "Ab0Oc1lIdEfGhJkMnPqRsTuVwXyZaBcDeFgHjKmN")
 	case "aws:lambda/function:Function":
 		set("arn", arnp+"lambda:eu-west-1:"+account+":function:"+physical)
+		if h, ok := a.Inputs["sourceCodeHash"]; ok && h.IsString() {
+			set("codeSha256", h.StringValue())
+		}
+		if r.wrongCode {
+			set("codeSha256", "bogus")
+		}
 	case "aws:cloudwatch/logGroup:LogGroup":
 		set("arn", arnp+"logs:eu-west-1:"+account+":log-group:"+physical)
 	case "aws:s3/bucketObjectv2:BucketObjectv2":
-		set("versionId", "v1")
+		if r.unversioned {
+			set("versionId", "")
+		} else {
+			set("versionId", "v1")
+			if strings.HasSuffix(a.Name, "-code") {
+				set("versionId", "ver-"+a.Name)
+			}
+		}
 	case "aws:apigatewayv2/api:Api":
 		set("apiEndpoint", "https://abc.execute-api.eu-west-1.amazonaws.com")
 		set("executionArn", arnp+"execute-api:eu-west-1:"+account+":abc")
@@ -178,6 +197,9 @@ func prop(d declared, key string) resource.PropertyValue { return d.Inputs[resou
 func run(t *testing.T, program func(ctx *pulumi.Context, collect func(string, pulumi.StringInput)) error) (*recorder, map[string]string, error) {
 	t.Helper()
 	rec := &recorder{}
+	if mockSetup != nil {
+		mockSetup(rec)
+	}
 	got := map[string]string{}
 	var wg sync.WaitGroup
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
@@ -195,7 +217,9 @@ func run(t *testing.T, program func(ctx *pulumi.Context, collect func(string, pu
 			})
 		})
 	}, pulumi.WithMocks("sluis-test", "test", rec))
-	wg.Wait()
+	if err == nil { // outputs of a failed program never resolve
+		wg.Wait()
+	}
 	return rec, got, err
 }
 
