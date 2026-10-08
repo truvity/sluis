@@ -337,7 +337,7 @@ func TestEdgeRequestsTheCertificate(t *testing.T) {
 		e, err := edge.NewEdge(ctx, "staging", &edge.Args{
 			FrontDoor: front(ctx), DomainName: domainName, TruststorePEM: truststore,
 			TruststoreBucket: &edge.TruststoreBucketArgs{Name: "acme-sluis-truststore", ApplyPrincipalArns: apply},
-			Certificate: &edge.CertificateArgs{CreateValidationRecord: func(ctx *pulumi.Context, r edge.ValidationRecord) (pulumi.StringInput, error) {
+			Certificate: &edge.CertificateArgs{CreateValidationRecord: func(_ *pulumi.Context, r edge.ValidationRecord) (pulumi.StringInput, error) {
 				collect("recordName", r.Name)
 				collect("recordType", r.Type)
 				collect("recordValue", r.Value)
@@ -409,7 +409,9 @@ func TestEdgeRefuses(t *testing.T) {
 		args sluispulumi.StorageArgs
 		want string
 	}{
-		"unversioned": {sluispulumi.StorageArgs{BucketName: "acme-sluis-blobs", ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edge.Guard(apply...)}}, "not versioned"},
+		"unversioned": {sluispulumi.StorageArgs{
+			BucketName: "acme-sluis-blobs", ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edge.Guard(apply...)},
+		}, "not versioned"},
 		"unguarded":   {sluispulumi.StorageArgs{BucketName: "acme-sluis-blobs", Versioning: true}, "does not guard"},
 	} {
 		t.Run(name, func(t *testing.T) {
