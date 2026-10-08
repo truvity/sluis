@@ -23,15 +23,6 @@ func newStores(t *testing.T) (*secretstore.Stores, state.Store) {
 	return secretstore.FromStore(root, secretstore.LayoutV4, ""), root
 }
 
-func keys(t *testing.T, s state.Store, prefix string) []string {
-	t.Helper()
-	got, err := s.Child(prefix).List(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return got
-}
-
 func readFile(t *testing.T, parts ...string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(parts...))
@@ -194,8 +185,7 @@ func TestAddresses(t *testing.T) {
 
 	walk := func(prefix string) []string {
 		var out []string
-		var rec func(p string)
-		rec = func(p string) {
+		rec := func(p string) {
 			names, err := root.Child(p).List(ctx)
 			if err != nil {
 				t.Fatal(err)
