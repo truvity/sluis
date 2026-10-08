@@ -120,6 +120,21 @@ func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 			return false, errors.New("sluispulumi: LambdaArgs.Config names keys and LambdaArgs.Keys is set: leave it out, the library writes it")
 		}
 		doc["keys"] = a.Keys.keysBlock()
+		if alias := a.Keys.Secrets; alias != "" {
+			secrets, err := child(doc, "Config", "secrets")
+			if err != nil {
+				return false, err
+			}
+			if _, set := secrets["kmsKeyId"]; !set {
+				added = true // the renderer wrote it for an Installation
+			}
+			if err := own(secrets, "Config: secrets", "kmsKeyId", alias); err != nil {
+				return false, err
+			}
+			if err := ownSecretsAdapterKey(doc, alias); err != nil {
+				return false, err
+			}
+		}
 		if err := own(doc, "Config", "instance", a.Instance); err != nil {
 			return false, err
 		}
@@ -245,6 +260,18 @@ func (a LambdaArgs) withInstallation() (LambdaArgs, error) {
 	}
 	if err := withVerifyOnly(&in, a.VerifyOnly); err != nil {
 		return a, err
+	}
+	if k := a.Keys; k != nil && k.Secrets != "" {
+		sec := sluisconfig.Secrets{}
+		if in.Secrets != nil {
+			sec = *in.Secrets
+		}
+		if sec.KMSKeyID != "" && sec.KMSKeyID != k.Secrets {
+			return a, fmt.Errorf("sluispulumi: LambdaArgs.Keys.Secrets is %q and the installation's secrets.kmsKeyId is %q: say it once",
+				k.Secrets, sec.KMSKeyID)
+		}
+		sec.KMSKeyID = k.Secrets
+		in.Secrets = &sec
 	}
 	if a.ParameterKeyArn != "" {
 		sec := sluisconfig.Secrets{}

@@ -584,6 +584,9 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if err := out.Keys.validate(); err != nil {
 		return out, err
 	}
+	if out.Keys != nil && out.Keys.Secrets != "" && out.ParameterKeyArn != "" {
+		return out, errors.New("sluispulumi: LambdaArgs.Keys.Secrets and ParameterKeyArn both name the key the secrets are encrypted with: set one")
+	}
 	if out.Keys != nil && (out.WrappedSigning != nil || out.SigningKeyAlias != "" || out.SigningKeyRS256Alias != "" || out.DisableSigningKeyRS256) {
 		return out, errors.New("sluispulumi: LambdaArgs.Keys supplies the keys: WrappedSigning, SigningKeyAlias, SigningKeyRS256Alias " +
 			"and DisableSigningKeyRS256 are of the keys the library creates, and are not set beside it")

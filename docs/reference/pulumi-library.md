@@ -79,8 +79,8 @@ input and none is in the Pulumi state. Seed the parameter out of band. DynamoDB 
 `ports.blob` or `adapters.blobs` itself, or an `endpoint` of its own, is refused as before.
 
 The runtime reads `credentialsRef`, `instance` and the `keys:` block (below) only from a release whose service-document
-schema carries them: the library holds the rest of the document to the loader and these to its own validation, so deploy
-them with the release that has them. Pulumi preview cannot tell.
+schema carries them (v1.74.0): the library holds the rest of the document to the loader and these to its own validation,
+so deploy them with the release that has them. Pulumi preview cannot tell.
 
 ```go
 store, _ := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{
@@ -327,31 +327,34 @@ working for one minor, are removed after it, and `NewLambda` logs a warning whil
 ### Keys the estate supplies
 
 `LambdaArgs.Keys` (`KeysArgs`) takes the aliases of keys the estate owns and the library creates none: `Sign` (required) and
-`Secrets` (optional, the keys block's `conceal` purpose). Both are symmetric keys. The library resolves each alias with
+`Secrets` (optional, the key the SSM secrets store encrypts its parameters with). Both are symmetric keys. The library resolves each alias with
 `aws.kms.LookupAlias` and grants on the key behind it, never on the alias:
 
 - `Sign`: `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey`, only with the context `{instance: <Instance>, purpose: sign}`
   and no other context key (`ForAllValues:StringEquals` on `kms:EncryptionContextKeys`). The runtime generates the ring's
   key pairs locally and wraps them with `kms:Encrypt` under that context. There is no `kms:Sign` grant.
-- `Secrets`: the same three actions under `{instance, purpose: conceal}`.
+- `Secrets`: the same three actions, through SSM only (`kms:ViaService` is `ssm.<region>.amazonaws.com`) and for the
+  installation's parameters only (`kms:EncryptionContext:PARAMETER_ARN` StringLike `…:parameter/sluis/<instance>/*`): SSM
+  encrypts a SecureString under the context `{PARAMETER_ARN}`, so there is no instance or purpose context. The alias is
+  written as `secrets.kmsKeyId` (the key id the `ssm` store passes on PutParameter); it is exclusive with `ParameterKeyArn`.
 - `LegacySigningContext` (nil is true): also keeps the older grant on the `Sign` key, `GenerateDataKeyPair` and `Decrypt`
   under `purpose=sluis-signing` (`WrappedKeyPolicyStatements` belongs in the key's policy), which ring entries written
   before the runtime wrapped locally are opened with. Set it false once the ring has rotated past those entries.
 
-The service document gets `instance: <Instance>` and `keys: {adapter: kms, sign: alias/…, conceal: alias/…}`
+The service document gets `instance: <Instance>` and `keys: {adapter: kms, sign: alias/…}`
 (`storage/schemas/keys.schema.json`); a document that names `keys` itself is refused. `SigningKeyArn` and `SigningKeyAlias`
 output the key behind `Sign`. An alias is not a permission: re-pointing it moves the function to the new key at the next
 apply, and the key policy must let the function's role (the account's IAM policies, by default) use it. Moving a stack from
 the keys the library created: supply their aliases as `Keys` and the library adopts the existing keys by alias; the
 library's own `kms.Key` resources are removed from state with `pulumi state delete` (they are protected: unprotect first),
-so that the next apply does not schedule their deletion.
+so that the next apply does not schedule their deletion: [the steps](../how-to/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones).
 
 ### Reader policies for `external/` secrets
 
 `ExternalReadPolicy(ExternalReadPolicyArgs)` returns the IAM policy document for a consumer's role that reads exact
 `external/<kind>/<id>` secrets of an installation: `ssm:GetParameter` on those parameters' ARNs under
-`/sluis/<instance>/`, and, with `SecretsKeyArn`, `kms:Decrypt` on the secrets key only under `{instance, purpose: conceal}`
-(or, with `ParameterKeyArn`, through SSM for exactly those parameters). No wildcard, no `GetParametersByPath`, no prefix: a
+`/sluis/<instance>/`, and, with `SecretsKeyArn` (or `ParameterKeyArn`), `kms:Decrypt` on the secrets key through SSM only, with
+`kms:EncryptionContext:PARAMETER_ARN` StringEquals exactly those parameter ARNs (no instance or purpose context). No wildcard, no `GetParametersByPath`, no prefix: a
 wildcard, a prefix, a repeated or a non-`external/` address is refused. `NewExternalReader(ctx, name, &ExternalReaderArgs{
 RoleName, Region, AccountID, Instance, Addresses, SecretsKeyArn, ParameterKeyArn})` is the same as a component that attaches
 the policy to the role as an inline policy (`PolicyJSON` is its output).

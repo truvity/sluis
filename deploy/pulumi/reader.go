@@ -27,12 +27,12 @@ type ExternalReadPolicyArgs struct {
 	Addresses []string
 	// SecretsKeyArn is the key the secrets are encrypted with (the one behind
 	// LambdaArgs.Keys.Secrets). Set, the policy also lets the role kms:Decrypt
-	// with it, only under the context {instance, purpose: conceal}. Unset, the
-	// secrets use SSM's own key and no key grant is needed (or ParameterKeyArn).
+	// with it, through SSM only and for exactly these parameters
+	// (kms:ViaService and the PARAMETER_ARN encryption context SSM sets). Unset,
+	// the secrets use SSM's own key and no key grant is needed (or ParameterKeyArn).
 	SecretsKeyArn string
 	// ParameterKeyArn is a customer-managed key the SecureString parameters are
-	// encrypted with, decrypted through SSM only for exactly these parameters.
-	// Exclusive with SecretsKeyArn.
+	// encrypted with, decrypted the same way. Exclusive with SecretsKeyArn.
 	ParameterKeyArn string
 }
 
@@ -78,7 +78,8 @@ func (a *ExternalReadPolicyArgs) validate() ([]string, error) {
 // ExternalReadPolicy is the IAM policy document a consumer's role attaches to
 // read exactly the `external/` addresses given: ssm:GetParameter on those
 // parameters' ARNs, and, with SecretsKeyArn, kms:Decrypt on the secrets key
-// under the context {instance, purpose: conceal} and no other context key. No
+// through SSM only (kms:ViaService) for exactly those parameter ARNs (the
+// PARAMETER_ARN encryption context), with no instance or purpose context. No
 // wildcard: no GetParametersByPath, no prefix, no other action.
 func ExternalReadPolicy(a ExternalReadPolicyArgs) (string, error) {
 	arns, err := a.validate()
@@ -92,9 +93,9 @@ func ExternalReadPolicy(a ExternalReadPolicyArgs) (string, error) {
 			"Sid": "SluisExternalSecretsKey", "Effect": "Allow", "Action": kmsDecrypt, "Resource": a.SecretsKeyArn,
 			"Condition": map[string]any{
 				"StringEquals": map[string]any{
-					"kms:EncryptionContext:instance": a.Instance, "kms:EncryptionContext:purpose": SecretsPurpose,
+					"kms:ViaService":                      "ssm." + a.Region + ".amazonaws.com",
+					"kms:EncryptionContext:PARAMETER_ARN": arns,
 				},
-				"ForAllValues:StringEquals": map[string]any{"kms:EncryptionContextKeys": contextKeys},
 			},
 		})
 	case a.ParameterKeyArn != "":

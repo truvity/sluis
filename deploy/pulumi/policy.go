@@ -409,7 +409,7 @@ func functionPolicy(in functionPolicyIn) (string, error) {
 	if in.wrappedKeyArn != "" {
 		st = append(st, wrappedSigningStatement(in.wrappedKeyArn))
 	}
-	st = append(st, in.keys.statements(in.instance)...)
+	st = append(st, in.keys.statements(in.region, in.account, in.instance)...)
 	st = append(st, statement{
 		"Sid":      sidInvoke,
 		"Effect":   "Allow",
