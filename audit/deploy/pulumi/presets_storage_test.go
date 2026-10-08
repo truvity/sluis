@@ -279,3 +279,87 @@ func TestPresetsAreValidatedWithoutAProfilesDocument(t *testing.T) {
 		t.Errorf("a bad preset without a document: %v", err)
 	}
 }
+
+// Adopt takes an existing bucket: it is imported by name and its settings are
+// declared, and no lifecycle resource is, so the rules it has are left alone.
+func TestAdoptImportsTheBucketAndDeclaresNoLifecycle(t *testing.T) {
+	rec, out, err := build(t, func(a *auditpulumi.Args) {
+		a.Presets["standard"] = auditpulumi.PresetStorage{
+			Bucket: "acme-audit-existing", Prefix: "standard/", Adopt: true, AcknowledgeLifecycle: true,
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(rec.ofType("aws:s3/bucketLifecycleConfiguration:BucketLifecycleConfiguration")); n != 0 {
+		t.Errorf("%d lifecycle configurations declared for an adopted bucket", n)
+	}
+	b := rec.one(t, "aws:s3/bucket:Bucket", "audit-archive-standard")
+	if b.ImportID != "acme-audit-existing" || prop(b, "bucket").StringValue() != "acme-audit-existing" {
+		t.Errorf("bucket import id %q, inputs %v", b.ImportID, b.Inputs)
+	}
+	if prop(b, "tags").IsObject() {
+		t.Errorf("the adopted bucket's tags are declared: %v", prop(b, "tags"))
+	}
+	for _, typ := range []string{
+		"aws:s3/bucketVersioning:BucketVersioning",
+		"aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration",
+		"aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock",
+		"aws:s3/bucketOwnershipControls:BucketOwnershipControls",
+		"aws:s3/bucketPolicy:BucketPolicy",
+	} {
+		r := rec.one(t, typ, "audit-archive-standard")
+		if r.ImportID != "acme-audit-existing" {
+			t.Errorf("%s: import id %q, want the bucket name", typ, r.ImportID)
+		}
+	}
+	if out["bucketNames"] != "standard=acme-audit-existing" {
+		t.Errorf("bucketNames = %q", out["bucketNames"])
+	}
+	// The roles are granted the bucket as for any other.
+	if g := grants(policy(t, rec, "audit-writer")); !hasResource(g, "s3:PutObject", "acme-audit-existing/standard/records/*") {
+		t.Errorf("the writer's puts: %v", g["s3:PutObject"])
+	}
+}
+
+// The Create path imports nothing and still writes the derived lifecycle.
+func TestCreateStillCreatesAndWritesItsLifecycle(t *testing.T) {
+	rec, _, err := build(t, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range rec.resources {
+		if d.ImportID != "" {
+			t.Errorf("%s %s imports %q", d.Type, d.Name, d.ImportID)
+		}
+	}
+	rec.one(t, "aws:s3/bucketLifecycleConfiguration:BucketLifecycleConfiguration", "audit-archive-standard")
+}
+
+func TestAdoptIsRefusedWhereItCannotWork(t *testing.T) {
+	for name, tc := range map[string]struct {
+		store auditpulumi.PresetStorage
+		want  string
+	}{
+		"with Create":         {auditpulumi.PresetStorage{Bucket: "acme-audit", Create: true, Adopt: true}, "Choose one"},
+		"with an endpoint":    {auditpulumi.PresetStorage{Bucket: "acme-audit", Adopt: true, Endpoint: "https://store.example.com"}, "Adopt is set with"},
+		"without Adopt":       {auditpulumi.PresetStorage{Bucket: "acme-audit", AcknowledgeLifecycle: true}, "without Presets[\"standard\"].Adopt"},
+		"unacknowledged keep": {auditpulumi.PresetStorage{Bucket: "acme-audit", Adopt: true}, "AcknowledgeLifecycle"},
+	} {
+		_, _, err := build(t, func(a *auditpulumi.Args) { a.Presets["standard"] = tc.store })
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, tc.want)
+		}
+	}
+}
+
+// Two presets cannot share a bucket one of them adopts.
+func TestAdoptedBucketIsOnePresets(t *testing.T) {
+	_, _, err := build(t, attested(func(a *auditpulumi.Args) {
+		a.Presets["standard"] = auditpulumi.PresetStorage{Bucket: "acme-shared", Prefix: "standard/", Adopt: true, AcknowledgeLifecycle: true}
+		a.Presets["attested"] = auditpulumi.PresetStorage{Bucket: "acme-shared", Prefix: "attested/", Adopt: true, AcknowledgeLifecycle: true}
+	}))
+	if err == nil || !strings.Contains(err.Error(), "both name the bucket") {
+		t.Errorf("err = %v", err)
+	}
+}

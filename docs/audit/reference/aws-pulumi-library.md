@@ -106,7 +106,7 @@ Required inputs are marked. Anything not listed has the default stated.
 | `AccountID` | looked up | the account; empty looks it up through the component's provider, see [the AWS provider](#the-aws-provider) |
 | `RolePath` | `/audit/` | the IAM path of every role the library creates |
 | `LogRetentionDays` | 30 | each function's log group |
-| `Presets` | **required** | the install presets the installation uses, by name (`operational`, `standard`, `attested`), each `PresetStorage{Bucket, Prefix, Region, Endpoint, PathStyle, CredentialsAddress, KeyAlias, Create}`: its own store ([install presets](profiles.md#presets-and-their-storage), [0068](../../decisions/0068-storage-is-configured-per-preset.md)). `Bucket` is required (`PresetBucketName` builds a default name); `Prefix` ends in `/`; `Endpoint` is an S3-compatible store (no bucket is created, `CredentialsAddress` is read from the state store, default `internal/archive/<preset>`); `KeyAlias` is looked up, never created; `Create` makes the AWS bucket (versioned, a lifecycle rule per `<Prefix>records/<profile>/`, compliance Object Lock for `attested`) and otherwise the bucket is used as it is. Every profile of `Writer.DeploymentYAML` must be kept under a preset configured here, and the library renders the final deployment document with them. Notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them: under `operational` alone there are none, and `Notary.Package` and `Alerts.EndpointURL` are refused |
+| `Presets` | **required** | the install presets the installation uses, by name (`operational`, `standard`, `attested`), each `PresetStorage{Bucket, Prefix, Region, Endpoint, PathStyle, CredentialsAddress, KeyAlias, Create, Adopt, AcknowledgeLifecycle}`: its own store ([install presets](profiles.md#presets-and-their-storage), [0068](../../decisions/0068-storage-is-configured-per-preset.md)). `Bucket` is required (`PresetBucketName` builds a default name); `Prefix` ends in `/`; `Endpoint` is an S3-compatible store (no bucket is created, `CredentialsAddress` is read from the state store, default `internal/archive/<preset>`); `KeyAlias` is looked up, never created; `Create` makes the AWS bucket (versioned, a lifecycle rule per `<Prefix>records/<profile>/`, compliance Object Lock for `attested`); `Adopt` takes an existing bucket and leaves its lifecycle alone (see [Lifecycle](#lifecycle)); with neither, the bucket is used as it is. Every profile of `Writer.DeploymentYAML` must be kept under a preset configured here, and the library renders the final deployment document with them. Notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them: under `operational` alone there are none, and `Notary.Package` and `Alerts.EndpointURL` are refused |
 | `Archive.ObjectLockMode` | `COMPLIANCE` | the lock of the `attested` preset's created bucket alone: `GOVERNANCE` (the trial) or `COMPLIANCE`; refused when no attested preset has `Create`. See [the lock modes](../explanation/aws-lambda.md#the-lock-modes) |
 | `Archive.AcknowledgeCompliance` | false | the deliberate step before `COMPLIANCE`; without it the library builds nothing |
 | `Archive.DefaultRetentionDays` | **required** (> 0) with `GOVERNANCE` and `COMPLIANCE` | the bucket's default retention, a floor: the writer sets each object's own. 0 is refused with a lock (a lock with no default rule is a trap), and any value with `NONE` |
@@ -336,6 +336,36 @@ reading it needs a restore, and `audit verify` over such a range says so first).
 `seals/`, `keys/` and `catalogue/` are small, are read often, and have no rule.
 Objects below the storage class's minimum billable size stay where they are, which
 is S3's default.
+
+**An existing bucket whose lifecycle is the estate's: `Adopt`.** A preset with
+`Create` makes the library own the bucket and derive the rules above from the
+profiles' retention, which includes an expiration (and a noncurrent-version
+expiration) for a profile whose framework deletes at the end of a fixed
+retention. An estate whose archive must never expire cannot say so there, and
+without `Create` the bucket is outside Pulumi altogether. `Adopt: true` is the
+third mode: the library imports the existing bucket by name (never creates it;
+`Protect` and `RetainOnDelete`, so destroying the stack leaves it) and manages
+its versioning, default encryption (as `Archive.Encryption` says), public-access
+block, ownership controls (`BucketOwnerEnforced`) and bucket policy (the TLS-only
+deny, which **replaces** the bucket's policy as a whole), and declares **no
+lifecycle configuration**: the rules the bucket has stay exactly as they are, and
+"never expire" is having no expiration rule there. This is a choice of the
+simplest form that lets an estate say it: a lifecycle derived from the profiles
+with the expiration suppressed would still have to write the bucket's lifecycle,
+replacing whatever it holds, which is the very thing Adopt exists to avoid.
+Object Lock is not touched either. The first `pulumi up` imports the resources
+and then changes them to these settings, so read the preview. `Adopt` is refused
+with `Create`, with `Endpoint`, and with a bucket another preset names;
+`Archive.GlacierIRDays`, `Archive.DeepArchiveDays` and the lock settings do not
+apply to an adopted bucket (they are refused when no preset has `Create`).
+
+The library cannot read the lifecycle it leaves alone, so it cannot check it
+against the retention the profiles demand. `Adopt` is therefore refused when a
+profile kept in the preset has a fixed minimum retention in its framework
+profiles (security, billing-nl, pci-dss, and the like), unless the preset sets
+`AcknowledgeLifecycle: true`: the estate's statement that the bucket's lifecycle
+and Object Lock keep objects at least that long. The responsibility is the
+estate's.
 
 ## Not covered
 

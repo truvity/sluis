@@ -132,8 +132,8 @@ func (c *Args) checkArchive() error {
 		return errors.New("auditpulumi: Keys.Archive and Archive.KeyArn both name the archive key: use Keys.Archive (by alias)")
 	}
 	if ar.Encryption == EncryptionKMS && c.Keys.Archive == "" && ar.KeyArn == "" {
-		for _, s := range created {
-			if s.KeyAlias == "" {
+		for _, s := range aws {
+			if s.managed() && s.KeyAlias == "" {
 				return fmt.Errorf("auditpulumi: Keys.Archive is required with Archive.Encryption \"kms\" for the bucket of Presets[%q], which names "+
 					"no KeyAlias: the library creates no key, so name the estate's archive key by alias (alias/<name>), give the preset a KeyAlias, "+
 					"or choose Archive.Encryption \"aws-managed\" or \"s3\"", s.Preset)
