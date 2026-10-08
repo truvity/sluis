@@ -301,7 +301,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 	if au.Presets == nil {
 		presets[auditpulumi.PresetOperational] = auditpulumi.PresetStorage{Create: true}
 	}
-	for name, pr := range au.Presets {
+	for name, pr := range au.Presets { //nolint:gocritic // read-only configuration, copied once per preset
 		st := pr.PresetStorage
 		if pr.ReuseBlobStore {
 			b := a.Storage.External
