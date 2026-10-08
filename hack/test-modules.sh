@@ -23,8 +23,8 @@ printf '%s\n' "$list" | grep -qxF . && fail "the root is listed"
 cp "$root/deploy/pulumi/go.mod" "$tmp/go.mod"
 "$mod" pin v9.8.7 "$tmp/go.mod"
 grep -qE '^[[:space:]]*github\.com/truvity/sluis v9\.8\.7$' "$tmp/go.mod" || fail "the require was not moved"
-diff <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/storage)? v' "$root/deploy/pulumi/go.mod") \
-     <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/storage)? v' "$tmp/go.mod") >/dev/null || fail "something besides the require changed"
+diff <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/[a-z/]+)? v' "$root/deploy/pulumi/go.mod") \
+     <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/[a-z/]+)? v' "$tmp/go.mod") >/dev/null || fail "something besides the require changed"
 grep -q '^replace github.com/truvity/sluis => ../..$' "$tmp/go.mod" || fail "the replace was lost"
 grep -q '^module github.com/truvity/sluis/deploy/pulumi$' "$tmp/go.mod" || fail "the module line was touched"
 
@@ -33,8 +33,8 @@ edge="$root/deploy/pulumi/edge/cloudflare/go.mod"
 "$mod" pin v9.8.7 - < "$edge" > "$tmp/edge.mod"
 grep -qE '^[[:space:]]*github\.com/truvity/sluis v9\.8\.7( // indirect)?$' "$tmp/edge.mod" || fail "the edge's root require was not moved"
 grep -qE '^[[:space:]]*github\.com/truvity/sluis/deploy/pulumi v9\.8\.7$' "$tmp/edge.mod" || fail "the edge's core require was not moved"
-diff <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/deploy/pulumi|/storage)? v' "$edge") \
-     <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/deploy/pulumi|/storage)? v' "$tmp/edge.mod") >/dev/null || fail "something besides the requires changed in the edge"
+diff <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/[a-z/]+)? v' "$edge") \
+     <(grep -vE '^[[:space:]]*github\.com/truvity/sluis(/[a-z/]+)? v' "$tmp/edge.mod") >/dev/null || fail "something besides the requires changed in the edge"
 grep -q '^replace github.com/truvity/sluis/deploy/pulumi => ../..$' "$tmp/edge.mod" || fail "the edge's replace was lost"
 
 # audit requires its SDK, which sits beside it.
@@ -45,7 +45,9 @@ grep -q '^replace github.com/truvity/sluis/audit/sdk => ./sdk$' "$tmp/audit.mod"
 # Every placeholder is pinned, whatever its spelling (v0.0.0 or a pseudo-version).
 grep -qE '^[[:space:]]*github\.com/truvity/sluis/storage v9\.8\.7' "$tmp/audit.mod" || fail "audit's storage require was not moved"
 grep -qE '^[[:space:]]*github\.com/truvity/sluis/storage v9\.8\.7' "$tmp/go.mod" || fail "the Pulumi library's storage require was not moved"
-[ "$(printf '%s\n' "$list" | head -1)" = storage ] || fail "storage is not tagged first"
+[ "$(pos storage)" -lt "$(pos audit)" ] || fail "storage is not before audit, which requires it"
+[ "$(pos audit/deploy/pulumi)" -lt "$(pos deploy/pulumi)" ] || fail "audit/deploy/pulumi is not before deploy/pulumi, which requires it"
+[ "$(pos deploy/pulumi)" -lt "$(pos deploy/pulumi/edge/cloudflare)" ] || fail "the edge is not after the core"
 
 # A module that requires none of the repository is unchanged.
 "$mod" pin v9.8.7 - < "$root/storage/go.mod" | cmp -s - "$root/storage/go.mod" || fail "storage changed"
