@@ -44,7 +44,7 @@ func TestTheFullPolicyDocumentLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.APIVersion != config.APIVersion("policy") || d.Policy.Version != 1 || len(d.Policy.Groups) != 3 {
+	if d.APIVersion != config.APIVersion("policy") || d.Policy.Version != 1 || len(d.Policy.Groups) != 4 {
 		t.Errorf("tables: %+v", d.Policy)
 	}
 	if len(d.Clusters()) != 1 || d.AWS().Audience == "" || d.GitHubOwners()[0] != "example-org" {
@@ -379,7 +379,7 @@ func TestAV2ServeDocumentReadsItsPolicyDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Policy == nil || len(c.Policy.Policy.Groups) != 3 {
+	if c.Policy == nil || len(c.Policy.Policy.Groups) != 4 {
 		t.Errorf("the policy document was not read: %+v", c.Policy)
 	}
 	fallback := policy.Policy{Version: 1, Groups: map[string]policy.Group{"all:access-roster:operator": {}}}

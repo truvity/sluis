@@ -184,32 +184,21 @@ func sortedKeys[V any](m map[string]V) []string {
 // PolicyCloudflare is the policy document's `cloudflare` section: who may ask
 // for which preset.
 type PolicyCloudflare struct {
-	// Grants say which presets a group of people, or a CI job, may have a token
-	// for. A row names exactly one of group or job.
+	// Grants say which presets the holders of a group may have a token for. A
+	// CI job is a group like any other: the policy declares it as a group with
+	// `github` matchers (repository, ref, event, job_workflow_ref), and the
+	// verified token is evaluated against them by the same group evaluation
+	// as everything else.
 	Grants []CloudflareGrant `yaml:"grants,omitempty" json:"grants,omitempty"`
 }
 
 // CloudflareGrant is one row of grants.
 type CloudflareGrant struct {
-	// Group is an internal group of the policy; every holder may ask.
+	// Group is an internal group of the policy (a person group, or a declared CI
+	// job group); every holder may ask.
 	Group string `yaml:"group,omitempty" json:"group,omitempty"`
-	// Job is a CI job, github:<owner>/<repo>:<name>, where <name> is the
-	// workflow's job as the verified token says it.
-	Job string `yaml:"job,omitempty" json:"job,omitempty"`
 	// Presets are the presets the row opens.
 	Presets []string `yaml:"presets" json:"presets"`
-}
-
-var cloudflareJobPattern = regexp.MustCompile(`^github:[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}/[A-Za-z0-9._-]{1,100}:[A-Za-z0-9_][A-Za-z0-9_. -]{0,99}$`)
-
-// ParseCloudflareJob splits github:<owner>/<repo>:<name>.
-func ParseCloudflareJob(job string) (repository, name string, err error) {
-	if !cloudflareJobPattern.MatchString(job) {
-		return "", "", fmt.Errorf("%q is not github:<owner>/<repo>:<job>", job)
-	}
-	rest := strings.TrimPrefix(job, "github:")
-	i := strings.LastIndex(rest, ":")
-	return rest[:i], rest[i+1:], nil
 }
 
 // Cloudflare is the policy's section, never nil.
@@ -233,23 +222,9 @@ func (c *PolicyCloudflare) PresetsForGroups(groups []string) []string {
 	return out
 }
 
-// PresetsForJob are the presets the CI job (github:<owner>/<repo>:<name>) may
-// ask for, sorted.
-func (c *PolicyCloudflare) PresetsForJob(job string) []string {
-	var out []string
-	for _, g := range c.Grants {
-		if g.Job != "" && g.Job == job {
-			out = union(out, g.Presets)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// Allows reports whether the caller (groups, and job when it is a CI job) may
-// ask for preset.
-func (c *PolicyCloudflare) Allows(preset string, groups []string, job string) bool {
-	return slices.Contains(c.PresetsForGroups(groups), preset) || (job != "" && slices.Contains(c.PresetsForJob(job), preset))
+// Allows reports whether a holder of groups may ask for preset.
+func (c *PolicyCloudflare) Allows(preset string, groups []string) bool {
+	return slices.Contains(c.PresetsForGroups(groups), preset)
 }
 
 // validate holds the grants to the policy's groups. The presets are the service
@@ -263,27 +238,19 @@ func (c *PolicyCloudflare) validate(declared func(group string) bool) []error {
 	for i, g := range c.Grants {
 		at := fmt.Sprintf("cloudflare.grants[%d]", i)
 		switch {
-		case (g.Group == "") == (g.Job == ""):
-			errs = append(errs, fmt.Errorf("%s: name exactly one of group and job", at))
+		case g.Group == "":
+			errs = append(errs, fmt.Errorf("%s: name the group (a person group, or a CI job group the policy declares)", at))
 			continue
 		case len(g.Presets) == 0:
 			errs = append(errs, fmt.Errorf("%s: presets is empty, so the row grants nothing", at))
 		}
-		who := g.Group
-		if g.Group != "" {
-			if !declared(g.Group) {
-				errs = append(errs, fmt.Errorf("%s: group %q is not declared by the policy", at, g.Group))
-			}
-		} else {
-			who = g.Job
-			if _, _, err := ParseCloudflareJob(g.Job); err != nil {
-				errs = append(errs, fmt.Errorf("%s.job: %w", at, err))
-			}
+		if !declared(g.Group) {
+			errs = append(errs, fmt.Errorf("%s: group %q is not declared by the policy", at, g.Group))
 		}
-		if seen[who] {
-			errs = append(errs, fmt.Errorf("%s: %q has a row already; list its presets in one row", at, who))
+		if seen[g.Group] {
+			errs = append(errs, fmt.Errorf("%s: %q has a row already; list its presets in one row", at, g.Group))
 		}
-		seen[who] = true
+		seen[g.Group] = true
 		for _, p := range g.Presets {
 			if !CloudflareNamePattern.MatchString(p) {
 				errs = append(errs, fmt.Errorf("%s.presets: %q is not a preset name", at, p))
