@@ -57,7 +57,7 @@ def files():
         # audit/ and its chart are a component with its own vocabulary and its
         # own link check (audit/internal/docscheck); the retired-name rules
         # here are sluis's.
-        if rel(p).startswith(("audit/", "charts/audit/")):
+        if rel(p).startswith(("audit/", "docs/audit/", "charts/audit/")):
             continue
         if p.suffix == ".md" or p.name == "Chart.yaml":
             out.append(p)

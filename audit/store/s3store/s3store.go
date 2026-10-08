@@ -4,7 +4,7 @@
 // compliance mode, a policy that denies deletes, encryption with a key the
 // writer may use and nobody may destroy. This package sets a retention on every
 // object it writes and refuses to reuse a key, and it does nothing else that
-// the bucket's own configuration should be doing. See docs/how-to/prepare-the-bucket.md.
+// the bucket's own configuration should be doing. See docs/audit/how-to/prepare-the-bucket.md.
 //
 // The bucket need not be on AWS. Any store that speaks the S3 API takes the
 // same calls, at an endpoint of its own (Options.Endpoint): Cloudflare R2 is
@@ -14,7 +14,7 @@
 // sent headers the store may accept without keeping the promise. It needs
 // PutObject, GetObject, HeadObject, ListObjectsV2 and presigning, which every
 // one of them has. With no region configured it is addressed as "auto"
-// (AutoRegion). See docs/decisions/0014-lock-modes-and-store-tiers.md.
+// (AutoRegion). See docs/decisions/0056-lock-modes-and-store-tiers.md.
 package s3store
 
 import (

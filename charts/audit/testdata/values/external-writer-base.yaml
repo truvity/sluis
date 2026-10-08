@@ -15,7 +15,7 @@
 # outputs of deploy/pulumi.
 #
 # Each `config:` block is the binary's own configuration, key for key
-# (audit/docs/reference/configuration.md).
+# (docs/audit/reference/configuration.md).
 writer:
   enabled: false
 

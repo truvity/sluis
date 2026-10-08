@@ -8,7 +8,7 @@ import (
 	"github.com/truvity/sluis/audit/internal/ulid"
 )
 
-// The v1 layout, as docs/reference/bucket-contract.md specifies it. The
+// The v1 layout, as docs/audit/reference/bucket-contract.md specifies it. The
 // archive's keys are built and read here and nowhere else, so that a second
 // reading of the grammar cannot disagree with the first.
 

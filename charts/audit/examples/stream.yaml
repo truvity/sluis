@@ -4,7 +4,7 @@
 # This is what an application's chart sets under the `audit:` key when it takes
 # this chart as a dependency. Everything not named here has a default. Each
 # `config:` block is the binary's own configuration, key for key
-# (audit/docs/reference/configuration.md); a secret is never in one.
+# (docs/audit/reference/configuration.md); a secret is never in one.
 mode: stream
 
 # Where each install preset keeps its copies. `security` needs the standard

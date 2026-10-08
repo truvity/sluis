@@ -1,6 +1,6 @@
 // Seals, delegations and revocations: the three statements the notary and a
-// root sign, as docs/reference/bucket-contract.md specifies them and
-// docs/decisions/0019-seals.md decides them.
+// root sign, as docs/audit/reference/bucket-contract.md specifies them and
+// docs/decisions/0061-seals.md decides them.
 //
 // Each is the payload of a JWS in compact serialisation (RFC 7515), ES384,
 // written as the proto JSON mapping with the field names as written here. The

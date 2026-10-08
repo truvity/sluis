@@ -1,4 +1,4 @@
--- Observe follows the bucket by cursor (docs/decisions/0020), and the writer
+-- Observe follows the bucket by cursor (docs/decisions/0062), and the writer
 -- stops indexing.
 --
 -- index_cursor is where each (profile, tenant) has been read to: the key of the

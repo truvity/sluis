@@ -39,7 +39,7 @@
 #
 #   - The internal-hostname pattern also skips 'schemas.truvity.com/audit/',
 #     the legacy schema identifier base that audit's loader still accepts
-#     (audit/docs/decisions/0015), in the audit tree only. It is a name that
+#     (docs/decisions/0057), in the audit tree only. It is a name that
 #     was never served, kept for the compatibility of archived records.
 #
 # Estate-internal names (a pattern group added with the neutral-names

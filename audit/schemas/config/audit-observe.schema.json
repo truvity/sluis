@@ -45,7 +45,7 @@
   "$id": "https://truvity.github.io/audit/schemas/v2/config/audit-observe.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0020). Secrets are never in this file: a field named ...Secret holds the NAME of a secret, which the `secrets` block says how to find (an environment variable, a file or an SSM parameter). Telemetry is the OTEL_* environment, not configuration.",
+  "description": "The configuration of audit-observe, the indexer: it follows the archive by cursor and writes the index the query service reads (ADR 0062). Secrets are never in this file: a field named ...Secret holds the NAME of a secret, which the `secrets` block says how to find (an environment variable, a file or an SSM parameter). Telemetry is the OTEL_* environment, not configuration.",
   "properties": {
     "apiVersion": {
       "description": "The version of this document's shape, `audit.truvity.github.io/audit-observe/v2`. Absent means version 1, which is deprecated and read for one minor (`truvity.github.io/audit-observe/v1`); another value is refused, so that a later shape arrives by a version and not by a file that quietly means something else.",

@@ -7,12 +7,12 @@ back. The Audit page lives in the application's console and is not in here.
 **This chart is instantiated, not deployed.** An installation belongs to one
 application and runs in that application's namespace, rendered by the
 application's own chart with this one as a dependency
-([0011](../../audit/docs/decisions/0011-one-installation-per-service-or-product.md)).
+([0011](../../docs/decisions/0053-one-installation-per-service-or-product.md)).
 There is no central installation and no shape that puts the writer inside
-the application. Start with [getting started on Kubernetes](../../audit/docs/getting-started/kubernetes.md);
-the shapes are explained in [direct](../../audit/docs/explanation/direct-mode.md) and
-[stream](../../audit/docs/explanation/stream-mode.md), and every value is in
-[chart values](../../audit/docs/reference/chart-values.md).
+the application. Start with [getting started on Kubernetes](../../docs/audit/getting-started/kubernetes.md);
+the shapes are explained in [direct](../../docs/audit/explanation/direct-mode.md) and
+[stream](../../docs/audit/explanation/stream-mode.md), and every value is in
+[chart values](../../docs/audit/reference/chart-values.md).
 
 ## What it deploys
 
@@ -41,7 +41,7 @@ the shapes are explained in [direct](../../audit/docs/explanation/direct-mode.md
   role**, which must not own the tables (`query.config.database`).
 - **`audit-notary`** (`jobs.notary.enabled`, off by default), an hourly CronJob in
   an image of its own that seals every closed hour into a signed chain
-  ([0019](../../audit/docs/decisions/0019-seals.md)). It signs, so it runs as an identity
+  ([0019](../../docs/decisions/0061-seals.md)). It signs, so it runs as an identity
   of its own that the chart refuses to be the writer's, with a P-384 key in KMS
   or OpenBAO.
 - **Three CronJobs**: `audit verify` nightly (one job
@@ -60,7 +60,7 @@ writer, receiver, consumers or Service are rendered, and everything that records
 (the query service, the notary and the other jobs) sends to the writer's queue
 with `sink: {sqs: {queueUrl, region}}` under its own pod identity; the chart
 refuses a sink that names the release's own front door
-([AWS](../../audit/docs/how-to/aws-run-readers-in-kubernetes.md),
+([AWS](../../docs/audit/how-to/aws-run-readers-in-kubernetes.md),
 `examples/external-writer.yaml`). In `stream` it renders two: a receiver
 that serves the sink and publishes, holding neither the bucket nor a key, and
 `writer.consumers` writers that read the stream and put the objects. The
@@ -89,7 +89,7 @@ mounted at `/etc/audit/config.yaml`. The components are `writer`, `receiver`
 under `config:` is the binary's key, and it is validated by
 `values.schema.json`, which embeds the schemas in `schemas/config/`, and again
 by the binary at start-up. The
-[configuration reference](../../audit/docs/reference/configuration.md) lists every
+[configuration reference](../../docs/audit/reference/configuration.md) lists every
 key.
 
 What is not configuration is the platform's, and each component has the same
@@ -101,7 +101,7 @@ three of those:
   `secrets: {source: file, root: /etc/audit/secrets}`, which the chart checks.
   A secret is never in `config:`. `secretEnv` (environment variables from a
   Secret's keys) is deprecated and belongs to version-1 configs, see the
-  [v0.13 upgrade](../../audit/docs/how-to/upgrade/v0.13.md);
+  [v0.13 upgrade](../../docs/audit/how-to/upgrade/v0.13.md);
 - `secretMounts`: a Secret mounted as a directory, for a key or a root a
   config names by path;
 - `tokens`: a projected service-account token of an audience, a file `token`
@@ -109,7 +109,7 @@ three of those:
 
 Telemetry is the `OTEL_*` environment. `telemetry.otlp` (`endpoint`,
 `protocol`, `extraEnv`) renders it on every pod when an endpoint is set and
-renders nothing otherwise ([telemetry](../../audit/docs/reference/telemetry.md#the-chart-sets-the-environment)).
+renders nothing otherwise ([telemetry](../../docs/audit/reference/telemetry.md#the-chart-sets-the-environment)).
 The documents a config names by path are
 rendered from the chart's own values: `profiles` into
 `/etc/audit/deployment.yaml`, `workloadIdentity` into
@@ -184,7 +184,7 @@ The chart takes references; it creates none of these.
 
 | thing | value |
 |---|---|
-| **a bucket for each install preset the profiles use**, belonging to the environment: the attested preset's with Object Lock in compliance mode (S3 only), the others without a lock ([0014](../../audit/docs/decisions/0014-lock-modes-and-store-tiers.md), [0026](../../audit/docs/decisions/0026-storage-is-configured-per-preset.md)) | `presets.<operational\|standard\|attested>.bucket` |
+| **a bucket for each install preset the profiles use**, belonging to the environment: the attested preset's with Object Lock in compliance mode (S3 only), the others without a lock ([0014](../../docs/decisions/0056-lock-modes-and-store-tiers.md), [0068](../../docs/decisions/0068-storage-is-configured-per-preset.md)) | `presets.<operational\|standard\|attested>.bucket` |
 | **only on an S3-compatible store that is not AWS**: its endpoint, whether its certificate covers a bucket subdomain, and the address, below `archive.stateRoot` in the state store, of the static keys if it has no pod identity | `presets.<name>.endpoint`, `.path_style`, `.credentials`, with `archive.stateRoot` in each process's config |
 | **a prefix of its own within the bucket**, required wherever the bucket is shared: it is what keeps two applications' archives apart, and what each role's IAM is scoped to | `presets.<name>.prefix` |
 | **on AWS S3, a KMS key alias** per preset, a name and never a key id or ARN | `presets.<name>.key_alias` (or `archive.kmsKey` in the writer's and notary's config for every preset that names none) |
@@ -197,12 +197,12 @@ The chart takes references; it creates none of these.
 | a P-384 signing key the notary may use and the writer may not (KMS `ECC_NIST_P384`, or OpenBAO `ecdsa-p384`), and the thumbprint of its public half for every verifier to pin | `jobs.notary.config.signer`, `jobs.verify.config.seals.roots` |
 | the JetStream stream, already created, with `mode: stream` | `writer.config.stream`, `receiver.config.stream` |
 | **if the broker verifies who connects**: an auth callout that reviews a projected service-account token and maps this namespace to an account, accepting the audience the chart projects | `stream.nats.tokenFile` and a `tokens` entry of the broker's audience |
-| the issuers callers sign in with, and who may read what | `query.grants` ([access](../../audit/docs/how-to/read-the-trail.md#access)) |
+| the issuers callers sign in with, and who may read what | `query.grants` ([access](../../docs/audit/how-to/read-the-trail.md#access)) |
 | an exports bucket with no Object Lock, if exports are wanted; on a store of its own if need be | `query.config.exports.bucket`, with its own `endpoint`, `pathStyle` and `credentialsSecret` |
 | the cluster's service-account issuer, reachable over HTTPS from the pods | `workloadIdentity.issuers` |
 | the images | `image.writer`, `image.query`, `image.observe`, `image.notary`, `image.cli` — one per binary, built by ko from `.goreleaser.yaml`; distroless, no shell |
 | a role per component — writer, indexer, notary, query and verify — bound through its ServiceAccount's annotations. The receiver, purge and clock-sync have accounts and no roles; the chart refuses the receiver, the notary and the indexer, sharing the writer's | `serviceAccount`, `receiver.serviceAccount`, `observe.serviceAccount`, `query.serviceAccount`, `jobs.*.serviceAccount` |
-| **only if the deployment chooses a key provider**: a Secret with the 32-byte root (`local`), or an OpenBAO transit engine with a JWT role per component ([what the engine needs](../../audit/docs/how-to/configure-openbao-keys.md#what-the-engine-needs)) | `keys.local.rootFile` with `secretMounts`, or `keys.provider: transit` with `keys.transit.openbao.login` and a `tokens` entry |
+| **only if the deployment chooses a key provider**: a Secret with the 32-byte root (`local`), or an OpenBAO transit engine with a JWT role per component ([what the engine needs](../../docs/audit/how-to/configure-openbao-keys.md#what-the-engine-needs)) | `keys.local.rootFile` with `secretMounts`, or `keys.provider: transit` with `keys.transit.openbao.login` and a `tokens` entry |
 | a CA bundle, if OpenBAO or Postgres serve from a private chain (e.g. trust-manager's) | `trust.configMap` |
 | a `ReadWriteMany` storage class, for more than one replica on `local` keys (transit needs none) | `keysVolume` |
 
@@ -214,7 +214,7 @@ manager, no `identity/` prefix in the archive, and resolve refused as
 `externalIdentifiersAreOpaque`, which relaxes a profile's `external:
 pseudonym` to `clear` and makes the writer refuse a record whose external
 actor or subject carries something that looks like a direct identifier
-([0013](../../audit/docs/decisions/0013-no-pseudonymisation-keys-by-default.md)).
+([0013](../../docs/decisions/0055-no-pseudonymisation-keys-by-default.md)).
 
 `local` and `transit` stay, for a deployment that must be able to
 crypto-shred. An installation that runs neither must set
@@ -255,7 +255,7 @@ present the token to the broker as their NATS token, read afresh on every
 connect; the broker's auth callout, which is the deployment's, reviews it and
 maps the namespace to an account. Without them, they connect with no
 credentials, for a broker that verifies nobody
-([stream](../../audit/docs/how-to/run-stream-mode.md)).
+([stream](../../docs/audit/how-to/run-stream-mode.md)).
 
 ## What it refuses to render
 

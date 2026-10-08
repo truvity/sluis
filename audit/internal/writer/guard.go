@@ -44,7 +44,7 @@ func GuardReplicas(replicas int, dedupe Dedupe) error {
 //
 // The third possibility is the one this refuses: starting without keys, never
 // saying anything, and writing whatever arrives into an archive nothing can
-// edit. See docs/decisions/0013-no-pseudonymisation-keys-by-default.md.
+// edit. See docs/decisions/0055-no-pseudonymisation-keys-by-default.md.
 func GuardKeys(profiles map[string]*profile.Profile, hasProvider bool) error {
 	if hasProvider {
 		return nil

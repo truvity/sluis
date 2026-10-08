@@ -11,7 +11,7 @@
 // It is exported because the binary needs it and a test may. It is not a way
 // to deploy: a writer inside an application puts the archive's credentials in
 // the application's pods and makes every fix an application release, which
-// docs/decisions/0011-one-installation-per-service-or-product.md rules out.
+// docs/decisions/0053-one-installation-per-service-or-product.md rules out.
 //
 //	w, err := writer.Open(ctx, writer.Config{
 //		Archive:  archive,  // an s3store.Store on the Object-Locked bucket
@@ -275,7 +275,7 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	// each, and compared when they are already there: a catalogue version that
 	// means something else than what the archive holds under it is a writer
 	// that refuses to run, not one that finds out on its first record
-	// (docs/reference/bucket-contract.md, Catalogue).
+	// (docs/audit/reference/bucket-contract.md, Catalogue).
 	described := &inner.SchemaArchive{Store: c.Archive, RetainUntil: keep}
 	for _, cat := range append([]*catalogue.Catalogue{common}, c.Catalogues...) {
 		if err := described.EnsureCatalogue(ctx, cat); err != nil {

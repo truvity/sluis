@@ -124,6 +124,11 @@ func checkMarkers(root string) error {
 		}
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
+		// docs/audit is audit's tree: its regions are written by hand and
+		// closed-checked by audit's own docscheck, not generated here.
+		if strings.HasPrefix(rel, "docs/audit/") {
+			return nil
+		}
 		for _, line := range strings.Split(string(b), "\n") {
 			line = strings.TrimSpace(line)
 			if !strings.HasPrefix(line, openPrefix) || !strings.HasSuffix(line, openSuffix) {

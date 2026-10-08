@@ -1,7 +1,7 @@
 // Package postgres is the default index and the shared deduplication store.
 //
 // It holds two things that look unrelated: the projection a search reads, which
-// observe writes by cursor (docs/decisions/0020), and the table that lets
+// observe writes by cursor (docs/decisions/0062), and the table that lets
 // several writer replicas agree about what has already been written. They share
 // a database and one migration chain, and nothing else: the writer's role may
 // touch the deduplication table and the registry and not the index, observe's

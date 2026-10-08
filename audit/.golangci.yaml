@@ -25,7 +25,7 @@ linters:
       rules:
         main:
           deny:
-            # Wiring. docs/decisions/0001-no-di-containers.md — a container turns
+            # Wiring. docs/decisions/0043-no-di-containers.md — a container turns
             # a missing dependency into a run-time failure in an environment
             # where nobody is watching, and takes the shape of the program out of
             # the program.
@@ -36,7 +36,7 @@ linters:
             - pkg: github.com/google/wire
               desc: "construct dependencies in main and pass them as arguments (policy: contracts/service.md §2)"
 
-            # Configuration. docs/decisions/0002-config-file-plus-env.md — a
+            # Configuration. docs/decisions/0044-config-file-plus-env.md — a
             # mapping library silently drops what it was not told about, so the
             # service starts on a default nobody chose.
             - pkg: github.com/knadh/koanf

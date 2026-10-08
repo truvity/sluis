@@ -461,7 +461,7 @@
       "$ref": "#/$defs/keys"
     },
     "require": {
-      "description": "The weakest durability this process's chain may give; the writer gives `archived` at best, which is the default. A batch acknowledged weaker than this fails. See ADR 0017.",
+      "description": "The weakest durability this process's chain may give; the writer gives `archived` at best, which is the default. A batch acknowledged weaker than this fails. See ADR 0059.",
       "enum": [
         "logged",
         "queued",

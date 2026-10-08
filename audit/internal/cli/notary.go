@@ -31,7 +31,7 @@ const rootsRetention = 24 * time.Hour
 
 // Notary seals the archive: for every profile, every tenant and every closed
 // hour since the last seal, one signed statement of what the hour holds, chained
-// to the one before (docs/reference/bucket-contract.md, docs/decisions/0019).
+// to the one before (docs/audit/reference/bucket-contract.md, docs/decisions/0061).
 //
 // It is the one part of the system that signs, and it holds nothing the writer
 // does: the key is a managed one the writer's role cannot use, and the bucket

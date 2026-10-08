@@ -28,7 +28,7 @@ import (
 )
 
 // The seals half of the conformance suite
-// (docs/reference/bucket-contract.md, "Seals"). Like the records half it runs
+// (docs/audit/reference/bucket-contract.md, "Seals"). Like the records half it runs
 // against the in-memory store and against S3, and the notary runs with two
 // signers: a key on this machine, and an ECC_NIST_P384 key in KMS (LocalStack's)
 // where there is one.

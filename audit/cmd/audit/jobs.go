@@ -5,7 +5,7 @@ package main
 // before anything starts. The flags of the same commands stay, for a person at
 // a keyboard; a job in a cluster is configured by the file and by nothing else,
 // so that a deployment is one reviewable document
-// (docs/decisions/0021-one-validated-configuration-file.md).
+// (docs/decisions/0063-one-validated-configuration-file.md).
 
 import (
 	"context"

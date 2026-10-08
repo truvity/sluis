@@ -59,7 +59,7 @@ func ParseDelivery(s string) (Delivery, error) {
 
 // Durability is what an acknowledgement promises about the records it covers,
 // ordered so that a higher value survives more. See
-// docs/decisions/0017-sink-durability-and-transports.md.
+// docs/decisions/0059-sink-durability-and-transports.md.
 type Durability = auditv1.Durability
 
 const (

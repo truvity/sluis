@@ -10,7 +10,7 @@
 // change is a new package (audit.v2); additive changes bump
 // Record.schema_version's minor. Readers keep a decoder for every major
 // that was ever written, because Object Lock keeps those objects for years.
-// See docs/decisions/0009-versioning-policy.md.
+// See docs/decisions/0051-versioning-policy.md.
 syntax = "proto3";
 
 package audit.v1;

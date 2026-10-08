@@ -12,7 +12,7 @@
 # receiver publishes to JetStream, a pool of writers consumes it, an indexer
 # follows the archive into the index, and the writer's, the indexer's and the
 # query service's database roles are separate from one another and from the
-# owner's. See audit/docs/decisions/0011 and
+# owner's. See docs/decisions/0053 and
 # 0014 for why direct mode and stream mode are otherwise configured alike.
 mode: stream
 
@@ -20,7 +20,7 @@ mode: stream
 # organisation, and with no key provider the writer refuses to start rather
 # than write one in clear. This tier's own emitted identifiers (e2e/suite's
 # actor id) are ones THIS suite minted, not a real external party's — the same
-# shape audit/docs/decisions/0013 describes.
+# shape docs/decisions/0055 describes.
 externalIdentifiersAreOpaque: true
 
 presets:
@@ -53,7 +53,7 @@ x-stream: &stream
 # partial — so this tier writes with no lock at all. `security` (composed
 # above) is one of the framework profiles whose framework does not demand one
 # (profiles/security.yaml: integrity.object_lock_mode: none); a profile that
-# demanded compliance or governance could not run here, and audit/docs/how-to/test-the-kind-tier.md
+# demanded compliance or governance could not run here, and docs/audit/how-to/test-the-kind-tier.md
 # says so.
 x-bucket: &bucket
   name: audit-e2e-archive

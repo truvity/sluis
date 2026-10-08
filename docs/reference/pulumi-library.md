@@ -378,7 +378,7 @@ presets they need. Each preset is one of:
 `v0.0.0`, until a release pins it with the root module's require: `hack/pin-pulumi-require.sh`). A stack that installed
 audit itself keeps working: leave `Audit` out and keep `AuditQueueArn` and the queue URL in the installation; to move, set
 `Audit.Use` (the library then writes the URL), or import the estate's installation under the new component and set `Audit`
-without `Use` ([the audit library's resources are named by `Name`](../../audit/docs/how-to/archive-on-r2.md)).
+without `Use` ([the audit library's resources are named by `Name`](../audit/how-to/archive-on-r2.md)).
 
 ### Keys the estate supplies
 

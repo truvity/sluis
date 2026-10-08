@@ -64,7 +64,7 @@ func (b bucketGrant) list(prefixes ...string) statement {
 	return allow([]string{"s3:ListBucket"}, []string{b.Arn}, cond)
 }
 
-// The prefixes of the bucket contract (docs/reference/bucket-contract.md) a part
+// The prefixes of the bucket contract (docs/audit/reference/bucket-contract.md) a part
 // writes. The writer writes everything but seals and keys; the notary writes
 // those two and nothing else.
 var (
@@ -108,7 +108,7 @@ func webIdentityStatement(audience string) statement {
 // start-up, the legal holds, and the archive an addendum scans; it lists the
 // bucket for the last two. It has no delete, no access to seals/ or keys/, and
 // no KMS Sign: whoever can write the archive and can also sign for it can choose
-// what to sign (ADR 0019). When its configuration names secrets it may read the
+// what to sign (ADR 0061). When its configuration names secrets it may read the
 // SSM parameters under its root and decrypt them, and read nothing else of SSM.
 // Only the attested preset's bucket is locked (bucketGrant.Locked); the writer
 // sends no lock header to any other, so it is granted neither permission there.
@@ -189,7 +189,7 @@ func notaryPolicy(buckets []bucketGrant, archiveKeyArns []string, sealKeyArn, lo
 // observeReaderPolicy is what audit-observe reads the archive with, across the
 // accounts or from a cluster: list and get on records/, catalogue/, schema/,
 // seals/ and keys/ of every AWS preset's bucket, and decrypt under the archive
-// keys. It writes nothing, which is what ADR 0020 means by observe following the
+// keys. It writes nothing, which is what ADR 0062 means by observe following the
 // bucket.
 func observeReaderPolicy(buckets []bucketGrant, archiveKeyArns []string) string {
 	return policyJSON(readStatements(buckets, archiveKeyArns)...)

@@ -19,7 +19,7 @@
 //		Notary:  auditpulumi.NotaryArgs{Package: notaryZip, PackageSHA256: notarySHA},
 //	})
 //
-// docs/reference/aws-pulumi-library.md is the guide: the shape, every input and output, the
+// docs/audit/reference/aws-pulumi-library.md is the guide: the shape, every input and output, the
 // switch from GOVERNANCE to COMPLIANCE, the role names and how alarms reach
 // alert-ingress.
 package auditpulumi
@@ -88,7 +88,7 @@ type Audit struct {
 	// ArchiveCredentialsPaths are the SSM parameters the functions read the
 	// credentials of each preset at an endpoint from, by preset name: write a
 	// SecureString there, a JSON object {"accessKeyID": ..., "secretAccessKey": ...},
-	// before the first record (docs/how-to/archive-on-r2.md). A preset on AWS S3
+	// before the first record (docs/audit/how-to/archive-on-r2.md). A preset on AWS S3
 	// has none: the roles are the credential.
 	ArchiveCredentialsPaths pulumi.StringMapOutput
 	// SecretsRoot is the SSM parameter path the writer reads the secrets its
@@ -534,7 +534,7 @@ func archiveResource(name string, st presetStore) string {
 // newArchive is a preset's bucket: versioned in every case, with Object Lock for
 // the attested preset (in the mode ArchiveArgs says), encrypted under the
 // preset's key or the archive key, closed to the public and to plain HTTP, with
-// the lifecycle of ADR 0023 written per profile prefix.
+// the lifecycle of ADR 0065 written per profile prefix.
 //
 // The bucket's own `objectLockEnabled` is never set: it is ForceNew, so a bucket
 // created with it off could only get the lock by being replaced. Object Lock is
@@ -637,7 +637,7 @@ func newArchive(ctx *pulumi.Context, name string, a *Args, st presetStore, keyAr
 		return nil, err
 	}
 
-	// ADR 0023: Glacier Instant Retrieval after GlacierIRDays, which observe's
+	// ADR 0065: Glacier Instant Retrieval after GlacierIRDays, which observe's
 	// reindex and `audit verify` read without a restore; Deep Archive after
 	// DeepArchiveDays, for what nobody expects to read before its retention ends.
 	// A rule per profile of the preset, because the profile is the first component

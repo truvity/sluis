@@ -22,7 +22,7 @@ import (
 //
 //	records/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>/<ULID>
 //
-// (docs/reference/bucket-contract.md). The profile is first, and deliberately:
+// (docs/audit/reference/bucket-contract.md). The profile is first, and deliberately:
 // an object store's lifecycle rules filter by literal prefix and take no
 // wildcards, so a rule that moves one profile's objects to colder storage after
 // its hot window can only exist if the profile is the leading component.
@@ -82,7 +82,7 @@ var ErrKeyComponent = errors.New("writer: not usable in a key")
 // rolling that object first if it is full or old.
 //
 // Nothing here indexes: the index is observe's, which follows the bucket
-// (docs/decisions/0020), so an object is complete when it is put.
+// (docs/decisions/0062), so an object is complete when it is put.
 func (r *Roller) Add(ctx context.Context, p *profile.Profile, c *record.Record) error {
 	return r.AddExpiring(ctx, p, c, nil)
 }

@@ -11,7 +11,7 @@
 // The types are written by hand and the schemas are generated from schema.go
 // into schemas/config/, which is committed; a test holds the two files to one
 // another, and a second holds each type to its schema. The decisions are
-// docs/decisions/0021-one-validated-configuration-file.md and, for the shared
+// docs/decisions/0063-one-validated-configuration-file.md and, for the shared
 // rules, truvity/policy 0002 and 0006.
 package config
 

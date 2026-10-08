@@ -244,7 +244,7 @@ directory, and `tokens` projects a service-account token. */}}
 {{- end -}}
 
 {{/* The OpenTelemetry SDK environment of one pod, as list items, or nothing when
-no endpoint is set: a process exports only when a collector is named (ADR 0021,
+no endpoint is set: a process exports only when a collector is named (ADR 0063,
 policy 0006), so an empty `telemetry.otlp.endpoint` renders nothing and a
 release that never set it is byte-identical to one before the value existed.
 Takes (dict "root" $ "service" "<service.name>"), the name the binary reports
