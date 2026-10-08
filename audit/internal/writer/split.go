@@ -108,7 +108,7 @@ func (s *Splitter) Split(ctx context.Context, r *record.Record, x *catalogue.Com
 // takes is reported as "category:<name>".
 func (s *Splitter) Unhandled(x *catalogue.Composed) []string {
 	var out []string
-	for _, name := range x.Action.Profiles {
+	for _, name := range x.Action.Profiles { //nolint:staticcheck // the deprecated list still names destinations for actions with no Category
 		if _, ok := s.Profiles[name]; !ok {
 			out = append(out, name)
 		}
