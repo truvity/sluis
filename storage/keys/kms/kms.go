@@ -51,12 +51,13 @@ type Backend struct {
 
 	mu    sync.Mutex
 	info  map[string]keyInfo
-	macKs map[string][]byte // wrapped-key id -> plaintext HMAC key
+	macKs map[string]macEntry // wrapped-key id -> plaintext HMAC key and when it was last checked
 }
 
 var (
-	_ keys.Backend    = (*Backend)(nil)
-	_ keys.MACBackend = (*Backend)(nil)
+	_ keys.Backend        = (*Backend)(nil)
+	_ keys.MACBackend     = (*Backend)(nil)
+	_ keys.DestroyBackend = (*Backend)(nil)
 )
 
 // Option configures New.
@@ -72,7 +73,7 @@ func WithInfoTTL(d time.Duration) Option { return func(b *Backend) { b.infoTTL =
 // New returns a backend over api.
 func New(api API, opts ...Option) *Backend {
 	b := &Backend{api: api, infoTTL: DefaultInfoTTL, now: time.Now,
-		info: map[string]keyInfo{}, macKs: map[string][]byte{}}
+		info: map[string]keyInfo{}, macKs: map[string]macEntry{}}
 	for _, o := range opts {
 		o(b)
 	}

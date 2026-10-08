@@ -53,6 +53,11 @@ var (
 	// ErrDecrypt is returned when ciphertext does not open: wrong key, wrong
 	// context, or damaged. The cause is deliberately not distinguished.
 	ErrDecrypt = errors.New("keys: cannot decrypt (wrong key or context, or damaged ciphertext)")
+	// ErrDestroyed is returned by MAC for a tenant whose material was
+	// destroyed. It is a fault in the caller, not a reason to mint a new
+	// secret: a second, unrelated pseudonym for the same person would split
+	// their history in two.
+	ErrDestroyed = errors.New("keys: the tenant's key material has been destroyed")
 )
 
 // Backend is a key service: it holds keys by name and does the work. A name
@@ -95,6 +100,23 @@ type Backend interface {
 // get unrelated outputs for the same data.
 type MACBackend interface {
 	MAC(ctx context.Context, key string, purpose Purpose, tenant string, data []byte) ([]byte, error)
+}
+
+// DestroyBackend is the optional capability behind Key.Destroy, the erasure
+// of one tenant. It exists beside MACBackend because per-tenant material is
+// the MAC secret and nothing else: Encrypt, Decrypt and Sign work under one
+// key for the whole installation, so there is nothing of a tenant's in them
+// to destroy.
+//
+// DestroyTenant removes the secret MAC uses for (purpose, tenant) and leaves
+// a tombstone, so that afterwards MAC for that tenant returns ErrDestroyed
+// instead of minting a new secret. It is idempotent: destroying a tenant
+// that was never used, or already destroyed, succeeds and still leaves the
+// tombstone. Other tenants are not affected. Destroyed reports whether the
+// tombstone is there.
+type DestroyBackend interface {
+	DestroyTenant(ctx context.Context, key string, purpose Purpose, tenant string) error
+	Destroyed(ctx context.Context, key string, purpose Purpose, tenant string) (bool, error)
 }
 
 // Options are what Open needs besides the configuration.
@@ -297,4 +319,35 @@ func cloneMap(m map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// Destroy erases a tenant: the secret behind MAC for this purpose is removed
+// and MAC for the tenant fails with ErrDestroyed from then on. Pseudonyms
+// already computed stay where they were written and can never be recomputed,
+// which is what erasure means here. It cannot be undone and it is idempotent.
+//
+// A backend without the capability returns ErrUnsupported (see
+// DestroyBackend); a caller must not read that as "destroyed".
+func (k *Key) Destroy(ctx context.Context, tenant string) error {
+	if tenant == "" {
+		return errors.New("keys: Destroy needs a tenant")
+	}
+	d, ok := k.backend.(DestroyBackend)
+	if !ok {
+		return fmt.Errorf("%w: backend %q cannot destroy a tenant's key material", ErrUnsupported, k.backend.Name())
+	}
+	return d.DestroyTenant(ctx, k.name, k.purpose, tenant)
+}
+
+// Destroyed reports whether Destroy has been done for the tenant. A backend
+// without the capability returns ErrUnsupported.
+func (k *Key) Destroyed(ctx context.Context, tenant string) (bool, error) {
+	if tenant == "" {
+		return false, errors.New("keys: Destroyed needs a tenant")
+	}
+	d, ok := k.backend.(DestroyBackend)
+	if !ok {
+		return false, fmt.Errorf("%w: backend %q cannot destroy a tenant's key material", ErrUnsupported, k.backend.Name())
+	}
+	return d.Destroyed(ctx, k.name, k.purpose, tenant)
 }

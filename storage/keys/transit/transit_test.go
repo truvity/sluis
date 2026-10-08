@@ -64,6 +64,7 @@ func TestConformance(t *testing.T) {
 		Symmetric:      "sym",
 		OtherSymmetric: "sym2",
 		Signing:        "sig",
+		NoDestroy:      true, // see the package documentation, "Erasing a tenant"
 	})
 }
 

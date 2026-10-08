@@ -12,6 +12,10 @@ import (
 // FromState adapts a state.Store to a WrappedStore: each wrapped key is one
 // JSON object, {"wrapped": "<base64>"}, under the id as its key. Give it a
 // store (or Child) of its own, so the ids cannot collide with other values.
+//
+// The store it returns is an ErasableStore: a tombstone is one more object,
+// {"destroyed": true}, under "destroyed/" + id, and erasing deletes the
+// wrapped key with all its versions (state.Store.Delete).
 func FromState(s state.Store) WrappedStore { return stateStore{s} }
 
 type stateStore struct{ s state.Store }
@@ -57,4 +61,34 @@ func decode(b []byte) ([]byte, bool, error) {
 		return nil, false, fmt.Errorf("kms: a stored wrapped key is not {\"wrapped\": ...}: %v", err)
 	}
 	return d.Wrapped, true, nil
+}
+
+const tombstonePrefix = "destroyed/"
+
+type tombstoneDoc struct {
+	Destroyed bool `json:"destroyed"`
+}
+
+var _ ErasableStore = stateStore{}
+
+func (w stateStore) Tombstone(ctx context.Context, id string) error {
+	doc, _ := json.Marshal(tombstoneDoc{Destroyed: true})
+	if _, err := w.s.Put(ctx, tombstonePrefix+id, doc, ""); err != nil && !errors.Is(err, state.ErrConflict) {
+		return err // a conflict is a tombstone already there
+	}
+	if err := w.s.Delete(ctx, id); err != nil && !errors.Is(err, state.ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
+func (w stateStore) Tombstoned(ctx context.Context, id string) (bool, error) {
+	_, err := w.s.Get(ctx, tombstonePrefix+id)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, state.ErrNotFound):
+		return false, nil
+	}
+	return false, err
 }

@@ -40,11 +40,13 @@ type Backend struct {
 	root []byte
 	mu   sync.Mutex
 	sign map[string]*ecdsa.PrivateKey
+	gone map[string]bool // tenants destroyed, by (key, purpose, tenant)
 }
 
 var (
-	_ keys.Backend    = (*Backend)(nil)
-	_ keys.MACBackend = (*Backend)(nil)
+	_ keys.Backend        = (*Backend)(nil)
+	_ keys.MACBackend     = (*Backend)(nil)
+	_ keys.DestroyBackend = (*Backend)(nil)
 )
 
 // New returns a backend over root. It refuses a root that is short or has
@@ -221,7 +223,43 @@ func (b *Backend) MAC(_ context.Context, key string, purpose keys.Purpose, tenan
 	if tenant == "" {
 		return nil, errors.New("local: MAC needs a tenant")
 	}
+	if b.isGone(key, purpose, tenant) {
+		return nil, fmt.Errorf("%w: %s/%s", keys.ErrDestroyed, purpose, tenant)
+	}
 	m := hmac.New(sha256.New, b.derive("mac", key, string(purpose), tenant))
 	m.Write(data)
 	return m.Sum(nil), nil
+}
+
+func goneID(key string, purpose keys.Purpose, tenant string) string {
+	return key + "\x00" + string(purpose) + "\x00" + tenant
+}
+
+func (b *Backend) isGone(key string, purpose keys.Purpose, tenant string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.gone[goneID(key, purpose, tenant)]
+}
+
+// DestroyTenant marks the tenant destroyed. Every key here derives from the
+// root, so there is no stored secret to delete: the mark is in this
+// backend's memory only, and a new Backend over the same root derives the
+// tenant's key again. That is enough to test the semantics, and it is one
+// more reason local is not a production backend.
+func (b *Backend) DestroyTenant(_ context.Context, key string, purpose keys.Purpose, tenant string) error {
+	if tenant == "" {
+		return errors.New("local: Destroy needs a tenant")
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.gone == nil {
+		b.gone = map[string]bool{}
+	}
+	b.gone[goneID(key, purpose, tenant)] = true
+	return nil
+}
+
+// Destroyed reports whether DestroyTenant was called on this backend.
+func (b *Backend) Destroyed(_ context.Context, key string, purpose keys.Purpose, tenant string) (bool, error) {
+	return b.isGone(key, purpose, tenant), nil
 }
