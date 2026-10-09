@@ -33,7 +33,7 @@ func rpcEvent(t *testing.T) json.RawMessage {
 func TestAnRPCEventIsAnsweredByTheModuleServerWithTheInvokedAlias(t *testing.T) {
 	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).WithRPC(echoServer())
 	ctx := lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{
-		InvokedFunctionArn: "arn:aws:lambda:eu-west-1:123456789012:function:cloudflare:live"})
+		InvokedFunctionArn: "arn:aws:lambda:eu-west-1:account:function:cloudflare:live"})
 	out, err := h.Handle(ctx, rpcEvent(t))
 	if err != nil {
 		t.Fatal(err)
