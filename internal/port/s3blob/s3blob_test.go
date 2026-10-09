@@ -130,7 +130,7 @@ func TestConformanceAgainstAFake(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "snapshots/"}}
+		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "google/"}}
 	}, "blob/")
 }
 
@@ -154,13 +154,13 @@ func TestListFollowsEveryPage(t *testing.T) {
 	b, _ := s3blob.NewWithAPI(f, s3blob.Config{Bucket: "b"})
 	var want []string
 	for i := range 7 {
-		name := "snapshots/" + strconv.Itoa(i)
+		name := "google/" + strconv.Itoa(i)
 		want = append(want, name)
 		if _, err := b.Write(context.Background(), name, []byte("x")); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, err := b.List(context.Background(), "snapshots/")
+	got, err := b.List(context.Background(), "google/")
 	if err != nil || strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("List: %v %v, want %v", got, err, want)
 	}

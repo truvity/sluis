@@ -139,7 +139,7 @@ type Object struct {
 
 // Blob is whole-object storage for what is too large for a State item and
 // read whole: a target's status report, a directory snapshot. Names are
-// slash-separated (`reports/<target>`, `snapshots/<directory>`). A reader
+// slash-separated (`reports/<target>`, `google/<workspace>`). A reader
 // treats a missing blob as "not yet written".
 type Blob interface {
 	// Read returns the object: ErrNotFound if absent.

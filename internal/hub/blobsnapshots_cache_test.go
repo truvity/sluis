@@ -274,3 +274,30 @@ func TestACachedSnapshotPastTheFreshnessWindowIsNotAuthoritative(t *testing.T) {
 		t.Error("a new snapshot was not authoritative")
 	}
 }
+
+// The snapshot of a workspace is the blob `google/<workspace>`: the name in
+// storage is the module's, and the old `snapshots/` name is not read, so a
+// cache written by an earlier release is a cache miss, never a wrong answer.
+func TestSnapshotBlobIsNamedForTheGoogleModule(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s, _, mem := cacheStore(t)
+	if hub.SnapshotBlobPrefix != "google/" {
+		t.Fatalf("SnapshotBlobPrefix = %q, want google/", hub.SnapshotBlobPrefix)
+	}
+	if _, err := mem.Blobs().Write(ctx, "snapshots/ws", []byte("an earlier release's cache")); err != nil {
+		t.Fatal(err)
+	}
+	if got := mustGet(t, s, "ws"); got != nil {
+		t.Fatalf("a snapshot from before the first write = %+v, want none", got)
+	}
+	if err := s.Put(ctx, snapshotOf("ws", time.Now(), "ada@north.example")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Blobs().Read(ctx, "google/ws"); err != nil {
+		t.Errorf("the snapshot is not at google/ws: %v", err)
+	}
+	if got := mustGet(t, s, "ws"); got == nil {
+		t.Error("the snapshot written at google/ws is not read back")
+	}
+}

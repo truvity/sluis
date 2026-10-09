@@ -31,7 +31,7 @@ func TestConformanceThroughTheObserver(t *testing.T) {
 		return porttest.Env{
 			Set:          observe.Set(s.Set()),
 			Advance:      s.Advance,
-			BlobPrefixes: []string{"reports/", "snapshots/"},
+			BlobPrefixes: []string{"reports/", "google/"},
 			Proof: func() porttest.Proof {
 				return porttest.Proof{Token: "workload-token", Subject: "system:serviceaccount:ns:sa", Audience: "sluis"}
 			},

@@ -39,6 +39,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -49,16 +50,23 @@ import (
 
 // The domains a run can skip by name.
 const (
-	DomainDirectory = "directory"
-	DomainGitHub    = "github"
-	DomainSlack     = "slack"
-	DomainConsole   = "console"
-	DomainIssuer    = "issuer"
-	DomainBlobs     = "blobs"
+	DomainGoogle  = "google"
+	DomainGitHub  = "github"
+	DomainSlack   = "slack"
+	DomainConsole = "console"
+	DomainIssuer  = "issuer"
+	DomainBlobs   = "blobs"
 )
 
+// DomainDirectory is the name the Google domain had before v1.75. A run still
+// accepts it in Skip for one release and treats it as [DomainGoogle]; the
+// report names the domain `google`.
+//
+// Deprecated: use [DomainGoogle]. Removed in v1.76.
+const DomainDirectory = "directory"
+
 // AllDomains is every name a run accepts to skip.
-var AllDomains = []string{DomainDirectory, DomainGitHub, DomainSlack, DomainConsole, DomainIssuer, DomainBlobs}
+var AllDomains = []string{DomainGoogle, DomainGitHub, DomainSlack, DomainConsole, DomainIssuer, DomainBlobs}
 
 // BlobMode says whether the controllers' reports are copied.
 type BlobMode string
@@ -298,7 +306,13 @@ func Run(ctx context.Context, from, to Side, opt Options) (*Report, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	for _, name := range opt.Skip {
+	opt.Skip = slices.Clone(opt.Skip)
+	for i, name := range opt.Skip {
+		if name == DomainDirectory {
+			log.Warn("migrate: the domain name directory is deprecated, use google; it is removed in v1.76")
+			opt.Skip[i] = DomainGoogle
+			name = DomainGoogle
+		}
 		if !contains(AllDomains, name) {
 			return nil, fmt.Errorf("migrate: --skip %q is none of %s", name, strings.Join(AllDomains, ", "))
 		}

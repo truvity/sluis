@@ -107,7 +107,7 @@ func TestConformance(t *testing.T) {
 		return porttest.Env{
 			Set:              f.ports,
 			Advance:          f.redis.FastForward,
-			BlobPrefixes:     []string{"snapshots/"},
+			BlobPrefixes:     []string{"google/"},
 			TextBlobPrefixes: []string{"reports/github/", "reports/slack/"},
 			Proof: func() porttest.Proof {
 				return porttest.Proof{Token: "good", Subject: "system:serviceaccount:ns:sa", Audience: "sluis"}

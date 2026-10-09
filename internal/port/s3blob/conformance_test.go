@@ -104,7 +104,7 @@ func conformance(t *testing.T, kmsKey func(*testing.T, string) string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "snapshots/"}}
+		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "google/"}}
 	}, "blob/")
 }
 
@@ -160,6 +160,6 @@ func TestConformanceWithStaticCredentials(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "snapshots/"}}
+		return porttest.Env{Set: port.Set{Blob: b}, BlobPrefixes: []string{"reports/", "google/"}}
 	}, "blob/")
 }

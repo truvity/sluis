@@ -169,3 +169,22 @@ func TestRestoreInvokeStatement(t *testing.T) {
 		t.Fatalf("%v", st)
 	}
 }
+
+// A role that hosts the Google module names it `google` everywhere: its table,
+// its parameters and its blob prefix (the hub's snapshots). `directory` and
+// `snapshots` are not names in IAM.
+func TestGoogleRoleNamesGoogleInStorageAndPaths(t *testing.T) {
+	doc := rendered(t, Role{Name: "google", Hosts: []Module{ModuleGoogle}})
+	for _, want := range []string{
+		"/sluis/i1/internal/google/*", "/sluis/i1/external/google/*", "tbl:google", "bkt/google/*",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("missing %q in %s", want, doc)
+		}
+	}
+	for _, not := range []string{"directory", "snapshots", "internal/oidc", "tbl:oidc", "bkt/oidc"} {
+		if strings.Contains(doc, not) {
+			t.Errorf("unexpected %q in %s", not, doc)
+		}
+	}
+}
