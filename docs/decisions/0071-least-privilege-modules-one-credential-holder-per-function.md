@@ -134,10 +134,11 @@ and schedule from one declaration, and one chart renders every Deployment.
     topology spread. Per-module defaults for replicas, resources, Lambda memory, timeout and reserved concurrency are
     in the chart values and the Pulumi library, not in this record.
 
-11. **Release.** Eight arm64 Lambda zips and eight multi-arch images, the adapter layer zip, and `sluisctl` and
-    `sluis-restore` archives, each with an SBOM and a checksum in one `checksums.txt`, signed. Lambda is packaged as
-    native zips and zip layers, never as container images, so that the package digest an installation pins is the
-    code that runs.
+11. **Release.** Eight modules, each shipped as a native zip for Lambda and a dedicated multi-arch image for Kubernetes,
+    plus the adapter layer zip and `sluisctl` and `sluis-restore` archives, each with an SBOM and a checksum in one
+    `checksums.txt`, signed. Lambda functions receive only native zips and zip layers, never container images, so that
+    the package digest an installation pins is the zip the function executes. Kubernetes receives one dedicated multi-arch
+    image per binary; there is no all-in-one binary or image.
 
 ## Consequences
 
