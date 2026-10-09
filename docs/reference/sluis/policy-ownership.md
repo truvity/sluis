@@ -4,7 +4,7 @@ The groups sluis reads for itself, how a workspace id narrows them, and how a Gi
 
 ## The service's own two groups
 
-`all:access-roster:operator` and `all:access-roster:viewer` are the only group names the service reads for itself. They are legacy identifiers, renamed in v1.75–v1.76 but kept: [ADR 0035](../../decisions/0035-renamed-to-sluis.md). Both spellings are read during the move: `all:sluis:operator` and `all:sluis:viewer` (and `<id>:sluis:operator`, `<id>:sluis:viewer`) confer the same roles, `sluisctl render` carries either, and the `access-roster` spelling is deprecated and goes in v1.76. A policy that names both holds the union. An identity is an operator because the policy puts it in the operators group.
+`all:access-roster:operator` and `all:access-roster:viewer` are the only group names the service reads for itself. They are legacy identifiers, renamed in v1.75–v1.76 but kept: [ADR 0035](../../decisions/0035-renamed-to-sluis.md). Both spellings are read during the move: `all:sluis:operator` and `all:sluis:viewer` (and `<id>:sluis:operator`, `<id>:sluis:viewer`) confer the same roles, `sluisctl render` carries either, and the old spelling is deprecated and goes in v1.76. A policy that names both holds the union. An identity is an operator because the policy puts it in the operators group.
 
 A workspace id in the scope position scopes the role to that tenant:
 
