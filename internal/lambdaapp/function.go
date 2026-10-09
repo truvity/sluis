@@ -195,6 +195,11 @@ func open(ctx context.Context, file string) (*Function, error) {
 	// service is assembled, whose New would run their loops.
 	github, slack := cfg.GitHub, cfg.Slack
 	cfg.GitHub, cfg.Slack = nil, nil
+	// A start reads no generated client's record: a herd of cold starts would
+	// read one per client each, and SSM throttles a herd. The token endpoint
+	// reads a record when its client first authenticates, and the schedule's
+	// refresh settles them (WithRefresh below).
+	cfg.SkipStartSecretsPass = true
 	service, err := rosterapp.New(ctx, cfg, log)
 	if err != nil {
 		return nil, err
