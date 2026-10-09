@@ -569,7 +569,7 @@ func (c *Controller) act(ctx context.Context, client githubapp.Org, token string
 		if err != nil {
 			outcome = audit.Failed(err.Error())
 			markHeld(report, action, err.Error())
-			c.deps.Log.WarnContext(ctx, "GitHub refused a change", slog.String("org", report.Org), slog.String("action", action.String()),
+			c.deps.Log.WarnContext(ctx, "a change was refused by GitHub", slog.String("org", report.Org), slog.String("action", action.String()),
 				logattr.SafeError("error", err))
 		} else {
 			done++

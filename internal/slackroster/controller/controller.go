@@ -752,7 +752,7 @@ func (c *Controller) fold(ctx context.Context, workspace string, report *status.
 		}
 		if o.Err != nil {
 			failed++
-			c.deps.Log.WarnContext(ctx, "Slack refused a change", logattr.SafeString("workspace", workspace),
+			c.deps.Log.WarnContext(ctx, "a change was refused by Slack", logattr.SafeString("workspace", workspace),
 				logattr.SafeString("kind", string(o.Action.Kind)),
 				logattr.SafeString("channel", o.Action.Channel), logattr.SafeError("error", o.Err))
 			markFailed(report, o.Action, o.Err)

@@ -675,12 +675,12 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		// The directory has an opinion and it is no. Saying so here is
 		// the only place a person will read it: everywhere downstream
 		// they would simply find themselves admitted nowhere.
-		s.deps.Log.WarnContext(r.Context(), "sign-in refused", logattr.SafeString("email", email), logattr.SafeString("reason", refused.Reason))
+		s.deps.Log.WarnContext(r.Context(), "sign-in refused", logattr.Pseudonym("subject", email), logattr.SafeString("reason", refused.Reason))
 		recordLoginFailure(r.Context(), LoginDirectoryRefused)
 		http.Error(w, "signed in as "+email+", but "+refused.Reason, http.StatusForbidden)
 		return
 	case err != nil:
-		s.deps.Log.ErrorContext(r.Context(), "the hub could not be asked", logattr.SafeString("email", email), logattr.SafeError("error", err))
+		s.deps.Log.ErrorContext(r.Context(), "the hub could not be asked", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
 		recordLoginFailure(r.Context(), LoginDirectoryUnreachable)
 		http.Error(w, "signed in as "+email+", but the directory could not be reached",
 			http.StatusServiceUnavailable)
@@ -705,7 +705,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	recordLoginSuccess(r.Context(), provider.Kind())
 	s.deps.Log.InfoContext(r.Context(), "signed in",
-		logattr.SafeString("email", email), slog.String("provider", provider.Kind()), slog.Int("groups", len(standing.Groups)))
+		logattr.Pseudonym("subject", email), slog.String("provider", provider.Kind()), slog.Int("groups", len(standing.Groups)))
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 

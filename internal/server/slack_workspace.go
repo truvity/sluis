@@ -416,7 +416,7 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 			"the token could not be kept: "+logattr.Error(err)+"; "+revokedWords(revokeErr), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "Slack workspace connected", logattr.SafeString("workspace", workspace),
+	s.log.InfoContext(r.Context(), "a Slack workspace was connected", logattr.SafeString("workspace", workspace),
 		logattr.SafeString("team", installed.TeamID),
 		logattr.SafeString("scopes", strings.Join(record.Scopes, ",")), logattr.SafeString("by", actor))
 	console.record(r.Context(), audit.SlackWorkspaceConnected(audit.Identified(actor), subject))
