@@ -1160,6 +1160,9 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 	if err := s.refusalOf(ctx, request); err != nil {
 		return "", time.Time{}, err
 	}
+	if err := resourceWithinGrant(ctx, request); err != nil {
+		return "", time.Time{}, err
+	}
 
 	// A code that opens no session -- `openid` alone, or a request whose
 	// every scope the client was not allowed, which mints no ID token
@@ -1207,6 +1210,9 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	// A refusal the first reading carried, now that the client is matched:
 	// returned as it is, which the library passes to the wire unchanged.
 	if err := s.refusalOf(ctx, request); err != nil {
+		return "", "", time.Time{}, err
+	}
+	if err := resourceWithinGrant(ctx, request); err != nil {
 		return "", "", time.Time{}, err
 	}
 
