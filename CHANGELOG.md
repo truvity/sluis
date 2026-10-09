@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.74.0-rc.2
+
 ### Added
 
 - **GitHub Apps with an active webhook (preview).** A catalogue App may declare `webhook:` with a `url` (Argo CD) or a `kargo` receiver (`base`, `receiver`, `project`) and `events`. sluis generates the webhook secret, sets it on GitHub right after the App is created, keeps it beside the App's key (optional `webhook_secret` in `github/v1`), and compares GitHub's hook URL, content type and secret presence in the drift check. `RotateGitHubAppWebhook` rotates it without overlap: it keeps the new secret, waits for the new target to accept a signed ping, then tells GitHub the secret (and a Kargo receiver's derived URL) in one call, restoring the previous secret on failure. New audit action `roster.catalogue_app.webhook_changed` (catalogue 1.13.0). Off unless an App declares `webhook:`; not yet verified against real GitHub; no console button yet; existing Apps must be disconnected and recreated to get an active webhook. See [Delivering events](docs/how-to/connect/github-apps-catalogue.md#delivering-events).
