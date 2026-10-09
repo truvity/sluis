@@ -361,11 +361,11 @@ type WriterArgs struct {
 
 // NotaryArgs is the notary function.
 type NotaryArgs struct {
-	// Disabled leaves out the whole notary: the P-384 seal key and its alias, the
-	// notary function with its role and log group, the schedule and the
-	// scheduler's role, and the notary's alarms. For a deployment that seals
-	// elsewhere (OpenBao transit) or not yet. Notary.Package is then not
-	// required and is ignored.
+	// Disabled leaves out the whole notary: the notary function with its role
+	// and log group, the schedule and the scheduler's role, and the notary's
+	// alarms. The library creates no seal key, and Keys.Seal is refused with
+	// Disabled. For a deployment that seals elsewhere (OpenBao transit) or
+	// not yet. Notary.Package is then not required and is ignored.
 	Disabled bool
 	// Package is the release's zip, `audit-notary-lambda_<version>_linux_arm64.zip`,
 	// as a path or an https URL; see WriterArgs.Package. Required.

@@ -1,18 +1,10 @@
 # The installation document
 
-What an estate knows about one installation, written once, from which both documents are rendered
-([ADR 0038](../../decisions/0038-estates-render-through-sluis.md)): `apiVersion: sluis.truvity.github.io/installation/v1`,
-held to `schemas/config/installation.schema.json`. It holds no secret.
+One installation, written once, from which both documents are rendered ([ADR 0038](../../decisions/0038-estates-render-through-sluis.md)): `apiVersion: sluis.truvity.github.io/installation/v1`, held to `schemas/config/installation.schema.json`. It holds no secret.
 
-`sluisctl render --installation <file> --out <dir>` writes `sluis.yaml` ([the service document](configuration.md#the-service-document))
-and `policy.yaml` ([the policy document](policy-document.md)) from it
-([sluisctl](sluisctl.md#render-an-installation-in-the-two-documents-out)); `--check` compares with the files already
-there and exits 1 on a difference. The Pulumi library takes it as `LambdaArgs.Installation`
-([Pulumi library](pulumi-library.md)); a Go program calls `config.Render` from `github.com/truvity/sluis/config`
-([Go module](../../sdk/go/sluis.md)).
+`sluisctl render --installation <file> --out <dir>` writes `sluis.yaml` and `policy.yaml` ([sluisctl](sluisctl.md#render-an-installation-in-the-two-documents-out)). `--check` exits 1 when the files differ. The Pulumi library takes it as `LambdaArgs.Installation`. Go programs call `config.Render` from `github.com/truvity/sluis/config`.
 
-It is a superset of the two documents: a section is under the key the document gives it, with that document's own
-schema, and the installation adds what a document cannot say.
+It is a superset of the service and policy documents: each section sits under its document's key with that document's schema.
 
 | Key | What it is |
 |---|---|
@@ -28,7 +20,4 @@ schema, and the installation adds what a document cannot say.
 | `controllers` | `github` and `slack`, each present when the controller is on: its own keys go to the service document's `controllers`, `enabledOrgs` and `enabledWorkspaces` to the policy document's. |
 | `access` | the access model's tables (`groups`, `clients`, `resources`, `github`, `slack`, ...), the policy document's, unchanged. |
 
-For shape `lambda` the renderer writes what the library owns: `secrets` (`ssm`, the instance's root, the region),
-`recovery.passwordSecret` and the `invoke` trigger's function, and refuses a different value. A named adapter replaces
-what a resource stands for. The output is deterministic and held to the service's loader; the renderer does not check
-what only a running process knows (an adapter's platform answer, an OpenBao's reachability), which is checked at start.
+For shape `lambda` the renderer writes what the library owns (`secrets` as `ssm` with the instance's root and region, `recovery.passwordSecret`, the `invoke` trigger's function) and refuses a different value. A named adapter replaces what a resource stands for. The output is deterministic and held to the service's loader. Start checks adapter platform answers and OpenBao reachability.

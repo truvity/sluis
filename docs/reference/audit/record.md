@@ -1,22 +1,10 @@
 # Record reference
 
-Source of truth: [record.proto](../../../audit/proto/audit/v1/record.proto), which is
-also where a reader goes for what each field means.
+The record is defined by [record.proto](../../../audit/proto/audit/v1/record.proto). A buf plugin generates its JSON Schema during `just generate`:
+[`gen/jsonschema/record.v1.schema.json`](../../../audit/gen/jsonschema/record.v1.schema.json), identifier `https://truvity.github.io/sluis/schemas/audit/v1/record.schema.json`.
+The schema uses proto field names, enum names, 64-bit integers as strings and absent unpopulated fields. Every proto comment is a description.
 
-Its JSON Schema is generated from that proto by a buf plugin during
-`just generate` and published as
-[`gen/jsonschema/record.v1.schema.json`](../../../audit/gen/jsonschema/record.v1.schema.json),
-under the identifier `https://truvity.github.io/sluis/schemas/audit/v1/record.schema.json`.
-It describes the form this project writes — proto field names, enums as names,
-64-bit integers as strings, unpopulated fields absent — and carries every proto
-comment as a description, so that a reader outside Go can both validate an
-archived record and understand it without this repository. The writer archives
-the proto of a record's major beside the schema on first use. A proto change not
-followed by `just generate` leaves the tree dirty, which CI reads as a failure.
-
-Which profile copies carry a field is decided by the profile's framework profiles
-([framework profiles](profiles.md)); `audit profile explain <name>` prints the result. The
-record does not say.
+The writer archives the proto of a record's major beside the schema on first use. The [profiles](profiles.md) decide which copy carries a field; `audit profile explain <name>` prints the result.
 
 | field | set by | notes |
 |---|---|---|
@@ -45,22 +33,30 @@ record does not say.
 | `origin_hash` | writer | SHA-256 of the wide record |
 | `profile` | writer | which copy this is |
 
-## Bounds (enforced by the emitter library, defaults)
+## Bounds
 
 | what | bound |
 |---|---|
+| defaults | `record.Default`; an emitter may lower them with its `Bounds` option. The emitter cuts what is over; the writer refuses a record over the size, `attributes` or `targets` bound |
+| whole record | 256 KiB canonical; a larger record gives up parts in the truncation order |
+| ids (record, tenant, actor, subject, session, target, request, trace, span) | 128 chars |
+| `targets[].name` | 256 chars |
+| `outcome.code` | 64 chars |
 | `attributes` | 50 keys, key 64 chars, value 512 chars |
 | `outcome.reason` | 512 chars |
 | `context.user_agent` | 256 chars |
 | `context.client_addresses` | 8 entries |
-| `capture.request`, `capture.response` | 64 KiB each; a larger body is dropped by the emitter. Bodies stay in the record: only the security profile keeps `capture`, so there is nothing to share between copies |
+| `capture.request`, `capture.response` | 64 KiB each; the emitter drops a larger body |
 | `targets` | 32 entries |
-| truncation order | response, request, unmapped, attributes, reason |
+| truncation order | response, request, unmapped, attributes, reason (cut to 64 chars); `capture.truncated` is set when present |
 
-## Negative list (refused by the emitter library)
+## Negative list
 
-Secrets, tokens, passwords, private keys, connection strings, card numbers,
-bank account numbers, session identifiers in clear, presented attribute
-values, user content, names, e-mail addresses. Property names containing
-`password`, `secret`, `token`, `authorization` are refused in extension
-schemas unless annotated `x-audit-sensitive: redact`.
+The emitter library refuses these values.
+
+| Class | Refused |
+|---|---|
+| Credentials | secrets, tokens, passwords, private keys, connection strings |
+| Financial | card numbers, bank account numbers |
+| Identity | session identifiers in clear, presented attribute values, user content, names, e-mail addresses |
+| Property names | `password`, `secret`, `token`, `authorization` in extension schemas, unless annotated `x-audit-sensitive: redact` |

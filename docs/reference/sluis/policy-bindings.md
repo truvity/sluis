@@ -1,7 +1,6 @@
 # Policy: GitHub teams, people, Slack channels and the access document
 
-The tables that bind internal groups to things outside the token. Part of [the policy](policy.md). To use them:
-[bind GitHub teams](../../guides/sluis/bind-github-teams.md), [bind Slack channels in git](../../guides/sluis/bind-slack-channels-in-git.md).
+The tables that bind internal groups to things outside the token, part of [the policy](policy.md). How: [bind GitHub teams](../../guides/sluis/bind-github-teams.md), [bind Slack channels in git](../../guides/sluis/bind-slack-channels-in-git.md).
 
 ## GitHub teams
 
@@ -19,35 +18,33 @@ github:
     teams:
       team-platform:
         members: [all:platform:engineer]
-    ignore:                                 # left alone here, whatever the bindings say
+    ignore:
       - admin@partner.example               # an address in a bound group nobody can take out
-      - temp-owner                          # a GitHub login: a temporary owner, a break-glass seat
+      - temp-owner                          # a GitHub login: temporary owner, break-glass seat
 ```
-
-A team is a consumer of an internal group, as a client's `requires` is: the holders of these groups are the people the
-team should contain. Which accounts hold a group is answered once, in `groups`.
 
 | Key | Meaning |
 |---|---|
-| `members` (organisation) | people who belong in the organisation **without** a team. Being in a bound team implies membership, so this is not a list of everybody |
+| `members` (organisation) | people in the organisation without a team; membership of a bound team is implied |
 | `teams.<slug>.members` | internal groups whose holders are team members |
-| `teams.<slug>.maintainers` | internal groups whose holders are team maintainers. A holder of a maintainer group is a maintainer even when a member group also names them |
-| `ignore` | addresses or GitHub logins never managed. An ignored address is never invited and not reported as waiting to link; an ignored login is never added, removed or changed, linked or not, owner or not. Two files ignoring accounts in one organisation ignore both |
+| `teams.<slug>.maintainers` | internal groups whose holders are maintainers; wins over a member group |
+| `ignore` | addresses or logins never managed: never invited, added, removed or changed; files merge by union |
 
-Nothing here grants anything, and none of it appears in a token: the GitHub controller reads the table and makes each
-organisation match. The same team slug in two organisations is two different teams. There is no `owner` key: which
-directory owns an organisation is recorded when it is connected ([policy-ownership.md](policy-ownership.md)).
-
-| Refused | Because |
+| Rule | Value |
 |---|---|
-| a group nothing declares | the binding would name something with no meaning |
-| a team with neither `members` nor `maintainers` | *remove everyone* is not expressed by leaving a list out |
-| an organisation binding no group and no team | *stop managing this organisation* is expressed by removing it |
-| the same team declared twice across merged files | the second would silently replace the first |
-| the same organisation's `members` declared twice | the same reason |
-| `github.<org>.owner` | removed in v1.41.x; the message says the owner is chosen on the console |
+| Effect | grants nothing; appears in no token; the GitHub controller makes each organisation match |
+| Same slug in two organisations | two teams |
+| Organisation owner | not in the policy; recorded at connect ([ownership](policy-ownership.md)) |
+| Console | the Rules page lists each binding beside other rules |
 
-The console's Rules page lists a binding beside every other rule, linked to its internal group.
+| Refused | Note |
+|---|---|
+| a group nothing declares | |
+| a team with neither `members` nor `maintainers` | |
+| an organisation binding no group and no team | remove it to stop managing it |
+| a team declared twice across merged files | |
+| an organisation's `members` declared twice | |
+| `github.<org>.owner` | the message says the owner is chosen on the console |
 
 ## People
 
@@ -56,13 +53,13 @@ people:
   jdoe: [j.doe@acme.example, john@globex.example]   # one person, two companies' addresses
 ```
 
-`people` says which addresses are the same person. The key is a name you choose, matching lowercase letters, digits,
-`.`, `_` and `-`, starting with a letter or digit, at most 63 characters. It is generic: any reconciler that looks a
-person up by their address in one domain uses it. It **only links addresses**: it never says who holds a group, and a
-person listed here gains nothing until the directory puts one of their addresses in a group.
-
-Refused: a person with no address, an address that is not one, the same address under two people or twice under one, and
-a key that is not a plain name. Addresses are compared lowercased. The same person in two merged files is a clash.
+| Rule | Value |
+|---|---|
+| Purpose | says which addresses are one person; grants nothing |
+| Key | lowercase letters, digits, `.`, `_`, `-`; starts with letter or digit; at most 63 characters |
+| Comparison | addresses lowercased |
+| Refused | person with no address; invalid address; address under two people or twice under one; invalid key |
+| Merge | the same person in two files is a clash |
 
 ## Slack channels
 
@@ -76,59 +73,46 @@ slack:
     globex: {}                              # declared; its channels are bound elsewhere
 ```
 
-The Slack controller reads this table. It is a loop inside the one `sluis serve` process (v1.63 on) and changes only the
-workspaces listed in `controllers.slack.enabledWorkspaces` of the policy document; every other declared workspace is a
-dry run. What it does with the keys, and how to run it: [Connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md)
-and [the Slack reconciler](../../concepts/sluis/slack-reconciler.md).
+The Slack controller runs inside `sluis serve`. It changes only `controllers.slack.enabledWorkspaces`; other workspaces are dry runs. See [Connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md) and [the Slack reconciler](../../concepts/sluis/slack-reconciler.md).
 
 | Key | Meaning |
 |---|---|
-| workspace key | ours: lowercase letters, digits and `-`, starting and ending with a letter or digit, at most 40 characters. Its Slack team, owning directory and domains are not declared here ([policy-ownership.md](policy-ownership.md#who-owns-a-slack-workspace)) |
-| channel name | as Slack spells it: lowercase letters, digits, `-`, `_`, at most 80 |
-| `from` | **internal groups** whose holders the channel should contain. Required. Slack user groups are out of scope |
-| `private` | the channel is private. Declaring it never converts a channel's visibility |
-| `mode` | `extend` (default): only add; `strict`: add and remove. `strict` needs `private: true` |
-| `ignore` | people a `strict` channel never removes: addresses, or Slack user ids such as `U0123ABCD`. Refused without `mode: strict` |
-| `adopt` | an optional channel id (`^[CG][A-Z0-9]{8,}$`) to disambiguate, for a renamed channel or two candidates |
+| workspace key | lowercase letters, digits, `-`; starts and ends alphanumeric; at most 40 characters. Team, owner and domains: [ownership](policy-ownership.md#who-owns-a-slack-workspace) |
+| channel name | as Slack spells it: lowercase letters, digits, `-`, `_`; at most 80 |
+| `from` | required; internal groups whose holders the channel contains; Slack user groups unsupported |
+| `private` | the channel is private; never converts visibility |
+| `mode` | `extend` (default) only adds; `strict` adds and removes, needs `private: true` |
+| `ignore` | addresses or Slack user ids (`U0123ABCD`) that `strict` never removes; needs `mode: strict` |
+| `adopt` | channel id `^[CG][A-Z0-9]{8,}$` for a renamed channel or two candidates |
 
-A policy channel is fed by internal groups only. Individual addresses (`members`) and directory groups (`sources`) are
-fields of a console channel record, not of this file; a `members` key here is refused as unknown. Shared (Slack
-Connect) channels are not in the policy.
-
-**The two kinds never mix.** The console refuses to create or edit a record for a channel this section binds (the same
-name or the same `adopt` id). If both definitions exist anyway, the channel is held on both sides, *defined in both git
-and the console*, and nothing on it changes until one is removed. There is no "take over from git".
-
-**Creation and adoption.** A channel is created if missing, otherwise adopted by name: a public channel is joined, a
-private one the bot is in is managed, and the adoption is recorded once as `roster.slack_channel.adopted`. Never done,
-each held with its reason: converting visibility, unarchiving an archived channel of that name, and creating a second
-channel when a private channel the bot cannot see holds the name.
-
-**Removal.** `strict` removes only after the directory vouches for the answer, never removes bots or apps, the
-controller's own bot, deactivated users, guests (reported, never touched) or anybody on `ignore`, and a breaker stops a
-run that would remove more than half of a channel's members or of the workspace's managed members unless an operator
-confirms exactly that set. A person with no Slack account yet, or no address in the workspace's domains, is held with
-that reason, never an error.
-
-| Refused | Because |
+| Rule | Value |
 |---|---|
-| a malformed workspace key or channel name | Slack or the audit record would refuse it later |
-| `team_id`, `domains` or `owner` on a workspace, or `owner` on a GitHub organisation | removed in v1.41.x in favour of what sluis records at run time; the message says where each comes from |
-| `mode` other than `extend` or `strict`; `strict` on a channel that is not `private` | Slack would refuse every removal from a public channel |
-| `ignore` without `mode: strict`, an entry that is neither address nor Slack user id, or one listed twice | an extend channel removes nobody |
-| a channel with no `from` | *empty this channel* is not expressed by leaving a list out |
-| a group nothing declares | the binding would name something with no meaning |
-| `adopt` not matching the pattern, or one id adopted twice in a workspace | two bindings would fight over one channel |
+| Fed by | internal groups only; `members` and `sources` belong to console channel records; `members` here is refused as unknown |
+| Slack Connect channels | not in the policy |
+| Git and console | console refuses a record for a channel bound here (same name or `adopt` id) |
+| Defined in both | held on both sides, *defined in both git and the console*, until one is removed; no take-over |
+| Creation | created if missing, else adopted by name; public channel joined, private channel the bot is in managed; adoption audited as `roster.slack_channel.adopted` |
+| Never done (held with reason) | convert visibility; unarchive; create a second channel when an invisible private channel has the name |
+| `strict` removes | only after the directory vouches |
+| `strict` never removes | bots, apps, the controller's bot, deactivated users, guests (reported), `ignore` entries |
+| Breaker | stops a run removing over half a channel's members or the workspace's managed members, unless an operator confirms that set |
+| No Slack account, or no address in workspace domains | held with that reason, not an error |
+| Merge | workspace merges field by field; a channel comes from one file |
+| Lint | bound groups count as consumed |
 
-Across merged files a workspace merges field by field; a channel comes from one file. Bound groups count as consumed
-by the unused-group lint.
+| Refused | Note |
+|---|---|
+| malformed workspace key or channel name | |
+| `team_id`, `domains` or `owner` on a workspace; `owner` on a GitHub organisation | the message says where each comes from |
+| `mode` not `extend` or `strict`; `strict` on a non-private channel | |
+| `ignore` without `strict`; entry neither address nor user id; duplicate entry | |
+| a channel with no `from` | |
+| a group nothing declares | |
+| `adopt` off-pattern, or one id adopted twice in a workspace | |
 
 ## The access document
 
-A file with an `access` key is an *access document*: the same tables, spelled as lists and camelCase, which the loader
-turns into the layer it would have read had it been written by hand (`policy.ParseAccess`, called by `LoadDeclared`;
-`sluisctl policy render` merges it with the other layers). The chart's values mode (deprecated) rendered `access` and
-`overlay` from values; with `documents.policy` the chart takes a rendered document instead.
+A file with an `access` key spells the same tables as camelCase lists. `policy.ParseAccess` (called by `LoadDeclared`) and `sluisctl policy render` turn it into a layer. It adds no concept. Chart `documents.policy` takes a rendered document.
 
 ```yaml
 version: 1
@@ -156,12 +140,12 @@ overlay:
     probe: {kind: exchange, requires: [env:ssh:admin]}
 ```
 
-It adds no concept. A group's matchers are written in this order: `emails`, `github`, `service_accounts`, `aws`, then the
-overlay's. A group the overlay names and the access part does not is created with only those matchers. A client the
-overlay declares that the access part also declares is refused. The access document is one layer like any other: a
-group, client or person declared in it and in another file is a clash, and the merged policy is validated once.
-
-A group's `github` entry carries only the eight fields CI-job rows use (`repository`, `owner`, `visibility`, `ref`,
-`ref_type`, `event_name`, `workflow_ref`, `job_workflow_ref`); `service_accounts` and `aws` only theirs; an unknown key is
-refused. A client row also accepts the keys its own deployment reads (`secretKey`, `hostname`, `prefix`, `mount`,
-`cluster`, `proxy`, `deliver`), which take no part in the policy.
+| Rule | Value |
+|---|---|
+| Matcher order | `emails`, `github`, `service_accounts`, `aws`, then the overlay's |
+| Group only in overlay | created with only those matchers |
+| Client in overlay and access | refused |
+| Layer | a group, client or person also declared in another file is a clash; the merged policy is validated once |
+| Group `github` fields | `repository`, `owner`, `visibility`, `ref`, `ref_type`, `event_name`, `workflow_ref`, `job_workflow_ref` |
+| Group `service_accounts`, `aws` | only their own fields; unknown key refused |
+| Client deployment keys | `secretKey`, `hostname`, `prefix`, `mount`, `cluster`, `proxy`, `deliver`; ignored by the policy |

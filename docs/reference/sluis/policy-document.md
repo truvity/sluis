@@ -1,24 +1,19 @@
 # The policy document
 
-The service loads one policy document, from the file the service document's `policy.file` names. There is one layer: the
-console is read-only, so nothing it does can add to what is declared here. It says what the installation decides. Its
-tables are the access model's ([policy](policy.md): `vocabulary`, `groups`, `claims`, `lifetimes`, `resources`,
-`clients`, `github`, `slack`, `people`, ...), unchanged; beside them are three sections that say whom the exchange
-trusts, which Apps an operator may make and what the controllers may change. Held to
-`schemas/config/policy.schema.json`; `apiVersion: sluis.truvity.github.io/policy/v2`.
+The policy document is the one file a process loads, named by the service document's `policy.file`. It holds the tables of [the policy](policy.md) plus three sections, held to `schemas/config/policy.schema.json`, `apiVersion: sluis.truvity.github.io/policy/v2`.
 
-| Section | Holds | Was |
-|---|---|---|
-| `exchange.clusters[]` | `{name, issuer, jwksUri}` per federated cluster | `exchange.clustersFile` |
-| `exchange.aws` | `audience`, `maxAge` and `accounts[]` (`{account, name, issuer, jwksUri, orgId, algs}`) | `exchange.awsFile` |
-| `exchange.github.owners[]` | the organisations whose CI tokens are verified. None verifies none | `github.owners` |
-| `apps.github.runnerTiers[]` | the tiers an operator may create a runner App for | `github.runnerTiers` |
-| `apps.github.catalogue[]` | the GitHub App catalogue ([connect/github-apps-catalogue.md](../../guides/sluis/connect/github-apps-catalogue.md)) | `github.catalogueFile`, the GitHub controller's `catalogueFile` |
-| `apps.slack.catalogue[]` | the Slack App catalogue ([connect/slack-apps-catalogue.md](../../guides/sluis/connect/slack-apps-catalogue.md)) | `slack.catalogueFile` |
-| `controllers.github.enabledOrgs[]` | the organisations the GitHub controller changes; every other bound organisation is a dry run | the controller's `enabledOrgs` |
-| `controllers.slack.enabledWorkspaces[]` | the workspaces the Slack controller changes | the controller's `enabledWorkspaces` |
+| Section | Holds |
+|---|---|
+| `exchange.clusters[]` | `{name, issuer, jwksUri}` per federated cluster |
+| `exchange.aws` | `audience`, `maxAge` and `accounts[]` (`{account, name, issuer, jwksUri, orgId, algs}`) |
+| `exchange.github.owners[]` | organisations whose CI tokens are verified; none verifies none |
+| `apps.github.runnerTiers[]` | tiers an operator may create a runner App for |
+| `apps.github.catalogue[]` | the GitHub App catalogue ([GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md)) |
+| `apps.slack.catalogue[]` | the Slack App catalogue ([Slack Apps catalogue](../../guides/sluis/connect/slack-apps-catalogue.md)) |
+| `controllers.github.enabledOrgs[]` | organisations the GitHub controller changes; other bound organisations are a dry run |
+| `controllers.slack.enabledWorkspaces[]` | workspaces the Slack controller changes |
 
-There is no secret in any of them: every row is a name and a URL.
+No section holds a secret: every row is a name and a URL.
 
 ```yaml
 apiVersion: sluis.truvity.github.io/policy/v2
@@ -42,20 +37,31 @@ controllers:
   github: {enabledOrgs: [example-org]}
 ```
 
-Whatever the service checked at start across these belongs to the document, and runs wherever it is loaded (the binary,
-`sluisctl policy render`, the Pulumi library before it publishes one): a catalogue grant naming an undeclared group, a
-Slack App for an undeclared workspace, an enabled organisation or workspace the policy does not bind, two clusters for one issuer.
+The document checks run wherever it is loaded: the binary, `sluisctl policy render` and the Pulumi library.
+
+| Refused |
+|---|
+| a catalogue grant naming an undeclared group |
+| a Slack App for an undeclared workspace |
+| an enabled organisation or workspace the policy does not bind |
+| two clusters for one issuer |
 
 ## Rendering
 
-A process loads exactly one document. `sluisctl policy render <file or directory> [-o <file>]` writes it from the layers
-a deployment declares: a policy file of v1 (`version: 1`), an access document (`access:` and `overlay:`, reshaped into
-tables) or a policy document fragment, alone or a directory of them merged in name order
-([sluisctl](sluisctl.md#policy-render-the-one-policy-document)). Tables merge by key and a key declared twice is an error
-naming the file; of the sections, a list concatenates and a list of names unions. The result is held to every check
-above, and is the same bytes for the same layers.
+`sluisctl policy render <file or directory> [-o <file>]` writes one document ([sluisctl](sluisctl.md#policy-render-the-one-policy-document)). The same layers give the same bytes.
 
-Name the result in the service document's `policy.file`. On Kubernetes the chart takes the policy in `policy:` in values
-and the Apps' catalogues, or the finished document in `documents.policy` ([chart values](chart-values.md)); on AWS Lambda
-it is the policy of the configuration layer. An installation renders both documents at once from
-[the installation document](installation-document.md).
+| Input layer | Form |
+|---|---|
+| policy file | `version: 1` |
+| access document | `access:` and `overlay:`, reshaped into tables |
+| policy document fragment | any section |
+
+A directory merges in name order. Tables merge by key and a key declared twice is an error naming the file. A list of sections concatenates; a list of names unions.
+
+| Target | Where the document goes |
+|---|---|
+| any | `policy.file` in the service document |
+| Kubernetes | `policy:` in values, or the finished document in `documents.policy` ([chart values](chart-values.md)) |
+| AWS Lambda | the policy of the configuration layer |
+
+[The installation document](installation-document.md) renders both documents at once.

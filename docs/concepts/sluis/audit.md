@@ -4,7 +4,7 @@ sluis does not keep its own audit trail. It records into an installation of
 [audit](../audit/README.md) that belongs to this application: with `audit.writer` set it
 registers its catalogue and sends its records to that one address, and with `audit.query` set it shows the
 installation's view as the console's Audit page; with neither it keeps nothing beyond the log line every record also
-is, and has no page. On AWS the sink is SQS ([ports](../../reference/sluis/ports.md#audit-sink)). Setting it up: [connect an audit installation](../../guides/sluis/connect-audit-installation.md).
+is, and has no page. On AWS the sink is SQS ([ports](../../reference/sluis/ports.md#inputs-identity-and-audit)). Setting it up: [connect an audit installation](../../guides/sluis/connect-audit-installation.md).
 
 **The catalogue is the model.** [`internal/audit/catalogue/roster.yaml`](../../../internal/audit/catalogue/roster.yaml)
 declares every action (listed in [audit actions](../../reference/sluis/audit-actions.md)) with what kind of operation it is,

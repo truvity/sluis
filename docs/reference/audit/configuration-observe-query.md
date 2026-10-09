@@ -1,18 +1,21 @@
 # Configuration: observe and query
 
-The keys of the indexer (`audit-observe`) and the query service (`audit-query`), with its grants file.
-Shared blocks are in [configuration](configuration.md#shared-blocks).
+The keys of the indexer (`audit-observe`), the query service (`audit-query`) and its grants file. Shared blocks are in [configuration](configuration.md#shared-blocks).
 
 ## Indexer
 
-`audit-observe` follows the archive and writes the index
-([0062](../../decisions/0062-observe-follows-the-bucket.md),
-[0066](../../decisions/0066-indexer-and-query-are-separate-processes.md)). It
-lists `records/<profile>/<tenant>/` from a cursor kept in Postgres, indexes the
-objects older than the settle window, and moves the cursor in the transaction
-that writes their rows. It reads the archive and never writes it, and it serves
-only `/healthz` and `/readyz`: the query service is `audit-query`, a process of its own under
-a role that can only read.
+`audit-observe` follows the archive and writes the index ([0062](../../decisions/0062-observe-follows-the-bucket.md), [0066](../../decisions/0066-indexer-and-query-are-separate-processes.md)). It reads the archive, never writes it, and serves only `/healthz` and `/readyz`.
+
+| Step | Behaviour |
+|---|---|
+| Pass | Lists `records/<profile>/<tenant>/` from a cursor kept in Postgres. Indexes objects older than `settle`. Moves the cursor in the transaction that writes their rows |
+| Wake-up | Set one of `wake.nats` and `wake.sqs`, or neither. A lost, repeated or reordered notification costs latency only |
+| Latency without wake | Between `settle` and `interval`, at worst `interval` (five minutes with defaults) |
+| Latency with wake | About `settle`, whatever `interval` is. Lower `settle` only as far as a put reliably finishes |
+| Undecodable object | Skipped and counted (`reason=unreadable`) |
+| Fetch or catalogue failure | Stops that tenant's cursor, retried by the next pass (`reason=retry`). Other tenants continue |
+| Reset | `audit reindex --reset-cursor` rereads a profile from the start and changes nothing already indexed |
+| Release | Run the same audit release as the writer or newer ([upgrade to v1.74](../../guides/audit/upgrade/v1.74.md)) |
 
 <!-- generated: config-audit-observe -->
 | key | type | default | meaning |
@@ -30,43 +33,16 @@ a role that can only read.
 | `wake.sqs` | `sqs` | | a queue of the bucket's notifications that is the indexer's own: each message wakes a pass and is deleted. Credentials are the SDK's ambient ones |
 <!-- /generated -->
 
-**Latency.** A pass that sees an object still inside the settle window schedules the next
-pass for the moment it is old enough (never later than `interval`). Without a wake the delay
-is therefore the longer of `settle` and the time to the next scheduled pass: between `settle`
-and `interval`, and at worst `interval` (five minutes with the defaults). With `wake.sqs` or
-`wake.nats` the woken pass finds the object too new and reschedules exactly at put plus
-`settle`, so the delay is about `settle` whatever `interval` is, and the poll is only a safety
-net for a lost notification and can be long. Lower `settle` only as far as a put can be
-trusted to finish.
+A failed pass is retried at the next poll. `/readyz` fails after `readiness.failedPasses` failed passes in a row, or `readiness.staleIntervals` intervals without a success. `/healthz` is unaffected, so a failing indexer does not crash-loop.
 
-**A stalled index is visible.** A pass that fails is retried at the next poll and the pod
-stays up, so the indexer reports it: `/readyz` also fails (`passes`, which does not affect
-`/healthz`, so a failing indexer is not restarted into a crash loop) once
-`readiness.failedPasses` passes in a row failed or no pass succeeded for
-`readiness.staleIntervals` intervals. The `audit_observe_passes_total` counter and the
-`audit_observe_pass_since_success_seconds` gauge back the chart's `AuditIndexStalled` and
-`AuditIndexPassesFailing` alerts. A failing pass is logged with the object and the reason
-once for each distinct error, and again only every half hour.
-
-**Readers are as new as the writer.** The indexer and the query service must run the same
-audit release as the writer or a newer one; see [upgrading to v1.74](../../guides/audit/upgrade/v1.74.md).
-
-Exactly one of `wake.nats` and `wake.sqs`, or neither. A wake-up only makes the
-next pass come sooner: nothing a pass does depends on it, so a notification
-that is lost, repeated or reordered costs latency and nothing else, and the
-poll finds what it missed.
-
-An object that does not decode is skipped and counted (`reason=unreadable`):
-it will not read later either. One that cannot be fetched, or whose
-catalogue cannot be found, stops that tenant's cursor where it is and is tried
-again by the next pass (`reason=retry`); the other tenants carry on.
-`audit reindex --reset-cursor` makes the indexer read a profile again from the
-start, which changes nothing it has already indexed.
+| Signal | Use |
+|---|---|
+| `audit_observe_passes_total`, `audit_observe_pass_since_success_seconds` | Back the chart alerts `AuditIndexStalled` and `AuditIndexPassesFailing` |
+| Log line | Once per distinct error with the object and reason, then every half hour |
 
 ## Query service
 
-`audit-query` serves search, facets, get, export, tail and resolve, behind
-the grants. Every read it serves is recorded through the writer.
+`audit-query` serves search, facets, get, export, tail and resolve behind the grants. The writer records every read it serves.
 
 <!-- generated: config-audit-query -->
 | key | type | default | meaning |
@@ -85,13 +61,11 @@ the grants. Every read it serves is recorded through the writer.
 | `keys` | `keys` | none | the writer's key provider, which turns resolve on. With provider `none`, or no `keys`, there is nothing to resolve and the RPC is `unimplemented`. `local` reads the writer's key directory, which must be shared; `transit` signs in as the query service's own identity, never the writer's |
 <!-- /generated -->
 
-The service's limits (`filter` 4 terms, `sort` 4, `in` 100 values, `limit`
-1000) are fixed in the service, not configured; see the
-[API reference](api.md).
+The service's limits are fixed, not configured: `filter` 4 terms, `sort` 4, `in` 100 values, `limit` 1000. See the [API reference](api.md).
 
-**The grants file.** `audit-query` reads who may authenticate and what each
-caller may see from one file, named by `grants` (in the chart,
-`/etc/audit/grants.yaml`, rendered from `query.grants`):
+## Grants file
+
+`grants` names the file (in the chart `/etc/audit/grants.yaml`, rendered from `query.grants`). It says who may authenticate and what each caller sees.
 
 ```yaml
 issuers:
@@ -128,8 +102,7 @@ rules:                                 # first match wins
       operations: [search, get]
 ```
 
-Instead of a rule per group, an installation whose groups already say who
-may read what names a **grants preset** (a named bundle of grant rules, not a framework profile):
+A grants preset replaces a rule per group. It needs `deployment` in the query configuration, because it turns roles into the deployment's profiles.
 
 ```yaml
 presets:
@@ -138,16 +111,9 @@ presets:
     claim: groups                        # the default
 ```
 
-The `access-roster` framework profile reads groups named `<scope>:audit:<role>`, the
-estate's grant grammar from sluis (`access-roster` is the identifier the code gives it,
-from sluis's former name, and stays until a code change renames it). The scope is `all` or an audit tenant id, byte for
-byte; an environment is never in the name, because each deployment's query
-service requires its own token audience and the issuer decides who may hold
-which. A role grants operations over the profiles built from certain framework profiles,
-so the deployment's own profile names need no mention — which is why a grants preset
-needs `deployment` in the query service's configuration:
+The `access-roster` grants preset reads groups named `<scope>:audit:<role>`, the grant grammar from sluis. The name is a legacy identifier, renamed in v1.75–v1.76. The scope is `all` or an audit tenant id, byte for byte.
 
-| role | profiles built from | operations | `all` allowed |
+| Role | Profiles built from | Operations | `all` allowed |
 |---|---|---|---|
 | `viewer` | `history` | search, facets, get | no: `all:audit:viewer` grants nothing |
 | `security` | `security`, `dora`, `pci-dss`, `nen-7513` | search, facets, get, tail, export | yes |
@@ -155,34 +121,22 @@ needs `deployment` in the query service's configuration:
 | `billing` | `billing-*` | search, facets, get, export | yes |
 | `evidence` | `evidence-etsi` | search, get, export | yes |
 
-`resolve` comes from no group name; it is an explicit rule naming the person.
-There is no assessor role, because a name carries no dates; a time-boxed grant
-is an explicit rule with a window.
+`resolve` comes from no group name: write an explicit rule naming the person.
 
-**Every grant a caller holds counts** — each matching rule and each audit
-group — and which apply is decided per request: on the profile asked for, the
-tenants of the grants covering it are unioned, and the record of the read
-names all of them (`acme:audit:viewer,all:audit:security`). A union never
-crosses profiles, so a viewer of one tenant's history plus a security role over
-every tenant does not become every tenant's history. A time window does not
-union: an unbounded grant on the profile makes the answer unbounded, and two
-different windows on one profile are refused.
+| Rule | Behaviour |
+|---|---|
+| Union | Every matching rule and audit group counts, per request. On the profile asked for, the tenants of the covering grants are unioned. The read's record names all of them (`acme:audit:viewer,all:audit:security`) |
+| Profiles | A union never crosses profiles |
+| Windows | An unbounded grant on a profile makes the answer unbounded. Two different windows on one profile are refused |
 
-It refuses to start when:
+The service refuses to start in these cases:
 
-- the file names no issuer, because then nobody could ever sign in;
-- an issuer has no audience. An audit log must not accept a token minted for
-  another service, because any workload holding that token could replay it here;
-- more than one issuer is trusted and a rule names none. Every issuer can assert
-  any claim, so a rule matching a group from anyone gives operator access to
-  whoever administers the least-trusted issuer;
-- a rule names an issuer that is not listed, or an operation that does not
-  exist;
-- a grants preset is named and the configuration has no `deployment`, or one that does not exist.
+| Case | Reason |
+|---|---|
+| No issuer | Nobody could sign in |
+| An issuer without an audience | A token minted for another service could be replayed |
+| Several issuers and a rule naming none | A rule would match a group from the least-trusted issuer |
+| A rule names an unlisted issuer or an unknown operation | Invalid reference |
+| A preset without `deployment`, or a nonexistent one | The preset cannot resolve profiles |
 
-A bearer token in `Authorization` is accepted, and so is the access token the
-fleet gateway forwards. Verification is
-[gateway-auth](https://github.com/truvity/gateway-auth)'s, one verifier per
-issuer: discovery, a key set refreshed in the background, signature, issuer,
-audience and expiry. That library allows no clock skew.
-
+It accepts a bearer token in `Authorization` and the access token the fleet gateway forwards. [gateway-auth](https://github.com/truvity/gateway-auth) verifies it with one verifier per issuer. It checks signature, issuer, audience and expiry, refreshes keys in the background, and allows no clock skew.

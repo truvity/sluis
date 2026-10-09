@@ -1,26 +1,18 @@
 # Chart values
 
-The values of `charts/audit/values.yaml`, which comments every one, and what the chart refuses.
-How to install is in [the Kubernetes tutorial](../../get-started/audit/kubernetes.md).
+The values of `charts/audit/values.yaml`, which comments every one, and what the chart refuses. To install, follow [the Kubernetes tutorial](../../get-started/audit/kubernetes.md).
 
-The chart passes configuration through. Each component has a `config:` block,
-rendered as it stands (`toYaml`) into a ConfigMap `<fullname>-<component>-config`
-and mounted at `/etc/audit/config.yaml`. A key under `config:` is the
-binary's key, validated twice: by `values.schema.json`, which is generated and
-embeds the same schemas, and by the binary at start-up. The chart translates
-none of it.
+Each component has a `config:` block, rendered with `toYaml` into the ConfigMap `<fullname>-<component>-config` and mounted at `/etc/audit/config.yaml`. A key under `config:` is the binary's key. `values.schema.json` and the binary validate it; the chart translates none of it.
 
-| component | `config:` is the configuration of | notes |
+| Component | `config:` configures | Notes |
 |---|---|---|
-| `writer` | `audit-writer` | direct mode: the one pod. Stream mode: the consumers, `writer.consumers` of them |
-| `receiver` | `audit-writer` with `mode: receiver` | stream mode only |
+| `writer` | `audit-writer` | Direct mode: the one pod. Stream mode: `writer.consumers` consumers |
+| `receiver` | `audit-writer` with `mode: receiver` | Stream mode only |
 | `query` | `audit-query` | `query.enabled` |
-| `observe` | `audit-observe` | `observe.enabled`: one Deployment, `<fullname>-observe`, with a ServiceAccount of its own and no Service |
-| `migrate` | `audit migrate` | `migrate.enabled`, a pre-install and pre-upgrade hook Job |
-| `jobs.notary` | `audit-notary`, in its own image | one CronJob, hourly, off by default (`jobs.notary.enabled`), under a ServiceAccount of its own that the chart refuses to be the writer's |
-| `jobs.verify`, `jobs.purge`, `jobs.clockSync` | `audit verify`, `purge`, `clock-sync` | one CronJob each. The verify job is one CronJob (`<fullname>-verify`) covering the `profiles` its config lists, or every profile |
-
-## What is a value and what is configuration
+| `observe` | `audit-observe` | `observe.enabled`: Deployment `<fullname>-observe`, own ServiceAccount, no Service |
+| `migrate` | `audit migrate` | `migrate.enabled`: pre-install and pre-upgrade hook Job |
+| `jobs.notary` | `audit-notary`, own image | Hourly CronJob, off by default (`jobs.notary.enabled`), own ServiceAccount that must not be the writer's |
+| `jobs.verify`, `jobs.purge`, `jobs.clockSync` | `audit verify`, `purge`, `clock-sync` | One CronJob each. `<fullname>-verify` covers the `profiles` its config lists, or all |
 
 <!-- generated: chart-values -->
 Everything else under a component is the platform's, not the binary's:
@@ -57,7 +49,7 @@ The values that are not configuration of a binary:
 
 ## Mount points
 
-A config names these by path. The chart provides:
+A config names these paths.
 
 | path | what | from |
 |---|---|---|
@@ -69,55 +61,44 @@ A config names these by path. The chart provides:
 | `/etc/audit/trust/<key>` | the CA bundle | `trust` |
 | `/var/lib/audit/keys` | the local key directory | `keysVolume` |
 
-Anything else a config names, such as a token or a key file, is mounted by the
-component's `secretMounts` or `tokens` at the path you give them.
+`secretMounts` and `tokens` mount anything else a config names, such as a token or key file, at the path you give.
 
 ## What the chart refuses
 
-The chart checks what only the platform can see, in
-`charts/audit/templates/_checks.tpl`:
+`charts/audit/templates/_checks.tpl` checks what only the platform sees. A top-level value such as `bucket` or `lockMode` fails against `values.schema.json`, naming the key.
 
-- `mode` is `direct` or `stream`;
-- `writer.config.replicas` equals the number of writer pods the chart renders
-  (`replicas` in direct mode, `writer.consumers` in stream mode): the writer
-  refuses to run several without a database and refuses in-memory keys with
-  several, and can only do that if it is told the truth;
-- more than one writer pod needs `database` in `writer.config`;
-- stream mode needs `receiver.config` with `mode: receiver`,
-  `writer.config.stream` (or `consume`) and a `database` in `writer.config`, and
-  `writer.config.mode` must not be `receiver`; direct mode refuses a receiver
-  writer;
-- more than one writer pod with a `keysVolume` that lacks `ReadWriteMany`, and
-  `query.keysVolume` without an enabled `keysVolume` or without
-  `ReadWriteMany`;
-- `workloads` in the writer's config with no `workloadIdentity.issuers`, and
-  issuers with no `workloads` in the config; an installation with an index and
-  issuers but no `workloadIdentity.workloads`; a workload that names no issuer
-  while more than one is trusted;
-- `query.grants.issuers` empty when the query service is enabled, and a query
-  `database.url` equal to the writer's, because an owner bypasses the tenant
-  policies;
-- `query.route.enabled` without `query.enabled`, `parentRefs` or `hostnames`, and
-  a `securityPolicy` that sets `targetRefs`, `targetRef` or `targetSelectors`;
-- the indexer (`observe.enabled`) running as the writer's, the query service's
-  or the receiver's ServiceAccount, or connecting to the database as the
-  writer's, the query service's or the migration's role (an owner), and a
-  writer that connects as the migration's role: each part's identity is its
-  own, at the cloud role and at the database role;
-- the notary running as the writer: `jobs.notary.serviceAccount.create: false`
-  (it would run as the release's account), a notary account that carries the
-  writer's annotations (the same cloud role), or a notary that signs in to
-  OpenBAO under the writer's role or token: whoever writes the archive and can
-  also sign for it can choose what to sign;
-- `extensions.billing` without a profile composed from a metering framework profile, and
-  `extensions.quotas` without `mode: stream`.
+| Area | Refused |
+|---|---|
+| `mode` | Anything but `direct` or `stream` |
+| `renders` | Anything but `app`, `alerts` or `dashboards`; `alerts` when no configured preset has alarms; an `alerts.format` other than `vmrule` or `prometheusrule`; every `alerts.rules` disabled |
+| `presets` | Empty; a key other than `operational`, `standard` or `attested`; no `bucket`; a `key_alias` that is not `alias/<name>`; a `prefix` that starts with `/` or does not end with one; an `endpoint` that is not http(s); `key_alias` or the attested preset with an `endpoint`; `credentials`, `credentials_ref` or `path_style` without one; `credentials_ref` beside `credentials` or `credentials_preset` |
+| Profiles | A framework profile the chart does not know; a `preset` other than the three; a preset weaker than its framework profiles need; a preset that `presets` does not configure |
+| `telemetry.otlp` | An `endpoint` that is not http(s); `extraEnv` holding `OTEL_EXPORTER_OTLP_ENDPOINT` or a name not starting with `OTEL_` |
+| `secretFiles` | The component's `config.secrets` is not `{source: file, root: /etc/audit/secrets}` |
+| Receiver | Running as the writer's ServiceAccount |
+| `writer.enabled: false` | With `mode: stream`, `keysVolume.enabled`, `workloadIdentity.issuers` or `extensions.billing.enabled`; a query service with no `config.sink`; a sink URL naming this release's own Service; an indexer, query service or job with `serviceAccount.create: false` and no `name` |
+| Keys | The `local` provider without `keysVolume.enabled`, unless `keysVolume.ephemeralIsAcceptable` (losing the directory re-keys every tenant); `query.config.keys` signing in to OpenBAO as the writer, because resolving and writing are separate privileges |
+| Writer count | `writer.config.replicas` differs from the pods rendered (`replicas` in direct mode, `writer.consumers` in stream mode) |
+| Several writers | No `database` in `writer.config`; a `keysVolume` without `ReadWriteMany` |
+| Stream mode | Missing `receiver.config` with `mode: receiver`, `writer.config.stream` (or `consume`) or writer `database`; `writer.config.mode: receiver` |
+| Direct mode | A receiver writer |
+| `query.keysVolume` | No enabled `keysVolume`, or no `ReadWriteMany` |
+| Workload identity | `workloads` without `workloadIdentity.issuers`, and the reverse; an index with issuers but no `workloadIdentity.workloads`; a workload naming no issuer while several are trusted |
+| Query | Empty `query.grants.issuers`; a `database.url` equal to the writer's, because an owner bypasses the tenant policies |
+| `query.route` | Enabled without `query.enabled`, `parentRefs` or `hostnames`; a `securityPolicy` setting `targetRefs`, `targetRef` or `targetSelectors` |
+| Indexer (`observe.enabled`) | Running as the writer's, query service's or receiver's ServiceAccount; connecting as the writer's, query service's or migration's role |
+| Writer | Connecting as the migration's role |
+| Notary | Running as the writer's ServiceAccount (`serviceAccount.create: false`) or with its annotations; OpenBAO sign-in under the writer's role or token; enabled when no configured preset has a notary (`standard` or `attested`) |
+| `extensions.billing` | No profile composed from a metering framework profile |
+| `extensions.quotas` | Without `mode: stream` |
 
-A value from before the file, such as `bucket` or `lockMode` at the top level,
-is not accepted: it fails against `values.schema.json`, naming the key.
+Each part keeps its own identity, at the cloud role and at the database role.
+
+The chart does not check that the Envoy Gateway CRDs exist when `query.route.securityPolicy` is set.
 
 ## Examples
 
-Four complete value files are kept beside the chart and rendered by its tests:
+The chart's tests render these complete value files, all in configuration version 2.
 
 | file | for |
 |---|---|
@@ -126,5 +107,4 @@ Four complete value files are kept beside the chart and rendered by its tests:
 | [`external-writer.yaml`](../../../charts/audit/examples/external-writer.yaml) | writer on Lambda, observe and query here (`writer.enabled: false`) |
 | [`sqs.yaml`](../../../charts/audit/examples/sqs.yaml) | a receiver or writer over SQS |
 
-All four are in configuration version 2. The sink URL in them names the writer's Service, which is
-the release's full name: `audit` there, and `<release>-audit` under an application's own.
+The sink URL names the writer's Service: `audit`, or `<release>-audit` under an application's own release.

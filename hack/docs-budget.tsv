@@ -20,9 +20,9 @@ docs/guides/sluis/migrate	3560
 docs/guides/sluis/operate	6871
 docs/guides/sluis/upgrade	1181
 docs/guides/storage	312
-docs/reference/audit	18281
-docs/reference/sluis	37577
-docs/reference/storage	368
+docs/reference/audit	3814
+docs/reference/sluis	7297
+docs/reference/storage	105
 docs/sdk	249
 docs/sdk/go	1809
 docs/sdk/typescript	1502

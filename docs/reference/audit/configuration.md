@@ -1,84 +1,42 @@
 # Configuration reference
 
-The configuration file of each binary: its shape, secrets, the shared blocks and what is
-refused. The per-binary keys are in [the writer](configuration-writer.md),
-[observe and query](configuration-observe-query.md) and [the jobs](configuration-jobs.md); the
-Go emitter's options in [the emitter library](../../sdk/go/audit-emitter.md); the chart's values in
-[chart values](chart-values.md). Every name here exists in the code, in
-`schemas/config/` or in `charts/audit/values.yaml`, and the chart's file has a
-comment on each value. Where something is designed and not built,
-it says so.
+The configuration file of each binary: its shape, secrets, shared blocks and refusals. Keys per binary: [writer](configuration-writer.md), [observe and query](configuration-observe-query.md), [jobs](configuration-jobs.md). See also [emitter library](../../sdk/go/audit-emitter.md) and [chart values](chart-values.md).
 
-One installation serves one application, in that application's namespace,
-rendered by the application's own chart with this one as a dependency
-([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
-There is no registry service and nothing configures one.
-
+One installation serves one application ([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
 
 ## The configuration file
 
-`audit-writer`, `audit-observe` and `audit-query` take one flag, `--config <file>` (and
-`--version`, `--help`). `audit verify`, `audit purge`,
-`audit clock-sync` and `audit migrate` take `--config <file>` in place of every
-other flag of the command; only `--json`, which changes how the report is
-printed, may accompany it. The interactive flags of `audit` stay for a person
-at a keyboard, and a command line that names both a file and another flag is
-refused. Nothing else configures a process: there are no flags with an
-environment fallback
-([0063](../../decisions/0063-one-validated-configuration-file.md)).
+Only the file configures a process; no flag has an environment fallback ([0063](../../decisions/0063-one-validated-configuration-file.md)). Everything here is version 2.
 
-The one variable that is not a fallback is **`AUDIT_CONFIG`**, which says
-*where the file is* and is read by all six binaries (`audit-writer`,
-`audit-query`, `audit-observe`, `audit-notary` and the two Lambdas) and by the
-four jobs of `audit`. `--config` wins when both are given. For a job of `audit`,
-the variable counts only on a command line with no option of its own, so that a
-person who has it exported and runs `audit verify --deployment ...` is not told to
-put that in a file they never named. The Lambda binaries look at `/opt/audit/audit.yaml`
-(where a layer mounts it) and then at `/var/task/audit.yaml` (the function's own
-package, where the previous release put it; kept for one release after the file
-moves to the layer), when neither the flag nor the variable is set.
+| Command | Flags |
+|---|---|
+| `audit-writer`, `audit-observe`, `audit-query` | `--config <file>`, `--version`, `--help` |
+| `audit verify`, `purge`, `clock-sync`, `migrate` | `--config <file>` replaces every other flag. Only `--json` may accompany it. A command line naming both a file and another flag is refused |
+| Interactive `audit` commands | Their own flags, for a person at a keyboard |
 
-Each binary's file is YAML, and is validated against that binary's JSON Schema
-before anything starts. The schemas are in `schemas/config/`, one per binary
-or command, and ship in the release:
+The file is YAML. The binary's JSON Schema in `schemas/config/` validates it before anything starts. The schemas ship in the release.
 
-| binary or command | schema |
+| Binary or command | Schema |
 |---|---|
 | `audit-writer` | `audit-writer.schema.json` |
 | `audit-observe` | `audit-observe.schema.json` |
 | `audit-query` | `audit-query.schema.json` |
 | `audit verify`, `purge`, `clock-sync`, `migrate` | `audit-verify.schema.json`, `audit-purge.schema.json`, `audit-clock-sync.schema.json`, `audit-migrate.schema.json` |
 
-Every file carries `apiVersion: audit.truvity.github.io/<kind>/v2` (`<kind>` is
-the schema's name: `audit-writer`, `audit-query`, `audit-writer-lambda`, and so
-on). The group is `<product>.truvity.github.io`. A binary reads version N and
-N-1 (ADR 0067): **version 1** is deprecated, is converted on load and logs a
-warning, and is read for one more minor; how to move off it is in
-[the v0.13 upgrade](../../guides/audit/upgrade/v0.13.md). Another version or another kind's is refused, so that a later shape
-arrives by a version and not by a file that quietly means something else. The
-version-2 schemas are `schemas/config/<kind>.schema.json`
-(`$id` `https://truvity.github.io/sluis/schemas/audit/v2/config/<kind>.schema.json`);
-version 1's are kept, frozen, in `schemas/config/v1/`. The `audit-deployment`
-document moved to the new group and nothing else.
-
-Everything on these pages, and the chart's examples, is version 2.
-
-An unknown key, a missing required key or a value of the wrong type is a
-start-up error that names the path to it. A few rules a schema cannot say run
-after it has accepted the file; they are listed under
-[Refusals](#refusals). The chart validates the same files when it renders, and
-`just config-schemas` regenerates the schemas from
-`internal/config/schema/schema.go`.
-
-Durations are strings in Go's notation: `30s`, `2m`, `168h`.
+| Rule | Detail |
+|---|---|
+| `apiVersion` | `audit.truvity.github.io/<kind>/v2`. `<kind>` is the schema name, such as `audit-writer-lambda` |
+| Versions | A binary reads N and N-1 (ADR 0067). Version 1 is deprecated, converted on load with a warning, and read for one more minor ([v0.13 upgrade](../../guides/audit/upgrade/v0.13.md)). Another version or kind is refused |
+| Schemas | Version 2: `schemas/config/<kind>.schema.json`, `$id` `https://truvity.github.io/sluis/schemas/audit/v2/config/<kind>.schema.json`. Version 1: frozen in `schemas/config/v1/` |
+| Errors | An unknown key, a missing required key or a wrong type is a start-up error naming the path. Rules a schema cannot say run after it ([Refusals](#refusals)) |
+| Regeneration | `just audit-config-schemas` regenerates the schemas from `internal/config/schema/schema.go`. The chart validates the same files when it renders |
+| Durations | Go notation: `30s`, `2m`, `168h` |
+| `AUDIT_CONFIG` | Where the file is. The six binaries and four `audit` jobs read it. `--config` wins. For an `audit` job it counts only on a command line with no option of its own |
+| Lambda default | Without flag or variable: `/opt/audit/audit.yaml`, then `/var/task/audit.yaml` (kept one release after the move to the layer) |
 
 ### Secrets
 
-A secret is never in the file. A field that holds one is named `...Secret` and
-holds the **name** of the secret, which the file's one `secrets` block says how
-to find. The process reads exactly the secrets the file names, and one that is
-absent or empty is an error naming the field and where it looked (the source and
-the root), never the name it holds or a value. These are all of them:
+A `...Secret` field holds a secret's name, never the secret. The file's `secrets` block says how to find it. An absent or empty secret is an error naming the field, source and root, never a value.
 
 <!-- generated: config-secrets -->
 | key | holds |
@@ -94,78 +52,56 @@ secrets:
   root: /etc/audit/secrets          # a directory (file) or a parameter path (ssm); not with env
 ```
 
-| `source` | a name is | `root` |
+| `source` | A name is | `root` |
 |---|---|---|
-| `env` | the name of an environment variable | refused |
-| `file` | a path under `root`, one file per secret, read as it is (one trailing newline is dropped): a mounted Kubernetes Secret | an absolute directory, required |
-| `ssm` | a SecureString parameter `<root>/<name>` in AWS Systems Manager Parameter Store, read decrypted with the process's own identity | a path starting with `/` and not ending in one, required |
+| `env` | The name of an environment variable | Refused |
+| `file` | A path under `root`, one file per secret, read as is except one trailing newline: a mounted Kubernetes Secret | An absolute directory, required |
+| `ssm` | A SecureString parameter `<root>/<name>` in AWS Systems Manager Parameter Store, read decrypted with the process's identity | A path starting with `/` and not ending in one, required |
 
-A name for `file` and `ssm` is relative and cannot leave the root: segments of
-letters, digits, `.`, `_` and `-`, no `..`. **On AWS Lambda use `ssm`: the
-function's environment is not a place for a secret, so `source: env` is refused there
-(when `AWS_LAMBDA_FUNCTION_NAME` is set), which includes a version-1 `...Env` that the loader converted
-to it.** A `root` has no empty, `.` or `..` segment. The Pulumi library renders
-the block and grants the function `ssm:GetParameter(s)` on its root and nothing
-else of SSM ([AWS](../../guides/audit/operate/aws-store-secrets-in-ssm.md)). On Kubernetes use `file`: the
-chart's `secretFiles` projects each Secret key as the file the name stands for.
-
-A password inside a database URL is refused. Token, key and root **files** are
-referenced by path, not by name: `tokenFile`, `jwtFile`, `rootFile`,
-`keyFile.path`, `caFile`. On a platform the file is a mounted
-Secret or a projected token.
+| Rule | Detail |
+|---|---|
+| Names | For `file` and `ssm`: relative, segments of letters, digits, `.`, `_`, `-`, no `..`. A `root` has no empty, `.` or `..` segment |
+| AWS Lambda | Use `ssm`. `source: env` is refused when `AWS_LAMBDA_FUNCTION_NAME` is set, including a converted version-1 `...Env`. The Pulumi library renders the block and grants `ssm:GetParameter(s)` on the root only ([AWS](../../guides/audit/operate/aws-store-secrets-in-ssm.md)) |
+| Kubernetes | Use `file`. The chart's `secretFiles` projects each Secret key as the named file |
+| Database URL | A password in it is refused |
+| Files | Token, key and root files are referenced by path: `tokenFile`, `jwtFile`, `rootFile`, `keyFile.path`, `caFile` |
 
 ### Telemetry
 
-Telemetry is the OpenTelemetry SDK's own environment, and the file has nothing
-about it: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` and the rest of
-`OTEL_*`. The platform decides where signals go, so the same file runs in
-every environment. The chart's `telemetry.otlp` value renders those variables
-on every pod ([telemetry](telemetry.md#the-chart-sets-the-environment));
-on AWS Lambda they are the function's environment
-([AWS](../../guides/audit/operate/aws-send-lambda-telemetry.md)).
+The file holds none. The `OTEL_*` variables configure telemetry. The chart's `telemetry.otlp` renders them ([telemetry](telemetry.md#the-chart-sets-the-environment)); on Lambda see [AWS](../../guides/audit/operate/aws-send-lambda-telemetry.md).
 
 ### Health: `/healthz` and `/readyz`
 
-`audit-writer`, `audit-query` and `audit-observe` serve both on their `listen` address.
-`/healthz` says the process is up and, for a writer with a stream or queue consumer,
-that the consumer has not stopped on its own: it is the liveness probe, and a failure
-restarts the pod. `/readyz` says it can do its work now: the database answers (writer
-with a `database`, query with the `postgres` searcher, observe), the catalogue
-registry can be read (writer with a `database`), the archive can be listed (query with
-the `s3scan` searcher, observe's catalogues), and a consumer is running. It is the
-readiness probe: a failure takes the pod out of the Service and does not restart it,
-because restarting does not bring a database back. The checks run at every probe, in
-parallel and within 2 seconds, and a 503 names the checks that failed and never their
-errors (those are in the log). A receiver with no database or consumer is ready when
-it is up.
+`audit-writer`, `audit-query` and `audit-observe` serve both on `listen`. Checks run at every probe, in parallel, within 2 seconds. A 503 names the failed checks, not their errors.
+
+| Endpoint | Probe | Passes when | On failure |
+|---|---|---|---|
+| `/healthz` | Liveness | The process is up, and a stream or queue consumer has not stopped on its own | Restarts the pod |
+| `/readyz` | Readiness | The database answers (writer with `database`, query with the `postgres` searcher, observe); the catalogue registry reads (writer with `database`); the archive lists (query with `s3scan`, observe's catalogues); a consumer runs. A receiver with neither is ready when up | Removes the pod from the Service, no restart |
 
 ### Evidence: the writer's start-up record
 
-`audit.writer.started` carries, as `data` (schema `writer-started.json`, in
-common catalogue 2.1.0), what the writer was configured with: `config_file` and
-`config_digest` (`sha256:` and the SHA-256 of the file's bytes, which is what
-`sha256sum` prints), the digests of the documents it names (`deployment_digest`,
-`workloads_digest`, and `catalogues_digest`, which is the digest of each file's
-relative name and digest in name order), and on Lambda `layer`
-(the layer version ARN the deployment declares in `AUDIT_CONFIG_LAYER`) and
-`function_version` (`AWS_LAMBDA_FUNCTION_VERSION`). A field that is not known is
-left out. The file is read twice, before and after it is validated, and a file
-that changed in between is refused, so that the digest names the bytes that ran.
+`audit.writer.started` carries these as `data` (schema `writer-started.json`, common catalogue 2.1.0). The writer refuses a file that changed between its two reads, before and after validation.
+
+| Field | Value |
+|---|---|
+| `config_file` | The file read |
+| `config_digest` | `sha256:` and the SHA-256 of the file's bytes, as `sha256sum` prints |
+| `deployment_digest`, `workloads_digest` | Digests of the named documents |
+| `catalogues_digest` | Digest of each file's relative name and digest, in name order |
+| `layer` | Lambda: the layer version ARN from `AUDIT_CONFIG_LAYER` |
+| `function_version` | Lambda: `AWS_LAMBDA_FUNCTION_VERSION`. An unknown field is left out |
 
 ### Documents the file points at
 
-Four things a file names by path are separate documents, each with its own
-contract, and not part of the file. Three of them have a JSON Schema in
-`schemas/config/` (`audit-deployment.schema.json`, `audit-grants.schema.json`,
-`audit-workloads.schema.json`) and carry `apiVersion` as the file does (version 2 under `audit.truvity.github.io`, version 1 deprecated); the code
-that reads them validates against it and then decodes strictly:
+The file names four documents by path. The first three carry `apiVersion` and have a schema in `schemas/config/`: `audit-deployment`, `audit-grants`, `audit-workloads` (`.schema.json`).
 
-| key | document | in the chart |
+| Key | Document | In the chart |
 |---|---|---|
-| `deployment` | the profile configuration: which framework profiles each profile is composed from, and `externalIdentifiersAreOpaque` | `/etc/audit/deployment.yaml`, from `profiles` and `externalIdentifiersAreOpaque` |
-| `workloads` | the issuers trusted to name a workload, and which service account speaks for which source ([Workload identity](configuration-writer.md#workload-identity)) | `/etc/audit/workloads.yaml`, from `workloadIdentity` |
-| `grants` | the query service's issuers, presets and rules ([Query service](configuration-observe-query.md#query-service)) | `/etc/audit/grants.yaml`, from `query.grants` |
-| `catalogues` | a directory of catalogue documents registered at start-up | `/etc/audit/catalogues`, from `catalogues` |
+| `deployment` | The profile configuration: the framework profiles each profile composes, and `externalIdentifiersAreOpaque` | `/etc/audit/deployment.yaml`, from `profiles` and `externalIdentifiersAreOpaque` |
+| `workloads` | Trusted issuers and which service account speaks for which source ([Workload identity](configuration-writer.md#workload-identity)) | `/etc/audit/workloads.yaml`, from `workloadIdentity` |
+| `grants` | The query service's issuers, presets and rules ([Grants file](configuration-observe-query.md#grants-file)) | `/etc/audit/grants.yaml`, from `query.grants` |
+| `catalogues` | A directory of catalogue documents registered at start-up | `/etc/audit/catalogues`, from `catalogues` |
 
 ## Shared blocks
 
@@ -255,52 +191,30 @@ read `{accessKeyID, secretAccessKey}` from an `internal/` address, for an archiv
 
 ## Refusals
 
-What the schemas say, and what is checked after them. Every one is a start-up
-error that names the key.
+Every refusal is a start-up error naming the key. The grants file has its own, under [Grants file](configuration-observe-query.md#grants-file).
 
-Beyond types, required keys and unknown keys, the schemas refuse:
+| Refused by the schema |
+|---|
+| `workloads` and `anonymousWrites` together, or neither |
+| `mode: receiver` with `archive`, `catalogues`, `keys` or `consume`, or with neither `stream` nor `forward` |
+| `forward` with none or several of `nats`, `sqs`, `log`; `consume` with none or both of `nats`, `sqs`; `forward` in a writer |
+| `require: archived` in a receiver; `forward.log` without `require: logged`; `require` on an emitter with no `sink` |
+| A `writer` without `archive` |
+| `keys.provider` `local` without `local`, `transit` without `transit`, or either block beside another provider |
+| An `openbao` with none or several of `login`, `tokenFile`, `tokenSecret` |
+| `secrets` with `root` and source `env`; source `file` or `ssm` with a root that is not an absolute directory or SSM path |
+| A `signer` with none or several of `keyFile`, `kmsKey`, `transit` |
+| A database URL with a password |
+| A query service with the `postgres` searcher and no `database`, or `s3scan` and no `archive` |
 
-- a `workloads` and an `anonymousWrites` together, or neither;
-- `mode: receiver` with `archive`, `catalogues`, `keys` or `consume`, or with
-  neither `stream` nor `forward`;
-- `forward` with none, or more than one, of `nats`, `sqs` and `log`; `consume`
-  with none, or both, of `nats` and `sqs`; `forward` in a writer;
-- `require: archived` in a receiver, and `forward.log` without `require: logged`;
-- `require` on an emitter with no `sink`;
-- a `writer` without `archive`;
-- `keys.provider` of `local` without `local`, of `transit` without `transit`,
-  or either block beside a provider that is not its own;
-- an `openbao` with none, or more than one, of `login`, `tokenFile` and
-  `tokenSecret`;
-- `secrets` with `root` and source `env`, or with source `file` or `ssm` and a
-  root that is not an absolute directory or an SSM path;
-- a `signer` with none, or more than one, of `keyFile`, `kmsKey` and `transit`;
-- a database URL that carries a password;
-- a query service with the `postgres` searcher and no `database`, or with
-  `s3scan` and no `archive`.
-
-After the schema, the binaries refuse:
-
-- a `require` the chain can never give (the guard, at start-up), and an
-  emitter's `require` with no `sink.expect`, or one weaker than it;
-- `forward.sqs.fifo: true` on a URL that does not end in `.fifo`;
-
-- `stream.ackWait` not longer than `roll.interval`: a writer gathers records
-  for one interval before it writes them and leaves them unacknowledged
-  meanwhile, and a stream that gives up waiting sooner offers the same records
-  to another writer;
-- `replicas` above 1 without `database`: deduplication in one process only
-  absorbs a repeat on the replica that saw the original, so a redelivery
-  landing on another would be written twice;
-- `replicas` above 1 with local keys and no `keys.local.dir`: each replica
-  would mint its own keys and the same person would get a different pseudonym
-  on each;
-- `keys` on the query service without `archive`, or with the local provider and
-  no `keys.local.dir`: resolve opens what the writer sealed in the archive;
-- a `database.url` that does not parse;
-- a profile that demands a stricter Object Lock than its preset's bucket gives, or whose preset is
-  not configured under `presets`: the writer refuses at start-up, naming the profile and the preset;
-- a profile whose name contains `/`: it is a key component.
-
-The grants file has refusals of its own, listed with it under [Query service](configuration-observe-query.md#query-service).
-
+| Refused after the schema | Reason |
+|---|---|
+| A `require` the chain can never give (the guard); an emitter `require` with no `sink.expect` or a weaker one | Start-up guard |
+| `forward.sqs.fifo: true` on a URL not ending in `.fifo` | URL and flag disagree |
+| `stream.ackWait` not longer than `roll.interval` | The stream would offer unacknowledged records to another writer |
+| `replicas` above 1 without `database` | In-process deduplication misses a redelivery landing on another replica |
+| `replicas` above 1 with local keys and no `keys.local.dir` | Each replica would mint its own keys and pseudonyms |
+| `keys` on the query service without `archive`, or with the local provider and no `keys.local.dir` | Resolve opens what the writer sealed in the archive |
+| A `database.url` that does not parse | Invalid URL |
+| A profile demanding a stricter Object Lock than its preset's bucket gives, or whose preset is not under `presets` | The writer names the profile and preset |
+| A profile name containing `/` | It is a key component |

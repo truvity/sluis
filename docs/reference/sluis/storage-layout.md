@@ -1,30 +1,10 @@
 # Storage layout
 
-Where sluis keeps what it keeps, on the adapters of the AWS platform (`dynamodb`,
-`ssm`, `s3`). This section describes **layout v3**: one root per installation, `/sluis/<instance>`
-([0036](../../decisions/0036-configuration-is-immutable-per-instance.md)), so two
-installations share an account. Layout v3 is the default in v1.74.0; [layout v4](#layout-v4-secretslayout-v4) is
-selected with `secrets.layout` and described below. The storage layout of the records themselves (kind
-and id) is v2's, unchanged; v3 moves the SSM paths. The **legacy** adapter (ConfigMaps, Secrets,
-Valkey) is unchanged and keeps its own names until a deployment leaves it.
-
-The rule is one sentence: **a record has a kind (a readable noun) and an id**.
-DynamoDB stores the kind as `pk` and the id as `sk`; the credentials of a record
-are the Secrets path `credentials/<kind>/<id>/<ref>`; an id that has two parts is
-written `a/b`. The mapping lives in one place, `internal/port/keys.go`, which the
-DynamoDB adapter and the domain stores share; the service's own *logical* keys
-(`ws.dir.<id>`, `issuer:token:<jti>`) did not change, so the legacy adapter and
-`sluis migrate` read the source as before.
+Layout v3 on the AWS adapters, with layout v4 for SSM. A record has a kind and an id: `pk` and `sk` in DynamoDB, `credentials/<kind>/<id>/<ref>` in Secrets, `a/b` for a two-part id. The mapping is in `internal/port/keys.go`, logical keys in [keys](keys.md). Decided in [ADR 0036](../../decisions/0036-configuration-is-immutable-per-instance.md).
 
 ## SSM (the `ssm` Secrets adapter)
 
-The root is the installation's, `<root>` = `/sluis/<instance>` (the serve document's
-`secrets.root`; for example `/sluis/acme`). An instance may not
-be named `private`, `export`, `internal` or `external`. The IAM boundary is the first level:
-`<root>/private/*` is sluis's alone. A port path `p` is `<root>/private/<p>`, except
-`export/<name>`, which is `<root>/export/<name>` and which nothing writes any more (layout v3's exports, retired). Inside `private` there are exactly
-two kinds of parameter: `config/`, the secrets a document **names** (an operator
-seeds them, sluis reads them), and `credentials/`, which sluis writes.
+`<root>` is `/sluis/<instance>`, the serve document's `secrets.root`. An instance is not named `private`, `export`, `internal` or `external`. `<root>/private/*` is sluis's alone: `config/` holds secrets a document names ([names](secrets.md#the-names)), `credentials/` what sluis writes.
 
 | SSM path | What it is | Who writes it |
 |---|---|---|
@@ -45,49 +25,18 @@ seeds them, sluis reads them), and `credentials/`, which sluis writes.
 | `<root>/private/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret and bot token | sluis |
 | `<root>/export/<export-name>` | a copy for a consumer (retired: see [Exports](#exports-retired)) | nothing, since ADR 0041 |
 
-The names under `config/` are the ones the documents give
-([configuration](secrets.md#the-names)); the http function reads them by path
-through the serve document's `secrets` source.
-
-**Identity directories.** `directory/<provider>/` is the rule for every identity
-directory: the provider is the record's `backend` (`google` today), a segment below
-the family, so another directory is a new provider and not a new kind. A credential
-saved before its record, which names no backend, is under `google`, and the record
-then keeps the key it finds.
-
-`<ref>` is a fresh random name per write, kept by the record that names it: a
-credential is never replaced in place, so a writer that loses a compare-and-swap
-cannot overwrite the winner's secret (a spent single-use refresh token never
-overwrites the new pair). The console's session key is the one stable item with no
-ref. An id segment that a secret path cannot hold (a `~`, an empty one, one that
-begins `u-`) is written `u-` and its bytes in hex.
-
-**What a deployment must change from the old layouts**
-
-| Was (v2, one root `/sluis`) | Is (v3, `/sluis/<instance>`) |
+| Rule | Meaning |
 |---|---|
-| `/sluis/private/config/oauth/client-id`, `client-secret` | `<root>/private/config/providers/google/default/client-id`, `client-secret` |
-| `/sluis/private/config/clients/<id>` | `<root>/private/config/clients/<id>/secret` |
-| `/sluis/private/config/issuer/state-secret`, `recovery/password` | the same names under `<root>/private/config/` |
-| `/sluis/private/credentials/...` | `<root>/private/credentials/...`, copied by `sluis migrate` |
-| `/sluis/export/<path>` | retired: the exports are no longer made (ADR 0041) |
+| `<ref>` | A fresh random name per write, kept by the record that names it. A credential is never replaced in place, so a losing writer cannot overwrite the winner's secret |
+| Console session key | The one stable item without a ref |
+| Unsafe id segment | A `~`, an empty segment or one starting `u-` is written `u-` plus its bytes in hex |
+| `directory/<provider>/` | The provider is the record's `backend` (`google`). A credential saved before its record is under `google` |
 
-`sluis migrate ssm-layout --to-root /sluis/<instance>` copies the first three rows
-and deletes nothing; `sluis migrate` moves the credentials
-([configuration](secrets.md#ssm-layout-v3)). The v1.60 layout's own move
-(`/sluis/private/oauth/...` to `config/`) is older still: the `<NAME>=ssm:` environment mappings and
-`SLUIS_SECRET_FILES` entries it named are gone, replaced by the documents' secret names.
-IAM follows the root: every grant is under `/sluis/<instance>/`.
+`sluis migrate ssm-layout --to-root /sluis/<instance>` copies the `config/` items from the one-root layout and deletes nothing. `sluis migrate` moves the credentials ([secrets](secrets.md#ssm-layout-v3)). IAM follows the root.
 
 ### Layout v4 (`secrets.layout: v4`)
 
-The SSM parameters move from `private/` and `export/` to `internal/` and `external/` under the same root; the paths
-below `internal/` are `private/`'s, and `external/<kind>/<id>` is a typed document, not an export copy. The table and
-the contract are in [secrets](secrets.md#ssm-layout-v4). State (DynamoDB), below, is unchanged.
-
-An installation moves with `sluis migrate secrets-layout --to v4`, which copies every v3 item to its v4 address and reads it
-back, and later `--delete-v3`; a legacy in-cluster installation moves with `sluis migrate` straight into v4. The mapping
-of each v3 item and the rollback are in [move the secrets to layout v4](../../guides/sluis/migrate/migrate-secrets-layout.md).
+`private/` and `export/` become `internal/` and `external/`; `external/<kind>/<id>` is a typed document ([secrets](secrets.md#ssm-layout-v4)). Move with `sluis migrate secrets-layout --to v4`, then `--delete-v3` ([guide](../../guides/sluis/migrate/migrate-secrets-layout.md)). A legacy in-cluster installation moves with `sluis migrate` straight into v4.
 
 | v3 | v4 address |
 |---|---|
@@ -101,9 +50,7 @@ of each v3 item and the rollback are in [move the secrets to layout v4](../../gu
 
 ## DynamoDB (the `dynamodb` State, Index and Trigger adapter)
 
-One table, `pk` (string, hash) and `sk` (string, range). Every State item has the
-record **kind** as `pk` and the record's **id** as `sk` (slash-separated when
-compound). Because `pk` is the kind, `dynamodb:LeadingKeys` grants a role the kinds it writes.
+One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so `dynamodb:LeadingKeys` grants a role the kinds it writes. Adapter behavior is in [adapter details](port-adapters.md#the-dynamodb-adapter).
 
 | Attribute | Type | Meaning |
 |---|---|---|
@@ -114,9 +61,6 @@ compound). Because `pk` is the kind, `dynamodb:LeadingKeys` grants a role the ki
 | `rev` | N | the revision: a random 64-bit number drawn on every write |
 | `expires` | N | epoch seconds the item is dead from; absent when permanent. The table's TTL attribute |
 | `k` | S | `i` for an Index member; absent for a State record, so no State listing returns a member |
-
-The logical keys the service writes are in [keys](keys.md); how the adapter conditions its writes is in
-[adapter details](port-adapters.md#the-dynamodb-adapter).
 
 | pk (kind) | sk (id) | What it is |
 |---|---|---|
@@ -156,46 +100,22 @@ The logical keys the service writes are in [keys](keys.md); how the adapter cond
 | `sessions-index`, `sso-index` (Index) | `all/<member>` | every session, every sign-in |
 | `other` | the whole logical key | a key the layout names no kind for (a test's) |
 
-**Session records, the pointer and the held groups.** Three details of the
-issuer's refresh path decide how often it writes:
+| Session rule | Behavior |
+|---|---|
+| Rotation mark | `issuer-session-token` holds `spent:<unix ms>:<sealed successor>:<session id>`. The successor is sealed with AES-256-GCM under a key derived from the spent token. A retry within the 30-second grace finds the successor; a later presentation ends the session the mark names. A mark that does not open with the presented token counts as an unknown token |
+| Mark lifetime | `max(auth_time + absolute limit - now, 30 s)` (24 hours by default). Without `auth_time` or an absolute limit: until the session ends, at most the refresh lifetime (12 hours) |
+| Mark write | Only over the revision read, so a concurrent refresh is a replay and a revocation is not undone |
+| Index membership | `issuer-session` carries `IndexedUntil` and `Involved`. A member is added with twice the refresh lifetime and re-added only when it would lapse: one `Add` per 12 hours by default |
+| `issuer-held` | Rewritten only when the groups change, when the record is not this process's own write (`RevisionPeeker`), or when older than hold window / 8. A hold can end up to an eighth early, never late |
+| `issuer-session-rotated` | Legacy: read, never written |
 
-- A rotation marks the spent token in its own pointer: `issuer-session-token`
-  then holds `spent:<unix ms>:<sealed successor>:<session id>`. The successor is
-  sealed with AES-256-GCM under a key derived from the spent token (SHA-256 of a
-  label, a zero byte and the token), so the key space never holds a live refresh
-  token in plain. A retry inside the 30-second grace finds the successor; a
-  presentation after it ends the session the mark names. The mark lives until
-  the absolute deadline of its refresh family,
-  `max(auth_time + absolute limit - now, 30 s)` (24 hours by default); a
-  session with no `auth_time` or no absolute limit keeps it until the session
-  ends, at most the refresh lifetime (12 hours by default). A mark that does not
-  open with the presented token is treated as an unknown token. The mark is
-  written only over the revision that was read,
-  so a concurrent refresh becomes a replay and a revocation during a refresh is
-  not undone. The separate `issuer-session-rotated` record is no longer written;
-  it is still read for one release, for tokens an older version rotated, and then
-  the kind is removed.
-- An `issuer-session` record carries `IndexedUntil` (when its membership of the
-  index sets lapses) and `Involved` (its client is already recorded among the
-  sign-in's clients). A member is added with twice the refresh lifetime and added
-  again only when it would lapse; with the default lifetimes that is one `Add`
-  per twelve hours of refreshing rather than one per refresh. A record without
-  `IndexedUntil` (written before it existed) is added at once.
-- `issuer-held` is rewritten only when the groups change, when the stored record
-  is no longer this process's own write (checked by an eventually consistent
-  read of its revision, `RevisionPeeker`), or when it is older than the hold
-  window divided by eight. A hold can therefore end up to an eighth of the hold
-  window early, never late.
+| Listing | Query |
+|---|---|
+| Prefix in one kind (`rec.slack.channel.acme.`) | `Query` on `pk` with `begins_with(sk, "acme/")`, in key order |
+| Prefix naming several kinds (`ws.`, `gate.`, empty) | `Scan` filtered on `lkey`, sorted in memory; for operators and `sluis migrate` |
+| Index member | `sk` = `<set id>/<member>`; `/` and `~` in a set id are `~2F` and `~7E` |
 
-**Listing by a prefix.** A prefix that lies in one kind (`rec.slack.channel.acme.`)
-is a `Query` on its `pk` with `begins_with(sk, "acme/")`, in key order. A prefix
-that names several kinds (`ws.`, `gate.`, the empty one) is a `Scan` filtered on
-`lkey`, sorted in memory: an operator's listing, and `sluis migrate`.
-An Index member is `sk` = `<set id>/<member>` (a `/` or `~` in a set id is `~2F`
-or `~7E`).
-
-**Old to new.** What a record was called before (the logical key, which is also
-what the legacy adapter keeps) and what it is now, for every kind:
+The logical key maps to kind and credential path as follows.
 
 | Logical key (unchanged) | v2 `pk` / `sk` | credential path under `<root>/private/` |
 |---|---|---|
@@ -234,13 +154,11 @@ what the legacy adapter keeps) and what it is now, for every kind:
 
 ## S3 (the `s3` Blob adapter)
 
-Kept as they were: `reports/github/<target>`, `reports/slack/<target>` (what each
-controller last reported) and `snapshots/<directory>` (the hub's cache, never
-migrated). The names already read as `<what>/<whose>`, so nothing is gained by
-moving them, and a report would otherwise be rewritten for no reason.
+| Prefix | Content |
+|---|---|
+| `reports/github/<target>`, `reports/slack/<target>` | What each controller last reported |
+| `snapshots/<directory>` | The hub's cache, never migrated |
 
 ## Exports (retired)
 
-Layout v3's exports (`<root>/export/<path>`, copies made by the exports controller) are retired by ADR 0041. A consumer
-reads the typed document at `<root>/external/<kind>/<id>`: [secrets](secrets.md#the-external-documents) has the kinds,
-their fields and their schemas, and [exports](exports.md) the old sources and where each went.
+Layout v3's `<root>/export/<path>` copies are retired ([ADR 0041](../../decisions/0041-the-secret-contract.md)). A consumer reads `<root>/external/<kind>/<id>`: [secrets](secrets.md#the-external-documents) has the kinds and schemas, [exports](exports.md) the old sources.
