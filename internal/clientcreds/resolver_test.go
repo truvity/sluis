@@ -1,15 +1,14 @@
 package clientcreds
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/truvity/sluis/storage/logtest"
 
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
@@ -405,12 +404,12 @@ func TestResolveAnUnavailableRecordIsCachedForTheRetryWindow(t *testing.T) {
 				t.Fatal(err)
 			}
 			in := &inputs{values: map[string]string{secrets.ClientSecret("grafana"): "input"}}
-			var logs lockedBuffer
-			r := NewResolver(store, in, slog.New(slog.NewTextHandler(&logs, nil)))
+			log, logs := logtest.Logger()
+			r := NewResolver(store, in, log)
 			clk := &clock{t: t0}
 			r.now = clk.now
 
-			warnings := func() int { return strings.Count(logs.String(), "level=WARN") }
+			warnings := func() int { return logs.CountLevel(slog.LevelWarn) }
 			resolve := func() bool { _, ok := r.Resolve(ctx0, "grafana"); return ok }
 
 			if resolve() {
@@ -449,7 +448,7 @@ func TestResolveAnUnavailableRecordIsCachedForTheRetryWindow(t *testing.T) {
 			if len(in.reads) != 0 {
 				t.Errorf("the input was read for an unavailable record: %v", in.reads)
 			}
-			if strings.Contains(logs.String(), "leaky-value") {
+			if logs.Mentions("leaky-value") {
 				t.Error("a record's value is in the log")
 			}
 
@@ -494,23 +493,6 @@ func TestResolveAStaleRecordThatExpiresBecomesUnavailableAndIsCached(t *testing.
 	if len(in.reads) != 0 {
 		t.Errorf("the input was read: %v", in.reads)
 	}
-}
-
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *lockedBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
 }
 
 // A replica that cached the pair before a rotation re-reads once before the

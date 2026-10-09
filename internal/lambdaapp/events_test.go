@@ -1,7 +1,6 @@
 package lambdaapp_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/truvity/sluis/storage/logtest"
 
 	"github.com/truvity/sluis/internal/lambdaapp"
 	"github.com/truvity/sluis/internal/port/memory"
@@ -244,21 +245,21 @@ type closeFails struct{ fakePass }
 func (closeFails) Close() error { return errors.New("closed\nlevel=ERROR msg=forged\r") }
 
 func TestALogLineBuiltFromAnErrorWithLineBreaksIsOneRecord(t *testing.T) {
-	var out bytes.Buffer
+	log, out := logtest.Logger()
 	c := &lambdaapp.Controller{
 		Name: "slack",
 		Open: func(context.Context) (lambdaapp.Pass, error) { return &closeFails{fakePass{ran: true}}, nil },
-		Log:  slog.New(slog.NewTextHandler(&out, nil)),
+		Log:  log,
 	}
 	if _, err := handle(t, c, `{"kind":"tick","target":"acme"}`); err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-	if len(lines) != 2 || strings.ContainsAny(out.String(), "\r") {
-		t.Fatalf("want the warning and the done line, one record each, got %q", out.String())
+	recs := out.Records()
+	if len(recs) != 2 || out.Mentions("\r") || out.Mentions("\n") {
+		t.Fatalf("want the warning and the done line, one record each, got %q", out.Messages())
 	}
-	if !strings.Contains(lines[0], "closedlevel=ERROR") || !strings.Contains(lines[1], "invocation done") {
-		t.Errorf("unexpected records: %q", lines)
+	if recs[0].Level != slog.LevelWarn || recs[0].String("error") != "closedlevel=ERROR msg=forged" || recs[1].Message != "invocation done" {
+		t.Errorf("unexpected records: %+v", recs)
 	}
 }
 

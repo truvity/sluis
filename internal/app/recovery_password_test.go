@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/truvity/sluis/storage/logtest"
+
 	"github.com/truvity/sluis/internal/secrets"
 )
 
@@ -69,14 +71,13 @@ func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 // nothing is printed.
 func TestOnLambdaAMissingPasswordFailsClosedWithoutPrintingOne(t *testing.T) {
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "sluis-http")
-	var logs strings.Builder
-	log := slog.New(slog.NewTextHandler(&logs, nil))
+	log, logs := logtest.Logger()
 
 	recovery, err := openRecovery(context.Background(), Config{recoveryEnabled: true}, stores{}, nil, log)
 	if err != nil || recovery != nil {
 		t.Fatalf("openRecovery = %v, %v, want no recovery and no error", recovery, err)
 	}
-	if !strings.Contains(logs.String(), "level=ERROR") || !strings.Contains(logs.String(), "NOT available") {
-		t.Errorf("no clear error was logged: %q", logs.String())
+	if logs.CountLevel(slog.LevelError) == 0 || !logs.Mentions("NOT available") {
+		t.Errorf("no clear error was logged: %q", logs.Messages())
 	}
 }
