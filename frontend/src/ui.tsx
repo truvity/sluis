@@ -1,5 +1,14 @@
 import { useState, type ReactNode } from "react";
 import TextField from "@mui/material/TextField";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+
+import { reason } from "./api";
 
 import { DomainReason } from "./gen/directoryroster/v1/workspace_pb";
 import Alert from "@mui/material/Alert";
@@ -654,5 +663,74 @@ export function Mono({ children }: { children: ReactNode }) {
     <Box component="span" sx={{ fontFamily: "monospace", fontSize: "0.85em" }}>
       {children}
     </Box>
+  );
+}
+
+/** The explanation behind a word, reachable without a mouse.
+ *
+ *  A tooltip on plain text is invisible to the keyboard and to a screen
+ *  reader, and the dotted underline it used to wear promised a link that
+ *  was not there. A button is the form that promises "press for more":
+ *  it takes focus, announces its label, and the tooltip opens on focus. */
+export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip title={children}>
+      <IconButton size="small" aria-label={label} sx={{ p: 0.25, ml: 0.5, verticalAlign: "middle" }}>
+        <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+/** Ask once before an act that cannot be taken back.
+ *
+ *  The caller names what follows in `children`; `run` does the act and
+ *  throws to keep the dialog open with the reason. The audit trail
+ *  records the signed-in operator, which is why the text can say so. */
+export function ConfirmDialog({
+  title,
+  children,
+  confirm,
+  danger,
+  run,
+  onCancel,
+}: {
+  title: string;
+  children: ReactNode;
+  confirm: string;
+  danger?: boolean;
+  run: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | undefined>();
+
+  const go = async () => {
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      await run();
+    } catch (error) {
+      setFailure(reason(error));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onClose={busy ? undefined : onCancel} fullWidth maxWidth="sm">
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <DialogContentText component="div">{children}</DialogContentText>
+        <Failure error={failure} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="contained" color={danger ? "warning" : "primary"} disabled={busy} onClick={() => void go()}>
+          {confirm}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

@@ -29,7 +29,7 @@ import type {
 } from "./gen/directoryroster/v1/cloudflare_pb";
 import { awsProfile, credentialProcess, freshness, freshnessNote, prototypeView, span, tokenCommand } from "./cloudflareModel";
 import { useAsync } from "./hooks";
-import { Failure, Loading, Mono, Nothing, Page, Section, State } from "./ui";
+import { ConfirmDialog, Failure, Loading, Mono, Nothing, Page, Section, State } from "./ui";
 
 type Props = { me?: Me; operator: boolean; onDone: (message: string) => void };
 
@@ -294,7 +294,7 @@ function Administration({ operator, onDone }: { operator: boolean; onDone: (mess
       ) : null}
 
       {confirming ? (
-        <ConfirmDialog
+        <ConfirmPreset
           key={confirming.kind + confirming.preset.name}
           confirming={confirming}
           onCancel={() => setConfirming(undefined)}
@@ -450,60 +450,43 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 /** Rotate and revoke act on a credential consumers depend on, so each asks
  *  once, says what follows, and names who is accountable: the audit trail
  *  records the signed-in operator for both. */
-function ConfirmDialog({ confirming, onCancel, onDone }: { confirming: Confirming; onCancel: () => void; onDone: (message: string) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<string | undefined>();
+function ConfirmPreset({ confirming, onCancel, onDone }: { confirming: Confirming; onCancel: () => void; onDone: (message: string) => void }) {
   const { preset } = confirming;
 
   const run = async () => {
-    setBusy(true);
-    setFailure(undefined);
-    try {
-      if (confirming.kind === "rotate") {
-        await cloudflare.rotateCloudflarePreset({ preset: preset.name });
-        onDone(`${preset.name} was rotated: a new stored token is in place.`);
-      } else {
-        const res = await cloudflare.revokeCloudflareToken({ preset: preset.name, tokenId: confirming.token.id });
-        onDone(res.replaced ? `The stored token of ${preset.name} was revoked and a new one is in place.` : `A token of ${preset.name} was revoked.`);
-      }
-    } catch (error) {
-      setFailure(reason(error));
-      setBusy(false);
+    if (confirming.kind === "rotate") {
+      await cloudflare.rotateCloudflarePreset({ preset: preset.name });
+      onDone(`${preset.name} was rotated: a new stored token is in place.`);
+    } else {
+      const res = await cloudflare.revokeCloudflareToken({ preset: preset.name, tokenId: confirming.token.id });
+      onDone(res.replaced ? `The stored token of ${preset.name} was revoked and a new one is in place.` : `A token of ${preset.name} was revoked.`);
     }
   };
 
   return (
-    <Dialog open onClose={busy ? undefined : onCancel} fullWidth maxWidth="sm">
-      <DialogTitle>{confirming.kind === "rotate" ? `Rotate ${preset.name} now?` : `Revoke a token of ${preset.name}?`}</DialogTitle>
-      <DialogContent>
-        <DialogContentText>
-          {confirming.kind === "rotate" ? (
-            <>
-              sluis mints a new stored token and writes it where consumers read it. The one it replaces stays valid until it expires, so a consumer that has it keeps working. This is
-              recorded in the audit trail under your name.
-            </>
-          ) : confirming.token.stored ? (
-            <>
-              This deletes the stored token <Mono>{confirming.token.id}</Mono> in Cloudflare at once and mints its replacement, so consumers that already hold it fail and the next read
-              gets the new one. Recorded in the audit trail under your name.
-            </>
-          ) : (
-            <>
-              This deletes <Mono>{confirming.token.id}</Mono>, minted for <Mono>{confirming.token.caller}</Mono>, in Cloudflare at once. Whatever uses it fails from now on. Recorded in the
-              audit trail under your name.
-            </>
-          )}
-        </DialogContentText>
-        <Failure error={failure} />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button variant="contained" color={confirming.kind === "revoke" ? "warning" : "primary"} disabled={busy} onClick={() => void run()}>
-          {confirming.kind === "rotate" ? "Rotate now" : "Revoke"}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <ConfirmDialog
+      title={confirming.kind === "rotate" ? `Rotate ${preset.name} now?` : `Revoke a token of ${preset.name}?`}
+      confirm={confirming.kind === "rotate" ? "Rotate now" : "Revoke"}
+      danger={confirming.kind === "revoke"}
+      run={run}
+      onCancel={onCancel}
+    >
+      {confirming.kind === "rotate" ? (
+        <>
+          sluis mints a new stored token and writes it where consumers read it. The one it replaces stays valid until it expires, so a consumer that has it keeps working. This is
+          recorded in the audit trail under your name.
+        </>
+      ) : confirming.token.stored ? (
+        <>
+          This deletes the stored token <Mono>{confirming.token.id}</Mono> in Cloudflare at once and mints its replacement, so consumers that already hold it fail and the next read
+          gets the new one. Recorded in the audit trail under your name.
+        </>
+      ) : (
+        <>
+          This deletes <Mono>{confirming.token.id}</Mono>, minted for <Mono>{confirming.token.caller}</Mono>, in Cloudflare at once. Whatever uses it fails from now on. Recorded in the
+          audit trail under your name.
+        </>
+      )}
+    </ConfirmDialog>
   );
 }

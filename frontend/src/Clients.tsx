@@ -10,7 +10,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
-import { access, forHowLong, matcherKind, people as peopleCount, personName, reason, sessions } from "./api";
+import { access, forHowLong, matcherKind, people as peopleCount, issuerFailure, personName, sessions } from "./api";
 import type { Session } from "./gen/accessissuer/v1/session_pb";
 import { useAsync } from "./hooks";
 import { paths } from "./router";
@@ -31,7 +31,7 @@ export function Clients() {
       <Loading busy={policy.loading} />
       <Failure error={policy.error} />
 
-      {clients.length === 0 ? (
+      {policy.error ? null : clients.length === 0 ? (
         <Nothing>No clients are declared. The hub itself needs none; they arrive with the issuer.</Nothing>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
@@ -94,6 +94,7 @@ export function Client({
   const found = useAsync(
     () => (showSessions ? sessions.listSessions({ clientId: id }) : Promise.resolve(undefined)),
     [id, showSessions],
+    issuerFailure,
   );
 
   const revoke = async (session: Session) => {
@@ -104,7 +105,7 @@ export function Client({
       onDone?.(`Ended ${session.identity}'s session on ${id}.`);
       found.reload();
     } catch (error) {
-      setSessionFailure(reason(error));
+      setSessionFailure(issuerFailure(error));
     } finally {
       setBusy(undefined);
     }
@@ -121,7 +122,7 @@ export function Client({
       onDone?.(`Ended ${response.ended} session${response.ended === 1 ? "" : "s"} on ${id}.`);
       found.reload();
     } catch (error) {
-      setSessionFailure(reason(error));
+      setSessionFailure(issuerFailure(error));
     } finally {
       setBusy(undefined);
     }
@@ -235,6 +236,7 @@ export function Client({
         >
           <Loading busy={found.loading} />
           <Failure error={found.error ?? sessionFailure} />
+          {found.error ? null : (
           <SessionsPanel
             sessions={found.value?.sessions ?? []}
             signIns={found.value?.signIns}
@@ -243,6 +245,7 @@ export function Client({
             revoking={busy}
             empty="Nobody is on this client right now."
           />
+          )}
         </Section>
       ) : null}
     </Page>

@@ -20,7 +20,7 @@ import { Backend, access, ago, at, backendName, personName, reason, settings, wo
 import { useAsync, useWhile } from "./hooks";
 import type { Workspace } from "./gen/directoryroster/v1/workspace_pb";
 import { paths } from "./router";
-import { Authority, Facet, Facets, Failure, Loading, Names, Nothing, Page, Ref, Rows, Section, State, authorityKind, stateLabel } from "./ui";
+import { Authority, ConfirmDialog, Facet, Facets, Failure, Loading, Names, Nothing, Page, Ref, Rows, Section, State, authorityKind, stateLabel } from "./ui";
 
 /** The identity-side container: every directory this hub reads. */
 export function Directories({ operator, onDone }: { operator: boolean; onDone: (message: string) => void }) {
@@ -350,6 +350,8 @@ export function Directory({
     accounts.reload();
   });
 
+  const [disconnecting, setDisconnecting] = useState(false);
+
   const act = async (run: () => Promise<unknown>, done: string) => {
     setBusy(true);
     setFailure(undefined);
@@ -447,7 +449,7 @@ export function Directory({
                 size="small"
                 color="warning"
                 disabled={!operator || tenant.declared || busy}
-                onClick={() => void act(() => workspaces.disconnect({ workspaceId: tenant.id }), `${tenant.id} disconnected.`)}
+                onClick={() => setDisconnecting(true)}
               >
                 Disconnect
               </Button>
@@ -487,6 +489,26 @@ export function Directory({
           empty={firstSnapshot ? "Reading them now — the first snapshot is still running." : "No accounts snapshotted from this provider yet."}
         />
       </Section>
+
+      {disconnecting ? (
+        <ConfirmDialog
+          title={`Disconnect ${tenant.id}?`}
+          confirm="Disconnect"
+          danger
+          onCancel={() => setDisconnecting(false)}
+          run={async () => {
+            await workspaces.disconnect({ workspaceId: tenant.id });
+            setDisconnecting(false);
+            onDone(`${tenant.id} disconnected.`);
+            list.reload();
+            groups.reload();
+            accounts.reload();
+          }}
+        >
+          This revokes the credential the hub holds for this provider and forgets it. Its accounts and groups leave the roster at once, and anyone who is in an internal group only through
+          it loses that membership. Connecting it again needs a fresh consent. Recorded in the audit trail under your name.
+        </ConfirmDialog>
+      ) : null}
     </Page>
   );
 }

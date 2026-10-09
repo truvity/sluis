@@ -4,6 +4,12 @@ import { createTheme } from "@mui/material/styles";
 // the accent; semantic colours stay separate from it so that a state
 // reads as a state rather than as decoration. Borders are reserved for
 // tables and forms — sections are separated by whitespace and type.
+// The keyboard focus ring: 2px, the primary teal (4.9:1 on the page
+// background, above the 3:1 a focus indicator needs), offset so it never
+// sits on the control's own border. One definition, so a control cannot
+// be left without one by forgetting it.
+const ring = { outline: "2px solid #0e7c7b", outlineOffset: 2 } as const;
+
 export const theme = createTheme({
   palette: {
     primary: { main: "#0e7c7b" },
@@ -28,6 +34,16 @@ export const theme = createTheme({
   },
   shape: { borderRadius: 6 },
   components: {
+    // Anything focusable gets the ring when the keyboard put focus there.
+    // A text field is the exception to the rule and the rule to the
+    // exception: its native <input> keeps no outline, and the ring is
+    // drawn on the whole field (MuiInputBase below) instead.
+    MuiCssBaseline: {
+      styleOverrides: { "body :focus-visible:not(.MuiInputBase-input)": ring },
+    },
+    MuiInputBase: { styleOverrides: { root: { "&.Mui-focused": ring } } },
+    MuiOutlinedInput: { styleOverrides: { root: { "&.Mui-focused": { outline: "none" } } } },
+    MuiToggleButton: { styleOverrides: { root: { "&.Mui-focusVisible": ring } } },
     MuiButton: { defaultProps: { disableElevation: true } },
     MuiTab: { styleOverrides: { root: { textTransform: "none", minHeight: 40 } } },
     MuiChip: {
@@ -46,7 +62,7 @@ export const theme = createTheme({
         root: { fontSize: "0.68rem", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", lineHeight: "32px", backgroundColor: "transparent" },
       },
     },
-    MuiListItemButton: { styleOverrides: { root: { borderRadius: 6, marginInline: 8, paddingBlock: 6 } } },
+    MuiListItemButton: { styleOverrides: { root: { borderRadius: 6, marginInline: 8, paddingBlock: 6, "&.Mui-focusVisible": { ...ring, outlineOffset: -2 } } } },
     MuiListItemIcon: { styleOverrides: { root: { minWidth: 34 } } },
     MuiTooltip: { defaultProps: { arrow: true } },
     MuiTextField: { defaultProps: { size: "small" } },

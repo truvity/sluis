@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Box from "@mui/material/Box";
 import InputBase from "@mui/material/InputBase";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -9,6 +9,7 @@ import Typography from "@mui/material/Typography";
 
 import { access, personName, workspaces } from "./api";
 import { useAsync } from "./hooks";
+import { chosenIndex, nextActive } from "./comboboxModel";
 import { go, paths } from "./router";
 
 type Hit = { kind: string; label: string; detail?: string; to: string };
@@ -20,6 +21,12 @@ type Hit = { kind: string; label: string; detail?: string; to: string };
 export function Search() {
   const [query, setQuery] = useState("");
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  // The option the arrow keys are on, or -1 while focus is only in the
+  // text box. Focus itself never leaves the input; `aria-activedescendant`
+  // is what tells a screen reader which option is current.
+  const [active, setActive] = useState(-1);
+  const listId = useId();
+  const optionId = (index: number) => `${listId}-option-${index}`;
 
   // The small, stable lists are loaded once and matched here; only people
   // need the server, because nothing else can enumerate a directory.
@@ -104,6 +111,13 @@ export function Search() {
 
   const open = Boolean(anchor) && hits.length > 0;
 
+  // A new set of hits starts with nothing active.
+  useEffect(() => setActive(-1), [query]);
+  useEffect(() => {
+    if (active >= 0) document.getElementById(optionId(active))?.scrollIntoView?.({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   const choose = (to: string) => {
     setQuery("");
     setAnchor(null);
@@ -122,8 +136,21 @@ export function Search() {
           placeholder="Search people, groups, clients, providers"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          inputProps={{
+            "aria-label": "Search people, groups, clients and providers",
+            role: "combobox",
+            "aria-expanded": open,
+            "aria-controls": open ? listId : undefined,
+            "aria-haspopup": "listbox",
+            "aria-autocomplete": "list",
+            "aria-activedescendant": open && active >= 0 ? optionId(active) : undefined,
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && hits.length) choose(hits[0].to);
+            if (open && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+              e.preventDefault();
+              setActive(nextActive(active, e.key, hits.length));
+            }
+            if (e.key === "Enter" && hits.length) choose(hits[chosenIndex(active, hits.length)].to);
             if (e.key === "Escape") setQuery("");
           }}
           sx={{ fontSize: 14 }}
@@ -131,9 +158,18 @@ export function Search() {
       </Paper>
 
       <Popper open={open} anchorEl={anchor} placement="bottom-start" style={{ zIndex: 1300 }}>
-        <Paper variant="outlined" sx={{ mt: 0.5, width: anchor?.clientWidth, maxHeight: 420, overflowY: "auto" }}>
-          {hits.map((hit) => (
-            <ListItemButton key={hit.kind + hit.label} onClick={() => choose(hit.to)} dense>
+        <Paper id={listId} role="listbox" aria-label="Search results" variant="outlined" sx={{ mt: 0.5, width: anchor?.clientWidth, maxHeight: 420, overflowY: "auto" }}>
+          {hits.map((hit, index) => (
+            <ListItemButton
+              key={hit.kind + hit.label}
+              id={optionId(index)}
+              role="option"
+              aria-selected={index === active}
+              selected={index === active}
+              tabIndex={-1}
+              onClick={() => choose(hit.to)}
+              dense
+            >
               <Stack direction="row" spacing={1} sx={{ alignItems: "center", width: "100%" }}>
                 <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                   <Typography variant="body2" noWrap>
