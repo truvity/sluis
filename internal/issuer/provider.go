@@ -600,17 +600,12 @@ var authorizationServerFields = []string{
 	"response_modes_supported",
 	"grant_types_supported",
 	"token_endpoint_auth_methods_supported",
-	"token_endpoint_auth_signing_alg_values_supported",
 	"service_documentation",
 	"ui_locales_supported",
 	"op_policy_uri",
 	"op_tos_uri",
 	"revocation_endpoint",
 	"revocation_endpoint_auth_methods_supported",
-	"revocation_endpoint_auth_signing_alg_values_supported",
-	"introspection_endpoint",
-	"introspection_endpoint_auth_methods_supported",
-	"introspection_endpoint_auth_signing_alg_values_supported",
 	"code_challenge_methods_supported",
 	"client_id_metadata_document_supported",
 }
@@ -645,6 +640,17 @@ var servedGrantTypes = []string{
 	"authorization_code",
 	"refresh_token",
 	"urn:ietf:params:oauth:grant-type:token-exchange",
+}
+
+// unservedDiscoveryFields are the members the library advertises from its
+// own defaults for surface this issuer does not serve.
+var unservedDiscoveryFields = []string{
+	"introspection_endpoint",
+	"introspection_endpoint_auth_methods_supported",
+	"introspection_endpoint_auth_signing_alg_values_supported",
+	"revocation_endpoint_auth_signing_alg_values_supported",
+	"token_endpoint_auth_signing_alg_values_supported",
+	"request_object_signing_alg_values_supported",
 }
 
 // truthfulDiscovery corrects the one place the library over-promises.
@@ -702,6 +708,19 @@ func truthfulDiscovery(issuerURL string, documentClientsEnabled func() bool, nex
 		// whatever the configuration says. The grant is gone,
 		// so the address of it is a promise to nobody.
 		delete(doc, "device_authorization_endpoint")
+		// Nor does it stop at the device grant. Introspection is not
+		// served (the tokens are JWTs, verified offline against the key
+		// set), and the library advertises its endpoint anyway. The
+		// signing-algorithm lists for client authentication and request
+		// objects are the library's RS256 default: no client here
+		// authenticates with a signed JWT, no request object is read, and
+		// the tokens are signed with the installation's own keys, which
+		// `id_token_signing_alg_values_supported` and the key set already
+		// state. A list that names an algorithm nothing uses is a promise
+		// to nobody, so each is withdrawn.
+		for _, name := range unservedDiscoveryFields {
+			delete(doc, name)
+		}
 		// Client ID Metadata Documents, and only when an origin has been
 		// named. A client reads this field to decide whether to present a
 		// URL as its id or to look for another way to register, so
