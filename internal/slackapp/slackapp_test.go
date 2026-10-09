@@ -1,7 +1,6 @@
 package slackapp_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/truvity/sluis/storage/logtest"
 
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackapp/slackfake"
@@ -330,8 +331,7 @@ func TestRateLimit(t *testing.T) {
 func TestTheTokenIsNotInErrorsOrLogs(t *testing.T) {
 	w := newWorld(t)
 	token := slackfake.Token("TACME")
-	var logs bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&logs, nil))
+	log, logs := logtest.Logger()
 	ctx := context.Background()
 	w.fake.Fail("conversations.create", "name_taken", 1)
 	w.fake.RateLimit("auth.test", "1", -1)
@@ -349,7 +349,7 @@ func TestTheTokenIsNotInErrorsOrLogs(t *testing.T) {
 			t.Errorf("token in %q", err)
 		}
 	}
-	if strings.Contains(logs.String(), token) {
+	if logs.Mentions(token) {
 		t.Error("token in logs")
 	}
 	for _, call := range w.fake.Calls() {

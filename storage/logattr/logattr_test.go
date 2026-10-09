@@ -16,8 +16,8 @@ func TestSafe(t *testing.T) {
 		"cr":              {"a\rb", "ab"},
 		"crlf":            {"a\r\nb", "ab"},
 		"fake level line": {"x\nlevel=ERROR msg=pwned", "xlevel=ERROR msg=pwned"},
-		"u2028":           {"a b c", "abc"},
-		"bidi override":   {"a‮b⁦c⁩d", "abcd"},
+		"u2028":           {"a\u2028b\u2029c", "abc"},
+		"bidi override":   {"a\u202eb\u2066c\u2069d", "abcd"},
 		"esc":             {"a\x1b[31mred", "a[31mred"},
 		"nul and c1":      {"a\x00b\u0085c", "abc"},
 		"unicode kept":    {"héllo 世界", "héllo 世界"},
@@ -36,7 +36,7 @@ func TestAttrs(t *testing.T) {
 	if a := logattr.SafeString("k", "a\nb"); a.Key != "k" || a.Value.String() != "ab" {
 		t.Fatalf("SafeString = %v", a)
 	}
-	if a := logattr.SafeStrings("k", []string{"a\n", "b‮"}); a.Value.String() != "a, b" {
+	if a := logattr.SafeStrings("k", []string{"a\n", "b\u202e"}); a.Value.String() != "a, b" {
 		t.Fatalf("SafeStrings = %v", a)
 	}
 	if a := logattr.SafeError("error", errors.New("bad\nlevel=ERROR")); a.Value.String() != "badlevel=ERROR" {
