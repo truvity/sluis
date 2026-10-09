@@ -70,40 +70,72 @@
 //
 // keys.Key.MAC wants HMAC-SHA-256 under a secret unique to (purpose, tenant).
 // Transit's hmac endpoint takes no context (it ignores one, with a warning),
-// so a derived key cannot give a key per tenant. The backend instead keys the
-// HMAC with the purpose's transit key (pinned to version 1; see
-// [WithMACKeyVersion]) and prepends an unambiguous encoding of the purpose
-// and the tenant to the data:
+// so a derived key cannot give a key per tenant. What the backend does depends
+// on the purpose:
 //
-//	HMAC(key, "keys/mac/v1" | len(purpose) | purpose | len(tenant) | tenant | data)
+//   - pseudonym: a key per tenant, see "Per-tenant keys".
+//
+//   - any other purpose: the HMAC is keyed with the purpose's transit key
+//     (pinned to version 1; see [WithMACKeyVersion]) and an unambiguous
+//     encoding of the purpose and the tenant is prepended to the data:
+//
+//     HMAC(key, "keys/mac/v1" | len(purpose) | purpose | len(tenant) | tenant | data)
 //
 // Two tenants (and two purposes) get unrelated outputs because the HMAC is a
 // pseudo-random function of the whole input, and no (purpose, tenant, data)
 // triple encodes like another. What this does not give is a per-tenant
 // secret: whoever may call hmac on the key can compute every tenant's
-// pseudonyms, and a policy cannot say "tenant a only" since the tenant is
-// inside the input, not a parameter. For that, configure one transit key per
-// tenant and purpose (for example from a naming scheme) behind a Backend of
-// its own; the MAC then needs no prefix, but an ACL can allow it by path.
-// Rotating the key changes nothing while version 1 is kept, which is why it
-// is pinned.
+// outputs, and a policy cannot say "tenant a only" since the tenant is inside
+// the input, not a parameter. Rotating the key changes nothing while version 1
+// is kept, which is why it is pinned.
+//
+// # Per-tenant keys
+//
+// For the pseudonym purpose each tenant has a transit key of its own, named
+//
+//	<key>.pseudonym.<escaped tenant>
+//
+// where <key> is the name configured for the purpose. Its material never
+// leaves the engine: MAC is the engine's hmac on that key, and
+// keys.Key.EncryptFor and DecryptFor (the sealed identifiers of audit) are
+// its encrypt and decrypt, all pinned to version 1. The key is made on first
+// use, through the encrypt endpoint, which makes a key when the policy grants
+// create there: a writer's policy then names hmac and encrypt on <key>.pseudonym.*, and
+// read on the keys, never decrypt (only a resolver opens) and nothing that
+// rotates, configures or trims a key, which is erasure.
+//
+// The tenant is escaped by [EscapeTenant]: a-z, 0-9 and '-' stand for
+// themselves, every other byte ('.', '_', '/', '@', upper-case letters, bytes
+// above ASCII) is '_' and the two lower-case hex digits of the byte. '_' only
+// ever starts an escape, so the map is injective: two tenants never share a
+// key name (the tests walk every short string over the awkward characters).
+// The name is readable ("security/acme@eu" is "security_2facme_40eu") and
+// begins with the beginning of the tenant, so a policy can allow a profile by
+// glob (audit.pseudonym.security_2f*). A name that would exceed transit's 128
+// characters is refused, never shortened.
 //
 // # Erasing a tenant
 //
-// This backend does not erase a tenant: keys.Key.Destroy returns
-// keys.ErrUnsupported. The pseudonym key here is one transit key for the
-// installation, and every tenant's HMAC is computed under it. Erasure needs a
-// key per tenant that can be deleted, and that would mean creating a transit
-// key on first use, setting deletion_allowed and deleting it on Destroy:
-// rights to create and delete keys that the writer's policy deliberately does
-// not have (it may call hmac on a key and nothing else), plus a key per
-// tenant to back up and count. That trade is not made silently here.
+// keys.Key.Destroy on the pseudonym purpose rotates the tenant's key once,
+// sets min_decryption_version and min_encryption_version to 2, and trims
+// version 1. Every pseudonym and every sealed identifier of the tenant was
+// made under version 1, so none can be computed or opened again by the engine.
+// A snapshot of the engine taken before the destroy still holds the key, so
+// the erasure is complete once such snapshots have expired. The key stays, with
+// versions nothing uses, and that state is the tombstone: calls find the key
+// before they would make one, so a destroyed tenant is refused with
+// keys.ErrDestroyed and never gets a fresh key (a second identity for the same
+// person). Destroying a tenant never seen makes its key and destroys it at
+// once. Destroy is idempotent and a second call finishes a first that stopped.
+// keys.Key.Destroyed reads the tombstone.
 //
-// An installation that must erase tenants configures the pseudonym purpose on
-// the kms backend (the wrapped secret per tenant lives in the state store and
-// is deleted from there), or runs a transit Backend of its own per tenant, as
-// above, and deletes that key itself. The other purposes can stay on
-// transit.
+// Destroy needs rights on the key itself (read, create and update on
+// keys/<key>.pseudonym.*, which reaches rotate, config and trim) that the
+// writer's role does not have: it is the eraser's, a human role.
+//
+// The other purposes (seal, conceal, archive) have one key for the
+// installation and do not erase a tenant: Destroy for them is
+// keys.ErrUnsupported.
 //
 // # Policy
 //

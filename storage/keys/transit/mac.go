@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -15,6 +16,8 @@ import (
 // macDomain starts every MAC input, so the HMAC of this scheme cannot equal
 // an HMAC the same key made for any other purpose.
 const macDomain = "keys/mac/v1"
+
+var errNoTenant = errors.New("transit: MAC needs a tenant")
 
 // macInput is the unambiguous encoding of (purpose, tenant, data): each
 // variable part carries its length, so ("ab", "c") and ("a", "bc") differ.
@@ -27,12 +30,17 @@ func macInput(purpose keys.Purpose, tenant string, data []byte) []byte {
 	return append(out, data...)
 }
 
-// MAC returns HMAC-SHA-256, computed by transit's hmac/<key>, of data
-// prefixed with the purpose and the tenant. See the package documentation
-// for what this does and does not separate.
+// MAC returns HMAC-SHA-256, computed by transit's hmac/<key>. For the
+// pseudonym purpose that is hmac on the tenant's own key (see the package
+// documentation, "Per-tenant keys"); for any other purpose it is hmac on the
+// purpose's key, of data prefixed with the purpose and the tenant, and the
+// documentation says what that does and does not separate.
 func (b *Backend) MAC(ctx context.Context, key string, purpose keys.Purpose, tenant string, data []byte) ([]byte, error) {
 	if tenant == "" {
 		return nil, errNoTenant
+	}
+	if perTenant(purpose) {
+		return b.tenantMAC(ctx, key, tenant, data)
 	}
 	resp, err := b.c.Request(ctx, http.MethodPost, b.path("hmac", key), map[string]any{
 		"input":       base64.StdEncoding.EncodeToString(macInput(purpose, tenant, data)),

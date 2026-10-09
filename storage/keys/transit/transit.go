@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -224,7 +223,15 @@ func mapDecryptErr(key string, err error) error {
 
 // Encrypt calls encrypt/<key>.
 func (b *Backend) Encrypt(ctx context.Context, key string, pt []byte, ec map[string]string) ([]byte, error) {
+	return b.encrypt(ctx, key, pt, ec, 0)
+}
+
+// encrypt is Encrypt, pinned to a key version when version is not 0.
+func (b *Backend) encrypt(ctx context.Context, key string, pt []byte, ec map[string]string, version int) ([]byte, error) {
 	body := map[string]any{"plaintext": base64.StdEncoding.EncodeToString(pt)}
+	if version != 0 {
+		body["key_version"] = version
+	}
 	if err := b.bind(ctx, key, ec, body); err != nil {
 		return nil, err
 	}
@@ -396,5 +403,3 @@ func (b *Backend) PublicKey(ctx context.Context, key string) (crypto.PublicKey, 
 	}
 	return ki.pub, spec.alg, nil
 }
-
-var errNoTenant = errors.New("transit: MAC needs a tenant")
