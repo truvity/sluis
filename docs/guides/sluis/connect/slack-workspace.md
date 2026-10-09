@@ -8,7 +8,7 @@ Connect a Slack workspace and run its controller. See [How a Slack pass decides]
 
 - Set `config.store: kubernetes`.
 
-- Team, owner and domains are [recorded on connect](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from).
+- Team, owner and domains are [recorded on connect](../../../concepts/sluis/slack-pass.md).
 
 ## 1. Connect
 

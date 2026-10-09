@@ -12,8 +12,8 @@ all pages, see the [index](README.md). Ask: what goes wrong if I do the obvious 
 | [resources](../../reference/sluis/policy.md#resources--what-a-token-is-for) | what a client asking for a resource gets and what it is refused |
 | [Slack channel bindings](../../reference/sluis/policy-bindings.md#slack-channels) | what the loader refuses about Slack channels |
 | [GitHub bindings](github-controller.md#what-waits-for-a-person) | what the render refuses about GitHub bindings |
-| [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md#errors) | how a token request is refused and what the audit trail records |
-| [Slack Apps](../../guides/sluis/connect/slack-apps-catalogue.md#errors) | how a Slack App install is refused |
+| [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md) | how a token request is refused and what the audit trail records |
+| [Slack Apps](../../guides/sluis/connect/slack-apps-catalogue.md) | how a Slack App install is refused |
 
 ## Configuration and operation
 
@@ -24,7 +24,7 @@ all pages, see the [index](README.md). Ask: what goes wrong if I do the obvious 
 | [trust](trust.md#recovery-is-the-root-not-a-back-door) and [lost operator access](../../guides/sluis/operate/lost-operator-access.md) | the way back in when nobody can sign in |
 | [check health](../../guides/sluis/operate/check-health.md) | what each unhealthy state means |
 | [unreachable installation](../../guides/sluis/operate/read-the-audit-trail.md#3-when-the-installation-cannot-be-reached) | what to do when you cannot reach it |
-| [console app traps](../../guides/sluis/connect/console-app.md#traps-that-were-real) | putting a console behind the gateway |
+| [console app traps](../../guides/sluis/connect/console-app.md) | putting a console behind the gateway |
 | [sluisctl exit codes](../../reference/sluis/sluisctl.md#exit-codes) | every failure of `sluisctl bao`, `pg` and `psql`, and a key it never overwrites |
 
 ## What the Slack controller refuses
@@ -39,7 +39,7 @@ removes no guest. It removes nobody the directory has not vouched for.
 | [dry run](slack-pass.md#dry-run-until-enabled) | every workspace is a dry run until the chart lists it; removing it is the emergency stop |
 | [modes](slack-pass.md#modes) | `extend` is the default; `strict` is for private channels and refused for a public one; Slack Connect is always `extend` |
 | [console channels](../../guides/sluis/connect/slack-console-channels.md) | a channel defined in git and the console is held; archiving is off by default |
-| [connect a workspace](../../guides/sluis/connect/slack-workspace.md#connect-a-workspace-from-the-console) | a team that is not the recorded one is revoked; the configuration token is never stored or logged |
+| [connect a workspace](../../guides/sluis/connect/slack-workspace.md) | a team that is not the recorded one is revoked; the configuration token is never stored or logged |
 
 ## Elsewhere
 

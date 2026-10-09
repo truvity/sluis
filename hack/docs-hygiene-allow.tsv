@@ -29,3 +29,10 @@ link	CHANGELOG.md	docs/guides/sluis/connect/github-apps-catalogue.md#a-default-s
 link	CHANGELOG.md	docs/guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module	history: the procedure moved to move-the-domain-to-the-edge-module.md
 link	audit/CHANGELOG.md	../docs/guides/audit/operate/prepare-the-bucket.md#the-attested-tier	history: the heading went with the docs reduction pass
 link	CHANGELOG.md	docs/reference/sluis/lambda.md#platform-logs	history: the section went with the docs reduction pass
+allow	docs/reference/sluis/artifacts.md	accessctl	the release archive and package names the release still publishes (.goreleaser.yaml)
+allow	docs/reference/sluis/configuration.md	/var/run/(secrets/)?(github|slack)-roster/	the chart's real mount paths for the controller credentials (chart _checks.tpl; changing them is a chart change)
+allow	docs/reference/sluis/contracts.md	directoryroster	proto packages that still exist (gen/directoryroster/v1)
+allow	docs/reference/sluis/sluisctl-wrappers.md	known_hosts\.d/accessctl	the managed known-hosts file name sluisctl still writes
+allow	docs/reference/sluis/sluisctl.md	(?i:accessctl)	the alias binary, default client id, ACCESSCTL_* variables and config directory sluisctl still reads
+allow	*	decisions/0003-deprecate-access-proxy\.md	ADR 0003's file name keeps the chart it retired: ADR file names never change, so links to it stay
+allow	docs/reference/sluis/endpoints.md	`accessctl`	the client id the client-secrets endpoint accepts (internal/issuer/clientsecrets_http.go ClientSecretsAudiences)

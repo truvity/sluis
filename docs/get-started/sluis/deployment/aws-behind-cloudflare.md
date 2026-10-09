@@ -30,4 +30,4 @@ The arguments are in [the Pulumi library](../../../reference/sluis/pulumi-librar
 
 The arguments `API.DomainName`, `API.CertificateArn`, `API.TruststorePEM` and `API.TruststoreBucketName` are deprecated. When you set all four, the core library builds the domain itself with no diff and warns.
 
-The preview must show the domain updated in place, never replaced. Empty the old truststore bucket by hand. The steps are in [cut over](../../../guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module).
+The preview must show the domain updated in place, never replaced. Empty the old truststore bucket by hand. The steps are in [cut over](../../../guides/sluis/migrate/move-the-domain-to-the-edge-module.md).

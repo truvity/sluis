@@ -42,4 +42,4 @@ Minting leaves nothing behind: tokens are never kept.
 | Action | Records |
 |---|---|
 | `roster.catalogue_app.created`, `.installed`, `.disconnected` | The App by catalogue id, with GitHub's id |
-| `roster.github_token.minted` | Every installation token asked for: [audit](../../guides/sluis/connect/github-app-tokens.md#audit) |
+| `roster.github_token.minted` | Every installation token asked for: [audit](../../guides/sluis/connect/github-app-tokens.md) |

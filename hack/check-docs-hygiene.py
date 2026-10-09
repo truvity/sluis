@@ -64,8 +64,8 @@ TERMS = {
 }
 
 # The old product names (docs/WRITING.md, rule 9). Reported as warnings under
-# --warn-terms while the documentation passes remove them; without the flag they
-# fail like the terms above. They apply to every tree, audit's included.
+# --warn-terms; without the flag they fail like the terms above, as `just docs-check`
+# runs it. They apply to every tree, audit's included.
 RETIRED_TERMS = {name: re.compile(name, re.I) for name in (
     "github-roster", "githubroster", "slack-roster", "slackroster",
     "directoryroster", "accessctl", "access-proxy",

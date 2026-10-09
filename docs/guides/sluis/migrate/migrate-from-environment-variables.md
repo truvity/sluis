@@ -80,4 +80,4 @@ Run `helm upgrade`, or restart with `--config <file>` or `SLUIS_CONFIG`. Check `
 
 - Remove the old variables from every Compose file, unit and CI job, or the next start refuses.
 
-- On AWS Lambda the Pulumi library of the same version replaces `SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES` and `SLUIS_ROLE` with `SLUIS_CONFIG` ([AWS Lambda](../../../reference/sluis/lambda.md#version-coupling)).
+- On AWS Lambda the Pulumi library of the same version replaces `SLUIS_CONFIG_FILE`, `SLUIS_SECRET_FILES` and `SLUIS_ROLE` with `SLUIS_CONFIG` ([AWS Lambda](../../../reference/sluis/lambda.md)).

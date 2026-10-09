@@ -22,7 +22,7 @@ Sluis verifies every proof and resolves it to internal groups. A token describes
 | Omitted field | matches anything |
 | `job_workflow_ref` | workflow file defining the job, e.g. `example-org/app/.github/workflows/release.yml@refs/heads/main` |
 | `workflow_ref` | file the run started from |
-| Pin a write grant | `job_workflow_ref` with `ref` and `event_name`: [pinning a grant to one workflow](../../guides/sluis/connect/github-app-tokens.md#pinning-a-grant-to-one-workflow) |
+| Pin a write grant | `job_workflow_ref` with `ref` and `event_name`: [pinning a grant to one workflow](../../guides/sluis/connect/github-app-tokens.md) |
 | `email`, `email_domain` | for populations no directory group describes; liveness does not gate them |
 | Attributes | only in matchers, at the front door |
 | `cluster` in a matcher | `name` of an `exchange.clusters` row of the policy document; renaming a row changes what its rules match |

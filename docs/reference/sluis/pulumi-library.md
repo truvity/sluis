@@ -166,7 +166,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `LogRetentionDays` | 30 | Function log group |
 | `AccessLogs` | nil (off) | `RetentionDays` (7). Declares log group `/aws/apigateway/<FunctionName>` and `$default` access logs: `requestTime`, `requestId`, `httpMethod`, `path`, `status`, `responseLatency`, `integrationLatency`. The query string, headers, address and identity are never logged. The applying principal needs `logs:CreateLogDelivery`, `logs:PutResourcePolicy` and related actions |
 | `PermissionsBoundaryArn` | None | Boundary of the role and the scheduler's |
-| `API.DomainName`, `.CertificateArn`, `.TruststorePEM`, `.TruststoreBucketName` | Deprecated | All four together keep the mutual-TLS domain with a warning. Move to the [edge module](#the-edge-modules) ([cutover](../../guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module)) |
+| `API.DomainName`, `.CertificateArn`, `.TruststorePEM`, `.TruststoreBucketName` | Deprecated | All four together keep the mutual-TLS domain with a warning. Move to the [edge module](#the-edge-modules) ([cutover](../../guides/sluis/migrate/move-the-domain-to-the-edge-module.md)) |
 | `API.KeepDefaultEndpoint` | false | Keeps the `execute-api` endpoint for the acceptance suite; turn it off after, it bypasses the client certificate |
 | `Schedule.GitHubOrgs`, `.SlackWorkspaces` | None | Targets, one schedule each |
 | `Schedule.Rate` | `rate(5 minutes)` | EventBridge Scheduler expression |
@@ -245,7 +245,7 @@ To adopt an existing audit stack, import it under the new component ([resource n
 
 ### Keys the estate supplies
 
-`LambdaArgs.Keys` (`KeysArgs`) takes aliases of symmetric keys you own; the library creates none, and the key policy must admit the function's role. A document naming `keys` is refused. To adopt library-created keys, supply their aliases and `pulumi state delete` the old `kms.Key` resources after unprotecting ([steps](../../guides/sluis/migrate/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones)).
+`LambdaArgs.Keys` (`KeysArgs`) takes aliases of symmetric keys you own; the library creates none, and the key policy must admit the function's role. A document naming `keys` is refused. To adopt library-created keys, supply their aliases and `pulumi state delete` the old `kms.Key` resources after unprotecting ([steps](../../guides/sluis/migrate/supply-your-own-signing-keys.md)).
 
 | `Keys` field | Grant |
 |---|---|

@@ -59,7 +59,7 @@ the response returns to the platform. The service is assembled once per executio
 per invocation, as `sluis tick` does.
 
 The binary is built without the Kubernetes and Valkey clients, which keeps cold start short
-([how it is held](../../reference/sluis/lambda.md#building-and-checking-the-binary)).
+([how it is held](../../reference/sluis/lambda.md)).
 
 ## What do you check before deploying?
 
@@ -69,12 +69,12 @@ A local `Package` is copied to a temporary file before it is hashed and deployed
 If a secret reaches a document, rotate it and delete the layer versions that hold it with `aws lambda delete-layer-version`.
 The layer is retained (`SkipDestroy`) so that rollback works.
 
-The library refuses a document that names an `endpoint` the function calls (`secrets.endpoint`, `ports.dynamodb.endpoint`; an R2 preset's is not one).
+The library refuses a document that names an `endpoint` the function calls, such as `secrets.endpoint` or `ports.dynamodb.endpoint`. An R2 preset's endpoint is not one.
 `AllowEndpoints` lifts that for a LocalStack test. `Telemetry.Env` takes only the layer's own variables, so the environment
 cannot carry `SLUIS_*`, `LD_*` or another `AWS_*` variable.
 
 An `aws` matcher with no `role` admits every role of the account, including roles created later. The issuer warns at
-start ([the reference](../../reference/sluis/lambda.md#two-audiences-two-doors)).
+start ([the reference](../../reference/sluis/lambda.md)).
 
 ## Decided in
 

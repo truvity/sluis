@@ -5,7 +5,8 @@ Per page (type from the path):
   - prose words (fenced code, table rows and generated regions excluded) within
     the limit of the page's type: tutorial 900, how-to 400, reference 300,
     explanation 800, index 250;
-  - sentences of at most 25 words, none over 40, and at most 10% over 25;
+  - sentences of at most 25 words, none over 40, and at most 10% over 25 (a list
+    item is a sentence of its own);
   - a how-to links at most 3 pages under decisions/;
   - none of the phrases in hack/docs-banned.tsv outside code.
 Per directory: the prose words of the pages directly in it stay within the
@@ -129,9 +130,20 @@ def plain(line):
     return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", line)
 
 
+LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+
+
 def sentence_lengths(prose):
-    body = "\n".join(t for _, t in prose if not t.lstrip().startswith("#"))
-    body = plain(body)
+    # A list item ends the sentence before it, so bullets need no blank line between them.
+    lines = []
+    for _, t in prose:
+        if t.lstrip().startswith("#"):
+            continue
+        if LIST_ITEM.match(t):
+            lines.append("")
+            t = LIST_ITEM.sub("", t, count=1)
+        lines.append(t)
+    body = plain("\n".join(lines))
     body = re.sub(r"\b(e\.g|i\.e|etc|vs|cf|v\d+)\.", r"\1", body)
     parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z`\"'(\[])|\n\n+", body) if s.strip()]
     return [n for n in (len(WORD.findall(s)) for s in parts) if n >= 3]

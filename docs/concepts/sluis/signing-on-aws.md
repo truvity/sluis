@@ -49,7 +49,7 @@ The library grants Encrypt, Decrypt and GenerateDataKey on the key behind the al
 context keeps ciphertexts apart.
 
 Letting the library create the key (`WrappedSigning`) is deprecated. See [its policy](../../reference/sluis/aws-signing-key.md#legacy-wrappedsigning-the-library-creates-the-key)
-and [the move to supplied aliases](../../guides/sluis/migrate/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones).
+and [the move to supplied aliases](../../guides/sluis/migrate/supply-your-own-signing-keys.md).
 
 An entry from an earlier release records no context and opens with `{purpose: sluis-signing, alg, kid}`. The ring turns
 over within `rotateEvery` plus `retain`, so no entry needs migrating. The library keeps the older grant while

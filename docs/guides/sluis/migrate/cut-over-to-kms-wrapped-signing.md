@@ -4,7 +4,7 @@ Move signing from cert-manager file keys to `signingKey.kmsWrapped` while every 
 
 ## Before you start
 
-- Provide the symmetric KMS key and its role ([configuration](../../../reference/sluis/configuration.md#the-service-document), [example](../../../reference/sluis/openbao-secrets-adapter.md#example-kubernetes-on-eks-with-kms-wrapped-signing-and-openbao-secrets)).
+- Provide the symmetric KMS key and its role ([configuration](../../../reference/sluis/configuration.md#the-service-document), [example](../../../reference/sluis/openbao-secrets-adapter.md)).
 
 - Create `issuer/state-secret` ([secrets](../../../reference/sluis/secrets.md#the-names)): at least 32 random bytes, the same in every replica.
 
