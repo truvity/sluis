@@ -88,6 +88,11 @@ controllers:
     credentialsDir: /var/run/slack-roster/credentials
     interval: 10m
 cloudflare:
+  remote:
+    url: http://cloudflare.sluis.svc:8080
+    audience: cloudflare
+    tokenFile: /var/run/secrets/sluis/cloudflare/token
+    function: sluis-cloudflare
   forbiddenPermissionGroups: [Workers Scripts Write]
   accounts:
     main:

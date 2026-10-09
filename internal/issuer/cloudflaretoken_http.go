@@ -16,16 +16,16 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/sluis/internal/cloudflare/minter"
+	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/tokens"
 )
 
 // CloudflareMinter is what the exchange needs of the Cloudflare minter
-// (internal/cloudflare/minter.Minter): the grants decide, and the minter audits
+// (internal/cloudflare/cfrpc.Minter): the grants decide, and the minter audits
 // the mint itself, whether it succeeds or not.
 type CloudflareMinter interface {
-	MintFor(ctx context.Context, preset string, caller minter.Caller, lifetime time.Duration) (*minter.Minted, error)
-	Granted(c minter.Caller) []minter.PresetInfo
+	MintFor(ctx context.Context, preset string, caller cfrpc.Caller, lifetime time.Duration) (*cfrpc.Minted, error)
+	Granted(c cfrpc.Caller) []cfrpc.PresetInfo
 }
 
 // UseCloudflare gives the issuer the minter of Cloudflare credentials. Without
@@ -47,8 +47,8 @@ func (i *Issuer) cloudflareMinter() CloudflareMinter {
 // policy with `github` matchers on what the verified token says (repository,
 // ref, event, job_workflow_ref); the exchange does not look at a workflow's
 // display name, which anyone who can push a branch can choose.
-func CloudflareCaller(proof Proof, groups []string) minter.Caller {
-	return minter.Caller{Actor: proof.actor(), Groups: groups}
+func CloudflareCaller(proof Proof, groups []string) cfrpc.Caller {
+	return cfrpc.Caller{Actor: proof.actor(), Groups: groups}
 }
 
 // cloudflareTokens serves the exchange for a Cloudflare credential: requested_token_type
@@ -208,11 +208,11 @@ func serveCloudflareToken(
 // wrong at Cloudflare is the audit trail's and the log's, not the caller's.
 func cloudflareTokenError(err error) *oidc.Error {
 	switch {
-	case errors.Is(err, minter.ErrUnknownPreset), errors.Is(err, minter.ErrNotGranted):
+	case errors.Is(err, cfrpc.ErrUnknownPreset), errors.Is(err, cfrpc.ErrNotGranted):
 		// The same answer for both: whether a preset exists is not for
 		// someone it is not granted to to learn.
 		return oidc.ErrInvalidTarget().WithDescription("no Cloudflare preset of that name is granted to this proof")
-	case errors.Is(err, minter.ErrLifetime):
+	case errors.Is(err, cfrpc.ErrLifetime):
 		return oidc.ErrInvalidRequest().WithDescription("%s", err)
 	default:
 		return oidc.ErrServerError().WithDescription("the Cloudflare credential could not be minted; see the audit trail")
@@ -237,7 +237,7 @@ func cloudflareGrantsOf(cf CloudflareMinter, groups []string) []CloudflareGrant 
 		return nil
 	}
 	var out []CloudflareGrant
-	for _, p := range cf.Granted(minter.Caller{Groups: groups}) {
+	for _, p := range cf.Granted(cfrpc.Caller{Groups: groups}) {
 		out = append(out, CloudflareGrant{
 			Preset: p.Name, Description: p.Description, R2: p.R2, Endpoint: p.Endpoint,
 			Lifetime: int64(p.Lifetime.Seconds()),

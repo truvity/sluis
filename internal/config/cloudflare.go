@@ -28,6 +28,24 @@ type Cloudflare struct {
 	// them under. They cannot remove from it: nothing in a document shortens
 	// the built-in list.
 	ForbiddenPermissionGroups []string `json:"forbiddenPermissionGroups,omitempty"`
+	// Remote is where the minter is when it is not this process: the on-demand
+	// exchange then calls the Cloudflare module there, and this process holds no
+	// account and no preset.
+	Remote *CloudflareRemote `json:"remote,omitempty"`
+}
+
+// CloudflareRemote is the Cloudflare module in another process: a Lambda
+// function or a Kubernetes Service (docs/decisions/0071).
+type CloudflareRemote struct {
+	// Function is the module's Lambda function, name or ARN; it is invoked
+	// through its `live` alias.
+	Function string `json:"function,omitempty"`
+	// URL is the module's Service, called with the pod's projected token.
+	URL string `json:"url,omitempty"`
+	// Audience is the audience of that token; the module's name when unset.
+	Audience string `json:"audience,omitempty"`
+	// TokenFile is where the projected token is mounted.
+	TokenFile string `json:"tokenFile,omitempty"`
 }
 
 // CloudflareAccount is one Cloudflare account.
@@ -98,6 +116,19 @@ func (c *Cloudflare) Validate() error {
 		return nil
 	}
 	var errs []error
+	if r := c.Remote; r != nil {
+		switch {
+		case (r.Function == "") == (r.URL == ""):
+			errs = append(errs, errors.New("cloudflare.remote: set exactly one of function and url"))
+		case r.URL != "":
+			if u, err := url.Parse(r.URL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+				errs = append(errs, fmt.Errorf("cloudflare.remote.url: %q is not an http(s) URL", r.URL))
+			}
+		}
+		if len(c.Accounts) > 0 || len(c.Presets) > 0 {
+			errs = append(errs, errors.New("cloudflare.remote: a process that calls the module holds no accounts or presets"))
+		}
+	}
 	for i, g := range c.ForbiddenPermissionGroups {
 		if strings.TrimSpace(g) == "" {
 			errs = append(errs, fmt.Errorf("cloudflare.forbiddenPermissionGroups[%d] is empty", i))
@@ -271,6 +302,10 @@ func (c *PolicyCloudflare) validate(declared func(group string) bool) []error {
 // CheckCloudflare holds the policy's grants to the service document's presets:
 // a grant for a preset that does not exist would read as a right nobody can use.
 func CheckCloudflare(cf *Cloudflare, p *PolicyDocument) error {
+	if cf != nil && cf.Remote != nil {
+		// The presets are the remote module's document's, which holds them to the grants.
+		return nil
+	}
 	grants := p.Cloudflare().Grants
 	var errs []error
 	for i, g := range grants {
