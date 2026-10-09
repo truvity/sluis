@@ -61,11 +61,14 @@ if ! kubectl -n "$NS" exec deploy/kms -- awslocal kms describe-key --key-id alia
   kubectl -n "$NS" exec deploy/kms -- awslocal kms create-alias --alias-name alias/audit-seal --target-key-id "$key_id"
 fi
 
-# The pseudonym key: symmetric, the data keys per tenant are wrapped under it.
-if ! kubectl -n "$NS" exec deploy/kms -- awslocal kms describe-key --key-id alias/audit-pseudonym >/dev/null 2>&1; then
-  key_id=$(kubectl -n "$NS" exec deploy/kms -- awslocal kms create-key --query KeyMetadata.KeyId --output text)
-  kubectl -n "$NS" exec deploy/kms -- awslocal kms create-alias --alias-name alias/audit-pseudonym --target-key-id "$key_id"
-fi
+# The pseudonym key (the per-tenant data keys are wrapped under it) and the
+# conceal key (the identity behind a pseudonym is sealed under it): symmetric.
+for alias in audit-pseudonym audit-conceal; do
+  if ! kubectl -n "$NS" exec deploy/kms -- awslocal kms describe-key --key-id "alias/$alias" >/dev/null 2>&1; then
+    key_id=$(kubectl -n "$NS" exec deploy/kms -- awslocal kms create-key --query KeyMetadata.KeyId --output text)
+    kubectl -n "$NS" exec deploy/kms -- awslocal kms create-alias --alias-name "alias/$alias" --target-key-id "$key_id"
+  fi
+done
 
 kubectl -n "$NS" get secret audit-e2e-kms >/dev/null 2>&1 || \
   kubectl -n "$NS" create secret generic audit-e2e-kms \
