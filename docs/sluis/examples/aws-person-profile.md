@@ -11,14 +11,14 @@ A person signs in once and uses ordinary AWS CLI profiles, one per role they are
 
 ## The policy snippet
 
-Trust policy of the role (account `123456789012`):
+Trust policy of the role (account `111122223333`):
 
 ```json
 {
   "Effect": "Allow",
-  "Principal": {"Federated": "arn:aws:iam::123456789012:oidc-provider/issuer.example.com"},
+  "Principal": {"Federated": "arn:aws:iam::111122223333:oidc-provider/issuer.example.com"},
   "Action": "sts:AssumeRoleWithWebIdentity",
-  "Condition": {"StringEquals": {"issuer.example.com:aud": "aws:123456789012:power"}}
+  "Condition": {"StringEquals": {"issuer.example.com:aud": "aws:111122223333:power"}}
 }
 ```
 
@@ -26,7 +26,7 @@ Policy: each role is an `exchange` client.
 
 ```yaml
 clients:
-  aws:123456789012:power: { kind: exchange, requires: [sre] }
+  aws:111122223333:power: { kind: exchange, requires: [sre] }
 ```
 
 ## The exchange / command
@@ -39,14 +39,14 @@ sluisctl aws-config          # a profile per granted role, named <role>@<account
 which writes
 
 ```ini
-[profile power@123456789012]
-credential_process = sluisctl aws --audience aws:123456789012:power
+[profile power@111122223333]
+credential_process = sluisctl aws --audience aws:111122223333:power
 region = eu-central-1
 ```
 
 ## Verify
 
-`aws sts get-caller-identity --profile power@123456789012` names the assumed role. A wrong `aud` condition fails as
+`aws sts get-caller-identity --profile power@111122223333` names the assumed role. A wrong `aud` condition fails as
 `AccessDenied` on `AssumeRoleWithWebIdentity` with no hint which half is wrong.
 
 ## Undo

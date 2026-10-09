@@ -7,7 +7,7 @@ lives in the policy.
 
 ## What you need
 
-- The account side of [the person example](aws-person-profile.md) for the audience `aws:123456789012:platform-deployer`.
+- The account side of [the person example](aws-person-profile.md) for the audience `aws:111122223333:platform-deployer`.
 - `github.owners` set to your organisation on the issuer: the allow-list is what makes a GitHub token yours.
 
 ## The policy snippet
@@ -23,7 +23,7 @@ groups:
           job_workflow_ref: example-org/platform/.github/workflows/deploy.yml@refs/heads/main
 lifetimes: { ci-deploy: 1h }
 clients:
-  aws:123456789012:platform-deployer: { kind: exchange, requires: [ci-deploy] }
+  aws:111122223333:platform-deployer: { kind: exchange, requires: [ci-deploy] }
 ```
 
 ## The exchange / command
@@ -35,8 +35,8 @@ steps:
     uses: truvity/sluis@<commit-sha>   # vX.Y.Z
     with:
       issuer: https://access.example.com
-      audiences: aws:123456789012:platform-deployer
-      default-profile: platform-deployer@123456789012
+      audiences: aws:111122223333:platform-deployer
+      default-profile: platform-deployer@111122223333
       region: eu-central-1
   - run: aws sts get-caller-identity
 ```
