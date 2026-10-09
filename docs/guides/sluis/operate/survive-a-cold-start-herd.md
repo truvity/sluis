@@ -27,6 +27,7 @@ aws ssm update-service-setting --setting-value true \
 | Reserved concurrency | Nothing; not provisioned concurrency | Environments, so cold starts and SSM reads |
 | SSM higher throughput | Every SSM call in the account and region | The SSM rate before it throttles |
 | Release v1.74.1 or later | Nothing | Reads per start: the session key and the configuration. Each is retried within 3.4 seconds |
+| Release v1.74.2 or later | Nothing | A start also reads no generated client's secret; the first refresh settles them |
 
 ## Verify
 

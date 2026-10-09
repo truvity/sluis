@@ -411,6 +411,13 @@ type Deps struct {
 	// had no issuer and hid its sessions pages on the deployment where
 	// they work best.
 	UseIssuerURL func(string)
+	// SkipStartSecretsPass leaves the generated clients' secrets to the
+	// scheduled pass ([App.ReconcileClientSecrets]) instead of settling them
+	// as the process starts. A Lambda sets it: every new environment of a
+	// herd of cold starts would otherwise read one SSM record per generated
+	// client, and SSM throttles a herd. The token endpoint reads a client's
+	// record when the client first authenticates.
+	SkipStartSecretsPass bool
 	// Ready are dependencies the caller's half of the process needs
 	// answering for, added to this one's on /readyz. The merged service
 	// has one readiness endpoint and two stores behind it.
@@ -767,7 +774,9 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// At start, and not only on the tick, so a first deploy has its secrets as
 	// soon as it serves. A client that fails here does not stop the issuer: it
 	// is logged and tried again, and the input secret serves it meanwhile.
-	app.reconcileGenerated(ctx)
+	if !deps.SkipStartSecretsPass {
+		app.reconcileGenerated(ctx)
+	}
 	return app, nil
 }
 
