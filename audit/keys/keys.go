@@ -17,9 +17,6 @@ package keys
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"regexp"
@@ -72,14 +69,6 @@ type Sealer interface {
 }
 
 var safeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$`)
-
-// pseudonym is the one place the derivation lives, so that two implementations
-// of Provider cannot disagree about what a pseudonym is.
-func pseudonym(key []byte, identifier string) string {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(identifier))
-	return PseudonymPrefix + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
 
 // IsPseudonym reports whether a value was produced by this package.
 func IsPseudonym(v string) bool { return strings.HasPrefix(v, PseudonymPrefix) }

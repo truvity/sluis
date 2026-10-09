@@ -303,13 +303,6 @@ func openBAOCredentials(ctx context.Context, o config.OpenBAO, secrets *config.S
 	}
 }
 
-func mountOrTransit(m string) string {
-	if m == "" {
-		return "transit"
-	}
-	return m
-}
-
 // OpenKeysFrom opens the key provider the configuration names. It is nil where
 // a deployment runs without one, which is the default.
 func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets, with ...KeyOption) (keys.Provider, error) {

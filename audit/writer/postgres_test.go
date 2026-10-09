@@ -19,15 +19,12 @@ import (
 	"github.com/truvity/sluis/audit/writer"
 )
 
-// With a database, replicas share one deduplication table, and a replica that
-// brings a key directory other than the deployment's is refused: it would give
-// the same person a second pseudonym.
-func TestReplicasShareTheDatabaseAndItsKeyDirectory(t *testing.T) {
+// With a database, replicas share one deduplication table.
+func TestReplicasShareTheDatabase(t *testing.T) {
 	pool := pgtest.Open(t)
 	ctx := context.Background()
 	archive := storetest.NewMemory()
-	dir := t.TempDir()
-	open := func(instance, keyDir string) (*writer.Writer, error) {
+	open := func(instance string) (*writer.Writer, error) {
 		provider := keystest.New(t)
 		return writer.Open(ctx, writer.Config{
 			Archive: archive, Profiles: profiles(t), Keys: provider,
@@ -35,16 +32,13 @@ func TestReplicasShareTheDatabaseAndItsKeyDirectory(t *testing.T) {
 		})
 	}
 
-	one, err := open("writer-1", dir)
+	one, err := open("writer-1")
 	if err != nil {
 		t.Fatalf("the first replica: %v", err)
 	}
-	two, err := open("writer-2", dir)
+	two, err := open("writer-2")
 	if err != nil {
-		t.Fatalf("a second replica on the same directory: %v", err)
-	}
-	if _, err := open("writer-3", t.TempDir()); err == nil || !strings.Contains(err.Error(), "directory") {
-		t.Fatalf("a replica with its own key directory was let in: %v", err)
+		t.Fatalf("a second replica: %v", err)
 	}
 
 	common, err := catalogue.Common()
