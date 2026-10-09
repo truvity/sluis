@@ -1,105 +1,51 @@
 # Recover from a receiver, writer or storage outage
 
-## Purpose
-
-Bring the write path back after the receiver, the writer or the object store was
-down, and know what was and was not lost.
-
-## Preconditions
-
-- You know the installation's mode ([direct](../../../concepts/audit/direct-mode.md) or
-  [stream](../../../concepts/audit/stream-mode.md)): most of what follows differs.
-- Access to the pods' logs and to the application's metrics.
+Bring the write path back after the receiver, writer or object store was down, and learn what was lost.
 
 ## Before you start
 
-- **`block` actions fail while the receiver is down; `async` actions queue.** An
-  `async` record waits in the emitter's bounded in-memory queue and is retried
-  with backoff. It is dropped only if the queue overflows, and every drop is
-  logged by the emitter as well as counted.
-- **There is no outbox file.** What a pod holds is the queue, and it dies with the
-  pod: one flush interval of `async` records plus the batch in flight. A `block`
-  record is never lost, because the application had no acknowledgement to act on.
-- **A rollout is a pause in direct mode and a backlog in stream mode.** Two
-  replicas and a rolling update make the pause the time one pod takes to become
-  ready; the dedupe table is in Postgres, not a pod.
-- **Nothing the receiver acknowledged was lost**, because it acknowledges nothing it
-  has not stored ([0059](../../../decisions/0059-sink-durability-and-transports.md)).
+- Know the mode, [direct](../../../concepts/audit/direct-mode.md) or [stream](../../../concepts/audit/stream-mode.md). You need the pods' logs and the application's metrics.
+
+- `block` actions fail while the receiver is down. `async` records wait in the emitter's bounded in-memory queue with backoff, and are dropped only on overflow. Each drop is logged and counted.
+
+- There is no outbox file. A pod's queue dies with it: one flush interval of `async` records plus the batch in flight. A `block` record is never lost.
+
+- Nothing the receiver acknowledged is lost: it acknowledges only what it stored ([0059](../../../decisions/0059-sink-durability-and-transports.md)).
 
 | | direct | stream |
 |---|---|---|
-| receiver | is the writer: one process validates and puts the object | publishes to the stream and acknowledges when it is replicated |
+| receiver | is the writer: one process validates and puts the object | publishes to the stream and acknowledges when replicated |
 | writer | the receiver's own pods | `audit-writer` in consumer mode, N pods, scaled apart |
 | "behind" looks like | `audit.emit.queue.pending` climbing in the application | the stream consumer's pending count |
 
 ## Steps
 
-### 1. Tell which part is down
+1. Tell what was lost from the application's own metrics. `audit.emit.queue.pending` rising means the receiver is slow or down. `audit.emit.records.dropped` is the incident. `audit.emit.records.refused` is an emitter bug.
 
-Two numbers from the application's own process say whether anything was lost:
+   ```
+   increase(audit_emit_records_dropped_total[15m]) > 0
+   ```
 
-| metric | what it means |
-|---|---|
-| `audit.emit.queue.pending` | records waiting to be delivered. Rising means the receiver is slow or down |
-| `audit.emit.records.dropped` | records the queue gave up on. This is the incident |
+2. Restore the part that is down.
 
-Alert on the second and watch the first:
+   - Receiver: restore it. `block` requests fail meanwhile.
 
-```
-increase(audit_emit_records_dropped_total[15m]) > 0
-```
+   - Writer in direct mode: a rollout is a pause, because the receiver is the writer. With two replicas and a rolling update it lasts one pod's readiness time. The deduplication table is in Postgres, not a pod.
 
-The emitter's other counters are `audit.emit.records.written`,
-`audit.emit.records.refused` (a bug in the emitting code, not an outage) and
-`audit.emit.batches.failed`. Verify: you know whether `dropped` moved. Roll back: none.
+   - Writer in stream mode: a rollout is a backlog. The application notices nothing and the consumer's pending count rises then falls. A count that does not fall means the writers cannot keep up or write: restore them. A writer resumes from its consumer position and the dedupe table absorbs redelivered batches.
 
-### 2. Restore the part
+   - Stream past its horizon: the discard-new policy refuses publishes instead of dropping. Refusals show as failed `block` calls and a filling queue.
 
-#### The receiver is down
+   - Object storage: in direct mode the receiver acknowledges nothing, so `block` fails and `async` queues. In stream mode the stream holds batches up to its horizon.
 
-An action declared `block` fails, and the application's request fails with it:
-that is what `block` is for. Restore the receiver; nothing it acknowledged was
-lost.
+## Verify
 
-#### The writer is down, or is being rolled
+`/readyz` on the receiver and writer answers 200 and `pending` falls. Records written after a storage outage carry their original `occurred_at`, and `recorded_at` shows the delay. Run `audit verify` over the window: see [verify the trail](verify-the-trail.md).
 
-**Direct mode: a rollout is a pause.** The receiver is the writer, so while
-no replica is ready, `block` calls fail and `async` records accumulate in
-the applications' queues. Two replicas and a rolling update make the pause
-the time one pod takes to become ready. Two replicas are safe because the
-deduplication table is in Postgres and not in a pod.
+## Roll back
 
-**Stream mode: a rollout is a backlog.** The receiver keeps publishing and
-acknowledging, the application notices nothing, and the stream's consumer
-pending count rises and then falls again. The alert is a pending count that
-rises and does not come back down: the writers cannot keep up, or cannot
-write. Restore them; a writer resumes from its consumer position and the
-dedupe table absorbs the redeliveries of whatever batch was in flight.
+If a rollout caused the outage, run `kubectl rollout undo`.
 
-If the stream's horizon was exceeded, its discard-new policy refused
-publishes rather than dropping, so nothing that was accepted was lost — the
-refusals appear at the receiver, and from there as failed `block` calls and
-a filling queue.
+## After a drop
 
-#### Object storage is unreachable
-
-In direct mode the receiver cannot make anything durable, so it acknowledges
-nothing: `block` fails and `async` queues, exactly as when the receiver is
-down. In stream mode the writers stop acknowledging batches and the stream
-holds them up to its horizon; the application is unaffected until that
-horizon is reached.
-
-Nothing is dropped in either case. After recovery, objects are written with
-their original `occurred_at`; `recorded_at` shows the delay.
-
-
-Verify: `/readyz` on the receiver and writer answers 200; `pending` falls. Roll
-back: for a rollout that caused it, `kubectl rollout undo`.
-
-## Afterwards
-
-- Records written after a storage outage carry their original `occurred_at`;
-  `recorded_at` shows the delay.
-- If `audit.emit.records.dropped` moved, the records it counts are in the
-  application's log (`Options.Logger`) and nowhere else: tell the application's owner.
-- Run `audit verify` over the window ([verify the trail](verify-the-trail.md)).
+If `audit.emit.records.dropped` moved, the records are in the application's log (`Options.Logger`) and nowhere else. Tell the application's owner.

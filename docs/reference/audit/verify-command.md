@@ -109,7 +109,7 @@ record claiming it had would be false assurance. They replace the v0
 | `--sink <writer>` | record what was checked through the writer. The scheduled job does; an auditor's run by hand should not |
 | `--deployment <file>` | the profile configuration, so the check knows what lock the profile demands. The scheduled job passes it; an auditor without it still gets keys, bytes and hashes checked, with nothing said about locks |
 | `--json` | print the report as JSON |
-| `--endpoint`, `--path-style` | an S3-compatible store that is not AWS, as [prepare the bucket](../../guides/audit/operate/prepare-the-bucket.md#s3-compatible-stores) has it |
+| `--endpoint`, `--path-style` | an S3-compatible store that is not AWS, as [put the archive on an S3-compatible store](../../guides/audit/operate/archive-on-r2.md) has it |
 <!-- /generated -->
 
 `--profile` is required, and a profile is verified on its own: an

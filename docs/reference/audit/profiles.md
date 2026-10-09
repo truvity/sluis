@@ -108,8 +108,8 @@ profiles:
 | `endpoint` | the URL of an S3-compatible store that is not AWS; empty is AWS S3 |
 | `path_style` | address the bucket as `endpoint/bucket/key`; with `endpoint` only |
 | `credentials` | the address, below the process's `archive.stateRoot`, of the store's static credentials; with `endpoint` only |
-| `credentials_ref` | `external/cloudflare/<preset>`: the R2 credentials a sluis installation rotates, read below the process's `archive.sluisRoot` or `archive.sluisDir`; exclusive with `credentials` and `credentials_preset`, with `endpoint` only (see [put the archive on R2](../../guides/audit/operate/archive-on-r2.md)) |
-| `credentials_preset` | `{account, minter, prototype, lifetime}`: mint the store's R2 credentials for the process from a Cloudflare prototype, which puts the minter in every process; exclusive with `credentials` and `credentials_ref`, with `endpoint` only (see [prepare the bucket](../../guides/audit/operate/prepare-the-bucket.md)) |
+| `credentials_ref` | `external/cloudflare/<preset>`: the R2 credentials a sluis installation rotates, read below the process's `archive.sluisRoot` or `archive.sluisDir`; exclusive with `credentials` and `credentials_preset`, with `endpoint` only (see [put the archive on an S3-compatible store](../../guides/audit/operate/archive-on-r2.md)) |
+| `credentials_preset` | `{account, minter, prototype, lifetime}`: mint the store's R2 credentials for the process from a Cloudflare prototype, which puts the minter in every process; exclusive with `credentials` and `credentials_ref`, with `endpoint` only (see [put the archive on an S3-compatible store](../../guides/audit/operate/archive-on-r2.md)) |
 | `key_alias` | the KMS key alias the preset's objects are encrypted under; AWS S3 only; empty is the process's `archive.kmsKey` or the bucket's default |
 
 - **Object Lock is the `attested` preset's bucket alone**: compliance mode on S3. An `attested`

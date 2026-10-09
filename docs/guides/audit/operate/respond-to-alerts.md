@@ -1,27 +1,16 @@
 # Respond to an audit alert
 
-## Purpose
-
-Work out what a firing write-path alert means and what to do about it. The rules are in
-[telemetry](../../../reference/audit/telemetry.md#alerts); each links to its section here by name (the chart's
-`alerts.runbookBaseUrl`).
-
-## Preconditions
-
-- The alerts are installed ([telemetry](../../../reference/audit/telemetry.md#installing-them)) and routed to someone.
-- Access to the writer's, indexer's and notary's logs, and read access to the archive.
+Find the cause of a firing write-path alert and fix it. Each rule in [telemetry](../../../reference/audit/telemetry.md#alerts) links to its section here through `alerts.runbookBaseUrl`.
 
 ## Before you start
 
-- **`AuditEmitterDroppingRecords` means records are gone,** not late: treat it as the incident.
-- **`AuditRecordsDeadLettered` is the only alert whose cause is often a catalogue out of step** with the
-  emitter: the writer also logs `event=unknown_catalogue` for it, and on AWS the
-  `<name>-writer-unknown-catalogue` alarm fires; give the writer the version first
-  ([change what a source records](../connect/change-what-a-source-records.md)).
-- **An hour with no seal cannot be told from one whose seal was removed,** so do not let
-  `AuditSealStale` age.
-- **The alarms on AWS are CloudWatch's, not these rules:** see
-  [alarms](../../../reference/audit/aws-pulumi-library.md#alarms) and [redrive the ingest DLQ](redrive-the-ingest-dlq.md).
+- Install and route the alerts: see [telemetry](../../../reference/audit/telemetry.md#installing-them). You need the component logs and read access to the archive.
+
+- `AuditEmitterDroppingRecords` means records are gone, not late.
+
+- An hour with no seal looks like one whose seal was removed. Do not let `AuditSealStale` age.
+
+- On AWS the alarms are CloudWatch's: see [alarms](../../../reference/audit/aws-pulumi-library.md#alarms).
 
 ## Steps
 
@@ -29,87 +18,40 @@ Find the alert's section.
 
 ### AuditRecordsDeadLettered
 
-The writer could not process a record and kept it aside under the archive's
-dead-letter prefix. The record is not lost, and it is not in the trail in its
-proper form. Read the writer's log for `dead letter` lines (they name the record
-id, the action and the reason), then the dead-letter objects. The usual causes
-are a catalogue the writer was never given, a schema version it does not know,
-and a record that does not satisfy its catalogue. Fix the cause, then replay the
-dead letters (`audit replay`).
+Read the writer's `dead letter` log lines for the record id and reason. Usual causes are a catalogue or schema version the writer lacks and a record that fails its catalogue. Give the writer the version first: [change what a source records](../connect/change-what-a-source-records.md). Then [replay dead-lettered records](replay-dead-lettered-records.md).
 
 ### AuditEmitterDroppingRecords
 
-An application's async queue overflowed. The records are gone. The emitter's
-log has a line for each. Look at `audit_emit_queue_pending` for the climb that
-preceded it and at the sink for why it was away: the receiver down, the stream
-full, the network. Raise the queue depth only after fixing the sink; a deeper
-queue over a dead sink only delays the loss.
+Each lost record is in the emitter's log. Check `audit_emit_queue_pending` and why the sink was away. Fix the sink before you deepen the queue.
 
 ### AuditSealStale
 
-No hour has been sealed for a profile for three hours. An hour with no seal cannot
-be told from one whose seal was removed. Look at the notary CronJob
-(`kubectl get cronjob`, then the last Job's log). The usual causes are the seal
-key (a KMS or OpenBAO policy, a key that is gone, a role the notary does not
-have), the archive (a `Put` refused), and an object of the profile that does not
-match its own metadata, which the notary refuses to seal past: its log names the
-object and the rule (`hour ... is not sealed: ... problem(s) in its objects`).
-The notary resumes from the last seal on its own once the cause is fixed, and
-needs no operator to catch up; `audit verify --root ...` then confirms the chain.
+Read the notary CronJob's last Job log. Causes are the seal key (policy, missing key or role), a refused archive `Put`, and an object that contradicts its metadata (`hour ... is not sealed`). The notary resumes once fixed. Confirm with `audit verify --root ...`.
 
 ### AuditIndexLagHigh
 
-Objects reach the index long after they were put, well past the settle window.
-The archive is unaffected. Look at whether `audit-observe` is running and at its
-log, then at the database's CPU, locks and connection pool. A large backlog (a
-new index, a reset cursor) shows here too until the indexer has caught up.
+Check that `audit-observe` runs, its log, and the database CPU, locks and pool.
 
 ### AuditIndexStalled
 
-No indexing pass has completed for longer than the threshold, so the index is stuck
-behind its cursor: search is empty or stale while `audit-observe` stays running
-(its `/readyz` is failing, which the pod's Ready condition shows, but a pod that is
-not Ready is not restarted). The indexer's log has `an indexing pass failed`, naming
-the object and the reason once for each distinct error and again only every half hour.
-The usual cause after an upgrade is a reader older than the writer: the catalogue
-the writer registered is one the reader's release does not accept (v1.74.0 replaced
-a catalogue action's `profiles` with `category`), the error is a schema message such as
-`does not satisfy catalogue.schema.json`. Upgrade `audit-observe` and `audit-query`
-to the writer's release or a newer one; the next pass resumes from the cursor and
-nothing is indexed twice. Other causes: the bucket or the database cannot be reached.
+The log shows `an indexing pass failed`. After an upgrade the cause is usually a reader older than the writer: `does not satisfy catalogue.schema.json`. Upgrade `audit-observe` and `audit-query` to the writer's release or newer. Otherwise check the bucket and database.
 
 ### AuditIndexPassesFailing
 
-More than half of the indexer's passes in the last 30 minutes failed. Read the log
-as for `AuditIndexStalled`; this fires first when some passes still succeed, for
-example when one tenant's object fails and the others carry on.
+Read the log as for `AuditIndexStalled`. It fires first when one tenant's object fails and the others succeed.
 
 ### AuditIndexRowsDeferred
 
-The indexer could not index objects the archive holds. Its log line
-`an object was not indexed` names each, and `reason` says what to do:
-`retry` resumes by itself once the cause (the bucket's permissions, the
-database, a catalogue missing from the archive) is fixed, and `unreadable` is an
-object that does not decode and has been skipped, which is the thing to
-investigate. `audit reindex --profile <name> --from <day> --to <day>` reads a
-range again ([repair or rebuild the index](rebuild-the-index.md)).
+The log line `an object was not indexed` names each object. A `retry` reason resumes when the cause is fixed. An `unreadable` object was skipped: investigate it. See [repair or rebuild the index](rebuild-the-index.md).
 
 ### AuditWriterRejectingRecords
 
-A producer is sending records the writer refuses. The writer's log names the
-record and the reason for each refusal. The cause is a producer sending what its
-catalogue does not allow, or a catalogue that changed under it. Find the producer
-by the observer on the logged records.
+The log names the record and reason. Find the producer by the logged observer.
 
 ### AuditQueueConsumerFailing
 
-The consumer's target refuses or fails its batches, and the queue delivers them
-again. Read the writer's log for the refusal (`the writer refused a batch from
-the stream`). Check the archive and the database first: the consumer fails a
-batch only when the writer could not put it. Meanwhile the queue's backlog grows
-and its oldest message ages; both are the broker's own metrics.
+Read the writer log for `the writer refused a batch from the stream`. Check the archive and database first.
 
-## Afterwards
+## Verify
 
-Confirm the alert resolves and, for a dead letter or a drop, tell the owner of the emitting application which
-records were affected ([replay dead-lettered records](replay-dead-lettered-records.md)).
+The alert resolves. For a dead letter or a drop, tell the application's owner which records were affected.

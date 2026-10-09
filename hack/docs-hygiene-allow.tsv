@@ -27,3 +27,4 @@ link	CHANGELOG.md	docs/guides/sluis/connect/github-apps-catalogue.md#delivering-
 link	CHANGELOG.md	docs/guides/sluis/connect/slack-workspace.md#connect-a-workspace-from-the-console	history: the heading moved in the docs reduction pass
 link	CHANGELOG.md	docs/guides/sluis/connect/github-apps-catalogue.md#a-default-set	history: the heading moved in the docs reduction pass
 link	CHANGELOG.md	docs/guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module	history: the procedure moved to move-the-domain-to-the-edge-module.md
+link	audit/CHANGELOG.md	../docs/guides/audit/operate/prepare-the-bucket.md#the-attested-tier	history: the heading went with the docs reduction pass
