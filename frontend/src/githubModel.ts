@@ -216,6 +216,10 @@ export type GitHubAppView = {
   permissions: GitHubAppPermission[];
   drift: string[];
   events: string[];
+  /** Whether the catalogue entry declares a webhook GitHub delivers to. */
+  hasWebhook: boolean;
+  /** When the webhook's secret was last set on GitHub. */
+  webhookRotatedAt?: Timestamp;
   description: string;
   /** Why GitHub could not be asked, when it could not. */
   reason: string;
@@ -345,6 +349,8 @@ export function appView(app: GitHubApp): GitHubAppView {
     permissions: app.permissions,
     drift: app.drift,
     events: app.events,
+    hasWebhook: app.webhookUrl !== "",
+    webhookRotatedAt: app.webhookRotatedAt,
     description: app.description,
     reason: app.reason,
     htmlUrl: app.htmlUrl,
