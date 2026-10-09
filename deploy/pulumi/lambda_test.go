@@ -871,7 +871,7 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 		if prop(r, "length").NumberValue() != 32 || prop(r, "keepers").HasValue() {
 			t.Errorf("random bytes: %v: 32 bytes and no keepers, or an apply rotates it", r.Inputs)
 		}
-		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret")
+		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret-internal")
 		if prop(p, "name").StringValue() != "/sluis/staging/internal/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
@@ -1290,7 +1290,7 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		if prop(r, "length").NumberValue() < 32 || prop(r, "special").BoolValue() || prop(r, "keepers").HasValue() {
 			t.Errorf("random password: %v: at least 32 characters, no special ones, and no keepers, or an apply rotates it", r.Inputs)
 		}
-		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password")
+		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password-internal")
 		if prop(p, "name").StringValue() != "/sluis/staging/internal/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
@@ -1344,7 +1344,7 @@ func TestRecoveryEnabledIsWrittenIntoTheServiceDocument(t *testing.T) {
 		t.Errorf("an operator's recovery.enabled was lost: %q", got)
 	}
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }})
-	rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password")
+	rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password-internal")
 	for name, e := range map[string]estate{
 		"disagrees": {config: "issuerURL: https://x.example\nrecovery: {enabled: true}\n",
 			mutate: func(a *arp.LambdaArgs) { a.Recovery = &arp.RecoveryArgs{Enabled: &off} }},
@@ -1645,6 +1645,29 @@ func TestReservedConcurrencyIsTheEstatesCeiling(t *testing.T) {
 		if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Function.ReservedConcurrency = &bad }}); err == nil ||
 			!strings.Contains(err.Error(), "ReservedConcurrency") {
 			t.Errorf("%d: %v", bad, err)
+		}
+	}
+}
+
+// The first v1.75 apply adopts the v4 copies `sluis migrate secrets-layout`
+// wrote: Overwrite is set, so the create does not fail with
+// ParameterAlreadyExists. The value is the RandomBytes/RandomPassword's, and
+// the parameter has a logical name of its own, so the old private/config
+// resource is removed (deleted last), never replaced in place.
+func TestTheGeneratedParametersAdoptAnExistingV4Copy(t *testing.T) {
+	rec, _ := mustLambda(t, estate{})
+	for _, name := range []string{"staging-state-secret-internal", "staging-recovery-password-internal"} {
+		p := rec.one(t, "aws:ssm/parameter:Parameter", name)
+		if !prop(p, "overwrite").BoolValue() {
+			t.Errorf("%s: no overwrite: creating it would fail where `sluis migrate secrets-layout` wrote it", name)
+		}
+		if !strings.HasPrefix(prop(p, "name").StringValue(), "/sluis/staging/internal/config/") {
+			t.Errorf("%s: name %v", name, p.Inputs)
+		}
+	}
+	for _, old := range []string{"staging-state-secret", "staging-recovery-password"} {
+		if rec.has("aws:ssm/parameter:Parameter", old) {
+			t.Errorf("a parameter is still registered as %s: the old resource would be replaced, not removed", old)
 		}
 	}
 }

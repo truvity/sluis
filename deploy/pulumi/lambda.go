@@ -1212,7 +1212,15 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis state secret: %w", err)
 	}
-	// Overwrite: the same value may have been copied to this path first.
+	// Overwrite adopts a parameter that is already there: `sluis migrate
+	// secrets-layout` wrote the v4 copy at this path with this very value, and it
+	// is not in this stack's state, so a create without Overwrite would fail with
+	// ParameterAlreadyExists. The parameter has its own logical name, apart from
+	// the old private/config one: the old resource is then removed from the
+	// program (a delete at the end of the update, after the new one exists and
+	// the function is updated), not replaced, whatever the provider says about
+	// delete-before-replace. The value comes from the same RandomBytes, so it
+	// does not change.
 	pargs := &ssm.ParameterArgs{
 		Name:      pulumi.String(StateSecretParameterName(a.Instance)),
 		Type:      pulumi.String("SecureString"),
@@ -1223,7 +1231,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if a.ParameterKeyArn != "" {
 		pargs.KeyId = pulumi.String(a.ParameterKeyArn)
 	}
-	stateParam, err := ssm.NewParameter(ctx, name+"-state-secret", pargs, child)
+	stateParam, err := ssm.NewParameter(ctx, name+"-state-secret-internal", pargs, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis state secret parameter: %w", err)
 	}
@@ -1251,7 +1259,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if a.ParameterKeyArn != "" {
 		rargs.KeyId = pulumi.String(a.ParameterKeyArn)
 	}
-	recoveryParam, err := ssm.NewParameter(ctx, name+"-recovery-password", rargs, child)
+	recoveryParam, err := ssm.NewParameter(ctx, name+"-recovery-password-internal", rargs, child)
 	if err != nil {
 		return nil, fmt.Errorf("sluis recovery password parameter: %w", err)
 	}
