@@ -241,7 +241,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// Everything not ours is the protocol's. A catch-all rather than a
 	// list, so that a library endpoint added by an upgrade keeps working
 	// instead of turning into a 404 nobody expected.
-	protocol := challenges(refusedAuthorize(defaultScope(resourceIndicators(iss.Policy().Resource, requirePKCE(storage, presentedClients(
+	protocol := challenges(refusedAuthorize(defaultScope(resourceIndicators(iss.Policy().Resource, requirePKCE(iss.Policy, presentedClients(
 		endSession(signIn, truthfulDiscovery(
 			iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, provider))))))))
 	// An installation token for a catalogue App is claimed in front of the
