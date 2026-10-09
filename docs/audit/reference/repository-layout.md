@@ -1,6 +1,6 @@
 # Layout, and how to add to it
 
-For whoever changes this repository. [CONTRIBUTING](../../../audit/CONTRIBUTING.md) has
+For whoever changes this repository. [CONTRIBUTING](../../../CONTRIBUTING.md#audit) has
 the gate and the rules; this page says where things are and how the usual
 additions are made.
 

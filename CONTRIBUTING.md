@@ -2,23 +2,23 @@
 
 ## Layout
 
-One repository, one tag, several deliverables, each installable or
-importable alone:
+Two products, **sluis** and **audit**, plus the shared **storage** module,
+in one repository with one tag. Every deliverable is installable or importable
+alone; [artifacts](docs/reference/artifacts.md) lists them all.
 
 ```
 cmd/sluis                 the one binary and image: `serve` (the
                           directory, the policy, the OpenID provider,
-                          the login page, the console, and what it
-                          records to the audit trail), `controller
-                          github` and `controller slack` (the two
-                          controllers, a second and third process from
-                          the same chart), and `migrate` (copies the State
-                          between storages, ADR 0031)
+                          the login page, the console, what it records
+                          to the audit trail, and the GitHub and Slack
+                          controllers as loops inside it, ADR 0037 and
+                          docs/explanation/one-process.md), and `migrate`
+                          (copies the State between storages, ADR 0031)
 cmd/resource-proxy        the sidecar that fronts a stock MCP server
                           with a resource server's front door
 cmd/sluisctl              the CLI, for laptops and CI jobs
 cmd/acceptance            the acceptance runner against a kind cluster
-charts/sluis              the chart: the service and both controllers
+charts/sluis              the chart: the service, with its controllers
 deploy/pulumi             the AWS infrastructure as a Pulumi Go library, a
                           Go module of its own
                           (github.com/truvity/sluis/deploy/pulumi,
@@ -57,13 +57,53 @@ frontend/                 the console: Vite + React + MUI, its built
 ts/                       the TypeScript package; dist/ is built and
                           published to GitHub Packages by the release
 proto/  gen/              contracts and committed generated code
-docs/                     getting-started, how-to (with upgrade/),
-                          reference, explanation, decisions (ADRs)
+audit/                    the audit product, a Go module of its own
+                          (see "Audit" below)
+storage/                  the state and keys module both products use
+docs/                     see "Writing documentation" below
 ```
 
 Public Go packages stay free of Kubernetes and framework specifics
 except in the adapters and the store implementations; anything a product
 might import lives behind a storage interface.
+
+## This repository is public
+
+**Mechanism only.** Nothing here names a real organisation, account, zone,
+hostname, cluster, issuer, team, person, incident, internal ticket or secret
+path of any installation: every such thing is a value with a neutral example
+(`example.com`, `acme`, `globex`), and the installation supplies it from its
+own repository. The rule covers code, docs, the CHANGELOG, tests, commit
+messages and pull request text. [`hack/leak-canary.sh`](hack/leak-canary.sh)
+enforces it in `just check` and in CI. This repository follows the shared
+[component contract](https://github.com/truvity/policy/blob/master/docs/contracts/component.md)
+and the [documentation contract](https://github.com/truvity/policy/blob/master/docs/contracts/docs.md).
+
+## Writing documentation
+
+The reader's map is the documentation home, [docs/README.md](docs/README.md).
+This section is for the writer. A page belongs to one directory of its
+product's tree (`docs/` for sluis, `docs/audit/` for audit), by what the
+reader is doing:
+
+| directory | holds |
+|---|---|
+| `getting-started/` | one tutorial per deployment shape, from nothing to working |
+| `how-to/` | one task per page; a runbook uses one template (purpose, preconditions, before you start, steps with command and expected output, verify and rollback, afterwards); migration steps in `how-to/upgrade/vX.Y.md`, linked from the CHANGELOG |
+| `reference/` | configuration keys, chart values, API, catalogue, bucket contract |
+| `explanation/` | design and the why |
+| `docs/decisions/` | the ADRs, one series for both products; the template and index are `docs/decisions/README.md`; a decision is never edited after acceptance, it is superseded by a new one that links back |
+
+- Keep each fact in one place and link to it from the others.
+- Prefer a page under about 400 lines; split by audience, not by length.
+- Where reference can be produced from code, a schema or a release file, mark it
+  `<!-- generated: name -->` ... `<!-- /generated -->`; `just docs-generate` rewrites it and
+  `just docs-check` fails when it is stale. Do not edit inside the markers.
+- Documentation is held to the code: every command shown is one the binary takes, every
+  chart value named exists, and a relative link or anchor that does not resolve fails the gate.
+  When you rename a flag, a value or a heading, search the docs for it in the same change.
+- Where the documentation runs ahead of the code, say so where the name is used (`# not built yet`).
+- Mermaid diagrams: a `;` inside a sequence diagram message splits it.
 
 ## Toolchain
 
@@ -72,10 +112,8 @@ Everything comes from [devbox](https://www.jetify.com/devbox): `devbox shell`
 helm, just and lefthook at the pinned versions. Never install the tools by
 hand next to it.
 
-`just check` runs what CI runs — build, test, lint, chart-lint, telemetry,
-archive-check, docs-check, leak-canary, audit-catalogue, ts (`console` runs
-inside `build`). The pre-push hook (installed by
-devbox's init hook) runs the same. `vuln` is deliberately not part of
+`just check` runs what CI runs; `just --list` names the parts. The pre-push
+hook (installed by devbox's init hook) runs the same. `vuln` is deliberately not part of
 `check`: a newly published CVE must not turn a PR red that never touched
 the dependency; run it on its own with `just vuln`, the same way
 `.github/workflows/security.yaml` does.
@@ -100,8 +138,6 @@ the dependency; run it on its own with `just vuln`, the same way
   land in the same commit.
 - **Contracts are additive.** `buf breaking` guards `proto/`; a field is
   added, never renumbered or removed, so every existing client stays valid.
-- **The docs are generic.** This repository describes an installation, not
-  a company: no tenant names, hostnames or account names in the docs.
 - **The chart's `version` stays `0.0.0`.** The git tag is the version
   authority; the release workflow stamps it at package time.
 
@@ -220,19 +256,13 @@ To cut a release `vX.Y.Z` (or a pre-release `vX.Y.Z-rc.1`):
    otherwise, before anything is published.
 3. The workflow does the rest, below. `just release-check vX.Y.Z` rehearses it.
 
-The release workflow, on a `v*` tag, builds the binaries, the images
-(`ghcr.io/truvity/sluis/sluis`, and the sidecar
-`/resource-proxy`),
-the chart (`oci://ghcr.io/truvity/charts/sluis`), `sluisctl`'s
-archives and its Nix flake, and publishes the TypeScript package to GitHub
-Packages, all stamped with the tag. The `audit` job adds audit's archives, Lambda
-zips, images (`ghcr.io/truvity/audit/*`), chart and Nix flake to the same GitHub
-release (`audit/.goreleaser.yaml`, `just audit-release`).
-The Go module and the GitHub Action are the same tag. Every other Go module of
-the repository (`hack/modules.py list` names them: `storage`, `deploy/pulumi`,
-`deploy/pulumi/edge/cloudflare`, `audit`, `audit/sdk`, `audit/deploy/pulumi`) is
-tagged `<dir>/vX.Y.Z` by the release's `modules` job. One tag, every artifact: a
-consumer pins one version of this repository.
+The release workflow, on a `v*` tag, publishes everything listed in
+[artifacts](docs/reference/artifacts.md), all stamped with the tag: sluis (through
+the shared `release-public` workflow), then the `audit` job (`audit/.goreleaser.yaml`,
+`just audit-release`) onto the same GitHub release, the TypeScript packages, and
+last the `modules` job, which tags every other Go module (`hack/modules.py list`
+names them) as `<dir>/vX.Y.Z`. One tag, every artifact: a consumer pins one version
+of this repository.
 
 `just docs-check` also holds the documentation's links and names
 (`hack/check-docs-hygiene.py`): every relative link in a Markdown file or
@@ -289,5 +319,36 @@ There are no automatic releases: renovate security bumps no longer auto-release.
 Cut a patch release by hand (`just release-pin`, commit, tag), and a minor or major
 after its CHANGELOG heading has landed.
 
-This repository follows the shared
-[component contract](https://github.com/truvity/policy/blob/master/docs/contracts/component.md).
+## Audit
+
+audit lives in this repository. Its recipes are the root Justfile's `audit-*`
+recipes (`just audit-check` is the gate; where a page says `just X` for audit,
+read `just audit-X`), its tools come from the root `devbox.json`, and its CI is
+the `audit*` jobs of the root `ci.yaml`. It never imports sluis; the one thing
+both share is the `storage` module, which imports nothing of sluis.
+
+- A compliance bundle is a **profile**; the files in `audit/profiles/` are *framework
+  profiles*. They cite the clause they implement and carry the disclaimer that they are an
+  engineering reading, not legal advice.
+- A pull request that changes a contract (`audit/proto/`, `audit/schemas/`,
+  `audit/profiles/`) updates the matching reference page and, if the change is
+  not additive, adds a decision record. A decision that applies to one
+  deployment only is not recorded here.
+- `just audit-check` needs nothing but this checkout. The checks that need more
+  are separate recipes, run by CI as their own jobs:
+  - `just audit-race` needs a C toolchain. Run it before changing anything that
+    hands a record to a background goroutine: a race there is a lost record,
+    not a crash.
+  - `just audit-drift-ts` regenerates TypeScript, whose plugin comes from a
+    remote schema registry that rate limits; `just audit-drift` (in the gate)
+    checks Go and the JSON Schema, which local plugins produce.
+  - `just audit-conformance` starts PostgreSQL, S3 with object locking
+    (LocalStack) and an OpenBao dev server and runs every test that skips without
+    its service. It needs Docker.
+  - `just audit-ts` installs the TypeScript package's dependencies, typechecks,
+    tests, builds, and checks what a publish would ship.
+  - Against real S3, on demand: `AUDIT_S3_REAL_BUCKET=<bucket> go test
+    ./internal/s3test -run RealBucket` (from `audit/`) checks that a lock can be
+    lengthened and that compliance mode refuses to shorten it, which no emulator
+    implements. Point it at an Object-Locked sandbox bucket: each run leaves one
+    small object locked for two days.
