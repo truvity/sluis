@@ -59,6 +59,16 @@ var ErrRecoveryThrottled = errors.New("server: too many attempts")
 // recoveryEnabled reports whether a deployment has a recovery path at all.
 func recoveryEnabled(r Recovery) bool { return r != nil }
 
+// recoveryLocationOf is where a password recovery's password is kept, as the
+// secrets source describes it; empty for any other recovery, or for one whose
+// password was generated at start.
+func recoveryLocationOf(r Recovery) string {
+	if p, ok := r.(*PasswordRecovery); ok && p != nil {
+		return p.Where
+	}
+	return ""
+}
+
 // recoveryKindOf is Kind for a possibly absent recovery.
 func recoveryKindOf(r Recovery) string {
 	if r == nil {
@@ -190,6 +200,12 @@ const (
 // the lock serialises verification, which keeps the memory cost of one
 // attempt from becoming the cost of as many as anyone cares to send.
 type PasswordRecovery struct {
+	// Where is where the password is kept, as the secrets source describes it
+	// ("ssm /sluis/<instance>/internal/config/recovery/password"): the console
+	// shows the operator this installation's own location. Empty for a
+	// generated password.
+	Where string
+
 	salt   []byte
 	digest []byte
 

@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -86,24 +87,87 @@ func logger(ctx context.Context, service string, level slog.Level) (*slog.Logger
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log)
 	// The shutdown is not kept: a function is never shut down in order, the
-	// platform freezes and ends it, so what matters is [forceFlush].
-	if _, err := telemetry.Start(ctx, service, log); err != nil {
+	// platform freezes and ends it, so what matters is the flush. A failed
+	// export is dropped, not retried: see [flusher].
+	if _, err := telemetry.Start(ctx, service, log, telemetry.WithoutRetry()); err != nil {
 		return nil, nil, err
 	}
-	return log, forceFlush, nil
+	f := &flusher{flush: forceFlush}
+	return log, f.Flush, nil
 }
 
-// forceFlush sends the batches the global providers hold, bounded.
-func forceFlush(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-	defer cancel()
+// forceFlush sends the batches the global providers hold.
+func forceFlush(ctx context.Context) error {
 	type flusher interface{ ForceFlush(context.Context) error }
+	var errs []error
 	if p, ok := any(otel.GetMeterProvider()).(flusher); ok {
-		_ = p.ForceFlush(ctx)
+		errs = append(errs, p.ForceFlush(ctx))
 	}
 	if p, ok := any(otel.GetTracerProvider()).(flusher); ok {
-		_ = p.ForceFlush(ctx)
+		errs = append(errs, p.ForceFlush(ctx))
 	}
+	return errors.Join(errs...)
+}
+
+const (
+	// flushBudget bounds the telemetry flush before an invocation returns. The
+	// collector is the telemetry layer's extension on localhost, which
+	// forwards each export as it comes.
+	flushBudget = time.Second
+	// flushBackoff is how long after a failed flush the next is skipped, and
+	// doubles with each failure in a row up to flushBackoffMax.
+	flushBackoff    = 5 * time.Second
+	flushBackoffMax = 5 * time.Minute
+)
+
+// flusher is the flush before an invocation returns, which the response waits
+// for. When the collector cannot take an export (its extension has no token
+// because the issuer it gets one from is overloaded, which may be this very
+// function) a flush fails or runs out its budget. The next ones are then
+// skipped for a while, longer for each failure in a row: what the providers
+// hold goes out with a later flush or their own timers, or is dropped when
+// their queues fill. Telemetry never makes a caller wait more than
+// flushBudget, and only once per backoff.
+type flusher struct {
+	flush func(context.Context) error
+	// now is the clock; nil is time.Now.
+	now func() time.Time
+
+	mu       sync.Mutex
+	failures int
+	skipTill time.Time
+}
+
+func (f *flusher) clock() time.Time {
+	if f.now != nil {
+		return f.now()
+	}
+	return time.Now()
+}
+
+// Flush flushes within flushBudget, unless a recent flush failed.
+func (f *flusher) Flush(ctx context.Context) {
+	f.mu.Lock()
+	if f.clock().Before(f.skipTill) {
+		f.mu.Unlock()
+		return
+	}
+	f.mu.Unlock()
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), flushBudget)
+	err := f.flush(fctx)
+	cancel()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err == nil {
+		f.failures, f.skipTill = 0, time.Time{}
+		return
+	}
+	wait := flushBackoffMax
+	if f.failures < 7 {
+		wait = min(flushBackoffMax, flushBackoff<<f.failures)
+	}
+	f.failures++
+	f.skipTill = f.clock().Add(wait)
 }
 
 func open(ctx context.Context, file string) (*Function, error) {

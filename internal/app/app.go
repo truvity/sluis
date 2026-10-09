@@ -348,7 +348,7 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 		return nil, nil //nolint:nilnil // no recovery is a configuration, not a failure
 	}
 	if kept.reviewToken == nil {
-		password := ""
+		password, where := "", ""
 		if cfg.recoveryLogin != "" {
 			if src == nil {
 				return nil, errors.New("recovery.passwordSecret: no secrets source is configured")
@@ -357,8 +357,8 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 			if password, err = src.Get(ctx, cfg.recoveryLogin); err != nil {
 				return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
 			}
-			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names",
-				slog.String("secret", src.Describe(cfg.recoveryLogin)))
+			where = src.Describe(cfg.recoveryLogin)
+			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names", slog.String("secret", where))
 		}
 		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
@@ -374,10 +374,12 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 			if err != nil {
 				return nil, err
 			}
-			password = generated
+			password, where = generated, ""
 			announceRecoveryPassword(password)
 		}
-		return server.NewPasswordRecovery(password), nil
+		r := server.NewPasswordRecovery(password)
+		r.Where = where
+		return r, nil
 	}
 
 	subject := access.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
@@ -474,12 +476,13 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 // a deployment mounts, which is an input and not a record this service writes.
 func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (stores, error) {
 	base := portstore.New(st.Ports).WithV4(st.V4).ExportGitHubApps(cfg.githubCatalogue.Exported)
-	if err := base.CheckSecrets(ctx); err != nil {
+	// The session key's read is the proof that Secrets answers.
+	if err := base.RequireSecrets(); err != nil {
 		return stores{}, fmt.Errorf("store: ports.adapter %s: %w", st.Adapter, err)
 	}
 	key, err := base.SessionKey(ctx, access.NewSessionKey)
 	if err != nil {
-		return stores{}, err
+		return stores{}, fmt.Errorf("store: ports.adapter %s: the Secrets port does not answer: %w", st.Adapter, err)
 	}
 	log.InfoContext(ctx, "keeping the domain records in the state port, credentials in Secrets",
 		slog.String("adapter", st.Adapter), slog.Bool("shared", st.Shared))

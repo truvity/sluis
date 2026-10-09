@@ -12,7 +12,6 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/observe"
 	"github.com/truvity/sluis/internal/secretstore"
-	ssmstate "github.com/truvity/sluis/storage/state/ssm"
 )
 
 // selection is what the file says about adapters beyond `ports.adapter`: the
@@ -329,7 +328,7 @@ func (c Config) overLayout(ctx context.Context, v3 port.Secrets) (port.Secrets, 
 	}
 	open := c.OpenState
 	if open == nil {
-		open = ssmstate.Open
+		open = openSSMState
 	}
 	stores, err := secretstore.Open(ctx, &config.Secrets{
 		Source: "ssm", Root: c.SecretsRoot, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,

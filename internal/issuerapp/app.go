@@ -767,7 +767,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// At start, and not only on the tick, so a first deploy has its secrets as
 	// soon as it serves. A client that fails here does not stop the issuer: it
 	// is logged and tried again, and the input secret serves it meanwhile.
-	app.ReconcileClientSecrets(ctx)
+	app.reconcileGenerated(ctx)
 	return app, nil
 }
 

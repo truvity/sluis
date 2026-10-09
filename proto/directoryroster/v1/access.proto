@@ -323,6 +323,11 @@ message GetPolicyResponse {
   // belong in an organisation with or without a team. An organisation
   // that binds only teams is absent.
   repeated PolicyOrg orgs = 8;
+  // where this installation keeps its recovery password, as its secrets
+  // source names it: "ssm <parameter>", "env <variable>" or "file <path>".
+  // Empty when recovery_kind is not "password" or the password was
+  // generated at start. A location, never the password.
+  string recovery_password_location = 9;
 }
 
 // PolicyTeam is one GitHub team binding as the console shows it.

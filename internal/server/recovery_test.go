@@ -294,3 +294,22 @@ func (stubSignIn) Identify(context.Context, string) (string, error) {
 func (stubSignIn) Exchange(context.Context, string, string) (hub.Workspace, backend.Backend, error) {
 	return hub.Workspace{}, nil, nil
 }
+
+// The console names this installation's own parameter, never an example's,
+// and never the password.
+func TestThePasswordLocationIsTheInstallationsOwn(t *testing.T) {
+	r := NewPasswordRecovery("correct horse battery staple")
+	r.Where = "ssm /sluis/example/internal/config/recovery/password"
+	if got := recoveryLocationOf(r); got != r.Where {
+		t.Errorf("location = %q", got)
+	}
+	if got := recoveryLocationOf(NewPasswordRecovery("generated")); got != "" {
+		t.Errorf("a generated password has location %q", got)
+	}
+	if got := recoveryLocationOf(&TokenRecovery{}); got != "" {
+		t.Errorf("token recovery has location %q", got)
+	}
+	if got := recoveryLocationOf(nil); got != "" {
+		t.Errorf("no recovery has location %q", got)
+	}
+}

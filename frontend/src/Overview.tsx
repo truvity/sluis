@@ -66,6 +66,7 @@ export function Overview({ me, operator }: { me?: Me; operator: boolean }) {
         directories: list.length,
         operators: (operators?.members.length ?? 0) + (operators?.rules.length ?? 0),
         standingPassword: policy.value.recoveryKind === "password",
+        passwordLocation: policy.value.recoveryPasswordLocation,
         setup: current.value.setup,
         operatorGroup: operators?.name ?? "all:access-roster:operator",
       }

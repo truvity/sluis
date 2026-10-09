@@ -1365,9 +1365,14 @@ type GetPolicyResponse struct {
 	// the organisation-level bindings: the internal groups whose holders
 	// belong in an organisation with or without a team. An organisation
 	// that binds only teams is absent.
-	Orgs          []*PolicyOrg `protobuf:"bytes,8,rep,name=orgs,proto3" json:"orgs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Orgs []*PolicyOrg `protobuf:"bytes,8,rep,name=orgs,proto3" json:"orgs,omitempty"`
+	// where this installation keeps its recovery password, as its secrets
+	// source names it: "ssm <parameter>", "env <variable>" or "file <path>".
+	// Empty when recovery_kind is not "password" or the password was
+	// generated at start. A location, never the password.
+	RecoveryPasswordLocation string `protobuf:"bytes,9,opt,name=recovery_password_location,json=recoveryPasswordLocation,proto3" json:"recovery_password_location,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetPolicyResponse) Reset() {
@@ -1447,6 +1452,13 @@ func (x *GetPolicyResponse) GetOrgs() []*PolicyOrg {
 		return x.Orgs
 	}
 	return nil
+}
+
+func (x *GetPolicyResponse) GetRecoveryPasswordLocation() string {
+	if x != nil {
+		return x.RecoveryPasswordLocation
+	}
+	return ""
 }
 
 // PolicyTeam is one GitHub team binding as the console shows it.
@@ -3053,7 +3065,7 @@ const file_directoryroster_v1_access_proto_rawDesc = "" +
 	"\tredirects\x18\x04 \x03(\tR\tredirects\x122\n" +
 	"\attl_cap\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x06ttlCap\x12\x16\n" +
 	"\x06secret\x18\x06 \x01(\tR\x06secret\"\x12\n" +
-	"\x10GetPolicyRequest\"\xfb\x02\n" +
+	"\x10GetPolicyRequest\"\xb9\x03\n" +
 	"\x11GetPolicyResponse\x127\n" +
 	"\x06groups\x18\x01 \x03(\v2\x1f.directoryroster.v1.PolicyGroupR\x06groups\x12)\n" +
 	"\x10recovery_enabled\x18\x02 \x01(\bR\x0frecoveryEnabled\x12#\n" +
@@ -3061,7 +3073,8 @@ const file_directoryroster_v1_access_proto_rawDesc = "" +
 	"\aclients\x18\x05 \x03(\v2 .directoryroster.v1.PolicyClientR\aclients\x12#\n" +
 	"\rrecovery_kind\x18\x06 \x01(\tR\frecoveryKind\x124\n" +
 	"\x05teams\x18\a \x03(\v2\x1e.directoryroster.v1.PolicyTeamR\x05teams\x121\n" +
-	"\x04orgs\x18\b \x03(\v2\x1d.directoryroster.v1.PolicyOrgR\x04orgsJ\x04\b\x04\x10\x05R\rconsole_layer\"n\n" +
+	"\x04orgs\x18\b \x03(\v2\x1d.directoryroster.v1.PolicyOrgR\x04orgs\x12<\n" +
+	"\x1arecovery_password_location\x18\t \x01(\tR\x18recoveryPasswordLocationJ\x04\b\x04\x10\x05R\rconsole_layer\"n\n" +
 	"\n" +
 	"PolicyTeam\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +

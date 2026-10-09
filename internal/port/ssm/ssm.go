@@ -68,6 +68,7 @@ import (
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/truvity/sluis/internal/awsretry"
 	"github.com/truvity/sluis/internal/port"
 )
 
@@ -129,6 +130,7 @@ func New(ctx context.Context, cfg Config) (*Secrets, error) {
 		return nil, fmt.Errorf("ssm: loading the AWS configuration: %w", err)
 	}
 	client := awsssm.NewFromConfig(awsCfg, func(o *awsssm.Options) {
+		o.Retryer = awsretry.New()
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}

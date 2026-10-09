@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
+
+	"github.com/truvity/sluis/internal/awsretry"
 )
 
 // DefaultRefresh is how old the SSM source's copy may be before it is read
@@ -26,8 +28,11 @@ const DefaultMaxStale = 24 * time.Hour
 // denied SSM is not asked again on every request.
 const retryAfter = 30 * time.Second
 
-// readTimeout bounds one read of the prefix, every page of it.
-const readTimeout = 20 * time.Second
+// readTimeout bounds one read of the prefix, every page of it and every retry
+// (internal/awsretry): a Lambda init has ten seconds in all, and a cold start
+// that cannot read its configuration in six fails and is tried again rather
+// than being ended by the platform.
+const readTimeout = 6 * time.Second
 
 // ConfigPrefix is where, under an installation's root, the secrets a document
 // names live: `<root>/private/config/<name>` (layout v3).
@@ -88,6 +93,7 @@ func NewSSM(ctx context.Context, root, region, endpoint string, refresh time.Dur
 		return nil, fmt.Errorf("secrets: ssm: %w", err)
 	}
 	client := awsssm.NewFromConfig(cfg, func(o *awsssm.Options) {
+		o.Retryer = awsretry.New()
 		if endpoint != "" {
 			o.BaseEndpoint = aws.String(endpoint)
 		}

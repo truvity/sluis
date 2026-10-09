@@ -102,14 +102,29 @@ func Resource(service, serviceVersion string) (*resource.Resource, error) {
 	return resource.Merge(resource.Default(), resource.NewSchemaless(attributes...))
 }
 
+// Option changes how [Start] exports.
+type Option func(*options)
+
+type options struct{ noRetry bool }
+
+// WithoutRetry makes an export that fails a dropped export, never a retried
+// one. A Lambda function flushes before each invocation returns, and an
+// exporter that honours a collector's Retry-After holds the response until the
+// flush's deadline: a function drops telemetry rather than make a caller wait.
+func WithoutRetry() Option { return func(o *options) { o.noRetry = true } }
+
 // Start installs the global meter provider when a collector is named for
 // metrics, and the global tracer provider (with the W3C trace-context
 // propagator) when one is named for traces, and returns what flushes and stops
 // them. Without a collector it installs nothing and the returned function does
 // nothing.
-func Start(ctx context.Context, service string, log *slog.Logger) (func(context.Context) error, error) {
+func Start(ctx context.Context, service string, log *slog.Logger, opts ...Option) (func(context.Context) error, error) {
 	if !Enabled() && !TracesEnabled() {
 		return func(context.Context) error { return nil }, nil
+	}
+	var o options
+	for _, opt := range opts {
+		opt(&o)
 	}
 	res, err := Resource(service, version.Version)
 	if err != nil {
@@ -117,7 +132,11 @@ func Start(ctx context.Context, service string, log *slog.Logger) (func(context.
 	}
 	var stops []func(context.Context) error
 	if Enabled() {
-		exporter, err := otlpmetrichttp.New(ctx)
+		var mopts []otlpmetrichttp.Option
+		if o.noRetry {
+			mopts = append(mopts, otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{Enabled: false}))
+		}
+		exporter, err := otlpmetrichttp.New(ctx, mopts...)
 		if err != nil {
 			return nil, fmt.Errorf("telemetry: an OTLP exporter: %w", err)
 		}
@@ -130,7 +149,11 @@ func Start(ctx context.Context, service string, log *slog.Logger) (func(context.
 		log.InfoContext(ctx, "publishing metrics over OTLP", slog.String("service", service))
 	}
 	if TracesEnabled() {
-		exporter, err := otlptracehttp.New(ctx)
+		var topts []otlptracehttp.Option
+		if o.noRetry {
+			topts = append(topts, otlptracehttp.WithRetry(otlptracehttp.RetryConfig{Enabled: false}))
+		}
+		exporter, err := otlptracehttp.New(ctx, topts...)
 		if err != nil {
 			return nil, fmt.Errorf("telemetry: a trace exporter: %w", err)
 		}
