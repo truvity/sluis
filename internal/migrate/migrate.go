@@ -309,7 +309,7 @@ func Run(ctx context.Context, from, to Side, opt Options) (*Report, error) {
 	opt.Skip = slices.Clone(opt.Skip)
 	for i, name := range opt.Skip {
 		if name == DomainDirectory {
-			log.Warn("migrate: the domain name directory is deprecated, use google; it is removed in v1.76")
+			log.WarnContext(ctx, "migrate: the domain name directory is deprecated, use google; it is removed in v1.76")
 			opt.Skip[i] = DomainGoogle
 			name = DomainGoogle
 		}
