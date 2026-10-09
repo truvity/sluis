@@ -68,6 +68,8 @@ Names are as the gateway stores them: dots become underscores, a counter gains
 | `audit_sink_consume_failures_total` | counter | `transport` | batches a queue consumer's target failed, to be delivered again |
 | `audit_observe_index_lag_seconds` | histogram | `profile` | seconds from an object's put into the archive to its rows being in the index, as `audit-observe` measures it; the settle window is its floor |
 | `audit_observe_index_deferred_total` | counter | `profile`, `reason` | objects the indexer could not index: `retry` is tried again, `unreadable` was skipped |
+| `audit_observe_passes_total` | counter | `outcome` | indexing passes, `succeeded` or `failed`; a failed pass leaves the pod running and the index behind its cursor |
+| `audit_observe_pass_since_success_seconds` | gauge | | seconds since an indexing pass last succeeded (since the start, before the first) |
 | `audit_observe_objects_indexed_total`, `audit_observe_records_indexed_total` | counter | `profile` | the indexer's output |
 | `audit_queue_message_age_seconds` | histogram | `transport` | seconds from a message being sent to a queue to the writer receiving it (AWS: the Lambda's `SentTimestamp`); a redelivery's wait is in it, so a message that keeps failing is a long tail. The depth and the dead-letter queue are CloudWatch's, and alarmed there ([AWS](aws-pulumi-library.md#alarms)) |
 | `audit_writer_dead_lettered_total` | counter | | records the writer could not process |
@@ -139,7 +141,7 @@ instrumentation and the exporter to the list.
 
 ## Alerts
 
-Seven rules in one group, `audit.write-path`. Each threshold and its reason is
+Nine rules in one group, `audit.write-path`. Each threshold and its reason is
 in the comment above the rule in `charts/audit/templates/alerts.yaml`.
 
 <!-- generated: alert-rules -->
@@ -150,6 +152,8 @@ in the comment above the rule in `charts/audit/templates/alerts.yaml`.
 | `AuditSealStale` | the newest sealed hour of a profile older than 3h, for 10m | the hourly notary seals an hour about ten minutes after it ends, so a healthy newest seal is at most about 1h20m old and one missed run leaves it near 2h20m; three hours fires on the second, when a gap in the chain has opened that no later seal can close | critical |
 | `AuditIndexLagHigh` | p99 index lag above 600s, for 10m | the settle window (default 2m) is the floor of the lag, so ten minutes is an indexer that has stopped or is stuck; raise it with `settle` | warning |
 | `AuditIndexRowsDeferred` | any increase in 15m | an object the indexer could not take: search is late or missing it | warning |
+| `AuditIndexStalled` | no successful indexing pass for 15m (`maxAgeSeconds`), for 5m | the pod of an indexer that cannot index stays Ready; the gauge is the seconds since a pass last succeeded, so a stall behind any cause is caught. 15m is three polls at the default 5m interval: raise it with `interval` | critical |
+| `AuditIndexPassesFailing` | over half the passes in 30m failed and at least 3, for 10m | one failed pass is a blink and is retried at the next poll; this is passes that keep failing while some may still succeed | warning |
 | `AuditWriterRejectingRecords` | over 5% of records refused and at least 10, for 10m | a share, so one buggy producer on a busy stream is seen and one bad record on a quiet one is not | warning |
 | `AuditQueueConsumerFailing` | a NATS or SQS consumer failing for 15m | one failure is a restart or an election; fifteen minutes is batches going round | critical |
 <!-- /generated -->

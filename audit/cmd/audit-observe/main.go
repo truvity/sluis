@@ -107,6 +107,14 @@ func run() error {
 	}
 	defer release()
 
+	progress := &observe.Progress{
+		FailedPasses: cfg.Readiness.FailedPasses, StaleIntervals: cfg.Readiness.StaleIntervals, Interval: cfg.Interval.D(),
+	}
+	if err := telemetry.SinceSuccess(otel.GetMeterProvider(), progress.SinceSuccess); err != nil {
+		return err
+	}
+	deferred := &observe.Repeats{}
+
 	indexer := &observe.Indexer{
 		Store:    archive,
 		Cursors:  target,
@@ -117,10 +125,18 @@ func run() error {
 		Profiles: cfg.Profiles,
 		Wake:     wake,
 		OnObject: func(profile, _ string, rows int, lag time.Duration) { counts.Indexed(profile, rows, lag) },
+		OnPass: func(err error) {
+			progress.Pass(err)
+			counts.Pass(err)
+		},
 		OnDeferred: func(profile, key string, permanent bool, err error) {
-			slog.ErrorContext(context.Background(), "an object was not indexed", slog.String("profile", profile), slog.String("object", key),
-				slog.Bool("permanent", permanent), slog.Any("error", err))
 			counts.Deferred(profile, permanent)
+			// The same object fails the same way every pass until its cause is
+			// mended: say so once, and again only now and then.
+			if log, held := deferred.Allow(profile + "\x00" + key + "\x00" + err.Error()); log {
+				slog.ErrorContext(context.Background(), "an object was not indexed", slog.String("profile", profile), slog.String("object", key),
+					slog.Bool("permanent", permanent), slog.Any("error", err), slog.Int("repeats_held_back", held))
+			}
 		},
 	}
 
@@ -130,6 +146,8 @@ func run() error {
 	// read: those are the two things an indexer's every object needs.
 	mux.Handle("/readyz", readiness.Ready(slog.Default(),
 		readiness.Check{Name: "database", Fn: pool.Ping},
+		// Not liveness: a restart does not mend what a pass cannot read.
+		readiness.Check{Name: "passes", Fn: progress.Ready},
 		readiness.Check{Name: "catalogues", Fn: func(ctx context.Context) error {
 			_, err := archive.List(ctx, store.CataloguePrefix, "", 1)
 			return err

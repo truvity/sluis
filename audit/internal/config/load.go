@@ -652,10 +652,16 @@ func (o *Observe) finish() error {
 		o.Settle = Duration(2 * 60 * time.Second)
 	}
 	if o.Interval == 0 {
-		o.Interval = Duration(30 * time.Second)
+		o.Interval = Duration(5 * 60 * time.Second)
 	}
 	if o.Batch == 0 {
 		o.Batch = 500
+	}
+	if o.Readiness.FailedPasses == 0 {
+		o.Readiness.FailedPasses = 3
+	}
+	if o.Readiness.StaleIntervals == 0 {
+		o.Readiness.StaleIntervals = 3
 	}
 	if o.Wake != nil && o.Wake.SQS != nil {
 		if err := o.Wake.SQS.check("wake.sqs"); err != nil {

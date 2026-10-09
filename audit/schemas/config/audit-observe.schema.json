@@ -87,8 +87,8 @@
     },
     "interval": {
       "$ref": "#/$defs/duration",
-      "default": "30s",
-      "description": "How often a pass runs when nothing woke it. A lost wake-up costs at most this."
+      "default": "5m",
+      "description": "How often a pass runs when nothing woke it. Without a `wake` the worst-case delay from an object reaching the archive to its rows being searchable is `settle` plus this; with one, a notification makes a pass run at once and this is only the bound on a lost one."
     },
     "listen": {
       "$ref": "https://github.com/truvity/policy/schemas/fragments/listen.json"
@@ -103,6 +103,25 @@
       "minItems": 1,
       "type": "array",
       "uniqueItems": true
+    },
+    "readiness": {
+      "additionalProperties": false,
+      "description": "When `/readyz` fails for want of progress. Liveness is not affected, so a stalled indexer is not restarted into a crash loop.",
+      "properties": {
+        "failedPasses": {
+          "default": 3,
+          "description": "How many indexing passes in a row may fail before `/readyz` fails.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "staleIntervals": {
+          "default": 3,
+          "description": "How many `interval`s may pass without a successful pass before `/readyz` fails.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "secrets": {
       "$ref": "#/$defs/secrets"

@@ -38,7 +38,7 @@ const (
 	// disagree.
 	DefaultSettle = 2 * time.Minute
 	// DefaultInterval is the poll: how often a pass runs when nothing woke it.
-	DefaultInterval = 30 * time.Second
+	DefaultInterval = 5 * time.Minute
 	// DefaultBatch is how many rows are indexed in one transaction.
 	DefaultBatch = 500
 )
@@ -58,7 +58,7 @@ type Indexer struct {
 
 	// Settle is the settle window. Default 2m; see DefaultSettle.
 	Settle time.Duration
-	// Interval is the poll. Default 30s.
+	// Interval is the poll. Default 5m; see DefaultInterval.
 	Interval time.Duration
 	// Batch is how many rows are written in one transaction. Default 500. A
 	// pass always ends a transaction at an object's end, so one object is
@@ -80,10 +80,16 @@ type Indexer struct {
 	// catalogue is retried by the next pass.
 	OnDeferred func(profile, key string, permanent bool, err error)
 
+	// OnPass is called with the outcome of each pass, nil when it succeeded.
+	// Readiness and the stall metrics follow it.
+	OnPass func(err error)
+
 	// Now is the clock, for tests.
 	Now func() time.Time
 	// Log, default slog.Default().
 	Log *slog.Logger
+
+	failures Repeats
 }
 
 // Report is what a pass did.
@@ -142,8 +148,11 @@ func (x *Indexer) Run(ctx context.Context) error {
 	}
 	for {
 		report, err := x.Pass(ctx)
-		if err != nil && ctx.Err() == nil {
-			x.log().ErrorContext(ctx, "an indexing pass failed; the next one resumes from the cursors", slog.Any("error", err))
+		if ctx.Err() == nil {
+			if x.OnPass != nil {
+				x.OnPass(err)
+			}
+			x.logPass(ctx, err)
 		}
 		if report.Objects > 0 {
 			x.log().InfoContext(ctx, "indexed", slog.Int("tenants", report.Tenants), slog.Int("objects", report.Objects), slog.Int("rows", report.Rows))
@@ -165,6 +174,22 @@ func (x *Indexer) Run(ctx context.Context) error {
 		case <-timer.C:
 		}
 		timer.Stop()
+	}
+}
+
+// logPass logs a failed pass, naming the object and the reason in the error,
+// once for each distinct error: the same one again every pass would fill the
+// log with a line that says nothing new, so it is repeated only every half hour,
+// with how many passes it was held back for. A pass that succeeds ends the
+// failure, so the next one is logged at once.
+func (x *Indexer) logPass(ctx context.Context, err error) {
+	if err == nil {
+		x.failures.Forget()
+		return
+	}
+	if log, held := x.failures.Allow(err.Error()); log {
+		x.log().ErrorContext(ctx, "an indexing pass failed; the next one resumes from the cursors",
+			slog.Any("error", err), slog.Int("repeats_held_back", held))
 	}
 }
 

@@ -195,6 +195,90 @@ tests:
         alertname: AuditIndexLagHigh
         exp_alerts: []
 
+  # ---------------------------------------------------------------- index stalled
+  - name: an indexer that has not completed a pass for half an hour fires
+    interval: 1m
+    input_series:
+      - series: 'audit_observe_pass_since_success_seconds{namespace="audit",k8s_cluster_name="example"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AuditIndexStalled
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+              namespace: audit
+              k8s_cluster_name: example
+            exp_annotations:
+              summary: 'The audit indexer in audit has not completed a pass for 30m 0s'
+              description: >-
+                No indexing pass has succeeded for more than
+                900s. The index is stuck behind its cursor and search answers from
+                what it had. Read the indexer's log for the object and the reason: a
+                catalogue the indexer's release does not accept (a reader older than
+                the writer), a bucket or database it cannot reach.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/audit/how-to/respond-to-alerts.md#auditindexstalled
+
+  - name: an indexer that completes a pass every quarter hour at most does not fire
+    interval: 1m
+    input_series:
+      - series: 'audit_observe_pass_since_success_seconds{namespace="audit",k8s_cluster_name="example"}'
+        values: '0+60x14 0+60x14 0+60x14'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: AuditIndexStalled
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- passes failing
+  - name: passes that all fail fire
+    interval: 1m
+    input_series:
+      - series: 'audit_observe_passes_total{namespace="audit",k8s_cluster_name="example",outcome="failed"}'
+        values: '0+1x40'
+      - series: 'audit_observe_passes_total{namespace="audit",k8s_cluster_name="example",outcome="succeeded"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AuditIndexPassesFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              namespace: audit
+              k8s_cluster_name: example
+            exp_annotations:
+              summary: 'The audit indexer in audit fails 100% of its passes'
+              description: >-
+                More than 0.5 of the indexing passes in the
+                last 30 minutes failed. The indexer's log names the object and the
+                reason once for each distinct error.
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/audit/how-to/respond-to-alerts.md#auditindexpassesfailing
+
+  - name: passes that succeed do not fire
+    interval: 1m
+    input_series:
+      - series: 'audit_observe_passes_total{namespace="audit",k8s_cluster_name="example",outcome="failed"}'
+        values: '0x40'
+      - series: 'audit_observe_passes_total{namespace="audit",k8s_cluster_name="example",outcome="succeeded"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AuditIndexPassesFailing
+        exp_alerts: []
+
+  - name: two failed passes are below the floor
+    interval: 1m
+    input_series:
+      - series: 'audit_observe_passes_total{namespace="audit",k8s_cluster_name="example",outcome="failed"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2'
+      - series: 'audit_observe_passes_total{namespace="audit",k8s_cluster_name="example",outcome="succeeded"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AuditIndexPassesFailing
+        exp_alerts: []
+
   # ---------------------------------------------------------------- objects deferred
   - name: objects the indexer could not take fire, by profile
     interval: 1m

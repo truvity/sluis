@@ -161,6 +161,25 @@ alerts:
       severity: warning
       for: 0m
       labels: {}
+    indexStalled:
+      enabled: true
+      severity: critical
+      # 15m: three polls at the default 5m `observe.config.interval`. Raise it
+      # to three times the interval when that is raised; an indexer whose pass
+      # takes longer than this to finish a backlog also fires, which is right
+      # to look at.
+      maxAgeSeconds: 900
+      for: 5m
+      labels: {}
+    indexFailing:
+      enabled: true
+      severity: warning
+      # The share of passes that failed over 30m (six passes at the default
+      # poll), and the fewest failures that count.
+      ratio: 0.5
+      minPasses: 3
+      for: 10m
+      labels: {}
     writerRejections:
       enabled: true
       severity: warning

@@ -304,8 +304,8 @@ func ProfileOf(key string) string {
 // index a reader searches is behind it, and nobody notices an index that is
 // quietly behind until it answers wrongly.
 type Observe struct {
-	objects, records, deferred metric.Int64Counter
-	indexLag                   metric.Float64Histogram
+	objects, records, deferred, passes metric.Int64Counter
+	indexLag                           metric.Float64Histogram
 }
 
 // NewObserve makes the indexer's instruments on the given provider.
@@ -317,6 +317,8 @@ func NewObserve(provider metric.MeterProvider) (*Observe, error) {
 		name, unit  string
 		description string
 	}{
+		{&o.passes, "audit.observe.passes", "{pass}", // audit:not-an-action — a metric name
+			"Indexing passes, by outcome (succeeded, failed). A pass that fails leaves the pod running and the index behind its cursor."},
 		{&o.objects, "audit.observe.objects.indexed", "{object}", "Objects whose rows are in the index."},  // audit:not-an-action — a metric name
 		{&o.records, "audit.observe.records.indexed", "{record}", "Record copies in the objects indexed."}, // audit:not-an-action — a metric name
 		{&o.deferred, "audit.observe.index.deferred", "{object}", // audit:not-an-action — a metric name
@@ -338,6 +340,32 @@ func NewObserve(provider metric.MeterProvider) (*Observe, error) {
 	}
 	o.indexLag = lag
 	return &o, nil
+}
+
+// Pass counts one indexing pass by its outcome.
+func (o *Observe) Pass(err error) {
+	outcome := "succeeded"
+	if err != nil {
+		outcome = "failed"
+	}
+	o.passes.Add(context.Background(), 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+// SinceSuccess reports, as a gauge, the seconds since a pass last succeeded
+// (since the start, before the first): the number to alert on for an index
+// that is stalled, whatever the reason.
+func SinceSuccess(provider metric.MeterProvider, since func() time.Duration) error {
+	m := provider.Meter("github.com/truvity/sluis/audit/observe")
+	_, err := m.Float64ObservableGauge("audit.observe.pass.since_success", metric.WithUnit("s"), // audit:not-an-action — a metric name
+		metric.WithDescription("Seconds since an indexing pass last succeeded, or since the start when none has."),
+		metric.WithFloat64Callback(func(_ context.Context, o metric.Float64Observer) error {
+			o.Observe(since().Seconds())
+			return nil
+		}))
+	if err != nil {
+		return fmt.Errorf("telemetry: audit.observe.pass.since_success: %w", err)
+	}
+	return nil
 }
 
 // Indexed counts one object whose rows are in the index, and records how long
