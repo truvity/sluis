@@ -74,7 +74,9 @@ is directly an S3 credential.
     `expires_on`; never the value), refusal (why), sweep (deleted ids) and revoke.
 
 11. **Implementation.** The Cloudflare client sits behind a small interface (`cloudflare-go/v7`
-    `accounts.TokenService`) so tests use a fake and CI never reaches Cloudflare.
+    `accounts.TokenService`) so tests use a fake and CI never reaches Cloudflare. Amended in v1.74.0-rc.3:
+    the real client speaks the five calls over plain `net/http`, because the SDK's root client linked every
+    Cloudflare service into the Lambda bootstrap and took it past the 100 MiB deploy/pulumi accepts.
 
 ### Limits to document
 

@@ -17,7 +17,7 @@ fmt:
     golangci-lint fmt ./...
 
 # Build (compile check)
-build: fmt console cross
+build: fmt console cross lambda-size
     go build ./...
 
 # Compile sluisctl for every platform the release builds it for.
@@ -37,6 +37,32 @@ cross:
     for target in windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
         GOOS="${target%%/*}" GOARCH="${target##*/}" go build -o /dev/null ./cmd/sluisctl
     done
+
+# The Lambda bootstrap against a size budget, built the way .goreleaser.yaml
+# builds it (id sluis-lambda: keep the two equal). deploy/pulumi refuses a
+# Package whose bootstrap is over artifact.MaxBytes (100 MiB) unzipped
+# (audit/deploy/pulumi/artifact), so a binary that grows past it builds,
+# releases, and is first refused by an estate's deploy. v1.74.0-rc.2 did:
+# cloudflare-go's root client took the bootstrap from 51 MB to 116 MB. The
+# budget sits below the limit so that growth fails here first; raise it only
+# knowing what grew (`go tool nm -size -sort size` on a build without -s -w).
+lambda_budget := "83886080"
+
+lambda-size: console
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(mktemp -d)"
+    trap 'rm -rf "$out"' EXIT
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -tags lambda,lambda.norpc \
+        -ldflags='-s -w' -o "$out/bootstrap" ./cmd/sluis-lambda
+    size="$(wc -c < "$out/bootstrap" | tr -d " ")"
+    if [ "$size" -gt {{lambda_budget}} ]; then
+        echo "lambda-size: the Lambda bootstrap is $size bytes, over the budget of {{lambda_budget}} ($(( {{lambda_budget}} / 1048576 )) MiB)." >&2
+        echo "deploy/pulumi refuses a bootstrap over 104857600 bytes (100 MiB) unzipped: artifact.MaxBytes in audit/deploy/pulumi/artifact." >&2
+        echo "Find what grew: go tool nm -size -sort size on a build without -ldflags='-s -w'." >&2
+        exit 1
+    fi
+    echo "lambda-size: bootstrap is $size bytes (budget {{lambda_budget}}, deploy/pulumi limit 104857600)"
 
 # Run unit tests
 # `console` first, and the same on every recipe that COMPILES Go: CI

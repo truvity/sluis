@@ -1,44 +1,85 @@
 // Package cfapi is the real client of Cloudflare's API for the minter: an
-// account reached with a token, over cloudflare-go v7. It is the only package
-// that imports the SDK; everything else speaks [minter.API].
+// account reached with a token, over plain net/http against
+// https://api.cloudflare.com/client/v4. Everything else speaks [minter.API].
+//
+// It is not cloudflare-go. The minter makes five calls on one resource (an
+// account's tokens), and the SDK's root client wires every Cloudflare service
+// at init: importing it put about 64 MB into the Lambda bootstrap, past the
+// 100 MiB unzipped limit deploy/pulumi enforces. The five calls are small
+// enough to speak directly.
 //
 // A token's policies and condition are carried as the JSON Cloudflare sent, so a
-// clone copies them exactly and does not depend on the SDK's types for create
-// (which only marshal).
+// clone copies them exactly and depends on no SDK's types.
 package cfapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
-
-	cf "github.com/cloudflare/cloudflare-go/v7"
-	"github.com/cloudflare/cloudflare-go/v7/accounts"
-	"github.com/cloudflare/cloudflare-go/v7/option"
 
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
 )
 
+// BaseURL is Cloudflare's API.
+const BaseURL = "https://api.cloudflare.com/client/v4/"
+
+const (
+	// maxRetries is how many times a call is repeated after a refusal that
+	// says to try again (see [retryable]).
+	maxRetries = 2
+	// attemptTimeout bounds one attempt; the caller's context bounds the call.
+	attemptTimeout = 30 * time.Second
+	// maxBody bounds what is read of a response.
+	maxBody = 16 << 20
+)
+
+// Option changes how [Dial] reaches Cloudflare; for tests.
+type Option func(*Client)
+
+// WithBaseURL points the client at another server (a test's).
+func WithBaseURL(base string) Option {
+	return func(c *Client) { c.base = strings.TrimSuffix(base, "/") + "/" }
+}
+
+// WithHTTPClient replaces the HTTP client.
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) { c.http = h }
+}
+
 // Client is one account.
 type Client struct {
 	account string
-	api     *cf.Client
+	token   string
+	base    string
+	http    *http.Client
+	backoff time.Duration
 }
 
 var _ minter.API = (*Client)(nil)
 
-// Dial opens an account with a token. Extra options are for tests (a base URL).
-func Dial(opts ...option.RequestOption) minter.Dialer {
+// Dial opens an account with a token. Options are for tests (a base URL).
+func Dial(opts ...Option) minter.Dialer {
 	return func(_ context.Context, accountID, token string) (minter.API, error) {
 		if accountID == "" || token == "" {
 			return nil, errors.New("cfapi: an account id and a token are required")
 		}
-		all := append([]option.RequestOption{option.WithAPIToken(token), option.WithMaxRetries(2)}, opts...)
-		return &Client{account: accountID, api: cf.NewClient(all...)}, nil
+		c := &Client{
+			account: accountID, token: token, base: BaseURL,
+			http: &http.Client{Timeout: attemptTimeout}, backoff: 500 * time.Millisecond,
+		}
+		for _, o := range opts {
+			o(c)
+		}
+		return c, nil
 	}
 }
 
@@ -61,27 +102,142 @@ func (w wire) token() cloudflare.Token {
 	return t
 }
 
-// notFound maps a 404 to [cloudflare.ErrNotFound]. The SDK's error does not
-// carry the body of a call, so nothing here can leak a value.
-func notFound(err error) error {
-	var apiErr *cf.Error
-	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("%w: HTTP %d", cloudflare.ErrNotFound, apiErr.StatusCode)
+// apiError is a call Cloudflare refused. It carries the status and
+// Cloudflare's error codes and messages, never the body: a body can hold a
+// token's value.
+type apiError struct {
+	method, path string
+	status       int
+	messages     []string
+}
+
+func (e *apiError) Error() string {
+	msg := fmt.Sprintf("cloudflare: %s %s: HTTP %d", e.method, e.path, e.status)
+	if len(e.messages) > 0 {
+		msg += ": " + strings.Join(e.messages, "; ")
 	}
-	return err
+	return msg
+}
+
+// Unwrap makes a 404 [cloudflare.ErrNotFound].
+func (e *apiError) Unwrap() error {
+	if e.status == http.StatusNotFound {
+		return cloudflare.ErrNotFound
+	}
+	return nil
+}
+
+// envelope is what every call answers: {success, errors, result, result_info}.
+type envelope struct {
+	Success bool `json:"success"`
+	Errors  []struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
+	Result json.RawMessage `json:"result"`
+}
+
+// retryable is a refusal worth repeating: rate limited, or the server's fault.
+// A create is repeated only when rate limited, which says it was not done; a
+// 5xx or a broken connection might have created a token whose value is lost.
+func retryable(method string, status int, err error) bool {
+	if method == http.MethodPost {
+		return err == nil && status == http.StatusTooManyRequests
+	}
+	if err != nil {
+		return true
+	}
+	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+}
+
+// do makes one call and decodes the envelope's result into out (when not nil).
+// It returns the raw envelope for callers that read more of it.
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, body []byte, out any) ([]byte, error) {
+	u := c.base + path
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
+	var (
+		raw    []byte
+		status int
+		err    error
+	)
+	for attempt := 0; ; attempt++ {
+		raw, status, err = c.once(ctx, method, u, body)
+		if attempt >= maxRetries || !retryable(method, status, err) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(c.backoff << attempt):
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare: %s %s: %w", method, path, err)
+	}
+	var env envelope
+	jsonErr := json.Unmarshal(raw, &env)
+	if status < 200 || status > 299 || jsonErr != nil || !env.Success {
+		e := &apiError{method: method, path: path, status: status}
+		for _, m := range env.Errors {
+			e.messages = append(e.messages, strconv.Itoa(m.Code)+" "+m.Message)
+		}
+		if status >= 200 && status <= 299 && jsonErr != nil {
+			e.messages = append(e.messages, "the response is not Cloudflare's envelope")
+		}
+		return nil, e
+	}
+	if out != nil {
+		if err = json.Unmarshal(env.Result, out); err != nil {
+			return nil, fmt.Errorf("cloudflare: %s %s: decoding the result: %w", method, path, err)
+		}
+	}
+	return raw, nil
+}
+
+func (c *Client) once(ctx context.Context, method, u string, body []byte) ([]byte, int, error) {
+	var rd io.Reader
+	if body != nil {
+		rd = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, rd)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "sluis")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return raw, resp.StatusCode, nil
+}
+
+func (c *Client) tokens(rest ...string) string {
+	p := "accounts/" + url.PathEscape(c.account) + "/tokens"
+	for _, r := range rest {
+		p += "/" + url.PathEscape(r)
+	}
+	return p
 }
 
 // GetToken implements [minter.API].
 func (c *Client) GetToken(ctx context.Context, id string) (cloudflare.Token, error) {
-	var env struct {
-		Result wire `json:"result"`
+	var w wire
+	if _, err := c.do(ctx, http.MethodGet, c.tokens(id), nil, nil, &w); err != nil {
+		return cloudflare.Token{}, err
 	}
-	_, err := c.api.Accounts.Tokens.Get(ctx, id, accounts.TokenGetParams{AccountID: cf.F(c.account)},
-		option.WithResponseBodyInto(&env))
-	if err != nil {
-		return cloudflare.Token{}, notFound(err)
-	}
-	return env.Result.token(), nil
+	return w.token(), nil
 }
 
 // CreateToken implements [minter.API].
@@ -94,25 +250,21 @@ func (c *Client) CreateToken(ctx context.Context, in cloudflare.NewToken) (cloud
 	if err != nil {
 		return cloudflare.Created{}, err
 	}
-	var env struct {
-		Result wire `json:"result"`
-	}
-	_, err = c.api.Accounts.Tokens.New(ctx, accounts.TokenNewParams{AccountID: cf.F(c.account)},
-		option.WithRequestBody("application/json", raw), option.WithResponseBodyInto(&env))
-	if err != nil {
+	var w wire
+	if _, err = c.do(ctx, http.MethodPost, c.tokens(), nil, raw, &w); err != nil {
 		return cloudflare.Created{}, err
 	}
-	out := cloudflare.Created{ID: env.Result.ID, Name: env.Result.Name, Value: env.Result.Value}
-	if env.Result.ExpiresOn != nil {
-		out.ExpiresOn = *env.Result.ExpiresOn
+	out := cloudflare.Created{ID: w.ID, Name: w.Name, Value: w.Value}
+	if w.ExpiresOn != nil {
+		out.ExpiresOn = *w.ExpiresOn
 	}
 	return out, nil
 }
 
 // DeleteToken implements [minter.API].
 func (c *Client) DeleteToken(ctx context.Context, id string) error {
-	_, err := c.api.Accounts.Tokens.Delete(ctx, id, accounts.TokenDeleteParams{AccountID: cf.F(c.account)})
-	return notFound(err)
+	_, err := c.do(ctx, http.MethodDelete, c.tokens(id), nil, nil, nil)
+	return err
 }
 
 // ListTokens implements [minter.API]: every page, the recently expired
@@ -120,22 +272,25 @@ func (c *Client) DeleteToken(ctx context.Context, id string) error {
 func (c *Client) ListTokens(ctx context.Context) ([]cloudflare.Token, error) {
 	var out []cloudflare.Token
 	for page := 1; ; page++ {
-		var env struct {
-			Result     []wire `json:"result"`
+		var result []wire
+		raw, err := c.do(ctx, http.MethodGet, c.tokens(), url.Values{
+			"include_expired": {"true"}, "per_page": {"50"}, "page": {strconv.Itoa(page)},
+		}, nil, &result)
+		if err != nil {
+			return nil, err
+		}
+		var info struct {
 			ResultInfo struct {
 				TotalPages int `json:"total_pages"`
 			} `json:"result_info"`
 		}
-		_, err := c.api.Accounts.Tokens.List(ctx, accounts.TokenListParams{
-			AccountID: cf.F(c.account), IncludeExpired: cf.F(true), PerPage: cf.F(50.0), Page: cf.F(float64(page)),
-		}, option.WithResponseBodyInto(&env))
-		if err != nil {
-			return nil, err
+		if err = json.Unmarshal(raw, &info); err != nil {
+			return nil, fmt.Errorf("cloudflare: listing tokens: %w", err)
 		}
-		for _, w := range env.Result {
+		for _, w := range result {
 			out = append(out, w.token())
 		}
-		if page >= env.ResultInfo.TotalPages || len(env.Result) == 0 {
+		if page >= info.ResultInfo.TotalPages || len(result) == 0 {
 			return out, nil
 		}
 	}
@@ -143,19 +298,15 @@ func (c *Client) ListTokens(ctx context.Context) ([]cloudflare.Token, error) {
 
 // PermissionGroups implements [minter.API].
 func (c *Client) PermissionGroups(ctx context.Context) (map[string]string, error) {
-	var env struct {
-		Result []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"result"`
+	var result []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
 	}
-	_, err := c.api.Accounts.Tokens.PermissionGroups.List(ctx, accounts.TokenPermissionGroupListParams{AccountID: cf.F(c.account)},
-		option.WithResponseBodyInto(&env))
-	if err != nil {
+	if _, err := c.do(ctx, http.MethodGet, c.tokens("permission_groups"), nil, nil, &result); err != nil {
 		return nil, err
 	}
-	out := make(map[string]string, len(env.Result))
-	for _, g := range env.Result {
+	out := make(map[string]string, len(result))
+	for _, g := range result {
 		out[g.ID] = g.Name
 	}
 	return out, nil

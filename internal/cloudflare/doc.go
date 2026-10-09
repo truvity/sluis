@@ -16,5 +16,5 @@
 //   - [R2Secret], how R2 derives an S3 secret from a token's value.
 //
 // minter does the work over an API interface; cfapi is the real client over
-// cloudflare-go. docs/guides/sluis/cloudflare-tokens.md is the operator's guide.
+// net/http. docs/guides/sluis/cloudflare-tokens.md is the operator's guide.
 package cloudflare
