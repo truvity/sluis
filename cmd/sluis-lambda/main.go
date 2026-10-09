@@ -9,28 +9,7 @@
 // a runtime that is not Go's RPC one.
 package main
 
-import (
-	"context"
-	"encoding/json"
-	"log/slog"
-	"os"
+import "github.com/truvity/sluis/internal/lambdaapp"
 
-	"github.com/aws/aws-lambda-go/lambda"
-
-	"github.com/truvity/sluis/internal/lambdaapp"
-)
-
-func main() {
-	fn, err := lambdaapp.Open(context.Background(), os.Getenv)
-	if err != nil {
-		// A failure at cold start is the platform's "Init error": the function
-		// does not take an invocation, and the message is in the log.
-		slog.New(slog.NewJSONHandler(os.Stdout, nil)).ErrorContext(context.Background(), "sluis could not start", slog.Any("error", err))
-		os.Exit(1)
-	}
-	defer fn.Close()
-	lambda.Start(func(ctx context.Context, payload json.RawMessage) (any, error) {
-		defer fn.Flush(ctx)
-		return fn.Handler.Handle(ctx, payload)
-	})
-}
+// The dispatch is lambdaapp.Start, shared with the lambda build of cmd/sluis.
+func main() { lambdaapp.Start() }

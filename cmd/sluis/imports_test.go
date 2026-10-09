@@ -42,6 +42,9 @@ var platforms = []struct {
 			"github.com/truvity/sluis/internal/port/dynamodb",
 			"github.com/truvity/sluis/internal/port/s3blob",
 			"github.com/truvity/sluis/internal/issuer",
+			"github.com/aws/aws-lambda-go/lambda",
+			"github.com/truvity/sluis/internal/port/invoke",
+			"github.com/truvity/sluis/internal/lambdaapp",
 		},
 	},
 	{
