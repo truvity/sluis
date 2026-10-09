@@ -1,7 +1,12 @@
 package suite
 
 import (
+	"encoding/base64"
+	"fmt"
+
 	"context"
+	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
+	"github.com/truvity/sluis/audit/sdk/record"
 	"os"
 	"os/exec"
 	"strings"
@@ -64,4 +69,93 @@ func TestVerifyReadsTheArchive(t *testing.T) {
 	}
 	logs := runJob(t, shared.names.Release+"-verify", 3*time.Minute)
 	t.Logf("verify log:\n%s", logs)
+}
+
+// TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase emits records naming
+// the same outside person twice and a second one once. The index must carry
+// pseudonyms and not the identifiers, the same pseudonym for the same person,
+// and the wrapped per-tenant secret must be a row in the writer's database.
+func TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase(t *testing.T) {
+	if os.Getenv(envKMS) == "" {
+		t.Skipf("%s is not set: this lane installs the KMS overlay", envKMS)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	tenant := randomTenant(t)
+	e := writerEmitter(ctx, t)
+	defer func() { _ = e.Close() }()
+
+	people := []string{"alice@example.test", "alice@example.test", "bob@example.test"}
+	for _, who := range people {
+		r := &record.Record{
+			Action:    "audit.search",
+			Operation: auditv1.Operation_OPERATION_ACCESS,
+			TenantId:  tenant,
+			Actor:     &record.Actor{Kind: "service", Id: "e2e-suite"},
+			// A kind the common catalogue does not declare is an outside
+			// person's: the security profile pseudonymises it.
+			Subject: &record.Party{Kind: "customer", Id: who},
+			Targets: []*record.Target{{Type: "profile", Id: "security"}},
+			Outcome: &record.Outcome{Result: auditv1.Outcome_RESULT_SUCCESS},
+		}
+		if err := e.Record(ctx, r); err != nil {
+			t.Fatalf("emit for %s: %v", who, err)
+		}
+	}
+
+	readerDB := openDSN(ctx, t, shared.queryDSN)
+	defer func() { _ = readerDB.Close() }()
+	conn, err := readerDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, `select set_config('audit.tenant_ids', $1, false)`, fmt.Sprintf(`["%s"]`, tenant)); err != nil {
+		t.Fatal(err)
+	}
+
+	var subjects []string
+	eventually(t, 150*time.Second, func() error {
+		rows, err := conn.QueryContext(ctx,
+			`select subject_id from events_core join events_context using (profile, id, recorded_at)
+			 where tenant_id = $1 and action = 'audit.search' order by subject_id`, tenant)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		subjects = nil
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				return err
+			}
+			subjects = append(subjects, s)
+		}
+		if len(subjects) < len(people) {
+			return fmt.Errorf("%d of %d records indexed", len(subjects), len(people))
+		}
+		return rows.Err()
+	})
+	distinct := map[string]int{}
+	for _, s := range subjects {
+		if s == "" || strings.Contains(s, "example.test") {
+			t.Fatalf("subject_id %q is not a pseudonym", s)
+		}
+		distinct[s]++
+	}
+	if len(distinct) != 2 {
+		t.Fatalf("want two pseudonyms for two people, got %v", distinct)
+	}
+
+	// The wrapped secret for the tenant is a row in the writer's database.
+	writerDB := openDSN(ctx, t, shared.writerDSN)
+	defer func() { _ = writerDB.Close() }()
+	var wrapped int
+	if err := writerDB.QueryRowContext(ctx, `select count(*) from audit_wrapped_keys where id like '%/' || $1`, base64.RawURLEncoding.EncodeToString([]byte(tenant))).Scan(&wrapped); err != nil {
+		t.Fatalf("read the wrapped keys as the writer role: %v", err)
+	}
+	if wrapped != 1 {
+		t.Fatalf("want one wrapped key for the tenant in the database, got %d", wrapped)
+	}
 }

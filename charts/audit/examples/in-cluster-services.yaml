@@ -157,13 +157,20 @@ jobs:
       sink:
         url: http://audit:8080
 
-# Variant: pseudonymisation keys in OpenBAO transit (every writer asks the same
-# engine, so there is no key directory). Under `writer.config`, with
-# `externalIdentifiersAreOpaque: false`, a token with the writer's policy in
-# AUDIT_BAO_TOKEN, and the query service given a token of its own:
+# Pseudonymisation keys, for records that carry direct identifiers (set
+# `externalIdentifiersAreOpaque: false`). Under `writer.config`, with KMS and the
+# wrapped per-tenant secrets in the PostgreSQL above (no SSM):
+#   keys:
+#     adapter: kms
+#     instance: audit
+#     pseudonym:
+#       key: alias/audit-pseudonym
+#     state:
+#       backend: database
+# The writer's database role holds the table; the key is an AWS KMS symmetric key.
+# Or in OpenBAO transit, every writer asking the same engine, with a token with
+# the writer's policy in AUDIT_BAO_TOKEN and the query service given one of its own:
 #   keys:
 #     provider: transit
 #     transit:
 #       openbao: {address: http://openbao.secrets.svc:8200, tokenSecret: AUDIT_BAO_TOKEN}
-# With KMS, pseudonyms (keys.adapter: kms, keys.pseudonym) also need `keys.state`,
-# the SSM Parameter Store path where the wrapped per-tenant secrets are kept.

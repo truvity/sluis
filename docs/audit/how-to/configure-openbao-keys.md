@@ -24,8 +24,7 @@ on this page applies
 [key custody](../explanation/key-custody.md)). Read on only for a deployment that must be
 able to crypto-shred and has chosen `transit` to do it with. A transit key
 that will sign seals is a different key
-([signing key](../explanation/key-custody.md#signing-key)); nothing in the chart uses one
-today.
+([signing key](../explanation/key-custody.md#signing-key)); the notary uses one, through `signer.transit` in its configuration.
 
 The `transit` key provider keeps every tenant's key for every purpose in an
 OpenBAO (or Vault) transit engine. It is the provider for a deployment of more

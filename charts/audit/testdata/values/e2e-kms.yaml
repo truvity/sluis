@@ -1,8 +1,57 @@
 # Laid over e2e.yaml for the "services in the cluster" tier: the same NATS,
-# PostgreSQL and S3 endpoint, plus the notary signing seals with an AWS KMS key.
+# PostgreSQL and S3 endpoint, plus the notary signing seals with an AWS KMS key
+# and the writers pseudonymising people outside the organisation under another,
+# their wrapped per-tenant secrets kept in the index database.
 # The pods reach KMS through the SDK's default credential chain; the endpoint
 # and the credentials arrive as environment variables from Kubernetes Secrets,
 # which is how a secret manager's operator would deliver them. Nothing reads SSM.
+# Keys are configured, so identifiers from outside are pseudonymised, not trusted
+# to be opaque.
+externalIdentifiersAreOpaque: false
+writer:
+  config:
+    apiVersion: audit.truvity.github.io/audit-writer/v2
+    deployment: /etc/audit/deployment.yaml
+    anonymousWrites: true
+    replicas: 3
+    database:
+      url: postgres://audit_e2e_writer@postgres.postgres.svc:5432/audit_e2e?sslmode=require
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+    stream:
+      nats:
+        url: nats://nats.nats.svc:4222
+      name: AUDIT
+      consumer: audit-writer
+    keys:
+      adapter: kms
+      instance: audit-e2e
+      pseudonym:
+        key: alias/audit-pseudonym
+      # No SSM: the wrapped secrets are rows in the database above.
+      state:
+        backend: database
+  secretEnv:
+    - name: AUDIT_DATABASE_PASSWORD
+      secretName: audit-e2e-database
+      key: password
+    - name: AUDIT_S3_ACCESS_KEY_ID
+      secretName: audit-e2e-s3-credentials
+      key: AWS_ACCESS_KEY_ID
+    - name: AUDIT_S3_SECRET_ACCESS_KEY
+      secretName: audit-e2e-s3-credentials
+      key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_ACCESS_KEY_ID
+      secretName: audit-e2e-s3-credentials
+      key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      secretName: audit-e2e-s3-credentials
+      key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_ENDPOINT_URL_KMS
+      secretName: audit-e2e-kms
+      key: AWS_ENDPOINT_URL_KMS
+    - name: AWS_REGION
+      secretName: audit-e2e-kms
+      key: AWS_REGION
 jobs:
   notary:
     enabled: true
