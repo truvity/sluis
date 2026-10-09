@@ -1,0 +1,4 @@
+# Pages merged or deleted by the get-started reduction pass.
+
+get-started/sluis/deployment/edge-aws.md: get-started/sluis/deployment/README.md#aws-edge-module
+get-started/sluis/deployment/kubernetes-openbao.md: get-started/sluis/deployment/README.md#kubernetes-with-openbao

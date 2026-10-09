@@ -1,27 +1,24 @@
 # Getting started on AWS Lambda
 
-From nothing to a writer Lambda archiving records into S3 and a notary Lambda sealing the
-hours, built by the Pulumi library. About an hour with an AWS account and a Pulumi stack.
+Build a writer Lambda that archives records into S3 and a notary Lambda that seals each hour, with the Pulumi library. It takes about an hour.
 
-The shape: an application sends records to an SQS ingest queue; the writer Lambda archives
-them in S3 (deduplicating in DynamoDB); the notary Lambda seals each closed hour with a KMS
-key. How it works is in [AWS Lambda](../../concepts/audit/aws-lambda.md); every input is in the
-[library reference](../../reference/audit/aws-pulumi-library.md).
+Records flow from SQS through the writer, which deduplicates in DynamoDB, to S3. The notary seals with KMS.
+See [AWS Lambda](../../concepts/audit/aws-lambda.md) and the [library reference](../../reference/audit/aws-pulumi-library.md).
 
 ## What you need
 
-- A Pulumi (Go) program and an AWS account and region.
-- The release's two zips and their checksums, from the GitHub release of this version:
-  `audit-writer-lambda_<version>_linux_arm64.zip`, `audit-notary-lambda_<version>_linux_arm64.zip`
-  and `checksums.txt`. The library at the same release (`go get github.com/truvity/sluis/audit/deploy/pulumi@v<version>`).
-- The ARN of the IAM **role** of whatever will send records (not a session ARN).
-- The emitting application's catalogue directory (its document and its JSON schemas), or
-  nothing yet if you only want to see the stack come up.
+| You need | Detail |
+|---|---|
+| A Pulumi (Go) program, an AWS account and a region | |
+| The release zips and checksums | `audit-writer-lambda_<version>_linux_arm64.zip`, `audit-notary-lambda_<version>_linux_arm64.zip`, `checksums.txt` from the GitHub release |
+| The library at the same release | `go get github.com/truvity/sluis/audit/deploy/pulumi@v<version>` |
+| The ARN of the IAM role of each sender | a role or user ARN, not a session ARN |
+| The application's catalogue directory | its document and JSON schemas; optional for a trial |
 
 ## 1. Write the profile document
 
-The writer reads one document naming which profiles it keeps. Save it as a string for
-`Writer.DeploymentYAML`:
+Save this as a string for `Writer.DeploymentYAML`. `security` is the profile every installation composes
+([which profiles to compose](../../concepts/audit/which-profiles-to-compose.md)).
 
 ```yaml
 apiVersion: audit.truvity.github.io/audit-deployment/v2
@@ -30,10 +27,6 @@ profiles:
   security:
     frameworks: [security]   # each is a framework profile
 ```
-
-Which framework profiles to compose is a policy decision
-([which profiles to compose](../../concepts/audit/which-profiles-to-compose.md)); `security` is
-the one every installation composes.
 
 ## 2. Write the stack
 
@@ -47,7 +40,7 @@ a, err := auditpulumi.New(ctx, "audit", &auditpulumi.Args{
 		ObjectLockMode: auditpulumi.None, // required: NONE, GOVERNANCE or COMPLIANCE
 	},
 	Ingest: auditpulumi.IngestArgs{
-		// Required: the whole of who may send. Role or user ARNs, never session ARNs.
+		// Required: who may send. Role or user ARNs, never session ARNs.
 		Senders: []pulumi.StringInput{emitterRoleArn},
 		// An operator's break-glass role, for redriving the DLQ (optional).
 		Redrivers: []pulumi.StringInput{breakGlassRoleArn},
@@ -66,21 +59,16 @@ a, err := auditpulumi.New(ctx, "audit", &auditpulumi.Args{
 ctx.Export("queueUrl", a.QueueURL)
 ```
 
-Three things that bite, each with its own page:
+Three traps:
 
-- **`Senders` is required.** The queue policy denies `sqs:SendMessage` to everyone not named,
-  so this list is the writer's authenticity on this path. A stack that names none fails at
-  preview ([run readers in Kubernetes](../../guides/audit/operate/aws-run-readers-in-kubernetes.md) has the
-  sender rules).
-- **The catalogue is a document plus its schemas.** The writer refuses to start without the
-  schemas the document references ([change what a source records](../../guides/audit/connect/change-what-a-source-records.md)).
-- **Library and zip must be the same release**, or the preview fails
-  ([ship a release](../../guides/audit/operate/aws-ship-a-release.md)).
+- `Senders` is required. A stack that names none fails at preview ([sender rules](../../guides/audit/operate/aws-run-readers-in-kubernetes.md)).
 
-If the writer needs a secret (an OpenBAO token for pseudonymisation keys), it is an SSM
-SecureString under the root `/audit/<name>/private/config`, never an environment variable
-([store the writer's secrets in SSM](../../guides/audit/operate/aws-store-secrets-in-ssm.md)). A trial with
-`keys.provider: none` (the default) needs none.
+- The writer refuses to start without the schemas its catalogue document references ([change what a source records](../../guides/audit/connect/change-what-a-source-records.md)).
+
+- The library and the zips must be the same release, or the preview fails ([ship a release](../../guides/audit/operate/aws-ship-a-release.md)).
+
+A writer secret, such as an OpenBAO token for pseudonymisation keys, is an SSM SecureString under `/audit/<name>/private/config`
+([store the writer's secrets in SSM](../../guides/audit/operate/aws-store-secrets-in-ssm.md)). A trial with `keys.provider: none`, the default, needs none.
 
 ## 3. Deploy
 
@@ -89,32 +77,26 @@ pulumi preview   # the guards run first: package digest, release match, catalogu
 pulumi up
 ```
 
-Expected: a bucket, a KMS key for the archive and one for seals, the ingest queue and its
-DLQ, a DynamoDB table, two functions, an hourly schedule and the alarms. Verify:
+The stack creates a bucket, two KMS keys for archive and seals, the ingest queue and its DLQ, and a DynamoDB table.
+It also creates two functions, an hourly schedule and the alarms.
 `pulumi stack output queueUrl` prints the queue URL.
 
 ## 4. Send a record
 
-Point an emitter at the queue: a component that records takes `sink: {sqs: {queueUrl, region}}`
-and its pod or role is one of `Senders`. The emitter registers nothing here: the writer
-already has the catalogue from step 2.
-
-Verify, a minute later:
+Point an emitter at the queue. A recording component takes `sink: {sqs: {queueUrl, region}}`. Its pod or role must be one of `Senders`.
+A minute later, run:
 
 ```sh
 aws s3 ls "s3://acme-audit-trial/records/security/" --recursive
 audit verify --profile security --last 1h --bucket acme-audit-trial
 ```
 
-and the trail holds an `audit.writer.started` record. If the DLQ alarm
-(`audit-ingest-dlq-not-empty`) or the `audit-writer-unknown-catalogue` alarm fires, see
+The trail holds an `audit.writer.started` record. If the `audit-ingest-dlq-not-empty` or `audit-writer-unknown-catalogue` alarm fires, see
 [redrive the ingest DLQ](../../guides/audit/operate/redrive-the-ingest-dlq.md).
 
-## 5. Next
+## Next
 
-- Turn the lock on when the retentions are signed off
-  ([turn the Object Lock on](../../guides/audit/operate/aws-turn-on-object-lock.md)).
-- Read the trail with observe and query in a cluster
-  ([run readers in Kubernetes](../../guides/audit/operate/aws-run-readers-in-kubernetes.md)).
-- Send the functions' telemetry ([send the Lambda functions' telemetry](../../guides/audit/operate/aws-send-lambda-telemetry.md)).
-- Upgrading from an earlier release: [the v0.13 upgrade](../../guides/audit/upgrade/v0.13.md).
+- [Turn the Object Lock on](../../guides/audit/operate/aws-turn-on-object-lock.md) when retentions are signed off.
+- [Run readers in Kubernetes](../../guides/audit/operate/aws-run-readers-in-kubernetes.md).
+- [Send the Lambda functions' telemetry](../../guides/audit/operate/aws-send-lambda-telemetry.md).
+- [Upgrade from an earlier release](../../guides/audit/upgrade/v0.13.md).

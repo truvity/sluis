@@ -6,10 +6,10 @@ docs	367
 docs/concepts/audit	17659
 docs/concepts/sluis	35641
 docs/concepts/storage	785
-docs/get-started/audit	2429
-docs/get-started/sluis	3304
-docs/get-started/sluis/deployment	1141
-docs/get-started/storage	62
+docs/get-started/audit	1553
+docs/get-started/sluis	2273
+docs/get-started/sluis/deployment	879
+docs/get-started/storage	58
 docs/guides/audit/connect	5573
 docs/guides/audit/operate	15421
 docs/guides/audit/upgrade	1682

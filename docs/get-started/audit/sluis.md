@@ -1,39 +1,36 @@
-# Getting started with a sluis-connected install
+# Connect a sluis install
 
-[sluis](https://github.com/truvity/sluis) is the access-management service that emits
-audit records, and the first product that connects to an audit installation. (It was named
-access-roster; the names `roster` in the catalogue's source and `ACCESS_ROSTER_*` in the
-Lambda extension's old settings are kept identifiers, not the product's name.) This page is
-audit's half of connecting it: what the installation must hold. How to configure sluis
-itself, its settings and its runbook are in [sluis's documentation](https://github.com/truvity/sluis/tree/master/docs);
-this page does not restate them.
+[sluis](https://github.com/truvity/sluis) is the first product that records to an audit installation. This page lists
+what the installation must hold. Configure sluis itself with [its documentation](https://github.com/truvity/sluis/tree/master/docs).
 
-You need an installation first: [Kubernetes](kubernetes.md) or [AWS Lambda](aws-lambda.md).
+## What you need
 
-## What the audit installation holds for sluis
+An installation from [Kubernetes](kubernetes.md) or [AWS Lambda](aws-lambda.md).
 
-| what | where | how |
+| What | Where | How |
 |---|---|---|
-| sluis's catalogue (source `roster`) | the writer | Kubernetes: sluis registers it at start-up, nothing to install. Lambda: the writer has no registry; unpack sluis's release bundle `sluis-audit-catalogue_<version>.tar.gz` (check its checksum) and give the directory to `Writer.CatalogueDirs` ([change what a source records](../../guides/audit/connect/change-what-a-source-records.md)) |
-| the right to write | the writer | Kubernetes: a `workloadIdentity.workloads` entry mapping sluis's ServiceAccount to the source (`roster`) and its issuer in `workloadIdentity.issuers`. Lambda: sluis's role in `Ingest.Senders` (a role ARN, not a session ARN) |
-| the right to read | the query service | `query.grants` naming the issuer and audience sluis's console uses, and who may read what ([read the trail](../../guides/audit/connect/read-the-trail.md)) |
-| the profiles sluis's actions fall under | the deployment document | at least `security`; `history` if sluis's console shows tenant-facing activity |
+| sluis's catalogue (source `roster`, a legacy identifier, renamed in v1.75–v1.76) | the writer | Kubernetes: sluis registers it at start-up. Lambda: unpack the release bundle `sluis-audit-catalogue_<version>.tar.gz`, check its checksum, and pass the directory to `Writer.CatalogueDirs` ([change what a source records](../../guides/audit/connect/change-what-a-source-records.md)) |
+| The right to write | the writer | Kubernetes: a `workloadIdentity.workloads` entry mapping sluis's ServiceAccount to the source, and its issuer in `workloadIdentity.issuers`. Lambda: sluis's role ARN in `Ingest.Senders` |
+| The right to read | the query service | `query.grants` naming the issuer and audience of sluis's console ([read the trail](../../guides/audit/connect/read-the-trail.md)) |
+| The profiles sluis's actions fall under | the deployment document | `security`, and `history` if the console shows tenant-facing activity |
 
-## Steps
+## 1. Install audit
 
-1. **Install audit** with one of the two tutorials, with the entries in the table above.
-2. **Connect sluis** by following sluis's own documentation, pointing its audit settings at the
-   writer's address (Kubernetes) or the ingest queue URL (Lambda).
-3. **Check from audit's side.** The writer logs the registration (Kubernetes), a record
-   appears in the archive under `records/security/`, and `audit verify` passes
-   ([verify the trail](../../guides/audit/operate/verify-the-trail.md)).
+Follow a tutorial above, with the entries from the table.
 
-## When it goes wrong
+## 2. Connect sluis
 
-- A record naming a catalogue version the writer lacks is dead-lettered and acknowledged;
-  `event=unknown_catalogue` and the `<name>-writer-unknown-catalogue` alarm say so. The fix is
-  the order in [change what a source records](../../guides/audit/connect/change-what-a-source-records.md): the writer
-  gets the catalogue, then sluis rolls.
-- Messages in the Lambda's DLQ: [redrive the ingest DLQ](../../guides/audit/operate/redrive-the-ingest-dlq.md).
-- sluis refuses to start with an installation that refused its catalogue; the reasons are in the
-  writer's log.
+Point sluis's audit settings at the writer's address (Kubernetes) or the ingest queue URL (Lambda).
+
+## 3. Check it works
+
+Expect three things: the writer logs the registration (Kubernetes), a record appears under `records/security/`, and
+`audit verify` passes ([verify the trail](../../guides/audit/operate/verify-the-trail.md)).
+
+## When it fails
+
+- A record naming a catalogue version the writer lacks is dead-lettered. `event=unknown_catalogue` and the
+  `<name>-writer-unknown-catalogue` alarm report it. Give the writer the catalogue first, then roll sluis
+  ([change what a source records](../../guides/audit/connect/change-what-a-source-records.md)).
+- Messages in the Lambda DLQ: [redrive the ingest DLQ](../../guides/audit/operate/redrive-the-ingest-dlq.md).
+- sluis refuses to start when the installation refused its catalogue. The writer's log gives the reason.

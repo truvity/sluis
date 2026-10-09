@@ -1,31 +1,23 @@
 # Tutorial: sluis on Kubernetes with AWS storage
 
-By the end you have sluis running as one pod on your cluster (preset `k8s-aws`): state in DynamoDB, blobs in S3,
-tokens signed under a KMS-wrapped key, secrets in SSM (or OpenBao). The two documents the pod reads are rendered from
-an installation file by `sluisctl render`, and CI holds them to it with `--check`. The chart is in documents mode: it
-mounts the documents unchanged and keeps only the deployment-level values.
+You run sluis as one pod on your cluster (preset `k8s-aws`). State is in DynamoDB, blobs in S3 and secrets in SSM or OpenBao. Tokens are signed under a KMS-wrapped key. `sluisctl render` writes the two documents the pod reads from an installation file. CI holds them to it with `--check`. The chart runs in documents mode: it mounts the documents unchanged and keeps only deployment-level values.
 
-Not here: the full runbook with a gateway and the first sign-in ([Install with Helm](../../guides/sluis/operate/install-with-helm.md)),
-every chart value ([configuration](../../reference/sluis/chart-values.md)), why ([ports](../../concepts/sluis/ports.md)).
+The full runbook with a gateway and the first sign-in is [Install with Helm](../../guides/sluis/operate/install-with-helm.md). Every chart value is in [chart values](../../reference/sluis/chart-values.md). Design: [ports](../../concepts/sluis/ports.md).
 
 ## What you need
 
-- A Kubernetes cluster on EKS, and `kubectl` and `helm` pointed at it. Pod Identity gives the pod its AWS role;
-  `serviceAccount.awsIdentity: irsa` is the alternative.
-- An AWS account (`111122223333`) and a region (`eu-central-1`), with credentials that can create DynamoDB, S3, KMS,
-  IAM and SSM resources.
-- Go and `pulumi` for the AWS side below, or the equivalent resources by hand.
-- `sluisctl` of the release you install. Pin the chart and `sluisctl` at the same version (`X.Y.Z`; documents mode
-  needs v1.64 or later).
-
 Names below are placeholders; replace them.
+
+| Item | Detail |
+|---|---|
+| Cluster | EKS, with `kubectl` and `helm` pointed at it. Pod Identity gives the pod its AWS role; `serviceAccount.awsIdentity: irsa` is the alternative. |
+| AWS | Account `111122223333`, region `eu-central-1`, credentials that create DynamoDB, S3, KMS, IAM and SSM resources. |
+| Tools | Go and `pulumi` for step 1, or the same resources by hand. |
+| `sluisctl` | The release you install. Pin the chart and `sluisctl` at one version `X.Y.Z`; documents mode needs v1.64 or later. |
 
 ## 1. Create the AWS side
 
-The pod needs a table, a bucket, a symmetric KMS key to wrap its signing keys under, and a role. The Pulumi library
-declares the first, second and fourth; the key you create, because its policy must reserve the signing context to the
-pod's role (the library returns the statements). Use the library at the release's tag
-(`go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z`), in a Pulumi Go project:
+The pod needs a table, a bucket, a symmetric KMS key and a role. The Pulumi library declares the table, bucket and role. You create the key, and its policy reserves the signing context to the pod's role with statements the library returns. In a Pulumi Go project, add the library with `go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z`:
 
 ```go
 store, _ := sluispulumi.NewStorage(ctx, "demo", &sluispulumi.StorageArgs{BucketName: "demo-sluis-111122223333"}, withAWS)
@@ -56,12 +48,11 @@ sluispulumi.NewKubernetesIdentity(ctx, "demo", &sluispulumi.KubernetesIdentityAr
 ```
 
 ```sh
-pulumi preview    # read it: a bucket, a table, a key and alias, a policy, a role and a pod identity association
+pulumi preview    # a bucket, a table, a key and alias, a policy, a role and a pod identity association
 pulumi up
 ```
 
-Expect the creates and nothing else. The role's grants and the key policy are in the
-[Pulumi library](../../reference/sluis/pulumi-library.md#kubernetes-identity); sealing is retired, so there is no sealer key.
+Expect only creates. The role's grants and the key policy are in the [Pulumi library](../../reference/sluis/pulumi-library.md#kubernetes-identity).
 
 ## 2. Write the installation and render it
 
@@ -110,13 +101,11 @@ access:
 sluisctl render --installation installation.yaml --out rendered
 ```
 
-Expect no output, exit 0, and `rendered/sluis.yaml` and `rendered/policy.yaml`. In `sluis.yaml` check `preset: k8s-aws`,
-the three adapters (`dynamodb`, `s3`, and `ssm` with root `/sluis/demo`) and `signingKey.kmsWrapped`. An installation
-that disagrees with its shape is refused here, naming the key. Commit both documents.
+Expect no output, exit 0, and `rendered/sluis.yaml` and `rendered/policy.yaml`. In `sluis.yaml`, check `preset: k8s-aws`, the adapters `dynamodb`, `s3` and `ssm` with root `/sluis/demo`, and `signingKey.kmsWrapped`. An installation that disagrees with its shape is refused here, naming the key. Commit both documents.
 
 ## 3. Seed the secrets
 
-A document names its secrets and holds none. With the SSM adapter each is a SecureString under the instance's root:
+The documents name secrets and hold none. With the SSM adapter each secret is a SecureString under the instance's root:
 
 ```sh
 kubectl create namespace sluis
@@ -125,12 +114,11 @@ aws ssm put-parameter --type SecureString --name /sluis/demo/private/config/issu
 aws ssm get-parameters-by-path --path /sluis/demo/private/config/ --recursive --query 'Parameters[].Name'
 ```
 
-Expect a parameter version, then `["/sluis/demo/private/config/issuer/state-secret"]`. Print names only, never values.
-The state secret is the sign-in state's key: it must be the same in every replica.
+Expect a parameter version, then `["/sluis/demo/private/config/issuer/state-secret"]`. Print names only, never values. The state secret keys the sign-in state and must be the same in every replica.
 
 ### With OpenBao instead of SSM
 
-Add an `openbao` block to the installation, and the preset's secrets adapter becomes `openbao`:
+An `openbao` block in the installation switches the secrets adapter to `openbao`:
 
 ```yaml
 openbao:
@@ -140,16 +128,11 @@ openbao:
   auth: {method: jwt, mount: jwt-demo, role: sluis, tokenFile: /var/run/openbao/token}
 ```
 
-The chart projects the token the login presents from values: `exports.openbao.token.audience` is the audience your
-role's `bound_audiences` names. The server's CA is the system's unless you give one: `exports.openbao.caBundle` (the
-PEM) and `caFile` in the block, which the chart refuses to disagree about. The state secret is then written
-under `<root>/private/config/issuer/state-secret` in that mount, not in SSM. The policy the role needs is in
-[configuration](../../reference/sluis/openbao-secrets-adapter.md).
+Set `exports.openbao.token.audience` to the audience in your role's `bound_audiences`. The chart projects the login token with it. The server's CA is the system's unless you set `exports.openbao.caBundle` (the PEM) and `caFile` in the block; the chart refuses values that disagree. The state secret goes under `<root>/private/config/issuer/state-secret` in that mount, not in SSM. The role's policy is in the [OpenBao secrets adapter](../../reference/sluis/openbao-secrets-adapter.md).
 
 ## 4. Install the chart in documents mode
 
-`values.yaml` holds only deployment-level keys. Without `route.host` no route is rendered, which suits a first run by
-port-forward; a gateway is in [Install with Helm](../../guides/sluis/operate/install-with-helm.md).
+`values.yaml` holds only deployment-level keys. Without `route.host` the chart renders no route, which suits a first run by port-forward. For a gateway, see [Install with Helm](../../guides/sluis/operate/install-with-helm.md).
 
 ```yaml
 replicaCount: 2        # replicas coordinate through DynamoDB
@@ -166,11 +149,7 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis --version X.Y.Z --namespac
   --set-file documents.service=rendered/sluis.yaml --set-file documents.policy=rendered/policy.yaml
 ```
 
-Expect a ServiceAccount, the `sluis-config` and `sluis-policy` ConfigMaps, one Deployment `sluis` and a Service. Set
-both documents or neither: beside them the chart refuses `config`, `policy` and the exchange lists, so nothing is said
-twice. It also refuses a document that disagrees with what it mounts (the release name, `policy.file`, the public URLs)
-and names the key to change in the installation. Helm cannot run sluis's loader, so the service validates the rest at
-start, after the rollout.
+Expect a ServiceAccount, the `sluis-config` and `sluis-policy` ConfigMaps, one Deployment `sluis` and a Service. Set both documents or neither. Beside them the chart refuses `config`, `policy` and the exchange lists. It also refuses a document that disagrees with the release name, `policy.file` or the public URLs, and names the installation key to change. Helm cannot run the loader, so the service validates the rest at start, after the rollout.
 
 ## 5. Check it
 
@@ -180,36 +159,32 @@ kubectl -n sluis port-forward svc/sluis 8080:8080 &
 curl -s localhost:8080/.well-known/openid-configuration
 ```
 
-Expect the rollout to finish (Ready means the whole process finished starting) and JSON whose `issuer` is
-`https://access.example.test`. If the pod does not start, `kubectl -n sluis logs deploy/sluis` names the key the loader
-refused, or the missing parameter's path (never its value).
+Expect the rollout to finish and JSON whose `issuer` is `https://access.example.test`. If the pod does not start, `kubectl -n sluis logs deploy/sluis` names the key the loader refused or the missing parameter's path.
 
-Then sign in with a recovery token, `kubectl -n sluis create token sluis-recovery --audience sluis-recovery
---duration 10m`, on the console's login page ([first sign-in](../../guides/sluis/operate/install-with-helm.md#5-first-sign-in)).
+Then sign in on the console's login page with a recovery token ([first sign-in](../../guides/sluis/operate/install-with-helm.md#5-first-sign-in)):
+
+```sh
+kubectl -n sluis create token sluis-recovery --audience sluis-recovery --duration 10m
+```
 
 ## 6. Hold the documents to the installation in CI
 
-The documents are trusted as they are, so they must come from `sluisctl render`, never by hand. Add one CI step:
+Generate the documents with `sluisctl render`, never by hand. Add one CI step:
 
 ```sh
 sluisctl render --installation installation.yaml --out rendered --check
 ```
 
-It writes nothing and exits 0 when the committed files are what the installation renders to. Edit a line of
-`rendered/sluis.yaml` and run it again to see the other case: a line diff, then a message telling you to render again,
-and exit 1 (a missing file counts as a difference). A change to the installation is therefore a reviewed diff of the
-installation and of both documents, then `helm upgrade` with the same `--set-file` arguments; the pod rolls on a
-document change by checksum.
+It writes nothing and exits 0 when the committed files match what the installation renders to. If a file differs or is missing, it prints a line diff, tells you to render again and exits 1.
 
-## You now have
+To change the installation, review the diff of the installation and both documents. Then run `helm upgrade` with the same `--set-file` arguments. The pod rolls on a document change by checksum.
 
-- one Deployment `sluis` whose documents are exactly what `sluisctl render` writes for your installation;
-- DynamoDB state shared by the replicas, S3 blobs, tokens signed under a KMS-wrapped key, and secrets in SSM (or
-  OpenBao);
-- a CI check that fails when a committed document and its installation drift apart.
+## Next
 
-Next: a gateway and the first real sign-in ([Install with Helm](../../guides/sluis/operate/install-with-helm.md)), connecting a
-directory and each relying party ([how-to index](../../concepts/sluis/README.md)), taking a release
-([upgrade pages](../../guides/sluis/upgrade/v1.64.md), including the zero-diff gate in
-[Install with Helm](../../guides/sluis/operate/install-with-helm.md#afterwards)). The values-mode (`config`, `policy`, `exchange`) is
-deprecated and works for one more minor.
+- A gateway and the first real sign-in: [Install with Helm](../../guides/sluis/operate/install-with-helm.md).
+
+- A directory and each relying party: [how-to index](../../concepts/sluis/README.md).
+
+- A release: [upgrade pages](../../guides/sluis/upgrade/v1.64.md) and the [zero-diff gate](../../guides/sluis/operate/install-with-helm.md#afterwards).
+
+Values mode (`config`, `policy`, `exchange`) is deprecated and works for one more minor.

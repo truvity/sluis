@@ -57,7 +57,7 @@ A shape is where a product runs. Each product's page is the owner of its list; t
 | sluis | AWS Lambda | available | [AWS Lambda](get-started/sluis/deployment/aws-lambda.md) |
 | sluis | AWS Lambda behind Cloudflare | available | [AWS behind Cloudflare](get-started/sluis/deployment/aws-behind-cloudflare.md) |
 | sluis | Kubernetes with AWS storage | available | [Kubernetes with AWS storage](get-started/sluis/kubernetes-aws.md) |
-| sluis | Kubernetes with OpenBao | planned | [Kubernetes with OpenBao](get-started/sluis/deployment/kubernetes-openbao.md) |
+| sluis | Kubernetes with OpenBao | planned | [Kubernetes with OpenBao](get-started/sluis/deployment/README.md#kubernetes-with-openbao) |
 | audit | services in the cluster (stream broker, OpenBao, PostgreSQL) | available | [in the cluster](get-started/audit/in-cluster.md) |
 | audit | AWS serverless (Lambda, SQS, DynamoDB, SSM) | available | [AWS Lambda](get-started/audit/aws-lambda.md) |
 | audit | writer on Lambda, readers in the cluster | available | [run readers in Kubernetes](guides/audit/operate/aws-run-readers-in-kubernetes.md) |
