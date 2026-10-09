@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"slices"
@@ -32,6 +33,19 @@ type Cloudflare struct {
 	// exchange then calls the Cloudflare module there, and this process holds no
 	// account and no preset.
 	Remote *CloudflareRemote `json:"remote,omitempty"`
+	// Serve makes the Cloudflare module answer other modules' calls: on
+	// Kubernetes a listener that verifies the caller's projected token, on
+	// Lambda the function's `rpc` events (docs/decisions/0071).
+	Serve *CloudflareServe `json:"serve,omitempty"`
+}
+
+// CloudflareServe is where the Cloudflare module answers other modules.
+type CloudflareServe struct {
+	// Address is the listener on Kubernetes: host:port. Lambda ignores it.
+	Address string `json:"address,omitempty"`
+	// Audience is the audience a caller's projected token must have been
+	// minted for; the module's name when unset.
+	Audience string `json:"audience,omitempty"`
 }
 
 // CloudflareRemote is the Cloudflare module in another process: a Lambda
@@ -127,6 +141,17 @@ func (c *Cloudflare) Validate() error {
 		}
 		if len(c.Accounts) > 0 || len(c.Presets) > 0 {
 			errs = append(errs, errors.New("cloudflare.remote: a process that calls the module holds no accounts or presets"))
+		}
+	}
+	if sv := c.Serve; sv != nil {
+		if c.Remote != nil {
+			errs = append(errs, errors.New("cloudflare.serve: a process that calls the module does not also serve it"))
+		}
+		if len(c.Presets) == 0 {
+			errs = append(errs, errors.New("cloudflare.serve: the module serves its own presets, and the document declares none"))
+		}
+		if _, _, err := net.SplitHostPort(sv.Address); sv.Address != "" && err != nil {
+			errs = append(errs, fmt.Errorf("cloudflare.serve.address: %q is not host:port", sv.Address))
 		}
 	}
 	for i, g := range c.ForbiddenPermissionGroups {

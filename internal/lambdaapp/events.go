@@ -9,6 +9,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aws/aws-lambda-go/lambdacontext"
+
+	"github.com/truvity/sluis/internal/modcall/lambdacall"
 	"github.com/truvity/sluis/internal/port/invoke"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -252,4 +255,35 @@ func (h *HTTP) tickCloudflare(ctx context.Context) (any, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// serveRPC answers a module call. The alias the function was invoked through is
+// the caller class (lambdacall.Serve); IAM decided who may invoke it.
+func (h *HTTP) serveRPC(ctx context.Context, payload json.RawMessage) (any, error) {
+	if h.rpc == nil {
+		return nil, errors.New("this function runs no module that others call")
+	}
+	defer func() {
+		if h.settle != nil {
+			h.settle()
+		}
+	}()
+	out, err := lambdacall.Serve(ctx, h.rpc, payload, invokedAlias(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(out), nil
+}
+
+// invokedAlias is the alias of the function ARN the invocation used, or "".
+func invokedAlias(ctx context.Context) string {
+	lc, ok := lambdacontext.FromContext(ctx)
+	if !ok {
+		return ""
+	}
+	// arn:aws:lambda:<region>:<account>:function:<name>:<alias>
+	if parts := strings.Split(lc.InvokedFunctionArn, ":"); len(parts) == 8 {
+		return parts[7]
+	}
+	return ""
 }

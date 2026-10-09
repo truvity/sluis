@@ -14,6 +14,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
+
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -44,7 +46,10 @@ type HTTP struct {
 	// kind of the event's target; kindOf says which kind a target is.
 	controllers map[string]*Controller
 	kindOf      func(target string) string
-	log         *slog.Logger
+	// rpc answers {"kind":"rpc"} events, other modules' calls; nil in a function
+	// that runs no module others call, which then refuses them.
+	rpc *modcall.Server
+	log *slog.Logger
 }
 
 // WithControllers makes the function answer {"kind":"tick"|"run","target":...}
@@ -69,6 +74,14 @@ func (h *HTTP) WithCloudflare(run func(context.Context) (failed int, summary str
 	return h
 }
 
+// WithRPC makes the function answer {"kind":"rpc"} events, the calls other
+// modules make to the module it runs, with s. Only the function that runs that
+// module is given a server: any other refuses them.
+func (h *HTTP) WithRPC(s *modcall.Server) *HTTP {
+	h.rpc = s
+	return h
+}
+
 // NewHTTP adapts handler. settle may be nil.
 func NewHTTP(handler http.Handler, settle func(), log *slog.Logger) *HTTP {
 	if log == nil {
@@ -84,6 +97,9 @@ func (h *HTTP) Handle(ctx context.Context, payload json.RawMessage) (any, error)
 		Kind string `json:"kind"`
 	}
 	if err := json.Unmarshal(payload, &peek); err == nil && peek.Kind != "" {
+		if peek.Kind == modcall.Kind {
+			return h.serveRPC(ctx, payload)
+		}
 		if peek.Kind == KindTick || peek.Kind == KindRun {
 			return h.controller(ctx, payload)
 		}

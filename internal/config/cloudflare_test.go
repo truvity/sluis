@@ -185,3 +185,24 @@ func TestGrantsAreNotHeldToPresetsOfARemoteMinter(t *testing.T) {
 		t.Fatal("a grant for an undeclared preset was accepted")
 	}
 }
+
+func TestCloudflareServeNeedsPresetsAndNotRemote(t *testing.T) {
+	preset := map[string]config.CloudflarePreset{"dns": {}}
+	for name, c := range map[string]*config.Cloudflare{
+		"address": {Serve: &config.CloudflareServe{Address: ":8080", Audience: "cloudflare"}, Presets: preset},
+		"lambda":  {Serve: &config.CloudflareServe{}, Presets: preset},
+	} {
+		if err := c.Validate(); err != nil && strings.Contains(err.Error(), "cloudflare.serve") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, c := range map[string]*config.Cloudflare{
+		"no presets": {Serve: &config.CloudflareServe{Address: ":8080"}},
+		"remote":     {Serve: &config.CloudflareServe{Address: ":8080"}, Remote: &config.CloudflareRemote{Function: "fn"}},
+		"bad":        {Serve: &config.CloudflareServe{Address: "8080"}, Presets: preset},
+	} {
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "cloudflare.serve") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
