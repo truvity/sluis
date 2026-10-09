@@ -25,7 +25,7 @@ type Config struct {
 	ClientID string `yaml:"clientId"`
 	// SSHKnownHosts is this laptop's own list of SSH host certificate
 	// authorities to trust -- see ssh_known_hosts.go and
-	// docs/reference/sluisctl.md#ssh-known-hosts. Nobody's estate names
+	// docs/reference/sluis/sluisctl.md#ssh-known-hosts. Nobody's estate names
 	// ship in this binary; this list (or $SLUISCTL_SSH_KNOWN_HOSTS, read
 	// the same way when this is empty) is the only thing that decides
 	// what `sluisctl ssh known-hosts` ever writes.

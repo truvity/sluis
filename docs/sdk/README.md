@@ -27,9 +27,9 @@ package below at `X.Y.Z`.
 
 | What | Where | Reference |
 |---|---|---|
-| The GitHub Action | `uses: truvity/sluis@<tag>` in a job | [GitHub Actions](../how-to/connect/github-actions.md) |
-| `sluisctl` | the command line for sluis | [sluisctl](../reference/sluisctl.md) |
-| `audit` | the command line for audit, including `audit verify` | [verify command](../audit/reference/verify-command.md) |
+| The GitHub Action | `uses: truvity/sluis@<tag>` in a job | [GitHub Actions](../guides/sluis/connect/github-actions.md) |
+| `sluisctl` | the command line for sluis | [sluisctl](../reference/sluis/sluisctl.md) |
+| `audit` | the command line for audit, including `audit verify` | [verify command](../reference/audit/verify-command.md) |
 
 ## Installing from GitHub Packages
 
@@ -58,7 +58,7 @@ on install.
 
 - A service that must know who is calling: [Go module](go/sluis.md) or [`@truvity/sluis`](typescript/sluis.md).
 - An application that must record what it does: [Go audit emitter](go/audit-emitter.md), walked through in
-  [emit records from Go](../audit/how-to/emit-records.md).
+  [emit records from Go](../guides/audit/connect/emit-records.md).
 - A program that reads the trail: [Go audit query](go/audit-query.md) or [`@truvity/audit`](typescript/audit.md); the
-  service behind both is described in [read the trail](../audit/how-to/read-the-trail.md).
+  service behind both is described in [read the trail](../guides/audit/connect/read-the-trail.md).
 - A console that shows the trail: [`@truvity/audit-react`](typescript/audit-react.md).

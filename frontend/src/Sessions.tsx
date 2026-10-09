@@ -34,7 +34,7 @@ import { useDebouncedCommit } from "./hooks";
 import { paths } from "./router";
 import { Facet, Facets, Failure, InfoTip, Loading, Nothing, Page, Ref } from "./ui";
 
-/** Sessions live in the issuer (docs/explanation/sessions.md, "Where
+/** Sessions live in the issuer (docs/concepts/sluis/sessions.md, "Where
  *  session management lives"): one refresh token, described, per
  *  identity and per client. This is the one file that renders them,
  *  because a person's page, a client's page and the installation-wide
@@ -61,7 +61,7 @@ function lifetime(session: Session): string {
  *  wherever sessions show: a person's page (client only), a client's
  *  page (identity only), and the Sessions rail page (both). Sessions
  *  that share a browser (SSO) session are grouped under one heading so
- *  "this laptop" reads as one thing (docs/explanation/console.md, "The
+ *  "this laptop" reads as one thing (docs/concepts/sluis/console.md, "The
  *  console"). */
 export function SessionsPanel({
     sessions,

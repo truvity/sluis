@@ -42,7 +42,7 @@ tests:
                 Secret the chart mounts (cert-manager's Certificate, or the existing Secret
                 named in signingKey.existingSecret) and the issuer's log for why it could not
                 be read.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosternosigningkeypublished
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrosternosigningkeypublished
 
   - name: a published key, and another namespace with none, do not fire
     interval: 1m
@@ -93,7 +93,7 @@ tests:
                 signingKey.pollInterval is reading the mounted file. With kms-wrapped keys,
                 check the issuer's log for why it cannot generate or wrap a key pair (the
                 pod's AWS role, the KMS key's policy).
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostersigningkeyrotationstalled
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrostersigningkeyrotationstalled
 
   - name: a key activated just now, and one still under the limit, do not fire
     interval: 1m
@@ -131,7 +131,7 @@ tests:
                 failed on the server side. The dashboard's request panel names the route; the
                 issuer's log has the error. A store that is down (see AccessRosterPortErrors)
                 and a directory that cannot be reached are the usual causes.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterissuer5xx
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrosterissuer5xx
 
   - name: one percent 5xx, and one stray error among a few requests, do not fire
     interval: 1m
@@ -186,7 +186,7 @@ tests:
                 Token requests are taking longer than 2s at the
                 99th percentile. The store (see the port latency panel), the policy's size and
                 the directory are what a token waits on.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostertokenendpointslow
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrostertokenendpointslow
 
   - name: a fast token endpoint beside a slow authorize route does not fire
     interval: 1m
@@ -228,7 +228,7 @@ tests:
                 times within 45m. Its report (the controller's page in the
                 console, and the log's "a pass over an organisation failed" or the Slack
                 equivalent) names the error.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostertickfailing
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrostertickfailing
 
   - name: two failures, and failures spread over an hour, do not fire
     interval: 1m
@@ -267,7 +267,7 @@ tests:
                 This target has not completed a tick for longer than 3600s.
                 Check that the controller's Deployment is running, that its leases are not held
                 by a runner that is gone (AccessRosterLeaseLost), and the log for the failures.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostertickstale
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrostertickstale
 
   - name: targets that tick, one of which ticks only every quarter hour, do not fire
     interval: 1m
@@ -304,7 +304,7 @@ tests:
                 within 1h. Look for a second runner (a tick Job beside the
                 Deployment, a replica count over one on a State that is not shared) and for
                 port errors on the State.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterleaselost
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrosterleaselost
 
   - name: one lost lease, and leases contended or acquired, do not fire
     interval: 1m
@@ -346,7 +346,7 @@ tests:
                 reason says whether the prototype was refused, the minter credential is
                 missing or Cloudflare answered an error), at the scheduled invocation on
                 Lambda, and at the preset's prototype in Cloudflare.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostercloudflarerotationstale
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrostercloudflarerotationstale
 
   - name: a credential rotated every five minutes, and a preset with no series, do not fire
     interval: 1m
@@ -385,7 +385,7 @@ tests:
                 requests for 30m. github_roster_rate_limited_total says how
                 often a call already waited. Lengthen the controller's interval, or look for
                 a caller spending the App's budget outside this controller.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrostergithubratelimitlow
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrostergithubratelimitlow
 
   - name: a dip that recovers within the half hour, and a healthy budget, do not fire
     interval: 1m
@@ -421,7 +421,7 @@ tests:
                 The controller could not invite everyone the policy admits to this organisation
                 because it has no free seats. Buy seats, or remove members that no longer
                 belong, and the next pass sends the invitations.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterseatsshort
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrosterseatsshort
 
   - name: no seats short, and a shortage that clears, do not fire
     interval: 1m
@@ -460,7 +460,7 @@ tests:
                 last 5 minutes. State and index are Valkey (or the namespace's ConfigMaps and
                 Secrets); blobs are the reports' ConfigMaps. Check that store's own health and
                 the NetworkPolicy to it.
-              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/telemetry.md#accessrosterporterrors
+              runbook_url: https://github.com/truvity/sluis/blob/master/docs/reference/sluis/telemetry.md#accessrosterporterrors
 
   - name: compare-and-swap conflicts, missing keys and a trickle of errors do not fire
     interval: 1m

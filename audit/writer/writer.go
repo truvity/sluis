@@ -276,7 +276,7 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	// each, and compared when they are already there: a catalogue version that
 	// means something else than what the archive holds under it is a writer
 	// that refuses to run, not one that finds out on its first record
-	// (docs/audit/reference/bucket-contract.md, Catalogue).
+	// (docs/reference/audit/bucket-contract.md, Catalogue).
 	described := &inner.SchemaArchive{Store: c.Archive, RetainUntil: keep}
 	for _, cat := range append([]*catalogue.Catalogue{common}, c.Catalogues...) {
 		if err := described.EnsureCatalogue(ctx, cat); err != nil {

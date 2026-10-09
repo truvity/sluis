@@ -24,8 +24,8 @@
 #   ci-automation      approves bot pull requests, cuts release tags
 #   iac                the program that manages the organisation itself
 #
-# See docs/how-to/connect/github-apps-catalogue.md for the field-by-field
-# meaning, and docs/how-to/connect/infrastructure-as-code.md for handing the
+# See docs/guides/sluis/connect/github-apps-catalogue.md for the field-by-field
+# meaning, and docs/guides/sluis/connect/infrastructure-as-code.md for handing the
 # `iac` App's credential to a Pulumi or Terraform program.
 #
 # The catalogue is rendered into the policy document
@@ -150,7 +150,7 @@ githubApps:
       # durable copy, rotated as one, and a store that holds it is in the
       # App's blast radius. A CI job that CAN ask the issuer should
       # exchange its own identity token instead and hold nothing:
-      # docs/how-to/connect/infrastructure-as-code.md weighs the two.
+      # docs/guides/sluis/connect/infrastructure-as-code.md weighs the two.
       #
       # push:
       #   secretStore:

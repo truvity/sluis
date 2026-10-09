@@ -7193,7 +7193,7 @@
       }
     }
   ],
-  "description": "The audit trail's write path: the writer, the query service, and the jobs that seal, verify and prune what it writes. Each component's `config` is the schema its binary validates its file against, embedded; everything else is the platform's. Names follow docs/audit/reference/configuration.md.",
+  "description": "The audit trail's write path: the writer, the query service, and the jobs that seal, verify and prune what it writes. Each component's `config` is the schema its binary validates its file against, embedded; everything else is the platform's. Names follow docs/reference/audit/configuration.md.",
   "patternProperties": {
     "^x-": {}
   },
@@ -8057,7 +8057,7 @@
           "type": "boolean"
         },
         "grants": {
-          "description": "The grants file a config names as `grants`: issuers, presets and rules. See docs/audit/how-to/read-the-trail.md#access.",
+          "description": "The grants file a config names as `grants`: issuers, presets and rules. See docs/guides/audit/connect/read-the-trail.md#access.",
           "type": "object"
         },
         "keysVolume": {

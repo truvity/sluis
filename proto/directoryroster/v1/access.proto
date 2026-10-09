@@ -14,7 +14,7 @@ import "directoryroster/v1/github.proto";
 // The policy's five tables are declared by the deployment. Exactly one of
 // them is writable here — memberships, which directory groups populate an
 // internal group — because everything else shapes a token and belongs in
-// a reviewed commit. See docs/reference/policy.md.
+// a reviewed commit. See docs/reference/sluis/policy.md.
 service AccessService {
   // WhoAmI returns the caller's identity: who they are, how they were
   // established, the role they hold and the internal groups behind it.

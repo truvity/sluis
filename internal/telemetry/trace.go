@@ -45,7 +45,7 @@ const (
 // the raw URL path, the RPC instrumentation records the peer, and a recorded
 // error carries a message that may quote an address or a group. Spans are read
 // by everyone with any grant on the trace store, so the rule that they hold no
-// personal data (docs/decisions/0026-0032, docs/explanation/ports.md) has to be a
+// personal data (docs/decisions/0026-0032, docs/concepts/sluis/ports.md) has to be a
 // property of the exporter and not a promise by each caller. Never an email,
 // a subject, a group name, a token or its hash.
 var SpanAttributeAllowlist = map[attribute.Key]bool{

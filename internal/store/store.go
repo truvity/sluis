@@ -409,7 +409,7 @@ func (s *Stores) Name() string {
 // whether it is shared by every replica. A lease is only exclusive across
 // processes when the State is: the legacy adapter keeps leases in Valkey, so
 // without one a controller holds its leases in its own memory and a second
-// replica would not be kept off (docs/explanation/ports.md, "The legacy adapter").
+// replica would not be kept off (docs/concepts/sluis/ports.md, "The legacy adapter").
 func (s *Stores) LeaseState() (state port.State, shared bool) {
 	if s.Shared {
 		return s.Ports.State, true
@@ -548,7 +548,7 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 }
 
 // deprecationDocs is where the way off the legacy store is written down.
-const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/how-to/migrate-secrets-layout.md"
+const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/guides/sluis/migrate/migrate-secrets-layout.md"
 
 // warnDeprecated says, once per open, that the legacy store and Valkey go away:
 // they are deprecated since v1.74.0 and removed in v1.75. It changes nothing else.

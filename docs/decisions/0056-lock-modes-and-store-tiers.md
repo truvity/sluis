@@ -87,7 +87,7 @@ none and as `INVALID` under one that does.
 ## Compensating controls for the `attested` tier
 
 These are what the deployment supplies in place of the lock, and the
-[S3 guide](../audit/how-to/prepare-the-bucket.md) says how.
+[S3 guide](../guides/audit/operate/prepare-the-bucket.md) says how.
 
 - **A managed signing key is required, not recommended.** On the record
   tier a local signer proved that objects had not changed since signing,
@@ -152,4 +152,4 @@ A store at an endpoint of its own (`archive.bucket.endpoint`) is written with
 the lock is an AWS S3 guarantee that they do not make as AWS does, and an archive
 that believes it is locked when it is not is worse than one that says it is not.
 A lock mode on an endpoint is refused by the configuration and by the store, and
-the attested preset is refused there. See [archive on R2](../audit/how-to/archive-on-r2.md).
+the attested preset is refused there. See [archive on R2](../guides/audit/operate/archive-on-r2.md).

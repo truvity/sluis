@@ -75,7 +75,7 @@ interface Identity {
 ```
 
 Those are the fields `/.access/whoami` serves; the endpoint is specified once, in
-[contracts](../../reference/contracts.md#the-whoami-endpoint), and the console's own answer adds its roles and scopes. If it is not
+[contracts](../../reference/sluis/contracts.md#the-whoami-endpoint), and the console's own answer adds its roles and scopes. If it is not
 served, the UI renders as signed out. `useIdentity()` asks once on mount
 and aborts on unmount: the answer changes when a session ends, and that is
 something the application discovers on its next call rather than something

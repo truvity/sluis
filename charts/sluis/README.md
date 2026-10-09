@@ -10,14 +10,14 @@ workspace until it is listed in `policy.controllers.github.enabledOrgs` or `poli
 The process is configured by one service document, the `config` value, rendered as it
 stands and validated against the schema the binary uses (`schemas/config/sluis.schema.json`); a secret is named in it
 and reaches a pod as a file the chart projects from `secrets` (or, for
-`secrets.source: env`, through `secretEnv`). See [docs/reference/configuration.md](../../docs/reference/configuration.md).
+`secrets.source: env`, through `secretEnv`). See [docs/reference/sluis/configuration.md](../../docs/reference/sluis/configuration.md).
 Published to `ghcr.io/truvity/charts/sluis` on every
 `v*` tag of the repository; the tag is the chart's version.
 
 What the chart includes, what it expects and every value are documented in
-[docs/reference/configuration.md](../../docs/reference/configuration.md). A release of the chart's earlier name
+[docs/reference/sluis/configuration.md](../../docs/reference/sluis/configuration.md). A release of the chart's earlier name
 moves with two values that keep every object's name:
-[the migration](../../docs/how-to/migrate-from-the-access-issuer-chart.md).
+[the migration](../../docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md).
 `values.schema.json` is strict at the top level: an unknown key fails the render.
 
 Two ways to give the chart its configuration:
@@ -66,7 +66,7 @@ in front of the issuer: this *is* the thing that authenticates, and a
 proxy would have nowhere to send anyone. And it does not make a second
 copy of what the console adds unless you ask it to: the Secrets that hold it are
 named in
-[docs/reference/configuration.md](../../docs/how-to/back-up-and-restore.md)
+[docs/reference/sluis/configuration.md](../../docs/guides/sluis/operate/back-up-and-restore.md)
 (the Slack ones, `<release>-slack-credentials`, `<release>-slack-records` and
 `<release>-slack-catalogue-apps`, are named in the values), and
 `directory.push`, `githubApps.push` and `slackState.push` render an External
@@ -75,7 +75,7 @@ rest is the deployment's job.
 
 The exports are retired ([0041](../../docs/decisions/0041-the-secret-contract.md)): a consumer
 reads the typed document at `external/<kind>/<id>` itself (see
-[secrets](../../docs/reference/secrets.md#the-external-documents)). `exports.openbao.caBundle` and
+[secrets](../../docs/reference/sluis/secrets.md#the-external-documents)). `exports.openbao.caBundle` and
 `exports.openbao.token.audience` stay: they mount the CA and project the token the `openbao`
 secrets adapter's login presents.
 
@@ -84,7 +84,7 @@ secrets adapter's login presents.
 `http/protobuf` by default), an `OTEL_SERVICE_NAME` (one name: the controllers report under the process's) and every
 `extraEnv` entry
 (other `OTEL_*` variables only). Empty, nothing is rendered and nothing is
-exported. See [docs/reference/telemetry.md](../../docs/reference/telemetry.md#wiring-it-with-the-chart).
+exported. See [docs/reference/sluis/telemetry.md](../../docs/reference/sluis/telemetry.md#wiring-it-with-the-chart).
 
 Without `audit.s3.bucket` the audit trail stays in one replica's memory,
 which is not a record; the service says so at start. A bucket needs an
@@ -99,7 +99,7 @@ the program that manages the organisation — with what each is for and why
 they are separate identities. It is values to read and copy, not a
 default: creating an App is an owner of the organisation confirming a
 manifest
-([guide](../../docs/how-to/connect/github-apps-catalogue.md#a-default-set)).
+([guide](../../docs/guides/sluis/connect/github-apps-catalogue.md#a-default-set)).
 
 `slackApps` declares Slack Apps the way `githubApps.catalogue` declares GitHub
 Apps: an operator creates each from
@@ -107,18 +107,18 @@ the console with a throwaway app configuration token (used once, never
 stored), an owner of the workspace installs it, and the bot token is kept in
 `<release>-slack-catalogue-apps`. An entry may `push` that one key to a
 secret store
-([guide](../../docs/how-to/connect/slack-apps-catalogue.md)).
+([guide](../../docs/guides/sluis/connect/slack-apps-catalogue.md)).
 
 `config.controllers.slack` runs the Slack controller in the process (`consoleURL`, `interval`; the
 workspaces it changes are `policy.controllers.slack.enabledWorkspaces`): it needs `exchange.clusters`
 to name this cluster and `console.mount` to be set, and egress to `slack.com:443` from the fleet's own
 policy
-([guide](../../docs/how-to/connect/slack-workspace.md#running-the-controller)).
+([guide](../../docs/guides/sluis/connect/slack-workspace.md#running-the-controller)).
 `slackState.push` is a recovery copy of the Slack state: two `PushSecret`s, one
 for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 `<release>-slack-records` at `recordsRemoteKey` (the two keys must differ), with
 `deletionPolicy` fixed at `None`; it needs `config.store: kubernetes`
-([runbook](../../docs/how-to/back-up-and-restore.md#1-know-what-there-is)).
+([runbook](../../docs/guides/sluis/operate/back-up-and-restore.md#1-know-what-there-is)).
 
 The pod rolls so that a failed start leaves the old pod running: the default `RollingUpdate`
 keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/readyz`,
@@ -126,7 +126,7 @@ keeps an old pod until a new one is Ready, and Ready (a readiness probe on `/rea
 finished starting. A controller in the process runs in every replica, so `replicaCount` above 1
 needs the tick leases in a State the replicas share: the chart refuses it unless
 `config.ports.adapter` is `dynamodb`
-([when a second replica is safe](../../docs/explanation/high-availability.md#the-controllers-in-the-one-process)).
+([when a second replica is safe](../../docs/concepts/sluis/high-availability.md#the-controllers-in-the-one-process)).
 The controllers read the console as this pod's own ServiceAccount, so the policy's exchange must
 admit that account (the policy's `viewer` group), and the audit installation knows one workload.
 
@@ -137,8 +137,8 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis \
 ```
 ## Where to go next
 
-- Every value: [chart values](../../docs/reference/chart-values.md); every configuration key:
-  [configuration](../../docs/reference/configuration.md).
-- A worked install on Kubernetes with AWS storage: [Kubernetes on AWS](../../docs/getting-started/kubernetes-aws.md);
-  OpenBao as the secrets store: [the OpenBao secrets adapter](../../docs/reference/openbao-secrets-adapter.md).
-- Upgrading across versions: the [upgrade pages](../../docs/how-to/upgrade/v1.63.md), linked from the CHANGELOG.
+- Every value: [chart values](../../docs/reference/sluis/chart-values.md); every configuration key:
+  [configuration](../../docs/reference/sluis/configuration.md).
+- A worked install on Kubernetes with AWS storage: [Kubernetes on AWS](../../docs/get-started/sluis/kubernetes-aws.md);
+  OpenBao as the secrets store: [the OpenBao secrets adapter](../../docs/reference/sluis/openbao-secrets-adapter.md).
+- Upgrading across versions: the [upgrade pages](../../docs/guides/sluis/upgrade/v1.63.md), linked from the CHANGELOG.

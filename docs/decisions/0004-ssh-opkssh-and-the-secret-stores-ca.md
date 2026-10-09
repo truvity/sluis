@@ -8,8 +8,8 @@
 `sluisctl credential ssh` already gets a person a short-lived
 certificate from a secret store's SSH CA — a key made on the caller's
 machine, signed once, handed to the agent
-([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../explanation/sluisctl.md#credential-the-broker-for-what-openbao-mints),
-[connect/openbao.md](../how-to/connect/openbao.md)). That is a courier in front
+([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../concepts/sluis/sluisctl.md#credential-the-broker-for-what-openbao-mints),
+[connect/openbao.md](../guides/sluis/connect/openbao.md)). That is a courier in front
 of a certificate authority: correct under
 [0002](0002-mission-boundary-tokens-and-memberships.md), but a detour
 through this repository's own binary for something OpenPubkey SSH
@@ -39,7 +39,7 @@ Session lifetime otherwise follows
 the same as anywhere else a person's sign-in is the credential.
 
 **Hosts keep their key signed by the secret store's SSH CA**, exactly as
-[connect/openbao.md](../how-to/connect/openbao.md)'s host side already describes
+[connect/openbao.md](../guides/sluis/connect/openbao.md)'s host side already describes
 — a certificate authority is still the right tool for a key that must
 never be a person's problem to rotate, and clients trust it with
 `@cert-authority` the way they always have.
@@ -58,7 +58,7 @@ whichever alternative arrives first; `sluisctl credential ssh` is not
 removed, and stays the supported path for people, until one of those
 lands. An installation could work around the gap today by setting
 `signingKey.certificate: {algorithm: RSA, size: 2048, encoding: PKCS1}`
-([reference/configuration.md](../reference/configuration.md)), but that
+([reference/configuration.md](../reference/sluis/configuration.md)), but that
 is a key-rotation decision made for one relying party's benefit, not a
 default this repository asks for.
 
@@ -71,7 +71,7 @@ tracked reason the direct path is not there yet. When ES384 support
 lands, the migration is: declare opkssh's client, write the
 `oidc:groups:` policy on each server, cut over, then remove the broker
 subcommand and its documentation, following the removal shape in
-[not-served.md#what-was-removed-and-why](../explanation/not-served.md#what-was-removed-and-why).
+[not-served.md#what-was-removed-and-why](../concepts/sluis/not-served.md#what-was-removed-and-why).
 
 ## Alternatives considered
 

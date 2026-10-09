@@ -1,18 +1,14 @@
-# The top of the site's navigation (mkdocs-awesome-nav). Everything below a
-# directory is listed from the directory itself: a directory's README.md is its
-# section page, a page is titled by its first heading, and pages are sorted by
-# file name. Add a .nav.yaml in a directory only where that order is wrong.
+# The top of the site's navigation (mkdocs-awesome-nav): seven tabs, the same on
+# every page. Each tab holds the three products, sluis, audit and storage, in
+# that order. Everything below a directory is listed from the directory itself:
+# a directory's README.md is its section page, a page is titled by its first
+# heading, and pages are sorted by file name. Add a .nav.yaml in a directory
+# only where that order is wrong.
 nav:
-  - Home: README.md
-  - sluis:
-      - sluis/README.md
-      - Getting started: getting-started
-      - How-to: how-to
-      - Reference: reference
-      - Explanation: explanation
-      - Deployment shapes: sluis/deployment
-      - Operations: sluis/operations
-      - People and agents: sluis/explanation/people-and-agents.md
-  - audit: audit
-  - storage: storage
+  - Overview: README.md
+  - Get started: get-started
+  - Guides: guides
+  - Reference: reference
+  - Concepts: concepts
   - Decisions: decisions
+  - SDKs: sdk

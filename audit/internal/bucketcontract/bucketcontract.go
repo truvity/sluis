@@ -1,5 +1,5 @@
 // Package bucketcontract checks a bucket against the v1 bucket contract,
-// docs/audit/reference/bucket-contract.md: the key grammar, the envelope of every
+// docs/reference/audit/bucket-contract.md: the key grammar, the envelope of every
 // line, the metadata of every object, its sha256, the hash of every record, and
 // the order keys sort in.
 //

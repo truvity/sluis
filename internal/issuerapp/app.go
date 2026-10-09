@@ -585,7 +585,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	case len(cfg.kmsKeys) > 0:
 		log.WarnContext(ctx, "signingKey.kms (direct asymmetric KMS signing) is deprecated and goes in a later release: "+
 			"move to the wrapped ring (signingKey.kmsWrapped with keys.sign), keeping the old public keys under "+
-			"signingKey.verifyOnly for the overlap (docs/explanation/signing-on-aws.md)")
+			"signingKey.verifyOnly for the overlap (docs/concepts/sluis/signing-on-aws.md)")
 		kmsRefs, kmsRest, key, kmsMore, err = kmsSigningKeys(ctx, cfg, deps.KMS, log)
 	default:
 		key, err = signingKey(ctx, cfg, log)

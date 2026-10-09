@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// The seals and keys half of the v1 layout, as docs/audit/reference/bucket-contract.md
+// The seals and keys half of the v1 layout, as docs/reference/audit/bucket-contract.md
 // specifies it. Like the records half in layout.go, built and read here and
 // nowhere else.
 

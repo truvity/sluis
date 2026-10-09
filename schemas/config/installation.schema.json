@@ -56,11 +56,11 @@
   "properties": {
     "access": {
       "additionalProperties": false,
-      "description": "The access model's tables (docs/reference/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
+      "description": "The access model's tables (docs/reference/sluis/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
       "properties": {
         "claims": {
           "additionalProperties": {
-            "description": "A claims fragment: merged into the token (docs/reference/policy.md#claims).",
+            "description": "A claims fragment: merged into the token (docs/reference/sluis/policy.md#claims).",
             "type": "object"
           },
           "description": "What a group adds to a token, by group.",
@@ -71,7 +71,7 @@
           "description": "Admits clients that are not declared, by a document they serve about themselves. Off unless it names an origin.",
           "properties": {
             "groups": {
-              "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+              "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/sluis/policy.md#groups-in-a-token-scoping).",
               "oneOf": [
                 {
                   "const": "all"
@@ -137,7 +137,7 @@
                 "type": "string"
               },
               "groups": {
-                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/sluis/policy.md#groups-in-a-token-scoping).",
                 "oneOf": [
                   {
                     "const": "all"
@@ -535,7 +535,7 @@
                 "type": "string"
               },
               "groups": {
-                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+                "description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/sluis/policy.md#groups-in-a-token-scoping).",
                 "oneOf": [
                   {
                     "const": "all"
@@ -725,7 +725,7 @@
     },
     "adapters": {
       "additionalProperties": false,
-      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.",
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/sluis/adapters.md.",
       "properties": {
         "audit": {
           "additionalProperties": false,
@@ -876,7 +876,7 @@
           "description": "GitHub Apps.",
           "properties": {
             "catalogue": {
-              "description": "Every GitHub App the installation declares (docs/how-to/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
+              "description": "Every GitHub App the installation declares (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.",
               "items": {
                 "additionalProperties": false,
                 "description": "One App: created under `org` from the console, and installed there.",
@@ -1055,7 +1055,7 @@
           "description": "Slack Apps.",
           "properties": {
             "catalogue": {
-              "description": "Every Slack App the installation declares (docs/how-to/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
+              "description": "Every Slack App the installation declares (docs/guides/sluis/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.",
               "items": {
                 "additionalProperties": false,
                 "description": "One Slack App, created and installed from the console.",
@@ -1177,7 +1177,7 @@
     },
     "cloudflare": {
       "additionalProperties": false,
-      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/how-to/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.",
+      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/guides/sluis/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.",
       "properties": {
         "accounts": {
           "additionalProperties": {

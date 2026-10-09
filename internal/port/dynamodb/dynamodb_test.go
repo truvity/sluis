@@ -342,7 +342,7 @@ func TestTheTriggerCrossesStoresOnOneTable(t *testing.T) {
 }
 
 // Storage layout v2: the item every kind of record becomes, pk the kind and sk
-// the id (docs/reference/storage-layout.md).
+// the id (docs/reference/sluis/storage-layout.md).
 func TestEveryKindIsAnItemOfItsKindAndId(t *testing.T) {
 	for _, c := range []struct{ key, pk, sk string }{
 		{"ws.dir.google.C01ipl6j0", "directory", "google/C01ipl6j0"},

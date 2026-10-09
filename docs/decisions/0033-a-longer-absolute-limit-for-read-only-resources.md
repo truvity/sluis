@@ -11,7 +11,7 @@ and at a silent `/authorize`. For a console that is the right dial: a person
 who leaves a tab open must meet the limit.
 
 It is the wrong dial for one kind of relying party. The observability MCP
-connectors are [resources](../reference/policy.md#resources--what-a-token-is-for)
+connectors are [resources](../reference/sluis/policy.md#resources--what-a-token-is-for)
 (RFC 8707) whose only reach is to **read** metrics, logs, traces and
 dashboards. Their clients are the claude.ai connector and Claude Code, both
 self-described under `client_documents`. With a 24-hour limit each makes the

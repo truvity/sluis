@@ -33,7 +33,7 @@ import { ConfirmDialog, Failure, Loading, Mono, Nothing, Page, Section, State } 
 
 type Props = { me?: Me; operator: boolean; onDone: (message: string) => void };
 
-/** Cloudflare, as sluis serves it (docs/how-to/cloudflare-tokens.md): what a
+/** Cloudflare, as sluis serves it (docs/guides/sluis/cloudflare-tokens.md): what a
  *  person is granted and may ask a token for, and, for whoever may read the
  *  installation, the accounts, the presets, the token each keeps and the ones
  *  minted on demand.

@@ -293,7 +293,7 @@ release:
 
     The Lambda zip `sluis-lambda_{{ .Version }}_linux_arm64.zip` holds `bootstrap`, the one
     binary the issuer and both controllers run as on AWS Lambda
-    (`docs/reference/lambda.md`). The telemetry layer is
+    (`docs/reference/sluis/lambda.md`). The telemetry layer is
     `otlp-lambda-layer_<version>_linux_<arch>.zip` from `truvity/observability`;
     sluis ships none.
 

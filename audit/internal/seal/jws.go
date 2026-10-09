@@ -1,5 +1,5 @@
 // Package seal is the format of the three signed statements of
-// docs/audit/reference/bucket-contract.md — seals, delegations and revocations —
+// docs/reference/audit/bucket-contract.md — seals, delegations and revocations —
 // the keys that sign them, and how a verifier decides whether to believe one.
 //
 // Each statement is a JWS in compact serialisation (RFC 7515), algorithm ES384,

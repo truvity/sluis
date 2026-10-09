@@ -12,7 +12,7 @@ import (
 
 const sharePrefix = "share."
 
-// The two lifetimes of a share record (docs/explanation/ports.md): while a guest
+// The two lifetimes of a share record (docs/concepts/sluis/ports.md): while a guest
 // has not accepted it waits as long as a Slack Connect invitation lives, and
 // once every guest has accepted it is kept a week, for the host's report and
 // for a guest that ticks late, and then goes by itself.

@@ -34,13 +34,13 @@ A seal's payload is a proto message (`audit.v1.Seal`) in its JSON form, as
 are the delegation and revocation messages below. The wire definitions are
 the contract, so a verifier in any language generates its structures from the
 same file. The fields are in
-[the bucket contract](../audit/reference/bucket-contract.md#seals).
+[the bucket contract](../reference/audit/bucket-contract.md#seals).
 
 **2026-10-03: the root is over per-record hashes**, so one record can be
 proven with a short audit path. The root is a Merkle tree (RFC 6962) of the
 record hashes from all objects in the hour, ordered by object key (ULID), then
 line order within each object. The specification is in
-[the bucket contract](../audit/reference/bucket-contract.md#merkle-tree-construction).
+[the bucket contract](../reference/audit/bucket-contract.md#merkle-tree-construction).
 
 **2026-10-03, built.** The notary (`audit-notary`) writes seals and `audit verify
 --root` checks them; the delegation and revocation statements are checked by the

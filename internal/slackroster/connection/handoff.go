@@ -28,7 +28,7 @@ type ShareGuest struct {
 // hosts it to the workspaces it is shared with: the host's tick writes it
 // after Slack accepted the invitation, and each guest's tick marks its own
 // side accepted. It lives under `share.<host>.<channel>` of the State port
-// (docs/explanation/ports.md), so the guest's runner sees it whichever process
+// (docs/concepts/sluis/ports.md), so the guest's runner sees it whichever process
 // the host's tick ran in.
 type Share struct {
 	Version int    `json:"version"`

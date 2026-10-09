@@ -2,7 +2,7 @@
 
 One record per decision that shapes this repository from the outside —
 what a relying party must do, what an installation must accept, what a
-release removes. The pages under [`../explanation/`](../explanation/) say
+release removes. The pages under [`concepts/sluis/`](../concepts/sluis/architecture.md) say
 how the shipped thing works; a record here says why it is shaped that
 way, what was weighed against it, and what follows from choosing it. When
 the two disagree, the explanation pages describe what actually shipped and a
@@ -23,7 +23,7 @@ is not edited.
 |---|---|---|
 | [0001](0001-sessions-and-an-absolute-limit.md) | Sessions and an absolute limit | Accepted; amended by [0033](0033-a-longer-absolute-limit-for-read-only-resources.md) and [0040](0040-agent-class-sessions.md) |
 | [0002](0002-mission-boundary-tokens-and-memberships.md) | Mission boundary: tokens and memberships | Accepted; partly superseded by [0008](0008-credentials-only-where-we-govern-membership.md) and, for `sluisctl credential db`/`client` specifically, by [0013](0013-openbao-access-through-the-bao-cli.md); its "next candidate, a chat workspace's channel membership" was built as the Slack reconciler, see [0017](0017-the-slack-reconciler-membership-only.md) |
-| [0003](0003-deprecate-access-proxy.md) | Deprecate and remove the access-proxy chart | Accepted; carried out in v1.32.0 (the chart is removed; the recipe for running upstream oauth2-proxy on another gateway lives in [how-to/connect/oauth2-proxy.md](../how-to/connect/oauth2-proxy.md)) |
+| [0003](0003-deprecate-access-proxy.md) | Deprecate and remove the access-proxy chart | Accepted; carried out in v1.32.0 (the chart is removed; the recipe for running upstream oauth2-proxy on another gateway lives in [how-to/connect/oauth2-proxy.md](../guides/sluis/connect/oauth2-proxy.md)) |
 | [0004](0004-ssh-opkssh-and-the-secret-stores-ca.md) | SSH: opkssh for people, the secret store's SSH CA for hosts | Accepted; partly superseded by [0011](0011-ssh-people-opkssh-machines-and-hosts-openbao.md) (machines and hosts move to the secret store); refined by [0015](0015-a-per-audience-groups-delimiter-for-opkssh.md) |
 | [0005](0005-es384-signing-algorithm.md) | ES384 is the signing algorithm | Accepted; partly superseded by [0009](0009-a-default-signing-algorithm-and-per-audience-exceptions.md) (ES384 stays the default; it is no longer the only algorithm an audience may have) |
 | [0006](0006-groups-claim-scoped-per-audience.md) | The groups claim is scoped per audience, by default | Accepted; the scoping rule is refined by [0010](0010-a-declared-vocabulary.md) |
@@ -47,7 +47,7 @@ is not edited.
 | [0024](0024-reconciler-rails-are-shared-pieces-not-a-framework.md) | Reconciler rails are shared pieces, not a framework | Accepted |
 | [0025](0025-slack-apps-catalogue-keeps-credentials-mints-none.md) | The Slack Apps catalogue keeps credentials but mints none | Accepted; applies [0008](0008-credentials-only-where-we-govern-membership.md) and [0014](0014-minting-third-party-credentials-only-where-membership-is-governed.md) |
 | [0026](0026-two-platforms-permanently-kubernetes-and-aws-lambda.md) | Two platforms, permanently: Kubernetes and AWS Lambda | Accepted |
-| [0027](0027-the-state-port-nats-jetstream-and-dynamodb.md) | The State port: NATS JetStream on Kubernetes, DynamoDB on AWS | Accepted; partly superseded (2026-10-04): the NATS JetStream half was removed, the DynamoDB half stands. It supersedes the store statement in [the store](../explanation/store.md) ("plain Kubernetes objects … no cloud parameter store, no cache") once the migration in [0031](0031-a-generic-migration-tool.md) has run |
+| [0027](0027-the-state-port-nats-jetstream-and-dynamodb.md) | The State port: NATS JetStream on Kubernetes, DynamoDB on AWS | Accepted; partly superseded (2026-10-04): the NATS JetStream half was removed, the DynamoDB half stands. It supersedes the store statement in [the store](../concepts/sluis/store.md) ("plain Kubernetes objects … no cloud parameter store, no cache") once the migration in [0031](0031-a-generic-migration-tool.md) has run |
 | [0028](0028-nothing-writes-configmaps-or-secrets.md) | Nothing writes ConfigMaps or Secrets; written secrets are sealed | Accepted; partly superseded (2026-10-04): sealing is retired, the rule that nothing writes ConfigMaps or Secrets stands; extended by [0034](0034-exports-go-to-openbao-directly.md); amended by [0036](0036-configuration-is-immutable-per-instance.md) |
 | [0029](0029-ticks-per-target-under-a-lease.md) | Ticks per target, under a lease | Accepted; applies [0024](0024-reconciler-rails-are-shared-pieces-not-a-framework.md) |
 | [0030](0030-workload-identity-on-both-platforms.md) | Workload identity: both mechanisms on both platforms | Accepted; applies [0002](0002-mission-boundary-tokens-and-memberships.md) |
@@ -83,7 +83,7 @@ is not edited.
 | [0060](0060-v1-bucket-layout.md) | The v1 bucket layout, and v0 is dropped | accepted; supersedes the object layout of [0045](0045-s3-object-lock-as-the-record.md) |
 | [0061](0061-seals.md) | Seals: JOSE ES384, chained, per profile, tenant and hour | accepted; supersedes [0050](0050-digest-chain-and-verification.md) |
 | [0062](0062-observe-follows-the-bucket.md) | Observe follows the bucket by cursor; notifications only wake it | accepted |
-| [0063](0063-one-validated-configuration-file.md) | One configuration file, validated against a schema | accepted; refined by [0067](0067-configuration-is-immutable-per-instance.md); the secret fields it names (`<field>Env`) are `<field>Secret` through `secrets.source` in configuration version 2 (truvity/policy decision 0012; [upgrade](../audit/how-to/upgrade/v0.13.md)) |
+| [0063](0063-one-validated-configuration-file.md) | One configuration file, validated against a schema | accepted; refined by [0067](0067-configuration-is-immutable-per-instance.md); the secret fields it names (`<field>Env`) are `<field>Secret` through `secrets.source` in configuration version 2 (truvity/policy decision 0012; [upgrade](../guides/audit/upgrade/v0.13.md)) |
 | [0064](0064-contracts-proto-and-connect.md) | Contracts are proto and Connect; Lambda RPCs are unary | accepted |
 | [0065](0065-archive-retention-and-lifecycle.md) | Archive retention: Object Lock compliance as the target, governance first | accepted; extends [0045](0045-s3-object-lock-as-the-record.md) and [0056](0056-lock-modes-and-store-tiers.md) |
 | [0066](0066-indexer-and-query-are-separate-processes.md) | The indexer and the query service are separate processes, under separate database roles | accepted |

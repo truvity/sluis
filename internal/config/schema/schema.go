@@ -53,14 +53,14 @@ const Group = "sluis.truvity.github.io"
 
 // apiVersion is the `apiVersion` every v2 document carries.
 func apiVersion(name string) m {
-	return m{"const": Group + "/" + name + "/v2", "description": "Which version of which document this is. " + Group + "/" + name + "/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/configuration.md)."}
+	return m{"const": Group + "/" + name + "/v2", "description": "Which version of which document this is. " + Group + "/" + name + "/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/sluis/configuration.md)."}
 }
 
 // apiVersionSluis is the `apiVersion` of the one service document, v3. A
 // binary reads it, and also the v2 `serve` document (and v1, which has none)
 // as a service with no controllers.
 func apiVersionSluis() m {
-	return m{"const": Group + "/sluis/v3", "description": "Which version of which document this is. " + Group + "/sluis/v3 is the one service document: the process that serves the issuer and the console and, under `controllers`, runs the GitHub and Slack controllers. A binary still reads the v2 `serve` document (and v1, which has no apiVersion) as this document with no controllers (docs/reference/configuration.md)."}
+	return m{"const": Group + "/sluis/v3", "description": "Which version of which document this is. " + Group + "/sluis/v3 is the one service document: the process that serves the issuer and the console and, under `controllers`, runs the GitHub and Slack controllers. A binary still reads the v2 `serve` document (and v1, which has no apiVersion) as this document with no controllers (docs/reference/sluis/configuration.md)."}
 }
 
 // policyRef is `policy`: the policy document a process decides by.
@@ -426,7 +426,7 @@ func controllerProps(tokenDefault, recordsDefault, dirKey, dirDescription, dirDe
 
 // portsSchema is the `ports` section both kinds of file share.
 func portsSchema() m {
-	o := obj("The adapters behind the storage ports (docs/explanation/ports.md).", m{
+	o := obj("The adapters behind the storage ports (docs/concepts/sluis/ports.md).", m{
 		"adapter": enum("`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.", "legacy",
 			"legacy", "memory", "dynamodb"),
 		"blob":     portsBlobSchema(),
@@ -555,7 +555,7 @@ func encode(v any) []byte {
 
 // platformSchema is `platform`: the answers that pick a preset.
 func platformSchema() m {
-	return obj("What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.", m{
+	return obj("What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.", m{
 		"aws":        boolean("AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge."),
 		"kubernetes": boolean("A Kubernetes cluster is available."),
 		"openbao":    boolean("An OpenBao is available."),
@@ -578,7 +578,7 @@ func adaptersSchema() m {
 			"settings": m{"type": "object", "description": "The adapter's own settings (an object; the adapter refuses a key it does not know)."},
 		}, "adapter")
 	}
-	return obj("Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.", m{
+	return obj("Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/sluis/adapters.md.", m{
 		"state":    choice("state, sessions included"),
 		"secrets":  choice("secrets (dynamic secrets)"),
 		"blobs":    choice("blobs"),

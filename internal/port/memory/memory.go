@@ -1,5 +1,5 @@
 // Package memory is the in-memory adapter: every port, in process memory,
-// with the semantics of docs/explanation/ports.md and nothing more. It is what
+// with the semantics of docs/concepts/sluis/ports.md and nothing more. It is what
 // tests and the demonstration run on, and the reference the conformance
 // suite is first written against.
 package memory

@@ -28,7 +28,7 @@ import (
 )
 
 // The conformance suite of the v1 bucket contract
-// (docs/audit/reference/bucket-contract.md).
+// (docs/reference/audit/bucket-contract.md).
 //
 // Every case runs twice: against the in-memory store, which a unit test can
 // afford, and against an S3 API (LocalStack in CI, any endpoint named by

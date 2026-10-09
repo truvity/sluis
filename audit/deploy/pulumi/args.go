@@ -167,7 +167,7 @@ type ArchiveArgs struct {
 	// or removed by anyone until each object's retention date, and a retention
 	// wrong in the long direction is paid for until then. GOVERNANCE to
 	// COMPLIANCE is an edit of the lock configuration of the same bucket, but it
-	// is the step nothing undoes: see docs/audit/how-to/aws-turn-on-object-lock.md. COMPLIANCE needs
+	// is the step nothing undoes: see docs/guides/audit/operate/aws-turn-on-object-lock.md. COMPLIANCE needs
 	// AcknowledgeCompliance. Once the lock is on, NONE is refused by AWS, not by
 	// this library: Object Lock cannot be disabled on a bucket.
 	ObjectLockMode string
@@ -233,7 +233,7 @@ type IngestArgs struct {
 	// other principal `sqs:SendMessage`, because what the writer attributes a
 	// record to on this path is whoever could send it: the queue carries no
 	// verified identity of the caller, so the policy's list of senders is the
-	// writer's authenticity (docs/audit/explanation/authn-authz.md, "On the SQS path").
+	// writer's authenticity (docs/concepts/audit/authn-authz.md, "On the SQS path").
 	Senders []pulumi.StringInput
 	// Redrivers are the principals (role or user ARNs) allowed to send to the queue
 	// for a redrive: `StartMessageMoveTask` from the dead-letter queue back to this
@@ -269,7 +269,7 @@ type WriterArgs struct {
 	// (from its build information, or Args.Release.Version), downloaded from the
 	// project's releases. It is the function's code exactly as released:
 	// the library adds nothing to it, and the configuration is a layer
-	// (docs/audit/explanation/aws-lambda.md#configuration-as-a-layer). Required.
+	// (docs/concepts/audit/aws-lambda.md#configuration-as-a-layer). Required.
 	Package string
 	// PackageSHA256 is that zip's SHA-256 in hex, from the release's
 	// checksums.txt. Required (unless Args.Release.ResolveChecksums finds it
@@ -299,7 +299,7 @@ type WriterArgs struct {
 	// layer version, so any change to a catalogue's content makes a new one and
 	// points the writer at it on the next `pulumi up`: a catalogue change reaches
 	// the writer deliberately, as a deploy, never silently
-	// (docs/audit/how-to/change-what-a-source-records.md). A changed catalogue
+	// (docs/guides/audit/connect/change-what-a-source-records.md). A changed catalogue
 	// under an unchanged version is refused before the function is updated, see
 	// GuardArgs.
 	CataloguePaths []string
@@ -384,7 +384,7 @@ type NotaryArgs struct {
 }
 
 // TelemetryArgs wires the functions' OpenTelemetry to the OTLP door with the
-// function role's own identity and no secret (docs/audit/how-to/aws-send-lambda-telemetry.md): the OTLP
+// function role's own identity and no secret (docs/guides/audit/operate/aws-send-lambda-telemetry.md): the OTLP
 // Lambda extension (published as the layer `audit-otlp`) is a layer on each
 // function. Nil gives the
 // functions no extension, no OTEL_* environment and no sts:GetWebIdentityToken.
@@ -418,7 +418,7 @@ type AlertsArgs struct {
 	// EndpointURL is the HTTPS endpoint of alert-ingress that the alarm topic
 	// delivers to. Empty creates the topic and the alarms and no subscription.
 	// alert-ingress must confirm the subscription (SNS sends a
-	// SubscriptionConfirmation to the URL), which docs/audit/reference/aws-pulumi-library.md covers.
+	// SubscriptionConfirmation to the URL), which docs/reference/audit/aws-pulumi-library.md covers.
 	EndpointURL pulumi.StringInput
 	// OldestMessageAgeSeconds alarms when the oldest message in the ingest queue
 	// is older than this. Default 900.
@@ -588,7 +588,7 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		case len(in.Senders) == 0 && !in.AnySenderInAccount:
 			return nil, errors.New("auditpulumi: Ingest.Senders is required: the principals that may send to the ingest queue. " +
 				"The queue carries no verified identity of its caller, so the queue policy's list of senders is what the " +
-				"trail's authenticity rests on (docs/audit/explanation/authn-authz.md). Name them, or, for a trial, set " +
+				"trail's authenticity rests on (docs/concepts/audit/authn-authz.md). Name them, or, for a trial, set " +
 				"Ingest.AnySenderInAccount to let every principal of the account with sqs:SendMessage send")
 		case len(in.Senders) > 0 && in.AnySenderInAccount:
 			return nil, errors.New("auditpulumi: Ingest.Senders and Ingest.AnySenderInAccount are both set: name the senders or " +

@@ -1,4 +1,4 @@
-// Command gen writes docs/reference/adapters.md. Run it through
+// Command gen writes docs/reference/sluis/adapters.md. Run it through
 // `just adapters-doc`; the matrixdoc test fails when the committed file is
 // not what it writes.
 package main

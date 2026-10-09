@@ -1,4 +1,4 @@
-// Package merkle is the Merkle tree of docs/audit/reference/bucket-contract.md: the
+// Package merkle is the Merkle tree of docs/reference/audit/bucket-contract.md: the
 // Merkle Tree Hash of RFC 6962 section 2.1, over SHA-256, and the audit path
 // that proves one leaf is in it (RFC 9162 section 2.1.3 for the checking).
 //

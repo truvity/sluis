@@ -25,7 +25,7 @@ oidc:groups:devel:ssh:user
 is not "match the group `devel:ssh:user`" to opkssh — it is "match
 whatever the LAST `:`-separated field is", `user`, against a held group
 of the same name. This schema's own grant shape,
-`<scope>:<thing>:<role>` ([taxonomy.md](../reference/taxonomy.md)), is built
+`<scope>:<thing>:<role>` ([taxonomy.md](../reference/sluis/taxonomy.md)), is built
 entirely out of the one character opkssh's parser treats as a field
 separator, so no group this schema would ever mint for opkssh can match
 by name at all — not `devel:ssh:user`, not any other. Quoting the value
@@ -35,7 +35,7 @@ matches either.
 
 This is upstream's bug, not a gap in what this issuer mints — a `groups`
 claim that says `devel:ssh:user`, verbatim, exactly as
-[Groups → token, by deep merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)
+[Groups → token, by deep merge](../reference/sluis/policy-groups.md#groups-to-token-by-deep-merge)
 promises every other relying party. Waiting for opkssh to fix its own
 parser is the right long-term answer and is not this repository's to
 schedule. In the meantime, opkssh-facing SSH access is unusable through
@@ -50,21 +50,21 @@ exactly on [0009](0009-a-default-signing-algorithm-and-per-audience-exceptions.m
 the same audience-resolution rule, refused at load if it is not safe.**
 Set, it rewrites every `:` in each name under THAT AUDIENCE's `groups`
 claim to the configured string, after
-[Groups in a token (scoping)](../reference/policy.md#groups-in-a-token-scoping)
+[Groups in a token (scoping)](../reference/sluis/policy.md#groups-in-a-token-scoping)
 has already decided which groups survive. `devel:ssh:user` becomes
 `devel.ssh.user` under `groups_delimiter: "."` — a single field to
 opkssh's own splitting, which its policy line can then match.
 
 The full mechanism — validation, precedence, where it hooks into
 minting — is
-[reference/policy.md#groups-delimiter-per-audience-opkssh-interop](../reference/policy.md#groups-delimiter-per-audience-opkssh-interop).
+[reference/policy.md#groups-delimiter-per-audience-opkssh-interop](../reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop).
 What belongs here is why a character-level restriction on the delimiter
 is not, by itself, the whole of what makes this safe:
 
 **No single delimiter character can be proven absent from every group
 name this schema could ever declare.** A Groups-table key is not
 required to fit `<scope>:<thing>:<role>` at all — an installation may
-declare any string as a group, [taxonomy.md](../reference/taxonomy.md) calls this
+declare any string as a group, [taxonomy.md](../reference/sluis/taxonomy.md) calls this
 "unconventional" and warns rather than refuses it — and even a concrete
 grant's own segments carry no character restriction narrower than "not
 empty, no `:`". So this schema refuses a delimiter built from the
@@ -104,7 +104,7 @@ removed — nothing else in this schema depends on it existing.
 
 **An installation that points this at its own hub client locks itself
 out of its own console.** [The service's own two groups, and scoping
-them](../reference/policy-ownership.md#the-services-own-two-groups)
+them](../reference/sluis/policy-ownership.md#the-services-own-two-groups)
 are parsed by splitting the SAME `:` this option removes; the reference
 documentation says so plainly, and nothing here adds a code-level guard
 against it, the same way nothing stops an operator from pinning an
@@ -120,7 +120,7 @@ lands, which is every group this schema's own taxonomy produces.
 
 **Rename this installation's groups to avoid `:` entirely**, e.g. give
 every group a single-segment alias. Rejected: it does not merely work
-around opkssh's bug, it reverses [taxonomy.md](../reference/taxonomy.md)'s whole
+around opkssh's bug, it reverses [taxonomy.md](../reference/sluis/taxonomy.md)'s whole
 point — the name being the whole of the fact, `<scope>:<thing>:<role>`,
 carried unchanged into every relying party's own binding — for every
 consumer, to accommodate the one relying party that cannot read it, when

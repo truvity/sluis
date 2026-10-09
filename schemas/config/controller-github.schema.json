@@ -28,7 +28,7 @@
   "properties": {
     "adapters": {
       "additionalProperties": false,
-      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.",
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/sluis/adapters.md.",
       "properties": {
         "audit": {
           "additionalProperties": false,
@@ -168,7 +168,7 @@
     },
     "apiVersion": {
       "const": "sluis.truvity.github.io/controller-github/v2",
-      "description": "Which version of which document this is. sluis.truvity.github.io/controller-github/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/configuration.md)."
+      "description": "Which version of which document this is. sluis.truvity.github.io/controller-github/v2 is what this build writes; a document with no apiVersion is v1, which the binary converts as it loads it, and a binary reads v2 and v1 (docs/reference/sluis/configuration.md)."
     },
     "appsDir": {
       "default": "/var/run/github-roster/apps",
@@ -235,7 +235,7 @@
     },
     "platform": {
       "additionalProperties": false,
-      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
       "properties": {
         "aws": {
           "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
@@ -302,7 +302,7 @@
           }
         }
       ],
-      "description": "The adapters behind the storage ports (docs/explanation/ports.md).",
+      "description": "The adapters behind the storage ports (docs/concepts/sluis/ports.md).",
       "properties": {
         "adapter": {
           "default": "legacy",

@@ -54,7 +54,7 @@ import (
 //     does. An absent key is not an error.
 //   - List is `GET metadata/<prefix>?list=true`, walked to every depth.
 //
-// The policy the service needs is in docs/reference/adapters.md.
+// The policy the service needs is in docs/reference/sluis/adapters.md.
 //
 // Nothing here logs or returns a value: an error names the operation, the path
 // and the status and the server's own error text.

@@ -22,7 +22,7 @@ import (
 //
 //	records/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>/<ULID>
 //
-// (docs/audit/reference/bucket-contract.md). The profile is first, and deliberately:
+// (docs/reference/audit/bucket-contract.md). The profile is first, and deliberately:
 // an object store's lifecycle rules filter by literal prefix and take no
 // wildcards, so a rule that moves one profile's objects to colder storage after
 // its hot window can only exist if the profile is the leading component.

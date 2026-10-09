@@ -19,7 +19,7 @@
 //		Notary:  auditpulumi.NotaryArgs{Package: notaryZip, PackageSHA256: notarySHA},
 //	})
 //
-// docs/audit/reference/aws-pulumi-library.md is the guide: the shape, every input and output, the
+// docs/reference/audit/aws-pulumi-library.md is the guide: the shape, every input and output, the
 // switch from GOVERNANCE to COMPLIANCE, the role names and how alarms reach
 // alert-ingress.
 package auditpulumi
@@ -101,7 +101,7 @@ type Audit struct {
 	// ArchiveCredentialsPaths are the SSM parameters the functions read the
 	// credentials of each preset at an endpoint from, by preset name: write a
 	// SecureString there, a JSON object {"accessKeyID": ..., "secretAccessKey": ...},
-	// before the first record (docs/audit/how-to/archive-on-r2.md); for a preset with
+	// before the first record (docs/guides/audit/operate/archive-on-r2.md); for a preset with
 	// CredentialsPreset it is the MINTER credential's address (a cloudflare-minter/v1
 	// document). A preset on AWS S3
 	// has none: the roles are the credential.

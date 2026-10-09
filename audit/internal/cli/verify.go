@@ -19,7 +19,7 @@ import (
 )
 
 // Verify checks a profile's record objects over a range of ingest time against
-// the bucket contract (docs/audit/reference/bucket-contract.md): for every object, its
+// the bucket contract (docs/reference/audit/bucket-contract.md): for every object, its
 // key, its metadata, the sha256 of its stored bytes, and the hash on every one
 // of its records.
 //

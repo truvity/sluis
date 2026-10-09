@@ -19,6 +19,10 @@ strict: true
 exclude_docs: |
   _redirects/
 
+# The writing standard is a page, not a tab.
+not_in_nav: |
+  /WRITING.md
+
 # Strict mode turns every warning into an error. These keep the checks on while
 # naming what each one covers.
 validation:
@@ -49,7 +53,6 @@ theme:
     - navigation.sections
     - navigation.path
     - navigation.footer
-    - navigation.prune
     - navigation.top
     - navigation.indexes
     - toc.follow
@@ -69,7 +72,9 @@ theme:
 plugins:
   - search:
       separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
-  - awesome-nav
+  - awesome-nav:
+      # awesome-nav looks for .nav.yml unless told otherwise; this repository uses .yaml.
+      filename: .nav.yaml
   - privacy
   - redirects:
       redirect_maps:

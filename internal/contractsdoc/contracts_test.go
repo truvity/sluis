@@ -1,5 +1,5 @@
 // Package contractsdoc holds one test: every proto service and RPC is
-// named in docs/reference/contracts.md.
+// named in docs/reference/sluis/contracts.md.
 //
 // The contracts page is the reference a stranger reads to learn what the
 // console serves. It fell four services behind once without anyone
@@ -32,7 +32,7 @@ func mentions(doc []byte, ident string) bool {
 
 func TestEveryServiceAndRPCIsDocumented(t *testing.T) {
 	root := filepath.Join("..", "..")
-	doc, err := os.ReadFile(filepath.Join(root, "docs", "reference", "contracts.md"))
+	doc, err := os.ReadFile(filepath.Join(root, "docs", "reference", "sluis", "contracts.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestEveryServiceAndRPCIsDocumented(t *testing.T) {
 	}
 	sort.Strings(missing)
 	for _, k := range missing {
-		t.Errorf("docs/reference/contracts.md does not mention %s", k)
+		t.Errorf("docs/reference/sluis/contracts.md does not mention %s", k)
 	}
 	for k := range undocumented {
 		if !used[k] {

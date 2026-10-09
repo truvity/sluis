@@ -7,7 +7,7 @@
 > port, the KMS sealer, the `sluis:binding` encryption context and `ports.sealer`
 > are gone. A dynamic secret is written to the Secrets port (SSM in production)
 > under `private/<key>/<ref>`, and State holds only the record that names it
-> ([design/ports.md](../explanation/domain-stores.md)). The rule that nothing
+> ([design/ports.md](../concepts/sluis/domain-stores.md)). The rule that nothing
 > writes ConfigMaps or Secrets stands. The text below is the decision as it was
 > taken.
 

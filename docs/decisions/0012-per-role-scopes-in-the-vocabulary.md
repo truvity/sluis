@@ -74,8 +74,8 @@ is`). Silently intersecting the two — granting `admin` only as much
 **A conservative default**, matching 0010's own posture: a role that
 declares no `scopes` restricts nothing, so no existing vocabulary changes
 shape or behaviour by upgrading past this release. Every table in
-[reference/policy.md#vocabulary](../reference/policy.md#vocabulary) and
-[taxonomy.md](../reference/taxonomy.md) that already worked in terms of "the role
+[reference/policy.md#vocabulary](../reference/sluis/policy.md#vocabulary) and
+[taxonomy.md](../reference/sluis/taxonomy.md) that already worked in terms of "the role
 exists on the thing" now also means "and the role covers this scope,"
 which is a no-op check for a role that names no `scopes` of its own.
 

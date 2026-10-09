@@ -9,7 +9,7 @@ What the issuer signs with follows from the key it is given:
 `signingKey.certificate.algorithm`/`.size`/`.encoding` selects RSA or
 ECDSA on P-256, P-384 or P-521, and the choice determines whether every
 token is RS256, ES256, ES384 or ES512
-([chart values](../reference/chart-values.md)). The
+([chart values](../reference/sluis/chart-values.md)). The
 signing key is never minted by the service itself — cert-manager issues
 it, or a deployment delivers it — so this decision is about the
 **default** a fresh installation gets when it sets nothing.
@@ -56,9 +56,9 @@ assuming RS256.
 **The RSA override exists as a last resort, for an installation that
 cannot wait on either of those**: `signingKey.certificate: {algorithm:
 RSA, size: 2048, encoding: PKCS1}` is a one-line, reviewable value
-([reference/configuration.md](../reference/configuration.md),
-[connect/kargo.md](../how-to/connect/kargo.md),
-[connect/kubernetes-cluster.md](../how-to/connect/kubernetes-cluster.md)), but
+([reference/configuration.md](../reference/sluis/configuration.md),
+[connect/kargo.md](../guides/sluis/connect/kargo.md),
+[connect/kubernetes-cluster.md](../guides/sluis/connect/kubernetes-cluster.md)), but
 it is not the recommended answer: it moves the *whole* installation to a
 smaller security margin and a larger token, for every relying party, to
 accommodate the one that could not be configured or fixed. The chart's
@@ -77,7 +77,7 @@ discovering one integration at a time:
 | Relying party | Default without configuration | What accepting ES384 needs |
 |---|---|---|
 | Kargo | its verifier is built from go-oidc's `oidc.NewVerifier` with no `SupportedSigningAlgs` set, which defaults to RS256 only, and it does not read discovery to widen itself | the durable fix is upstream: Kargo reading `id_token_signing_alg_values_supported` from discovery instead of hard-coding RS256; until then, the RSA override on this issuer's key is the last-resort interim |
-| `kube-apiserver` | the legacy `--oidc-signing-algs` flag defaults to `RS256`, and **a managed control plane may not expose that flag at all** | list `ES384` on the flag where it is exposed, or in the structured `AuthenticationConfiguration`, which some managed control planes accept in the flag's place — verify which path, if either, the platform in question actually supports before relying on it ([connect/kubernetes-cluster.md](../how-to/connect/kubernetes-cluster.md)) |
+| `kube-apiserver` | the legacy `--oidc-signing-algs` flag defaults to `RS256`, and **a managed control plane may not expose that flag at all** | list `ES384` on the flag where it is exposed, or in the structured `AuthenticationConfiguration`, which some managed control planes accept in the flag's place — verify which path, if either, the platform in question actually supports before relying on it ([connect/kubernetes-cluster.md](../guides/sluis/connect/kubernetes-cluster.md)) |
 | OpenBAO or Vault, JWT auth on an **OIDC-type** role | `jwt_supported_algs` defaults to `[RS256]` for that role type (a **JWT-type** role has no such default and accepts every algorithm) | an OIDC-login recipe against this issuer must set `jwt_supported_algs` explicitly to admit ES384 |
 | opkssh (OpenPubkey) | verifies RS256, PS256, ES256 and EdDSA only — ES384 is not in that list at all | nothing configures around this; it is the blocker recorded in [0004](0004-ssh-opkssh-and-the-secret-stores-ca.md), and it waits on that project, not on a key rotation here |
 

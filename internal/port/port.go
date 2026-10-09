@@ -1,5 +1,5 @@
 // Package port is the storage, signalling and identity edge of the
-// service: small interfaces with the semantics in docs/explanation/ports.md,
+// service: small interfaces with the semantics in docs/concepts/sluis/ports.md,
 // and nothing else.
 //
 // Business code names a port and never an adapter, and an adapter holds no

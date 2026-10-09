@@ -1,0 +1,6 @@
+nav:
+  - connect
+  - operate
+  - migrate
+  - upgrade
+  - "*"

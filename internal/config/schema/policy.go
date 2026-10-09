@@ -2,7 +2,7 @@
 package schema
 
 // The policy document's schema. Its tables are the access model's
-// (docs/reference/policy.md), held here to their shape: every object closed, so
+// (docs/reference/sluis/policy.md), held here to their shape: every object closed, so
 // a misspelt key fails the document before the access model's own parser reads
 // it. What a shape cannot say (a group a client requires that nobody declared,
 // a catalogue grant naming no group) is the loader's semantic check, the same
@@ -17,7 +17,7 @@ func table(description string, value m) m {
 // groupsOverride is `groups: all` or a list of thing names.
 func groupsOverride() m {
 	return m{
-		"description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/policy.md#groups-in-a-token-scoping).",
+		"description": "Which held groups beyond the requires pairs a token for it carries: `all`, or a list of things, families or names (docs/reference/sluis/policy.md#groups-in-a-token-scoping).",
 		"oneOf": []any{
 			m{"const": "all"},
 			m{"type": "array", "items": m{"type": "string", "minLength": 1}},
@@ -239,10 +239,10 @@ func policyAppsSchema() m {
 	return obj("What an operator may make on the console.", m{
 		"github": obj("GitHub Apps.", m{
 			"runnerTiers": m{"type": "array", "uniqueItems": true, "items": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,14}[a-z0-9])?$"}, "description": "The tiers an operator may create a runner App for: lower-case letters, digits and dashes, at most 16, each once."},
-			"catalogue":   list("Every GitHub App the installation declares (docs/how-to/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", catalogueAppSchema()),
+			"catalogue":   list("Every GitHub App the installation declares (docs/guides/sluis/connect/github-apps-catalogue.md). A grant naming an undeclared group stops the service.", catalogueAppSchema()),
 		}),
 		"slack": obj("Slack Apps.", m{
-			"catalogue": list("Every Slack App the installation declares (docs/how-to/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.", slackAppSchema()),
+			"catalogue": list("Every Slack App the installation declares (docs/guides/sluis/connect/slack-apps-catalogue.md). One for a workspace the policy does not declare stops the service.", slackAppSchema()),
 		}),
 	})
 }
@@ -263,7 +263,7 @@ func policySchema() m {
 		"apiVersion":       apiVersion("policy"),
 		"vocabulary":       vocabularySchema(),
 		"groups":           table("Every internal group, by name, and how a caller comes to be in it.", obj("A group.", m{"members": strList("Directory groups whose members are in it."), "matchers": list("The matchers.", matcherSchema())})),
-		"claims":           table("What a group adds to a token, by group.", m{"type": "object", "description": "A claims fragment: merged into the token (docs/reference/policy.md#claims)."}),
+		"claims":           table("What a group adds to a token, by group.", m{"type": "object", "description": "A claims fragment: merged into the token (docs/reference/sluis/policy.md#claims)."}),
 		"lifetimes":        table("How long a token lives, by group, and `default`. The shortest across a caller's groups wins.", duration("A lifetime.", "")),
 		"resources":        table("What a token may be minted FOR, by resource indicator.", resourceSchema()),
 		"client_documents": obj("Admits clients that are not declared, by a document they serve about themselves. Off unless it names an origin.", m{"origins": strList("The origins."), "requires": strList("The groups a caller must hold."), "ttl_cap": duration("The longest a token lives.", ""), "groups": groupsOverride(), "session": sessionClass("Every document client's refresh chains", "Never read from a document: admit with `agent` only an origin whose documents its vendor controls.")}),
@@ -277,7 +277,7 @@ func policySchema() m {
 		"cloudflare":       policyCloudflareSchema(),
 	}
 	return document("policy", "sluis policy",
-		"The policy document: what an installation decides, read by every process of it. The access model's tables (docs/reference/policy.md) and beside them whom the exchange trusts, what an operator may make, what each controller may change and what is copied out. Rendered by `sluisctl policy render` from layers; a process reads exactly one. Nothing here is a secret.",
+		"The policy document: what an installation decides, read by every process of it. The access model's tables (docs/reference/sluis/policy.md) and beside them whom the exchange trusts, what an operator may make, what each controller may change and what is copied out. Rendered by `sluisctl policy render` from layers; a process reads exactly one. Nothing here is a secret.",
 		props, []string{"apiVersion"}, []string{"duration", "url"}, nil)
 }
 

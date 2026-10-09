@@ -12,7 +12,7 @@ import (
 )
 
 // r2AudienceDefault is the client id an R2 credential broker conventionally
-// answers to -- see docs/how-to/connect/r2-storage.md. An installation whose
+// answers to -- see docs/guides/sluis/connect/r2-storage.md. An installation whose
 // broker uses a different name overrides it with --audience or
 // $SLUISCTL_R2_AUDIENCE; nothing here assumes the name is universal.
 const r2AudienceDefault = "r2-broker"
@@ -38,7 +38,7 @@ const (
 // still runs the broker, and goes with it.
 func r2(args []string) error {
 	_, _ = fmt.Fprintln(os.Stderr, "sluisctl: `r2` is deprecated: use `sluisctl cloudflare r2 <preset>` "+
-		"(R2 credentials minted by sluis, no r2broker). See docs/how-to/cloudflare-tokens.md.")
+		"(R2 credentials minted by sluis, no r2broker). See docs/guides/sluis/cloudflare-tokens.md.")
 	request, rest, err := parseR2Flags(args)
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func parseR2Flags(args []string) (r2Request, []string, error) {
 // Defaulting the subcommand is what lets a `credential_process` line
 // never spell it out: `credential_process = sluisctl r2 -- credentials
 // --bucket example-bucket --prefix nix/` is the documented form
-// (docs/how-to/connect/r2-storage.md), and `sluisctl r2 -- --bucket
+// (docs/guides/sluis/connect/r2-storage.md), and `sluisctl r2 -- --bucket
 // example-bucket` (no subcommand at all) works identically -- `credentials`
 // is the one subcommand a caller of THIS wrapper ever wants. `serve` runs
 // the broker service itself, holding its own parent key from its own

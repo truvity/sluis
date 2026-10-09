@@ -9,7 +9,7 @@ const (
 // pattern cannot say (rotation shorter than lifetime, both at least a minute,
 // an account a preset names being declared) is internal/config.Cloudflare.Validate.
 func cloudflareSchema() m {
-	section := obj("sluis as the STS for Cloudflare API tokens and R2 credentials (docs/how-to/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.", m{
+	section := obj("sluis as the STS for Cloudflare API tokens and R2 credentials (docs/guides/sluis/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.", m{
 		"accounts": m{
 			"type": "object", "propertyNames": m{"pattern": cloudflareName},
 			"description": "The Cloudflare accounts sluis mints in, by the name presets use.",

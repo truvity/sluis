@@ -4,22 +4,22 @@
 
 ### Added
 
-- **GitHub Apps with an active webhook (preview).** A catalogue App may declare `webhook:` with a `url` (Argo CD) or a `kargo` receiver (`base`, `receiver`, `project`) and `events`. sluis generates the webhook secret, sets it on GitHub right after the App is created, keeps it beside the App's key (optional `webhook_secret` in `github/v1`), and compares GitHub's hook URL, content type and secret presence in the drift check. `RotateGitHubAppWebhook` rotates it without overlap: it keeps the new secret, waits for the new target to accept a signed ping, then tells GitHub the secret (and a Kargo receiver's derived URL) in one call, restoring the previous secret on failure. New audit action `roster.catalogue_app.webhook_changed` (catalogue 1.13.0). Off unless an App declares `webhook:`; not yet verified against real GitHub; no console button yet; existing Apps must be disconnected and recreated to get an active webhook. See [Delivering events](docs/how-to/connect/github-apps-catalogue.md#delivering-events).
-- **Release supply chain: SBOMs, keyless signatures and attestations.** Every archive (the Lambda zips, the binaries, the two bundles) gets an SPDX SBOM from syft (`sboms:` in both goreleaser configs; audit's ko-built SBOM tag is off, so the two configs agree). A new `attest` job of the release workflow signs the combined `checksums.txt` (sluis and audit lines) with keyless cosign, publishes `checksums.txt.sigstore.json`, and attests the build provenance of every release asset; `attest-sboms` binds each SBOM to its archive, and `attest-oci` signs every pushed image and Helm chart by digest and attaches provenance (and, for images, SBOM) attestations in the registry, from one list, `hack/release-images.txt`. Keyless certificates and signatures are recorded in Sigstore's public transparency log. `just release-verify VERSION` (`hack/release-verify.sh`) checks the checksums, the cosign bundle and `gh attestation verify` for each asset and image; `just release-lint` (in `check` and `release-check`) runs `goreleaser check` on both configs, `actionlint`, and a test that verification fails on a tampered asset. devbox gains `cosign`, `syft` and `actionlint`. See [Verify a release](docs/how-to/verify-a-release.md).
-- **The Pulumi library: adopt an existing archive bucket and leave its lifecycle alone, `PresetStorage.Adopt`.** A preset with `Create` owns its bucket and derives a lifecycle from the profiles' retention (an expiration, a noncurrent-version expiration, no Deep Archive step before it); without `Create` the bucket is outside Pulumi. `Adopt: true` imports an existing bucket by name (`Protect`, `RetainOnDelete`) and manages its versioning, default encryption, public-access block, ownership controls and bucket policy (the TLS-only deny, replacing the bucket's policy as a whole), and declares **no lifecycle resource**, so an estate whose archive must never expire keeps its own rules (none that expire). Object Lock is not touched. Refused with `Create`, with `Endpoint` and for a bucket another preset names. Because the library cannot read the lifecycle it leaves alone, `Adopt` is refused when a profile kept in the preset has a fixed minimum retention unless `AcknowledgeLifecycle: true` states that the estate's lifecycle and lock keep objects that long. The `Create` path is unchanged. See [the library reference](docs/audit/reference/aws-pulumi-library.md#lifecycle).
+- **GitHub Apps with an active webhook (preview).** A catalogue App may declare `webhook:` with a `url` (Argo CD) or a `kargo` receiver (`base`, `receiver`, `project`) and `events`. sluis generates the webhook secret, sets it on GitHub right after the App is created, keeps it beside the App's key (optional `webhook_secret` in `github/v1`), and compares GitHub's hook URL, content type and secret presence in the drift check. `RotateGitHubAppWebhook` rotates it without overlap: it keeps the new secret, waits for the new target to accept a signed ping, then tells GitHub the secret (and a Kargo receiver's derived URL) in one call, restoring the previous secret on failure. New audit action `roster.catalogue_app.webhook_changed` (catalogue 1.13.0). Off unless an App declares `webhook:`; not yet verified against real GitHub; no console button yet; existing Apps must be disconnected and recreated to get an active webhook. See [Delivering events](docs/guides/sluis/connect/github-apps-catalogue.md#delivering-events).
+- **Release supply chain: SBOMs, keyless signatures and attestations.** Every archive (the Lambda zips, the binaries, the two bundles) gets an SPDX SBOM from syft (`sboms:` in both goreleaser configs; audit's ko-built SBOM tag is off, so the two configs agree). A new `attest` job of the release workflow signs the combined `checksums.txt` (sluis and audit lines) with keyless cosign, publishes `checksums.txt.sigstore.json`, and attests the build provenance of every release asset; `attest-sboms` binds each SBOM to its archive, and `attest-oci` signs every pushed image and Helm chart by digest and attaches provenance (and, for images, SBOM) attestations in the registry, from one list, `hack/release-images.txt`. Keyless certificates and signatures are recorded in Sigstore's public transparency log. `just release-verify VERSION` (`hack/release-verify.sh`) checks the checksums, the cosign bundle and `gh attestation verify` for each asset and image; `just release-lint` (in `check` and `release-check`) runs `goreleaser check` on both configs, `actionlint`, and a test that verification fails on a tampered asset. devbox gains `cosign`, `syft` and `actionlint`. See [Verify a release](docs/guides/sluis/operate/verify-a-release.md).
+- **The Pulumi library: adopt an existing archive bucket and leave its lifecycle alone, `PresetStorage.Adopt`.** A preset with `Create` owns its bucket and derives a lifecycle from the profiles' retention (an expiration, a noncurrent-version expiration, no Deep Archive step before it); without `Create` the bucket is outside Pulumi. `Adopt: true` imports an existing bucket by name (`Protect`, `RetainOnDelete`) and manages its versioning, default encryption, public-access block, ownership controls and bucket policy (the TLS-only deny, replacing the bucket's policy as a whole), and declares **no lifecycle resource**, so an estate whose archive must never expire keeps its own rules (none that expire). Object Lock is not touched. Refused with `Create`, with `Endpoint` and for a bucket another preset names. Because the library cannot read the lifecycle it leaves alone, `Adopt` is refused when a profile kept in the preset has a fixed minimum retention unless `AcknowledgeLifecycle: true` states that the estate's lifecycle and lock keep objects that long. The `Create` path is unchanged. See [the library reference](docs/reference/audit/aws-pulumi-library.md#lifecycle).
 - **audit: `credentials_preset` mints a preset store's R2 credentials for the process (stacked on the Cloudflare core).** A preset of the deployment document whose store is at an `endpoint` may name `credentials_preset: {account, minter, prototype, lifetime}` instead of the static `credentials` (exclusive with it; the static path stays the default and needs no Cloudflare account). The process reads the `cloudflare-minter/v1` document at `minter` in the state store, clones the disabled prototype with it, renews with a third of the lifetime left and records the ids it minted so the expired tokens are deleted. A 403 from the store is sent once more after new credentials are minted (once per request, one mint per 30 seconds: `s3store.Options.Reauth`). The audit Pulumi library (`PresetStorage.CredentialsPreset`) grants the writer and the notary read on exactly the minter address and read and write on exactly `cloudflare-minted/<preset>` below the state root, only for a preset that uses it. The shared code is the new package `github.com/truvity/sluis/storage/cloudflare` of the storage module (the one module both the root and audit import): the token shapes, the naming, the prototype checks and the built-in refusal list, R2's secret derivation, a stdlib HTTP client for the account and `Provider`, an `aws.CredentialsProvider`. The root module's `internal/cloudflare` re-exports it, so the refusal list exists once.
-- **sluis as the STS for Cloudflare tokens and R2 credentials (core).** A `cloudflare` section of the service document (`accounts` with a minter at `internal/cloudflare/<account>/minter`, `presets` with a disabled prototype token, `lifetime`, `rotation` and, for R2, `endpoint`) and `cloudflare.grants` in the policy document (a `group`, which for a CI job is a group declared with `github` matchers, with `presets`). `internal/cloudflare/minter` clones the prototype's policies and condition into an account token that expires, on a schedule (a loop in a cluster, `{"kind":"cloudflare"}` on Lambda) writing `external/cloudflare/<preset>` (`cloudflare/v1`, R2 as access key and the SHA-256 of the value), and on demand for a granted caller. A prototype that is active, missing, or grants token admin, billing, account settings, memberships or Access identity providers is refused at every mint and when a cluster service starts (an audit event, a log line and the counter `sluis.cloudflare.prototype.refused`); the built-in list cannot be shortened, `cloudflare.forbiddenPermissionGroups` only adds to it. The minter can mint anything the account owner can, so its custody is the owner's. The sweep deletes by the ids it recorded, not by listing. New audit actions `roster.cloudflare.token.minted|refused`, `roster.cloudflare.tokens.swept`, `roster.cloudflare.token.revoked` (catalogue 1.12.0), the alert `AccessRosterCloudflareRotationStale` and the `sluis.cloudflare.*` metrics. `ports.blob.s3.credentials: {preset}` lets the blob adapter mint its own R2 credentials, exclusive with `credentialsRef`, which stays the default and needs no `cloudflare` section. The on-demand exchange, `sluisctl cloudflare` and the console follow. See [mint short-lived Cloudflare tokens and R2 credentials](docs/how-to/cloudflare-tokens.md).
-- **The console's Cloudflare page.** A **Cloudflare** entry under Systems where the service document has a `cloudflare` section (`whoami` says `cloudflare: true`). Anyone signed in sees the presets the policy grants their groups and can **Get a token** or **Get credentials** (R2), shown once and held only in the dialog, with the `sluisctl` and AWS `credential_process` hints. A viewer sees the accounts (ids by their last four characters), each preset's lifetime and rotation, its prototype as read live (disabled, ACTIVE, forbidden permission or missing, with the reason), the stored token's id, mint time and expiry with a warning past one rotation and an error past two, and the on-demand tokens still live. An operator can **Rotate now** and **Revoke** a live token, each behind a confirmation and recorded under their name. New `CloudflareService` in `proto/directoryroster/v1/cloudflare.proto` (`ListCloudflare`, `RotateCloudflarePreset`, `RevokeCloudflareToken`, `ListMyCloudflarePresets`, `GetCloudflareCredential`); no response but the last carries a token's value. The minter gains `Accounts`, `CheckPreset`, `Stored` and `RotateNow`, and `Live` names the caller and mint time. On-demand minting calls the minter directly until the token exchange lands. See [the console](docs/explanation/console.md).
-- **Cloudflare credentials on demand: the exchange and `sluisctl cloudflare`.** `/token` serves RFC 8693 with `requested_token_type=urn:access-roster:params:oauth:token-type:cloudflare-token` and `audience=cloudflare:<preset>` (optional `lifetime` in seconds, at most the preset's): a person's sign-in or a CI job's GitHub token is verified by the chain every exchange uses, the policy's `cloudflare.grants` decide (a CI job is a group declared with `github` matchers, evaluated like every other group), and the minter clones the prototype into a token named for the caller. The answer carries `token`, or for an R2 preset `access_key_id`, `secret_access_key` and `endpoint`, with `expires_on`; an unknown preset and one not granted are the same `invalid_target`. `/.access/grants` also lists the granted presets. `sluisctl cloudflare token <preset> [--format env|json]` prints `CLOUDFLARE_API_TOKEN=...` or JSON; `sluisctl cloudflare r2 <preset>` prints an AWS `credential_process` answer; both cache under the config directory (0600) and renew with a third of the lifetime left, and `--file` reads the `cloudflare/v1` document a secrets operator projected, with no sign-in. `sluisctl aws-config` writes an R2 profile per granted preset (`endpoint_url`, `region = auto`, `when_required` checksums, path-style addressing) and `whoami` lists the presets. See [mint short-lived Cloudflare tokens and R2 credentials](docs/how-to/cloudflare-tokens.md).
+- **sluis as the STS for Cloudflare tokens and R2 credentials (core).** A `cloudflare` section of the service document (`accounts` with a minter at `internal/cloudflare/<account>/minter`, `presets` with a disabled prototype token, `lifetime`, `rotation` and, for R2, `endpoint`) and `cloudflare.grants` in the policy document (a `group`, which for a CI job is a group declared with `github` matchers, with `presets`). `internal/cloudflare/minter` clones the prototype's policies and condition into an account token that expires, on a schedule (a loop in a cluster, `{"kind":"cloudflare"}` on Lambda) writing `external/cloudflare/<preset>` (`cloudflare/v1`, R2 as access key and the SHA-256 of the value), and on demand for a granted caller. A prototype that is active, missing, or grants token admin, billing, account settings, memberships or Access identity providers is refused at every mint and when a cluster service starts (an audit event, a log line and the counter `sluis.cloudflare.prototype.refused`); the built-in list cannot be shortened, `cloudflare.forbiddenPermissionGroups` only adds to it. The minter can mint anything the account owner can, so its custody is the owner's. The sweep deletes by the ids it recorded, not by listing. New audit actions `roster.cloudflare.token.minted|refused`, `roster.cloudflare.tokens.swept`, `roster.cloudflare.token.revoked` (catalogue 1.12.0), the alert `AccessRosterCloudflareRotationStale` and the `sluis.cloudflare.*` metrics. `ports.blob.s3.credentials: {preset}` lets the blob adapter mint its own R2 credentials, exclusive with `credentialsRef`, which stays the default and needs no `cloudflare` section. The on-demand exchange, `sluisctl cloudflare` and the console follow. See [mint short-lived Cloudflare tokens and R2 credentials](docs/guides/sluis/cloudflare-tokens.md).
+- **The console's Cloudflare page.** A **Cloudflare** entry under Systems where the service document has a `cloudflare` section (`whoami` says `cloudflare: true`). Anyone signed in sees the presets the policy grants their groups and can **Get a token** or **Get credentials** (R2), shown once and held only in the dialog, with the `sluisctl` and AWS `credential_process` hints. A viewer sees the accounts (ids by their last four characters), each preset's lifetime and rotation, its prototype as read live (disabled, ACTIVE, forbidden permission or missing, with the reason), the stored token's id, mint time and expiry with a warning past one rotation and an error past two, and the on-demand tokens still live. An operator can **Rotate now** and **Revoke** a live token, each behind a confirmation and recorded under their name. New `CloudflareService` in `proto/directoryroster/v1/cloudflare.proto` (`ListCloudflare`, `RotateCloudflarePreset`, `RevokeCloudflareToken`, `ListMyCloudflarePresets`, `GetCloudflareCredential`); no response but the last carries a token's value. The minter gains `Accounts`, `CheckPreset`, `Stored` and `RotateNow`, and `Live` names the caller and mint time. On-demand minting calls the minter directly until the token exchange lands. See [the console](docs/concepts/sluis/console.md).
+- **Cloudflare credentials on demand: the exchange and `sluisctl cloudflare`.** `/token` serves RFC 8693 with `requested_token_type=urn:access-roster:params:oauth:token-type:cloudflare-token` and `audience=cloudflare:<preset>` (optional `lifetime` in seconds, at most the preset's): a person's sign-in or a CI job's GitHub token is verified by the chain every exchange uses, the policy's `cloudflare.grants` decide (a CI job is a group declared with `github` matchers, evaluated like every other group), and the minter clones the prototype into a token named for the caller. The answer carries `token`, or for an R2 preset `access_key_id`, `secret_access_key` and `endpoint`, with `expires_on`; an unknown preset and one not granted are the same `invalid_target`. `/.access/grants` also lists the granted presets. `sluisctl cloudflare token <preset> [--format env|json]` prints `CLOUDFLARE_API_TOKEN=...` or JSON; `sluisctl cloudflare r2 <preset>` prints an AWS `credential_process` answer; both cache under the config directory (0600) and renew with a third of the lifetime left, and `--file` reads the `cloudflare/v1` document a secrets operator projected, with no sign-in. `sluisctl aws-config` writes an R2 profile per granted preset (`endpoint_url`, `region = auto`, `when_required` checksums, path-style addressing) and `whoami` lists the presets. See [mint short-lived Cloudflare tokens and R2 credentials](docs/guides/sluis/cloudflare-tokens.md).
 - **The Pulumi library: the Cloudflare rotation schedule and the grants it needs (stacked on the Cloudflare core).** `Installation.Cloudflare` (accounts, presets and grants, `github.com/truvity/sluis/config`) renders into the service document's `cloudflare` and the policy document's `cloudflare.grants`, and a grant for a preset nobody declared is refused. When an installation declares presets, `NewLambda` adds an EventBridge schedule invoking the function with `{"kind":"cloudflare"}` (`LambdaArgs.CloudflareRotation`, default `rate(1 minute)`, `Disabled` and `Paused` as for the directory refresh), and the function's role reads `internal/cloudflare/*` (the minter credentials, never written), reads and writes `internal/cloudflare-minted/*` (the record of minted ids) and writes `external/cloudflare/*` (the stored credentials), with the secrets key used through SSM for the same parameters. `KubernetesIdentityArgs.Cloudflare` gives a pod the same. Without presets nothing is added. No AWS grant is needed for the Cloudflare API itself.
 - **The Pulumi libraries publish function versions and route every caller through the alias `live`.** The sluis function and audit's writer and notary publish a version on each change; the HTTP API integration and its (qualified) invoke permission, the schedules' targets, the scheduler role's invoke grant (the alias ARN, not `:*`), the function's own invoke grant, audit's writer event source and notary schedule all use the alias, and asynchronous-invoke configuration is set on it. The `invoke` trigger names `<function>:live`: **`sluisctl render` of the Lambda shape now writes `adapters.trigger.settings` as `<function>:live`**. The API, its stage and the domain mapping are not replaced. New outputs `LiveAliasArn`, `LiveVersion` (sluis) and `WriterLiveAliasArn`, `NotaryLiveAliasArn`, `WriterLiveVersion`, `NotaryLiveVersion` (audit).
-- **The Pulumi libraries ship code through an artifacts bucket: `Artifacts`, `Release`, `CodeSha256Matches`.** `LambdaArgs.Artifacts` (and the audit library's `Args.Artifacts`) uploads the verified release zip as it is, and the configuration layer as a deterministic zip, to the estate's versioned bucket at `<prefix><version>/<sha256>-<name>`; the function and the layer are created from the object version with `SourceCodeHash`. An unversioned bucket is refused at apply. Unset, the code is uploaded with the function as before. `Release.ResolveChecksums` reads an empty digest from the release's `checksums.txt`; with no `Package` the library deploys its own release (its module version from the build information, or `Release.Version`), digest from `checksums.txt` unless one is pinned (a pinned digest always wins); a development build, a pseudo-version or a replaced module is refused. Downloads are cached by SHA-256 and use `GITHUB_TOKEN` for github.com. New outputs `CodeSha256Matches` (and `WriterCodeSha256Matches`, `NotaryCodeSha256Matches`). `LambdaArgs.Audit.WriterPackage` and its digest may be left empty. The shared code is the new package `github.com/truvity/sluis/audit/deploy/pulumi/artifact`. See [Deploy from a mirrored release](docs/how-to/deploy-from-a-mirrored-release.md).
+- **The Pulumi libraries ship code through an artifacts bucket: `Artifacts`, `Release`, `CodeSha256Matches`.** `LambdaArgs.Artifacts` (and the audit library's `Args.Artifacts`) uploads the verified release zip as it is, and the configuration layer as a deterministic zip, to the estate's versioned bucket at `<prefix><version>/<sha256>-<name>`; the function and the layer are created from the object version with `SourceCodeHash`. An unversioned bucket is refused at apply. Unset, the code is uploaded with the function as before. `Release.ResolveChecksums` reads an empty digest from the release's `checksums.txt`; with no `Package` the library deploys its own release (its module version from the build information, or `Release.Version`), digest from `checksums.txt` unless one is pinned (a pinned digest always wins); a development build, a pseudo-version or a replaced module is refused. Downloads are cached by SHA-256 and use `GITHUB_TOKEN` for github.com. New outputs `CodeSha256Matches` (and `WriterCodeSha256Matches`, `NotaryCodeSha256Matches`). `LambdaArgs.Audit.WriterPackage` and its digest may be left empty. The shared code is the new package `github.com/truvity/sluis/audit/deploy/pulumi/artifact`. See [Deploy from a mirrored release](docs/guides/sluis/operate/deploy-from-a-mirrored-release.md).
 - **audit: a stalled indexer is visible.** `audit-observe`'s `/readyz` also fails (check `passes`; `/healthz` is untouched, so the pod is not restarted into a crash loop) once `readiness.failedPasses` passes in a row failed (default 3) or no pass succeeded for `readiness.staleIntervals` intervals (default 3). New series `audit_observe_passes_total{outcome}` and `audit_observe_pass_since_success_seconds`, and chart alerts `AuditIndexStalled` (no successful pass for 15m, `alerts.rules.indexStalled.maxAgeSeconds`, to be kept at three polls) and `AuditIndexPassesFailing` (over half of the passes in 30m, at least 3), unit-tested. A failing pass is logged with the object and the reason once for each distinct error and again only every half hour, as is an object that was not indexed. A release check holds the newest released catalogue of each source to the reader's validator. The incident behind it: a writer on v1.74.0-rc.1 registered a catalogue with `category` and no `profiles`, an older indexer rejected it every pass, the pod stayed Ready and nothing alerted.
 
 ### Changed
 
-- **Breaking (audit): readers must run the writer's release or a newer one; v1.74.0 changes the catalogue shape.** The roster catalogue 1.11.0 declares `category` on an action and no `profiles`, which the `catalogue.schema.json` of earlier releases requires, so an older `audit-observe` or `audit-query` refuses it and the index stalls behind its cursor. Upgrade the readers first and the writer last: [upgrade audit to v1.74](docs/audit/how-to/upgrade/v1.74.md).
-- **audit: the default poll of `audit-observe` is 5 minutes (was 30 seconds).** `interval` (config schema, chart values and the [configuration reference](docs/audit/reference/configuration-observe-query.md)) is the bound on a lost wake-up; without a `wake` (SQS or NATS) a record is searchable after the longer of `settle` and the time to the next pass, at worst `interval`; with a wake the woken pass reschedules for when the object is old enough, so the delay is about `settle` whatever `interval` is. Set `interval` back if five minutes is too slow. The schema default and `observe.DefaultInterval` are held equal by a test. It also stops a failing pass from re-reading the archive twice a minute.
+- **Breaking (audit): readers must run the writer's release or a newer one; v1.74.0 changes the catalogue shape.** The roster catalogue 1.11.0 declares `category` on an action and no `profiles`, which the `catalogue.schema.json` of earlier releases requires, so an older `audit-observe` or `audit-query` refuses it and the index stalls behind its cursor. Upgrade the readers first and the writer last: [upgrade audit to v1.74](docs/guides/audit/upgrade/v1.74.md).
+- **audit: the default poll of `audit-observe` is 5 minutes (was 30 seconds).** `interval` (config schema, chart values and the [configuration reference](docs/reference/audit/configuration-observe-query.md)) is the bound on a lost wake-up; without a `wake` (SQS or NATS) a record is searchable after the longer of `settle` and the time to the next pass, at worst `interval`; with a wake the woken pass reschedules for when the object is old enough, so the delay is about `settle` whatever `interval` is. Set `interval` back if five minutes is too slow. The schema default and `observe.DefaultInterval` are held equal by a test. It also stops a failing pass from re-reading the archive twice a minute.
 - **Log attribute keys are `snake_case` throughout, and a few were renamed.** `sloglint` now enforces typed attributes, constant messages and `snake_case` keys, so these keys changed: `configMap` to `config_map`, `serviceAccount` to `service_account`, `signIn` to `sign_in`, `inCluster` to `in_cluster`, `seenAt` and `activateAt` to `seen_at` and `activate_at`, `rotateEvery`, `tokenLifetime`, `refreshLifetime`, `holdWindow`, `exchangeAudience`, `sessionKeySecret` and `oauthClientSecret` likewise, `apiVersion` to `api_version` in the audit writer's deployment warnings, and `source` (a reserved key) to `event_source` / `principal_source`. Three messages that carried a variable part now have a constant message and the variable part as an attribute (`warning`, `why`, `reason`, `what`). The audit log line's dotted `audit.*` keys are a documented contract and are unchanged. Anything that matches these keys in a log query or alert needs the new spelling.
 - **Sign-in and authorization log lines name a pseudonymous `subject`, not the address.** "authorization refused", "sign-in refused", "sign-in could not be resolved" and the sign-in success lines logged `email`; they now log `subject`: the first 8 bytes of an HMAC-SHA256 of the principal's stable subject (or of the address where there is none) under a per-process random key (the same person correlates within one process only). The audit trail still carries the real identity. Log messages are lowercased (`sloglint` `msg-style`), so six messages changed spelling.
 - **`storage/logattr` replaces `internal/logsafe`:** `SafeString`, `SafeStrings` and `SafeError` build log attributes for untrusted values (line breaks, control and bidirectional-control characters removed, length capped), and are used at more sites.
@@ -27,33 +27,33 @@
 
 ### Deprecated
 
-- **The legacy store and Valkey** (`ports.adapter: legacy`, the default, which keeps state in the namespace's ConfigMaps and Secrets, and the `valkey` section) are deprecated in v1.74.0 and removed in v1.75, with the module split. Behaviour is unchanged; the service logs one warning at start when it opens the legacy adapter or `valkey` is set, and the schema, the chart values and the docs say so. Move off it with `sluis migrate` (see [migrate the secrets layout](docs/how-to/migrate-secrets-layout.md) and [migrate the State](docs/how-to/migrate-state.md)).
+- **The legacy store and Valkey** (`ports.adapter: legacy`, the default, which keeps state in the namespace's ConfigMaps and Secrets, and the `valkey` section) are deprecated in v1.74.0 and removed in v1.75, with the module split. Behaviour is unchanged; the service logs one warning at start when it opens the legacy adapter or `valkey` is set, and the schema, the chart values and the docs say so. Move off it with `sluis migrate` (see [migrate the secrets layout](docs/guides/sluis/migrate/migrate-secrets-layout.md) and [migrate the State](docs/guides/sluis/migrate/migrate-state.md)).
 - **`sluisctl r2`** (the wrapper that runs `r2broker`) prints a deprecation notice and goes with the broker: use `sluisctl cloudflare r2 <preset>`, which needs no broker.
 
 ## v1.74.0-rc.1
 
 ### Added
 
-- **Blobs on an S3-compatible store: `ports.blob.s3.credentialsRef`.** With `endpoint` set, the S3 Blob adapter signs with static credentials read from the installation's secrets store at an `internal/<kind>/<id>` address (layout v4 or transition) instead of the SDK's default chain: a small versioned document, `s3-credentials/v1` (`access_key_id`, `secret_access_key`; JSON Schema under `schemas/internal/`). They are read at start and again after a 403, at most once a minute, and never logged. `region` defaults to `auto` with a `credentialsRef`; any address that is not `internal/<kind>/<id>`, or a `credentialsRef` without `endpoint`, is refused at load. The Pulumi library no longer strips `credentialsRef` before its loader check. See [Keep the blobs on an S3-compatible store](docs/how-to/blobs-on-r2.md).
+- **Blobs on an S3-compatible store: `ports.blob.s3.credentialsRef`.** With `endpoint` set, the S3 Blob adapter signs with static credentials read from the installation's secrets store at an `internal/<kind>/<id>` address (layout v4 or transition) instead of the SDK's default chain: a small versioned document, `s3-credentials/v1` (`access_key_id`, `secret_access_key`; JSON Schema under `schemas/internal/`). They are read at start and again after a 403, at most once a minute, and never logged. `region` defaults to `auto` with a `credentialsRef`; any address that is not `internal/<kind>/<id>`, or a `credentialsRef` without `endpoint`, is refused at load. The Pulumi library no longer strips `credentialsRef` before its loader check. See [Keep the blobs on an S3-compatible store](docs/guides/sluis/operate/blobs-on-r2.md).
 - **The Pulumi library: blobs on an S3-compatible endpoint (R2), `StorageArgs.Blobs`.** `ExternalBlobs{Bucket, Endpoint, Region, PathStyle, Prefix, CredentialsRef}` replaces the bucket: the library creates none and grants no S3 IAM, writes `ports.blob` into the service document, and grants the function's role (and the Kubernetes identity's) `ssm:GetParameter` on the one parameter the `internal/<kind>/<id>` address `CredentialsRef` names. No credential is an input, so none is in the Pulumi state. Exactly one of `BucketName` and `Blobs`. Pair it with the edge's `TruststoreBucket` for the truststore. `Storage.Grant()` carries the external store.
 - **The Pulumi library: keys the estate supplies, `LambdaArgs.Keys`.** `KeysArgs{Sign, Secrets, LegacySigningContext}` names symmetric keys by alias; the library creates none, resolves each alias with `aws.kms.LookupAlias` and grants `kms:Encrypt`/`Decrypt`/`GenerateDataKey` on the key behind `Sign` under the runtime's context `{instance, purpose: sign}`, never `kms:Sign`. `Secrets` is the SSM store's key: written as `secrets.kmsKeyId`, granted through SSM only for the installation's parameters (`kms:ViaService`, `PARAMETER_ARN`), and exclusive with `ParameterKeyArn`. The older `{purpose: sluis-signing}` grant stays by default (`LegacySigningContext`), until the ring has rotated past the old entries. The service document gets `instance` and the `keys:` block. `instance` and `keys` are held to the service-document schema; `ports.blob.s3.credentialsRef` is written for a runtime whose schema carries it, and is held to that schema with the rest of the document.
 - **The Pulumi library: reader policies for exact `external/` addresses.** `ExternalReadPolicy` returns the IAM document (`ssm:GetParameter` on those parameters, `kms:Decrypt` on the secrets key through SSM for exactly those parameters, no wildcard), and `NewExternalReader` attaches it to a role.
 - **The Pulumi library installs audit by default: `LambdaArgs.Audit`.** With an `Installation`, `Audit` decides where the service's audit records go. Unset (or set without `Use`), the library calls the audit Pulumi library of this repository (`github.com/truvity/sluis/audit/deploy/pulumi`, the same release) beside the function: the `operational` preset derived from `Profiles` (default `security: [history]`; `Preset` may name a stronger one), an archive of its own (an AWS S3 bucket named `<name>-<account>-<region>`, SSE-S3 without an archive key; or an S3-compatible store with `Archive.Endpoint`, or `Archive.ReuseBlobStore` to take the endpoint from `StorageArgs.Blobs` while keeping a bucket and credentials of its own), the function's role as the one sender its ingest queue accepts, the function granted `sqs:SendMessage` on exactly that queue, and `aws.auditQueueURL` written into the service document. `Audit.Use{QueueURL, QueueArn}` sends the records to an installation that exists and installs nothing; `Audit.Enabled: false` installs and grants nothing and writes the `log` audit adapter (the runtime validates each record and logs it, and keeps it nowhere else). The roster catalogue stays delivered with the audit writer's package: `Audit.CatalogueDir` is the unpacked `sluis-audit-catalogue` bundle, shipped in the writer's configuration layer, and an install without it, the writer's zip or its digest is refused before anything is created. New outputs `Audit`, `AuditQueueURL` and `AuditQueueArn`. `deploy/pulumi/go.mod` (and the Cloudflare edge module's) gain a require on `github.com/truvity/sluis/audit/deploy/pulumi` at `v0.0.0` with `replace` directives for it, `audit` and `audit/sdk`, which the release pin script (`hack/pin-pulumi-require.sh`) pins to the release.
-- **`storage/keys`: erase a tenant, `Key.Destroy`; `audit key destroy` works on the port.** `Key.Destroy(ctx, tenant)` removes the per-tenant secret behind `MAC` and leaves a tombstone, so `MAC` for that tenant then returns `keys.ErrDestroyed` instead of minting a new secret (a second, unrelated pseudonym for the same person); it is idempotent, touches no other tenant, and `Key.Destroyed` reports it. The optional backend capability is `DestroyBackend`. On `kms` the wrapped key is deleted from the state store with all its versions behind a tombstone written first (`kms.ErasableStore`, which `kms.FromState` gives; another replica stops within `kms.DefaultMACKeyTTL`, a minute). `local` remembers it in memory (tests). **`transit` does not erase** and returns `ErrUnsupported`: its pseudonym key is one transit key for the installation, and a key per tenant would need create and delete rights the writer's policy deliberately lacks; put `pseudonym` on `kms`. The keys conformance suite checks destroy, idempotence and isolation of other tenants. audit: `PortProvider.Destroy` calls it, `Pseudonym`, `Seal` and `Open` return `ErrDestroyed` afterwards, and `audit key destroy --writer-config <writer.yaml>` opens the keys the writer does. Sealed identifiers are refused, not shredded (one conceal key for the installation). See [erase a tenant's keys](docs/audit/how-to/erase-a-tenants-keys.md).
+- **`storage/keys`: erase a tenant, `Key.Destroy`; `audit key destroy` works on the port.** `Key.Destroy(ctx, tenant)` removes the per-tenant secret behind `MAC` and leaves a tombstone, so `MAC` for that tenant then returns `keys.ErrDestroyed` instead of minting a new secret (a second, unrelated pseudonym for the same person); it is idempotent, touches no other tenant, and `Key.Destroyed` reports it. The optional backend capability is `DestroyBackend`. On `kms` the wrapped key is deleted from the state store with all its versions behind a tombstone written first (`kms.ErasableStore`, which `kms.FromState` gives; another replica stops within `kms.DefaultMACKeyTTL`, a minute). `local` remembers it in memory (tests). **`transit` does not erase** and returns `ErrUnsupported`: its pseudonym key is one transit key for the installation, and a key per tenant would need create and delete rights the writer's policy deliberately lacks; put `pseudonym` on `kms`. The keys conformance suite checks destroy, idempotence and isolation of other tenants. audit: `PortProvider.Destroy` calls it, `Pseudonym`, `Seal` and `Open` return `ErrDestroyed` afterwards, and `audit key destroy --writer-config <writer.yaml>` opens the keys the writer does. Sealed identifiers are refused, not shredded (one conceal key for the installation). See [erase a tenant's keys](docs/guides/audit/operate/erase-a-tenants-keys.md).
 - **The Pulumi library's custom domain is split out into an edge module: `github.com/truvity/sluis/deploy/pulumi/edge/cloudflare`.** A module of its own (package `edgecloudflare`), so the core never depends on a front door: `NewEdge` builds the regional API Gateway custom domain with mutual TLS, its mapping to the API, the truststore and, if asked, the ACM certificate. The truststore is ONE versioned object, `truststore/client-ca.pem`, in the installation's blob bucket, which the domain pins by version; the bucket policy denies every write, delete and re-label under `truststore/` to every principal except the apply identities you name (the CD role, the operators' admin role, a break-glass role), so the functions, which write the rest of that bucket, cannot replace the client CA. `Args.CertificateArn` takes a certificate the caller supplies; `Args.Certificate` requests one with DNS validation through a callback that creates the record in the estate's own DNS, so the edge holds no DNS credential and imports no Cloudflare provider. For blobs on an S3-compatible store (R2), API Gateway cannot read a truststore from the blob store: `Args.TruststoreBucket` makes the edge create a small S3 bucket of its own for it, with the same guard. Authenticated Origin Pulls remains the estate's zone setting. `edge/aws` is a later module. The release workflow tags the edge at the same version as the core.
 - **Core: `Lambda.FrontDoor()`, `Lambda.APIStageName`, and `StorageArgs.ProtectedPrefixes`.** `FrontDoor` is what an edge module takes (the API id, its stage, the component's name for aliases). `ProtectedPrefixes` is a bucket-policy Deny on writes under a key prefix for every principal but the listed ones, in the bucket's one policy; `Storage` now reports `Versioned` and `ProtectedPrefixes`.
 - **audit: the audit trail component moves into this repository, under `audit/`.** A snapshot of truvity/audit at v0.16.0, without its history. It stays independently usable: its own Go modules (`github.com/truvity/sluis/audit`, `.../audit/sdk`, `.../audit/deploy/pulumi`; the SDK is wired to the root with `v0.0.0` and a `replace` until a release pins it), the Pulumi library, the SDKs, the documentation (`docs/audit/`, its old changelog is `audit/CHANGELOG.md`), the images (`ghcr.io/truvity/audit/*`, names unchanged) and the Helm chart, now `charts/audit`. audit never imports sluis: a depguard rule and `audit/internal/independence` hold that. Its recipes are `just audit-*`, its toolchain is the root `devbox.json` (plus nodejs, openssl and postgresql), its CI jobs run in `ci.yaml` and are skipped on a pull request that touches nothing audit covers, and the leak canary now scans `audit/` too. The module path changes from `github.com/truvity/audit` to `github.com/truvity/sluis/audit`, so an importer rewrites its imports when it moves. Releases of audit from this repository, and archiving truvity/audit, follow separately.
 - **`keys.sign`: the wrapped signing ring wraps its keys under a key asked for by purpose.** The service document gains `keys` (`adapter: kms`, `sign: alias/...`, the shared block of `storage/keys`, by alias only; the long form `{key, context}` is accepted) and `instance`, which the default encryption context `{instance, purpose: sign}` binds. New ring entries are generated here, wrapped under it and record the context they were made under; entries written by earlier releases carry no record and are opened with `{purpose: sluis-signing, alg, kid}`, without being re-wrapped. The installation document takes `keys` too and, with `signingKey.kmsWrapped` and no `keys`, defaults to `alias/sluis-<instance>-sign`.
-- **audit: the archive on an S3-compatible store (Cloudflare R2), and keys by purpose through the storage port.** `archive.bucket.endpoint` already addressed a store that is not AWS; now the region defaults to `auto`, **Object Lock is refused on an endpoint** (`lockMode: none` only; the lock is an AWS S3 guarantee another store does not make), and `archive.credentials: {root, address}` reads the store's static credentials, a JSON object `{accessKeyID, secretAccessKey}`, from the installation's `internal/` address of its state store (SSM through `storage/state`), so no secret is in the file or in the stack's state. The precomputed SHA-256 checksum for compressed writes (R2 refuses an SDK-chosen checksum with a `Content-Encoding`) is kept and now has a wire-level test against the real SDK client. The `keys:` block takes the storage port's shape (`adapter: kms|transit|local`, then `seal`, `pseudonym`, `conceal`, `archive`, aliases only, `state` for the kms pseudonym secrets); the notary takes `keys.seal` in place of `signer` (exactly one). `audit/keys` gains `PortProvider` and `PortSigner` over the port, and `Local`, `Transit`, `TransitSigner` and `KMSSigner` are marked `Deprecated:` (kept: they take an ARN or P-256 key). The Pulumi library **creates no key**: `Keys{Archive, Seal, Pseudonym, Conceal, Instance}` name the estate's keys by alias, resolved with `kms.LookupAlias`; the writer's grants on the pseudonym and conceal keys are conditioned on the encryption context the storage KMS backend sends; `SealKeyPolicy` is the seal key's policy for the estate to apply; pseudonym keys are accepted only at the attested preset or for a profile that pseudonymises. New `Archive.Endpoint`, `StoreRegion`, `PathStyle`, `CredentialsAddress`, `State{Root, KeyArn}` and the output `ArchiveCredentialsPath`; with an endpoint the library creates no bucket and the roles get no S3 or archive-key statement. `audit` now imports the `storage` module (the one exception to "audit never imports sluis"; it imports nothing of sluis). See [archive on R2](docs/audit/how-to/archive-on-r2.md).
+- **audit: the archive on an S3-compatible store (Cloudflare R2), and keys by purpose through the storage port.** `archive.bucket.endpoint` already addressed a store that is not AWS; now the region defaults to `auto`, **Object Lock is refused on an endpoint** (`lockMode: none` only; the lock is an AWS S3 guarantee another store does not make), and `archive.credentials: {root, address}` reads the store's static credentials, a JSON object `{accessKeyID, secretAccessKey}`, from the installation's `internal/` address of its state store (SSM through `storage/state`), so no secret is in the file or in the stack's state. The precomputed SHA-256 checksum for compressed writes (R2 refuses an SDK-chosen checksum with a `Content-Encoding`) is kept and now has a wire-level test against the real SDK client. The `keys:` block takes the storage port's shape (`adapter: kms|transit|local`, then `seal`, `pseudonym`, `conceal`, `archive`, aliases only, `state` for the kms pseudonym secrets); the notary takes `keys.seal` in place of `signer` (exactly one). `audit/keys` gains `PortProvider` and `PortSigner` over the port, and `Local`, `Transit`, `TransitSigner` and `KMSSigner` are marked `Deprecated:` (kept: they take an ARN or P-256 key). The Pulumi library **creates no key**: `Keys{Archive, Seal, Pseudonym, Conceal, Instance}` name the estate's keys by alias, resolved with `kms.LookupAlias`; the writer's grants on the pseudonym and conceal keys are conditioned on the encryption context the storage KMS backend sends; `SealKeyPolicy` is the seal key's policy for the estate to apply; pseudonym keys are accepted only at the attested preset or for a profile that pseudonymises. New `Archive.Endpoint`, `StoreRegion`, `PathStyle`, `CredentialsAddress`, `State{Root, KeyArn}` and the output `ArchiveCredentialsPath`; with an endpoint the library creates no bucket and the roles get no S3 or archive-key statement. `audit` now imports the `storage` module (the one exception to "audit never imports sluis"; it imports nothing of sluis). See [archive on R2](docs/guides/audit/operate/archive-on-r2.md).
 
 ### Deprecated
 
 - **`LambdaArgs.AuditQueueArn`** (an audit installation the estate installed itself, its queue URL written in the installation) keeps working, unchanged, and is the only way with the deprecated `Config`. Set `Audit` instead; with `Installation` an unset `AuditQueueArn` no longer errors, it installs audit.
 - **`LambdaArgs.SigningKeyAlias`, `SigningKeyRS256Alias`, `DisableSigningKeyRS256` and `WrappedSigning`** (the keys the library creates) are accepted for one more release with a warning, unchanged (no diff), and removed after it. Supply the keys with `Keys`; it is exclusive with them.
 - **`sluis migrate` into a destination on `secrets.layout: v3`** is accepted for one release, with a warning; write layout v4.
-- **`LambdaArgs.API.DomainName`, `CertificateArn`, `TruststorePEM` and `TruststoreBucketName`, and the outputs `DomainTarget`, `DomainHostedZoneID`, `TruststoreBucketName` and `TruststoreURI`.** They are accepted for one release, all four together or none, and while set `NewLambda` still builds the domain and its truststore bucket exactly as before (same resources, same names, no diff) and logs a warning. Unset, `NewLambda` builds the API alone, with no domain, no certificate and no truststore, and the outputs are empty. `API.KeepDefaultEndpoint` stays: it is the API's. An existing stack moves to the edge module without replacing the custom domain (the edge's domain and mapping are aliased to the core's): [the steps](docs/how-to/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module), including `pulumi state unprotect` of the old truststore bucket, which was protected.
+- **`LambdaArgs.API.DomainName`, `CertificateArn`, `TruststorePEM` and `TruststoreBucketName`, and the outputs `DomainTarget`, `DomainHostedZoneID`, `TruststoreBucketName` and `TruststoreURI`.** They are accepted for one release, all four together or none, and while set `NewLambda` still builds the domain and its truststore bucket exactly as before (same resources, same names, no diff) and logs a warning. Unset, `NewLambda` builds the API alone, with no domain, no certificate and no truststore, and the outputs are empty. `API.KeepDefaultEndpoint` stays: it is the API's. An existing stack moves to the edge module without replacing the custom domain (the edge's domain and mapping are aliased to the core's): [the steps](docs/guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module), including `pulumi state unprotect` of the old truststore bucket, which was protected.
 - **`signingKey.kmsWrapped.keyId`** is replaced by `keys.sign`. An alias is mapped onto it with a warning for this release; an ARN or a key id is refused. It is no longer required.
-- **`signingKey.kms` (direct asymmetric KMS signing)** logs a warning at start. Move to the wrapped ring and keep the old public keys under `signingKey.verifyOnly` for the overlap (docs/explanation/signing-on-aws.md).
+- **`signingKey.kms` (direct asymmetric KMS signing)** logs a warning at start. Move to the wrapped ring and keep the old public keys under `signingKey.verifyOnly` for the overlap (docs/concepts/sluis/signing-on-aws.md).
 
 ### Changed
 
@@ -62,7 +62,7 @@
 - **Layout v4 types and contract (`internal/secretstore`), first part of the move.** `Internal` and `External` over `state.Store` with a typed `state.Value` per address, the three external documents (`oidc/v1`, `github/v1`, `slack/v1`) with JSON Schemas under `schemas/external/` and golden tests, and `secrets.layout: v3 | transition | v4` in the `ssm` secrets source (default `v3`; nothing reads it yet, so no behaviour changes). A catalogue GitHub App id may no longer begin `runner-`, which names a runner App's document. The root module now requires the `storage` module. See ADR 0041 (the secret contract).
 - **Layout v4: the callers move (`secrets.layout: transition | v4`).** The Secrets port is mapped to `internal/` and `external/` (`internal/secretstore`), the SSM secrets source reads `<root>/internal/config/`, and the Apps' exported credentials are `github/v1` and `slack/v1` documents with ids from the App's record. A generated or operator-seeded client secret is the `oidc/v1` document, rotated with one write; the token check accepts the current or the previous secret (`secrets.grace`, default 24h) and reads the pair fresh once before it refuses. A catalogue GitHub App gains `export` in the policy. `transition` writes v3 and v4 and reads v4 first. The default stays `v3`; the exports controller still runs.
 - **Breaking (audit): install presets, derived from the profiles.** `operational` (writer, archive, deduplication, intake; no notary, seal key, Object Lock or pseudonym keys; alarms off), `standard` (adds the notary, its seal key and the alarms) and `attested` (adds compliance Object Lock and the pseudonym keys). Every framework profile file states `min_preset` (required by `profile.schema.json`), and the preset is the highest of them over the profiles an installation composes, `operational` when nothing is chosen. The deployment document, the chart (`preset`) and the Pulumi library (`Args.Preset`) may name a stronger one; a weaker one is refused naming the profile that needs more (`profile.Deployment.ResolvePreset`, applied wherever the deployment is composed). The Pulumi library creates no notary, seal key, schedule or alarm under `operational` and refuses `Notary.Package` or `Alerts.EndpointURL` there, `Archive.ObjectLockMode` defaults to what the preset says (compliance for `attested`, which refuses a weaker mode; `NONE` below it) instead of being required, `Writer.DeploymentYAML` is parsed and its profiles must be shipped framework profiles, an installation with no writer here sets `Preset` itself, and the component exports `Preset`. The chart's `profiles` default is empty, which renders one `history` profile and is `operational` (audit for yourself): an estate that needs the notary or a framework's controls names its profiles (`security: {frameworks: [security]}`), and the chart no longer refuses an empty `profiles`. It refuses `jobs.notary.enabled` under `operational`, and `renders: alerts` too (the alert rules are the standard preset's: give that release `preset: standard` or the write path's profiles); its billing check now reads `frameworks`.
-- **Layout v4: `sluis migrate secrets-layout --to v4` and `--delete-v3`.** The first copies every v3 item to its v4 address (`internal/...`, and the `oidc/v1`, `github/v1` and `slack/v1` documents at `external/<kind>/<id>`), reads each back and compares; it is idempotent and resumable, a differing document at an address is a refusal naming both revisions, and `--dry-run` prints addresses and never a value. The second removes the v3 items as a later step and refuses unless `secrets.layout` is `v4` and every item has its v4 address. `sluis migrate` from the legacy in-cluster store writes straight into v4 when the destination says `secrets.layout: v4`, under its key alias; a ring is copied as it is with each entry's wrap context. [The steps](docs/how-to/migrate-secrets-layout.md).
+- **Layout v4: `sluis migrate secrets-layout --to v4` and `--delete-v3`.** The first copies every v3 item to its v4 address (`internal/...`, and the `oidc/v1`, `github/v1` and `slack/v1` documents at `external/<kind>/<id>`), reads each back and compares; it is idempotent and resumable, a differing document at an address is a refusal naming both revisions, and `--dry-run` prints addresses and never a value. The second removes the v3 items as a later step and refuses unless `secrets.layout` is `v4` and every item has its v4 address. `sluis migrate` from the legacy in-cluster store writes straight into v4 when the destination says `secrets.layout: v4`, under its key alias; a ring is copied as it is with each entry's wrap context. [The steps](docs/guides/sluis/migrate/migrate-secrets-layout.md).
 - **Breaking (audit): destinations as prefixes, routed by category.** Each profile of the deployment document is a destination of the one archive bucket: `categories` (the action categories it takes), `key_alias` and an optional `preset`. A catalogue declares a `category` per action, `profiles` on an action is deprecated (and no longer required when a category is given), and the writer stores a projection of the one record per destination that takes its category; a category nobody takes is reported once. `catalogue.MissingCategories` takes the destination's categories. Object Lock is the writer's only for a destination whose preset is attested, on S3 only: an attested destination on an S3-compatible endpoint or an archive with no lock is refused at start, and a destination below attested writes objects it can clear even in a locked bucket (a governance trial of the lock now means `preset: attested` on the destination). The Pulumi library takes the destinations from `Writer.DeploymentYAML` (`Archive.Profiles` is optional), writes a lifecycle rule per prefix that expires its objects when a fixed retention ends (Glacier steps only before it), and looks up the key behind each destination's `key_alias` (the estate supplies it; the library creates no key) and grants it to every role that reads or writes the archive, conditioned on the storage backend's encryption context (the lookup is the one the `Keys` aliases use); on an archive at an S3-compatible endpoint, where the library creates no bucket or lifecycle and `Keys.Archive` is refused, a destination's `key_alias` is refused too, and the per-prefix lifecycle applies only to the bucket the library creates. The library refuses `Archive.ObjectLockMode` other than `NONE` on an archive with no attested destination, and anything but `COMPLIANCE` on one that has one (unset is compliance), which supersedes the install-presets entry's allowance of a stricter lock below attested and of governance at attested. The sluis roster catalogue does not declare categories yet: the root module still builds against the published audit SDK, which does not know the field.
 - **Breaking (audit): storage is configured per install preset ([ADR 0068](docs/decisions/0068-storage-is-configured-per-preset.md)).** An installation names the presets it uses under `presets:` in the deployment document, and each preset has a store of its own: `bucket`, `prefix`, `region`, `endpoint` (empty is AWS S3, set is an S3-compatible store such as R2), `path_style`, `credentials` (the address of an endpoint's static credentials below the process's `archive.stateRoot`) and `key_alias` (AWS only). A profile's preset (the highest `min_preset` of its framework profiles, or a stronger `preset` it asks for) must be configured, or the document is refused naming both; its records, seals and compositions are stored in that preset's bucket. Object Lock is a property of the preset's bucket: compliance for `attested`, on S3 only (an `attested` preset with an `endpoint` is refused), none for every other. The notary, seal key, alarms and pseudonym keys turn on when any configured preset needs them. Removed: the deployment's installation-wide `preset:` and `profiles.<name>.key_alias`, the process configuration's `archive.bucket`, `prefix`, `lockMode`, `kmsKey`'s role as the only key and `credentials` (the `archive` block is now `{stateRoot, ca, kmsKey}`; `audit-observe` and `audit-notary` take `deployment`; a version-1 file that names the bucket is refused with a pointer to `presets`), `profile.Deployment.ResolvePreset`/`Derive`, `cli.OpenArchiveFrom`/`PlanDestinations`/`OpenDestinations` and `writer.Config.Destinations`. New: `profile.PresetStorage`, `Deployment.CheckStorage` and `Features`, `store/routed` (the presets' stores addressed as one archive, so the indexer, query service and notary read every preset's store), `cli.PlanPresets` and `cli.OpenArchive`. The audit chart takes `presets` in place of `preset`, and the audit Pulumi library `Args.Presets` (`PresetStorage{Bucket, Prefix, Region, Endpoint, PathStyle, CredentialsAddress, KeyAlias, Create}`) in place of the single `Archive` bucket and endpoint; `LambdaArgs.Audit.Archive` is replaced by the same `Presets`.
 
@@ -82,7 +82,7 @@
 
 ### Added
 
-- **The Pulumi library's Lambda role can mint web identity tokens for further audiences: `LambdaArgs.AdditionalWebIdentityAudiences`.** For code that runs in the function and needs its own AWS-minted token, such as an OpenTelemetry layer authenticating to a collector through the issuer's token exchange (`exchange.aws.audience`, typically the issuer URL). The entries are appended, after the console audience, to the exact `ForAllValues:StringEquals` condition on `sts:IdentityTokenAudience`; the console audience stays first and required. Empty entries, duplicates (the console audience included) and use while `WebIdentityAudience` resolves empty are refused. Unset, the role's policy is byte-identical, so an existing stack shows no diff. This gives up "the role mints a console bearer and nothing else": any code running with the function role, its layers and their dependencies included, can mint a token for every audience listed, so a policy rule that matches the role for an exchange must grant only what that audience's consumer needs. `docs/reference/lambda.md` now shows the `ForAllValues:StringEquals` the code emits, where it showed `ForAnyValue`.
+- **The Pulumi library's Lambda role can mint web identity tokens for further audiences: `LambdaArgs.AdditionalWebIdentityAudiences`.** For code that runs in the function and needs its own AWS-minted token, such as an OpenTelemetry layer authenticating to a collector through the issuer's token exchange (`exchange.aws.audience`, typically the issuer URL). The entries are appended, after the console audience, to the exact `ForAllValues:StringEquals` condition on `sts:IdentityTokenAudience`; the console audience stays first and required. Empty entries, duplicates (the console audience included) and use while `WebIdentityAudience` resolves empty are refused. Unset, the role's policy is byte-identical, so an existing stack shows no diff. This gives up "the role mints a console bearer and nothing else": any code running with the function role, its layers and their dependencies included, can mint a token for every audience listed, so a policy rule that matches the role for an exchange must grant only what that audience's consumer needs. `docs/reference/sluis/lambda.md` now shows the `ForAllValues:StringEquals` the code emits, where it showed `ForAnyValue`.
 
 ## v1.70.0
 
@@ -181,7 +181,7 @@ The release candidate of v1.64.0: its notes are v1.64.0's, below. Cut to exercis
 
 ## v1.64.0
 
-Documents mode, `sluisctl render` and the installation document, the OpenBao Secrets adapter, `k8s-aws`, verify-only signing keys. Presets `server`, `k8s-minimal` and `k8s-openbao` are refused, and the chart's values mode is deprecated: see [upgrade to v1.64](docs/how-to/upgrade/v1.64.md).
+Documents mode, `sluisctl render` and the installation document, the OpenBao Secrets adapter, `k8s-aws`, verify-only signing keys. Presets `server`, `k8s-minimal` and `k8s-openbao` are refused, and the chart's values mode is deprecated: see [upgrade to v1.64](docs/guides/sluis/upgrade/v1.64.md).
 
 ### Added
 
@@ -200,8 +200,8 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
   on, whom it trusts, its clients and its exports. `sluisctl render --installation <file> --out <dir>` writes the service
   document (`sluis.yaml`, v3) and the policy document (`policy.yaml`, v2) from it, deterministically, held to the loader
   the service runs at start; `--check` compares with the files already there and exits 1 on a difference. Documented in
-  [sluisctl](docs/reference/sluisctl.md#render-an-installation-in-the-two-documents-out) and
-  [configuration](docs/reference/installation-document.md).
+  [sluisctl](docs/reference/sluis/sluisctl.md#render-an-installation-in-the-two-documents-out) and
+  [configuration](docs/reference/sluis/installation-document.md).
 - **A public configuration package, `github.com/truvity/sluis/config`**: the service (v3) and policy (v2) document
   types, `Load` and `Validate` against the authored schemas, `LoadInstallation`, `Render` and `InstallationSchema`.
   Estates and the Pulumi library use it instead of `internal/config`.
@@ -219,7 +219,7 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
   namespace, so a preview runner App can land in `devel`. An export of properties is stored as the properties
   themselves, one KV field each, readable by a consumer's External Secrets as it reads a copy made by
   `ports.export: openbao`. The policy it needs is in
-  [configuration](docs/reference/openbao-secrets-adapter.md). Settings: `address`, `caFile`,
+  [configuration](docs/reference/sluis/openbao-secrets-adapter.md). Settings: `address`, `caFile`,
   `mount`, `namespace`, `root`, `auth{method, mount, role, tokenFile}`. The OpenBao client accepts https only, never
   follows a redirect, puts a 403 down to the token only when it is older than 30s, and a `Put` under a
   `cas_required` mount is a refusal that names it, not a conflict.
@@ -249,10 +249,10 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
 
 - **Presets `server`, `k8s-minimal` and `k8s-openbao` are marked unavailable**: each names adapters that are planned
   and not built, and loading one now fails with a message naming the preset and the missing adapters, unless
-  `adapters` replaces every one of them. They are not removed; `docs/reference/adapters.md` lists them.
+  `adapters` replaces every one of them. They are not removed; `docs/reference/sluis/adapters.md` lists them.
 - **The `$id` of `sluis.schema.json` says v3**, the version of the document (it said v2). A schema's `$id`
   version now follows its document's `apiVersion`.
-- **`docs/reference/adapters.md` shows the `invoke` trigger as implemented**, as is the `aws-serverless` and
+- **`docs/reference/sluis/adapters.md` shows the `invoke` trigger as implemented**, as is the `aws-serverless` and
   `aws-hybrid` presets' trigger: the generator now links every adapter any binary registers.
 - **The Pulumi library imports no `internal/` package, and its `require` of the root module is pinned by the
   release.** `deploy/pulumi/vX.Y.Z` is now tagged at a child of the release commit whose `go.mod` requires `vX.Y.Z`
@@ -281,7 +281,7 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
 
 ## v1.63.0
 
-One process everywhere (ADR 0037): on AWS Lambda one function and one role, on Kubernetes one Deployment and one Pod Identity role, configured by one service document `sluis.yaml` (`apiVersion` v3, with `controllers.github` and `controllers.slack`) plus the canonical `policy.yaml`. No data migration from 1.62; binary 1.63 and the Pulumi library 1.63 deploy together. **Upgrading:** [upgrade to v1.63](docs/how-to/upgrade/v1.63.md).
+One process everywhere (ADR 0037): on AWS Lambda one function and one role, on Kubernetes one Deployment and one Pod Identity role, configured by one service document `sluis.yaml` (`apiVersion` v3, with `controllers.github` and `controllers.slack`) plus the canonical `policy.yaml`. No data migration from 1.62; binary 1.63 and the Pulumi library 1.63 deploy together. **Upgrading:** [upgrade to v1.63](docs/guides/sluis/upgrade/v1.63.md).
 
 ### Changed
 
@@ -367,7 +367,7 @@ One process everywhere (ADR 0037): on AWS Lambda one function and one role, on K
   anything is published, the layer mounted last, every IAM grant under
   `/sluis/<instance>/` (a test holds it, with no `*` but a trailing `/*`).
 - **Migrating:** merge the three documents into one v3 document, admit the one role in the policy and the audit
-  installation's workload map, and keep `FunctionName: "<prefix>-http"` to replace nothing: [upgrade to v1.63](docs/how-to/upgrade/v1.63.md).
+  installation's workload map, and keep `FunctionName: "<prefix>-http"` to replace nothing: [upgrade to v1.63](docs/guides/sluis/upgrade/v1.63.md).
 
 - **Breaking: `NewKubernetesIdentity` makes ONE role for the one pod.** The
   `Serve`, `GitHub` and `Slack` `ProcessArgs` and `ProcessArgs` itself are gone;
@@ -381,7 +381,7 @@ One process everywhere (ADR 0037): on AWS Lambda one function and one role, on K
   `ParameterKeyArn`), the Lambda role's SSM grants under `/sluis/<instance>/`:
   credentials read/write, config read, exports, the parameter key through SSM
   only. Moving: Pulumi replaces the serve role under its new name and destroys
-  the github and slack roles and associations ([upgrade to v1.63](docs/how-to/upgrade/v1.63.md#4-eks-identity-one-role-for-the-one-pod)).
+  the github and slack roles and associations ([upgrade to v1.63](docs/guides/sluis/upgrade/v1.63.md#4-eks-identity-one-role-for-the-one-pod)).
 
 ### Chart
 
@@ -419,7 +419,7 @@ One process everywhere (ADR 0037): on AWS Lambda one function and one role, on K
 
 ## v1.62.0
 
-Configuration is immutable per instance (ADR 0036): four versioned documents (`serve`, `controller-github`, `controller-slack`, and one canonical `policy`) with `apiVersion` v2, secrets by name from a declared source, SSM layout v3 under `/sluis/<instance>`, and on Lambda the release zip deployed unchanged with the configuration as a layer. Binary 1.62 and the Pulumi library 1.62 deploy together. **Upgrading:** [upgrade to v1.62](docs/how-to/upgrade/v1.62.md).
+Configuration is immutable per instance (ADR 0036): four versioned documents (`serve`, `controller-github`, `controller-slack`, and one canonical `policy`) with `apiVersion` v2, secrets by name from a declared source, SSM layout v3 under `/sluis/<instance>`, and on Lambda the release zip deployed unchanged with the configuration as a layer. Binary 1.62 and the Pulumi library 1.62 deploy together. **Upgrading:** [upgrade to v1.62](docs/guides/sluis/upgrade/v1.62.md).
 
 ### Changed
 
@@ -452,7 +452,7 @@ Configuration is immutable per instance (ADR 0036): four versioned documents (`s
   undeclared workspace, an enabled organisation or workspace the policy does
   not bind, an export of an undeclared App) are the policy document's, run
   wherever it is loaded. A v1 document keeps working until moved
-  ([upgrade to v1.62](docs/how-to/upgrade/v1.62.md)).
+  ([upgrade to v1.62](docs/guides/sluis/upgrade/v1.62.md)).
 
 - **Breaking: a service document names its secrets; `secrets.source` delivers
   them.** A key ending in `Secret` holds a secret's NAME, from the layout of
@@ -481,7 +481,7 @@ Configuration is immutable per instance (ADR 0036): four versioned documents (`s
   `<root>/private/config/...` (what an operator seeds),
   `<root>/private/credentials/...`, `<root>/export/...`. A v1 document that
   names no root keeps `/sluis` (layout v2) until it moves. The secrets are copied with `sluis migrate
-  ssm-layout` first ([upgrade to v1.62](docs/how-to/upgrade/v1.62.md#3-copy-the-configuration-secrets-to-the-instance-root)).
+  ssm-layout` first ([upgrade to v1.62](docs/guides/sluis/upgrade/v1.62.md#3-copy-the-configuration-secrets-to-the-instance-root)).
 - **Breaking: on Lambda, `SLUIS_CONFIG` names the document; `SLUIS_CONFIG_FILE`,
   `SLUIS_SECRET_FILES` and the `ssm:<path>` variables are retired** and refused
   at start, naming the v1.62 Pulumi library to deploy with: a function the
@@ -532,7 +532,7 @@ Configuration is immutable per instance (ADR 0036): four versioned documents (`s
     with `ParameterKeyArn`, each role may use the key only for the parameters
     under its own prefixes (`kms:EncryptionContext:PARAMETER_ARN`).
   - Moving from `kms` to `WrappedSigning` drops the old key ids from the JWKS at once: it is a step of its own
-    ([upgrade to v1.62](docs/how-to/upgrade/v1.62.md#6-retire-the-asymmetric-signing-keys-only-when-moving-from-kms-to-wrappedsigning)).
+    ([upgrade to v1.62](docs/guides/sluis/upgrade/v1.62.md#6-retire-the-asymmetric-signing-keys-only-when-moving-from-kms-to-wrappedsigning)).
   - The directory-refresh and exports schedules are unchanged.
 
 ### Added
@@ -641,7 +641,7 @@ kms-wrapped signing (one symmetric KMS key, wrapped data key pairs, free rotatio
   is part of the trust boundary; the key policy must reserve the signing context
   to the signing roles (the library does it for the key it creates; a shared
   `KeyArn` needs the denial merged in). EdDSA is not supported yet. See
-  [Signing on AWS](docs/explanation/signing-on-aws.md). A deployment that
+  [Signing on AWS](docs/concepts/sluis/signing-on-aws.md). A deployment that
   names `signingKey.kms` or `signingKey.file` keeps what it names.
 - **Pulumi library: `LambdaArgs.WrappedSigning`.** One symmetric key (created
   with rotation enabled, protected, and a key policy that denies every principal
@@ -669,7 +669,7 @@ kms-wrapped signing (one symmetric KMS key, wrapped data key pairs, free rotatio
   refused ones too, is now the audit event `roster.recovery.signed_in` (outcome
   `denied` or `failure` with the reason, actor `anonymous`); the catalogue is unchanged.
   The setup checklist's step "Turn off the recovery password" names the setting and the
-  parameter. See [Recovery on Lambda](docs/how-to/recover-on-lambda.md).
+  parameter. See [Recovery on Lambda](docs/guides/sluis/operate/recover-on-lambda.md).
 
 - **`GET /` on the issuer's host redirects to `/console/`** (302, HEAD too) when the
   console is mounted, instead of the issuer's bare 404. Only the exact path: every
@@ -683,7 +683,7 @@ Storage layout v2 moves DynamoDB items to a per-kind table partition, SSM config
 
 - **Layout change for the non-legacy adapters (storage layout v2): re-migrate from legacy.**
   What the `dynamodb`, `ssm` and Secrets-port adapters write is now clear and
-  consistent ([storage layout](docs/reference/storage-layout.md)). A record has a
+  consistent ([storage layout](docs/reference/sluis/storage-layout.md)). A record has a
   kind and an id: DynamoDB `pk` is the kind (`directory`, `github-org`, `slack-workspace`,
   `issuer-token`, `lease`, `keyring`, ...) and `sk` its id (`google/C01ipl6j0`,
   `stable/acme`), where there were three conventions in one table; a credential
@@ -744,7 +744,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   the issuer now warns at start). The `http` function also answers `{"kind":"exports"}` from a
   schedule: one pass of every export, each under its lease, failing the invocation if
   a copy could not be made. Kubernetes behaviour is unchanged. See
-  [aws-lambda](docs/reference/lambda.md).
+  [aws-lambda](docs/reference/sluis/lambda.md).
 
 - **The Pulumi library creates a second signing key, RS256.** `NewLambda` makes an
   `RSA_3072` `SIGN_VERIFY` key beside the ES384 one (alias `SigningKeyRS256Alias`,
@@ -786,7 +786,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
 - **Deployment guides and a generated adapter matrix.** `docs/guides/choosing-a-deployment.md`
   opens with the decision tree and modifiers, then the presets and support levels
   (`aws-hybrid` is the implemented, maintained path); `docs/guides/diy-adapter.md` is the
-  fixed checklist for adding an adapter in a fork. `docs/reference/adapters.md` is
+  fixed checklist for adding an adapter in a fork. `docs/reference/sluis/adapters.md` is
   generated from the adapter registry and the preset table by `just adapters-doc`;
   `just docs-check` fails when it is stale.
 
@@ -820,7 +820,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   `-tags lambda,lambda.norpc`, which leaves out client-go, NATS and Valkey, and
   `cmd/sluis-lambda/imports_test.go` fails on any of them. The controllers' configuration files gain the serve file's `platform`, `preset` and
   `adapters` keys (the Lambda controllers select `sqs` audit through them). **No change
-  to the Kubernetes build.** See [aws-lambda](docs/reference/lambda.md).
+  to the Kubernetes build.** See [aws-lambda](docs/reference/sluis/lambda.md).
 
 - **Removed: sluis's own OTLP Lambda extension.** `cmd/sluis-lambda` used to be the
   extension installed as `extensions/access-roster-otlp`, deprecated in v1.57.0 for
@@ -877,7 +877,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
 
 - **The Pulumi library deploys sluis on AWS Lambda.** Both estates (one on Kubernetes and
   one on AWS Lambda installations) move sluis to Lambda, and `deploy/pulumi` now expresses it
-  ([guide](docs/reference/pulumi-library.md#lambda)):
+  ([guide](docs/reference/sluis/pulumi-library.md#lambda)):
 
   - `NewLambda` creates three functions from one released zip (`sluis-http`,
     `sluis-github`, `sluis-slack`; arm64, `provided.al2023`, handler `bootstrap`,
@@ -925,7 +925,7 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   key and rides the existing `pollInterval`, `activationDelay` and `overlap`. The role
   needs `kms:Sign` and `kms:GetPublicKey`; signatures are counted by key in
   `access_issuer.kms_signatures`. See
-  [Signing with AWS KMS](docs/how-to/sign-with-aws-kms.md). The chart
+  [Signing with AWS KMS](docs/guides/sluis/operate/sign-with-aws-kms.md). The chart
   does not render this yet.
 
 - **The GitHub and Slack controllers roll safely.** The chart fixed each controller at
@@ -946,8 +946,8 @@ sluis runs on AWS Lambda (three functions from one zip) with DynamoDB state, SSM
   - More than one replica is refused at render unless the controller's
     `ports.adapter` is `nats` or `dynamodb`. With `legacy` or `memory` the tick leases
     are in each pod's memory and every replica would act on every target.
-  - See [the runbook](docs/how-to/check-health.md#2-a-rollout-that-does-not-complete)
-    and [high availability](docs/explanation/high-availability.md#the-controllers-in-the-one-process).
+  - See [the runbook](docs/guides/sluis/operate/check-health.md#2-a-rollout-that-does-not-complete)
+    and [high availability](docs/concepts/sluis/high-availability.md#the-controllers-in-the-one-process).
 
 ## v1.57.1
 
@@ -1017,8 +1017,8 @@ Released automatically as a patch: the roster audit catalogue bumped to 1.7.0 af
   - **Environment:** the Lambda extension reads `SLUIS_*` first and falls back
     to `ACCESS_ROSTER_*` (both work, `SLUIS_*` wins); `sluisctl` does the same
     for `SLUISCTL_*` and `ACCESSCTL_*`
-    ([aws-lambda](docs/reference/lambda.md),
-    [sluisctl](docs/reference/sluisctl.md)).
+    ([aws-lambda](docs/reference/sluis/lambda.md),
+    [sluisctl](docs/reference/sluis/sluisctl.md)).
   - **npm:** `@truvity/access-roster` becomes `@truvity/sluis`. The release also
     publishes the same build as `@truvity/access-roster` for one or two
     releases, described as deprecated.
@@ -1048,7 +1048,7 @@ Released automatically as a patch by a workflow_dispatch of Auto Release; it car
   validated in its tests against the binaries' schemas. The KMS grant admits the
   encryption-context key `sluis:binding` only, so it needs a service release
   whose Sealer sends that key. Tested with Pulumi's mocks (`just pulumi-test`).
-  [docs/deployment/aws.md](docs/reference/pulumi-library.md).
+  [docs/deployment/aws.md](docs/reference/sluis/pulumi-library.md).
 
 ## v1.56.0
 
@@ -1095,7 +1095,7 @@ Released automatically as a patch by a workflow_dispatch of Auto Release; it car
   `kv/data/<prefix>/*`. Marked 🧪 in the capabilities. Installations without
   `exports` see no change. See
   [docs/decisions/0034](docs/decisions/0034-exports-go-to-openbao-directly.md) and
-  [docs/reference/configuration.md](docs/reference/exports.md).
+  [docs/reference/sluis/configuration.md](docs/reference/sluis/exports.md).
 
 ## v1.55.0
 
@@ -1117,7 +1117,7 @@ This release adds a DynamoDB adapter for State, the session index and the Trigge
   on any other skip, and `access-roster migrate` copies memory into it and back.
   Marked 🧪 in the capabilities: not yet run against AWS. Installations on any other
   adapter see no change. See
-  [docs/design/ports.md](docs/reference/port-adapters.md#the-dynamodb-adapter).
+  [docs/design/ports.md](docs/reference/sluis/port-adapters.md#the-dynamodb-adapter).
 
 ## v1.54.0
 
@@ -1133,7 +1133,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   that is not an http(s) URL, an `extraEnv` name not starting with `OTEL_`, and
   `OTEL_EXPORTER_OTLP_ENDPOINT` in `extraEnv`. Without it the alerts and the
   dashboard had no data. See
-  [docs/reference/telemetry.md](docs/reference/telemetry.md#wiring-it-with-the-chart).
+  [docs/reference/sluis/telemetry.md](docs/reference/sluis/telemetry.md#wiring-it-with-the-chart).
 
 - **`access-roster migrate --from <config> --to <config>`** copies the State from
   one storage to another (ADR 0031): the first step of the move, ConfigMaps,
@@ -1149,7 +1149,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   writes needs `--i-have-stopped-writers`. It then reads both sides again and
   compares every item, and prints a JSON report of counts and keys (never a
   value), also to a Blob with `--report-blob`. Re-running completes a partial
-  copy. See [docs/operations/migrate.md](docs/how-to/migrate-state.md). Adds the
+  copy. See [docs/operations/migrate.md](docs/guides/sluis/migrate/migrate-state.md). Adds the
   optional `port.StateExporter` and `port.IndexExporter`, a `Restore` on the two
   GitHub link stores and `PutSessionKey`, used only by the migration. `--backup`
   to a file is a follow-up.
@@ -1165,7 +1165,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   unchanged. A Sealer is required: the start is refused, naming `ports.sealer`,
   without one (so `nats` needs `ports.sealer`). The controllers read the same
   records from the State instead of the mounted files. See
-  [docs/design/ports.md](docs/explanation/domain-stores.md).
+  [docs/design/ports.md](docs/concepts/sluis/domain-stores.md).
 
 - **A GitHub link is one item with one compare-and-swap refresh.**
   `gh.link.<account>` holds the link and its sealed token pair; the refresh
@@ -1193,7 +1193,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   adapter's unless `ports.blob` and `ports.sealer` name the S3 and KMS adapters. The conformance suite passes against an
   embedded nats-server, a single node and a three-node cluster. Additive: the
   default adapter is unchanged. See
-  [docs/design/ports.md](docs/explanation/ports.md#the-nats-adapter).
+  [docs/design/ports.md](docs/concepts/sluis/ports.md#the-nats-adapter).
 
 - **S3 Blob and KMS Sealer adapters.** `ports.blob: {adapter: s3, s3: {bucket,
   prefix, region, kmsKey, endpoint, pathStyle}}` keeps the status reports and
@@ -1205,7 +1205,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   platform's; no key is configured. Additive: an installation that sets neither
   runs what it did. Both are experimental: they pass the conformance suite on
   LocalStack (`just test-s3`, and the `s3` CI job, which fails on a skipped
-  test). See [docs/design/ports.md](docs/explanation/ports.md#the-s3-blob-and-the-kms-sealer).
+  test). See [docs/design/ports.md](docs/concepts/sluis/ports.md#the-s3-blob-and-the-kms-sealer).
 
 - **The access document.** A policy layer may be written as the lists an
   installation derives from its access matrix (`access`) plus the rows that are
@@ -1215,7 +1215,7 @@ This release adds the NATS JetStream KV, S3 Blob and KMS Sealer port adapters; t
   policy ConfigMap, checks `enabledOrgs` and `enabledWorkspaces` against them
   and projects the secrets of the clients they declare. Additive: `policy` is
   unchanged, and an installation that sets neither value renders what it did.
-  See [docs/reference/policy.md](docs/reference/policy-bindings.md#the-access-document).
+  See [docs/reference/sluis/policy.md](docs/reference/sluis/policy-bindings.md#the-access-document).
 
 ## v1.53.0
 
@@ -1224,7 +1224,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
 - **Traces, issuer and controller metrics, and the chart's `alerts` and
   `dashboards` modes.** Telemetry is still only `OTEL_*`, exported only when a
   collector is named; the contract and every signal are in
-  [docs/reference/telemetry.md](docs/reference/telemetry.md).
+  [docs/reference/sluis/telemetry.md](docs/reference/sluis/telemetry.md).
 
   - **Traces.** A server span per request on the issuer's listener, named for a
     fixed route and never the path; Connect spans on the console's and the
@@ -1281,9 +1281,9 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   moves configuration from environment variables and chart values to one
   validated file per binary. It is a breaking change shipped as a patch release;
   the migration steps are in
-  [docs/reference/configuration.md](docs/how-to/migrate-from-environment-variables.md)
+  [docs/reference/sluis/configuration.md](docs/guides/sluis/migrate/migrate-from-environment-variables.md)
   and
-  [the chart migration](docs/how-to/migrate-from-the-access-issuer-chart.md).
+  [the chart migration](docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md).
 
 - **Breaking: each binary is configured by one validated file, in place of
   environment variables, and the chart passes it through.**
@@ -1298,7 +1298,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   wrong type is a start-up error that names the path to it, and a misspelt
   value in a chart is a failed `helm template` rather than a container that
   ignores it. The key for each old variable is in
-  [docs/reference/configuration.md](docs/how-to/migrate-from-environment-variables.md).
+  [docs/reference/sluis/configuration.md](docs/guides/sluis/migrate/migrate-from-environment-variables.md).
 
   - **Secrets are the one thing the environment adds, and only the ones the
     file names.** A key ending in `Env` (`valkey.passwordEnv`,
@@ -1413,7 +1413,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `ghcr.io/truvity/access-roster/access-roster` and
   `oci://ghcr.io/truvity/charts/access-roster`. Migrating an installation
   (the full walk-through, with every name that changes, is in
-  [docs/reference/configuration.md](docs/how-to/migrate-from-the-access-issuer-chart.md)):
+  [docs/reference/sluis/configuration.md](docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md)):
 
   1. Be on the config-file form of the values (the entry above).
   2. Rename the values `githubRoster` to `controllerGithub` and `slackRoster` to
@@ -1452,7 +1452,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `reports/slack/` are the two status ConfigMaps). A key of the layout that has
   no object of its own today (`ses.`, `sid.`, `ws.`, `gh.link.`, ...) is refused
   as unsupported rather than written somewhere else. The gaps are listed in
-  [design/ports.md](docs/reference/capabilities.md): a revision is
+  [design/ports.md](docs/reference/sluis/capabilities.md): a revision is
   a digest of the stored bytes, `Watch` polls, and the legacy `Sealer` refuses.
   The issuer's logins in progress, the hub's snapshots and refresh lease, the
   controllers' reports and the cluster `TokenReview` now go through the ports;
@@ -1575,7 +1575,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`ACCESS_ROSTER_TELEMETRY_BUFFER_*`; oldest dropped and counted), exports are
   fail-open, and what is queued is exported before the environment can freeze
   and on `SHUTDOWN`. The binary grows by about 65 KB. See
-  [integrations/aws-lambda.md](docs/reference/lambda.md#platform-logs).
+  [integrations/aws-lambda.md](docs/reference/sluis/lambda.md#platform-logs).
 
 ## v1.51.0
 
@@ -1598,7 +1598,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   the rest `path.Match` globs; roll the issuer before the policy that uses it,
   since an older issuer refuses the key). Audited as `roster.token.exchanged`
   with proof `workload`; the catalogue is unchanged. See
-  [connect/aws-workloads.md](docs/how-to/connect/aws-workloads.md).
+  [connect/aws-workloads.md](docs/guides/sluis/connect/aws-workloads.md).
 
 - **A Lambda extension layer sends a function's OpenTelemetry data with the
   function role's identity.** The release now carries
@@ -1668,7 +1668,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
 
 - **A test keeps `contracts.md` in step with the protos.** `just docs-check` now
   fails, naming each one, when a service or RPC in `proto/` is not mentioned in
-  `docs/reference/contracts.md`. It found `accessissuer.v1.SessionService`
+  `docs/reference/sluis/contracts.md`. It found `accessissuer.v1.SessionService`
   (`ListSessions`, `RevokeSessions`) undocumented, and the page now describes it.
 
 - **GitHub organisations get Refresh and a prompt pass, as Slack workspaces
@@ -1997,7 +1997,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   never as data, so the Slack Connect records no longer write `from`. Moving a
   policy channel to the console: remove it from the policy, find it under
   Discovered, Manage it with the directory group as the source and the same
-  mode ([docs](docs/how-to/connect/slack-console-channels.md)).
+  mode ([docs](docs/guides/sluis/connect/slack-console-channels.md)).
 
 - **Fix: a Slack Connect side no report mentions is shown as unknown, not
   dropped.** Slack names only the host among a channel's teams when the host's
@@ -2025,7 +2025,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   and refused at render without `directory.store: kubernetes`, without a
   store or either key, or for two pushes sharing one path. The mirror Secret
   is written regardless; it uses the permissions the service already has.
-  Restore procedure: docs/how-to/back-up-and-restore.md, Slack state.
+  Restore procedure: docs/guides/sluis/operate/back-up-and-restore.md, Slack state.
 
 - **Slack Connect: find channels that already exist and take them under
   management.** The Slack controller now lists, per connected workspace, the
@@ -2040,7 +2040,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   invitation, and a private side without the bot is held until the bot is
   invited. Nobody is ever removed, and a team that is not a connected workspace
   is never touched. The audit catalogue is unchanged. See
-  [docs/connect/slack-connect-channels.md](docs/how-to/connect/slack-connect-channels.md).
+  [docs/connect/slack-connect-channels.md](docs/guides/sluis/connect/slack-connect-channels.md).
 
 ## v1.43.1
 
@@ -2223,7 +2223,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`ListSlackSharedChannels`, `CreateSlackSharedChannel`,
   `UpdateSlackSharedChannel`, `DeleteSlackSharedChannel`), new audit actions
   `roster.slack_shared_channel.created`, `.updated` and `.deleted`. See
-  [docs/connect/slack-connect-channels.md](docs/how-to/connect/slack-connect-channels.md).
+  [docs/connect/slack-connect-channels.md](docs/guides/sluis/connect/slack-connect-channels.md).
 - **New: the Slack page.** Connect, read and operate a Slack workspace from
   the console. **Connect** pastes a throwaway app configuration token
   (api.slack.com/apps, *Your App Configuration Tokens*; 12 hours, used once,
@@ -2247,7 +2247,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `DisconnectSlackWorkspace`, `ConfirmSlackRemovals`), new audit action
   `roster.slack_workspace.connect_refused`, new `slackapp.Client.Revoke`. The
   catalogue's install into the wrong workspace now revokes the token too. See
-  [docs/connect/slack-workspace.md](docs/how-to/connect/slack-workspace.md#connect-a-workspace-from-the-console).
+  [docs/connect/slack-workspace.md](docs/guides/sluis/connect/slack-workspace.md#connect-a-workspace-from-the-console).
 
 - **New: a catalogue of Slack Apps, created and installed from the
   console.** `slackApps` declares each App (`id`, the policy's `workspace`
@@ -2266,14 +2266,14 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   token, through a PushSecret per entry. New RPCs `SlackAppService`
   (`ListSlackApps`, `CreateSlackApp`, `InstallSlackApp`), new audit actions
   `roster.slack_app.created`, `.installed` and `.install_refused`. See
-  [docs/connect/slack-apps-catalogue.md](docs/how-to/connect/slack-apps-catalogue.md).
+  [docs/connect/slack-apps-catalogue.md](docs/guides/sluis/connect/slack-apps-catalogue.md).
 - **New: per-organisation operators for Slack workspaces.**
   `slack.workspaces.<key>.owner` names the directory workspace that owns a
   Slack workspace, with the same meaning and checks as
   `github.<org>.owner`: its scoped operator creates, installs and reinstalls
   its Apps, the Slack Apps page lists only what the caller may view, and each
   row says whether the caller may operate it (`can_operate`). See
-  [docs/reference/policy.md](docs/reference/policy-ownership.md#who-owns-a-slack-workspace).
+  [docs/reference/sluis/policy.md](docs/reference/sluis/policy-ownership.md#who-owns-a-slack-workspace).
 
 - **New: per-organisation operators for GitHub.** `github.<org>.owner`
   names the directory workspace that owns an organisation; its scoped
@@ -2286,7 +2286,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   pages list only the organisations the caller may view, each row says
   whether the caller may operate it (`can_operate`), and the connect
   callbacks ask the role question again. See
-  [docs/reference/policy.md](docs/reference/policy-ownership.md#who-owns-a-github-organisation).
+  [docs/reference/sluis/policy.md](docs/reference/sluis/policy-ownership.md#who-owns-a-github-organisation).
 - **New: the Slack controller, `slack-roster`, and its chart values
   `slackRoster.*`.** A second process from the `access-issuer` chart (and its
   own image and archive) that makes each Slack workspace's channels match the
@@ -2303,7 +2303,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   never creates accounts, touches user groups or removes anybody from a public
   channel. It needs egress to `slack.com:443`, which the chart leaves to the
   fleet's egress policy. Off by default; see
-  [docs/connect/slack-workspace.md](docs/how-to/connect/slack-workspace.md).
+  [docs/connect/slack-workspace.md](docs/guides/sluis/connect/slack-workspace.md).
 - **New: `people` and `slack` in the policy schema (schema only; no
   controller yet).** `people` links the addresses of one person across
   domains; `slack` declares workspaces (own key, Slack `team_id`, email
@@ -2318,7 +2318,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   they are managed on the console. A controller that reads these keys is
   being built; until it ships, nothing does. (The controller ships in this same
   release, in the first bullet above.)
-  See [docs/reference/policy.md](docs/reference/policy-bindings.md#slack-channels).
+  See [docs/reference/sluis/policy.md](docs/reference/sluis/policy-bindings.md#slack-channels).
 - **Internal: the Slack reconciler's core (`internal/slackroster`): the pure
   decision (who to invite, remove, hold and report in each workspace's
   channels, and in Slack Connect channels given as input), its status
@@ -2327,7 +2327,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   yet. (The controller ships in this same release, in the first bullet above.)
   `internal/slackapp` gains `UserInfo` (a member's address) and
   `SharedTeamIDs` on a channel. See
-  [docs/explanation/slack-reconciler.md](docs/explanation/slack-reconciler.md).
+  [docs/concepts/sluis/slack-reconciler.md](docs/concepts/sluis/slack-reconciler.md).
 - **Internal: `internal/rails` now holds what the GitHub controller and the
   reconcilers after it share: the pass loop with its policy-retry backoff
   (`Run`), the console's two questions gated by the policy digest
@@ -2335,7 +2335,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   (`Ledger`) and the last-good-report journal (`Journal`).** The GitHub
   controller calls them and keeps everything GitHub-shaped to itself. No
   user-visible change: same decisions, same audit records, same metrics.
-  See [docs/explanation/github-controller.md](docs/explanation/github-controller.md#reconciler-rails).
+  See [docs/concepts/sluis/github-controller.md](docs/concepts/sluis/github-controller.md#reconciler-rails).
 
 ## v1.40.0
 
@@ -2352,7 +2352,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   injects a bearer token the workload's own projected ServiceAccount token
   earned by an RFC 8693 exchange, so the stock server holds no credential.
   The image is `ghcr.io/truvity/access-roster/resource-proxy:<version>`,
-  multi-arch. See [docs/connect/mcp.md](docs/how-to/connect/mcp.md#fronting-a-stock-mcp-server-with-resource-proxy).
+  multi-arch. See [docs/connect/mcp.md](docs/guides/sluis/connect/mcp.md#fronting-a-stock-mcp-server-with-resource-proxy).
   `identity.Verified` gains `ClientID` (the token's `azp`, or
   `client_id`). No existing package changes behaviour.
 
@@ -2381,7 +2381,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `internal/rails` for these four pieces and keeps everything GitHub-shaped —
   teams, logins, invitations, deriving and deciding — to itself. No
   user-visible change: same decisions, same audit records, same metrics. See
-  [docs/explanation/github-controller.md](docs/explanation/github-controller.md#reconciler-rails).
+  [docs/concepts/sluis/github-controller.md](docs/concepts/sluis/github-controller.md#reconciler-rails).
 
 ## v1.39.2
 
@@ -2446,8 +2446,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `r2broker`'s own syntax, per
   [ADR 0014](docs/decisions/0014-minting-third-party-credentials-only-where-membership-is-governed.md).
   See
-  [docs/reference/sluisctl-wrappers.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged](docs/reference/sluisctl-wrappers.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)
-  and [docs/connect/r2-storage.md](docs/how-to/connect/r2-storage.md).
+  [docs/reference/sluis/sluisctl-wrappers.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged](docs/reference/sluis/sluisctl-wrappers.md#r2-authenticate-then-run-the-real-r2broker-cli-unchanged)
+  and [docs/connect/r2-storage.md](docs/guides/sluis/connect/r2-storage.md).
 
 ## v1.38.0
 
@@ -2476,8 +2476,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   file automatically once something is configured — a fresh sign-in
   never fails, or prints anything, over a feature it was never opted
   into. See
-  [docs/reference/sluisctl-wrappers.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](docs/reference/sluisctl-wrappers.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect),
-  [docs/connect/ssh.md](docs/how-to/connect/ssh.md) and
+  [docs/reference/sluis/sluisctl-wrappers.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect](docs/reference/sluis/sluisctl-wrappers.md#ssh-known-hosts-trust-configured-ssh-host-cas-before-the-first-connect),
+  [docs/connect/ssh.md](docs/guides/sluis/connect/ssh.md) and
   [docs/decisions/0016](docs/decisions/0016-a-managed-known-hosts-file-for-ssh-host-cas.md).
 
 ## v1.37.0
@@ -2490,7 +2490,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   another delimiter this schema accepts), modelled on `signing_alg`
   ([docs/decisions/0009](docs/decisions/0009-a-default-signing-algorithm-and-per-audience-exceptions.md)):
   after
-  [per-audience groups scoping](docs/reference/policy.md#groups-in-a-token-scoping)
+  [per-audience groups scoping](docs/reference/sluis/policy.md#groups-in-a-token-scoping)
   has decided which groups a token for that audience carries, every `:`
   in each one is rewritten to the configured string — `devel:ssh:user`
   becomes `devel.ssh.user`. This is for opkssh specifically: its
@@ -2504,13 +2504,13 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   A delimiter is refused at load if it is empty, the separator itself, a
   quote, a comma, whitespace, or built from the alphabet a scope, thing
   or role is itself conventionally written in
-  ([taxonomy.md](docs/reference/taxonomy.md)) — and, because no single character
+  ([taxonomy.md](docs/reference/sluis/taxonomy.md)) — and, because no single character
   can be proven absent from every group name this schema could ever
   declare, also if it would collide two of the policy's own declared
   groups once rewritten. See
   [docs/decisions/0015](docs/decisions/0015-a-per-audience-groups-delimiter-for-opkssh.md)
   and
-  [docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop](docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop)
+  [docs/reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop](docs/reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop)
   for the full mechanism. It is a temporary interop shim, meant to be
   removed once opkssh's own parser stops splitting on every `:`.
 
@@ -2527,7 +2527,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `TestJWKSAndDiscoveryAreNotCacheableByAProxy`
   (`internal/issuer/jwks_cache_test.go`) now fails the build the day that
   stops being true. See
-  [docs/operations/high-availability.md#signing-keys-across-replicas](docs/explanation/high-availability.md#signing-keys-across-replicas)
+  [docs/operations/high-availability.md#signing-keys-across-replicas](docs/concepts/sluis/high-availability.md#signing-keys-across-replicas)
   for the same rule restated as a deployment concern: nothing in front of
   this issuer may cache `/keys` either.
 
@@ -2565,7 +2565,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   by the login namespace rather than the target, so two targets sharing
   a parent login (`bao -ns=<env>/a`, `bao -ns=<env>/b`) reuse the same
   login; `--forget` clears the entry at that login namespace. See
-  [docs/connect/openbao.md#logins-at-a-parent-namespace](docs/how-to/connect/openbao.md#logins-at-a-parent-namespace).
+  [docs/connect/openbao.md#logins-at-a-parent-namespace](docs/guides/sluis/connect/openbao.md#logins-at-a-parent-namespace).
 
 ## v1.34.0
 
@@ -2615,8 +2615,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `--mount`, `--login-role`, `--forget`) go BEFORE the bao subcommand;
   bao's own flags, including `-namespace`, go after it, exactly where
   bao has always accepted them. See
-  [docs/reference/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged](docs/reference/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged)
-  and [docs/connect/openbao.md](docs/how-to/connect/openbao.md).
+  [docs/reference/sluis/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged](docs/reference/sluis/sluisctl-wrappers.md#bao-authenticate-then-run-bao-unchanged)
+  and [docs/connect/openbao.md](docs/guides/sluis/connect/openbao.md).
 
 - **Added: `accessctl bao kv get ... -format=env` renders a KV secret as
   dotenv lines**, a stop-gap for the one thing `bao kv get` cannot do yet
@@ -2653,8 +2653,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   unchanged. accessctl no longer writes a `pg_service` entry: a
   repository keeps its own, committed and secret-free, and points
   `PGSERVICEFILE` at it. See
-  [docs/reference/sluisctl-wrappers.md#pg--psql-a-postgres-client-certificate-then-a-command](docs/reference/sluisctl-wrappers.md#pg--psql-a-postgres-client-certificate-then-a-command)
-  and [docs/connect/postgresql.md](docs/how-to/connect/postgresql.md).
+  [docs/reference/sluis/sluisctl-wrappers.md#pg--psql-a-postgres-client-certificate-then-a-command](docs/reference/sluis/sluisctl-wrappers.md#pg--psql-a-postgres-client-certificate-then-a-command)
+  and [docs/connect/postgresql.md](docs/guides/sluis/connect/postgresql.md).
 
 - **Breaking: `accessctl credential ssh|db|client` is removed.**
   `docs/decisions/0013-openbao-access-through-the-bao-cli.md`. Each now
@@ -2664,9 +2664,9 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   CI and Ansible; `db` → `accessctl psql` / `accessctl pg --`; `client`
   → `accessctl bao write <pki mount>/sign/<role> csr=@your.csr` (an
   `openssl req -new` recipe for the CSR is in
-  [docs/connect/openbao.md](docs/how-to/connect/openbao.md)). See
-  [docs/connect/ssh.md](docs/how-to/connect/ssh.md) and
-  [docs/connect/postgresql.md](docs/how-to/connect/postgresql.md) for the
+  [docs/connect/openbao.md](docs/guides/sluis/connect/openbao.md)). See
+  [docs/connect/ssh.md](docs/guides/sluis/connect/ssh.md) and
+  [docs/connect/postgresql.md](docs/guides/sluis/connect/postgresql.md) for the
   full replacements.
 
 ## v1.33.0
@@ -2686,8 +2686,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   not cover every scope its source does is refused at load rather than
   silently narrowed. No policy that declares no per-role `scopes` changes
   shape or behaviour. See
-  [docs/reference/policy-vocabulary.md#per-role-scopes](docs/reference/policy-vocabulary.md#per-role-scopes)
-  and [docs/taxonomy.md#per-role-scopes](docs/reference/taxonomy.md#per-role-scopes).
+  [docs/reference/sluis/policy-vocabulary.md#per-role-scopes](docs/reference/sluis/policy-vocabulary.md#per-role-scopes)
+  and [docs/taxonomy.md#per-role-scopes](docs/reference/sluis/taxonomy.md#per-role-scopes).
 
 - **Added: `groupsScoping: enforce` actually narrows a token's `groups`
   claim, and `/userinfo`'s answer, to what report mode has been
@@ -2703,8 +2703,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   Report's INFO line becomes a DEBUG line under enforce, at the same rate
   limit, for turning on when a role goes missing.
 
-  Opt-in: the chart's default stays `report`. `docs/reference/policy.md#groups-in-a-token-scoping`
-  and `docs/how-to/turn-enforce-on.md` for how to move
+  Opt-in: the chart's default stays `report`. `docs/reference/sluis/policy.md#groups-in-a-token-scoping`
+  and `docs/guides/sluis/turn-enforce-on.md` for how to move
   from report's findings to `enforce`, and how to find a role that went
   missing once it is on.
 
@@ -2720,7 +2720,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   the same for `rung:`. A declared vocabulary constrains a bare-word entry
   to a declared thing or one of the two known families; an exact
   two-segment name validates either way, unchanged. See
-  `docs/reference/policy.md#groups-in-a-token-scoping`.
+  `docs/reference/sluis/policy.md#groups-in-a-token-scoping`.
 
 ## v1.32.1
 
@@ -2773,9 +2773,9 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   which would actually narrow a token, is **refused at issuer start** in
   this release, by name, so the switch is visible and wired before an
   installation can reach for it. See
-  [docs/reference/policy.md#groups-in-a-token-scoping](docs/reference/policy.md#groups-in-a-token-scoping),
-  [docs/reference/configuration.md](docs/reference/configuration.md) and
-  [docs/how-to/read-the-groups-scoping-report.md](docs/how-to/read-the-groups-scoping-report.md)
+  [docs/reference/sluis/policy.md#groups-in-a-token-scoping](docs/reference/sluis/policy.md#groups-in-a-token-scoping),
+  [docs/reference/sluis/configuration.md](docs/reference/sluis/configuration.md) and
+  [docs/guides/sluis/read-the-groups-scoping-report.md](docs/guides/sluis/read-the-groups-scoping-report.md)
   for reading what report mode finds.
 
 - **Added: an optional `vocabulary` table declares which scopes and things
@@ -2814,8 +2814,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   counts a wildcard key as consumed the moment any group its expansion
   names is.
 
-  See [docs/reference/policy.md#vocabulary](docs/reference/policy.md#vocabulary),
-  [docs/taxonomy.md](docs/reference/taxonomy.md) and
+  See [docs/reference/sluis/policy.md#vocabulary](docs/reference/sluis/policy.md#vocabulary),
+  [docs/taxonomy.md](docs/reference/sluis/taxonomy.md) and
   [docs/decisions/0010-a-declared-vocabulary.md](docs/decisions/0010-a-declared-vocabulary.md).
 
 - **Added: a person's page states the whole "why do I hold this group"
@@ -2838,7 +2838,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   OIDC (a `SecurityPolicy` with `oidc:` on Envoy Gateway) is the replacement
   for a console with no OpenID flow of its own. For a gateway that is not Envoy
   Gateway, run upstream `oauth2-proxy` yourself following the recipe in
-  [docs/design/access-proxy.md](docs/how-to/connect/oauth2-proxy.md).
+  [docs/design/access-proxy.md](docs/guides/sluis/connect/oauth2-proxy.md).
 
   Versions of the chart already published remain available in the OCI registry,
   so existing pins keep working. See
@@ -2891,7 +2891,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `signingKey.certificate` shape is unchanged and renders byte-identical
   output.
 
-  See [reference/policy.md#signing-algorithm-per-audience](docs/reference/policy.md#signing-algorithm-per-audience)
+  See [reference/policy.md#signing-algorithm-per-audience](docs/reference/sluis/policy.md#signing-algorithm-per-audience)
   and [ADR 0009](docs/decisions/0009-a-default-signing-algorithm-and-per-audience-exceptions.md).
 
 ## v1.30.0
@@ -2996,7 +2996,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   1. Delete the `secretManagers` block from your deployment values.
   2. Revoke the reader grant you gave the issuer in OpenBAO: the policy
      `sys/policies/acl/*`, `identity/group/name*` and `sys/auth` — see
-     [docs/connect/openbao.md](docs/how-to/connect/openbao.md) for the full path list.
+     [docs/connect/openbao.md](docs/guides/sluis/connect/openbao.md) for the full path list.
   3. Delete the secret stores page from your console bookmarks.
 
   **Sign in to OpenBAO stays unaffected:** the issuer still hands OpenBAO a
@@ -3092,7 +3092,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   cannot displace one. Existing clients are unaffected.
 
   The refusals, each with the failure it prevents, are in
-  [reference/policy.md](docs/reference/policy-clients.md#clients-that-describe-themselves).
+  [reference/policy.md](docs/reference/sluis/policy-clients.md#clients-that-describe-themselves).
   Two worth naming here: a document whose `client_id` is not the URL it
   was served from is refused, because otherwise a document at any
   allow-listed host could claim to be any client; and a document that
@@ -3324,7 +3324,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   pod. Give that identity `list` on `sys/policies/acl`,
   `identity/group/name` and `identity/group-alias/id`, `read` on each of
   their children and on `sys/auth`, and nothing else
-  ([docs/connect/openbao.md](docs/how-to/connect/openbao.md)). An
+  ([docs/connect/openbao.md](docs/guides/sluis/connect/openbao.md)). An
   exchange it is not granted is drawn on the page, naming the audience,
   rather than raised as an error.
 - **`secretManagers[].caCertSecret`** mounts a PEM bundle trusted in
@@ -3343,8 +3343,8 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   denied". A run that reads **zero** keys fails rather than writing an
   empty `.env`, which is the failure nobody notices. Only the key names
   are printed, never a value.
-  [docs/connect/openbao.md](docs/how-to/connect/openbao.md),
-  [docs/reference/sluisctl.md](docs/reference/sluisctl.md).
+  [docs/connect/openbao.md](docs/guides/sluis/connect/openbao.md),
+  [docs/reference/sluis/sluisctl.md](docs/reference/sluis/sluisctl.md).
 
 ## v1.21.0
 
@@ -3419,7 +3419,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   organisation) — each with the permissions it needs and why. It is
   values to read and copy, not a default the chart applies: creating an
   App stays an owner of the organisation confirming a manifest. The
-  guide's new [*A default set*](docs/how-to/connect/github-apps-catalogue.md#a-default-set)
+  guide's new [*A default set*](docs/guides/sluis/connect/github-apps-catalogue.md#a-default-set)
   says why they are four identities and not one.
 - **A catalogue App's credential can be projected to a secret store.**
   An entry may carry `push: {secretStore: {name, kind}, remoteKey,
@@ -3438,7 +3438,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   rotated as one, and the store that holds it is in the App's blast
   radius.
 - **New guide:
-  [connect/infrastructure-as-code.md](docs/how-to/connect/infrastructure-as-code.md)**
+  [connect/infrastructure-as-code.md](docs/guides/sluis/connect/infrastructure-as-code.md)**
   — the line between the two sides (this service owns identities and
   credentials; the program owns structure and names identities), a worked
   Pulumi program in Go that reads the credential from the store and
@@ -3955,7 +3955,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
     credential. So copying `<release>-workspace-credentials`,
     `<release>-github-apps` and `<release>-github-links` is a whole
     backup, for example with one External Secrets `PushSecret` each
-    ([configuration](docs/how-to/back-up-and-restore.md)).
+    ([configuration](docs/guides/sluis/operate/back-up-and-restore.md)).
   - **Existing credentials migrate at start.** The first start copies each
     per-workspace Secret in, and gives older GitHub credentials their
     records.
@@ -3977,7 +3977,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   `accessctl_<version>_nix-flake.tar.gz`, a Nix flake over that release's
   own archives. A repository adds its URL with `#accessctl` to
   `devbox.json`
-  ([docs/design/sluisctl.md](docs/explanation/sluisctl.md#installing-it)).
+  ([docs/design/sluisctl.md](docs/concepts/sluis/sluisctl.md#installing-it)).
 
 ## v1.6.5
 
@@ -4499,7 +4499,7 @@ changed since 0.17.1; what changed is what can be said about it.
   its step demanded. The logout pair — RP-Initiated plus one of the
   other three — is what the Foundation requires for a logout
   submission, and both halves are green for the first time.
-  [docs/conformance.md](docs/explanation/conformance-findings.md) carries the run and what
+  [docs/conformance.md](docs/concepts/sluis/conformance-findings.md) carries the run and what
   each column means.
 
 - **Documentation at 1.0**: one design document for the one
@@ -6013,7 +6013,7 @@ git history.
   to weave the operator view into the directory console. `docs/design/access-issuer.md`.
 - **Docs: `sub` is decided.** A person is their email; a ServiceAccount is
   `<cluster>:k8s:<namespace>:<name>` (the cluster qualifier is the one part
-  still to land in code). `docs/reference/policy.md`,
+  still to land in code). `docs/reference/sluis/policy.md`,
   `docs/design/trust.md`.
 
 ## v0.9.6
@@ -6303,7 +6303,7 @@ the console was making for the operator.
   to connect. The authorisation still happens where it always did, when an
   operator asks for the consent; the state now carries the answer, signed
   by the hub and pinned to the browser by the cookie the callback already
-  checked. `docs/reference/configuration.md` had described this shape all
+  checked. `docs/reference/sluis/configuration.md` had described this shape all
   along.
 - `Identity.Who()` — the address where there is one, the subject where
   there is not. A recovery sign-in completes as a ServiceAccount and has
@@ -6586,7 +6586,7 @@ in.
 - The forwarded identity header is now required to be an address before it
   is taken as a principal; the consent cookie is cleared with the same
   attributes it was set with.
-- **The policy** (`docs/reference/policy.md`): five tables — groups,
+- **The policy** (`docs/reference/sluis/policy.md`): five tables — groups,
   claims, lifetimes, clients, memberships — one schema for both services,
   deep merge with a load-time scalar-conflict check, shortest lifetime,
   layered loading, memberships the only console-writable table, clients

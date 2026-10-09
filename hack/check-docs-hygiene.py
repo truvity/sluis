@@ -5,7 +5,7 @@
    named in a Chart.yaml, must point at a file that exists; a `#anchor` must
    match a heading of the file it points into (GitHub's slug rules). A link to
    a page that was never written is found by a stranger, and Chart.yaml's
-   description named docs/explanation/verify-and-issue.md for months.
+   description named docs/concepts/sluis/verify-and-issue.md for months.
 
 2. BANNED NAMES. The product was renamed (docs/decisions/0035-renamed-to-sluis.md):
    `access-roster`, `access-issuer` and the NATS adapter are gone, and so is the
@@ -48,7 +48,8 @@ HISTORY_FILES = ("CHANGELOG.md",)
 HISTORY_PATHS = ("docs/WRITING.md",)
 # audit's own tree: its vocabulary is its own (it runs on NATS), so only the
 # repository-wide terms apply there.
-AUDIT_TREES = ("audit/", "docs/audit/", "charts/audit/")
+AUDIT_TREES = ("audit/", "charts/audit/")
+AUDIT_DOCS = re.compile(r"^docs/(get-started|guides|reference|concepts)/audit/")
 SLUIS_ONLY = {"NATS", "access-issuer", "access-roster"}
 
 
@@ -196,7 +197,7 @@ def check_names(allow, baseline):
         if is_history(path):
             continue
         terms = {t: rx for t, rx in TERMS.items()
-                 if not (t in SLUIS_ONLY and path.startswith(AUDIT_TREES))}
+                 if not (t in SLUIS_ONLY and (path.startswith(AUDIT_TREES) or AUDIT_DOCS.match(path)))}
         rules = [rx for glob, rx, _ in allow if fnmatch.fnmatch(path, glob)]
         for lineno, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
             for rx in rules:

@@ -31,7 +31,7 @@ else does: `sluisctl credential ssh` is also how a CI job or a
 controller — a machine, holding a GitHub Actions OIDC token or a
 Kubernetes ServiceAccount token, never a person at a browser — gets a
 short-lived certificate today
-([connect/openbao.md](../how-to/connect/openbao.md)). opkssh's login is shaped
+([connect/openbao.md](../guides/sluis/connect/openbao.md)). opkssh's login is shaped
 for an interactive OIDC sign-in, or, as of a recent opkssh release, for
 GitHub Actions' own OIDC token specifically (`opkssh login github`). It
 has no equivalent of a Kubernetes ServiceAccount token, or of this
@@ -53,7 +53,7 @@ from 0004's Decision; only the blocker under it is different.
 the supported path for machines.** A CI job or a controller exchanges its
 own identity at this issuer, logs in to OpenBAO's JWT mount with the
 result, and gets a short-lived signed SSH user certificate — the same
-broker [connect/openbao.md](../how-to/connect/openbao.md) already documents for
+broker [connect/openbao.md](../guides/sluis/connect/openbao.md) already documents for
 database and client certificates, with SSH as one more kind it signs.
 This reverses 0004's plan to remove the subcommand "once opkssh was
 adopted": opkssh's adoption for **people** does not extend to
@@ -64,14 +64,14 @@ broker would leave that population with no path rather than a more direct
 one.
 
 **Hosts are unaffected** and continue exactly as 0004 and
-[connect/openbao.md](../how-to/connect/openbao.md) already describe: a host
+[connect/openbao.md](../guides/sluis/connect/openbao.md) already describe: a host
 proves itself to OpenBAO (the AWS auth method for a cloud VM; cert auth
 or AppRole for bare metal) and is issued a host certificate from the SSH
 CA, renewed by an OpenBAO Agent or a timer; clients trust the CA with one
 `@cert-authority` line. Nothing here changes that.
 
 The full shape for all three — the policy rows, the file formats, the
-commands — is [connect/ssh.md](../how-to/connect/ssh.md), written alongside this
+commands — is [connect/ssh.md](../guides/sluis/connect/ssh.md), written alongside this
 record.
 
 ## Consequences
@@ -79,7 +79,7 @@ record.
 **`sluisctl credential ssh`'s documentation stays live and is no longer
 a stopgap.** 0004 described it as the interim path for people; it is now
 the permanent, documented path for machines, and
-[connect/ssh.md](../how-to/connect/ssh.md) is where that is written down rather
+[connect/ssh.md](../guides/sluis/connect/ssh.md) is where that is written down rather
 than left to be inferred from 0004 having not yet been acted on.
 
 **opkssh's client row needs `signing_alg` pinned, and an installation

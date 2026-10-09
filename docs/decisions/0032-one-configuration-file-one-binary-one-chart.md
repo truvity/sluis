@@ -36,7 +36,7 @@ retired variable that is still set is refused at start, not ignored.
 
 An installation rewrites its values once. A removed binary is not kept as an
 alias. The reference for the file, generated from the schema, replaces the
-environment tables in [reference/configuration.md](../reference/configuration.md).
+environment tables in [reference/configuration.md](../reference/sluis/configuration.md).
 
 ## Alternatives considered
 
@@ -88,6 +88,6 @@ mounts are unchanged, and the telemetry service names are unchanged. The one
 change of name an installation must act on is the chart's own, which is part of
 every object's name; `nameOverride` and `fullnameOverride` keep it, and the
 migration is in
-[reference/configuration.md](../how-to/migrate-from-the-access-issuer-chart.md).
+[reference/configuration.md](../guides/sluis/migrate/migrate-from-the-access-issuer-chart.md).
 The old binaries, the three images and the `access-issuer` chart are not
 published after this change: as the decision says, no alias is kept.

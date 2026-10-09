@@ -3,7 +3,7 @@
 # Not scheduled: a daily run of one of three profiles reads as "conformance
 # passes" while the two that sign somebody in have not been run for weeks. The
 # suite is run by a person, as a whole, at each major and minor release
-# (docs/how-to/run-conformance.md). This profile stays one click away because it
+# (docs/guides/sluis/run-conformance.md). This profile stays one click away because it
 # needs no client, no secret and nobody at a browser, and guards the surface
 # most likely to break by accident: discovery and the key set. Not on a tag: a
 # tag is a build, not a deployment, so a run would certify the OLD issuer against

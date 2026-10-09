@@ -148,7 +148,7 @@ func Values() []byte {
 			"enabled":        boolean("Run it."),
 			"replicas":       integer("Pods.", 0, nil),
 			"service":        obj("Its Service.", m{"port": integer("The Service's port.", 1, nil)}),
-			"grants":         m{"type": "object", "description": "The grants file a config names as `grants`: issuers, presets and rules. See docs/audit/how-to/read-the-trail.md#access."},
+			"grants":         m{"type": "object", "description": "The grants file a config names as `grants`: issuers, presets and rules. See docs/guides/audit/connect/read-the-trail.md#access."},
 			"keysVolume":     boolean("Mount the writer's key directory read-only, for resolve with the local key provider."),
 			"serviceAccount": def("serviceAccount"),
 			"route": obj("Publish the query service through Gateway API: an HTTPRoute to the Service, and with `securityPolicy` an Envoy Gateway SecurityPolicy on it. Needs `enabled` and, for the route, `parentRefs` and `hostnames`.", m{
@@ -286,7 +286,7 @@ func Values() []byte {
 	root := m{
 		"$schema":              "https://json-schema.org/draft/2020-12/schema",
 		"title":                "audit",
-		"description":          "The audit trail's write path: the writer, the query service, and the jobs that seal, verify and prune what it writes. Each component's `config` is the schema its binary validates its file against, embedded; everything else is the platform's. Names follow docs/audit/reference/configuration.md.",
+		"description":          "The audit trail's write path: the writer, the query service, and the jobs that seal, verify and prune what it writes. Each component's `config` is the schema its binary validates its file against, embedded; everything else is the platform's. Names follow docs/reference/audit/configuration.md.",
 		"type":                 "object",
 		"additionalProperties": false,
 		// `x-` keys are free, so that a values file can anchor what it repeats.

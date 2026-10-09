@@ -64,7 +64,7 @@ func (b bucketGrant) list(prefixes ...string) statement {
 	return allow([]string{"s3:ListBucket"}, []string{b.Arn}, cond)
 }
 
-// The prefixes of the bucket contract (docs/audit/reference/bucket-contract.md) a part
+// The prefixes of the bucket contract (docs/reference/audit/bucket-contract.md) a part
 // writes. The writer writes everything but seals and keys; the notary writes
 // those two and nothing else.
 var (

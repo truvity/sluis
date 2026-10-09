@@ -1,5 +1,5 @@
 // Package dynamodb is the DynamoDB adapter of the State, Index and Trigger
-// ports (docs/explanation/ports.md, ADR 0027): one table, shared by every replica
+// ports (docs/concepts/sluis/ports.md, ADR 0027): one table, shared by every replica
 // and every process, so a lease is exclusive across pods and a notification
 // crosses processes. It is the State of the AWS platform, and what a
 // Kubernetes deployment on AWS can use.
@@ -16,7 +16,7 @@
 // # Mapping
 //
 // A key is a record KIND and an ID (internal/port/keys.go, storage layout v2,
-// docs/reference/storage-layout.md): pk is the kind (`directory`, `github-org`,
+// docs/reference/sluis/storage-layout.md): pk is the kind (`directory`, `github-org`,
 // `issuer-token`) and sk the id, slash-separated when compound (`stable/acme`).
 // A prefix that lies in one kind (`ses.ada.`, `ws.dir.google.`) is a Query on that
 // partition with begins_with on sk, which returns the keys in key order and

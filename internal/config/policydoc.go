@@ -19,7 +19,7 @@ import (
 // PolicyDocument is the policy document: what an installation decides, in one
 // file every process of it reads (`policy.file`).
 //
-// Its tables are the access model's (package policy, docs/reference/policy.md),
+// Its tables are the access model's (package policy, docs/reference/sluis/policy.md),
 // unchanged; beside them are the decisions that used to be spread over the
 // service documents and the files they named:
 //

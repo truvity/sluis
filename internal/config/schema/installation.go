@@ -111,7 +111,7 @@ func installationSchema() m {
 		"exchange":    exchange,
 		"apps":        policyAppsSchema(),
 		"controllers": controllers,
-		"access": obj("The access model's tables (docs/reference/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
+		"access": obj("The access model's tables (docs/reference/sluis/policy.md): the groups, the clients, the resources, the GitHub and Slack bindings. They are the policy document's, unchanged.",
 			tables),
 	}
 	return document("installation", "sluis installation",

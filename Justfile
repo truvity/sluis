@@ -237,7 +237,7 @@ leak-canary:
 # Every Go symbol the documentation names must exist. Nothing compiles a
 # code block in a Markdown file, so a rename leaves the old name in the
 # guide and the first person to notice is a stranger following it. Every
-# proto service and RPC must also be named in docs/reference/contracts.md.
+# proto service and RPC must also be named in docs/reference/sluis/contracts.md.
 #
 # And the documentation's hygiene (hack/check-docs-hygiene.py): every relative
 # link in a Markdown file or Chart.yaml resolves, and the retired names
@@ -263,7 +263,7 @@ docs-check:
 docs-generate:
     go run ./cmd/docsgen
 
-# Regenerate docs/reference/adapters.md from the adapter registry. Run it
+# Regenerate docs/reference/sluis/adapters.md from the adapter registry. Run it
 # after adding, removing or changing an adapter; docs-check fails when stale.
 adapters-doc:
     go run ./internal/port/matrixdoc/gen

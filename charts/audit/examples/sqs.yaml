@@ -7,7 +7,7 @@
 # association made outside the chart; IRSA is the annotation below) that may
 # send to and receive from the queue and put to the archive's bucket. Everything
 # not named here has a default. Each `config:` block is the binary's own
-# configuration, key for key (docs/audit/reference/configuration.md).
+# configuration, key for key (docs/reference/audit/configuration.md).
 mode: stream
 
 # Where each install preset keeps its copies. `security` needs the standard

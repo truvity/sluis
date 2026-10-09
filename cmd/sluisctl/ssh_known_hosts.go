@@ -20,7 +20,7 @@ import (
 // ~/.ssh/known_hosts.d/accessctl by default: a `@cert-authority` line per
 // configured entry, so a laptop trusts a fleet's SSH host certificate
 // authorities before the first connection rather than being prompted for
-// one -- docs/how-to/connect/ssh.md's "Hosts" section already documents the
+// one -- docs/guides/sluis/connect/ssh.md's "Hosts" section already documents the
 // manual version of this (fetch the CA's public key, add one line per
 // domain, by hand, on every laptop); this automates exactly that,
 // refreshed by `login` so it never goes stale.

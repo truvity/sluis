@@ -1,0 +1,33 @@
+# Doctrine
+
+The design rules: what this repository owns and what the installation
+that consumes it owns, and the reasons for the shape. The test for
+whether something belongs here: *why is it like this, and would a change
+fit.* This page is an index; the pages below hold the argument. For a map
+of every page in the repository, not just these, see
+[index.md](README.md).
+
+- [why.md](why.md): the situation it starts from, the problems it solves, and the principles every design question is
+  decided by
+- [concepts.md](concepts.md): the words used precisely
+- [architecture.md](architecture.md): every piece and how it connects, and
+  [who owns what](architecture.md#who-owns-what): sluis, the directories, the relying parties
+- [trust.md](trust.md): two anchors and one vocabulary of internal groups, the rule under everything
+- [design.md](design.md): one process, the directory model, freshness, sessions, the console, the GitHub and Slack
+  controllers and the rails they share, the audit trail
+- [ports.md](ports.md): the ports and adapters the process runs on
+- [sluisctl.md](sluisctl.md): why a CLI at all, the GitHub Action, and the credential broker's list of decisions it
+  does not make
+- [integrations.md](integrations.md): every integration, case by case
+- [safety.md](safety.md): what can break and how sluis prevents it
+- [conformance-findings.md](conformance-findings.md): what the OpenID conformance suite found
+- [How to extend](../../guides/sluis/extend.md): where something new plugs in, and what it must ship with
+- [decisions/](../../decisions/README.md) — the accepted decisions this doctrine
+  follows from, one record per decision, with what was weighed against it
+- the Slack rules that decide design questions, each its own record:
+  [0017](../../decisions/0017-the-slack-reconciler-membership-only.md) the Slack
+  reconciler's scope (membership only),
+  [0018](../../decisions/0018-do-not-configure-what-the-product-knows.md) do not
+  configure what the product already knows,
+  [0019](../../decisions/0019-two-kinds-of-slack-channel-never-mixed.md) two kinds of
+  channel, never mixed

@@ -9,10 +9,10 @@ declares for a client) and refines the client table of the policy document
 A confidential client's secret is always supplied by the operator. The policy row
 names it (`secret`), the service reads it as the input `clients/<id>/secret`, and
 the token endpoint compares the value presented with it as plain text
-([policy-clients](../reference/policy-clients.md)). The console cannot set it
-([rotate keys and credentials](../how-to/rotate-keys-and-credentials.md)), and
+([policy-clients](../reference/sluis/policy-clients.md)). The console cannot set it
+([rotate keys and credentials](../guides/sluis/operate/rotate-keys-and-credentials.md)), and
 dynamic client registration is refused as "an endpoint that mints trust"
-([what is not served](../explanation/not-served.md)).
+([what is not served](../concepts/sluis/not-served.md)).
 
 In practice an operator generates each secret ad hoc outside the issuer and copies
 the same value to two places: the issuer's input and the relying party's own

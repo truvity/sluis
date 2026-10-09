@@ -247,7 +247,7 @@ listed, and would resume within their idle window if the row came back.
 
 **8. Audit and console.** `roster.session.ended` gains `spared`, the client ids of the agent sessions a sign-out left
 running. `roster.person.signed_in` gains the session's `class` and `deadline`. The catalogue moves from 1.9.0 to
-1.10.0 with its released fixture, following [change the audit catalogue](../how-to/change-the-audit-catalogue.md).
+1.10.0 with its released fixture, following [change the audit catalogue](../guides/sluis/change-the-audit-catalogue.md).
 Recording is best effort, so the audit writer goes first: an audit installation must hold catalogue 1.10.0 before
 the issuer that emits it is deployed. A Lambda audit writer needs the new catalogue release asset, schemas included.
 

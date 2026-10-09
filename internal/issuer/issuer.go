@@ -1,7 +1,7 @@
 // Package issuer is the token service: it verifies proofs produced
 // elsewhere, applies the shared policy, and issues tokens. It never
 // authenticates anyone and holds no user records — the line the design
-// draws around it is in docs/explanation/verify-and-issue.md.
+// draws around it is in docs/concepts/sluis/verify-and-issue.md.
 package issuer
 
 import (
@@ -82,13 +82,13 @@ const (
 	// token — see [Storage]'s groups-scoping report. The default, and the
 	// mode an installation is expected to run before it ever turns to
 	// [GroupsScopingEnforce] — see
-	// docs/how-to/read-the-groups-scoping-report.md for
+	// docs/guides/sluis/read-the-groups-scoping-report.md for
 	// turning report's findings into overrides first.
 	GroupsScopingReport GroupsScopingMode = "report"
 	// GroupsScopingEnforce narrows a token's `groups` claim, and
 	// `/userinfo`'s answer, to what [policy.Policy.ScopeGroups] keeps for
 	// the audience each was minted or asked for -- see
-	// docs/reference/policy.md#groups-in-a-token-scoping. Opt-in: the
+	// docs/reference/sluis/policy.md#groups-in-a-token-scoping. Opt-in: the
 	// chart's default, and what an installation that sets nothing keeps
 	// running, is [GroupsScopingReport].
 	GroupsScopingEnforce GroupsScopingMode = "enforce"

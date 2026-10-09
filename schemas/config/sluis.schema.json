@@ -51,7 +51,7 @@
   "properties": {
     "adapters": {
       "additionalProperties": false,
-      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/adapters.md.",
+      "description": "Names the adapter of single concerns, over the preset and the `ports` keys. The names and what each needs are in the matrix of docs/reference/sluis/adapters.md.",
       "properties": {
         "audit": {
           "additionalProperties": false,
@@ -195,7 +195,7 @@
     },
     "apiVersion": {
       "const": "sluis.truvity.github.io/sluis/v3",
-      "description": "Which version of which document this is. sluis.truvity.github.io/sluis/v3 is the one service document: the process that serves the issuer and the console and, under `controllers`, runs the GitHub and Slack controllers. A binary still reads the v2 `serve` document (and v1, which has no apiVersion) as this document with no controllers (docs/reference/configuration.md)."
+      "description": "Which version of which document this is. sluis.truvity.github.io/sluis/v3 is the one service document: the process that serves the issuer and the console and, under `controllers`, runs the GitHub and Slack controllers. A binary still reads the v2 `serve` document (and v1, which has no apiVersion) as this document with no controllers (docs/reference/sluis/configuration.md)."
     },
     "audit": {
       "additionalProperties": false,
@@ -231,7 +231,7 @@
     },
     "cloudflare": {
       "additionalProperties": false,
-      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/how-to/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.",
+      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/guides/sluis/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.",
       "properties": {
         "accounts": {
           "additionalProperties": {
@@ -1105,7 +1105,7 @@
     },
     "platform": {
       "additionalProperties": false,
-      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/explanation/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
+      "description": "What this installation has to build on. The answers pick a preset (the decision tree in docs/concepts/sluis/ports.md), and start refuses an adapter that needs an answer that is no. Absent, the `ports` keys decide and nothing is checked against the platform.",
       "properties": {
         "aws": {
           "description": "AWS is available: its credentials, DynamoDB, S3, SSM, KMS, SQS and EventBridge.",
@@ -1172,7 +1172,7 @@
           }
         }
       ],
-      "description": "The adapters behind the storage ports (docs/explanation/ports.md).",
+      "description": "The adapters behind the storage ports (docs/concepts/sluis/ports.md).",
       "properties": {
         "adapter": {
           "default": "legacy",

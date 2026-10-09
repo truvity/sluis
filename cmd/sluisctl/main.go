@@ -227,14 +227,14 @@ func credentialRemoved(args []string) error {
 		return fmt.Errorf("sluisctl credential ssh was removed in v1.34.0: use " +
 			"`sluisctl bao ssh -mode=ca ...` for an interactive session, or " +
 			"`sluisctl bao write -field=signed_key <mount>/sign/<role> public_key=@key.pub > key-cert.pub` " +
-			"for scp, git, CI and Ansible — see docs/how-to/connect/ssh.md")
+			"for scp, git, CI and Ansible — see docs/guides/sluis/connect/ssh.md")
 	case "db":
 		return fmt.Errorf("sluisctl credential db was removed in v1.34.0: use " +
-			"`sluisctl psql` or `sluisctl pg -- <command>` instead — see docs/how-to/connect/postgresql.md")
+			"`sluisctl psql` or `sluisctl pg -- <command>` instead — see docs/guides/sluis/connect/postgresql.md")
 	case "client":
 		return fmt.Errorf("sluisctl credential client was removed in v1.34.0: use " +
 			"`sluisctl bao write <pki mount>/sign/<role> csr=@your.csr` instead " +
-			"(openssl req -new -key key.pem -out your.csr for the CSR) — see docs/how-to/connect/openbao.md")
+			"(openssl req -new -key key.pem -out your.csr for the CSR) — see docs/guides/sluis/connect/openbao.md")
 	default:
 		return fmt.Errorf("sluisctl credential was removed in v1.34.0: ssh → `sluisctl bao ssh -mode=ca ...`; " +
 			"db → `sluisctl psql` / `sluisctl pg --`; client → `sluisctl bao write <pki mount>/sign/<role> csr=@...` " +

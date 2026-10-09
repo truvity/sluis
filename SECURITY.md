@@ -25,18 +25,18 @@ Each property links the page that owns it; this file does not restate them.
 
 - It **authenticates nobody**: sign-in stays with the corporate directory, and sluis
   verifies proofs produced elsewhere. It holds no passwords, no users and no MFA.
-  [trust](docs/explanation/trust.md)
+  [trust](docs/concepts/sluis/trust.md)
 - It trusts **exactly two anchors**, the cluster and the issuer, and never a third.
-  [trust](docs/explanation/trust.md)
+  [trust](docs/concepts/sluis/trust.md)
 - It holds directory credentials so that its consumers hold none, and is **read-only
   against the directory**. Its write surfaces are GitHub and Slack, acting only in the
-  organisations and workspaces the policy names. [safety](docs/explanation/safety.md)
+  organisations and workspaces the policy names. [safety](docs/concepts/sluis/safety.md)
 - Removals act only on an **authoritative** answer; a failed probe, a partial read or a stale
   snapshot reads as "not authoritative", never as "gone", and a controller never removes
-  more than half of a set without an operator's confirmation. [safety](docs/explanation/safety.md)
+  more than half of a set without an operator's confirmation. [safety](docs/concepts/sluis/safety.md)
 - A client may describe itself over HTTPS only when `client_documents.origins` allows its
   host (an SSRF surface bounded by that list: 64 KiB, 5 seconds, no redirect).
-  [policy clients](docs/reference/policy-clients.md#clients-that-describe-themselves)
+  [policy clients](docs/reference/sluis/policy-clients.md#clients-that-describe-themselves)
 - Every request-derived value is routed through `logattr` (`storage/logattr`) before it is logged.
 - The client address in an audit record is read from `X-Forwarded-For` only as far as
   `audit.forwardedForTrustedHops` says: set it to the deployment's own proxies and no more.
@@ -44,11 +44,11 @@ Each property links the page that owns it; this file does not restate them.
 ### audit
 
 - Records are append-only; the store is expected to carry S3 Object Lock in compliance
-  mode. [prepare the bucket](docs/audit/how-to/prepare-the-bucket.md)
+  mode. [prepare the bucket](docs/guides/audit/operate/prepare-the-bucket.md)
 - Every read of the audit trail is itself recorded.
 - Subjects are referenced by identifiers or keyed pseudonyms, never by identity attributes.
   [ADR 0047](docs/decisions/0047-identity-tiers-and-pseudonymisation.md)
 - The split writer is the most privileged component: it holds unwrapped pseudonymisation
   keys in memory. Reports about it are especially welcome.
 - sluis reaches audit as its own workload; ordinary records never wait on it, and a recovery
-  sign-in is refused when its record cannot be kept. [audit](docs/explanation/audit.md)
+  sign-in is refused when its record cannot be kept. [audit](docs/concepts/sluis/audit.md)

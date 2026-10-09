@@ -8,8 +8,8 @@ The query service is a Connect service, `audit.v1.QueryService`. Go reads it wit
 `auditv1connect.QueryServiceClient`, in the same module as the [emitter](audit-emitter.md). This page walks through
 [`examples/read`](../../../audit/examples/read/main.go), which is compiled on every run of the gate; the whole API is on
 [pkg.go.dev](https://pkg.go.dev/github.com/truvity/sluis/audit/sdk/gen/audit/v1). What the service does with a
-request, and who may see what, is in [read the trail](../../audit/how-to/read-the-trail.md); the wire contract is the
-[API reference](../../audit/reference/api.md). The other SDKs are listed in [the overview](../README.md).
+request, and who may see what, is in [read the trail](../../guides/audit/connect/read-the-trail.md); the wire contract is the
+[API reference](../../reference/audit/api.md). The other SDKs are listed in [the overview](../README.md).
 
 ## Make a client
 

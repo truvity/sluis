@@ -7,7 +7,7 @@
 
 The policy is the product: one vocabulary of internal groups, declared
 once, in git
-([reference/policy.md](../reference/policy.md)). Every feature this
+([reference/policy.md](../reference/sluis/policy.md)). Every feature this
 repository adds either delivers that vocabulary somewhere new or it does
 not belong here. Two shapes of "somewhere new" exist, and they are not
 the same feature wearing different clothes:
@@ -17,7 +17,7 @@ the same feature wearing different clothes:
 - a system that cannot — because it has its own membership model with no
   token in front of it — gets a **membership**, kept in step by a
   reconciler. GitHub teams are the one built today
-  ([github-controller.md](../explanation/github-controller.md));
+  ([github-controller.md](../concepts/sluis/github-controller.md));
   a chat workspace's channel membership is the next candidate for the
   same shape.
 
@@ -38,8 +38,8 @@ access key, a database password held on that system's behalf) and reading
 per-system mapping from an internal group to that system's own roles — an
 RBAC binding, a policy attached to a login — is real and useful, and it is
 published as a **recipe** (a connect page under
-[how-to/connect/](../how-to/connect/README.md), such as
-[connect/openbao.md](../how-to/connect/openbao.md)), never carried as a
+[how-to/connect/](../guides/sluis/connect/README.md), such as
+[connect/openbao.md](../guides/sluis/connect/openbao.md)), never carried as a
 first-class feature of the service itself. A recipe can go stale without
 taking the issuer down with it; a feature cannot.
 
@@ -63,7 +63,7 @@ from this boundary:
   client-side couriers: one exchange for the store's own audience, then
   the store's own signing call, key generated on the caller's machine and
   never sent
-  ([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../explanation/sluisctl.md#credential-the-broker-for-what-openbao-mints)).
+  ([design/sluisctl.md#credential-the-broker-for-what-openbao-mints](../concepts/sluis/sluisctl.md#credential-the-broker-for-what-openbao-mints)).
   Nothing server-side reads the store's policy; the command is a courier
   for a proof, not a reader of another system's grants.
 - **Secret-store login moves to the store's own OIDC flow.** Rather than
@@ -108,6 +108,6 @@ view a store's own UI already gives its own operators.
 **Keep `sluisctl secrets` and add more `secrets`-shaped subcommands as
 other stores appear.** Rejected: every such subcommand is this
 repository re-implementing a client for somebody else's data plane, which
-is the shape [design/access-proxy.md](../how-to/connect/oauth2-proxy.md) already
+is the shape [design/access-proxy.md](../guides/sluis/connect/oauth2-proxy.md) already
 argues against for sessions; a store's own client does not go stale when
 this repository's release cadence does not match its own.

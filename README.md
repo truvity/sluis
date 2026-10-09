@@ -12,7 +12,7 @@ credentials under one policy file, and audit keeps a tamper-evident record of wh
 | `@truvity/sluis`, `@truvity/audit`, `@truvity/audit-react` | GitHub Packages |
 | GitHub Action | `truvity/sluis@<commit>` |
 
-Every artifact and its location: [artifacts](docs/reference/artifacts.md). Docs site: <https://truvity.github.io/sluis/>.
+Every artifact and its location: [artifacts](docs/reference/sluis/artifacts.md). Docs site: <https://truvity.github.io/sluis/>.
 
 [![CI](https://github.com/truvity/sluis/actions/workflows/ci.yaml/badge.svg)](https://github.com/truvity/sluis/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/truvity/sluis?include_prereleases)](https://github.com/truvity/sluis/releases)
@@ -68,7 +68,7 @@ OpenBao transit) and an S3 store (AWS S3 or Cloudflare R2) either way. Neither i
 
 A directory says who people are, a policy file in git maps directory groups and machine identities to internal groups,
 and one process mints tokens and reconciles GitHub and Slack from that file; audit records what it did.
-See [concepts](docs/explanation/concepts.md).
+See [concepts](docs/concepts/sluis/concepts.md).
 
 ## Install and a worked example
 
@@ -78,8 +78,8 @@ helm install sluis oci://ghcr.io/truvity/charts/sluis --version X.Y.Z --namespac
   --values values.yaml --set-file documents.service=rendered/sluis.yaml --set-file documents.policy=rendered/policy.yaml
 ```
 
-Tutorials: [Kubernetes on AWS](docs/getting-started/kubernetes-aws.md), [AWS Lambda](docs/getting-started/aws-lambda.md),
-audit [on Kubernetes](docs/audit/getting-started/kubernetes.md) and [on AWS Lambda](docs/audit/getting-started/aws-lambda.md).
+Tutorials: [Kubernetes on AWS](docs/get-started/sluis/kubernetes-aws.md), [AWS Lambda](docs/get-started/sluis/aws-lambda.md),
+audit [on Kubernetes](docs/get-started/audit/kubernetes.md) and [on AWS Lambda](docs/get-started/audit/aws-lambda.md).
 
 ## Consumers
 
@@ -93,7 +93,7 @@ Estates install the charts from their GitOps repositories or the Pulumi librarie
 
 ## Documentation
 
-[docs/README.md](docs/README.md) is the entry point; every artifact is in [artifacts](docs/reference/artifacts.md).
+[docs/README.md](docs/README.md) is the entry point; every artifact is in [artifacts](docs/reference/sluis/artifacts.md).
 Upgrading: the [CHANGELOG](CHANGELOG.md) links an upgrade page from each breaking entry.
 
 ## The rule that makes this repository public
