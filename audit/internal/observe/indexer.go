@@ -157,14 +157,7 @@ func (x *Indexer) Run(ctx context.Context) error {
 		if report.Objects > 0 {
 			x.log().InfoContext(ctx, "indexed", slog.Int("tenants", report.Tenants), slog.Int("objects", report.Objects), slog.Int("rows", report.Rows))
 		}
-		wait := x.interval()
-		if !report.Next.IsZero() {
-			// The key that was too new is old enough at Next; there is no
-			// point in looking sooner, and none in waiting past it.
-			if until := report.Next.Sub(x.now()); until < wait {
-				wait = max(until, 0) + 100*time.Millisecond
-			}
-		}
+		wait := waitFor(x.interval(), report.Next, x.now())
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
@@ -191,6 +184,20 @@ func (x *Indexer) logPass(ctx context.Context, err error) {
 		x.log().ErrorContext(ctx, "an indexing pass failed; the next one resumes from the cursors",
 			slog.Any("error", err), slog.Int("repeats_held_back", held))
 	}
+}
+
+// waitFor is how long to wait before the next pass: the interval, or less when
+// the pass left a key too new to index, which is looked at again just when it
+// is old enough. So an object's wait for indexing is the settle window when a
+// pass has seen it (as a woken one does), and otherwise up to the interval.
+func waitFor(interval time.Duration, next, now time.Time) time.Duration {
+	if next.IsZero() {
+		return interval
+	}
+	if until := next.Sub(now); until < interval {
+		return max(until, 0) + 100*time.Millisecond
+	}
+	return interval
 }
 
 // Pass indexes everything that is old enough, once. It discovers the profiles

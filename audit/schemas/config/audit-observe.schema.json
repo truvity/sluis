@@ -88,7 +88,7 @@
     "interval": {
       "$ref": "#/$defs/duration",
       "default": "5m",
-      "description": "How often a pass runs when nothing woke it. Without a `wake` the worst-case delay from an object reaching the archive to its rows being searchable is `settle` plus this; with one, a notification makes a pass run at once and this is only the bound on a lost one."
+      "description": "How often a pass runs when nothing woke it. Without a `wake` an object is indexed after the longer of `settle` and the time to the next pass, so at worst after this; with one, the woken pass reschedules itself for when the object is old enough, the delay is about `settle` whatever this is, and this is only the bound on a lost notification."
     },
     "listen": {
       "$ref": "https://github.com/truvity/policy/schemas/fragments/listen.json"

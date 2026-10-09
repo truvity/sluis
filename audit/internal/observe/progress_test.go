@@ -76,3 +76,21 @@ func TestARepeatedFailureIsLoggedOnceUntilItClears(t *testing.T) {
 		t.Fatal("after a success the same error is not logged again")
 	}
 }
+
+func TestTheNextPassComesWhenTheNewestKeyIsOldEnough(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for name, c := range map[string]struct {
+		next time.Time
+		want time.Duration
+	}{
+		"nothing left behind":          {time.Time{}, 5 * time.Minute},
+		"ripe in 90s":                  {now.Add(90 * time.Second), 90*time.Second + 100*time.Millisecond},
+		"ripe already":                 {now.Add(-time.Second), 100 * time.Millisecond},
+		"ripe after the interval":      {now.Add(time.Hour), 5 * time.Minute},
+		"ripe exactly at the interval": {now.Add(5 * time.Minute), 5 * time.Minute},
+	} {
+		if got := observe.WaitFor(5*time.Minute, c.next, now); got != c.want {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
+	}
+}
