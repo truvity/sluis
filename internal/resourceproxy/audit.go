@@ -44,6 +44,9 @@ func audited(log *slog.Logger, next http.Handler) http.Handler {
 		}
 		if rec.have {
 			attrs = append(attrs, slog.String("sub", clean(rec.who.Subject)))
+			if rec.who.Email != "" {
+				attrs = append(attrs, slog.String("email", clean(rec.who.Email)))
+			}
 			if rec.who.Name != "" {
 				attrs = append(attrs, slog.String("name", clean(rec.who.Name)))
 			}
