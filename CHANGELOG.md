@@ -4185,7 +4185,7 @@ This release adds traces and metrics through an exporter allowlist, the chart's 
   release tag's version, built and tested by the release workflow.
   Install `@truvity/access-roster` with the `@truvity` scope pointed at
   `https://npm.pkg.github.com` and a token that can read packages
-  ([docs/reference/typescript.md](docs/reference/typescript.md)). A git
+  ([docs/sdk/typescript/sluis.md](docs/sdk/typescript/sluis.md)). A git
   install stopped working when `ts/dist` left git: yarn 4 packs a git
   dependency without running `prepare`, so it shipped no `ts/dist`.
 

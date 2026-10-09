@@ -9,7 +9,7 @@ and `policy.yaml` ([the policy document](policy-document.md)) from it
 ([sluisctl](sluisctl.md#render-an-installation-in-the-two-documents-out)); `--check` compares with the files already
 there and exits 1 on a difference. The Pulumi library takes it as `LambdaArgs.Installation`
 ([Pulumi library](pulumi-library.md)); a Go program calls `config.Render` from `github.com/truvity/sluis/config`
-([Go module](go-module.md)).
+([Go module](../sdk/go/sluis.md)).
 
 It is a superset of the two documents: a section is under the key the document gives it, with that document's own
 schema, and the installation adds what a document cannot say.

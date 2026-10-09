@@ -1,7 +1,15 @@
-# Emitter library
+# Go audit emitter
+
+```sh
+go get github.com/truvity/sluis/audit/sdk@vX.Y.Z   # import github.com/truvity/sluis/audit/sdk/emit
+```
+
+The walk-through is [emit records from Go](../../audit/how-to/emit-records.md); the API is on
+[pkg.go.dev](https://pkg.go.dev/github.com/truvity/sluis/audit/sdk/emit). This page keeps what pkg.go.dev does not
+say: the options, the middleware and the two metrics worth alerting on. The SDKs are listed in [the overview](../README.md).
 
 The Go emitter's options (`emit.New`), the middleware and the two metrics worth alerting on. The
-configuration files of the server binaries are in [configuration](configuration.md).
+configuration files of the server binaries are in [configuration](../../audit/reference/configuration.md).
 
 
 `emit.New(emit.Options{…})`:

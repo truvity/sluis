@@ -3,7 +3,7 @@
 The AWS shape of sluis as a Pulumi Go library, `github.com/truvity/sluis/deploy/pulumi`, a module of its own so that Pulumi
 is not in the root module's dependency graph. The infrastructure lives here, in a versioned library next to the code it
 serves, and gitops only wires it: a stack calls the constructors and renders the processes' configuration from the same
-names. Source: `deploy/pulumi`; the exported identifiers are in [Go packages](go-module.md).
+names. Source: `deploy/pulumi`; the exported identifiers are in [Go packages](../sdk/go/sluis.md).
 
 **Lambda is the main path** (decision of 2026-10-04: both estates run sluis on AWS Lambda). `NewLambda` is the
 whole of it: ONE function, one role, the HTTP API, the signing key and the schedules. The mutual-TLS custom domain in

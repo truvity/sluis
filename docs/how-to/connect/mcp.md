@@ -163,9 +163,9 @@ http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
 
 the same `identity.Issuer` every console and API listener uses, with the
 resource's own URI as `Audience`
-([reference/go-module.md](../../reference/go-module.md)); the TypeScript
+([Go module](../../sdk/go/sluis.md)); the TypeScript
 package's `Issuer` takes the same shape
-([reference/typescript.md](../../reference/typescript.md)).
+([TypeScript package](../../sdk/typescript/sluis.md)).
 
 **Publish RFC 9728.** The Model Context Protocol expects a resource
 server to serve its own OAuth 2.0 Protected Resource Metadata document —
