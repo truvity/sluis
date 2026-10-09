@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.74.0-rc.3
+
 ### Fixed
 
 - **The Lambda bootstrap is back to 52 MB (v1.74.0-rc.2: 116 MB), under the 100 MiB deploy/pulumi accepts.** rc.2's `bootstrap` (115,736,736 bytes) was refused by deploy/pulumi (`larger than 104857600 bytes unzipped`), because cloudflare-go's root client links every Cloudflare service. The Cloudflare minter's client (`internal/cloudflare/cfapi`) now makes its five calls (tokens get, create, delete, list, permission groups) over plain `net/http`, and cloudflare-go is no longer a dependency; behaviour is unchanged, except that a token create is retried only when rate limited (a 5xx might have created it). The arm64 bootstrap is 52,494,496 bytes (rc.1: 51,380,384); the `sluis` binary, which links the same client, sheds the SDK too. New recipe `just lambda-size`, part of `build` and so of CI: it builds the bootstrap with the release's flags and fails above an 80 MiB budget, naming deploy/pulumi's limit.
