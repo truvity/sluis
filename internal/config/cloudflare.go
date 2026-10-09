@@ -357,7 +357,7 @@ func (c *Cloudflare) PresetOf(name string) (CloudflarePreset, bool) {
 // schema cannot make. A document that never mentions Cloudflare passes: the
 // static credentials of `ports.blob.s3.credentialsRef` need no section.
 func (s *Serve) ValidateCloudflare() error {
-	errs := []error{s.Cloudflare.Validate()}
+	errs := []error{s.Cloudflare.Validate(), s.Signer.Validate()}
 	if b := s.blobS3(); b != nil && b.Credentials != nil {
 		if b.CredentialsRef != "" {
 			errs = append(errs, errors.New("ports.blob.s3: credentialsRef and credentials are exclusive"))

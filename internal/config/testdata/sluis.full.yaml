@@ -112,3 +112,9 @@ cloudflare:
       endpoint: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
       lifetime: 15m
       rotation: 5m
+signer:
+  remote:
+    url: http://signer.sluis.svc:8080
+    audience: signer
+    tokenFile: /var/run/secrets/sluis/signer/token
+    function: sluis-signer

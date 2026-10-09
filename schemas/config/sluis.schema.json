@@ -1530,6 +1530,39 @@
       "description": "Mark session cookies Secure. Unset follows the scheme the browser will use: https in the URL.",
       "type": "boolean"
     },
+    "signer": {
+      "additionalProperties": false,
+      "description": "Where the signer module is, for a process that does not hold the signing key itself (docs/decisions/0071).",
+      "properties": {
+        "remote": {
+          "additionalProperties": false,
+          "description": "Where the signer is when it is not this process: the issuer then signs and reads the key set through the signer module there (docs/decisions/0071), and this process opens no signing key. Set exactly one of `function` and `url`. Unset keeps the signer in this process.",
+          "properties": {
+            "audience": {
+              "description": "The audience of that token. The module's name, `signer`, when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "function": {
+              "description": "The module's Lambda function, name or ARN. It is invoked through its `live` alias.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenFile": {
+              "description": "Where the projected token is mounted. `/var/run/secrets/sluis/signer/token` when unset.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "url": {
+              "$ref": "#/$defs/url",
+              "description": "The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "signingKey": {
       "additionalProperties": false,
       "description": "The issuer's signing keys: provisioned, never minted here.",

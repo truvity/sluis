@@ -440,6 +440,9 @@ type Serve struct {
 	// Cloudflare is sluis as the STS for Cloudflare API tokens and R2
 	// credentials: the accounts it mints in and the presets it mints.
 	Cloudflare *Cloudflare `json:"cloudflare,omitempty"`
+	// Signer is where the signer module is, for a process that does not hold
+	// the signing key itself (docs/decisions/0071).
+	Signer *Signer `json:"signer,omitempty"`
 
 	// legacy is what a v1 document named by file, and [PolicyFor] reads it in
 	// place of a policy document: set only by the v1 converter.

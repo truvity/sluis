@@ -365,6 +365,7 @@ func serveSchema() m {
 			"cluster":        boolDefault("Speak the cluster protocol. A plain single server needs it off.", true),
 		}),
 		"cloudflare": cloudflareSchema(),
+		"signer":     signerSchema(),
 		"audit": obj("The audit installation this service records to. Unset keeps the trail in the log only.", m{
 			"writer":                  url("The installation's receiver."),
 			"tokenFile":               str("This workload's projected service-account token, presented on every call."),

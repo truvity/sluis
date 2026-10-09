@@ -108,6 +108,7 @@ func installationSchema() m {
 		"directory":   serveProps["directory"],
 		"audit":       serveProps["audit"],
 		"cloudflare":  installationCloudflare(serveProps["cloudflare"].(m)),
+		"signer":      serveProps["signer"],
 		"exchange":    exchange,
 		"apps":        policyAppsSchema(),
 		"controllers": controllers,
