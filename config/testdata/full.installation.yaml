@@ -100,6 +100,8 @@ access:
         channels:
           ops: {private: true, from: [all:access-roster:operator]}
 cloudflare:
+  remote:
+    function: sluis-cloudflare
   forbiddenPermissionGroups: [Workers Scripts Write]
   accounts:
     main:
