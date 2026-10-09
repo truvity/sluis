@@ -134,6 +134,16 @@ func validateIndicator(raw string) error {
 // refuseTarget answers as RFC 8707 says to, in whichever form the caller
 // reads: a page for a browser, the OAuth error for a program.
 func refuseTarget(w http.ResponseWriter, r *http.Request, description string) {
+	refuseWith(w, r, string(oidc.InvalidTarget), description)
+}
+
+// refuseRequest answers an authorization request that is malformed with
+// `invalid_request`, in the same two forms.
+func refuseRequest(w http.ResponseWriter, r *http.Request, description string) {
+	refuseWith(w, r, string(oidc.InvalidRequest), description)
+}
+
+func refuseWith(w http.ResponseWriter, r *http.Request, code string, description string) {
 	if wantsHTML(r) {
 		_ = writePage(w, http.StatusBadRequest, "That sign-in request was not valid",
 			`<p>`+html.EscapeString(description)+`</p>
@@ -145,7 +155,7 @@ func refuseTarget(w http.ResponseWriter, r *http.Request, description string) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusBadRequest)
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":             string(oidc.InvalidTarget),
+		"error":             code,
 		"error_description": description,
 	})
 }
