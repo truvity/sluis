@@ -67,6 +67,11 @@ type Base struct {
 	Secrets port.Secrets
 	Now     func() time.Time
 
+	// Module is the module State belongs to, and Peers are the read-only
+	// views of the modules this process may read (see [port.Set]).
+	Module port.Module
+	Peers  map[port.Module]port.StateReader
+
 	// v4 and exportApp put the Apps' exported credentials on layout v4 (see
 	// [Base.WithV4]).
 	v4        *secretstore.Stores
@@ -75,7 +80,14 @@ type Base struct {
 
 // New returns the base over a set of ports.
 func New(set port.Set) *Base {
-	return &Base{State: set.State, Secrets: set.Secrets, Now: time.Now}
+	return &Base{State: set.State, Secrets: set.Secrets, Now: time.Now, Module: set.Module, Peers: set.Peers}
+}
+
+// Peer is the read-only view of another module's State, if the process holds
+// one.
+func (b *Base) Peer(m port.Module) (port.StateReader, bool) {
+	r, ok := b.Peers[m]
+	return r, ok && r != nil
 }
 
 // item is a record with, beside it, the name of one secret kept in Secrets
