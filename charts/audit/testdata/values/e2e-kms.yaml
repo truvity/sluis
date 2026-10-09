@@ -27,6 +27,9 @@ writer:
       instance: audit-e2e
       pseudonym:
         key: alias/audit-pseudonym
+      # Who is behind a pseudonym is kept sealed under this key (resolve opens it).
+      conceal:
+        key: alias/audit-conceal
       # No SSM: the wrapped secrets are rows in the database above.
       state:
         backend: database
