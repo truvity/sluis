@@ -883,6 +883,7 @@ function AppPage({
   const [failure, setFailure] = useState<string | undefined>();
   const [checked, setChecked] = useState<GitHubAppView | undefined>();
   const [asking, setAsking] = useState(false);
+  const [rotating, setRotating] = useState(false);
   const [changingOwner, setChangingOwner] = useState(false);
   const bound = listed.boundOrganisations;
   const [owner, setOwner] = useState(bound[0] ?? "");
@@ -919,6 +920,22 @@ function AppPage({
     act(async () => {
       const answer = await github.checkGitHubApp({ id: shown.id });
       if (answer.app) setChecked(appView(answer.app));
+    });
+
+  const rotateWebhook = () =>
+    act(async () => {
+      setRotating(false);
+      const answer = await github.rotateGitHubAppWebhook({ id: shown.id });
+      if (answer.app) {
+        const next = appView(answer.app);
+        setChecked(next);
+        onDone(
+          next.drift.length
+            ? `The webhook secret of ${shown.name} is rotated; GitHub still differs from the declaration: ${next.drift.join("; ")}.`
+            : `The webhook secret of ${shown.name} is rotated; GitHub matches the declaration.`,
+        );
+      }
+      reload();
     });
 
   const disconnect = () =>
@@ -1014,6 +1031,15 @@ function AppPage({
           </span>
         </Tooltip>
       ) : null}
+      {shown.hasWebhook && shown.declared && shown.stage !== "not-created" ? (
+        <Tooltip title="Replace the secret GitHub signs deliveries with. The new target must accept it before GitHub is told.">
+          <span>
+            <Button size="small" disabled={busy} onClick={() => setRotating(true)}>
+              Rotate webhook secret
+            </Button>
+          </span>
+        </Tooltip>
+      ) : null}
       {shown.stage !== "not-created" ? (
         <Button size="small" color="warning" disabled={busy} onClick={() => setAsking(true)}>
           Disconnect
@@ -1053,6 +1079,7 @@ function AppPage({
         { label: "Repositories", value: shown.repositories },
         { label: "On GitHub", value: shown.slug ? appLink(shown.slug, shown.htmlUrl) : undefined },
         { label: "Created", value: shown.slug ? since(shown.connectedAt, shown.connectedBy) : undefined },
+        { label: "Webhook secret set", value: shown.hasWebhook && at(shown.webhookRotatedAt) ? ago(at(shown.webhookRotatedAt)) : undefined },
         { label: "Checked", value: at(shown.checkedAt) ? ago(at(shown.checkedAt)) : undefined },
       ]}
     >
@@ -1258,6 +1285,23 @@ function AppPage({
           />
         </Paper>
       </Disclosure>
+
+      <Dialog open={rotating} onClose={() => setRotating(false)}>
+        <DialogTitle>Rotate the webhook secret of {shown.name}?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            sluis keeps a new secret, waits for the receiving side to accept a signed ping with it, and only then tells GitHub. If the receiver does not
+            answer, GitHub is not changed and deliveries carry on as they were. Deliveries sent while the receiver and GitHub disagree are not
+            redelivered by this step.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRotating(false)}>Keep it</Button>
+          <Button variant="contained" disabled={busy} onClick={() => void rotateWebhook()}>
+            Rotate
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={asking} onClose={() => setAsking(false)}>
         <DialogTitle>Disconnect {shown.name}?</DialogTitle>

@@ -20,6 +20,7 @@
 
 ### Added
 
+- **A "Rotate webhook secret" button on a GitHub App's page.** For a catalogue App that declares a webhook, an operator confirms in a dialog; the console then calls `RotateGitHubAppWebhook` and shows whether GitHub still differs from the declaration. The page also shows when the secret was last set.
 - **`sluis` is a multi-call binary on urfave/cli v3 (docs/decisions/0071).** The root command gets the module subcommands `issuer`, `console`, `github`, `slack`, `cloudflare`, `google` and `backup`. `issuer` runs what `sluis serve` runs, `github` and `slack` run the controller's loop alone, and a module with no process of its own yet (`console`, `cloudflare`, `google`, `backup`) answers `not yet split` and exits 1. `serve`, `controller`, `tick` and `migrate` are unchanged, and so is the Lambda binary. The root `--help` text is now generated.
 - **An import-boundary test pins the module boundaries that hold today.** Only the issuer's process (the future signer) imports the signing-key adapters; the GitHub, Slack and Cloudflare packages import neither the issuer front end nor each other; the issuer library imports no process.
 

@@ -50,6 +50,11 @@ function app(init: AppInit) {
 }
 
 describe("appView", () => {
+  it("says whether the App has a webhook from its URL", () => {
+    expect(app({ id: "a" }).hasWebhook).toBe(false);
+    expect(app({ id: "a", webhookUrl: "https://example.org/api/webhook" }).hasWebhook).toBe(true);
+  });
+
   it("reads every kind of App as one kind of row", () => {
     expect(app({ id: "link", purpose: AppPurpose.LINK, origin: AppOrigin.PRESET, name: "example-org-link", linkedAccounts: 4 })).toMatchObject({
       purpose: "link",
