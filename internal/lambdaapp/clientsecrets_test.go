@@ -85,9 +85,16 @@ adapters:
 	}
 	t.Cleanup(fn.Close)
 
-	// Open settled the secret once.
+	// Open settled nothing: a herd of cold starts reads no client's record. The
+	// first refresh the schedule invokes creates it, and the ones after find it.
+	if got := reconciled(t, reader, "created"); got != 0 {
+		t.Fatalf("created after Open = %d, want 0", got)
+	}
+	if _, err = fn.Handler.Handle(context.Background(), json.RawMessage(`{"kind":"refresh"}`)); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
 	if got := reconciled(t, reader, "created"); got != 1 {
-		t.Fatalf("created after Open = %d, want 1", got)
+		t.Fatalf("created after the first refresh = %d, want 1", got)
 	}
 	before := reconciled(t, reader, "existing")
 	for i := 1; i <= 2; i++ {
@@ -95,7 +102,7 @@ adapters:
 			t.Fatalf("refresh: %v", err)
 		}
 		if got := reconciled(t, reader, "existing"); got != before+int64(i) {
-			t.Errorf("after %d refreshes the reconcile ran %d times, want %d", i, got-before, i)
+			t.Errorf("after %d more refreshes the reconcile ran %d times, want %d", i, got-before, i)
 		}
 	}
 }
