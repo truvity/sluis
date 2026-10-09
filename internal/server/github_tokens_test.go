@@ -203,3 +203,9 @@ func (unreadableApps) Get(context.Context, string) (catalogueapp.Record, string,
 }
 
 func (unreadableApps) Delete(context.Context, string) error { return nil }
+
+func (unreadableApps) PutWebhookSecret(context.Context, string, string) error { return nil }
+
+func (unreadableApps) WebhookSecret(context.Context, string) (string, bool, error) {
+	return "", false, errors.New("the API server is not answering")
+}

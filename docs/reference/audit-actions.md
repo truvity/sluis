@@ -1,7 +1,7 @@
 # Audit actions
 
 Every action sluis records, from the catalogue [`internal/audit/catalogue/roster.yaml`](../../internal/audit/catalogue/roster.yaml)
-(the version and the number of actions are in the table below). Each action declares one `category`: `security` (sign-in, recovery, token exchange and minting, sessions, client secrets, confirmed removals, Slack shared and console channels) or `activity` (directory and workspace, GitHub and Slack apps, organisation connections, links, members, channels). The installation's destinations take records by category, in its tenant `@platform`; sluis's actions no longer carry the deprecated `profiles` list.
+(the version and the number of actions are in the table below). All are kept under the `security` profile in the installation's tenant `@platform`.
 Delivery `async` goes on a bounded queue in the process; `block` is recorded before the action completes and refuses
 it when it cannot be. Why the trail is shaped this way: [audit](../explanation/audit.md).
 
@@ -11,7 +11,7 @@ Actor kinds: `person`, `recovery`, `ci`, `workload`, `system`, `anonymous`. Targ
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.12.0, 72 actions.
+Catalogue version 1.13.0, 73 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@ Catalogue version 1.12.0, 72 actions.
 | `roster.catalogue_app.created` | create | github_app, organisation | async | A catalogued GitHub App was created. |
 | `roster.catalogue_app.installed` | create | github_app, organisation | async | A catalogued GitHub App was installed. |
 | `roster.catalogue_app.disconnected` | remove | github_app, organisation | async | A catalogued GitHub App was disconnected. |
+| `roster.catalogue_app.webhook_changed` | modify | github_app, organisation | async | A step of setting or rotating the secret of a catalogued GitHub App's webhook. |
 | `roster.runner_app.created` | create | github_app, organisation | async | A GitHub App for self-hosted runners was created. |
 | `roster.runner_app.installed` | create | github_app, organisation | async | A GitHub App for self-hosted runners was installed. |
 | `roster.runner_app.disconnected` | remove | github_app, organisation | async | A GitHub App for self-hosted runners was disconnected. |

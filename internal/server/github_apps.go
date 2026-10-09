@@ -78,6 +78,11 @@ type githubAppSpec struct {
 	htmlURL        string
 	connectedAt    time.Time
 	connectedBy    string
+	// webhookURL and hookRotatedAt are where GitHub was last told to deliver
+	// the App's events and when it was last given a secret; empty and zero
+	// for an App with no webhook.
+	webhookURL    string
+	hookRotatedAt time.Time
 	// owner is the directory workspace recorded as the owner of the
 	// organisation this App acts on, empty for none; the link App has none.
 	owner string
@@ -675,6 +680,7 @@ func (c *Console) catalogueAppSpec(
 	spec.created, spec.installed = true, record.Installed()
 	spec.appID, spec.appSlug, spec.htmlURL, spec.installationID = record.AppID, record.AppSlug, record.HTMLURL, record.InstallationID
 	spec.connectedAt, spec.connectedBy = record.ConnectedAt, record.ConnectedBy
+	spec.webhookURL, spec.hookRotatedAt = record.WebhookURL, record.HookRotatedAt
 	spec.key = func() string {
 		_, key, _, _ := store.Get(ctx, id)
 		return key
@@ -732,6 +738,7 @@ func (c *Console) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 	out.AppId, out.AppSlug, out.InstallationId = spec.appID, spec.appSlug, spec.installationID
 	out.HtmlUrl, out.ConnectedAt, out.ConnectedBy = spec.htmlURL, timestampOf(spec.connectedAt), spec.connectedBy
 	out.SettingsUrl = appSettingsURL(spec.org, spec.appSlug)
+	out.WebhookUrl, out.WebhookRotatedAt = spec.webhookURL, timestampOf(spec.hookRotatedAt)
 	state := appCreated
 	if spec.installed {
 		state = appInstalled
@@ -749,7 +756,7 @@ func (c *Console) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 
 	seen, cached := c.githubSeen.get(spec.id, spec.appID, spec.installationID)
 	if fresh || !cached {
-		seen = c.observe(ctx, spec.appID, spec.installationID, spec.installed, spec.key())
+		seen = c.observe(ctx, spec.appID, spec.installationID, spec.installed, spec.entry.Webhook != nil, spec.key())
 		c.githubSeen.put(spec.id, seen)
 	}
 	out.CheckedAt, out.Reason = timestampOf(seen.at), seen.err
@@ -760,6 +767,9 @@ func (c *Console) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 			out.HtmlUrl = seen.app.HTMLURL
 		}
 		out.Drift = append(out.Drift, appDrift(spec.entry, *seen.app, spec.declarer())...)
+	}
+	if seen.hook != nil {
+		out.Drift = append(out.Drift, hookDrift(spec.entry, spec.webhookURL, *seen.hook)...)
 	}
 	switch {
 	case seen.installationGone:

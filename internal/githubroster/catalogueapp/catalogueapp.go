@@ -42,6 +42,11 @@ const (
 	RecordProperty         = "record.json"
 	// PendingKeyProperty holds the key of an App not installed yet.
 	PendingKeyProperty = "pending_private_key"
+	// WebhookSecretProperty holds the secret GitHub signs the App's webhook
+	// deliveries with, for an App whose catalogue entry declares a webhook.
+	// It is kept whether or not the App is installed, and a rewrite of the
+	// App's other keys leaves it alone.
+	WebhookSecretProperty = "webhook_secret"
 )
 
 // SecretName is the object holding every catalogue App.
@@ -75,6 +80,14 @@ type Record struct {
 	HTMLURL        string    `json:"html_url,omitempty"`
 	ConnectedAt    time.Time `json:"connected_at"`
 	ConnectedBy    string    `json:"connected_by"`
+	// WebhookURL is where GitHub was last told to deliver this App's events.
+	// For a Kargo receiver it is derived from the secret, so it moves when
+	// the secret does. Not a secret itself: it is what a drift check reads
+	// GitHub's configuration against.
+	WebhookURL string `json:"webhook_url,omitempty"`
+	// HookRotatedAt is when the webhook's secret was last set on GitHub: the
+	// creation, or the latest rotation.
+	HookRotatedAt time.Time `json:"hook_rotated_at,omitzero"`
 }
 
 // Installed reports whether a token can be minted for it yet.
@@ -117,6 +130,7 @@ func Keys(id string) []string {
 		Key(id, InstallationIDProperty),
 		Key(id, PrivateKeyProperty),
 		Key(id, PendingKeyProperty),
+		Key(id, WebhookSecretProperty),
 	}
 }
 
@@ -129,6 +143,12 @@ func PrivateKeyOf(data map[string][]byte, id string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// WebhookSecretOf reads one App's webhook secret from the Secret's data.
+func WebhookSecretOf(data map[string][]byte, id string) (string, bool) {
+	secret := data[Key(id, WebhookSecretProperty)]
+	return string(secret), len(secret) > 0
 }
 
 // DecodeRecord reads a record.

@@ -92,3 +92,42 @@ func TestAnIncompleteCatalogueAppIsNeverWritten(t *testing.T) {
 		t.Error("an App with no key was encoded")
 	}
 }
+
+// The webhook secret is the App's: a rewrite of the key at install leaves it,
+// forgetting the App takes it, and an App never put has none to keep.
+func TestACatalogueAppsWebhookSecretSurvivesInstall(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := kube.NewGitHubCatalogueApps(newClient())
+	at := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	if err := store.PutWebhookSecret(ctx, "renovate", "early"); err == nil {
+		t.Fatal("a secret was kept for an App never put")
+	}
+	pending := catalogueapp.Record{ID: "renovate", Org: "example-org", AppID: 42, AppSlug: "example-org-renovate", ConnectedAt: at}
+	if err := store.Put(ctx, pending, "pem"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.WebhookSecret(ctx, "renovate"); err != nil || ok {
+		t.Fatalf("a secret before any was set = %v, %v", ok, err)
+	}
+	if err := store.PutWebhookSecret(ctx, "renovate", "hook-1"); err != nil {
+		t.Fatal(err)
+	}
+	installed := pending
+	installed.InstallationID = 7
+	if err := store.Put(ctx, installed, "pem"); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, err := store.WebhookSecret(ctx, "renovate"); err != nil || !ok || got != "hook-1" {
+		t.Fatalf("after Install = %q, %v, %v", got, ok, err)
+	}
+	if _, key, _, _ := store.Get(ctx, "renovate"); key != "pem" {
+		t.Errorf("key = %q", key)
+	}
+	if err := store.Delete(ctx, "renovate"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := store.WebhookSecret(ctx, "renovate"); ok {
+		t.Error("the secret outlived the App")
+	}
+}

@@ -1316,6 +1316,14 @@ func (d demoCatalogueApps) Get(_ context.Context, id string) (catalogueapp.Recor
 
 func (demoCatalogueApps) Delete(context.Context, string) error { return errDemoConnect }
 
+func (demoCatalogueApps) PutWebhookSecret(context.Context, string, string) error {
+	return errDemoConnect
+}
+
+func (demoCatalogueApps) WebhookSecret(context.Context, string) (string, bool, error) {
+	return "", false, nil
+}
+
 // githubLinkApp is the store as the console's interface, or nil. A
 // demonstration run shows a link App already created.
 func githubLinkApp(store githubOrgStore, demonstration bool) server.GitHubLinkApp {

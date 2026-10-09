@@ -42,7 +42,7 @@ func (s *GitHubRunnerApps) Put(ctx context.Context, record runnerapp.Record, pri
 	exported := record.Installed() && s.b.v4Writes()
 	if exported {
 		doc := s.b.v4.External.GitHubRunnerApp(record.Tier, record.Org)
-		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey); err != nil {
+		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey, ""); err != nil {
 			return err
 		}
 	}
@@ -125,23 +125,126 @@ func (s *GitHubCatalogueApps) Put(ctx context.Context, record catalogueapp.Recor
 		return err
 	}
 	key := ghCatalogueKey(record.ID)
+	// The webhook secret belongs to the App, not to this write: whatever was
+	// kept stays kept, wherever it was.
+	hook, _, err := s.webhookSecret(ctx, record.ID)
+	if err != nil {
+		return err
+	}
 	// An installed App with `export: true` is external on layout v4; a pending
 	// one, or one not exported, stays an internal credential.
-	exported := record.Installed() && s.b.v4Writes() && s.b.exportApp != nil && s.b.exportApp(record.ID)
+	exported := s.exported(record)
 	if exported {
 		doc := s.b.v4.External.GitHubApp(record.ID)
-		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey); err != nil {
+		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey, hook); err != nil {
 			return err
 		}
 	}
 	var ref string
 	if !exported || s.b.keepInternal() {
-		if ref, err = s.b.newSecret(ctx, key, []byte(privateKey)); err != nil {
+		if ref, err = s.b.newSecret(ctx, key, packCatalogueSecret(privateKey, hook)); err != nil {
 			return err
 		}
 	}
 	raw := json.RawMessage(keys[catalogueapp.RecordKey(record.ID)])
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
+}
+
+// exported is whether an App's document is external on layout v4.
+func (s *GitHubCatalogueApps) exported(record catalogueapp.Record) bool {
+	return record.Installed() && s.b.v4Writes() && s.b.exportApp != nil && s.b.exportApp(record.ID)
+}
+
+// PutWebhookSecret sets the secret GitHub signs one App's webhook with,
+// replacing the one before, wherever the App's credential is kept. The App
+// must have been Put: a secret with no App is nobody's.
+func (s *GitHubCatalogueApps) PutWebhookSecret(ctx context.Context, id, secret string) error {
+	if secret == "" {
+		return errors.New("portstore: a webhook secret is not empty")
+	}
+	record, privateKey, ok, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("portstore: no App %s to keep a webhook secret for", id)
+	}
+	key := ghCatalogueKey(id)
+	exported := s.exported(record)
+	if exported {
+		doc := s.b.v4.External.GitHubApp(id)
+		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey, secret); err != nil {
+			return err
+		}
+	}
+	if exported && !s.b.keepInternal() {
+		return nil
+	}
+	ref, err := s.b.newSecret(ctx, key, packCatalogueSecret(privateKey, secret))
+	if err != nil {
+		return err
+	}
+	return s.b.editItem(ctx, key, 0, func(cur *item) (*item, error) {
+		if cur == nil || len(cur.Record) == 0 {
+			return nil, fmt.Errorf("portstore: App %s was forgotten while its webhook secret was being kept", id)
+		}
+		return &item{Record: cur.Record, Secret: ref}, nil
+	})
+}
+
+// WebhookSecret reads one App's webhook secret.
+func (s *GitHubCatalogueApps) WebhookSecret(ctx context.Context, id string) (string, bool, error) {
+	return s.webhookSecret(ctx, id)
+}
+
+func (s *GitHubCatalogueApps) webhookSecret(ctx context.Context, id string) (string, bool, error) {
+	if s.b.v4Reads() && secretstore.CheckAppName(id) == nil {
+		doc, ok, err := s.b.getGitHub(ctx, s.b.v4.External.GitHubApp(id))
+		if err != nil && !errors.Is(err, secretstore.ErrReservedName) {
+			return "", false, err
+		}
+		if ok && doc.WebhookSecret != "" {
+			return doc.WebhookSecret, true, nil
+		}
+	}
+	key := ghCatalogueKey(id)
+	it, err := s.b.getItem(ctx, key)
+	if err != nil || it == nil || it.Secret == "" {
+		return "", false, err
+	}
+	plain, err := s.b.getSecret(ctx, key, it.Secret)
+	if err != nil {
+		return "", false, err
+	}
+	_, hook := unpackCatalogueSecret(plain)
+	return hook, hook != "", nil
+}
+
+// packCatalogueSecret is what an App's internal credential holds: the key as
+// it always was, or, with a webhook secret, both as JSON. A reader tells them
+// apart by the first byte: a PEM key never begins with a brace.
+func packCatalogueSecret(privateKey, webhookSecret string) []byte {
+	if webhookSecret == "" {
+		return []byte(privateKey)
+	}
+	raw, _ := json.Marshal(struct {
+		PrivateKey    string `json:"private_key"`
+		WebhookSecret string `json:"webhook_secret"`
+	}{privateKey, webhookSecret})
+	return raw
+}
+
+func unpackCatalogueSecret(plain []byte) (privateKey, webhookSecret string) {
+	if len(plain) > 0 && plain[0] == '{' {
+		var packed struct {
+			PrivateKey    string `json:"private_key"`
+			WebhookSecret string `json:"webhook_secret"`
+		}
+		if json.Unmarshal(plain, &packed) == nil {
+			return packed.PrivateKey, packed.WebhookSecret
+		}
+	}
+	return string(plain), ""
 }
 
 // List returns every App's record, sorted by id.
@@ -190,7 +293,7 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 		if err != nil {
 			return catalogueapp.Record{}, "", false, err
 		}
-		privateKey = string(plain)
+		privateKey, _ = unpackCatalogueSecret(plain)
 	}
 	return record, privateKey, true, nil
 }

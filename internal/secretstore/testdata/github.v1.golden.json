@@ -1,1 +1,1 @@
-{"app_id":"12345","installation_id":"67890","private_key":"-----BEGIN EXAMPLE KEY-----\nexample\n-----END EXAMPLE KEY-----\n","schema":"github/v1"}
+{"app_id":"12345","installation_id":"67890","private_key":"-----BEGIN EXAMPLE KEY-----\nexample\n-----END EXAMPLE KEY-----\n","schema":"github/v1","webhook_secret":"example-webhook-secret"}

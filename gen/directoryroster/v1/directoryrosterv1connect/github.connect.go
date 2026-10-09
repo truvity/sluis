@@ -51,6 +51,9 @@ const (
 	// GitHubServiceCheckGitHubAppProcedure is the fully-qualified name of the GitHubService's
 	// CheckGitHubApp RPC.
 	GitHubServiceCheckGitHubAppProcedure = "/directoryroster.v1.GitHubService/CheckGitHubApp"
+	// GitHubServiceRotateGitHubAppWebhookProcedure is the fully-qualified name of the GitHubService's
+	// RotateGitHubAppWebhook RPC.
+	GitHubServiceRotateGitHubAppWebhookProcedure = "/directoryroster.v1.GitHubService/RotateGitHubAppWebhook"
 	// GitHubServiceGetGitHubStatusProcedure is the fully-qualified name of the GitHubService's
 	// GetGitHubStatus RPC.
 	GitHubServiceGetGitHubStatusProcedure = "/directoryroster.v1.GitHubService/GetGitHubStatus"
@@ -130,6 +133,14 @@ type GitHubServiceClient interface {
 	// CheckGitHubApp asks GitHub again what one App and its installation
 	// hold, bypassing the short cache the list reads through. Operator.
 	CheckGitHubApp(context.Context, *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error)
+	// RotateGitHubAppWebhook replaces the secret GitHub signs a catalogue
+	// App's webhook deliveries with. It keeps the new secret (where the
+	// consumers read it), sends the new target a signed ping until it
+	// answers 2xx, and only then tells GitHub — the secret and, for a Kargo
+	// receiver, the URL derived from it, in one call. A consumer holds one
+	// secret, so there is no overlap: a failure before GitHub is told
+	// restores the old secret and leaves deliveries as they were. Operator.
+	RotateGitHubAppWebhook(context.Context, *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error)
 	// GetGitHubStatus returns every organisation the policy binds or the
 	// controller reports on, each with its bound teams and the members the
 	// controller derived for them. Viewer.
@@ -296,6 +307,12 @@ func NewGitHubServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(gitHubServiceMethods.ByName("CheckGitHubApp")),
 			connect.WithClientOptions(opts...),
 		),
+		rotateGitHubAppWebhook: connect.NewClient[v1.RotateGitHubAppWebhookRequest, v1.RotateGitHubAppWebhookResponse](
+			httpClient,
+			baseURL+GitHubServiceRotateGitHubAppWebhookProcedure,
+			connect.WithSchema(gitHubServiceMethods.ByName("RotateGitHubAppWebhook")),
+			connect.WithClientOptions(opts...),
+		),
 		getGitHubStatus: connect.NewClient[v1.GetGitHubStatusRequest, v1.GetGitHubStatusResponse](
 			httpClient,
 			baseURL+GitHubServiceGetGitHubStatusProcedure,
@@ -391,6 +408,7 @@ type gitHubServiceClient struct {
 	beginGitHubAppConnect          *connect.Client[v1.BeginGitHubAppConnectRequest, v1.BeginGitHubAppConnectResponse]
 	disconnectGitHubApp            *connect.Client[v1.DisconnectGitHubAppRequest, v1.DisconnectGitHubAppResponse]
 	checkGitHubApp                 *connect.Client[v1.CheckGitHubAppRequest, v1.CheckGitHubAppResponse]
+	rotateGitHubAppWebhook         *connect.Client[v1.RotateGitHubAppWebhookRequest, v1.RotateGitHubAppWebhookResponse]
 	getGitHubStatus                *connect.Client[v1.GetGitHubStatusRequest, v1.GetGitHubStatusResponse]
 	beginGitHubConnect             *connect.Client[v1.BeginGitHubConnectRequest, v1.BeginGitHubConnectResponse]
 	requestGitHubPass              *connect.Client[v1.RequestGitHubPassRequest, v1.RequestGitHubPassResponse]
@@ -435,6 +453,11 @@ func (c *gitHubServiceClient) DisconnectGitHubApp(ctx context.Context, req *conn
 // CheckGitHubApp calls directoryroster.v1.GitHubService.CheckGitHubApp.
 func (c *gitHubServiceClient) CheckGitHubApp(ctx context.Context, req *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error) {
 	return c.checkGitHubApp.CallUnary(ctx, req)
+}
+
+// RotateGitHubAppWebhook calls directoryroster.v1.GitHubService.RotateGitHubAppWebhook.
+func (c *gitHubServiceClient) RotateGitHubAppWebhook(ctx context.Context, req *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error) {
+	return c.rotateGitHubAppWebhook.CallUnary(ctx, req)
 }
 
 // GetGitHubStatus calls directoryroster.v1.GitHubService.GetGitHubStatus.
@@ -544,6 +567,14 @@ type GitHubServiceHandler interface {
 	// CheckGitHubApp asks GitHub again what one App and its installation
 	// hold, bypassing the short cache the list reads through. Operator.
 	CheckGitHubApp(context.Context, *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error)
+	// RotateGitHubAppWebhook replaces the secret GitHub signs a catalogue
+	// App's webhook deliveries with. It keeps the new secret (where the
+	// consumers read it), sends the new target a signed ping until it
+	// answers 2xx, and only then tells GitHub — the secret and, for a Kargo
+	// receiver, the URL derived from it, in one call. A consumer holds one
+	// secret, so there is no overlap: a failure before GitHub is told
+	// restores the old secret and leaves deliveries as they were. Operator.
+	RotateGitHubAppWebhook(context.Context, *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error)
 	// GetGitHubStatus returns every organisation the policy binds or the
 	// controller reports on, each with its bound teams and the members the
 	// controller derived for them. Viewer.
@@ -706,6 +737,12 @@ func NewGitHubServiceHandler(svc GitHubServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(gitHubServiceMethods.ByName("CheckGitHubApp")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gitHubServiceRotateGitHubAppWebhookHandler := connect.NewUnaryHandler(
+		GitHubServiceRotateGitHubAppWebhookProcedure,
+		svc.RotateGitHubAppWebhook,
+		connect.WithSchema(gitHubServiceMethods.ByName("RotateGitHubAppWebhook")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gitHubServiceGetGitHubStatusHandler := connect.NewUnaryHandler(
 		GitHubServiceGetGitHubStatusProcedure,
 		svc.GetGitHubStatus,
@@ -804,6 +841,8 @@ func NewGitHubServiceHandler(svc GitHubServiceHandler, opts ...connect.HandlerOp
 			gitHubServiceDisconnectGitHubAppHandler.ServeHTTP(w, r)
 		case GitHubServiceCheckGitHubAppProcedure:
 			gitHubServiceCheckGitHubAppHandler.ServeHTTP(w, r)
+		case GitHubServiceRotateGitHubAppWebhookProcedure:
+			gitHubServiceRotateGitHubAppWebhookHandler.ServeHTTP(w, r)
 		case GitHubServiceGetGitHubStatusProcedure:
 			gitHubServiceGetGitHubStatusHandler.ServeHTTP(w, r)
 		case GitHubServiceBeginGitHubConnectProcedure:
@@ -863,6 +902,10 @@ func (UnimplementedGitHubServiceHandler) DisconnectGitHubApp(context.Context, *c
 
 func (UnimplementedGitHubServiceHandler) CheckGitHubApp(context.Context, *connect.Request[v1.CheckGitHubAppRequest]) (*connect.Response[v1.CheckGitHubAppResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.GitHubService.CheckGitHubApp is not implemented"))
+}
+
+func (UnimplementedGitHubServiceHandler) RotateGitHubAppWebhook(context.Context, *connect.Request[v1.RotateGitHubAppWebhookRequest]) (*connect.Response[v1.RotateGitHubAppWebhookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("directoryroster.v1.GitHubService.RotateGitHubAppWebhook is not implemented"))
 }
 
 func (UnimplementedGitHubServiceHandler) GetGitHubStatus(context.Context, *connect.Request[v1.GetGitHubStatusRequest]) (*connect.Response[v1.GetGitHubStatusResponse], error) {

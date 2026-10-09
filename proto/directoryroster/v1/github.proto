@@ -53,6 +53,15 @@ service GitHubService {
   // hold, bypassing the short cache the list reads through. Operator.
   rpc CheckGitHubApp(CheckGitHubAppRequest) returns (CheckGitHubAppResponse);
 
+  // RotateGitHubAppWebhook replaces the secret GitHub signs a catalogue
+  // App's webhook deliveries with. It keeps the new secret (where the
+  // consumers read it), sends the new target a signed ping until it
+  // answers 2xx, and only then tells GitHub — the secret and, for a Kargo
+  // receiver, the URL derived from it, in one call. A consumer holds one
+  // secret, so there is no overlap: a failure before GitHub is told
+  // restores the old secret and leaves deliveries as they were. Operator.
+  rpc RotateGitHubAppWebhook(RotateGitHubAppWebhookRequest) returns (RotateGitHubAppWebhookResponse);
+
   // GetGitHubStatus returns every organisation the policy binds or the
   // controller reports on, each with its bound teams and the members the
   // controller derived for them. Viewer.
@@ -273,7 +282,8 @@ message GitHubApp {
   // every permission declared or held, each with its declared level and
   // what the App and its installation hold.
   repeated GitHubAppPermission permissions = 17;
-  // the webhook events declared. The webhook itself is never active.
+  // the webhook events declared. They are delivered only to an App whose
+  // catalogue entry declares a webhook (webhook_url is then set).
   repeated string events = 18;
   // which internal groups may mint tokens of it, and for how much. Only a
   // catalogue App has any.
@@ -314,6 +324,12 @@ message GitHubApp {
   // installation-wide operator, on the controller App of a connected
   // organisation.
   bool can_change_owner = 34;
+  // where GitHub was last told to deliver the App's events; empty for an
+  // App that has no webhook. A Kargo receiver's URL moves with the secret.
+  string webhook_url = 35;
+  // when the webhook's secret was last set on GitHub: the creation, or the
+  // latest rotation.
+  google.protobuf.Timestamp webhook_rotated_at = 36;
 }
 
 message ListGitHubAppsRequest {}
@@ -437,6 +453,16 @@ message CheckGitHubAppRequest {
 }
 
 message CheckGitHubAppResponse {
+  GitHubApp app = 1;
+}
+
+message RotateGitHubAppWebhookRequest {
+  // the App's id in the catalogue. Its entry must declare a webhook, and
+  // the App must have been created.
+  string id = 1;
+}
+
+message RotateGitHubAppWebhookResponse {
   GitHubApp app = 1;
 }
 

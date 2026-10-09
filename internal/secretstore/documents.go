@@ -45,6 +45,10 @@ type GitHubv1 struct {
 	AppID          string `json:"app_id"`
 	InstallationID string `json:"installation_id"`
 	PrivateKey     string `json:"private_key"`
+	// WebhookSecret is the secret GitHub signs the App's webhook deliveries
+	// with. Optional: only an App whose catalogue entry declares a webhook
+	// has one, and a consumer that verifies deliveries reads it from here.
+	WebhookSecret string `json:"webhook_secret,omitempty"`
 }
 
 // Slackv1 is the document of a Slack App's bot token, at external/slack/<app>.

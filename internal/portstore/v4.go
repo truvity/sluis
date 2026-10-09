@@ -35,9 +35,12 @@ func (b *Base) v4Reads() bool { return b.v4 != nil && b.v4.Layout.ReadsV4() }
 // one: until the installation is on v4, v3 readers still need it.
 func (b *Base) keepInternal() bool { return b.v4 == nil || b.v4.Layout.WritesV3() }
 
-func (b *Base) putGitHub(ctx context.Context, value state.Value[secretstore.GitHubv1], appID, installationID int64, privateKey string) error {
+func (b *Base) putGitHub(
+	ctx context.Context, value state.Value[secretstore.GitHubv1], appID, installationID int64, privateKey, webhookSecret string,
+) error {
 	_, err := b.overwriteGitHub(ctx, value, secretstore.GitHubv1{
 		AppID: strconv.FormatInt(appID, 10), InstallationID: strconv.FormatInt(installationID, 10), PrivateKey: privateKey,
+		WebhookSecret: webhookSecret,
 	})
 	return err
 }
@@ -50,7 +53,8 @@ func (b *Base) overwriteGitHub(ctx context.Context, value state.Value[secretstor
 			rev = ""
 		case err != nil:
 			return "", err
-		case cur.AppID == doc.AppID && cur.InstallationID == doc.InstallationID && cur.PrivateKey == doc.PrivateKey:
+		case cur.AppID == doc.AppID && cur.InstallationID == doc.InstallationID && cur.PrivateKey == doc.PrivateKey &&
+			cur.WebhookSecret == doc.WebhookSecret:
 			return rev, nil // identical: no new revision
 		}
 		out, err := value.Put(ctx, doc, rev)
