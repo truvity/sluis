@@ -1,17 +1,17 @@
 package suite
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
-
-	"context"
-	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
-	"github.com/truvity/sluis/audit/sdk/record"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
+
+	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
+	"github.com/truvity/sluis/audit/sdk/record"
 )
 
 // envKMS turns on the tests of the "services in the cluster" lane, which
@@ -81,6 +81,11 @@ func TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
+	defer func() {
+		if t.Failed() {
+			dumpWriterLogs(t)
+		}
+	}()
 
 	tenant := randomTenant(t)
 	e := writerEmitter(ctx, t)
@@ -111,7 +116,8 @@ func TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(ctx, `select set_config('audit.tenant_ids', $1, false)`, fmt.Sprintf(`["%s"]`, tenant)); err != nil {
+	tenants := fmt.Sprintf(`["%s"]`, tenant)
+	if _, err := conn.ExecContext(ctx, `select set_config('audit.tenant_ids', $1, false)`, tenants); err != nil {
 		t.Fatal(err)
 	}
 
@@ -152,10 +158,23 @@ func TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase(t *testing.T) {
 	writerDB := openDSN(ctx, t, shared.writerDSN)
 	defer func() { _ = writerDB.Close() }()
 	var wrapped int
-	if err := writerDB.QueryRowContext(ctx, `select count(*) from audit_wrapped_keys where id like '%/' || $1`, base64.RawURLEncoding.EncodeToString([]byte(tenant))).Scan(&wrapped); err != nil {
+	suffix := "%/" + base64.RawURLEncoding.EncodeToString([]byte(tenant))
+	if err := writerDB.QueryRowContext(ctx, `select count(*) from audit_wrapped_keys where id like $1`, suffix).Scan(&wrapped); err != nil {
 		t.Fatalf("read the wrapped keys as the writer role: %v", err)
 	}
 	if wrapped != 1 {
 		t.Fatalf("want one wrapped key for the tenant in the database, got %d", wrapped)
 	}
+}
+
+// dumpWriterLogs prints what the release's pods said, for a test that failed: the
+// shared dump step matches pods by the lane's name, which is not the release's.
+func dumpWriterLogs(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	out, _ := exec.CommandContext(ctx, "kubectl", //nolint:gosec // fixed argv, no shell
+		"--context", getenv(envKubecontext, defaultKubecontext), "-n", shared.names.Namespace,
+		"logs", "-l", "app.kubernetes.io/instance="+shared.names.Release, "--all-containers", "--prefix", "--tail=60").CombinedOutput()
+	t.Logf("the release's pods:\n%s", out)
 }
