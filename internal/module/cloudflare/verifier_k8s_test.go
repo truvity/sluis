@@ -9,7 +9,7 @@ import (
 
 func TestTheReviewIsForTheAudience(t *testing.T) {
 	var got []string
-	v := reviewer(func(_ context.Context, token string, audiences []string) (string, error) {
+	v := reviewer(func(_ context.Context, _ string, audiences []string) (string, error) {
 		got = audiences
 		return "system:serviceaccount:sluis:issuer", nil
 	}, "cloudflare")

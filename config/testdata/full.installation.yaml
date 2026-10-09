@@ -102,6 +102,9 @@ access:
 cloudflare:
   remote:
     function: sluis-cloudflare
+  serve:
+    address: :8080
+    audience: cloudflare
   forbiddenPermissionGroups: [Workers Scripts Write]
   accounts:
     main:

@@ -38,6 +38,8 @@ var wiring = []string{
 	"internal/rosterapp",
 	"internal/githubroster/app",
 	"internal/slackroster/app",
+	// The Cloudflare module checks a caller's token with the cluster.
+	"internal/module/cloudflare",
 	// The migration reads one storage and writes another, so it must name both.
 	"internal/migrate",
 	"cmd",
