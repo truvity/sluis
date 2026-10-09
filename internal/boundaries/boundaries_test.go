@@ -119,19 +119,20 @@ func TestModuleBoundaries(t *testing.T) {
 		{
 			name:   "the GitHub module wraps only the GitHub role",
 			from:   []string{"internal/module/github"},
-			forbid: append(append(append([]string{}, front...), slack...), append(cloudflare, "internal/module/slack", "internal/module/issuer", "internal/module/cloudflare")...),
+			forbid: slices.Concat(front, slack, cloudflare, []string{"internal/module/slack", "internal/module/issuer", "internal/module/cloudflare"}),
 			sees:   "internal/module/github",
 		},
 		{
 			name:   "the Slack module wraps only the Slack role",
 			from:   []string{"internal/module/slack"},
-			forbid: append(append(append([]string{}, front...), github...), append(cloudflare, "internal/module/github", "internal/module/issuer", "internal/module/cloudflare")...),
+			forbid: slices.Concat(front, github, cloudflare, []string{"internal/module/github", "internal/module/issuer", "internal/module/cloudflare"}),
 			sees:   "internal/module/slack",
 		},
 		{
 			name:   "the issuer module wraps no provider module",
 			from:   []string{"internal/module/issuer"},
-			forbid: []string{"internal/module/github", "internal/module/slack", "internal/module/cloudflare", "internal/githubroster", "internal/slackroster", "internal/cloudflare"},
+			forbid: []string{"internal/module/github", "internal/module/slack", "internal/module/cloudflare",
+				"internal/githubroster", "internal/slackroster", "internal/cloudflare"},
 			sees:   "internal/module/issuer",
 		},
 		{

@@ -126,7 +126,8 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	}
 	if stores.V4 == nil {
 		stores.Close()
-		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the layout-v4 secrets store, so `secrets.source: ssm` is required")
+		return nil, errors.New("cloudflare: the minter credential and the stored credentials live in the layout-v4 secrets store, " +
+			"so `secrets.source: ssm` is required")
 	}
 	// A refusal found after the start is fatal the way one at the start is, in
 	// the controllers: here it is logged, and the next record says it again.
