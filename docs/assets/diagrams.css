@@ -1,0 +1,15 @@
+/* Diagrams render at their natural size and scroll sideways in the column
+   instead of being shrunk to it; docs/assets/diagrams.js draws them. */
+.diagram { position: relative; margin: 1em 0; border: .05rem solid var(--md-default-fg-color--lightest); border-radius: .2rem; }
+.diagram-scroll { overflow-x: auto; padding: .5rem; }
+.diagram-scroll svg { max-width: none !important; height: auto; display: block; margin: 0 auto; }
+.diagram-open { position: absolute; top: .3rem; right: .3rem; z-index: 1; font: inherit; font-size: .7rem; padding: .15rem .5rem; cursor: pointer;
+  color: var(--md-primary-fg-color); background: var(--md-default-bg-color); border: .05rem solid currentColor; border-radius: .2rem; }
+.diagram-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: var(--md-default-bg-color); }
+.diagram-bar { display: flex; gap: .4rem; align-items: center; padding: .4rem .6rem; border-bottom: .05rem solid var(--md-default-fg-color--lightest); font-size: .75rem; }
+.diagram-bar button { font: inherit; padding: .2rem .6rem; cursor: pointer; color: var(--md-default-fg-color); background: transparent; border: .05rem solid currentColor; border-radius: .2rem; }
+.diagram-bar span { margin-left: auto; opacity: .7; }
+.diagram-stage { flex: 1; overflow: hidden; cursor: grab; touch-action: none; position: relative; }
+.diagram-stage.dragging { cursor: grabbing; }
+.diagram-stage svg { position: absolute; top: 0; left: 0; max-width: none !important; transform-origin: 0 0; }
+.diagram-fallback { white-space: pre-wrap; }

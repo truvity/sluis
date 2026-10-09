@@ -1,6 +1,7 @@
 # The packages the documentation site (mkdocs.yaml) is built with, pinned so the
 # build is the same on a laptop and in .github/workflows/pages.yaml. Renovate
 # bumps them here.
+# Hold MkDocs below 2: 2.0 breaks the plugins and overrides used here (renovate.json enforces it).
 mkdocs==1.6.1
 mkdocs-material==9.7.7
 mkdocs-awesome-nav==3.3.0

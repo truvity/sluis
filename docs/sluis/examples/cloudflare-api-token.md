@@ -1,7 +1,5 @@
 # Example: a short-lived Cloudflare API token for a CI job
 
-> **Queued.** Written against the Cloudflare STS pull request branches (#411, #413, #417, #418); not on master yet.
-
 ## Goal
 
 A release job edits DNS on one zone with a Cloudflare token that lives 15 minutes, and only the one reviewed workflow at a
@@ -64,4 +62,6 @@ The token works against the zone and is refused elsewhere; a run from a branch i
 
 Remove the grant row or the group; delete the preset. A live token expires on its own, or revoke it by id.
 
-Source: `docs/how-to/cloudflare-tokens.md` and `docs/reference/sluisctl.md` on the branch of PR #417.
+Source: the how-to [mint short-lived Cloudflare tokens](../../how-to/cloudflare-tokens.md) and the
+[`sluisctl cloudflare` reference](../../reference/sluisctl.md#cloudflare-token-and-cloudflare-r2). The policy snippet renders with
+`sluisctl policy render` (checked against master, 2026-10-09).

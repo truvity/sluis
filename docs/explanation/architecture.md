@@ -16,33 +16,41 @@ caller, a service acts on one thing: a flat list of internal group names, the `g
 
 ## Context
 
+**Who asks.** People, CI jobs and workloads exchange a proof with sluis; sluis signs people in against the corporate directory and is trusted by the relying parties.
+
 ```mermaid
 flowchart TB
-  person["Engineer or operator<br/>browser, kubectl, sluisctl"]
-  ci["CI job<br/>GitHub Actions"]
-  workload["Workload<br/>a ServiceAccount, any cluster"]
-  admin["Directory admin<br/>consents once per tenant"]
-
-  ar["sluis<br/>verifies a proof · reads the directory<br/>applies the policy · mints tokens<br/>keeps teams and channels in step<br/>serves the login page and the console"]
-
-  idp["Corporate directories<br/>Google Workspace tenants, Entra later<br/>sign-in and MFA live here"]
-  rp["Relying parties<br/>Kubernetes API servers · AWS accounts<br/>ArgoCD · Kargo · consoles"]
-  gho["GitHub organisations<br/>teams, invitations, removals"]
-  slk["Slack workspaces<br/>channel members, Slack Connect"]
-  aud[("audit installation<br/>in this service's namespace; the trail, one record per action")]
-
+  subgraph callers["Callers"]
+    person["Engineer<br/>browser, kubectl, sluisctl"]
+    ci["CI job<br/>GitHub Actions"]
+    workload["Workload<br/>a ServiceAccount"]
+  end
+  ar["sluis<br/>verifies a proof, applies the policy,<br/>mints tokens, serves login and console"]
+  idp["Corporate directories<br/>sign-in and MFA live here"]
+  rp["Relying parties<br/>Kubernetes, AWS, ArgoCD, Kargo"]
   person -- "sign in once" --> ar
   ci -- "token exchange" --> ar
   workload -- "token exchange" --> ar
-  admin -. "admin consent" .-> idp
-  ar -- "sign-in [OIDC]<br/>directory reads [Admin SDK]" --> idp
+  ar -- "sign-in [OIDC]<br/>directory reads" --> idp
   ar -. "trusted issuer [key set]" .-> rp
-  ar -- "acts as each organisation's App" --> gho
-  ar -- "acts as each workspace's bot" --> slk
-  admin -. "pastes a configuration token, installs" .-> slk
-  ar -- "records, as itself" --> aud
-  person --> rp
-  ci --> rp
+  callers --> rp
+```
+
+**What it acts on.** sluis keeps GitHub teams and Slack channels in step and records each action in the audit installation; an admin consents once per tenant.
+
+```mermaid
+flowchart TB
+  admin["Directory admin"]
+  idp["Corporate directories"]
+  ar["sluis"]
+  gho["GitHub organisations<br/>teams, invitations"]
+  slk["Slack workspaces<br/>channel members"]
+  aud[("audit installation<br/>one record per action")]
+  admin -. "consent" .-> idp
+  admin -. "installs<br/>the app" .-> slk
+  ar -- "as each<br/>organisation's App" --> gho
+  ar -- "as each<br/>workspace's bot" --> slk
+  ar -- "records" --> aud
 ```
 
 Nothing in sluis is a database of record. Nothing authenticates anyone. The directories hold the people; the relying
@@ -55,54 +63,61 @@ installation of its own, rendered beside it in the same namespace.
 
 ## Containers
 
+**Entry.** Browsers, the CLI and CI reach one process, which signs people in against the corporate directory (who trusts it is in the Context above).
+
 ```mermaid
 flowchart TB
   browser["Browser"]
-  cli["sluisctl · kubelogin"]
-  ci["GitHub Actions"]
-  gw["Envoy Gateway<br/>one data plane, native OIDC per console"]
-
-  subgraph ar["sluis — one process"]
-    issuer["the issuer<br/>OpenID provider · six grants<br/>login page · session service"]
-    dir["the directory<br/>snapshots · routing by domain<br/>authoritative per domain"]
-    con["the console<br/>React, mounted at /console/"]
-    ctl["the GitHub controller<br/>one pass per interval per organisation<br/>born disabled, dry run until listed"]
-    sctl["the Slack controller<br/>one pass per interval per workspace<br/>born disabled, dry run until listed"]
+  cli["sluisctl, kubelogin,<br/>GitHub Actions"]
+  gw["Envoy Gateway<br/>native OIDC per console"]
+  subgraph ar["sluis, one process"]
+    issuer["issuer<br/>OpenID provider,<br/>login and sessions"]
+    dir["directory<br/>snapshots, routing"]
+    con["console<br/>React, /console/"]
   end
-
-  st[("State port<br/>sessions · single sign-on · auth requests · records · reports<br/>directory snapshots")]
-  cfg[("policy · clients · federated clusters<br/>the mounted documents")]
-  sec[("Secrets port<br/>workspace credentials · GitHub Apps · people's links<br/>runner and catalogue Apps · Slack bot tokens")]
-  aud[("audit installation<br/>receiver · writer · query service · jobs")]
-
   idp["Google Workspace"]
-  rp["Kubernetes · AWS · ArgoCD · Kargo"]
+  browser --> gw
+  gw -- "/ and /console/" --> issuer
+  cli -- "exchange" --> issuer
+  issuer -- "who is this<br/>address" --> dir
+  con -. "same origin" .-> issuer
+  issuer -- "sign-in" --> idp
+  dir -- "reads" --> idp
+```
+
+**What it keeps.** Behind the ports sluis holds state, mounted documents and secrets, and writes records to the audit installation.
+
+```mermaid
+flowchart TB
+  ar["sluis<br/>issuer, directory, controllers"]
+  st[("State port<br/>sessions, auth requests,<br/>records, reports, snapshots")]
+  cfg[("Mounted documents<br/>policy, clients,<br/>federated clusters")]
+  sec[("Secrets port<br/>workspace credentials,<br/>Apps, people's links,<br/>Slack bot tokens")]
+  aud[("audit installation<br/>receiver, writer,<br/>query service, jobs")]
+  ar --> st
+  ar --> cfg
+  ar --> sec
+  ar -- "records; the Audit page<br/>reads as the person" --> aud
+```
+
+**Controllers.** The GitHub and Slack loops ask the console who holds which group, then act in their organisation or workspace.
+
+```mermaid
+flowchart TB
+  issuer["issuer<br/>the console's API"]
+  subgraph ar["same process"]
+    ctl["GitHub<br/>controller"]
+    sctl["Slack<br/>controller"]
+  end
   gho["GitHub organisations"]
   slk["Slack workspaces"]
-
-  browser --> gw
-  gw -- "one host: / and /console/" --> issuer
-  cli -- "code + PKCE on loopback,<br/>then exchange" --> issuer
-  ci -- "exchange" --> issuer
-
-  issuer -- "who is this address<br/>[a function call]" --> dir
-  issuer --> st
-  issuer --> cfg
-  issuer --> sec
-  issuer -- "sign-in" --> idp
-  issuer -- "records; the Audit page reads as the person" --> aud
-  ctl -- "records, as itself" --> aud
-  sctl -- "records, as itself" --> aud
-  dir --> st
-  dir --> sec
-  dir -- "reads" --> idp
-  con -. "same origin, the browser's own cookie" .-> issuer
-  ctl -- "who holds which group, and its report<br/>[the console's API, its own ServiceAccount token]" --> issuer
-  ctl -- "as the organisation's App<br/>[a Secret mounted as files]" --> gho
-  sctl -- "who holds which group, directory groups, served domains, vouching<br/>[the console's API, its own ServiceAccount token]" --> issuer
-  sctl -- "as each workspace's bot<br/>[a Secret mounted as files]" --> slk
-  sctl -- "reads records, writes its report" --> st
-  issuer -. "trusted by" .-> rp
+  aud[("audit installation")]
+  ctl -- "who holds<br/>which group" --> issuer
+  sctl -- "who holds<br/>which group" --> issuer
+  ctl -- "as the<br/>organisation's App" --> gho
+  sctl -- "as each<br/>workspace's bot" --> slk
+  ctl -- "records" --> aud
+  sctl -- "records" --> aud
 ```
 
 **The GitHub and Slack controllers are loops in the same process, not services** (since v1.63,

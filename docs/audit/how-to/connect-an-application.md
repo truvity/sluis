@@ -226,11 +226,11 @@ issuer and audience in its grants, and the grants decide which profiles and
 tenants the person may read.
 
 ```mermaid
-flowchart LR
+flowchart TB
   P(["a person in the console"]) --> B["the console<br/>Audit page"]
-  GW["the gateway"] -- "issues the session's token" --> B
-  B -- "the console's own token" --> Q["query service<br/>in the same namespace"]
-  Q -- "grants decide what comes back" --> PG[("index")]
+  GW["the gateway"] -- "issues the<br/>session's token" --> B
+  B -- "the console's<br/>own token" --> Q["query service<br/>in the same namespace"]
+  Q -- "grants decide<br/>what comes back" --> PG[("index")]
 ```
 
 Whether the query service needs a public name follows from where the console

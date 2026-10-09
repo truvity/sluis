@@ -1,0 +1,29 @@
+# External and local link checking for the documentation, run by
+# .github/workflows/links.yaml: a weekly pass over the built site (online) and,
+# on pull requests, an offline pass over the Markdown the pull request changes.
+# In-site links and anchors are held by `mkdocs build --strict` and
+# hack/check-docs-hygiene.py; this is for the links that leave the repository.
+
+cache = true
+max_cache_age = "1d"
+max_retries = 3
+retry_wait_time = 5
+timeout = 30
+max_concurrency = 8
+# 429 is a host asking for patience, not a dead link.
+accept = ["200..=204", "429"]
+user_agent = "Mozilla/5.0 (compatible; sluis-docs-link-check)"
+include_fragments = false
+
+exclude = [
+  # GitHub's edit and blob URLs need a sign-in or point at files this very
+  # change adds; the paths are checked as relative links instead.
+  '^https://github\.com/truvity/sluis/(edit|blob|tree)/',
+  # Release assets exist only after a release is cut.
+  '^https://github\.com/truvity/sluis/releases/(download|tag)/',
+  # Example values.
+  '^https?://(localhost|127\.0\.0\.1|example\.(com|org))',
+  '^https?://[^/]*\.(example|invalid|test|local|svc)(/|:|$)',
+  # Needs a token or a session.
+  '^https://(www\.)?linkedin\.com',
+]

@@ -25,7 +25,7 @@ document and the policy document, which `sluisctl render` writes from an install
 | cert-manager and a `ClusterIssuer` | the TLS certificate of the Gateway (`route.certificate`) | the signing key is KMS here, so no signing Certificate is rendered |
 | a Google Workspace and an OAuth client | people signing in, and the directory | [Google Workspace](connect/google-workspace.md) walks through the client |
 | `sluisctl`, `helm`, `kubectl` | rendering and installing | |
-| an audit installation ([truvity/audit](https://github.com/truvity/audit)) | the audit trail (optional) | without `audit.writer` nothing is kept beyond the log line each record also is, and the service says so at start |
+| an audit installation ([audit](../audit/README.md)) | the audit trail (optional) | without `audit.writer` nothing is kept beyond the log line each record also is, and the service says so at start |
 
 Replicas above one need `adapters.state` `dynamodb`, so the tick leases are shared; the chart refuses to render
 otherwise ([high availability](high-availability.md)). Valkey is optional (the directory cache); see

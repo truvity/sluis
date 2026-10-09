@@ -479,7 +479,7 @@ on the whole installation, needs the `all:access-roster:operator` group.
 ## The audit trail
 
 Not a service of this one. sluis records into an audit
-installation ([truvity/audit](https://github.com/truvity/audit)) through its
+installation ([audit](../audit/README.md)) through its
 contracts: it registers its catalogue with the installation's
 `audit.v1.RegistryService` at start, and sends records to its
 `audit.v1.SinkService`, each with the process's own projected

@@ -8,7 +8,7 @@ and [chart values](../reference/chart-values.md).
 sluis is one chart, `charts/sluis`, and one image, for the whole product. It renders the directory, the policy, the OpenID
 provider, the login page and the console, and, when `config.controllers` names them, the GitHub and Slack controllers in
 the same process ([why one process](one-process.md)). It keeps no audit trail of its own: it records into an installation
-of [truvity/audit](https://github.com/truvity/audit) that the deployment provides, and reads that installation's query
+of [audit](../audit/README.md) that the deployment provides, and reads that installation's query
 service for the console's Audit page.
 
 A process is configured by one file. [ADR 0032](../decisions/0032-one-configuration-file-one-binary-one-chart.md) replaced

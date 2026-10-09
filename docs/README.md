@@ -8,14 +8,22 @@ documentation tree with the same sections, organised by what the reader is doing
 In one line: sluis turns a caller's proof into short-lived credentials and records what it did; audit archives those
 records in S3, seals them, and serves them to the console's Audit page.
 
+**sluis.** A caller's proof goes to the issuer; the issuer mints credentials and emits audit records, and the controllers keep GitHub teams and Slack channels in step.
+
 ```mermaid
-flowchart LR
-  dir["Directory + machine proofs"] --> iss["sluis issuer"]
-  iss --> cred["Tokens and credentials for Kubernetes, AWS, GitHub Apps, Cloudflare"]
+flowchart TB
+  dir["Directory and<br/>machine proofs"] --> iss["sluis issuer"]
+  iss --> cred["Tokens and credentials<br/>Kubernetes, AWS,<br/>GitHub Apps, Cloudflare"]
+  iss --> em["audit emitter"]
   ctl["Controllers"] --> gh["GitHub teams"]
   ctl --> sl["Slack channels"]
-  iss --> em["audit emitter"]
-  em --> wr["audit writer"]
+```
+
+**audit.** The writer archives the records in S3, the notary seals them, the indexer fills PostgreSQL, and the query service feeds the console's Audit page.
+
+```mermaid
+flowchart TB
+  em["audit emitter"] --> wr["audit writer"]
   wr --> s3[("S3 archive")]
   nt["notary"] --> s3
   s3 --> ix["indexer"]

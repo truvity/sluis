@@ -22,23 +22,40 @@ they are the direction.
 
 ## The parts
 
+**Write path.** The emit library hands a validated record to the receiver, which puts it straight to the writer (direct mode) or publishes it to JetStream first (stream mode); the writer locks objects in the bucket, which is the record.
+
 ```mermaid
-flowchart LR
-  subgraph app["application pod"]
-    E["emit library<br/>validates against the catalogue<br/>block, or async queue"]
-  end
-  E -- "Connect, ack = durable" --> R["receiver<br/>(audit-writer, front door)"]
-  R -- "direct mode: put, then ack" --> W
-  R -- "stream mode: publish, ack when replicated" --> NATS[("JetStream<br/>the application's stream")]
-  NATS --> W["writer<br/>(audit-writer, consumer mode, N pods)"]
-  W -- "locked objects" --> S3[("the environment's bucket<br/>audit/app/ — THE RECORD")]
-  W -- "dedupe, registry" --> PG[("database<br/>in the application's Postgres")]
-  O["indexer<br/>(audit-observe)"] -- "lists from a cursor, reads" --> S3
-  O -- "index rows, cursors" --> PG
-  V["verify CronJob, nightly"] --> S3
-  Q["query service<br/>(audit-query)"] -- "reads the index" --> PG
+flowchart TB
+  E["emit library<br/>validates against<br/>the catalogue"]
+  R["receiver<br/>audit-writer, front door"]
+  NATS[("JetStream<br/>stream mode only")]
+  W["writer<br/>audit-writer"]
+  S3[("the environment's bucket<br/>THE RECORD")]
+  PG[("database<br/>dedupe, registry")]
+  E -- "Connect,<br/>ack = durable" --> R
+  R -- "direct mode:<br/>put, then ack" --> W
+  R -- "stream mode:<br/>publish" --> NATS
+  NATS --> W
+  W -- "locked objects" --> S3
+  W --> PG
+```
+
+**Read path.** The indexer fills the index from the bucket, the nightly job verifies it, and the query service answers the Audit page from the index and the bucket.
+
+```mermaid
+flowchart TB
+  UI["Audit page<br/>in the application's console"]
+  Q["query service<br/>audit-query"]
+  O["indexer<br/>audit-observe"]
+  V["verify CronJob<br/>nightly"]
+  S3[("the environment's bucket")]
+  PG[("database<br/>the index")]
+  UI -- "the console's<br/>own token" --> Q
+  Q -- "reads the index" --> PG
   Q --> S3
-  UI["Audit page<br/>in the application's console"] -- "the console's own token" --> Q
+  O -- "lists from a cursor,<br/>reads" --> S3
+  O -- "index rows,<br/>cursors" --> PG
+  V --> S3
 ```
 
 | part | runs as | holds | never holds |

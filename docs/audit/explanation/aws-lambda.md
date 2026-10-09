@@ -15,21 +15,35 @@ row here 🧪 and not ✅.
 
 ## The shape
 
+**Ingest.** The receiver sends batches to SQS; the writer Lambda locks objects in S3 and dedupes in DynamoDB; failures go to a DLQ.
+
+```mermaid
+flowchart TB
+  app["application / receiver"] -->|"SendMessageBatch"| q["SQS ingest queue"]
+  q -->|"event source mapping"| w["writer Lambda"]
+  q -. "after<br/>maxReceiveCount" .-> dlq["SQS DLQ"]
+  w -->|"PutObject +<br/>Object Lock"| b[("S3 archive<br/>Object Lock")]
+  w <-->|"conditional put, TTL"| d[("DynamoDB dedupe")]
+```
+
+**Seals.** An hourly schedule runs the notary, which signs seals with a KMS key and writes them beside the records; observe reads from another account.
+
+```mermaid
+flowchart TB
+  sch["EventBridge Scheduler<br/>hourly"] --> n["notary Lambda"]
+  b[("S3 archive")]
+  n -->|"list, get; write<br/>seals/, keys/"| b
+  n -->|"Sign, P-384"| k["KMS seal key"]
+  b -. "records/, catalogue/,<br/>seals/, keys/" .-> o["observe, in<br/>another account"]
+```
+
+**Telemetry and alerts.** Both Lambdas send OTLP under their role identity; CloudWatch alarms reach the alert ingress through SNS.
+
 ```mermaid
 flowchart LR
-    app["application / receiver"] -->|SendMessageBatch| q["SQS ingest queue"]
-    q -->|"event source mapping, ReportBatchItemFailures"| w["writer Lambda"]
-    q -. "after maxReceiveCount" .-> dlq["SQS DLQ"]
-    w -->|"PutObject + Object Lock"| b[("S3 archive, Object Lock")]
-    w <-->|"conditional put, TTL"| d[("DynamoDB dedupe")]
-    sch["EventBridge Scheduler, hourly"] --> n["notary Lambda"]
-    n -->|"list, get"| b
-    n -->|"seals/, keys/"| b
-    n -->|"Sign, P-384"| k["KMS seal key"]
-    b -. "records/, catalogue/, seals/, keys/" .-> o["observe, in another account"]
-    w -.->|"OTLP, role identity"| otlp["OTLP door"]
-    n -.->|"OTLP, role identity"| otlp
-    cw["CloudWatch alarms"] --> sns["SNS topic"] -->|HTTPS| ai["alert-ingress"]
+  w["writer Lambda"] -.->|"OTLP, role identity"| otlp["OTLP door"]
+  n["notary Lambda"] -.->|"OTLP, role identity"| otlp
+  cw["CloudWatch alarms"] --> sns["SNS topic"] -->|"HTTPS"| ai["alert-ingress"]
 ```
 
 The two functions are the [two parts](../../decisions/0058-three-parts-installed-independently.md)

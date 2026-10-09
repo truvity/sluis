@@ -7,7 +7,7 @@ Make sluis record into an audit installation and show its Audit page in the cons
 ## Preconditions
 
 - The audit installation is deployed and has its deployment document, from which its profiles come (see its deploy
-  guide, [truvity/audit](https://github.com/truvity/audit)).
+  guide, [audit](../audit/README.md)).
 - You can edit the policy and the chart's values.
 
 ## Before you start
