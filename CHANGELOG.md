@@ -219,9 +219,6 @@ The code of v1.74.0-rc.4, proven on a live installation. The changes since v1.73
 
 - **`github.com/truvity/policy` v1.44.0 to v1.45.0** (root module and `deploy/pulumi`). v1.45.0 removes `config.Secret` and replaces the `...Env` spellings in its shared fragments with `...Secret` names; sluis used neither (its schemas do not `$ref` those fragments and nothing called `config.Secret`), so no document, schema, chart value or behaviour changes. The unused `config.Secret` wrapper in `internal/config` is removed. sluis keeps its own `internal/secrets` resolver (the `SLUIS_SECRET_<NAME>` env mapping, the legacy v1 locations, the bulk SSM read with a five-minute refresh); it does not yet sit on policy's `config.NewSecrets`.
 
-## v1.64.0-rc.1
-
-The release candidate of v1.64.0: its notes are v1.64.0's, below. Cut to exercise the release workflow's library-tag job before the final tag; its npm package was not published (npm refuses a pre-release without `--tag`).
 
 ## v1.64.0
 
@@ -322,6 +319,10 @@ Documents mode, `sluisctl render` and the installation document, the OpenBao Sec
 
 - **Preset `aws-eks`** is the deprecated name of `k8s-aws` (it never started: it named the unbuilt trigger `watch`).
   It resolves to `k8s-aws` and start logs a warning.
+
+### v1.64.0-rc.1
+
+The release candidate of v1.64.0: its notes are v1.64.0's, above. Cut to exercise the release workflow's library-tag job before the final tag; its npm package was not published (npm refuses a pre-release without `--tag`).
 
 ## v1.63.0
 
