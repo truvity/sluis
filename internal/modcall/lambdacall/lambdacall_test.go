@@ -5,9 +5,14 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/modcall/lambdacall"
@@ -112,6 +117,71 @@ func TestAClassWrittenInTheEventIsIgnored(t *testing.T) {
 	out, err := lambdacall.Serve(context.Background(), s,
 		[]byte(`{"v":2,"kind":"rpc","module":"calc","method":"who","caller":"issuer","payload":{"caller":"issuer"}}`), "live-console")
 	if err != nil || !strings.Contains(string(out), `"Subject":"console"`) {
+		t.Fatalf("%s %v", out, err)
+	}
+}
+
+func TestTheTraceContinuesIntoTheFunction(t *testing.T) {
+	rec := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	defer func() { otel.SetTracerProvider(previous); _ = provider.Shutdown(context.Background()) }()
+
+	_, c := setup()
+	if _, err := modcall.Do[req, res](context.Background(), c, "calc", "double", req{N: 1}); err != nil {
+		t.Fatal(err)
+	}
+	var client, srv sdktrace.ReadOnlySpan
+	for _, s := range rec.Ended() {
+		if s.SpanKind() == trace.SpanKindClient {
+			client = s
+		} else if s.SpanKind() == trace.SpanKindServer {
+			srv = s
+		}
+	}
+	if client == nil || srv == nil || srv.SpanContext().TraceID() != client.SpanContext().TraceID() ||
+		srv.Parent().SpanID() != client.SpanContext().SpanID() {
+		t.Fatalf("the function's span does not continue the caller's trace: %v %v", client, srv)
+	}
+}
+
+func TestSizeGuardsAndTheDeadlineHoldOnLambda(t *testing.T) {
+	f, c := setup()
+	big := strings.Repeat("x", modcall.DefaultMaxBytes)
+	var e *modcall.Error
+	// The caller refuses before invoking.
+	f.got = nil
+	_, err := c.Call(context.Background(), "calc", "double", []byte(`{"N":1,"Pad":"`+big+`"}`))
+	if !errors.As(err, &e) || e.Code != modcall.CodeBadRequest || f.got != nil {
+		t.Fatalf("%v invoked=%v", err, f.got != nil)
+	}
+	// The function refuses a payload that got past a caller with a higher bound.
+	c.MaxBytes = modcall.HardMaxBytes
+	_, err = c.Call(context.Background(), "calc", "double", []byte(`{"N":1,"Pad":"`+big+`"}`))
+	if !errors.As(err, &e) || e.Code != modcall.CodeBadRequest || strings.Contains(err.Error(), "xxx") {
+		t.Fatalf("%v", err)
+	}
+	// An expired deadline never invokes.
+	f.got = nil
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	if _, err = c.Call(ctx, "calc", "double", nil); !errors.Is(err, modcall.Coded(modcall.CodeDeadlineExceeded, "")) || f.got != nil {
+		t.Fatalf("%v", err)
+	}
+	// A deadline that passed in flight is refused by the function.
+	out, err := lambdacall.Serve(context.Background(), f.server,
+		[]byte(`{"v":2,"kind":"rpc","module":"calc","method":"double","deadline":1}`), "live-issuer")
+	if err != nil || !strings.Contains(string(out), modcall.CodeDeadlineExceeded) {
+		t.Fatalf("%s %v", out, err)
+	}
+}
+
+func TestAV1EventIsAnsweredInV1(t *testing.T) {
+	f, _ := setup()
+	out, err := lambdacall.Serve(context.Background(), f.server,
+		[]byte(`{"kind":"rpc","module":"calc","method":"double","payload":{"N":2}}`), "live-issuer")
+	if err != nil || strings.Contains(string(out), `"v"`) || !strings.Contains(string(out), `"N":4`) {
 		t.Fatalf("%s %v", out, err)
 	}
 }
