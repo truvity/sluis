@@ -156,3 +156,6 @@ func (c Config) kubeClient() (*kube.Client, error) {
 	}
 	return kube.InCluster(c.Release)
 }
+
+// valkeyConfigured reports whether the file sets a Valkey address.
+func (c Config) valkeyConfigured() bool { return c.Valkey.Address != "" }

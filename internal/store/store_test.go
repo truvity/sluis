@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -174,5 +175,55 @@ func TestABlobWithoutSettingsIsRefused(t *testing.T) {
 		if _, err := store.Open(context.Background(), cfg, quiet); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+}
+
+// capture is a slog handler that keeps what it is given.
+type capture struct {
+	mu   *sync.Mutex
+	logs *[]slog.Record
+}
+
+func (c capture) Enabled(context.Context, slog.Level) bool { return true }
+func (c capture) Handle(_ context.Context, r slog.Record) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	*c.logs = append(*c.logs, r)
+	return nil
+}
+func (c capture) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c capture) WithGroup(string) slog.Handler      { return c }
+
+func deprecationWarnings(t *testing.T, f *config.Serve) []string {
+	t.Helper()
+	var logs []slog.Record
+	cfg, err := store.FromServe(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(context.Background(), cfg, slog.New(capture{&sync.Mutex{}, &logs}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var out []string
+	for _, r := range logs {
+		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "deprecated in v1.74.0, removed in v1.75; migrate with `sluis migrate`") {
+			out = append(out, r.Message)
+		}
+	}
+	return out
+}
+
+func TestTheLegacyAdapterWarnsItIsDeprecated(t *testing.T) {
+	got := deprecationWarnings(t, &config.Serve{IssuerURL: "https://i.example", Ports: &config.Ports{Adapter: "legacy"}})
+	if len(got) != 1 || !strings.HasPrefix(got[0], "the legacy store is") {
+		t.Fatalf("warnings = %q; want one about the legacy store", got)
+	}
+}
+
+func TestOtherAdaptersDoNotWarnOfTheLegacyStore(t *testing.T) {
+	if got := deprecationWarnings(t, &config.Serve{IssuerURL: "https://i.example", Ports: &config.Ports{Adapter: "memory"}}); len(got) != 0 {
+		t.Fatalf("warnings = %q; want none for memory", got)
 	}
 }

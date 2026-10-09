@@ -358,7 +358,7 @@ func serveSchema() m {
 			"activationDelay": duration("How long a newly published key waits before a replica signs with it. At least `pollInterval`.", "15m"),
 			"overlap":         duration("How long a rotated key stays published. Unset is `lifetimes.token` plus a margin for clock skew.", ""),
 		}), "file", "kms", "kmsWrapped"),
-		"valkey": obj("The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.", m{
+		"valkey": obj("Deprecated in v1.74.0, removed in v1.75: migrate with `sluis migrate`. The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.", m{
 			"address":        m{"type": "string", "allOf": []any{m{"pattern": `^[^\s/]+:[0-9]{1,5}$`}, m{"not": m{"pattern": "@"}}}, "description": "host:port, with no credentials."},
 			"passwordSecret": secretField("The secret the password is (`valkey/password`). Unset connects with none."),
 			"tls":            boolean("Speak TLS to the server."),
@@ -427,7 +427,7 @@ func controllerProps(tokenDefault, recordsDefault, dirKey, dirDescription, dirDe
 // portsSchema is the `ports` section both kinds of file share.
 func portsSchema() m {
 	o := obj("The adapters behind the storage ports (docs/explanation/ports.md).", m{
-		"adapter": enum("`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.", "legacy",
+		"adapter": enum("`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.", "legacy",
 			"legacy", "memory", "dynamodb"),
 		"blob":     portsBlobSchema(),
 		"dynamodb": portsDynamoDBSchema(),

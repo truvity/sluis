@@ -456,6 +456,7 @@ func Open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 			return nil, err
 		}
 	}
+	warnDeprecated(ctx, cfg, log)
 	cfg.v4 = &v4Holder{}
 	st, err := open(ctx, cfg, log)
 	if err != nil {
@@ -544,4 +545,25 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 	log.InfoContext(ctx, "keeping state in DynamoDB", "adapter", AdapterDynamoDB,
 		"table", cfg.DynamoDB.Table, "region", cfg.DynamoDB.Region, "create", cfg.DynamoDB.Create)
 	return st, nil
+}
+
+// deprecationDocs is where the way off the legacy store is written down.
+const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/how-to/migrate-secrets-layout.md"
+
+// warnDeprecated says, once per open, that the legacy store and Valkey are
+// deprecated in v1.74.0 and removed in v1.75. It changes nothing else.
+func warnDeprecated(ctx context.Context, cfg Config, log *slog.Logger) {
+	if log == nil {
+		return
+	}
+	const removal = "deprecated in v1.74.0, removed in v1.75; migrate with `sluis migrate`"
+	if cfg.Adapter == AdapterLegacy {
+		log.WarnContext(ctx, "the legacy store is "+removal,
+			slog.String("setting", "ports.adapter"), slog.String("adapter", AdapterLegacy),
+			slog.String("docs", deprecationDocs))
+	}
+	if cfg.valkeyConfigured() {
+		log.WarnContext(ctx, "valkey is "+removal,
+			slog.String("setting", "valkey"), slog.String("docs", deprecationDocs))
+	}
 }

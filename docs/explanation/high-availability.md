@@ -13,7 +13,7 @@ port (`internal/issuerapp/app.go`, `openState`):
 
 - **`dynamodb`** (`ports.adapter: dynamodb`): one table, shared by every replica and process. This is the State a replica
   set uses on AWS and the one the chart requires when a controller runs at more than one replica.
-- **`legacy` with `valkey.address`**: the Kubernetes objects plus a Valkey that holds sessions and the key ring. It is the
+- **`legacy` with `valkey.address`** (deprecated in v1.74.0, removed in v1.75; [migrate](../how-to/migrate-state.md) with `sluis migrate`): the Kubernetes objects plus a Valkey that holds sessions and the key ring. It is the
   transitional store of an installation not yet moved ([migrate the State](../how-to/migrate-state.md)); it shares the
   issuer's state, and the chart still refuses a controller at more than one replica on it.
 - **`memory`, or `legacy` with no Valkey**: process-local. The service logs `keeping logins in progress in memory:
