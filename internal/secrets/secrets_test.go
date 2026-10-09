@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,63 +57,53 @@ func TestTheFileSourceReadsEveryUse(t *testing.T) {
 	}
 }
 
+// fakeSSM answers GetParameter, counting the calls; it has no other method, so
+// a prefix sweep cannot compile against it.
 type fakeSSM struct {
-	params map[string]string
-	calls  int
-	fail   bool
+	mu      sync.Mutex
+	params  map[string]string
+	calls   int
+	byName  map[string]int
+	fail    bool
+	gate    chan struct{} // when set, a read waits for it to close
+	decrypt bool
 }
 
-func (f *fakeSSM) GetParametersByPath(
-	_ context.Context, in *awsssm.GetParametersByPathInput, _ ...func(*awsssm.Options),
-) (*awsssm.GetParametersByPathOutput, error) {
+func (f *fakeSSM) GetParameter(
+	_ context.Context, in *awsssm.GetParameterInput, _ ...func(*awsssm.Options),
+) (*awsssm.GetParameterOutput, error) {
+	f.mu.Lock()
 	f.calls++
-	if f.fail {
+	if f.byName == nil {
+		f.byName = map[string]int{}
+	}
+	f.byName[aws.ToString(in.Name)]++
+	fail, gate := f.fail, f.gate
+	v, ok := f.params[aws.ToString(in.Name)]
+	f.decrypt = aws.ToBool(in.WithDecryption)
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
+	if fail {
 		return nil, errors.New("throttled")
 	}
-	if !aws.ToBool(in.WithDecryption) || !aws.ToBool(in.Recursive) {
-		return nil, errors.New("want a recursive, decrypted read")
+	if !ok {
+		return nil, &types.ParameterNotFound{}
 	}
-	// One parameter per page, to prove the paging.
-	var names []string
-	for n := range f.params {
-		if strings.HasPrefix(n, aws.ToString(in.Path)+"/") {
-			names = append(names, n)
-		}
-	}
-	start := 0
-	if in.NextToken != nil {
-		for i, n := range sortStrings(names) {
-			if n == *in.NextToken {
-				start = i
-			}
-		}
-	}
-	names = sortStrings(names)
-	if start >= len(names) {
-		return &awsssm.GetParametersByPathOutput{}, nil
-	}
-	out := &awsssm.GetParametersByPathOutput{Parameters: []types.Parameter{{Name: aws.String(names[start]), Value: aws.String(f.params[names[start]])}}}
-	if start+1 < len(names) {
-		out.NextToken = aws.String(names[start+1])
-	}
-	return out, nil
+	return &awsssm.GetParameterOutput{Parameter: &types.Parameter{Name: in.Name, Value: aws.String(v)}}, nil
 }
 
-func sortStrings(s []string) []string {
-	out := append([]string{}, s...)
-	for i := range out {
-		for j := i + 1; j < len(out); j++ {
-			if out[j] < out[i] {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
-	}
-	return out
+func (f *fakeSSM) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }
 
-// The SSM source reads the whole prefix at once, every page, and again only
-// when its copy is older than the refresh; a read that fails keeps the copy.
-func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
+// Building the source reads nothing; a name is read on its first use, one
+// parameter per name, decrypted, and again only when its copy is older than the
+// refresh.
+func TestTheSSMSourceReadsOneNamePerCallAndRefreshes(t *testing.T) {
 	f := &fakeSSM{params: map[string]string{
 		"/sluis/example/internal/config/issuer/state-secret":                "seed",
 		"/sluis/example/internal/config/providers/google/default/client-id": "id",
@@ -122,19 +113,27 @@ func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 	now := time.Unix(0, 0)
 	src := &secrets.SSM{API: f, Root: "/sluis/example", Refresh: 5 * time.Minute, Now: func() time.Time { return now }}
 	ctx := context.Background()
+	if f.count() != 0 {
+		t.Fatalf("building the source made %d calls", f.count())
+	}
 	if v, err := src.Get(ctx, "issuer/state-secret"); err != nil || v != "seed" {
 		t.Fatalf("%q %v", v, err)
+	}
+	if f.count() != 1 || !f.decrypt {
+		t.Errorf("one name, one decrypted read: %d calls, decrypt %v", f.count(), f.decrypt)
 	}
 	if v, err := src.Get(ctx, "providers/google/default/client-id"); err != nil || v != "id" {
 		t.Fatalf("%q %v", v, err)
 	}
-	if f.calls != 2 {
-		t.Errorf("two pages, one read: %d calls", f.calls)
+	if f.count() != 2 {
+		t.Errorf("a second name is one more call: %d", f.count())
 	}
 	if _, err := src.Get(ctx, "credentials/github-org/acme/key"); !errors.Is(err, secrets.ErrNotFound) {
 		t.Errorf("a credential is not configuration: %v", err)
 	}
+	f.mu.Lock()
 	f.params["/sluis/example/internal/config/issuer/state-secret"] = "rotated"
+	f.mu.Unlock()
 	if v, _ := src.Get(ctx, "issuer/state-secret"); v != "seed" {
 		t.Errorf("read again before the refresh: %q", v)
 	}
@@ -142,13 +141,86 @@ func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 	if v, _ := src.Get(ctx, "issuer/state-secret"); v != "rotated" {
 		t.Errorf("not read again after the refresh: %q", v)
 	}
+	if got := f.byName["/sluis/example/internal/config/providers/google/default/client-id"]; got != 1 {
+		t.Errorf("a name nobody asked for again was read again: %d", got)
+	}
+	f.mu.Lock()
 	f.fail = true
+	f.mu.Unlock()
 	now = now.Add(6 * time.Minute)
 	if v, err := src.Get(ctx, "issuer/state-secret"); err != nil || v != "rotated" {
 		t.Errorf("a failed read lost the copy: %q %v", v, err)
 	}
 	if _, err := secrets.NewSSM(ctx, "/sluis", "", "", 0); err == nil {
 		t.Error("a v2 root was accepted: an instance root is /sluis/<instance>")
+	}
+}
+
+// Callers that arrive together for one name make one read.
+func TestTheSSMSourceReadsOneNameOnceForConcurrentCallers(t *testing.T) {
+	f := &fakeSSM{params: map[string]string{"/sluis/example/internal/config/a": "1"}, gate: make(chan struct{})}
+	src := &secrets.SSM{API: f, Root: "/sluis/example"}
+	const n = 16
+	var wg sync.WaitGroup
+	results := make(chan string, n)
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			v, err := src.Get(context.Background(), "a")
+			if err != nil {
+				results <- "error: " + err.Error()
+				return
+			}
+			results <- v
+		}()
+	}
+	// Let every caller reach the source before the read returns.
+	deadline := time.Now().Add(5 * time.Second)
+	for f.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(f.gate)
+	wg.Wait()
+	close(results)
+	for r := range results {
+		if r != "1" {
+			t.Errorf("a caller got %q", r)
+		}
+	}
+	if f.count() != 1 {
+		t.Errorf("%d concurrent callers made %d reads, want 1", n, f.count())
+	}
+}
+
+// An absent name is remembered as absent for a short while, then asked again,
+// so a parameter created after a miss is seen.
+func TestTheSSMSourceRemembersAnAbsentNameBriefly(t *testing.T) {
+	f := &fakeSSM{params: map[string]string{}}
+	now := time.Unix(0, 0)
+	src := &secrets.SSM{API: f, Root: "/sluis/example", Now: func() time.Time { return now }}
+	ctx := context.Background()
+	for range 5 {
+		if _, err := src.Get(ctx, "late"); !errors.Is(err, secrets.ErrNotFound) {
+			t.Fatalf("absent: %v", err)
+		}
+	}
+	if f.count() != 1 {
+		t.Errorf("an absent name was asked %d times within the back-off", f.count())
+	}
+	f.mu.Lock()
+	f.params["/sluis/example/internal/config/late"] = "now"
+	f.mu.Unlock()
+	now = now.Add(time.Minute)
+	if v, err := src.Get(ctx, "late"); err != nil || v != "now" {
+		t.Errorf("a name created after a miss: %q %v", v, err)
+	}
+	f.mu.Lock()
+	f.params["/sluis/example/internal/config/empty"] = ""
+	f.mu.Unlock()
+	if _, err := src.Get(ctx, "empty"); !errors.Is(err, secrets.ErrNotFound) {
+		t.Errorf("an empty parameter is not a secret: %v", err)
 	}
 }
 
@@ -194,12 +266,12 @@ func TestTheSSMSourceBacksOffAndFailsClosedWhenTooStale(t *testing.T) {
 	if v, err := src.Get(ctx, "a"); err != nil || v != "1" {
 		t.Fatalf("the copy was not served: %q %v", v, err)
 	}
-	calls := f.calls
+	calls := f.count()
 	for range 5 {
 		_, _ = src.Get(ctx, "a")
 	}
-	if f.calls != calls {
-		t.Errorf("SSM was asked again within the back-off: %d calls", f.calls-calls)
+	if f.count() != calls {
+		t.Errorf("SSM was asked again within the back-off: %d calls", f.count()-calls)
 	}
 	now = now.Add(2 * time.Hour)
 	if _, err := src.Get(ctx, "a"); err == nil {

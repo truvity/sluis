@@ -215,12 +215,12 @@ func (f *ssmFake) reset() {
 	f.calls, f.log = map[string]int{}, nil
 }
 
-// A cold start reads SSM once for the console's session key and once per page
-// of its configuration, and nothing else: every new environment of a herd
-// makes these calls, and SSM throttles a herd. Sixteen parameters are two
-// pages. Before v1.74.1 the same start made five calls: it also listed every
-// stored credential to prove the Secrets port answers, and every generated
-// client's record looking for orphans, which is the scheduled pass's job.
+// A cold start reads SSM once for the console's session key and once for each
+// secret it needs to start (here the recovery password), by name, and nothing
+// else: every new environment of a herd makes these calls, and SSM throttles a
+// herd. No call lists a prefix, so the parameters nobody asks for (the fixture
+// has fifteen) are never read. Before this a start read the whole of
+// internal/config/ in pages.
 func TestAColdStartReadsOnlyItsConfigurationAndSessionKeyFromSSM(t *testing.T) {
 	fake := newSSMFake(fixtureParams())
 	// The installation's first start creates the session key; the herd's are
@@ -233,11 +233,11 @@ func TestAColdStartReadsOnlyItsConfigurationAndSessionKeyFromSSM(t *testing.T) {
 		t.Fatalf("cold start: %v", err)
 	}
 	total, by := fake.count()
-	if total != 3 || by["GetParametersByPath"] != 2 || by["GetParameter"] != 1 {
-		t.Errorf("SSM calls per cold start = %d %v, want 3: %q", total, by, fake.log)
+	if total != 2 || by["GetParameter"] != 2 {
+		t.Errorf("SSM calls per cold start = %d %v, want 2 GetParameter: %q", total, by, fake.log)
 	}
 	for _, call := range fake.log {
-		if !strings.Contains(call, " /sluis/example/internal/config ") && !strings.Contains(call, "/console/session-key ") {
+		if !strings.Contains(call, "/config/recovery/password ") && !strings.Contains(call, "/console/session-key ") {
 			t.Errorf("a cold start called %q", call)
 		}
 	}
@@ -256,7 +256,7 @@ func TestAColdStartOutlastsAThrottledSSM(t *testing.T) {
 	if err := coldStart(t, fake); err != nil {
 		t.Fatalf("cold start: %v", err)
 	}
-	if total, _ := fake.count(); total != 4+3 {
-		t.Errorf("SSM calls = %d, want the 4 throttled and the 3 of a start: %q", total, fake.log)
+	if total, _ := fake.count(); total != 4+2 {
+		t.Errorf("SSM calls = %d, want the 4 throttled and the 2 of a start: %q", total, fake.log)
 	}
 }
