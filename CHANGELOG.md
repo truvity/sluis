@@ -1,5 +1,7 @@
 ## Unreleased
 
+## v1.74.0-rc.4
+
 ### Added
 
 - **audit: `credentials_ref` refuses a document for another endpoint.** At every read, a `cloudflare/v1` document whose `endpoint` is not the preset's (scheme and host compared without case, a trailing slash ignored), or that has none, is refused with an error naming its address and both endpoints. A credential already held from a matching document is kept while it is valid, as for any failed read. `cloudflare.StoredConfig.Endpoint` and `cloudflare.SameEndpoint` in the storage module.
