@@ -769,7 +769,8 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, keys: keys, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
+	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, keys: keys,
+		cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
 		generated: generated, creds: creds, credStore: stores.Ports.Secrets, leases: leases}
 	// At start, and not only on the tick, so a first deploy has its secrets as
 	// soon as it serves. A client that fails here does not stop the issuer: it
