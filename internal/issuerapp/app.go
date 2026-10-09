@@ -39,13 +39,13 @@ import (
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secrets"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/store"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/verify"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/keys"
-	keysbackend "github.com/truvity/sluis/storage/keys/kms"
 )
 
 // Config is what a deployment decides. It is built from the configuration
@@ -1560,21 +1560,7 @@ func (c Config) signKeys() (keys.Config, []string, error) {
 	return out, warnings, out.Validate()
 }
 
-// openKMSKeys opens the key service for adapter "kms": storage/keys/kms over
-// the AWS default credential chain.
-var openKMSKeys = func(ctx context.Context, region string) (keys.Backend, error) {
-	var loaders []func(*awsconfig.LoadOptions) error
-	if region != "" {
-		loaders = append(loaders, awsconfig.WithRegion(region))
-	}
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loaders...)
-	if err != nil {
-		return nil, fmt.Errorf("load the AWS configuration for keys.adapter kms: %w", err)
-	}
-	return keysbackend.New(kms.NewFromConfig(awsCfg)), nil
-}
-
-// signKey opens the key behind `keys.sign`.
+// signKey opens the key behind `keys.sign`; the signer opens it.
 func signKey(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*keys.Key, error) {
 	kc, warnings, err := cfg.signKeys()
 	if err != nil {
@@ -1583,23 +1569,7 @@ func signKey(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*key
 	for _, w := range warnings {
 		log.WarnContext(ctx, "signing key configuration warning", slog.String("warning", w))
 	}
-	backend := deps.Keys
-	if backend == nil {
-		switch kc.Adapter {
-		case "kms":
-			backend, err = openKMSKeys(ctx, cfg.kmsWrapped.Region)
-		default:
-			err = fmt.Errorf("keys.adapter %q cannot be opened by the issuer here (kms is the adapter of a deployment)", kc.Adapter)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	set, err := keys.Open(kc, keys.Options{Backend: backend, Instance: cfg.instance})
-	if err != nil {
-		return nil, err
-	}
-	return set.For(keys.Sign)
+	return signer.OpenSignKey(ctx, kc, cfg.kmsWrapped.Region, cfg.instance, deps.Keys)
 }
 
 // wrappedSigningKeys opens the KMS-wrapped signing at start: the client, the

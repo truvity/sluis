@@ -69,14 +69,26 @@ func TestModuleBoundaries(t *testing.T) {
 	rules := []rule{
 		{
 			// The signing-key adapters (a KMS, a Transit, a local key) belong to the
-			// signer. Today the signer is the issuer's process, internal/issuerapp,
-			// which composes the one backend a document names. The key interface
-			// (storage/keys) may be imported anywhere: it is a type, not a credential.
+			// signer, internal/signer, which opens the one backend a document names.
+			// The key interface (storage/keys) may be imported anywhere: it is a
+			// type, not a credential.
 			name:   "only the signer imports the signing-key adapters",
 			from:   []string{"internal", "cmd", "identity", "policy", "config", "deploy"},
-			except: []string{"internal/issuerapp"},
+			except: []string{"internal/signer"},
 			forbid: []string{"storage/keys/kms", "storage/keys/local", "storage/keys/transit"},
-			sees:   "internal/issuerapp",
+			sees:   "internal/signer",
+		},
+		{
+			// ADR 0071 decision 3: the signer parses no request. It imports no
+			// front end, server or console session package of ours, and no HTTP
+			// router, cookie, session or OIDC protocol library.
+			name: "the signer imports no HTTP server, cookie, session or OIDC protocol package",
+			from: []string{"internal/signer"},
+			forbid: slices.Concat(front, []string{"internal/consoleauth", "internal/app", "internal/connector", "internal/access",
+				"internal/kube", "internal/valkey",
+				"github.com/zitadel", "github.com/gorilla", "github.com/go-chi", "connectrpc.com", "golang.org/x/oauth2",
+				"net/http/cookiejar", "net/http/httptest", "net/http/httputil", "net/http/pprof"}),
+			sees: "internal/signer",
 		},
 		{
 			name:   "the GitHub module imports neither the front end nor another provider",
@@ -156,7 +168,9 @@ func TestModuleBoundaries(t *testing.T) {
 				}
 				for _, d := range deps {
 					drel := strings.TrimPrefix(d, mod)
-					if d != drel && anyUnder(drel, r.forbid) {
+					// Module paths are matched relative to the module; third-party
+					// and standard-library paths are matched whole.
+					if anyUnder(drel, r.forbid) {
 						t.Errorf("%s imports %s", rel, drel)
 					}
 				}
@@ -181,11 +195,11 @@ func anyUnder(path string, prefixes []string) bool {
 // tree where nobody imports them: this holds the sweep to seeing the one
 // legitimate import.
 func TestTheSignerSeesTheKeyAdapter(t *testing.T) {
-	deps := imports(t)[mod+"internal/issuerapp"]
+	deps := imports(t)[mod+"internal/signer"]
 	for _, d := range deps {
 		if d == mod+"storage/keys/kms" {
 			return
 		}
 	}
-	t.Fatalf("internal/issuerapp does not import storage/keys/kms: the signer moved, update the rule")
+	t.Fatalf("internal/signer does not import storage/keys/kms: the signer moved, update the rule")
 }

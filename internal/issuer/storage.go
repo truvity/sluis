@@ -21,6 +21,7 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/logattr"
 )
@@ -197,9 +198,13 @@ func (a *authRequest) Done() bool                         { return a.IsDone }
 // entitlement goes to the [Issuer], so that the console, the token and
 // the audit trail cannot disagree about what someone is allowed.
 type Storage struct {
-	iss     *Issuer
-	verify  Verifier
-	keys    *KeyRings
+	iss    *Issuer
+	verify Verifier
+	keys   *KeyRings
+	// signer signs the tokens this package hand-signs and publishes the
+	// keys (internal/signer); the library-minted paths still take their key
+	// from keys through [Storage.SigningKey].
+	signer  signer.Signer
 	secrets clientcreds.Lookup
 	// verifyOnly are public keys published beside the rings' (UseVerifyOnly),
 	// and now is the clock that ends them.
@@ -396,6 +401,7 @@ func NewStorage(
 		iss:           iss,
 		verify:        verify,
 		keys:          keys,
+		signer:        newRingSigner(keys, iss.Config().TokenLifetime),
 		secrets:       secrets,
 		state:         state,
 		documents:     newDocumentClients(iss.Policy().ClientDocuments()),
@@ -577,8 +583,14 @@ func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorith
 // KeySet implements [op.AuthStorage]: every key currently published, by
 // every configured algorithm, signing or retiring — see [KeyRings.Published].
 func (s *Storage) KeySet(ctx context.Context) ([]op.Key, error) {
-	s.keys.Maintain(ctx)
-	published := s.keys.Published()
+	public, err := s.signer.PublicKeys(ctx)
+	if err != nil {
+		return nil, err
+	}
+	published := make([]op.Key, 0, len(public))
+	for _, k := range public {
+		published = append(published, publishedKey{id: k.KID, alg: k.Algorithm, pub: k.Key})
+	}
 	return append(published, s.verifyOnlyKeys(published)...), nil
 }
 
