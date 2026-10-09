@@ -4,6 +4,10 @@
 
 - **Breaking: the chart's `exports.openbao.*` values are now `adapters.openbao.*`.** The key named the layout v3 exports, which no longer exist; it only configures the CA bundle and the projected login token of the `openbao` secrets adapter. `exports.openbao.caBundle` becomes `adapters.openbao.caBundle`, `exports.openbao.token.audience` becomes `adapters.openbao.token.audience` and `exports.openbao.token.expirationSeconds` becomes `adapters.openbao.token.expirationSeconds`. The mount paths and the rendered objects are unchanged. A values file that still sets `exports` is refused by the schema.
 
+### Breaking
+
+- **audit: `credentials_preset` is refused unless the installation acknowledges the minter's custody.** The mode puts the Cloudflare minter in every process that reads the archive (the Lambda writer and notary, in-cluster observe, query and jobs), and a minter can mint any right its creating user holds, so anyone able to act as those roles or service accounts holds that power. The chart now refuses a preset with `credentials_preset` unless `acknowledgeMinterCustody: true` is set in values. The Pulumi library refuses a `PresetStorage.CredentialsPreset` unless `Args.AcknowledgeMinterCustody` is true. Both errors name the preset and point at `credentials_ref`, the mode to prefer since v1.74.0-rc.4. An installation that keeps `credentials_preset` sets the acknowledgement; one that moves to `credentials_ref` sets nothing. See [upgrade audit to v1.75](docs/guides/audit/upgrade/v1.75.md).
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).

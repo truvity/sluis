@@ -79,7 +79,8 @@ type PresetStorage struct {
 	// static credentials, which need no Cloudflare account.
 	//
 	// Every role that opens the archive then holds the minter, which can mint
-	// anything the Cloudflare account owner can. Prefer CredentialsRef.
+	// anything the Cloudflare account owner can. Refused unless
+	// Args.AcknowledgeMinterCustody is true. Prefer CredentialsRef.
 	CredentialsPreset *profile.CredentialsPreset
 	// CredentialsRef makes the functions read the R2 credentials a sluis
 	// installation rotates for one of its Cloudflare presets (the deployment
@@ -245,6 +246,11 @@ func resolvePresets(a *Args) error {
 		s, err := checkPresetStorage(name, in[name])
 		if err != nil {
 			return err
+		}
+		if s.CredentialsPreset != nil && !a.AcknowledgeMinterCustody {
+			return fmt.Errorf("auditpulumi: Presets[%q].CredentialsPreset puts the Cloudflare minter in every role that opens the archive, "+
+				"and a minter can mint any right its creating user holds. Use Presets[%q].CredentialsRef (the R2 credential sluis already rotates), "+
+				"or set Args.AcknowledgeMinterCustody to accept the custody", string(name), string(name))
 		}
 		stores = append(stores, presetStore{Preset: name, PresetStorage: s, Locked: name == profile.Attested})
 	}

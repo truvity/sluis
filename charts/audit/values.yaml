@@ -441,6 +441,12 @@ presets: {}
 # that keep nobody: see docs/decisions/0055-no-pseudonymisation-keys-by-default.md.
 externalIdentifiersAreOpaque: false
 
+# The statement a preset's `credentials_preset` requires. That mode puts the
+# Cloudflare minter in every process that reads the archive, and a minter can
+# mint any right its creating user holds. The chart refuses `credentials_preset`
+# unless this is true. Prefer `credentials_ref`.
+acknowledgeMinterCustody: false
+
 # The query service: search, facets, get, export, tail and resolve, behind the
 # grants below. Every read it serves is recorded through the writer: its
 # `config.sink` is `{url: <the front door>}` or, for a writer that runs

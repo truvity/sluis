@@ -237,6 +237,11 @@ func TestEveryRenderedConfigurationIsOneItsBinaryStartsWith(t *testing.T) {
 				mounts = "[]"
 			}
 			values := strings.NewReplacer("PRESET", mode.preset, "ARCHIVE", mode.archive, "MOUNTS", mounts).Replace(everyComponent)
+			if mode.name == "credentials_preset" {
+				// The mode puts the minter in every process: the chart renders it
+				// only when the installation says so.
+				values = "acknowledgeMinterCustody: true\n" + values
+			}
 			out, stderr, err := helmOutput(t, values)
 			if err != nil {
 				t.Fatalf("helm template: %v\n%s", err, stderr)
@@ -405,4 +410,29 @@ func checkSluisMounts(t *testing.T, docs []map[string]any) {
 func asList(v any) []any {
 	l, _ := v.([]any)
 	return l
+}
+
+// credentials_preset is refused unless acknowledgeMinterCustody is true; the
+// refusal names the preset and points at credentials_ref, and the same values
+// render once acknowledged.
+func TestCredentialsPresetIsRefusedWithoutAcknowledgeMinterCustody(t *testing.T) {
+	var preset string
+	for _, mode := range credentialModes {
+		if mode.name == "credentials_preset" {
+			preset = mode.preset
+		}
+	}
+	values := strings.NewReplacer("PRESET", preset, "ARCHIVE", "{stateRoot: /audit/main}", "MOUNTS", "[]").Replace(everyComponent)
+	_, stderr, err := helmOutput(t, values)
+	if err == nil {
+		t.Fatal("credentials_preset rendered without acknowledgeMinterCustody")
+	}
+	for _, want := range []string{"presets.standard", "credentials_preset", "credentials_ref", "acknowledgeMinterCustody"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal does not mention %q: %s", want, stderr)
+		}
+	}
+	if _, stderr, err := helmOutput(t, "acknowledgeMinterCustody: true\n"+values); err != nil {
+		t.Errorf("the acknowledged install was refused: %s", stderr)
+	}
 }

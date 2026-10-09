@@ -85,6 +85,9 @@ held to in Go (profile.Deployment.CheckStorage and PresetStorage.check). */}}
   {{- if and $s.credentials_ref (or $s.credentials $s.credentials_preset) -}}
   {{- fail (printf "audit: presets.%s names credentials_ref and credentials or credentials_preset: one source of credentials, not two." $name) -}}
   {{- end -}}
+  {{- if and $s.credentials_preset (not $.Values.acknowledgeMinterCustody) -}}
+  {{- fail (printf "audit: presets.%s names credentials_preset, which puts the Cloudflare minter in every process that reads the archive; a minter can mint any right its creating user holds. Use credentials_ref (the R2 credential sluis already rotates), or set acknowledgeMinterCustody: true to accept the custody." $name) -}}
+  {{- end -}}
   {{- if $s.endpoint -}}
     {{- if not (regexMatch "^https?://[^/?#[:space:]]+" $s.endpoint) -}}
     {{- fail (printf "audit: presets.%s.endpoint %q is not an http(s) URL." $name $s.endpoint) -}}

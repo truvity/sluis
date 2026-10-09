@@ -29,7 +29,7 @@ One tutorial per shape: [Kubernetes](../../get-started/audit/kubernetes.md), [AW
 | Operate | [recover from an outage](../../guides/audit/operate/recover-from-an-outage.md), [respond to alerts](../../guides/audit/operate/respond-to-alerts.md), [replay dead-lettered records](../../guides/audit/operate/replay-dead-lettered-records.md), [rebuild the index](../../guides/audit/operate/rebuild-the-index.md), [diagnose a scheduled job](../../guides/audit/operate/diagnose-a-scheduled-job.md), [read from the replica](../../guides/audit/operate/read-from-the-replica.md) |
 | Verify and hold | [verify the trail](../../guides/audit/operate/verify-the-trail.md), [investigate a failed verification](../../guides/audit/operate/investigate-a-failed-verification.md), [place a legal hold](../../guides/audit/operate/place-a-legal-hold.md) |
 | Keys | [erase a tenant's keys](../../guides/audit/operate/erase-a-tenants-keys.md), [fix the key directory](../../guides/audit/operate/fix-the-key-directory.md) |
-| Upgrade | [v1.74](../../guides/audit/upgrade/v1.74.md), [v0.13](../../guides/audit/upgrade/v0.13.md), [v0.6](../../guides/audit/upgrade/v0.6.md) |
+| Upgrade | [v1.75](../../guides/audit/upgrade/v1.75.md), [v1.74](../../guides/audit/upgrade/v1.74.md), [v0.13](../../guides/audit/upgrade/v0.13.md), [v0.6](../../guides/audit/upgrade/v0.6.md) |
 | Contribute | [test the kind tier](../../guides/audit/operate/test-the-kind-tier.md) |
 
 ## Reference
