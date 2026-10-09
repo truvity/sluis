@@ -83,10 +83,10 @@ func TestACallerWithNoSpanStartsATraceAndTheEnvelopeCarriesIt(t *testing.T) {
 	}
 }
 
-func sized(max int) *modcall.Server {
+func sized(bound int) *modcall.Server {
 	s := modcall.NewServer("echo")
 	modcall.Handle(s, "say", func(_ context.Context, r echoReq) (echoRes, error) { return echoRes{Said: r.Word}, nil })
-	modcall.Handle(s, "big", func(_ context.Context, r echoReq) (echoRes, error) { return echoRes{Said: r.Word}, nil }, modcall.MaxBytes(max))
+	modcall.Handle(s, "big", func(_ context.Context, r echoReq) (echoRes, error) { return echoRes{Said: r.Word}, nil }, modcall.MaxBytes(bound))
 	modcall.Handle(s, "leak", func(_ context.Context, r echoReq) (echoRes, error) { return echoRes{}, errors.New(r.Word) })
 	return s
 }
@@ -138,7 +138,7 @@ func TestTheHTTPListenerAnswersABodyNoMethodCouldTakeAsBadRequest(t *testing.T) 
 
 func TestAnOversizeResultIsInternalWithNoEcho(t *testing.T) {
 	s := modcall.NewServer("echo")
-	modcall.Handle(s, "grow", func(_ context.Context, r echoReq) (echoRes, error) {
+	modcall.Handle(s, "grow", func(context.Context, echoReq) (echoRes, error) {
 		return echoRes{Said: "SECRET" + strings.Repeat("y", modcall.DefaultMaxBytes)}, nil
 	})
 	_, err := modcall.Local{"echo": s}.Call(context.Background(), "echo", "grow", []byte(`{}`))
