@@ -378,7 +378,10 @@ func TestASecretInTheKeysBlockIsRefusedBeforeItIsKeptInALayer(t *testing.T) {
 	// A reference is a name of a secret or a file; an environment variable is not
 	// a reference a function can have, because its environment is not for secrets.
 	if _, _, err := build(t, func(a *auditpulumi.Args) {
-		a.Writer.Keys = map[string]any{"adapter": "transit", "instance": "audit", "pseudonym": "audit-pseudonym", "openbao": map[string]any{"tokenSecret": "openbao/token", "tokenFile": "/x"}}
+		a.Writer.Keys = map[string]any{
+			"adapter": "transit", "instance": "audit", "pseudonym": "audit-pseudonym",
+			"openbao": map[string]any{"tokenSecret": "openbao/token", "tokenFile": "/x"},
+		}
 	}); err != nil {
 		t.Errorf("a reference was refused: %v", err)
 	}
