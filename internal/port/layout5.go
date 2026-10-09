@@ -213,7 +213,8 @@ func Locate5(key string) (Address5, error) {
 	if key == "" {
 		return Address5{}, fmt.Errorf("%w: an empty key", ErrUnsupported)
 	}
-	for _, r := range rules5 {
+	for i := range rules5 {
+		r := &rules5[i]
 		if !r.matches(key) {
 			continue
 		}
@@ -231,11 +232,13 @@ func Locate5(key string) (Address5, error) {
 // family, or the family's module depends on the rest of the key (a `lease.`
 // listing is a scan of the table it is made in).
 func LocatePrefix5(prefix string) (module Module, kind, idPrefix string, ok bool) {
-	for _, r := range rules5 {
+	for i := range rules5 {
+		r := &rules5[i]
 		if r.exact != "" || !strings.HasPrefix(prefix, r.prefix) {
 			continue
 		}
-		for _, o := range rules5 {
+		for i := range rules5 {
+			o := &rules5[i]
 			if o.prefix != r.prefix && strings.HasPrefix(o.prefix, prefix) {
 				return "", "", "", false
 			}
@@ -275,7 +278,8 @@ func LocateSet5(set string) (Address5, error) {
 	if set == "" {
 		return Address5{}, fmt.Errorf("%w: an empty index set", ErrUnsupported)
 	}
-	for _, r := range setRules5 {
+	for i := range setRules5 {
+		r := &setRules5[i]
 		if !r.matches(set) {
 			continue
 		}
@@ -293,19 +297,21 @@ func LocateSet5(set string) (Address5, error) {
 // of no one module), State first, then the Index sets', each sorted.
 func Kinds5() (state, sets []string) {
 	seen := map[string]bool{}
-	name := func(r rule5) string {
+	name := func(r *rule5) string {
 		if r.module == "" {
 			return "*/" + r.kind
 		}
 		return string(r.module) + "/" + r.kind
 	}
-	for _, r := range rules5 {
+	for i := range rules5 {
+		r := &rules5[i]
 		if n := name(r); !seen[n] {
 			seen[n] = true
 			state = append(state, n)
 		}
 	}
-	for _, r := range setRules5 {
+	for i := range setRules5 {
+		r := &setRules5[i]
 		sets = append(sets, name(r))
 	}
 	sort.Strings(state)

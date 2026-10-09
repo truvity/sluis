@@ -203,7 +203,11 @@ func TestLayout5DoesNotMergeLayout4Kinds(t *testing.T) {
 }
 
 func TestALayout5KeyNoModuleCanHoldIsRefused(t *testing.T) {
-	for _, key := range []string{"", "ws.dir.", "ws.dir.entra.4b1f", "ws.dir.google.", "ws.dir.google.a/b", "app.gh.cat.link", "app.gh.cat.runner/x", "lease.a:b/c"} {
+	keys := []string{
+		"", "ws.dir.", "ws.dir.entra.4b1f", "ws.dir.google.", "ws.dir.google.a/b",
+		"app.gh.cat.link", "app.gh.cat.runner/x", "lease.a:b/c",
+	}
+	for _, key := range keys {
 		if _, err := port.Locate5(key); !errors.Is(err, port.ErrUnsupported) {
 			t.Errorf("Locate5(%q) = %v, want ErrUnsupported", key, err)
 		}
