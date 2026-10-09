@@ -1,15 +1,8 @@
 # Keys: the logical key layout
 
-The records the service keeps in State, by logical key. One logical layout, two renderings: the in-memory and the
-legacy adapters use the key as written; the adapters of the AWS platform use storage layout v3, a record *kind* and an
-*id*, derived in one place (`internal/port/keys.go`): [storage layout](storage-layout.md). The contract of State itself
-(operations, lifetimes, revisions) is in [ports](ports.md#state).
+The records the service keeps in State, by logical key. The in-memory and legacy adapters use the key as written; the AWS adapters use [storage layout](storage-layout.md) v3, derived in `internal/port/keys.go`. State's contract: [ports](ports.md#state).
 
-No access pattern needs a secondary index: everything a caller looks up is a key
-or a prefix. Sessions are listed per person under `ses.<person>.`, a session id
-is resolved to its person through the pointer `sid.<sid>`, and "every session"
-is a listing over all `ses.` partitions, which is an operator action and not a
-hot path.
+No access pattern needs a secondary index. Sessions are listed per person under `ses.<person>.`, and `sid.<sid>` resolves a session id to its person. Listing every session scans all `ses.` partitions: an operator action.
 
 | Key | Content | Writer | TTL |
 |---|---|---|---|
@@ -42,16 +35,6 @@ hot path.
 | `cache.<digest>.<name>` | a shared input (a group's holders, an address's state), keyed by the policy digest. **Not written yet**: the Slack controller's shared inputs stay in memory ([why](../../concepts/sluis/domain-stores.md)) | ticks | the digest's lifetime |
 | `dedupe.<id>` | an idempotency marker for an external write | ticks | by use |
 
-The records marked permanent are the only ones with no TTL (`ws.`, `gh.org.`,
-`gh.link.`, `app.` and `rec.`: the layout was first drawn with a lifetime on a
-link, "until the refresh expires", which is wrong for the links that hold no
-tokens at all, a profile match or an import, and for a lost link, whose record is
-what removes a person: a link that expired would read as unlinked). A key that no
-longer appears in this table is not written by the service. Names that go into a
-key (an id, a login, a channel) are written one segment each, every byte but a
-letter, a digit, `-` and `_` as `~XX`, so a dot in a name cannot end its segment.
+Only the records marked permanent (`ws.`, `gh.org.`, `gh.link.`, `app.`, `rec.`) have no TTL. A key absent from the table is not written. Name segments (id, login, channel) encode every byte but letters, digits, `-` and `_` as `~XX`, so a dot cannot end a segment.
 
-A credential is never written to State. The domain stores put it in
-[Secrets](ports.md#secrets) under `credentials/<kind>/<id>` and leave a marker in the record; the
-State store never sees a credential. (There was once a sealing step, an
-envelope under a KMS key. It is retired: ADR 0027's sealing is superseded.)
+A credential is never written to State. Domain stores put it in [Secrets](ports.md#secrets) under `credentials/<kind>/<id>` and leave a marker in the record.

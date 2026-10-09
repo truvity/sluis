@@ -1,103 +1,58 @@
 # AWS Pulumi library reference
 
-The inputs, outputs, resources, IAM and alarms of `github.com/truvity/sluis/audit/deploy/pulumi`,
-a module of its own so that Pulumi is not in the root module's dependency graph. How the
-functions behave and why is in [AWS Lambda](../../concepts/audit/aws-lambda.md); to deploy, start
-with [the AWS Lambda tutorial](../../get-started/audit/aws-lambda.md).
-
-**Nothing here is deployed by this repository.** The library is tested against Pulumi's mocks
-(`just pulumi-test`): it declares the right resources with the right arguments and creates
-none. See [capabilities](capabilities.md) for what has run in an account.
+The inputs, outputs, resources, IAM and alarms of `github.com/truvity/sluis/audit/deploy/pulumi`. Mocks test it (`just audit-pulumi-test`); it has not run in an account ([capabilities](capabilities.md)). See [AWS Lambda](../../concepts/audit/aws-lambda.md) and [the tutorial](../../get-started/audit/aws-lambda.md).
 
 ## The AWS provider
 
-The library makes one invoke, `aws.GetCallerIdentity`, for the account the seal
-key's policy names. It is made **through the component**, so it uses the provider
-the caller gave `New`, and not the default one, which a stack may have disabled
-(`pulumi:disable-default-providers`, as the truvity gitops stacks do):
+Every invoke and every resource takes the provider passed to `New`, not the default, which a stack may disable (`pulumi:disable-default-providers`).
 
 ```go
 prov, _ := aws.NewProvider(ctx, "audit-account", &aws.ProviderArgs{Region: pulumi.String("eu-west-1")})
 a, err := auditpulumi.New(ctx, "audit", args, pulumi.Provider(prov)) // or pulumi.Providers(prov)
 ```
 
-Every resource the library creates is a child of the component and takes the
-provider the same way. A caller that would rather not make the call, or has no
-way to, sets `Args.AccountID` and no invoke is made. No invoke is made either
-when the notary is off, since the account is used for nothing else. The tests
-check on Pulumi's mocks that the provider reaches the invoke.
+| Invoke | When |
+|---|---|
+| `kms.LookupAlias` | Once per key named in `Keys` |
+| `aws.GetCallerIdentity`, `aws.GetRegion` | Only for SSM grants (`Writer.Secrets`, or a state store). `Args.AccountID` and `Args.Region` skip them |
+| `s3.GetObject` | The catalogue guard, when the writer is given catalogues. `Guards.SkipCatalogueCheck` skips it |
 
 ## Optional parts
 
-The archive is the one part that is always there. The ingest side and the notary
-are each optional, and independent of the other:
-
-| | `Ingest.Disabled` | `Notary.Disabled` | both |
+| | `Ingest.Disabled` | `Notary.Disabled` | Both |
 |---|---|---|---|
-| left out | queue and DLQ, DynamoDB table, writer function, role, log group and event source mapping, the writer's and the queue's alarms (4) | seal key and alias, notary function, role and log group, the schedule and the scheduler's role, the notary's alarms (3) | all of it |
-| outputs that are then empty | `QueueURL`, `QueueArn`, `DlqURL`, `DlqArn`, `DedupeTableName`, `WriterFunctionArn`, `WriterRoleArn` | `SealKeyArn`, `SealKeyAlias`, `NotaryFunctionArn`, `NotaryRoleArn`, `ScheduleArn` | and `AlarmTopicArn` |
-| inputs no longer required | `Writer.Package`, `Writer.PackageSHA256`, `Writer.DeploymentYAML` | `Notary.Package`, `Notary.PackageSHA256` | |
+| Left out | Queue and DLQ, DynamoDB table, writer function, role, log group, event source mapping, the writer's and queue's alarms (5) | Notary function, role, log group, schedule and its role, the notary's alarms (3) | All of it |
+| Empty outputs | `QueueURL`, `QueueArn`, `DlqURL`, `DlqArn`, `DedupeTableName`, `WriterFunctionArn`, `WriterRoleArn` | `SealKeyArn`, `SealKeyAlias`, `NotaryFunctionArn`, `NotaryRoleArn`, `ScheduleArn` | And `AlarmTopicArn` |
+| No longer required | `Writer.Package`, `Writer.PackageSHA256`, `Writer.DeploymentYAML` | `Notary.Package`, `Notary.PackageSHA256` | |
 
-The alarm topic exists when at least one alarm does. The resource counts the
-tests hold, with the component itself, for the test installation (Governance,
-telemetry, alerts, observe): both parts 44, ingest only 30, notary only 29,
-neither 13.
-
-Use ingest without the notary where the seals are made elsewhere (a notary on
-Talos signing with OpenBao transit), and neither where both are deferred: the
-archive, its key and the roles for what reads it are then all the stack holds.
-A part turned off later is a plain removal: its resources are deleted by the next
-`pulumi up`, except the seal key and the bucket, which are protected and make the
-update stop until the protection is lifted by hand.
+| Rule | Detail |
+|---|---|
+| Alarm topic | Exists when at least one alarm does |
+| Resource counts | `options_test.go` pins them for its fixture (one created `standard` bucket, telemetry, alerts, observe), the component included: both parts 43, ingest only 30, notary only 25, neither 10 |
+| Use | Ingest without the notary where seals are made elsewhere (for example a notary on Talos signing with OpenBao transit). Neither where both are deferred |
+| Turning a part off later | A plain removal on the next `pulumi up`. The library creates no KMS key, and the archive bucket, which is protected, stays |
 
 ## Encryption
 
-`Archive.Encryption` has three modes, and `Archive.KeyArn` refines the first:
+`Archive.Encryption` has three modes; `Archive.KeyArn` refines `kms`.
 
-| Mode | Bucket default encryption | Key | Role grants | `kmsKey` in the functions' configuration | `ArchiveKeyArn` |
+| Mode | Bucket encryption | Key | Role grants | Functions' `kmsKey` | `ArchiveKeyArn` |
 |---|---|---|---|---|---|
-| `kms` (default) | SSE-KMS, bucket keys on | the estate's, named by `Keys.Archive` (an alias, looked up): the library creates none | `kms:GenerateDataKey`, `kms:Decrypt` on it (the read role: `Decrypt`) | the alias | the key the alias points at |
-| `kms` with `KeyArn` | SSE-KMS under `KeyArn`, bucket keys on | yours, by ARN (instead of `Keys.Archive`) | the same grants, on `KeyArn` | `KeyArn` | `KeyArn` |
-| `aws-managed` | SSE-KMS under the AWS-managed key `aws/s3`, bucket keys on | none is created | none | none: the bucket default applies | empty |
-| `s3` | SSE-S3 (`AES256`) | none | none | none | empty |
+| `kms` (default) | SSE-KMS, bucket keys on | The estate's, named by `Keys.Archive` (an alias, looked up). The library creates none | `kms:GenerateDataKey`, `kms:Decrypt` (read role: `Decrypt`) | The alias | The key the alias points at |
+| `kms` with `KeyArn` | SSE-KMS under `KeyArn`, bucket keys on | Yours, by ARN, instead of `Keys.Archive` | Same, on `KeyArn` | `KeyArn` | `KeyArn` |
+| `aws-managed` | SSE-KMS under `aws/s3`, bucket keys on | None created | None | None: the bucket default applies | Empty |
+| `s3` | SSE-S3 (`AES256`) | None | None | None | Empty |
 
-`KeyArn` is refused with `aws-managed` and `s3`, and must be a key ARN
-(`arn:<partition>:kms:<region>:<account>:key/<id>`), not an alias ARN, which IAM
-cannot grant on. The seal key is a different key and never changes: the notary
-still signs with it. Objects already written keep the encryption they were
-written with.
-
-**A key you bring.** The roles are granted the key through their IAM policies,
-so the key's own policy must let IAM grant access: the default key policy's
-`arn:aws:iam::<account>:root` statement does that, and a policy without it makes
-every put and get fail with `AccessDenied` however the roles are written. The
-library neither edits nor protects a key it did not create; its rotation, its
-deletion window and its policy stay yours. For a key in another account, the
-key policy there must also name the roles.
-
-**The AWS-managed key.** No grant on a key is needed or made. S3 uses `aws/s3`
-on behalf of the caller and decrypts for any principal in the account that holds
-`s3:GetObject` on the object, so the bucket's IAM and bucket policy are the only
-access control over plaintext; the key policy cannot be changed and cannot add a
-second control. Its use is logged in CloudTrail under the account, not under a
-key of its own.
-
-**What SSE-S3 gives up** is the key policy and the CloudTrail record of every
-use that either KMS mode has.
-
-**ISO 27001 (A.8.24, use of cryptography).** The control asks for a documented
-policy on cryptography and key management, not for a customer-managed key.
-AWS-managed keys are acceptable when the policy says so and records who rotates
-(AWS, yearly), who can use the key and how its use is evidenced. Choose a
-customer key (`kms`, with or without `KeyArn`) when the ISMS policy or a
-customer contract requires control of the key: its policy, rotation, a
-separate-duties split between key administrators and users, or the ability to
-disable it. Use `KeyArn` when the organisation already manages keys centrally.
-
+| Rule | Detail |
+|---|---|
+| `KeyArn` | Refused with `aws-managed` and `s3`. Must be a key ARN (`arn:<partition>:kms:<region>:<account>:key/<id>`), not an alias ARN, which IAM cannot grant on |
+| Seal key | A different key; it never changes. Written objects keep their encryption |
+| Your own key | The roles get the key through IAM policies, so the key policy must let IAM grant access. The default `arn:aws:iam::<account>:root` statement does; without it every put and get fails with `AccessDenied`. The library neither edits nor protects a key it did not create. In another account the key policy must also name the roles |
+| `aws-managed` | S3 uses `aws/s3` and decrypts for any account principal holding `s3:GetObject`, so the bucket's IAM and policy are the only plaintext access control. Use is logged in CloudTrail under the account |
+| `s3` | Gives up the key policy and the CloudTrail record of each use |
+| ISO 27001 A.8.24 | Requires a documented cryptography and key-management policy, not a customer-managed key. AWS-managed keys pass when the policy records who rotates (AWS, yearly), who can use the key and how use is evidenced. Choose `kms` when the ISMS or a customer contract requires control of the key: policy, rotation, separated key administrators and users, or disabling. Use `KeyArn` when keys are managed centrally |
 
 ## Inputs
-
-Required inputs are marked. Anything not listed has the default stated.
 
 <!-- generated: aws-library-inputs -->
 | input | default | meaning |
@@ -106,7 +61,10 @@ Required inputs are marked. Anything not listed has the default stated.
 | `AccountID` | looked up | the account; empty looks it up through the component's provider, see [the AWS provider](#the-aws-provider) |
 | `RolePath` | `/audit/` | the IAM path of every role the library creates |
 | `LogRetentionDays` | 30 | each function's log group |
-| `Presets` | **required** | the install presets the installation uses, by name (`operational`, `standard`, `attested`), each `PresetStorage{Bucket, Prefix, Region, Endpoint, PathStyle, CredentialsAddress, KeyAlias, Create, Adopt, AcknowledgeLifecycle}`: its own store ([install presets](profiles.md#presets-and-their-storage), [0068](../../decisions/0068-storage-is-configured-per-preset.md)). `Bucket` is required (`PresetBucketName` builds a default name); `Prefix` ends in `/`; `Endpoint` is an S3-compatible store (no bucket is created, `CredentialsAddress` is read from the state store, default `internal/archive/<preset>`); `KeyAlias` is looked up, never created; `Create` makes the AWS bucket (versioned, a lifecycle rule per `<Prefix>records/<profile>/`, compliance Object Lock for `attested`); `Adopt` takes an existing bucket and leaves its lifecycle alone (see [Lifecycle](#lifecycle)); with neither, the bucket is used as it is. Every profile of `Writer.DeploymentYAML` must be kept under a preset configured here, and the library renders the final deployment document with them. Notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them: under `operational` alone there are none, and `Notary.Package` and `Alerts.EndpointURL` are refused |
+| `Presets` | **required** | the install presets the installation uses, by name (`operational`, `standard`, `attested`), each `PresetStorage{Bucket, Prefix, Region, Endpoint, PathStyle, CredentialsAddress, CredentialsRef, CredentialsPreset, KeyAlias, Create, Adopt, AcknowledgeLifecycle}`: its own store ([install presets](profiles.md#presets-and-their-storage), [0068](../../decisions/0068-storage-is-configured-per-preset.md)). `Bucket` is required (`PresetBucketName` builds a default name); `Prefix` ends in `/`; `Endpoint` is an S3-compatible store (no bucket is created, `CredentialsAddress` is read from the state store, default `internal/archive/<preset>`); `KeyAlias` is looked up, never created; `Create` makes the AWS bucket (versioned, a lifecycle rule per `<Prefix>records/<profile>/`, compliance Object Lock for `attested`); `Adopt` takes an existing bucket and leaves its lifecycle alone (see [Lifecycle](#lifecycle)); with neither, the bucket is used as it is. Every profile of `Writer.DeploymentYAML` must be kept under a preset configured here, and the library renders the final deployment document with them. Notary, seal key, alarms and pseudonym keys are provisioned when any configured preset needs them: under `operational` alone there are none, and `Notary.Package` and `Alerts.EndpointURL` are refused |
+| `PresetStorage.CredentialsRef` | empty | `external/cloudflare/<preset>`: the R2 credentials a sluis installation rotates, read below `Sluis.Root`. The roles get `ssm:GetParameter` on exactly that parameter and nothing of a minter. Exclusive with `CredentialsAddress` and `CredentialsPreset`; with `Endpoint` only; the mode to prefer on R2 |
+| `PresetStorage.CredentialsPreset` | nil | mint R2 credentials from a disabled Cloudflare prototype. The roles get read on exactly the minter address and read and write on exactly `cloudflare-minted/<preset>`, so every role that opens the archive holds the minter |
+| `Sluis` | nil | `SluisArgs{Root, KeyArn}`: the sluis installation's SSM root (`/sluis/<instance>`) and the key its SecureStrings use (empty is `alias/aws/ssm`). Required with a `CredentialsRef`, refused without one; writes `archive.sluisRoot` and grants `kms:Decrypt` on `KeyArn` through SSM only |
 | `Archive.ObjectLockMode` | `COMPLIANCE` | the lock of the `attested` preset's created bucket alone: `GOVERNANCE` (the trial) or `COMPLIANCE`; refused when no attested preset has `Create`. See [the lock modes](../../concepts/audit/aws-lambda.md#the-lock-modes) |
 | `Archive.AcknowledgeCompliance` | false | the deliberate step before `COMPLIANCE`; without it the library builds nothing |
 | `Archive.DefaultRetentionDays` | **required** (> 0) with `GOVERNANCE` and `COMPLIANCE` | the bucket's default retention, a floor: the writer sets each object's own. 0 is refused with a lock (a lock with no default rule is a trap), and any value with `NONE` |
@@ -134,7 +92,7 @@ Required inputs are marked. Anything not listed has the default stated.
 | `Writer.BatchSize` | 10 | 1 to 10, the sink's limit |
 | `Writer.MaxBatchingWindowSeconds` | 5 | how long the mapping gathers a batch: fewer, larger objects for a few seconds of latency |
 | `Writer.MaxConcurrency` | 10 | the mapping's concurrency cap, 2 or more |
-| `Notary.Disabled` | false | leaves out the seal key, the notary, its schedule and alarms |
+| `Notary.Disabled` | false | leaves out the notary function, its role, log group, schedule and alarms; `Keys.Seal` must then be unset |
 | `Notary.Package` | **required** unless `Notary.Disabled` | the release's `audit-notary-lambda_<version>_linux_arm64.zip` |
 | `Notary.PackageSHA256` | **required** with the package | its SHA-256 in hex |
 | `Guards.AllowVersionSkew`, `.SkipCatalogueCheck` | false | acknowledge a binary of another release than the library, and skip the comparison of catalogues with the archive; see [guards](../../guides/audit/operate/aws-ship-a-release.md) |
@@ -160,25 +118,34 @@ Required inputs are marked. Anything not listed has the default stated.
 
 ## Artifacts bucket and the library's own release
 
-By default the library uploads the function's code with the function. Set `Artifacts` and the verified zip is instead uploaded **as it is** (a file asset, never repacked) to the estate's versioned S3 bucket, and the function and the configuration layer are created from that object version.
+With `Artifacts`, the verified zip goes unchanged (a file asset) to a versioned S3 bucket, and the function and layer come from that object version. Without it, the code uploads with the function.
 
-| input | default | meaning |
+| Input | Default | Meaning |
 |---|---|---|
-| `Artifacts.Bucket` | unset (direct upload) | The estate's artifacts bucket. It must be **versioned**: the function names the object version, and an unversioned bucket (the upload returns no version id) fails the apply with a message saying so. |
-| `Artifacts.Prefix` | `audit/` | Starts every key: `<prefix><version>/<sha256>-<file name>`. The digest is in the key, so a key never holds two contents and a re-run uploads nothing new. |
-| `Release.ResolveChecksums` | false | Reads an empty `Writer.PackageSHA256` / `Notary.PackageSHA256` from `<BaseURL>/v<version>/checksums.txt`; a digest that is given is used as it is. |
-| `Release.Version` | from the file name | The release, when the name does not say; names the release when `Writer.Package` / `Notary.Package` is empty. `(devel)` and empty are refused. |
-| `Release.BaseURL` | the project's GitHub releases | Where the release is published, for a mirror. |
+| `Artifacts.Bucket` | unset (direct upload) | The artifacts bucket. It must be versioned: an unversioned bucket returns no version id and the apply fails with a message saying so |
+| `Artifacts.Prefix` | `audit/` | Starts every key: `<prefix><version>/<sha256>-<file name>`. The digest in the key means a key never holds two contents and a re-run uploads nothing new |
+| `Release.ResolveChecksums` | false | Reads an empty `Writer.PackageSHA256` or `Notary.PackageSHA256` from `<BaseURL>/v<version>/checksums.txt`. A given digest is used as is |
+| `Release.Version` | from the file name | The release when the name does not say; names the release when `Writer.Package` or `Notary.Package` is empty. `(devel)` and empty are refused |
+| `Release.BaseURL` | the project's GitHub releases | Where the release is published, for a mirror |
 
-The function gets `S3Bucket`, `S3Key`, `S3ObjectVersion` and `SourceCodeHash` (the zip's SHA-256, base64). The configuration layer is built as a zip whose bytes are the same on every run (sorted names, no timestamps), uploaded under the same prefix and used the same way.
-
-**No package named.** With `Writer.Package` / `Notary.Package` empty the library deploys its own release: the version of its module in the program's build information (or `Release.Version`), fetched from `<BaseURL>/v<version>/audit-<writer|notary>-lambda_<version>_linux_arm64.zip`, with its digest from that release's `checksums.txt` unless `Writer.PackageSHA256` / `Notary.PackageSHA256` pins one. A pinned digest always wins; bytes that do not have it are refused. A development build (`(devel)`), a pseudo-version, a module replaced by a local copy and a program without build information have no release and are refused with a message naming `Writer.Package` / `Notary.Package` and `Release.Version`.
-
-Downloads are cached by SHA-256 under the user cache directory (`os.UserCacheDir()/sluis/artifacts`), so a preview does not download again; `GITHUB_TOKEN`, when set, is sent to github.com. After the deploy, `WriterCodeSha256Matches` / `NotaryCodeSha256Matches` is true when the code Lambda reports has the SHA-256 of the zip the library verified.
+| Behaviour | Detail |
+|---|---|
+| Function fields | `S3Bucket`, `S3Key`, `S3ObjectVersion`, `SourceCodeHash` (the zip's SHA-256, base64) |
+| Configuration layer | A zip with identical bytes on every run (sorted names, no timestamps), uploaded under the same prefix |
+| No package named | The library deploys its own release: its module version from the build information (or `Release.Version`), fetched from `<BaseURL>/v<version>/audit-<writer\|notary>-lambda_<version>_linux_arm64.zip`, digest from `checksums.txt` unless `PackageSHA256` pins one. A pinned digest always wins and mismatching bytes are refused |
+| Refused as a release | `(devel)`, a pseudo-version, a module replaced by a local copy, a program without build information. The message names `Writer.Package` or `Notary.Package` and `Release.Version` |
+| Download cache | By SHA-256 under `os.UserCacheDir()/sluis/artifacts`. `GITHUB_TOKEN`, when set, is sent to github.com |
+| After deploy | `WriterCodeSha256Matches` and `NotaryCodeSha256Matches` are true when Lambda's code SHA-256 equals the verified zip's |
 
 ## The live alias
 
-Each function publishes a version on every change of its code or configuration, and the alias `live` points at the newest. The writer's event source mapping, the notary's schedule, the scheduler role's invoke grant (the alias ARN alone, not `:*`) and the notary's asynchronous-invoke configuration (no retries) use the alias, so a change moves them together and the previous version is kept for a rollback. Outputs: `WriterLiveAliasArn`, `NotaryLiveAliasArn`, `WriterLiveVersion`, `NotaryLiveVersion`. Canary rollouts through CodeDeploy are planned for a later release; the alias moves in one step today.
+| Item | Detail |
+|---|---|
+| Versions | Each function publishes one per code or configuration change. Alias `live` points at the newest |
+| Users of the alias | The writer's event source mapping, the notary's schedule, the scheduler role's invoke grant (the alias ARN alone, not `:*`), the notary's asynchronous-invoke configuration (no retries) |
+| Rollback | The previous version stays |
+| Outputs | `WriterLiveAliasArn`, `NotaryLiveAliasArn`, `WriterLiveVersion`, `NotaryLiveVersion` |
+| Rollout | In one step; CodeDeploy canaries are planned |
 
 ## Outputs
 
@@ -186,8 +153,8 @@ Each function publishes a version on every change of its code or configuration, 
 | output | what |
 |---|---|
 | `BucketName`, `BucketArn` | the archive |
-| `ArchiveKeyArn` | the symmetric key objects are encrypted with (rotation on); the given `Archive.KeyArn` if set; empty with `Encryption: s3` or `aws-managed` |
-| `ArchiveCredentialsPath` | the SSM parameter the functions read an S3-compatible store's credentials from; empty on AWS S3 |
+| `ArchiveKeyArn` | the symmetric key objects are encrypted with: the estate's `Keys.Archive`, or the given `Archive.KeyArn`; empty with `Encryption: s3` or `aws-managed` |
+| `ArchiveCredentialsPaths` | by preset at an endpoint, the SSM parameter its credentials are read from: the static pair to write by hand, the minter (`CredentialsPreset`), or the parameter sluis rotates (`CredentialsRef`, never written by hand); none on AWS S3 |
 | `SealKeyArn`, `SealKeyAlias` | the estate's `ECC_NIST_P384` `SIGN_VERIFY` key (`Keys.Seal`) and its alias. `audit key public` reads its public half for `keys/roots.jwks` and the verifier's pin |
 | `QueueURL`, `QueueArn` | the ingest queue a receiver or an application sends to (`forward.sqs.queueUrl`), and what the chart's `sink.sqs` of the query service and the jobs names when the writer runs here ([observe and query in Kubernetes](../../guides/audit/operate/aws-run-readers-in-kubernetes.md)): `QueueURL` is the `queueUrl`, `QueueArn` the resource of `sqs:SendMessage` |
 | `DlqURL`, `DlqArn` | the dead-letter queue |
@@ -203,72 +170,52 @@ Each function publishes a version on every change of its code or configuration, 
 
 ## What it creates
 
-| resource | notes |
+| Resource | Notes |
 |---|---|
-| S3 bucket | versioning enabled in every mode, protected from a stack destroy in every mode, the bucket's own `objectLockEnabled` never set (it forces replacement), and Object Lock as a separate configuration resource that exists unless the mode is `NONE`; SSE-KMS under the archive key with bucket keys (the AWS-managed key with `aws-managed`, SSE-S3 with `s3`), all four public-access blocks, bucket-owner-enforced ownership, a policy that denies plain HTTP, a lifecycle rule per profile prefix and one that aborts incomplete multipart uploads after 7 days. `ForceDestroy` is never set |
-| KMS keys | none: the library creates no key. The archive, seal, pseudonym and conceal keys are the estate's, named by alias in `Keys` and looked up (below) |
-| SQS ingest queue and DLQ | SSE-SQS, visibility timeout six times the writer's timeout, a redrive policy to the DLQ and a redrive-allow policy on the DLQ, a queue policy that denies plain HTTP and allows the named senders |
-| DynamoDB table `<name>-dedupe` | on-demand, hash key `pk` (string), TTL on `expires_at` |
+| S3 bucket | Versioning on and stack-destroy protection in every mode. `objectLockEnabled` is never set (it forces replacement). Object Lock is a separate resource unless the mode is `NONE`. SSE-KMS under the archive key with bucket keys (AWS-managed key with `aws-managed`, SSE-S3 with `s3`). All four public-access blocks, bucket-owner-enforced ownership, a policy denying plain HTTP, a lifecycle rule per profile prefix, and one aborting incomplete multipart uploads after 7 days. `ForceDestroy` is never set |
+| Scope | The `aws` partition and one region per stack |
+| KMS keys | None. The archive, seal, pseudonym and conceal keys are the estate's, named by alias in `Keys` ([below](#keys-state-and-an-s3-compatible-archive)) |
+| SQS ingest queue and DLQ | SSE-SQS; visibility timeout six times the writer's timeout; redrive policy to the DLQ and redrive-allow policy on it; a queue policy denying plain HTTP and allowing the named senders |
+| DynamoDB `<name>-dedupe` | On-demand, hash key `pk` (string), TTL on `expires_at` |
 | Lambda `<name>-writer`, `<name>-notary` | `provided.al2023`, `arm64`, no VPC, a log group each, the extension layer when there is one |
-| event source mapping | queue to writer, `ReportBatchItemFailures`, scaling capped by `Writer.MaxConcurrency` |
-| EventBridge Scheduler `<name>-notary` | the schedule, a role of its own that may invoke only the notary, no retries, and no asynchronous retries on the function |
-| IAM roles | below |
-| CloudWatch alarms, SNS topic `<name>-alarms` | [below](#alarms) |
-
-The library supports the `aws` partition and one region per stack.
+| Event source mapping | Queue to writer, `ReportBatchItemFailures`, scaling capped by `Writer.MaxConcurrency` |
+| Scheduler `<name>-notary` | The schedule, a role that may invoke only the notary, no retries, no asynchronous retries on the function |
+| IAM roles | [Below](#iam-roles) |
+| CloudWatch alarms, SNS topic `<name>-alarms` | [Below](#alarms) |
 
 ## IAM roles
 
-**One role per function, under the path `/audit/`**, named `<name>-<part>`. The
-name is in the role because an IAM role name is unique across the account whatever
-its path, and one account may hold several installations. For the default
-installation, `audit`, the exact ARNs, which an estate's gitops grants and the OTLP
-issuer's group matcher name, are
+Each function has one role under `/audit/`, named `<name>-<part>`. For the default installation `audit`:
 
-| role | ARN | runs as |
+| Role | ARN | Runs as |
 |---|---|---|
-| writer | `arn:aws:iam::<account>:role/audit/audit-writer` | the writer function; the identity the OTLP door sees |
-| notary | `arn:aws:iam::<account>:role/audit/audit-notary` | the notary function; the identity the OTLP door sees |
-| observe reader | `arn:aws:iam::<account>:role/audit/audit-observe-reader` | assumed by observe in another account or by a Kubernetes ServiceAccount, by IRSA or Pod Identity (only with `Observe`) |
-| query | `arn:aws:iam::<account>:role/audit/audit-query` | audit-query on EKS, by Pod Identity (only with `Query`) |
-| archive writer | `arn:aws:iam::<account>:role/audit/audit-archive-writer` | a Kubernetes ServiceAccount, by IRSA (only with `ArchiveWriter`) |
-| scheduler | `arn:aws:iam::<account>:role/audit/audit-scheduler` | EventBridge Scheduler, to invoke the notary and nothing else |
+| writer | `arn:aws:iam::<account>:role/audit/audit-writer` | The writer function; the identity the OTLP door sees |
+| notary | `arn:aws:iam::<account>:role/audit/audit-notary` | The notary function; the identity the OTLP door sees |
+| observe reader | `arn:aws:iam::<account>:role/audit/audit-observe-reader` | Observe in another account or a Kubernetes ServiceAccount, by IRSA or Pod Identity (only with `Observe`) |
+| query | `arn:aws:iam::<account>:role/audit/audit-query` | `audit-query` on EKS, by Pod Identity (only with `Query`) |
+| archive writer | `arn:aws:iam::<account>:role/audit/audit-archive-writer` | A Kubernetes ServiceAccount, by IRSA (only with `ArchiveWriter`); see [Kubernetes workloads](../../guides/audit/operate/aws-run-readers-in-kubernetes.md) |
+| scheduler | `arn:aws:iam::<account>:role/audit/audit-scheduler` | EventBridge Scheduler, to invoke the notary only |
 
-The writer, notary and scheduler roles exist only with their part; the KMS
-row is empty with `Encryption: s3` or `aws-managed`, and the IRSA write role is described under
-[Kubernetes workloads](../../guides/audit/operate/aws-run-readers-in-kubernetes.md).
-
-The kernel OTLP door's provisional single role, `role/audit/audit`, is not used:
-the writer and the notary must not share a role, because whoever can write the
-archive and can also sign for it can choose what to sign
-([0061](../../decisions/0061-seals.md)).
-
-What each role may do, and nothing more:
+The writer, notary and scheduler roles exist only with their part. The writer and notary never share a role ([0061](../../decisions/0061-seals.md)).
 
 | | writer | notary | observe reader |
 |---|---|---|---|
 | S3 put | `PutObject`, `PutObjectRetention`, `PutObjectLegalHold` on `records/`, `catalogue/`, `schema/`, `identity/`, `dlq/` | `PutObject`, `PutObjectRetention` on `seals/`, `keys/` | none |
-| S3 read | `GetObject` on the same and `holds/`, `ListBucket` | `GetObject` on `records/`, `seals/`, `keys/`, `ListBucket` | `GetObject` on `records/`, `catalogue/`, `schema/`, `seals/`, `keys/`; `ListBucket` under those prefixes |
-| KMS | `GenerateDataKey`, `Decrypt` on the archive key | the same, and `Sign`, `GetPublicKey`, `DescribeKey` on the **seal key** | `Decrypt` on the archive key |
+| S3 read | `GetObject` on the same and `holds/`; `ListBucket` | `GetObject` on `records/`, `seals/`, `keys/`; `ListBucket` | `GetObject` on `records/`, `catalogue/`, `schema/`, `seals/`, `keys/`; `ListBucket` under those |
+| KMS | `GenerateDataKey`, `Decrypt` on the archive key | The same, and `Sign`, `GetPublicKey`, `DescribeKey` on the seal key | `Decrypt` on the archive key |
 | DynamoDB | `GetItem`, `BatchGetItem`, `PutItem` on the dedupe table | none | none |
 | SQS | `ReceiveMessage`, `DeleteMessage`, `GetQueueAttributes`, `ChangeMessageVisibility` on the ingest queue | none | none |
-| logs | its own log group | its own log group | none |
-| STS | `GetWebIdentityToken` with `Telemetry` | the same | none |
+| Logs | Its own log group | Its own log group | none |
+| STS | `GetWebIdentityToken` with `Telemetry` | Same | none |
 
-`PutObjectRetention` and `PutObjectLegalHold` are listed beside `PutObject`
-because S3 refuses a put that carries an Object Lock header unless the caller also
-holds the matching permission. With `ObjectLockMode: NONE` the functions send no
-lock header, so both grants are left out. No role has a delete: nothing in the archive is
-deleted by anything in this stack.
+| Rule | Detail |
+|---|---|
+| Object Lock permissions | S3 refuses a put carrying an Object Lock header unless the caller holds `PutObjectRetention` and `PutObjectLegalHold`. With `ObjectLockMode: NONE` the functions send no header and both grants are omitted |
+| Deletes | No role has one |
+| KMS rows | Empty with `Encryption: s3` or `aws-managed` |
+| Seal key policy | The account root administers the key (create, describe, enable, put policy, schedule deletion) and cannot use it. Only the notary's role may `Sign`, `GetPublicKey`, `DescribeKey`. The default key policy would let any principal with a `kms:Sign` allow sign seals |
 
-**The seal key has a policy of its own.** The default key policy hands a key to
-IAM, so any principal in the account with a `kms:Sign` allow could sign seals.
-This one does not: the account's root administers the key (create, describe,
-enable, put policy, schedule deletion and so on) and **cannot use it**, and only
-the notary's role may `Sign`, `GetPublicKey` and `DescribeKey`.
-
-**The web identity statement** is, for both functions, with the audience the
-`Telemetry` input names (default `otlp`):
+The web identity statement, for both functions:
 
 ```json
 {
@@ -283,135 +230,85 @@ the notary's role may `Sign`, `GetPublicKey` and `DescribeKey`.
 }
 ```
 
-`sts:IdentityTokenAudience` is a multi-valued key, so it needs
-`ForAllValues:StringEquals`: a plain `StringEquals` is an implicit deny when the
-request carries the audience as a list. `ForAllValues` also passes on an empty
-set, which is safe here only because `Audience` is a required parameter of
-`GetWebIdentityToken`. The algorithm and the lifetime are what the extension asks
-for.
+| Element | Reason |
+|---|---|
+| Audience | From `Telemetry` (default `otlp`) |
+| `ForAllValues:StringEquals` | `sts:IdentityTokenAudience` is multi-valued; a plain `StringEquals` is an implicit deny on a list. An empty set also passes, which is safe because `Audience` is required |
+| ES384, 300 s | What the extension asks for |
 
 ## Alarms
 
-With `Ingest.Disabled` the writer's and the queue's alarms are not created, and with
-`Notary.Disabled` the notary's three are not; with neither there is no topic.
+Alarms publish on ALARM and OK to the SNS topic `<name>-alarms`, subscribed to alert-ingress over HTTPS. `Ingest.Disabled` removes the writer's and queue's alarms; `Notary.Disabled` removes the notary's three.
 
-CloudWatch alarms publish, on ALARM and on OK, to the SNS topic `<name>-alarms`,
-which is subscribed to alert-ingress over HTTPS. This is the D13 set:
-
-| alarm | metric | fires when | why |
+| Alarm | Metric | Fires when | Means |
 |---|---|---|---|
-| `<name>-writer-throttles` | `AWS/Lambda` `Throttles`, writer | any, in 5 minutes | the writer is not keeping up, or the account's concurrency is spent |
-| `<name>-notary-throttles` | `AWS/Lambda` `Throttles`, notary | any, in 5 minutes | |
-| `<name>-ingest-dlq-not-empty` | `AWS/SQS` `ApproximateNumberOfMessagesVisible`, DLQ | above 0 | a record was delivered `MaxReceiveCount` times and is not in the archive |
-| `<name>-ingest-oldest-message-age` | `AWS/SQS` `ApproximateAgeOfOldestMessage`, ingest | above `Alerts.OldestMessageAgeSeconds` (900) | the writer is behind or not running |
-| `<name>-writer-errors` | `AWS/Lambda` `Errors`, writer | any, in 5 minutes | an invocation failed |
-| `<name>-writer-unknown-catalogue` | `Audit/<name>` `UnknownCatalogueVersion` (a metric filter on the writer's log group, matching the field `event=unknown_catalogue`) | any, in 5 minutes | a record named a catalogue version the writer does not have and was dead-lettered in the archive and acknowledged, which neither queue's alarm sees: the writer and its emitters are out of step. The log line names the `source` and `catalogue_version`; the same count is `audit_writer_catalogue_unknown_total` by `source` and `catalogue_version` over OTLP |
-| `<name>-notary-errors` | `AWS/Lambda` `Errors`, notary | any, in an hour | a tenant could not be sealed, or the signer failed |
-| `<name>-notary-silent` | `AWS/Lambda` `Invocations`, notary | below 1 in each of the last `Alerts.NotarySilenceHours` (3) hours | the schedule or the function is gone, and the chain of seals is growing a gap |
+| `<name>-writer-throttles` | `AWS/Lambda` `Throttles`, writer | Any, in 5 minutes | The writer is not keeping up, or the account's concurrency is spent |
+| `<name>-notary-throttles` | `AWS/Lambda` `Throttles`, notary | Any, in 5 minutes | |
+| `<name>-ingest-dlq-not-empty` | `AWS/SQS` `ApproximateNumberOfMessagesVisible`, DLQ | Above 0 | A record was delivered `MaxReceiveCount` times and is not in the archive |
+| `<name>-ingest-oldest-message-age` | `AWS/SQS` `ApproximateAgeOfOldestMessage`, ingest | Above `Alerts.OldestMessageAgeSeconds` (900) | The writer is behind or not running |
+| `<name>-writer-errors` | `AWS/Lambda` `Errors`, writer | Any, in 5 minutes | An invocation failed |
+| `<name>-writer-unknown-catalogue` | `Audit/<name>` `UnknownCatalogueVersion`, a metric filter on the writer's log field `event=unknown_catalogue` | Any, in 5 minutes | A record named a catalogue version the writer lacks and was dead-lettered and acknowledged, which neither queue alarm sees. The log line names `source` and `catalogue_version`; OTLP carries `audit_writer_catalogue_unknown_total` |
+| `<name>-notary-errors` | `AWS/Lambda` `Errors`, notary | Any, in an hour | A tenant could not be sealed, or the signer failed |
+| `<name>-notary-silent` | `AWS/Lambda` `Invocations`, notary | Below 1 in each of the last `Alerts.NotarySilenceHours` (3) hours | The schedule or function is gone and the seal chain is growing a gap |
 
-"The function going silent" is the notary's, as an alarm on the platform's own
-`Invocations` metric: Lambda publishes no datapoint for an hour with no
-invocations, so missing data is treated as breaching, and a function that has
-stopped is the one case an alarm that depends on the function's own telemetry
-cannot see. The writer is quiet when nothing is written, so its silence is not
-an alarm; the oldest-message-age alarm is what says it has stopped with work to
-do.
-
-**How alarms reach alert-ingress.** CloudWatch publishes to the topic, and the
-topic delivers to `Alerts.EndpointURL` over HTTPS. The subscription is created with
-`EndpointAutoConfirms` false: SNS POSTs a `SubscriptionConfirmation` to the URL and
-the subscription stays pending until the endpoint follows its `SubscribeURL`, so
-alert-ingress has to handle SNS's message types (`SubscriptionConfirmation`,
-`Notification`, `UnsubscribeConfirmation`) and should verify the message
-signature. The topic is not encrypted with a customer key, which CloudWatch could
-not publish to without a key policy of its own: an alarm's body names a queue and
-a function and carries no record.
+| Rule | Detail |
+|---|---|
+| Notary silence | Alarms on the platform's `Invocations` metric. Lambda publishes no datapoint for an hour without invocations, so missing data counts as breaching. A stopped function cannot report its own silence |
+| Writer silence | Not an alarm: the writer is quiet when nothing is written. The oldest-message-age alarm catches a stopped writer with work waiting |
+| Delivery | The subscription has `EndpointAutoConfirms` false. SNS POSTs a `SubscriptionConfirmation` and the subscription stays pending until the endpoint follows its `SubscribeURL`. alert-ingress must handle `SubscriptionConfirmation`, `Notification` and `UnsubscribeConfirmation` and should verify the message signature |
+| Topic encryption | None with a customer key, which CloudWatch could not publish to without its own key policy. An alarm body names a queue and a function and carries no record |
 
 ## Lifecycle
 
-One rule per `records/<profile>/` prefix: Glacier Instant Retrieval at 30 days
-(still readable by observe's reindex and by `audit verify` without a restore) and
-Deep Archive at one year (for what nobody expects to read before retention ends;
-reading it needs a restore, and `audit verify` over such a range says so first).
-`seals/`, `keys/` and `catalogue/` are small, are read often, and have no rule.
-Objects below the storage class's minimum billable size stay where they are, which
-is S3's default.
+One rule per `records/<profile>/` prefix:
 
-**An existing bucket whose lifecycle is the estate's: `Adopt`.** A preset with
-`Create` makes the library own the bucket and derive the rules above from the
-profiles' retention, which includes an expiration (and a noncurrent-version
-expiration) for a profile whose framework deletes at the end of a fixed
-retention. An estate whose archive must never expire cannot say so there, and
-without `Create` the bucket is outside Pulumi altogether. `Adopt: true` is the
-third mode: the library imports the existing bucket by name (never creates it;
-`Protect` and `RetainOnDelete`, so destroying the stack leaves it) and manages
-its versioning, default encryption (as `Archive.Encryption` says), public-access
-block, ownership controls (`BucketOwnerEnforced`) and bucket policy (the TLS-only
-deny, which **replaces** the bucket's policy as a whole), and declares **no
-lifecycle configuration**: the rules the bucket has stay exactly as they are, and
-"never expire" is having no expiration rule there. This is a choice of the
-simplest form that lets an estate say it: a lifecycle derived from the profiles
-with the expiration suppressed would still have to write the bucket's lifecycle,
-replacing whatever it holds, which is the very thing Adopt exists to avoid.
-Object Lock is not touched either. The first `pulumi up` imports the resources
-and then changes them to these settings, so read the preview. `Adopt` is refused
-with `Create`, with `Endpoint`, and with a bucket another preset names;
-`Archive.GlacierIRDays`, `Archive.DeepArchiveDays` and the lock settings do not
-apply to an adopted bucket (they are refused when no preset has `Create`).
+| Step | When | Note |
+|---|---|---|
+| Glacier Instant Retrieval | 30 days | Still readable by observe's reindex and `audit verify` without a restore |
+| Deep Archive | 1 year | Reading needs a restore; `audit verify` over such a range says so first |
 
-The library cannot read the lifecycle it leaves alone, so it cannot check it
-against the retention the profiles demand. `Adopt` is therefore refused when a
-profile kept in the preset has a fixed minimum retention in its framework
-profiles (security, billing-nl, pci-dss, and the like), unless the preset sets
-`AcknowledgeLifecycle: true`: the estate's statement that the bucket's lifecycle
-and Object Lock keep objects at least that long. The responsibility is the
-estate's.
+`seals/`, `keys/` and `catalogue/` have no rule.
+
+### An existing bucket whose lifecycle is yours: `Adopt`
+
+| Mode | Behaviour |
+|---|---|
+| `Create` | The library owns the bucket and derives the rules above from profile retention, including expiration and noncurrent-version expiration for a profile whose framework deletes at the end of a fixed retention |
+| neither | The bucket is outside Pulumi |
+| `Adopt: true` | The library imports the existing bucket by name (never creates it; `Protect` and `RetainOnDelete`, so destroying the stack leaves it). It manages versioning, default encryption (per `Archive.Encryption`), the public-access block, ownership controls (`BucketOwnerEnforced`) and the bucket policy. The TLS-only deny replaces the bucket's policy as a whole. It declares no lifecycle configuration: existing rules stay as they are, and "never expire" means no expiration rule. Object Lock is untouched |
+
+| Rule | Detail |
+|---|---|
+| First `pulumi up` | Imports then changes the resources to these settings; read the preview |
+| Refused | `Adopt` with `Create`, with `Endpoint`, or with a bucket another preset names |
+| Not applicable | `Archive.GlacierIRDays`, `Archive.DeepArchiveDays` and the lock settings; they are refused when no preset has `Create` |
+| `AcknowledgeLifecycle` | The library cannot read the lifecycle it leaves alone. `Adopt` is refused when a profile kept in the preset has a fixed minimum retention (security, billing-nl, pci-dss and the like), unless the preset sets `AcknowledgeLifecycle: true`. That is your statement that the bucket's lifecycle and Object Lock keep objects at least that long |
 
 ## Not covered
 
-- **A deployment.** Nothing here has run in an account.
-- **The `lambda` sink** (a direct invocation of the writer function) is still
-  designed ([capabilities](capabilities.md)); the queue is the transport.
-- **FIFO ingest.** The queue is a standard queue and deduplication is the writer's;
-  a FIFO queue would also absorb a repeat inside its five-minute window, and is
-  not what the library creates.
-- **A signed delegation.** The notary signs with a root, as everywhere
-  ([0061](../../decisions/0061-seals.md)).
-
+| Item | Status |
+|---|---|
+| A deployment | Nothing here has run in an account |
+| The `lambda` sink | Designed ([capabilities](capabilities.md)); the queue is the transport |
+| FIFO ingest | The queue is standard and deduplication is the writer's. A FIFO queue would also absorb a repeat inside its five-minute window and is not what the library creates |
+| A signed delegation | The notary signs with a root ([0061](../../decisions/0061-seals.md)) |
 
 ## Keys, state and an S3-compatible archive
 
-The library creates no key. `Args.Keys` names the estate's keys by KMS alias
-(`alias/<name>`; an ARN, a key id and an AWS-managed alias are refused) and the
-library resolves each with `kms.LookupAlias`:
+`Args.Keys` names keys by KMS alias (`alias/<name>`), resolved with `kms.LookupAlias`. An ARN, a key id or an AWS-managed alias is refused.
 
-| field | purpose | required | the roles' grants |
+| Field | Purpose | Required | Role grants |
 |---|---|---|---|
-| `Keys.Archive` | `archive`: SSE-KMS of the objects | with `Encryption: kms` unless `Archive.KeyArn` | `GenerateDataKey`, `Decrypt` (the readers: `Decrypt`), no context condition (S3 binds its own) |
-| `Keys.Seal` | `seal`: the P-384 key seals are signed with | with the notary; refused without one | the notary: `Sign`, `GetPublicKey`, `DescribeKey` |
-| `Keys.Pseudonym` | `pseudonym`: wraps the per-tenant secrets | never; refused unless the preset is `attested` or a profile of `Writer.DeploymentYAML` pseudonymises | the writer: `GenerateDataKey`, `Decrypt` where `kms:EncryptionContext:purpose` is `pseudonym` |
-| `Keys.Conceal` | `conceal`: identities that must be recoverable | never; needs `Keys.Pseudonym` | the writer: `Encrypt`, `Decrypt`, `GenerateDataKey` where the context is `{instance: Keys.Instance, purpose: conceal}` |
+| `Keys.Archive` | `archive`: SSE-KMS of the objects | With `Encryption: kms` unless `Archive.KeyArn` | `GenerateDataKey`, `Decrypt` (readers: `Decrypt`); no context condition, S3 binds its own |
+| `Keys.Seal` | `seal`: the P-384 key seals are signed with | With the notary; refused without one | Notary: `Sign`, `GetPublicKey`, `DescribeKey` |
+| `Keys.Pseudonym` | `pseudonym`: wraps the per-tenant secrets | Never; refused unless the preset is `attested` or a profile of `Writer.DeploymentYAML` pseudonymises | Writer: `GenerateDataKey`, `Decrypt` where `kms:EncryptionContext:purpose` is `pseudonym` |
+| `Keys.Conceal` | `conceal`: identities that must be recoverable | Never; needs `Keys.Pseudonym` | Writer: `Encrypt`, `Decrypt`, `GenerateDataKey` where the context is `{instance: Keys.Instance, purpose: conceal}` |
 
-`Keys.Instance` (default the component name) is the `instance` of the default
-encryption context of [`storage/keys`](../../../storage/keys/doc.go); it is
-bound into ciphertexts, so choose it once. The functions' configuration carries
-the aliases as `keys: {adapter: kms, instance, seal, pseudonym, conceal, state}`
-and, for the archive, `archive.kmsKey`. `SealKeyPolicy(accountRootArn,
-notaryRoleArn)` is the key policy the estate puts on the seal key: the account
-root administers and cannot sign, and only the notary's role signs. The notary
-role's ARN is `arn:<partition>:iam::<account>:role<RolePath><name>-notary`.
-
-`Args.State` is the installation's state store, SSM parameters under `Root`
-(default `/audit/<name>`; `KeyArn` for a customer-managed key): the archive's
-credentials at `Root/internal/archive` and the pseudonym secrets under
-`Root/internal/pseudonym/`. The library creates no parameter (it is not given a
-secret's value); the writer creates the pseudonym secrets, ciphertext under the
-pseudonym key, and may create but never replace them.
-
-A preset with an `Endpoint` (`Presets[...]`) is an S3-compatible store: no bucket,
-lifecycle, encryption setting or S3 or archive-key statement is created for it;
-an `attested` preset there is refused (Object Lock is S3 only); `Observe`, `Query`
-and `ArchiveWriter` get nothing for it (they are roles over AWS buckets). The
-writer, and the notary when there is one, are granted `ssm:GetParameter` on the
-preset's credentials parameter and nothing else of SSM. See
-[archive on R2](../../guides/audit/operate/archive-on-r2.md).
+| Item | Detail |
+|---|---|
+| `Keys.Instance` | Default is the component name. It is the `instance` of the default encryption context of [`storage/keys`](../../../storage/keys/doc.go) and is bound into ciphertexts, so choose it once |
+| Function configuration | `keys: {adapter: kms, instance, seal, pseudonym, conceal, state}` and, for the archive, `archive.kmsKey` |
+| `SealKeyPolicy(accountRootArn, notaryRoleArn)` | The key policy to put on the seal key: the root administers and cannot sign; only the notary's role signs. The notary role's ARN is `arn:<partition>:iam::<account>:role<RolePath><name>-notary` |
+| `Args.State` | The installation's state store: SSM parameters under `Root` (default `/audit/<name>`; `KeyArn` for a customer-managed key). The archive's credentials are at `Root/internal/archive` and pseudonym secrets under `Root/internal/pseudonym/` |
+| Parameters | The library creates none. The writer creates the pseudonym secrets (ciphertext under the pseudonym key) and may create but never replace them |
+| Preset with `Endpoint` | An S3-compatible store: no bucket, lifecycle, encryption setting or S3 or archive-key statement is created. An `attested` preset there is refused (Object Lock is S3 only). `Observe`, `Query` and `ArchiveWriter` get nothing for it. The writer, and the notary if present, get `ssm:GetParameter` on the preset's credentials parameter only. See [archive on R2](../../guides/audit/operate/archive-on-r2.md) |

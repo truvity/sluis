@@ -1,19 +1,18 @@
 # Configuration: the writer
 
-The keys of `audit-writer` (the receiver and the writer), the durability knobs, the writer Lambda's
-file, and the workload identity file the receiver reads. Shared blocks (`database`, `bucket`,
-`archive`, `sink`, `openbao`, `keys`) are in [configuration](configuration.md#shared-blocks).
+The keys of `audit-writer` (receiver and writer), the durability knobs, the writer Lambda's file and the workload identity file. Shared blocks (`database`, `bucket`, `archive`, `sink`, `openbao`, `keys`) are in [configuration](configuration.md#shared-blocks).
 
 ## audit-writer
 
-One binary in two roles, chosen by `mode`. As a `writer`, the default, it
-serves the sink, writes the archive and consumes a stream when `stream` is
-set. As a `receiver` it serves the sink and publishes to the stream, and holds
-neither an archive nor a key provider: a receiver holding either would be a
-writer. In direct mode one process in `writer` mode is both. In stream mode
-the receiver publishes to JetStream and acknowledges the replicated publish,
-and the same image runs again as the writer. Both serve `RegistryService`, so
-the application registers its catalogue with the address it writes to.
+One binary, two roles chosen by `mode`.
+
+| Mode | Behaviour |
+|---|---|
+| `writer` (default) | Serves the sink, writes the archive, consumes a stream when `stream` is set |
+| `receiver` | Serves the sink and publishes to the stream. Holds no archive and no key provider |
+| Direct mode | One process in `writer` mode does both |
+| Stream mode | The receiver acknowledges the replicated JetStream publish; the same image runs again as the writer |
+| Both roles | Serve `RegistryService`, where the application registers its catalogue |
 
 <!-- generated: config-audit-writer -->
 | key | type | default | meaning |
@@ -49,72 +48,54 @@ the application registers its catalogue with the address it writes to.
 | `roll.maxRecords` | integer, at least 1 | 5000 | how many gathered records are written at once. The roll ends at whichever of the two is reached first, or at the roller's byte limit |
 <!-- /generated -->
 
-`stream` is the NATS shorthand and is kept as it was: in a receiver it is
-`forward.nats`, in a writer `consume.nats`, with the same defaults. Give it or
-the longhand, not both. A `receiver` requires `stream` or `forward`. A writer
-with neither `stream` nor `consume` only serves its own sink; with one, it
-also consumes.
+`stream` is the NATS shorthand for `forward.nats` in a receiver and `consume.nats` in a writer. Give it or the longhand, not both. A receiver requires one of them.
 
 ### Durability: `require`, `forward`, `consume`
 
-Every acknowledgement carries a durability ([0059](../../decisions/0059-sink-durability-and-transports.md)):
-`archived` (the object is in the bucket), `queued` (a replicated queue holds it
-and will deliver it) or `logged` (a log line). `require` is the floor a process
-holds its own chain to, and its default is the strongest the mode can give, so
-that anything weaker is something a person wrote down:
+Every acknowledgement carries a durability ([0059](../../decisions/0059-sink-durability-and-transports.md)).
 
-- a **writer** defaults to `archived`: it puts the object itself, and a
-  deployment that wants a weaker promise says so;
-- a **receiver** defaults to `queued`, not `archived`: it holds no archive (a
-  receiver holding one would be a writer), so `archived` is not its to promise,
-  and it is refused there. Its promise is what its onward transport gives, and
-  the writers behind it are what reach `archived`.
+| Value | Meaning |
+|---|---|
+| `archived` | The object is in the bucket |
+| `queued` | A replicated queue holds it and will deliver it |
+| `logged` | A log line |
 
-At start-up the process builds its chain (the receiver, and the transport
-`forward` names; or the writer) and computes the best it can ever give. A chain
-below `require` is a start-up error, not a surprise on the first privileged
-action. `forward.log` can give `logged` at most, so it is allowed only with
-`require: logged`, which the schema, the loader and the guard each refuse
-otherwise: it is for a deployment that has chosen its log pipeline as its
-record.
+`require` is the floor a process holds its chain to. At start-up the process computes the best its chain can give. A chain below `require` is a start-up error.
 
-The queue's credentials are never in the file. `sqs` uses the AWS SDK's ambient
-credentials, which on Kubernetes is the pod's workload identity (EKS Pod
-Identity, or IRSA through a service-account annotation), the same way the
-archive's bucket does. The role needs `sqs:SendMessage` for the receiver,
-`sqs:ReceiveMessage`, `sqs:DeleteMessage` and `sqs:ChangeMessageVisibility`
-for the writers. `charts/audit/examples/sqs.yaml` is a full SQS install; its
-transport is not yet tested against live AWS, only against a fake and
-LocalStack.
+| Process | `require` default | Notes |
+|---|---|---|
+| Writer | `archived` | Puts the object itself |
+| Receiver | `queued` | `archived` is refused, because a receiver holds no archive. The writers behind it reach `archived` |
+| `forward.log` | `logged` only | Refused with any other `require` by the schema, the loader and the guard |
 
-A process that records through a writer of its own (`audit-query` and every
-job with a `sink`) takes `require` too, with `sink.expect` saying what that
-writer gives: `require` unset checks nothing, and set it needs `expect` at
-least as strong, checked at start-up, with every acknowledgement checked
-afterwards.
+A process that records through a writer (`audit-query` and every job with a `sink`) takes `require` too. `sink.expect` states what that writer gives. Set `require` needs an `expect` at least as strong, checked at start-up and on every acknowledgement. Unset checks nothing.
 
-The receiver verifies who writes with `workloads` and stamps the caller's
-service account as each record's observer. Without it, it refuses to start
-unless given `anonymousWrites: true`. Records that arrive over the stream
-carry no verified observer: the stream's own authentication is what admits a
-publisher there. The observer version stamped on records is the build's
-version and is not configurable.
+| SQS item | Detail |
+|---|---|
+| Credentials | The AWS SDK's ambient ones, such as EKS Pod Identity or IRSA. Never in the file |
+| Receiver role | `sqs:SendMessage` |
+| Writer role | `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility` |
+| Example | `charts/audit/examples/sqs.yaml`. Tested against a fake and LocalStack, not live AWS |
+
+| Caller verification | Behaviour |
+|---|---|
+| `workloads` set | The receiver verifies who writes and stamps the caller's service account as the record's observer |
+| Neither `workloads` nor `anonymousWrites: true` | The receiver refuses to start |
+| Records over the stream | No verified observer; the stream's authentication admits the publisher |
+| Observer version | The build's version, not configurable |
 
 ### audit-writer-lambda
 
-The write path as an AWS Lambda function behind an SQS event source mapping
-([AWS](aws-pulumi-library.md)). It runs the same writer under the same
-`require: archived` guard as `audit-writer`, and has none of the rest of it: no
-listener, no registry, no stream, no database, no HTTP front door. A function has
-no process that stays up, so there is nothing to serve and no replica count to
-state; what the Postgres table does for `audit-writer` is a DynamoDB table here.
-The file is read from `--config`, or `AUDIT_CONFIG`, or `/opt/audit/audit.yaml`,
-or `/var/task/audit.yaml`, whichever of them is first to exist. In the Pulumi
-library's deployment it is in the function's configuration layer at
-`/opt/audit/audit.yaml`, named by `AUDIT_CONFIG`, rendered from the stack's own
-arguments ([AWS](../../concepts/audit/aws-lambda.md#configuration-as-a-layer)). The writer says
-which file it read, and its digest, in its start-up record
-([evidence](configuration.md#evidence-the-writers-start-up-record)).
+The write path as an AWS Lambda function behind an SQS event source mapping ([AWS](aws-pulumi-library.md)). It runs the writer under the same `require: archived` guard. It has no listener, registry, stream, database or HTTP front door. DynamoDB does the deduplication that Postgres does for `audit-writer`.
+
+| Config file lookup, first that exists |
+|---|
+| `--config` |
+| `AUDIT_CONFIG` |
+| `/opt/audit/audit.yaml` |
+| `/var/task/audit.yaml` |
+
+The Pulumi library puts the file in the function's configuration layer at `/opt/audit/audit.yaml`, named by `AUDIT_CONFIG` ([AWS](../../concepts/audit/aws-lambda.md#configuration-as-a-layer)). The writer's start-up record names the file read and its digest ([evidence](configuration.md#evidence-the-writers-start-up-record)).
 
 <!-- generated: config-audit-writer-lambda -->
 | key | type | default | meaning |
@@ -130,15 +111,11 @@ which file it read, and its digest, in its start-up record
 | `require` | `logged`, `queued` or `archived` | `archived` | the weakest durability the chain may give; the writer gives `archived` at best |
 <!-- /generated -->
 
-The notary Lambda reads `audit-notary`'s file, unchanged
-([audit-notary](configuration-jobs.md#audit-notary)), from the same place; its `signer.kms` names the
-seal key by alias.
-
+The notary Lambda reads `audit-notary`'s file ([audit-notary](configuration-jobs.md#audit-notary)) from the same place. Its `signer.kms` names the seal key by alias.
 
 ## Workload identity
 
-The receiver reads one file, named by `workloads` (in the chart,
-`/etc/audit/workloads.yaml`, rendered from `workloadIdentity`):
+The receiver reads the file `workloads` names (in the chart `/etc/audit/workloads.yaml`, rendered from `workloadIdentity`).
 
 ```yaml
 issuers:
@@ -146,23 +123,12 @@ issuers:
     audience: audit
 ```
 
-A caller presents its projected service-account token as a bearer. The jobs and the
-query service read it from the file their `sink.tokenFile` names on every
-request, because the kubelet replaces it before it expires; the interactive
-`audit` commands read `--token-file` or `AUDIT_TOKEN_FILE` the same way.
-
-Whose catalogue a registration is, comes from that verified identity and never
-from the document. The file's `workloads` list is what says so: which service
-account speaks for which source. A caller missing from it registers as nobody
-and its registration is refused, which is also why an installation that keeps
-an index and verifies callers must fill the list in — the chart refuses to
-render otherwise. There is deliberately no shortcut that lets any verified
-caller register for the application: a workload that could register under
-another source could describe another application's records, and everything
-downstream reads the description.
-
-The issuer's discovery document is fetched at start-up, so it must be reachable
-over HTTPS from the pods. A managed cluster's public OIDC provider is. The API
-server's own in-cluster issuer usually is not without its CA and a credential,
-which this does not yet take.
-
+| Item | Behaviour |
+|---|---|
+| Caller token | A projected service-account token as a bearer |
+| Jobs and query service | Read the file `sink.tokenFile` names on every request, because the kubelet replaces it |
+| `audit` commands | Read `--token-file` or `AUDIT_TOKEN_FILE` the same way |
+| Catalogue ownership | The verified identity decides it, never the document. The file's `workloads` list maps service account to source |
+| Caller missing from `workloads` | Registers as nobody; the registration is refused |
+| Index plus verified callers | The chart refuses to render without the `workloads` list |
+| Issuer discovery | Fetched at start-up, so it must be reachable over HTTPS from the pods. The API server's in-cluster issuer usually is not, as the file takes no CA or credential for it |

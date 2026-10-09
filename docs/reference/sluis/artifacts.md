@@ -1,8 +1,6 @@
 # Artifacts
 
-Every artifact of this repository is stamped by one tag, `vX.Y.Z`: pin one version of the repository. The tables below
-are generated from the release configuration (`.goreleaser.yaml`, `audit/.goreleaser.yaml`, the release workflow and
-`hack/modules.py list`), so they cannot drift from what a release publishes.
+One tag, `vX.Y.Z`, stamps every artifact of this repository. The tables are generated from the release configuration.
 
 <!-- generated: artifacts -->
 
@@ -64,5 +62,4 @@ Packages and actions published by the release workflow:
 | GitHub Action | `truvity/sluis@<commit>` | the repository root, `action.yml` |
 <!-- /generated -->
 
-What each deliverable is for: sluis is in [the documentation home](../../README.md), audit in [the audit docs](../../concepts/audit/README.md).
-SDKs today are Go and TypeScript; Kotlin and Python are planned ([ADR 0042](../../decisions/0042-one-repository-one-release-train.md)).
+SDKs are Go and TypeScript ([ADR 0042](../../decisions/0042-one-repository-one-release-train.md)). Docs: [home](../../README.md), [audit](../../concepts/audit/README.md).

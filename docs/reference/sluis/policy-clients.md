@@ -1,83 +1,78 @@
 # Policy: clients, resources and self-described clients
 
-The `clients`, `resources` and `client_documents` tables. Part of [the policy](policy.md).
+The `clients`, `resources` and `client_documents` tables of [the policy](policy.md). Decided in [ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md), [0033](../../decisions/0033-a-longer-absolute-limit-for-read-only-resources.md), [0039](../../decisions/0039-the-issuer-generates-confidential-client-secrets.md), [0040](../../decisions/0040-agent-class-sessions.md).
 
 ## Clients
 
-A client's id is the `aud`, unless the request named a [resource](#resources). `requires` lists the internal groups any
-one of which admits a caller; a caller in none is refused before a token exists. `requires` is mandatory: an empty list
-means nobody, not everyone, and sluis refuses to start on one.
+A client's id is the `aud`, unless the request named a [resource](#resources).
 
-| Kind | Used by | Has a secret |
+| Rule | Value |
+|---|---|
+| `requires` | mandatory; an empty list means nobody; sluis refuses to start on one |
+| A caller in no `requires` group | refused before a token exists |
+| Token exchange | target's `requires` decides; each proof is checked against its own issuer's keys |
+
+| Kind | Used by | Secret |
 |---|---|---|
-| `public` | kubelogin per cluster, `sluisctl`, Kargo's web UI and CLI, `local-dev` | no |
-| `confidential` | ArgoCD, Grafana, a console behind oauth2-proxy | yes: the `secret` it names, or one the issuer generates ([ADR 0039](../../decisions/0039-the-issuer-generates-confidential-client-secrets.md)) |
-| `exchange` | AWS roles reached by token exchange | no |
+| `public` | kubelogin, `sluisctl`, Kargo, `local-dev` | none |
+| `confidential` | ArgoCD, Grafana, a console behind oauth2-proxy | named, or generated |
+| `exchange` | AWS roles reached by token exchange | none |
 
 | Key | Meaning |
 |---|---|
 | `kind` | `public`, `confidential` or `exchange` |
-| `secret` | a confidential client's secret; required for that kind: a name, or [`{generate: true}`](#a-generated-secret) ([ADR 0039](../../decisions/0039-the-issuer-generates-confidential-client-secrets.md)) |
-| `redirects` | where a code is delivered: a path that starts a sign-in |
-| `signed_out` | the pages a person may land on after an RP-initiated logout. An address in both lists fails the load; an `exchange` client may declare none |
-| `requires` | the internal groups, any one of which admits a caller |
-| `ttl_cap` | an upper bound on this client's token lifetime |
-| `session` | `interactive` (the default) or `agent`: the class of this client's refresh chains, see [agent-class sessions](#agent-class-sessions). Refused on an `exchange` client |
-| `sign_in_exchange` | `true` lets a person's sign-in to this client be presented as a proof in a token exchange, as its `access_token`, while the session behind it is live. `public` clients only. No other token this service signs is a proof |
-| `display_name`, `description` | what the sign-in page shows, see below |
-| `backchannel_logout_uri` | opts the client into OIDC Back-Channel Logout: when a sign-in ends, a signed `logout+jwt` naming the session (`sid`) is POSTed here |
-| `groups` | [the groups override](#groups-override) |
-| `groups_delimiter` | [rewrites `:` in the audience's groups](#groups_delimiter) |
-| `signing_alg` | [pins the signing algorithm](#signing_alg) |
+| `secret` | required for `confidential`: a name, or [`{generate: true}`](#a-generated-secret) |
+| `redirects` | paths that start a sign-in |
+| `signed_out` | pages allowed after RP-initiated logout; an address in both lists fails the load; an `exchange` client may declare none |
+| `requires` | internal groups, any one admits |
+| `ttl_cap` | upper bound on token lifetime |
+| `session` | `interactive` (default) or `agent`; refused on `exchange`; see [agent-class sessions](#agent-class-sessions) |
+| `sign_in_exchange` | `true` lets a sign-in be a token-exchange proof (`access_token`) while its session lives; `public` only |
+| `display_name`, `description` | [sign-in page text](#what-the-sign-in-page-calls-a-client) |
+| `backchannel_logout_uri` | receives a signed `logout+jwt` naming the `sid` when a sign-in ends; unusable behind [oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md) |
+| `groups` | [groups override](#groups-override) |
+| `groups_delimiter` | [rewrites `:`](#groups_delimiter) |
+| `signing_alg` | [pins the algorithm](#signing_alg) |
 
 ### A generated secret
 
-`secret` is one of two shapes:
-
-| Shape | Meaning |
+| `secret` shape | Meaning |
 |---|---|
-| a string | the name of an input, `clients/<id>/secret`, delivered by the installation (unchanged) |
-| `{generate: true}` | the issuer makes a 32-byte random secret (base64url, no padding) and keeps it itself |
+| a string | input `clients/<id>/secret`, delivered by the installation |
+| `{generate: true}` | issuer makes 32 random bytes (base64url, no padding) |
 
-A generated secret is one record at `credentials/oidc-client/<id>/secret` in the Secrets port, holding the current
-secret, a previous one and the time until which the previous is accepted. It is written create-only, so replicas and
-Lambda invocations that start together agree on one value, and an existing record is never overwritten. If the input
-`clients/<id>/secret` exists at that moment it is adopted unchanged. The token endpoint reads the record of a generated
-client first and the input only while the store says there is none; a corrupt or unreadable record authenticates nobody,
-except that a record read earlier is served for at most 5 minutes when the store fails. A record is cached for 30
-seconds, and the current and the previous secret are both compared on every request, in constant time.
+| Fact | Value |
+|---|---|
+| Record | `credentials/oidc-client/<id>/secret` in the Secrets port: current, previous, previous-valid-until |
+| Write | create-only; never overwritten; an existing input `clients/<id>/secret` is adopted |
+| Read order | record first, input only while the store has no record |
+| Cache | 30 s; a record read earlier is served up to 5 min when the store fails |
+| Compare | current and previous on every request, constant time |
+| Corrupt or unreadable record | authenticates nobody |
+| Refused at start | `generate: false`; `public` or `exchange` client; Secrets adapter `legacy`; State not shared by replicas (`memory` excepted) |
+| Older binary | refuses the object form; roll every replica first |
+| Client no longer generated | record reported once as orphan; never deleted |
+| Delivery | [`oidc/v1` document](secrets.md#the-external-documents) at `external/oidc/<client>` |
+| Rotation | [`sluisctl clients`](sluisctl.md#clients-rotate-show-purge) |
 
-Refused at start: the object form with `generate: false`; on a `public` or `exchange` client; with a Secrets adapter that
-cannot create only if absent (`legacy`); and, for a generated client, a State that replicas do not share (the `memory`
-adapter excepted). An older binary refuses the object form, so roll every replica first. Stored records of clients no
-longer generated are reported once as orphans and never deleted by the issuer. The relying party receives the secret
-by reading the [`oidc/v1` document](secrets.md#the-external-documents) at `external/oidc/<client>`; rotation is
-[`sluisctl clients`](sluisctl.md#clients-rotate-show-purge). How:
-[let the issuer generate a client's secret](../../guides/sluis/let-the-issuer-generate-a-clients-secret.md),
-[rotate a client secret](../../guides/sluis/operate/rotate-a-client-secret.md).
-
-A token **exchange** trades a proof for a token whose `aud` is any declared client, and the target's `requires` decides.
-Each proof is checked against its own issuer's keys.
-
-Clients are declared: one row each, in git. They are never created in a console and never registered by a workload.
-The one exception is [`client_documents`](#clients-that-describe-themselves).
-Back-Channel Logout suits a client running its own session; a console behind oauth2-proxy cannot take it, because
-oauth2-proxy keeps each session under a key only the browser's cookie holds ([oauth2-proxy.md](../../guides/sluis/connect/oauth2-proxy.md)).
+How: [let the issuer generate a secret](../../guides/sluis/let-the-issuer-generate-a-clients-secret.md), [rotate a client secret](../../guides/sluis/operate/rotate-a-client-secret.md).
 
 ### What the sign-in page calls a client
 
 | The row declares | The page says |
 |---|---|
 | `display_name` | that name |
-| no name, and the id is `k8s:<cluster>` | *Kubernetes, `<cluster>`* |
-| no name | the client id, as it is |
+| no name, id `k8s:<cluster>` | *Kubernetes, `<cluster>`* |
+| no name | the client id |
 
-The host shown is taken from the redirect URI of the request being answered, already matched against `redirects`, as
-text and never as a link. A loopback redirect (`localhost`, a loopback address) shows *a program on this computer*
-instead, with no port. Both fields are public: anyone who starts a sign-in reads them before proving who they are.
-Validation refuses a name over 80 characters, a description over 200, a blank value, and any control or formatting
-character (a line break, a tab, a bidirectional override). Everything is HTML-escaped when written. A build older than
-the release that introduced them refuses both keys as unknown: deploy the service before declaring them.
+| Fact | Value |
+|---|---|
+| Host shown | from the matched redirect URI; text, never a link |
+| Loopback redirect | *a program on this computer*, no port |
+| Visibility | both fields are public before sign-in |
+| Refused | name over 80 characters; description over 200; blank; control, line-break, tab or bidirectional character |
+| Output | HTML-escaped |
+| Older build | refuses both keys as unknown; deploy the service first |
 
 ## Resources
 
@@ -90,57 +85,52 @@ resources:
     absolute_cap: 168h
 ```
 
-A client names a resource with the `resource` parameter (RFC 8707) and `aud` is the resource. Keys: `requires`,
-`ttl_cap`, `display_name`, `description`, `groups`, `groups_delimiter`, `signing_alg`, `read_only` and `absolute_cap`.
+A client names a resource with the `resource` parameter (RFC 8707); `aud` is then the resource.
 
-- **Both gates apply.** A caller must satisfy the client's `requires` and the resource's.
-- **Both caps apply, and the shorter wins.**
-- **The id is matched exactly.** A trailing slash or a different scheme is a different resource. It must be an absolute
-  URI with no fragment, and its `requires` must name declared groups.
-
-| A client asks | It gets |
+| Rule | Value |
 |---|---|
-| nothing | a token for the client itself |
-| a declared resource it is entitled to | a token whose `aud` is the resource, capped by both, with the same `aud` on every refresh of that session |
-| a resource this installation does not declare | `invalid_target` |
-| a resource it is not entitled to | refused at sign-in, naming the resource and the group it would need |
-| more than one resource | refused |
-| a relative URI, or one with a fragment | refused |
+| Keys | `requires`, `ttl_cap`, `display_name`, `description`, `groups`, `groups_delimiter`, `signing_alg`, `read_only`, `absolute_cap` |
+| Gates | caller satisfies the client's `requires` and the resource's |
+| Caps | both apply; the shorter wins |
+| Id | matched literally; absolute URI, no fragment; `requires` names declared groups |
+| Recorded | with the session; re-checked on every refresh |
 
-The resource is recorded with the session and re-checked on every refresh, which is where a withdrawn grant bites.
+| A client asks | Result |
+|---|---|
+| nothing | token for the client |
+| declared, entitled resource | `aud` is the resource, capped by both, same on every refresh |
+| undeclared resource | `invalid_target` |
+| resource not entitled | refused at sign-in, naming the resource and group |
+| several resources | refused |
+| relative URI or fragment | refused |
 
 ### Absolute session of a read-only resource
 
-The service's `lifetimes.absolute` ends every session 24 hours after `auth_time`
-([ADR 0001](../../decisions/0001-sessions-and-an-absolute-limit.md), [configuration.md](configuration.md)). A resource that
-only reads may ask for longer, up to 168h ([ADR 0033](../../decisions/0033-a-longer-absolute-limit-for-read-only-resources.md)).
-
-**Deprecated.** Lengthening is superseded by [agent-class sessions](#agent-class-sessions)
-([ADR 0040](../../decisions/0040-agent-class-sessions.md)). An `absolute_cap` above `lifetimes.absolute` on a `read_only`
-resource is still honoured, with a warning at start naming the resources, and a later minor release will refuse it.
-To migrate, mark the clients that need a longer chain `session: agent`, then remove `absolute_cap` from those
-resources or lower it to at most `lifetimes.absolute`. `absolute_cap` as a shortening cap stays.
+Deprecated: use [agent-class sessions](#agent-class-sessions).
 
 | Field | Meaning |
 |---|---|
-| `absolute_cap` | this resource's absolute session limit, in place of `lifetimes.absolute` |
-| `read_only` | the declarer's claim that a token for this resource cannot change anything. The service cannot verify it |
+| `absolute_cap` | this resource's absolute limit in place of `lifetimes.absolute`; at most `168h` |
+| `read_only` | declarer's claim that the token changes nothing; unverified by the service |
+| Access document | `readOnly`, `absoluteCap` |
 
-Refused at load: an `absolute_cap` above 168h, and zero or a negative one. Refused at start: an `absolute_cap` above
-`lifetimes.absolute` without `read_only: true`. A cap below `lifetimes.absolute` needs no `read_only`. A refresh chain's
-limit is the **shortest** among the resources it has been used for; the client's own audience and a resource without an
-`absolute_cap` count as `lifetimes.absolute`. The limit is enforced at refresh, at a silent `/authorize` and in the
-access token's `exp`. Sign-out, removal or suspension, and refresh-token reuse end an extended chain as they end any
-other. The sliding window still applies: a chain ends at the earlier of `now + lifetimes.refresh` and
-`auth_time + limit`, and `lifetimes.refresh` defaults to `12h`, so raise it (to `168h`) for the cap to be usable across a
-closed laptop. In the access document the fields are `readOnly` and `absoluteCap`.
+| Rule | Value |
+|---|---|
+| Default limit | `lifetimes.absolute`, 24 h from `auth_time` |
+| Refused at load | `absolute_cap` above 168h, zero or negative |
+| Refused at start | `absolute_cap` above `lifetimes.absolute` without `read_only: true` |
+| Cap below `lifetimes.absolute` | needs no `read_only` |
+| Warning at start | names resources above `lifetimes.absolute`; a later minor release refuses them |
+| Chain limit | shortest across resources used; client audience and cap-less resources count as `lifetimes.absolute` |
+| Enforced at | refresh, silent `/authorize`, access token `exp` |
+| Chain ends | earlier of `now + lifetimes.refresh` and `auth_time + limit` |
+| `lifetimes.refresh` | default `12h`; raise to `168h` to survive a closed laptop |
+| Ended by | sign-out, removal, suspension, refresh-token reuse |
+| Migrate | set `session: agent` on those clients; lower or remove `absolute_cap` |
 
 ## Agent-class sessions
 
-A client that is software holding its own refresh token and working in the background, such as an MCP host, is not a
-person at a browser, and a daily sign-in or a console sign-out that ends its chain serves nobody. Such a client is
-declared `session: agent` ([ADR 0040](../../decisions/0040-agent-class-sessions.md)); a client without the key is
-`interactive` and keeps the installation's `lifetimes`.
+Declare `session: agent` for software that holds its own refresh token. Concepts: [sessions](../../concepts/sluis/sessions.md#agent-class-sessions).
 
 ```yaml
 clients:
@@ -153,60 +143,43 @@ clients:
 client_documents:
   origins: [agents.example]
   requires: [rung:engineering]
-  session: agent                  # EVERY document client below gets the class
+  session: agent                  # every document client gets the class
 ```
 
-The class's lifetimes are in the service configuration, under `lifetimes.agent`
-([configuration.md](configuration.md)):
-
-| Key | Default | Ceiling | Meaning |
+| Key under `lifetimes.agent` | Default | Ceiling | Meaning |
 |---|---|---|---|
-| `lifetimes.agent.refresh` | `336h` (14 days) | `lifetimes.agent.absolute` | the idle limit |
-| `lifetimes.agent.absolute` | `720h` (30 days) | `2160h` (90 days) | the limit from `auth_time` |
-| `lifetimes.agent.access` | `30m` | `1h` | the longest an access or ID token lives |
+| `refresh` | `336h` | `absolute` | idle limit |
+| `absolute` | `720h` | `2160h` | limit from `auth_time` |
+| `access` | `30m` | `1h` | longest access or ID token |
 
-All three must be positive, and shortening is always allowed. A resource's `absolute_cap` is only a ceiling for an
-agent chain, and the client's, `client_documents`' and the resource's `ttl_cap` still shorten its tokens.
+All three are positive; shortening is allowed. Set them in [the service configuration](configuration.md).
 
-A document cannot set its own class: the issuer reads `session` only from the installation's policy, never from a
-fetched document. `client_documents.session` gives the class to **every** document client, so admit with `agent` only
-an origin whose documents their vendor controls and its users cannot publish. An installation that needs one document
-client interactive and another agent declares one of them as a `clients` row.
-
-Refused at load: `session` on an `exchange` client, which opens no chain, and `session: agent` with
-`sign_in_exchange: true`, because a month-long chain behind a person's CLI would make every credential traded from it
-a month long in effect. Warned at start: `session: agent` on a client with `signed_out` or `backchannel_logout_uri`,
-which describe a browser-facing application.
-
-**The consent page.** An agent authorization never completes silently. After the person signs in they are shown a
-page, once per authorization of the client, that names the client, its origin (for a document client), the host it
-returns to, the class and the computed deadline. The connection is made only when they accept it in their own browser.
-`prompt=none` for an agent client is answered `consent_required`.
-
-**Sign-out.** A person's own sign-out (`/logout`, `/end_session`) ends their interactive sessions and keeps their agent
-sessions; the signed-out page says so. A sign-in that passes its own limit keeps every live chain, and another person
-signing in in the same browser keeps nothing. *Sign out everywhere*, a per-client revoke, the operator's revoke of one
-client for everybody, removal from the directory and refresh-token reuse end agent sessions. `/end_session` that names
-an agent client, by `client_id` or by its `id_token_hint`, ends that client's sessions too.
-
-Removing a client or an origin from the policy only stops its chains, because the client is then unknown at refresh;
-it does not end them, and they would resume within their idle window if the row came back. To end them, revoke the
-client's sessions first. Why the class exists and how a chain ends:
-[sessions](../../concepts/sluis/sessions.md#agent-class-sessions).
+| Rule | Value |
+|---|---|
+| Shortening tokens | `absolute_cap` only ceilings an agent chain; `ttl_cap` of client, `client_documents` and resource still apply |
+| Class source | installation policy only, never a fetched document |
+| `client_documents.session` | applies to every document client; declare a mixed set as `clients` rows |
+| Refused at load | `session` on `exchange`; `session: agent` with `sign_in_exchange: true` |
+| Warned at start | `session: agent` with `signed_out` or `backchannel_logout_uri` |
+| Consent page | once per authorization; names client, origin, return host, class, deadline |
+| `prompt=none` | `consent_required` |
+| Own sign-out (`/logout`, `/end_session`) | ends interactive sessions, keeps agent sessions |
+| `/end_session` naming an agent client | also ends that client's sessions |
+| Ends agent sessions | *sign out everywhere*; per-client revoke; operator revoke; directory removal; refresh-token reuse |
+| Keeps every live chain | a sign-in past its own limit; another person signing in in the same browser |
+| Removing a client or origin | stops chains (unknown at refresh) but does not end them; revoke sessions first |
 
 ## Groups override
 
-`groups` on a client row, a resource row or the `client_documents` block sets which held groups a token carries beyond
-the `<scope>:<thing>` pairs of its audience's `requires`. The rule that uses it, with its reasoning, is
-[explanation/groups-in-a-token.md](../../concepts/sluis/groups-in-a-token.md).
+`groups` on a client, resource or `client_documents` block sets which held groups a token carries beyond the pairs in its audience's `requires`. Rule: [groups in a token](../../concepts/sluis/groups-in-a-token.md).
 
 | Value | Carries |
 |---|---|
-| absent | the pairs of the audience's `requires`, in any role |
+| absent | the pairs of the audience's `requires`, any role |
 | `all` | every group the caller holds |
-| `[thing, ...]` | additionally every held group of each named thing, in any scope |
-| `[rung]` or `[emp]` | additionally every held name of that family |
-| `[rung:sre]` | additionally that one two-segment name |
+| `[thing, ...]` | also every held group of each thing, any scope |
+| `[rung]` or `[emp]` | also every held name of that family |
+| `[rung:sre]` | also that one two-segment name |
 
 ```yaml
 clients:
@@ -217,10 +190,12 @@ clients:
     groups: [shop]
 ```
 
-Without a declared vocabulary, validation checks only that the value is `all` or a list of names. With one, each
-bare-word entry must be a declared thing, or `rung` or `emp` (there is no `vocabulary.families` table). An entry with a
-separator is an exact two-segment name and validates either way. `groupsScoping` is a key of the service's `config`
-([configuration.md](configuration.md)): `off`, `report` (the default since v1.32.0) or `enforce`.
+| Validation | Rule |
+|---|---|
+| No declared vocabulary | value is `all` or a list of names |
+| Declared vocabulary | bare word must be a declared thing, `rung` or `emp` |
+| Entry with a separator | exact two-segment name; valid either way |
+| `groupsScoping` | service `config` key: `off`, `report` (default), `enforce` ([configuration](configuration.md)) |
 
 ## `groups_delimiter`
 
@@ -233,22 +208,18 @@ clients:
     groups_delimiter: "."   # devel:ssh:user -> devel.ssh.user
 ```
 
-Rewrites every `:` in each name of that audience's `groups` claim, after scoping has decided which groups survive. Empty
-(the default) leaves the claim as it is. It applies to the ID token, the access token, `/userinfo`, a token exchange and
-the console's own mint alike. Which row wins follows [`signing_alg`](#signing_alg): an ID token reads the client's
-value; an access token reads the resource's when a request named one, else the client's. It changes how a name is
-spelled, never which groups a caller carries: `requires` and the `groups:` override still use the real names.
+| Rule | Value |
+|---|---|
+| Effect | rewrites every `:` in each name of the audience's `groups` claim, after scoping |
+| Default | empty: claim unchanged |
+| Applies to | ID token, access token, `/userinfo`, token exchange, console mint |
+| Row read | as for [`signing_alg`](#signing_alg) |
+| Unchanged | which groups a caller carries; `requires` and `groups:` use real names |
+| Refused at load | empty; `:`; whitespace, `"` or `,`; a character in `[A-Za-z0-9-]` |
+| Refused at load | a delimiter that makes two declared groups the same string; the message names both |
+| Never use on | an audience whose tokens this installation reads back: the service's own two roles split on `:` |
 
-Refused at load:
-
-- empty, or the separator `:` itself;
-- whitespace, a quote (`"`) or a comma;
-- an ASCII letter, digit or `-` (exactly `[A-Za-z0-9-]`);
-- a delimiter that would make two of the policy's own declared groups the same string: every ordinary and non-grant
-  `groups` key and every wildcard expansion is rewritten and compared, and the refusal names both.
-
-Never point it at an audience whose tokens this installation reads back: the service's own two roles are parsed by
-splitting on `:`. Why it exists, and the ADRs: [explanation/policy.md](../../concepts/sluis/policy.md#why-a-groups-delimiter-exists).
+Rationale: [why a groups delimiter exists](../../concepts/sluis/policy.md#why-a-groups-delimiter-exists).
 
 ## `signing_alg`
 
@@ -259,52 +230,50 @@ resources:
   https://legacy.example/: { requires: [prod:k8s:admin], signing_alg: RS256 }
 ```
 
-Accepts exactly `RS256`, `ES256` or `ES384`; anything else is refused at load. A row without it gets the installation
-default (the algorithm of the signing key; ES384 in the chart). **The audience decides, not the client asking:**
+Accepts `RS256`, `ES256` or `ES384`; anything else is refused at load. A row without it gets the signing key's algorithm (ES384 in the chart).
 
 | Token | Row read |
 |---|---|
 | ID token | the client's |
-| access token | the resource a caller named, else the client |
-| token exchange (`sluisctl kube-token`, a CI job) | the target the exchange was granted, never the client presenting it |
-| Back-Channel Logout token | the client receiving it |
-| the console's own short-lived mint (`MintFor`) | that call's own target |
+| access token | the named resource, else the client |
+| token exchange (`sluisctl kube-token`, CI job) | the granted target, never the presenting client |
+| Back-Channel Logout token | the receiving client |
+| console mint (`MintFor`) | that call's target |
 
-A pin naming an algorithm the installation has no key for is refused at start, not at the first token that would need
-it. Keys for other algorithms are `signingKey.additional` ([configuration.md](configuration.md)). Why a pin exists:
-[explanation/policy.md](../../concepts/sluis/policy.md#why-an-audience-can-pin-a-signing-algorithm).
+A pin with no matching key is refused at start. Extra keys: `signingKey.additional` ([configuration](configuration.md)). Rationale: [why an audience can pin a signing algorithm](../../concepts/sluis/policy.md#why-an-audience-can-pin-a-signing-algorithm).
 
 ## Clients that describe themselves
 
 ```yaml
 client_documents:
-  origins: [clients.example]       # the hosts that may serve a document; empty (the default) is off
-  requires: [rung:engineering]     # who may use ANY such client; mandatory with origins
-  ttl_cap: 5m                      # optional, and worth setting
+  origins: [clients.example]       # hosts that may serve a document; empty (default) is off
+  requires: [rung:engineering]     # gate for ANY such client; mandatory with origins
+  ttl_cap: 5m                      # optional
   groups: [shop]                   # optional, as for a client row
 ```
 
-Such a client presents an **HTTPS URL** as its `client_id`; the URL serves a JSON document (an OAuth Client ID Metadata
-Document). sluis fetches it, validates it and treats the client as `public`. A declared client always wins: the policy
-is consulted first, and a document cannot displace one. A document's `kind`, `ttl_cap` and `requires` are not read.
-Every such client shares one gate, `client_documents.requires`.
+A client presents an HTTPS URL as `client_id`. sluis fetches its OAuth Client ID Metadata Document and treats the client as `public`.
 
-| Shape | Refused because |
+| Rule | Value |
 |---|---|
-| a document whose `client_id` is not the URL it was served from | the id a person sees, the id the audit records and the id the token is minted for would be a name its holder chose |
-| an origin that is not allow-listed | decided before anything is dialled, so the list also stops sluis fetching arbitrary URLs |
-| a response larger than 64 KiB, or slower than 10 seconds per attempt | the URL is caller-chosen |
-| a redirect to anywhere else | the document is served at its own id |
-| a document with no `redirect_uris` | there would be nowhere to deliver a code |
-| an `origins` entry with a scheme, a path or a `*` | an origin is a host |
-| `requires` or `ttl_cap` with no `origins`, or `origins` with no `requires` | a block somebody expected to apply |
+| Precedence | a declared client always wins |
+| Gate | one shared gate, `client_documents.requires` |
+| Ignored in a document | `kind`, `ttl_cap`, `requires` |
+| Cache | 10 min; one retry on timeout, reset or 5xx |
+| Stale-while-error | last good copy up to 1 h past expiry, transport failures only; warning logged each time |
+| Never served stale | refused answer: invalid document, redirect, 4xx, oversized body |
+| Display name | bounded, cursor-moving characters stripped; host shown when absent |
+| Audit | records the URL |
+| Discovery | `client_id_metadata_document_supported` in discovery and `/.well-known/oauth-authorization-server` only while an origin is named |
 
-A fetched document is honoured for ten minutes and then fetched again; a transient failure (a timeout, a reset, a 5xx)
-is retried once. **Stale-while-error is bounded and transport-only:** if a refresh of an already validated document
-fails that way, the last good copy is served for at most one hour past its expiry and a warning is logged each time. It
-is never served when the origin answered and the answer is refused (a document that no longer validates, a redirect, a
-4xx, an oversized body). The display name comes from the document, so it is bounded and stripped of anything that moves
-the cursor; with no name, the host is shown. The audit trail records the URL, which is the identity.
-`client_id_metadata_document_supported` appears in the discovery document, and in the RFC 8414 authorization server
-metadata at `/.well-known/oauth-authorization-server`, only while an origin is named. Why this is
-proportionate: [explanation/policy.md](../../concepts/sluis/policy.md#why-a-self-described-client-is-proportionate).
+| Refused | Limit |
+|---|---|
+| document `client_id` differs from its URL | |
+| origin not allow-listed | decided before any dial |
+| response over 64 KiB or slower than 10 s per attempt | |
+| redirect elsewhere | |
+| no `redirect_uris` | |
+| `origins` entry with a scheme, path or `*` | origins are hosts |
+| `requires` or `ttl_cap` without `origins`; `origins` without `requires` | |
+
+Rationale: [why a self-described client is proportionate](../../concepts/sluis/policy.md#why-a-self-described-client-is-proportionate).

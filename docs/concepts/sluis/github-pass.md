@@ -4,7 +4,7 @@ Each pass of the [GitHub controller](github-controller.md) makes an organisation
 policy's `github` table. This page is why it does what it does: what a pass reads, what it changes, what it holds for a
 person and what it never touches. To connect an organisation see
 [Connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md); for the Secrets and records see
-[GitHub roster reference](../../reference/sluis/github-roster.md).
+[GitHub organisation reference](../../reference/sluis/github-roster.md).
 
 ## What it does every pass
 
