@@ -9,7 +9,7 @@ credentials under one policy file, and audit keeps a tamper-evident record of wh
 | Helm charts `sluis`, `audit` | `oci://ghcr.io/truvity/charts/sluis`, `oci://ghcr.io/truvity/charts/audit` |
 | `sluisctl`, `audit` CLI, Lambda zips | the [GitHub release](https://github.com/truvity/sluis/releases) |
 | Go modules (root, `storage`, `audit`, Pulumi libraries) | `github.com/truvity/sluis[/<dir>]`, tagged with the release |
-| `@truvity/sluis`, `@truvity/audit` (`@truvity/audit-react` is being split out, PR #429) | GitHub Packages |
+| `@truvity/sluis`, `@truvity/audit`, `@truvity/audit-react` | GitHub Packages |
 | GitHub Action | `truvity/sluis@<commit>` |
 
 Every artifact and its location: [artifacts](docs/reference/artifacts.md). Docs site: <https://truvity.github.io/sluis/>.
