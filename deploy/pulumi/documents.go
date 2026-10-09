@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -71,7 +72,7 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 		return nil, err
 	}
 	if !a.AllowEndpoints {
-		if at := endpointIn(doc, ""); at != "" {
+		if at := endpointIn(doc, nil); at != "" {
 			return nil, fmt.Errorf("sluispulumi: LambdaArgs.Config names an endpoint (%s): the function reaches AWS at its own "+
 				"endpoints; AllowEndpoints is for a test against LocalStack", at)
 		}
@@ -112,8 +113,9 @@ func renderDocuments(a *LambdaArgs) (map[string]string, error) {
 // the renderer knows: `instance` and the `keys:` block (LambdaArgs.Keys), and
 // `ports.blob` for external blobs (StorageArgs.Blobs). It reports whether it
 // wrote anything. A document that already names one of them is refused: the
-// library owns it. The external endpoint is the library's own and is the one
-// endpoint a document may carry without AllowEndpoints.
+// library owns it. The external endpoint is the library's own, and with the
+// Cloudflare presets' (see [clientEndpoint]) it is what a document may carry
+// without AllowEndpoints.
 func ownRuntime(doc map[string]any, a *LambdaArgs) (bool, error) {
 	added := false
 	if a.Keys != nil {
@@ -524,17 +526,15 @@ func validInstance(s string) bool {
 	return instancePattern.MatchString(s) && s != "private" && s != "export"
 }
 
-// endpointIn is the path of the first `endpoint` key under v, or "".
-func endpointIn(v any, at string) string {
+// endpointIn is the dotted path of the first `endpoint` key under v that the
+// function would call, or "": a [clientEndpoint] is not one.
+func endpointIn(v any, at []string) string {
 	switch t := v.(type) {
 	case map[string]any:
 		for k, x := range t {
-			p := k
-			if at != "" {
-				p = at + "." + k
-			}
-			if s, ok := x.(string); k == "endpoint" && ok && s != "" {
-				return p
+			p := append(slices.Clip(at), k)
+			if s, ok := x.(string); k == "endpoint" && ok && s != "" && !clientEndpoint(p) {
+				return strings.Join(p, ".")
 			}
 			if found := endpointIn(x, p); found != "" {
 				return found
@@ -542,12 +542,28 @@ func endpointIn(v any, at string) string {
 		}
 	case []any:
 		for i, x := range t {
-			if found := endpointIn(x, fmt.Sprintf("%s[%d]", at, i)); found != "" {
+			p := slices.Clone(at)
+			if n := len(p); n > 0 {
+				p[n-1] = fmt.Sprintf("%s[%d]", p[n-1], i)
+			} else {
+				p = []string{fmt.Sprintf("[%d]", i)}
+			}
+			if found := endpointIn(x, p); found != "" {
 				return found
 			}
 		}
 	}
 	return ""
+}
+
+// clientEndpoint reports whether path is an endpoint the documents hand to
+// clients rather than one the function calls: `cloudflare.presets.<name>.endpoint`,
+// the R2 S3 endpoint an R2 preset's credentials are for (ADR 0070). The
+// function stores it beside the minted credentials and never sends a request
+// to it, so it cannot point the function at forged secrets or State. Nothing
+// else is: every other `endpoint` stays behind AllowEndpoints.
+func clientEndpoint(path []string) bool {
+	return len(path) == 4 && path[0] == "cloudflare" && path[1] == "presets" && path[3] == "endpoint"
 }
 
 // MinPackageVersion is the oldest release this library deploys: the first that
