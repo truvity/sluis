@@ -207,10 +207,10 @@ func wire(err error) error {
 //
 // It is the searchable projection of a record, not the record: the index keeps
 // the columns a query can name, and the rest of what was written stays in the
-// archive. A caller who needs the whole thing asks Get, which reads the line
-// the provenance points at. Returning a partial record from a search and a
-// whole one from a get is the honest shape — the alternative is reading an
-// object per row of every page.
+// archive. Get returns the same projection, with the provenance that locates
+// the archive line; it does not read that line. A caller who needs the whole
+// record follows the provenance to the archive. Reading an object per row of
+// every page is the cost this shape avoids.
 func asRecord(r index.Row) *auditv1.Record {
 	out := &auditv1.Record{
 		Id: r.ID, TenantId: r.TenantID, Source: r.Source, Action: r.Action,

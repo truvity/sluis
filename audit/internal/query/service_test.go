@@ -522,3 +522,52 @@ func TestAGetNamesTheSealThatCoversItsHour(t *testing.T) {
 		t.Fatal("a seal that nobody verified is reported as verified")
 	}
 }
+
+// A sort that leads with recorded_at is the tail's cursor and needs the tail
+// grant; a search grant alone is refused.
+func TestATailNeedsTheTailOperation(t *testing.T) {
+	tail := &auditv1.SearchRequest{
+		Profile: "security", Limit: 10,
+		Sort: []*auditv1.Sort{{Field: auditv1.Sort_FIELD_RECORDED_AT}},
+	}
+	s, _ := service(t, fullGrant())
+	if _, _, err := s.Search(context.Background(), caller(), tail); !errors.Is(err, auth.ErrDenied) {
+		t.Fatalf("a tail without the tail operation: %v, want denied", err)
+	}
+
+	g := fullGrant()
+	g.Operations = append(g.Operations, auth.Tail)
+	s, _ = service(t, g)
+	if _, _, err := s.Search(context.Background(), caller(), tail); err != nil {
+		t.Fatalf("a tail with the tail operation: %v", err)
+	}
+	// A plain search by another field stays a search.
+	s, _ = service(t, fullGrant())
+	if _, _, err := s.Search(context.Background(), caller(), &auditv1.SearchRequest{
+		Profile: "security", Limit: 10,
+		Sort: []*auditv1.Sort{{Field: auditv1.Sort_FIELD_OCCURRED_AT}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Free text is reserved; a searcher that has none refuses it.
+func TestFreeTextIsRefusedWhereNotOffered(t *testing.T) {
+	s, _ := service(t, fullGrant())
+	_, _, err := s.Search(context.Background(), caller(),
+		&auditv1.SearchRequest{Profile: "security", Q: "alice"})
+	if !errors.Is(err, query.ErrNotOffered) {
+		t.Fatalf("free text: %v, want not offered", err)
+	}
+}
+
+// The limit ceiling does not depend on the searcher.
+func TestTheLimitCeilingIsTheServices(t *testing.T) {
+	q, err := query.Compile(&auditv1.SearchRequest{Profile: "security", Limit: 5000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Limit != 1000 {
+		t.Fatalf("limit %d, want the ceiling of 1000", q.Limit)
+	}
+}

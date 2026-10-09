@@ -177,6 +177,13 @@ function Trail({ profiles, profile: initial, query = "", facets = ["action", "ou
               {records.map((r) => (
                 <RecordRow key={r.id} record={r} profile={profile} narrow={narrow} permalink={permalink} />
               ))}
+              {search.loading && (
+                <TableRow>
+                  <TableCell colSpan={3}>
+                    <Typography color="text.secondary">Loading…</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
               {!search.loading && records.length === 0 && !search.error && (
                 <TableRow>
                   <TableCell colSpan={3}>
@@ -211,6 +218,17 @@ function facetQualifier(field: string): string {
   }
 }
 
+// offset is the viewer's UTC offset at that moment, "UTC+02:00", so a time
+// read off the page can be compared with one from another zone.
+function offset(d: Date): string {
+  const minutes = -d.getTimezoneOffset();
+  if (minutes === 0) return "UTC";
+  const abs = Math.abs(minutes);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `UTC${minutes < 0 ? "-" : "+"}${hh}:${mm}`;
+}
+
 function explain(code: string, message: string): string {
   switch (code) {
     case "permission_denied":
@@ -237,11 +255,24 @@ function RecordRow({ record: r, profile, narrow, permalink }: RecordRowProps) {
   const when = r.occurredAt ? timestampDate(r.occurredAt) : undefined;
   return (
     <Fragment>
-      <TableRow hover onClick={() => setOpen(!open)} sx={{ cursor: "pointer", "& > td": { borderBottom: open ? "none" : undefined } }}>
+      <TableRow
+        hover
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen(!open);
+          }
+        }}
+        sx={{ cursor: "pointer", "& > td": { borderBottom: open ? "none" : undefined } }}
+      >
         <TableCell>
           {when && (
             <Tooltip title={when.toISOString()}>
-              <span>{when.toLocaleString()}</span>
+              <span>{`${when.toLocaleString()} ${offset(when)}`}</span>
             </Tooltip>
           )}
         </TableCell>
@@ -296,8 +327,11 @@ function Detail({ record: r, profile, narrow, permalink }: RecordRowProps) {
         {provenance?.verifiedAt ? (
           <Chip size="small" color="success" label={`Verified ${timestampDate(provenance.verifiedAt).toLocaleString()}`}
             title={`Covered by digest ${provenance.digestId}`} />
+        ) : provenance?.digestId ? (
+          <Chip size="small" color="info" label="Sealed, not yet verified"
+            title={`Covered by digest ${provenance.digestId}, which nobody has checked yet`} />
         ) : provenance ? (
-          <Chip size="small" label="Not yet covered by a verified digest" title={provenance.objectKey} />
+          <Chip size="small" label="Not sealed yet" title={provenance.objectKey} />
         ) : null}
         {permalink && (
           <Button size="small" onClick={() => void navigator.clipboard?.writeText(permalink(profile, r.id))}>

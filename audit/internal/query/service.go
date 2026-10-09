@@ -131,6 +131,19 @@ func (s *Service) Search(
 	if err != nil {
 		return index.Page{}, g, err
 	}
+	// `q` is reserved for free text. A searcher that cannot answer it refuses
+	// it, rather than return the unfiltered page as though it had.
+	if req.GetQ() != "" && !s.Searcher.Capabilities().FreeText {
+		return index.Page{}, g, fmt.Errorf(
+			"%w: free text (q) is not offered by this deployment's searcher", ErrNotOffered)
+	}
+	// A sort that leads with recorded_at is the tail's cursor, so it needs the
+	// tail operation, not only search.
+	if len(compiled.Sort) > 0 && compiled.Sort[0].Field == index.SortRecordedAt {
+		if _, err := s.allow(ctx, p, req.GetProfile(), auth.Tail); err != nil {
+			return index.Page{}, g, err
+		}
+	}
 	q := s.narrow(compiled, g)
 
 	// The cursor is bound to this question, narrowing included, so one issued

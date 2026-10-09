@@ -163,7 +163,7 @@ returns a signed link that expires:
 64-bit integers (`count`, `line`, `records`) are strings in JSON, as proto3
 JSON maps them. Limits, enforced by the
 service rather than by whichever searcher is configured: `filter` 4 terms,
-`sort` 4, `in` 100 values, `limit` ceiling 1000, and an export size cap. A
+`sort` 4, `in` 100 values, a `limit` ceiling of 1000 (a larger value is cut to it), and an export size cap. A
 grant's window narrows a wider request rather than refusing it.
 
 ## Access

@@ -51,6 +51,8 @@ export interface FakeOptions {
   deny?: Code;
   /** Records the fake says a verified digest covers. */
   verified?: string[];
+  /** Records covered by a digest nobody has verified yet. */
+  sealed?: string[];
   /** The profiles access() says the caller may search; default every profile a record is in. */
   readable?: string[];
 }
@@ -100,11 +102,13 @@ export function fakeQueryService(options: FakeOptions = {}): Fake {
         const record = records.find((r) => r.id === req.id && r.profile === req.profile);
         if (!record) throw new ConnectError("no such record", Code.NotFound);
         const verified = options.verified?.includes(req.id);
+        const sealed = options.sealed?.includes(req.id);
         return {
           record,
           provenance: {
             objectKey: `profile=${req.profile}/x.ndjson.zst`,
             line: 1n,
+            ...(sealed && !verified ? { digestId: "digest/profile=security/hour=10.json" } : {}),
             ...(verified ? { digestId: "digest/profile=security/hour=10.json", verifiedAt: timestampFromDate(new Date()) } : {}),
           },
         };

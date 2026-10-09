@@ -40,8 +40,9 @@ const maxConjunctions = 4
 // enforced here rather than left to a searcher, so that the answer to "is this
 // too much" does not depend on which one is configured.
 const (
-	maxSort = 4
-	maxIn   = 100
+	maxSort  = 4
+	maxIn    = 100
+	maxLimit = 1000
 )
 
 // Compile turns a request into a closed query.
@@ -63,7 +64,13 @@ func Compile(req *auditv1.SearchRequest) (index.Query, error) {
 			"%w: %d sort terms, and %d is the most", ErrTooMuch, len(req.GetSort()), maxSort)
 	}
 
-	q := index.Query{Profile: req.GetProfile(), Limit: int(req.GetLimit())}
+	// The ceiling is the service's, for every searcher: a page larger than it
+	// is cut to it, as the Postgres searcher always did.
+	limit := int(req.GetLimit())
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+	q := index.Query{Profile: req.GetProfile(), Limit: limit}
 	for _, f := range req.GetFilter() {
 		c, err := conjunction(f)
 		if err != nil {
