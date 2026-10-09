@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **audit: the chart and the binaries are held to each way a preset's credentials are given.** A chart test renders an install with every component for each credential mode (AWS, `credentials`, `credentials_preset`, `credentials_ref` with `archive.sluisDir`, and with `archive.sluisRoot`). It loads each rendered configuration with its binary's own loader and plans the archive of every process that opens one. It also holds the rotated credential's mount to a directory on exactly those processes. A notary before v1.74.0-rc.4 refuses the rendered file with `archive: additional properties 'sluisDir' not allowed`; the test fails the same way should a schema drop the field. The R2 guide says so, and the configuration reference names the processes that take `archive`.
+
 ## v1.74.0-rc.4
 
 ### Added

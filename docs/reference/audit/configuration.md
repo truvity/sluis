@@ -133,7 +133,7 @@ component contract (`postgres.json`, `bucket.json`, `listen.json`,
 region and endpoint of each install preset -- and the Object Lock it is written under (compliance for the
 `attested` preset, none for the others) are the **deployment document's `presets`**
 ([0068](../../decisions/0068-storage-is-configured-per-preset.md), [profiles](profiles.md#presets-and-their-storage)).
-The process names the deployment (`deployment`) and may carry:
+The processes that open the archive take it: `audit-writer` (mode `writer`), the writer Lambda, `audit-query`, `audit-observe`, `audit-notary` and `audit verify`. The receiver, `audit migrate`, `audit purge` and `audit clock-sync` open no archive. The process names the deployment (`deployment`) and may carry:
 
 | key | type | default | meaning |
 |---|---|---|---|

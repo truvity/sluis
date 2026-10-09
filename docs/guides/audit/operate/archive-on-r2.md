@@ -62,18 +62,20 @@ Store the archive on Cloudflare R2 or another store that speaks the S3 API at it
    ```
 
    ```yaml
-   writer:            # and observe, query, jobs.* that read the archive
+   writer:            # and observe, query, jobs.notary, jobs.verify
      config:
        archive: {sluisDir: /etc/audit/sluis}
      secretMounts:
        - {secretName: audit-r2, mountPath: /etc/audit/sluis/external/cloudflare}
    ```
 
-   Keep `refreshInterval` plus the kubelet's sync well under the sluis preset's `lifetime - rotation`. Never mount it with `subPath`, which does not follow the rotation.
+   Keep `refreshInterval` plus the kubelet's sync well under the sluis preset's `lifetime - rotation`. A `subPath` mount does not follow the rotation.
+
+   Binaries before v1.74.0-rc.4 refuse `sluisDir`.
 
 ## Static credentials instead
 
-Without sluis, write a token's pair once as a SecureString, outside Pulumi:
+Without sluis, write a token's pair as a SecureString, outside Pulumi:
 
 ```sh
 aws ssm put-parameter --type SecureString \
@@ -101,11 +103,11 @@ presets:
       lifetime: 15m
 ```
 
-The minter document, the refused prototypes and the minted-token record are in [profiles](../../../reference/audit/profiles.md).
+The minter document and the refused prototypes are in [profiles](../../../reference/audit/profiles.md).
 
 ## Other store settings
 
-Set `path_style: true` when the certificate does not cover a bucket subdomain, and `archive.ca` for a private CA. Set `region` to what the store documents, often `auto`.
+Set `path_style: true` when the certificate does not cover a bucket subdomain, and `archive.ca` for a private CA. Set `region` as the store documents, often `auto`.
 
 ## Verify
 
