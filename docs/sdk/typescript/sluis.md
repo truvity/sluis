@@ -1,7 +1,7 @@
 # TypeScript package `@truvity/sluis`
 
 **Status:** built. Three entry points: the root (`fetchIdentity()` and the `Identity` type), `/react` (`useIdentity()`,
-`<UserBadge/>`) and `/server` (a Node verifier, below). The Go counterpart is [go-module.md](go-module.md).
+`<UserBadge/>`) and `/server` (a Node verifier, below). The Go counterpart is [go-module.md](../go/sluis.md).
 
 What a console needs from the identity it is behind: who the caller is,
 what that gets them, and the way out. The browser half parses no token —
@@ -21,24 +21,7 @@ workflow. The package is the repository root — `ts/package.json` is the
 inner build and is not what anybody installs — which is why the import
 path has no `-ts` in it.
 
-GitHub's npm registry needs a token to install, even a public package:
-one with `read:packages` (a job's `GITHUB_TOKEN` with
-`packages: read`, or `gh auth token` after `gh auth refresh -s
-read:packages` on a laptop). Point the `@truvity` scope at it:
-
-```yaml
-# .yarnrc.yml (yarn 4)
-npmScopes:
-  truvity:
-    npmRegistryServer: "https://npm.pkg.github.com"
-    npmAuthToken: "${GITHUB_PACKAGES_TOKEN}"
-```
-
-```ini
-# .npmrc (npm)
-@truvity:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
+The registry scope and token are set once, in [the SDK overview](../README.md#installing-from-github-packages).
 
 ```sh
 yarn add @truvity/sluis@^1.8.0
@@ -92,7 +75,7 @@ interface Identity {
 ```
 
 Those are the fields `/.access/whoami` serves; the endpoint is specified once, in
-[contracts](contracts.md#the-whoami-endpoint), and the console's own answer adds its roles and scopes. If it is not
+[contracts](../../reference/contracts.md#the-whoami-endpoint), and the console's own answer adds its roles and scopes. If it is not
 served, the UI renders as signed out. `useIdentity()` asks once on mount
 and aborts on unmount: the answer changes when a session ends, and that is
 something the application discovers on its next call rather than something

@@ -52,7 +52,7 @@ Tasks and runbooks. A runbook has one template: purpose, preconditions, before y
 
 | area | pages |
 |---|---|
-| Configuration | [the file and shared blocks](reference/configuration.md), [the writer](reference/configuration-writer.md), [observe and query](reference/configuration-observe-query.md), [the jobs](reference/configuration-jobs.md), [chart values](reference/chart-values.md), [the emitter library](reference/emitter-library.md) |
+| Configuration | [the file and shared blocks](reference/configuration.md), [the writer](reference/configuration-writer.md), [observe and query](reference/configuration-observe-query.md), [the jobs](reference/configuration-jobs.md), [chart values](reference/chart-values.md), [the emitter library](../sdk/go/audit-emitter.md) |
 | Contracts | [record](reference/record.md), [catalogue](reference/catalogue.md), [extension points](reference/extension-points.md), [API](reference/api.md), [bucket contract](reference/bucket-contract.md) |
 | Profiles and verification | [profiles](reference/profiles.md), [`audit verify`](reference/verify-command.md), [archive prefixes and IAM](reference/archive-prefixes-and-iam.md) |
 | Platforms | [AWS Pulumi library](reference/aws-pulumi-library.md), [capabilities](reference/capabilities.md), [telemetry](reference/telemetry.md), [repository layout](reference/repository-layout.md) |

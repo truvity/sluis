@@ -49,7 +49,7 @@ reader is doing; pick the column that matches. Pages marked *planned* describe w
   [capabilities](../reference/capabilities.md), [Lambda](../reference/lambda.md),
   [Pulumi library](../reference/pulumi-library.md), [storage layout](../reference/storage-layout.md)
 - Tools: [sluisctl](../reference/sluisctl.md), [contracts](../reference/contracts.md),
-  [Go module](../reference/go-module.md), [TypeScript](../reference/typescript.md),
+  [Go module](../sdk/go/sluis.md), [TypeScript](../sdk/typescript/sluis.md),
   [audit actions](../reference/audit-actions.md), [telemetry and alerts](../reference/telemetry.md)
 
 ## Explanation

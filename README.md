@@ -90,7 +90,7 @@ Every artifact is stamped by one tag, `vX.Y.Z`; pin one version of this reposito
 | `sluis-audit-catalogue_<version>.tar.gz` | the release's assets | the audit catalogue `roster.yaml` with every schema it references: the audit writer refuses to start without them |
 | `checksums.txt` | the release's assets | SHA-256 of every archive above |
 | Pulumi library | `github.com/truvity/sluis/deploy/pulumi` (tag `deploy/pulumi/vX.Y.Z`) | AWS infrastructure and the Lambda: [Pulumi library](docs/reference/pulumi-library.md) |
-| Go module | `github.com/truvity/sluis` | services and consoles in Go: verify a bearer, read the caller's groups ([Go module](docs/reference/go-module.md)) |
+| Go module | `github.com/truvity/sluis` | services and consoles in Go: verify a bearer, read the caller's groups ([Go module](docs/sdk/go/sluis.md)) |
 | TypeScript package | `@truvity/sluis` on GitHub Packages | console UIs: `useIdentity()` over `/.access/whoami`; Node services: verify a bearer |
 | GitHub Action | `truvity/sluis@<commit>` | workflows: one exchange, then a kubeconfig, AWS profiles, or a GitHub App token |
 | an Entra directory backend | none | planned: a second corporate directory behind the same workspace record |
