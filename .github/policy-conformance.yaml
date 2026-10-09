@@ -1,4 +1,6 @@
 exempt:
+  C5:
+    reason: "for the v1.74.0 release PR only: the latest tag is v1.74.0-rc.4, whose notes sit under ## v1.74.0 as ### v1.74.0-rc.4, because the conformance comparator orders v1.74.0 below its pre-releases; remove once v1.74.0 is tagged"
   C13:
     - checks: [region]
       paths: [audit/internal/s3test/**]
