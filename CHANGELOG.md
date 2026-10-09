@@ -24,6 +24,8 @@
 
 - **`cmd/sluis` builds for Lambda with `-tags lambda,lambda.norpc`.** The Lambda build carries no Kubernetes, NATS or Valkey storage, and `sluis migrate` answers that it is not part of that build. The untagged build is the Kubernetes one and is unchanged. `cmd/sluis/imports_test.go` holds each build to its platform's adapters, as `cmd/sluis-lambda` already did for its own. `cmd/sluis-lambda` stays the released Lambda entry for now.
 
+- **`sluis github` and `sluis slack` are single-module processes with a `tick <target>` form.** Each runs its controller's loop without the "deprecated" warning that `sluis controller <kind>` keeps, and `sluis github tick <target>` ticks once, as `sluis tick github <target>` does. The roles are `internal/module` implementations (`Run`, `Tick`) that the commands call; `console`, `cloudflare`, `google` and `backup` are placeholders that answer `not yet split`. The existing commands run the same code and are unchanged.
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
