@@ -313,32 +313,10 @@ func mountOrTransit(m string) string {
 // OpenKeysFrom opens the key provider the configuration names. It is nil where
 // a deployment runs without one, which is the default.
 func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets, with ...KeyOption) (keys.Provider, error) {
-	switch {
-	case !k.Enabled():
+	if !k.Enabled() {
 		return nil, nil
-	case k.Storage():
-		return OpenPortProvider(ctx, k, secrets, with...)
-	case k.IsLocal():
-		root, err := os.ReadFile(k.Local.RootFile)
-		if err != nil {
-			return nil, fmt.Errorf("keys.local.rootFile: %w", err)
-		}
-		return keys.NewLocal(root, k.Local.Dir)
-	default:
-		t := k.Transit
-		login, token, tokenFile, err := openBAOCredentials(ctx, t.OpenBAO, secrets)
-		if err != nil {
-			return nil, err
-		}
-		prefix := t.Prefix
-		if prefix == "" {
-			prefix = "audit"
-		}
-		return keys.NewTransit(ctx, &keys.Transit{
-			Address: t.OpenBAO.Address, Mount: mountOrTransit(t.OpenBAO.Mount), Namespace: t.OpenBAO.Namespace,
-			CAFile: t.OpenBAO.CAFile, Prefix: prefix, Login: login, Token: token, TokenFile: tokenFile,
-		})
 	}
+	return OpenPortProvider(ctx, k, secrets, with...)
 }
 
 // OpenSignerFrom opens the key the configuration says seals are signed with.
@@ -348,7 +326,7 @@ func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets, 
 // With a keys block in the adapter shape, the seal purpose names the key and
 // the port opens it; the signer block is the first releases' shape.
 func OpenSignerFrom(ctx context.Context, s config.Signer, k *config.Keys, secrets *config.Secrets) (keys.Signer, error) {
-	if k != nil && k.Storage() && k.Seal != nil {
+	if k != nil && k.Seal != nil {
 		set, name, err := OpenKeyPort(ctx, k, secrets)
 		if err != nil {
 			return nil, err
@@ -365,20 +343,10 @@ func OpenSignerFrom(ctx context.Context, s config.Signer, k *config.Keys, secret
 			cfg.Region = s.KMS.Region
 		}
 		return &keys.KMSSigner{Client: kms.NewFromConfig(cfg), Key: s.KMS.Key}, nil
-	case s.Transit != nil:
-		login, token, tokenFile, err := openBAOCredentials(ctx, s.Transit.OpenBAO, secrets)
-		if err != nil {
-			return nil, err
-		}
-		o := s.Transit.OpenBAO
-		return keys.NewTransitSigner(ctx, &keys.TransitSigner{
-			Address: o.Address, Mount: mountOrTransit(o.Mount), Namespace: o.Namespace, CAFile: o.CAFile,
-			Key: s.Transit.Key, Login: login, Token: token, TokenFile: tokenFile,
-		})
 	case s.File != nil:
 		return keys.LoadLocalSignerFile("", s.File.Path)
 	}
-	return nil, fmt.Errorf("signer: name one of kms, transit and file")
+	return nil, fmt.Errorf("signer: name one of kms and file")
 }
 
 // SinkFrom is a client to the writer the configuration names, presenting the

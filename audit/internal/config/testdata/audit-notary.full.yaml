@@ -7,18 +7,19 @@ archive:
   stateRoot: /audit/main
   ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit-archive
-signer:
-  transit:
-    key: audit-seal
-    openbao:
-      address: https://openbao.example.test:8200
-      mount: transit
-      namespace: devel
-      caFile: /etc/audit/trust/ca.crt
-      login:
-        mount: jwt-devel
-        role: audit-notary
-        jwtFile: /var/run/openbao/token
+keys:
+  adapter: transit
+  instance: audit
+  seal: audit-seal
+  openbao:
+    address: https://openbao.example.test:8200
+    mount: transit
+    namespace: devel
+    caFile: /etc/audit/trust/ca.crt
+    login:
+      mount: jwt-devel
+      role: audit-notary
+      jwtFile: /var/run/openbao/token
 profiles:
   - security
   - billing

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/truvity/sluis/audit/index"
-	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/query"
 	"github.com/truvity/sluis/audit/sdk/auth"
 	"github.com/truvity/sluis/audit/sdk/sink"
@@ -15,10 +15,7 @@ import (
 // was asking, or recorded no reads, or answered without grants, would be the
 // failure it exists to prevent.
 func TestNewRefusesAnIncompleteService(t *testing.T) {
-	provider, err := keys.NewLocal(nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	provider := keystest.New(t)
 	anyone := auth.AuthenticatorFunc(nil)
 	full := query.Config{
 		Searcher: index.NewMemory(), Authenticator: anyone,

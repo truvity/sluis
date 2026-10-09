@@ -2,7 +2,8 @@
 writer:
   config:
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example.test:8200
+      adapter: transit
+      instance: audit
+      pseudonym: audit-pseudonym
+      openbao:
+        address: https://openbao.example.test:8200

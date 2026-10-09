@@ -17,7 +17,7 @@ import (
 	"github.com/truvity/sluis/audit/index"
 	"github.com/truvity/sluis/audit/index/s3scan"
 	"github.com/truvity/sluis/audit/internal/cli"
-	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/query"
 	"github.com/truvity/sluis/audit/sdk/auth"
@@ -38,10 +38,7 @@ func deployment(t *testing.T, searcher func(store.Store) index.Searcher) string 
 	t.Helper()
 	ctx := context.Background()
 	archive := storetest.NewMemory()
-	provider, err := keys.NewLocal(nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	provider := keystest.New(t)
 	d, err := profile.ParseDeployment([]byte("profiles:\n  security:\n    frameworks: [security]\n"))
 	if err != nil {
 		t.Fatal(err)

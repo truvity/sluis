@@ -9,7 +9,7 @@ Audit uses two kinds of key. Pseudonymisation keys are off by default. Signing k
 
 ## Pseudonymisation keys
 
-No keys is the default (`keys` unset, or the deprecated `keys.provider: none`): no key directory, no `identity/` prefix, and resolve refused as unimplemented. Such a deployment declares `external_identifiers_are_opaque` and skips the rest of this section.
+No keys is the default (`keys` unset): no key directory, no `identity/` prefix, and resolve refused as unimplemented. Such a deployment declares `external_identifiers_are_opaque` and skips the rest of this section.
 
 Choose a provider only if the contract demands erasure of an identifier from a locked archive. The choice is permanent: moving keys means a new identity for every person.
 
@@ -24,11 +24,11 @@ For resolve, the writer also seals the identifier with AES-GCM under a sealing k
 | provider | where the key lives | use it for |
 |---|---|---|
 | `none` | no keys | anything that need not crypto-shred |
-| `local` | 32-byte data keys wrapped under a 32-byte root in a Secret, as files in `keys.local.dir` | tests, a laptop, one instance |
-| `transit` | a key per tenant and purpose inside an OpenBAO or Vault transit engine, named `<prefix>.<purpose>.<tenant>` | more than one replica, or secrets already in OpenBAO |
+| `local` | 32-byte data keys wrapped under a 32-byte root in a Secret, kept by the local adapter | tests, a laptop, one instance |
+| `transit` | one key per purpose inside an OpenBAO or Vault transit engine | more than one replica, or secrets already in OpenBAO |
 | `kms` (`keys.adapter`) | data keys from `GenerateDataKey` under one customer-managed KMS key, wrapped copies in the index database or SSM (`keys.state`) | AWS without OpenBAO |
 
-With `local`, set the root with `keys.local.rootFile`. Two writers sharing a directory agree, because creation is create-once via link. Two writers with separate directories do not, and the writer refuses that. A replica count above one without `keys.local.dir` is refused. The chart's `keysVolume` holds the directory.
+With `local`, set the root with `keys.rootFile`; the adapter is for tests and a single instance.
 
 With `transit`, the writer creates each key on first use and signs in with the pod's projected service-account token on a JWT auth mount. Key material never leaves the engine. Policy scopes each role:
 

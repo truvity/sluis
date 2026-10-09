@@ -16,7 +16,7 @@
 //	w, err := writer.Open(ctx, writer.Config{
 //		Archive:  archive,  // an s3store.Store on the Object-Locked bucket
 //		Profiles: profiles, // framework profile.ParseDeployment(doc) then Compose
-//		Keys:     provider, // keys.NewTransit or keys.NewLocal
+//		Keys:     provider, // keys.NewPortProvider
 //	})
 //	defer w.Close(ctx)
 package writer
@@ -74,7 +74,7 @@ type Config struct {
 	// renders.
 	Profiles map[string]*profile.Profile
 	// Keys pseudonymise identifiers. With a provider that can also seal
-	// (keys.Transit, keys.Local), the identity behind each pseudonym is kept
+	// (keys.PortProvider), the identity behind each pseudonym is kept
 	// sealed under the same key, for resolve; see ForgetIdentities.
 	//
 	// Optional, and nil is the default a deployment should have to argue
@@ -212,20 +212,6 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 		if dedupe, err = postgres.NewDedupe(c.Database, longestDedupe(c.Profiles)); err != nil {
 			return nil, err
 		}
-		// Every writer of a deployment must hold the same key directory: one
-		// with its own mints its own keys, and the same person gets a second
-		// pseudonym on it. The database is the one place all replicas can
-		// compare, so each binds its directory there and one that brings
-		// another is refused.
-		if l, ok := c.Keys.(*keys.Local); ok && l.Dir != "" {
-			id, err := l.DirectoryID()
-			if err != nil {
-				return nil, err
-			}
-			if err := postgres.BindKeyDirectory(ctx, c.Database, id); err != nil {
-				return nil, err
-			}
-		}
 	}
 	if err := inner.GuardReplicas(replicas, dedupe); err != nil {
 		return nil, err
@@ -236,12 +222,6 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	if err := inner.GuardHashes(c.Catalogues, c.Keys != nil); err != nil {
 		return nil, err
 	}
-	if l, ok := c.Keys.(*keys.Local); ok && replicas > 1 && l.Dir == "" {
-		return nil, errors.New(
-			"writer: more than one replica with keys held only in memory: each replica would mint " +
-				"its own keys and the same person would get a different pseudonym on each")
-	}
-
 	longest := longestRetention(c.Profiles)
 	keep := func(at time.Time) time.Time { return at.Add(longest) }
 

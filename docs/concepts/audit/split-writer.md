@@ -18,7 +18,7 @@ The deployment creates the stream, and the writer refuses to start without it. S
 
 5. **Split** into one copy per profile the action belongs to, with the profile's allowed fields and classes.
 
-6. **Treat identities** per profile: clear, pseudonym (HMAC under the tenant-and-purpose key), scoped or omit. Apply `x-audit-sensitive`. With `keys.provider: none`, the default, there is no pseudonym treatment. Declare `external_identifiers_are_opaque` instead.
+6. **Treat identities** per profile: clear, pseudonym (HMAC under the tenant-and-purpose key), scoped or omit. Apply `x-audit-sensitive`. With no `keys` block, the default, there is no pseudonym treatment. Declare `external_identifiers_are_opaque` instead.
 
 7. **Buffer** per profile and tenant. Roll on an interval of one to five minutes or on size before compression. A roll is one ingest batch keyed by the hour it was taken. Retention is fixed when an object opens, so every copy keeps at least the oldest's period.
 

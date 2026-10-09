@@ -4,7 +4,7 @@ Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transi
 
 ## Before you start
 
-- Use this only when you must crypto-shred and chose `transit`. The default is `keys.provider: none`. See [key custody](../../../concepts/audit/key-custody.md).
+- Use this only when you must crypto-shred and chose `transit`. The default is no `keys` block. See [key custody](../../../concepts/audit/key-custody.md).
 
 - You administer an OpenBao namespace that can reach the cluster's service-account issuer.
 
@@ -16,8 +16,8 @@ Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transi
 
    | component | service account (chart default) | role set in | policy |
    |---|---|---|---|
-   | writer | `<release>` | `writer.config.keys.transit.openbao.login.role` | writer |
-   | query service, if it resolves | `<release>-query` | `query.config.keys.transit.openbao.login.role` | resolve |
+   | writer | `<release>` | `writer.config.keys.openbao.login.role` | writer |
+   | query service, if it resolves | `<release>-query` | `query.config.keys.openbao.login.role` | resolve |
 
    The writer creates one key per purpose and tenant, named `<prefix>.<purpose>.<tenant>`, for example `audit.security.acme`. A purpose is a profile name with no dot.
 
@@ -47,16 +47,16 @@ Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transi
 
    ```yaml
    keys:
-     provider: transit
-     transit:
-       prefix: audit
-       openbao:
-         address: https://openbao.example.com:8200
-         mount: transit
-         login:
-           mount: jwt-devel
-           role: audit-writer
-           jwtFile: /var/run/openbao/token
+     adapter: transit
+     instance: audit
+     pseudonym: audit-pseudonym
+     openbao:
+       address: https://openbao.example.com:8200
+       mount: transit
+       login:
+         mount: jwt-devel
+         role: audit-writer
+         jwtFile: /var/run/openbao/token
    ```
 
    For an engine without JWT logins, set one of `tokenFile` or `tokenSecret` instead of `jwtFile`. `audit key destroy` reads `BAO_ADDR`, `BAO_NAMESPACE`, `BAO_CACERT` and `BAO_TOKEN`, or the `VAULT_` names.

@@ -14,9 +14,9 @@ import (
 )
 
 func transitKeys(secret string) map[string]any {
-	return map[string]any{"provider": "transit", "transit": map[string]any{"openbao": map[string]any{
+	return map[string]any{"adapter": "transit", "instance": "audit", "pseudonym": "audit-pseudonym", "openbao": map[string]any{
 		"address": "https://bao.example.test", "tokenSecret": secret,
-	}}}
+	}}
 }
 
 // Secrets never reach a function's environment: whatever the configuration names,

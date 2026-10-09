@@ -25,7 +25,6 @@ Seals the archive ([0061](../../decisions/0061-seals.md)). Hourly in the chart.
 | `archive` | `archive`, required | | the archive to read and to put seals in (`bucket`, `prefix`, `lockMode`, `kmsKey`); `lockMode` defaults to `compliance`, and a seal is locked as long as the records it covers |
 | `signer` | object, required | | exactly one of `kms`, `transit` and `file` |
 | `signer.kms` | `{key, region}` | | an AWS KMS key, `ECC_NIST_P384` `SIGN_VERIFY`, by ARN, ID or alias; the credentials are the SDK's ambient ones, the notary's role |
-| `signer.transit` | `{key, openbao}` | | an OpenBAO transit key of type `ecdsa-p384`; `openbao` is the [shared block](configuration.md#shared-blocks) |
 | `signer.file` | `{path}` | | a P-384 private key in PEM (PKCS#8 or SEC 1), for development |
 | `profiles` | list of strings, at least one, unique | every profile the archive has records for | the profiles to seal |
 | `settle` | duration | `10m` | how long after an hour has ended it is sealed, so that a batch put late in the hour it is keyed by is in the seal |

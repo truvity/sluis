@@ -213,7 +213,7 @@ func TestASecretInTheFileIsRefused(t *testing.T) {
 	if err != nil && strings.Contains(err.Error(), "hunter2") {
 		t.Errorf("the error quotes the secret: %v", err)
 	}
-	_, err = config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', token: s.abc}}}\n")) //nolint:lll // a table row
+	_, err = config.LoadWriter(writeAs(t, "audit-writer", minimalWriter+"keys: {adapter: transit, instance: i, pseudonym: p, openbao: {address: 'https://b.example.test', token: s.abc}}\n")) //nolint:lll // a table row
 	if err == nil {
 		t.Error("an OpenBAO token in the file was accepted")
 	}
@@ -263,7 +263,7 @@ stream:
 	}
 	for name, extra := range map[string]string{
 		"archive": "archive: {}\n",
-		"keys":    "keys: {provider: none}\n",
+		"keys":    "keys: {adapter: kms, seal: alias/s}\n",
 	} {
 		if _, err := config.LoadWriter(writeAs(t, "audit-writer", receiver+extra)); err == nil {
 			t.Errorf("a receiver with %s was accepted", name)
@@ -295,7 +295,7 @@ func TestExactlyOneWayToVerifyCallers(t *testing.T) {
 func TestOneWayToSignInToOpenBAO(t *testing.T) {
 	const base = "deployment: /d\nanonymousWrites: true\narchive: {}\n"
 	open := func(auth string) string {
-		return base + "keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test'" + auth + "}}}\n"
+		return base + "keys: {adapter: transit, instance: i, pseudonym: p, openbao: {address: 'https://b.example.test'" + auth + "}}\n"
 	}
 	if _, err := config.LoadWriter(writeAs(t, "audit-writer", open(", tokenSecret: BAO_TOKEN"))); err != nil {
 		t.Errorf("a token from a named secret: %v", err)
@@ -313,7 +313,7 @@ func TestResolveNeedsTheArchive(t *testing.T) {
 grants: /g.yaml
 sink: {url: 'http://audit:8080'}
 database: {url: 'postgres://u@h/db'}
-keys: {provider: local, local: {rootFile: /r, dir: /d}}
+keys: {adapter: local, instance: i, pseudonym: p, rootFile: /r}
 `
 	if _, err := config.LoadQuery(writeAs(t, "audit-query", q)); err == nil || !strings.Contains(err.Error(), "archive") {
 		t.Fatalf("resolve with no archive: %v", err)
@@ -535,7 +535,6 @@ func TestTheLambdaWriterTakesADynamoDBAndRefusesWhatItCannotRun(t *testing.T) {
 		"an empty dedupe":  "deployment: /d.yaml\narchive: {}\ndedupe: {}\n",
 		"a database":       "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\ndatabase: {url: 'postgres://u@h/db'}\n",
 		"a listener":       "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nlisten: {address: ':8080'}\n",
-		"a key in memory":  "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nkeys: {provider: local, local: {rootFile: /r}}\n",
 		"a bad durability": "deployment: /d.yaml\narchive: {}\ndedupe: {dynamodb: {table: t}}\nrequire: forever\n",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -774,7 +773,7 @@ func TestTheSecretsBlockIsHeldToItsSource(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := config.LoadWriterLambda(writeAs(t, "audit-writer-lambda", "apiVersion: audit.truvity.github.io/audit-writer-lambda/v2\n"+c.block+lambda+
-				"keys: {provider: transit, transit: {openbao: {address: 'https://b.example.test', tokenSecret: openbao/token}}}\n"))
+				"keys: {adapter: transit, instance: i, pseudonym: p, openbao: {address: 'https://b.example.test', tokenSecret: openbao/token}}\n"))
 			if (err == nil) != c.ok {
 				t.Errorf("ok = %v, got %v", c.ok, err)
 			}
@@ -1001,7 +1000,6 @@ func TestKeysByPurposeAreHeldToTheirAdapter(t *testing.T) {
 		"keys: {adapter: kms, instance: i, seal: alias/s, archive: alias/a}\n",
 		"keys: {adapter: transit, seal: s, openbao: {address: 'https://o.example.test', tokenSecret: t}}\n",
 		"keys: {adapter: local, seal: s, rootFile: /root}\n",
-		"keys: {provider: none}\n",
 	}
 	for _, body := range good {
 		if _, err := config.LoadWriter(writeAs(t, "audit-writer", head+body)); err != nil {
@@ -1011,6 +1009,7 @@ func TestKeysByPurposeAreHeldToTheirAdapter(t *testing.T) {
 	bad := map[string]string{
 		"an ARN":                  "keys: {adapter: kms, seal: 'arn:" + "x:kms'}\n",
 		"a key id":                "keys: {adapter: kms, seal: 0b8d4a55-0000-4000-8000-000000000000}\n",
+		"the old provider shape":  "keys: {provider: none}\n",
 		"both shapes":             "keys: {adapter: kms, seal: alias/s, provider: none}\n",
 		"an unknown purpose":      "keys: {adapter: kms, sign: alias/s}\n",
 		"no purpose":              "keys: {adapter: kms}\n",
@@ -1032,7 +1031,7 @@ func TestTheNotaryNamesItsSealKeyOneWay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.Keys.Storage() || n.Keys.Seal.Key != "alias/seal" {
+	if n.Keys.Adapter == "" || n.Keys.Seal.Key != "alias/seal" {
 		t.Errorf("keys = %+v", n.Keys)
 	}
 	for name, body := range map[string]string{

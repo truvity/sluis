@@ -192,36 +192,11 @@ type (
 		TokenSecret string        `json:"tokenSecret,omitempty"`
 	}
 
-	// LocalKeys is the local key provider: a root the data keys are wrapped
-	// under, and the directory they are kept in.
-	LocalKeys struct {
-		RootFile string `json:"rootFile"`
-		Dir      string `json:"dir,omitempty"`
-	}
-
-	// TransitKeys is the transit key provider.
-	TransitKeys struct {
-		Prefix  string  `json:"prefix,omitempty"`
-		OpenBAO OpenBAO `json:"openbao"`
-	}
-
-	// Keys is where the keys live, in one of two shapes.
-	//
-	// The storage shape (`adapter`) names a key by purpose through
+	// Keys is where the keys live. It names a key by purpose through
 	// github.com/truvity/sluis/storage/keys: seal, pseudonym, conceal and
-	// archive, each an alias (kms) or a transit key name. It is the shape to use.
-	//
-	// The legacy shape (`provider`) is the pseudonymisation provider of the first
-	// releases: local or transit, with a key per tenant and purpose. Without
-	// either, or with provider none, there are no pseudonyms and no resolve.
-	//
-	// Deprecated fields: Provider, Local and Transit. Use Adapter and the
-	// purposes.
+	// archive, each an alias (kms) or a transit key name. Without a keys block
+	// there are no pseudonyms and no resolve.
 	Keys struct {
-		Provider string       `json:"provider,omitempty"`
-		Local    *LocalKeys   `json:"local,omitempty"`
-		Transit  *TransitKeys `json:"transit,omitempty"`
-
 		// Adapter is the key service of the storage shape: kms, transit or local.
 		Adapter string `json:"adapter,omitempty"`
 		// Instance names the installation in the default encryption context
@@ -446,12 +421,6 @@ type (
 		Region string `json:"region,omitempty"`
 	}
 
-	// TransitSigner is an OpenBAO transit key that signs seals: ecdsa-p384.
-	TransitSigner struct {
-		Key     string  `json:"key"`
-		OpenBAO OpenBAO `json:"openbao"`
-	}
-
 	// FileSigner is a P-384 private key in a PEM file, for development and for
 	// a deployment small enough to accept that the key lives beside the archive.
 	FileSigner struct {
@@ -460,9 +429,8 @@ type (
 
 	// Signer is where the notary's key is: exactly one of its fields.
 	Signer struct {
-		KMS     *KMSSigner     `json:"kms,omitempty"`
-		Transit *TransitSigner `json:"transit,omitempty"`
-		File    *FileSigner    `json:"file,omitempty"`
+		KMS  *KMSSigner  `json:"kms,omitempty"`
+		File *FileSigner `json:"file,omitempty"`
 	}
 )
 

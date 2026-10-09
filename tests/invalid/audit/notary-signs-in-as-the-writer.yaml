@@ -4,15 +4,17 @@ jobs:
   notary:
     enabled: true
     config:
-      archive:
-        bucket:
-          name: audit-archive
-      signer:
-        transit:
-          key: audit-seal
-          openbao:
-            address: https://openbao.example.test:8200
-            login:
-              mount: jwt-devel
-              role: audit-writer
-              jwtFile: /var/run/openbao/token
+      apiVersion: audit.truvity.github.io/audit-notary/v2
+      deployment: /etc/audit/deployment.yaml
+      sink:
+        url: http://audit:8080
+      keys:
+        adapter: transit
+        instance: audit
+        seal: audit-seal
+        openbao:
+          address: https://openbao.example.test:8200
+          login:
+            mount: jwt-devel
+            role: audit-writer
+            jwtFile: /var/run/openbao/token

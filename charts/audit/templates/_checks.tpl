@@ -237,7 +237,7 @@ can choose what to sign, so the notary signs in as itself, never as the writer;
 and whoever writes it and can also open what it sealed can read what the writer
 must not, so the query service's resolve does too. Only the chart sees both
 configurations. */}}
-{{- $writerBao := dig "transit" "openbao" nil (dig "keys" nil $writer | default dict) -}}
+{{- $writerBao := dig "openbao" nil (dig "keys" nil $writer | default dict) -}}
 {{- $writerWho := include "audit.baoIdentity" (dict "bao" $writerBao "env" .Values.writer.secretEnv "files" .Values.writer.secretFiles) -}}
 {{- if .Values.jobs.notary.enabled -}}
   {{- $notary := .Values.jobs.notary.config | default dict -}}
@@ -248,24 +248,17 @@ configurations. */}}
   {{- if and $notaryRole (eq (toJson $notaryRole) (toJson (.Values.serviceAccount.annotations | default dict))) -}}
   {{- fail "audit: the notary's ServiceAccount carries the writer's annotations, so it would bind the writer's cloud role (Pod Identity, IRSA). Whoever writes the archive and can also sign for it can choose what to sign; bind the notary to a role of its own." -}}
   {{- end -}}
-  {{- $notaryWho := include "audit.baoIdentity" (dict "bao" (dig "signer" "transit" "openbao" nil $notary) "env" .Values.jobs.notary.secretEnv "files" .Values.jobs.notary.secretFiles) -}}
+  {{- $notaryWho := include "audit.baoIdentity" (dict "bao" (dig "keys" "openbao" nil $notary) "env" .Values.jobs.notary.secretEnv "files" .Values.jobs.notary.secretFiles) -}}
   {{- if and $notaryWho $writerWho (eq $notaryWho $writerWho) -}}
   {{- fail "audit: the notary signs in to OpenBAO as the writer. Whoever writes the archive and can also sign for it can choose what to sign; give the notary its own role." -}}
   {{- end -}}
 {{- end -}}
 {{- if and .Values.query.enabled .Values.query.config -}}
   {{- $queryKeys := dig "keys" nil .Values.query.config | default dict -}}
-  {{- $queryWho := include "audit.baoIdentity" (dict "bao" (dig "transit" "openbao" nil $queryKeys) "env" .Values.query.secretEnv "files" .Values.query.secretFiles) -}}
+  {{- $queryWho := include "audit.baoIdentity" (dict "bao" (dig "openbao" nil $queryKeys) "env" .Values.query.secretEnv "files" .Values.query.secretFiles) -}}
   {{- if and $queryWho $writerWho (eq $queryWho $writerWho) -}}
   {{- fail "audit: `query.config.keys` signs in as the writer. Resolving and writing are separate privileges: the writer's policy seals and must not open." -}}
   {{- end -}}
-{{- end -}}
-
-{{/* Keys held in a directory are the only copy: losing it re-keys every
-tenant. */}}
-{{- $writerKeys := dig "keys" nil $writer | default dict -}}
-{{- if and (eq (dig "provider" "none" $writerKeys) "local") (not .Values.keysVolume.enabled) (not .Values.keysVolume.ephemeralIsAcceptable) -}}
-{{- fail "audit: the local key provider with `keysVolume.enabled` false. Data keys are random and wrapped into that directory, so losing it re-keys every tenant: the same person gets a new pseudonym and the trail stops linking across the restart. Set `keysVolume.ephemeralIsAcceptable: true` if this install is disposable." -}}
 {{- end -}}
 
 {{- if .Values.query.enabled -}}

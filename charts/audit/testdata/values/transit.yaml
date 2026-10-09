@@ -20,16 +20,17 @@ writer:
     replicas: 3
     database: *database
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example:8200
-          namespace: devel
-          caFile: /etc/audit/trust/ca.crt
-          login:
-            mount: jwt-devel
-            role: audit-writer
-            jwtFile: /var/run/openbao/token
+      adapter: transit
+      instance: audit
+      pseudonym: audit-pseudonym
+      openbao:
+        address: https://openbao.example:8200
+        namespace: devel
+        caFile: /etc/audit/trust/ca.crt
+        login:
+          mount: jwt-devel
+          role: audit-writer
+          jwtFile: /var/run/openbao/token
   secretEnv:
     - name: AUDIT_DATABASE_PASSWORD
       secretName: audit-database
@@ -58,17 +59,18 @@ jobs:
     config:
       apiVersion: audit.truvity.github.io/audit-notary/v2
       deployment: /etc/audit/deployment.yaml
-      signer:
-        transit:
-          key: audit-seal
-          openbao:
-            address: https://openbao.example:8200
-            namespace: devel
-            caFile: /etc/audit/trust/ca.crt
-            login:
-              mount: jwt-devel
-              role: audit-notary
-              jwtFile: /var/run/openbao/token
+      keys:
+        adapter: transit
+        instance: audit
+        seal: audit-seal
+        openbao:
+          address: https://openbao.example:8200
+          namespace: devel
+          caFile: /etc/audit/trust/ca.crt
+          login:
+            mount: jwt-devel
+            role: audit-notary
+            jwtFile: /var/run/openbao/token
     tokens:
       - audience: openbao
         mountPath: /var/run/openbao
@@ -99,16 +101,17 @@ query:
       url: postgres://audit_query@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
       passwordSecret: AUDIT_QUERY_DATABASE_PASSWORD
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example:8200
-          namespace: devel
-          caFile: /etc/audit/trust/ca.crt
-          login:
-            mount: jwt-devel
-            role: audit-resolve
-            jwtFile: /var/run/openbao/token
+      adapter: transit
+      instance: audit
+      pseudonym: audit-pseudonym
+      openbao:
+        address: https://openbao.example:8200
+        namespace: devel
+        caFile: /etc/audit/trust/ca.crt
+        login:
+          mount: jwt-devel
+          role: audit-resolve
+          jwtFile: /var/run/openbao/token
   secretEnv:
     - name: AUDIT_QUERY_DATABASE_PASSWORD
       secretName: audit-query-database

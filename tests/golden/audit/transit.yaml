@@ -129,16 +129,17 @@ data:
       url: postgres://audit_writer@db.example.test:5432/audit?sslmode=verify-full&sslrootcert=/etc/audit/trust/ca.crt
     deployment: /etc/audit/deployment.yaml
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example:8200
-          caFile: /etc/audit/trust/ca.crt
-          login:
-            jwtFile: /var/run/openbao/token
-            mount: jwt-devel
-            role: audit-writer
-          namespace: devel
+      adapter: transit
+      instance: audit
+      openbao:
+        address: https://openbao.example:8200
+        caFile: /etc/audit/trust/ca.crt
+        login:
+          jwtFile: /var/run/openbao/token
+          mount: jwt-devel
+          role: audit-writer
+        namespace: devel
+      pseudonym: audit-pseudonym
     replicas: 3
 
 ---
@@ -168,17 +169,18 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-notary/v2
     deployment: /etc/audit/deployment.yaml
-    signer:
-      transit:
-        key: audit-seal
-        openbao:
-          address: https://openbao.example:8200
-          caFile: /etc/audit/trust/ca.crt
-          login:
-            jwtFile: /var/run/openbao/token
-            mount: jwt-devel
-            role: audit-notary
-          namespace: devel
+    keys:
+      adapter: transit
+      instance: audit
+      openbao:
+        address: https://openbao.example:8200
+        caFile: /etc/audit/trust/ca.crt
+        login:
+          jwtFile: /var/run/openbao/token
+          mount: jwt-devel
+          role: audit-notary
+        namespace: devel
+      seal: audit-seal
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -279,16 +281,17 @@ data:
     deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example:8200
-          caFile: /etc/audit/trust/ca.crt
-          login:
-            jwtFile: /var/run/openbao/token
-            mount: jwt-devel
-            role: audit-resolve
-          namespace: devel
+      adapter: transit
+      instance: audit
+      openbao:
+        address: https://openbao.example:8200
+        caFile: /etc/audit/trust/ca.crt
+        login:
+          jwtFile: /var/run/openbao/token
+          mount: jwt-devel
+          role: audit-resolve
+        namespace: devel
+      pseudonym: audit-pseudonym
     sink:
       url: http://audit:8080
 
@@ -370,7 +373,7 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: query
       annotations:
-        checksum/config: d824b01e983f395437800370fd81ec6abe0ce392dc4ed70ffe5e9f910cbd012e
+        checksum/config: 8b44e4d4f73fb3ded487cfb3b961d5e6a2b39d0abe3cdf5e56aa665db1e87fd2
         checksum/grants: c6e926709c6176bc66b906eaad228b9bb32e6760036c8733b2758355055342a1
         # A grant preset turns roles into profiles, so the profiles are part
         # of what a grant means.
@@ -494,7 +497,7 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 0792572454b3c6783ee631453ec8208874f9f911050711caa2223b6eed494177
+        checksum/config: 40fd2a9a7fb9137bcd74e4db53ece0e79e35e130bb7894bf8ae9f612dfc82ca4
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
         checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
@@ -622,7 +625,7 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: f86cfe56cd678fa2ca34df74f110bb707c9c8d9f913a472739495a6a1f4fccdc
+            checksum/config: fa7db2778ec346e3eac2e56e8b6fac434e0275fbb3c6d0b3590a892010e74188
             checksum/deployment: 2627126ba849240e4bf0b9521213f88070f1e799ddaac233f9cbd753acb830cf
         spec:
           restartPolicy: OnFailure

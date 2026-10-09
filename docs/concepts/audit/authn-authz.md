@@ -77,7 +77,7 @@ The application's own console hosts the page and passes the token it already hol
 
 `resolve` maps a pseudonym back to a person through the identity map. Grant it to as few roles as possible. It emits `audit.get`-class records naming the rule.
 
-With `keys.provider: none`, or no `keys` block, there is nothing to resolve. The operation is refused as unimplemented. A grant may still name it.
+With no `keys` block, there is nothing to resolve. The operation is refused as unimplemented. A grant may still name it.
 
 ## Decided in
 

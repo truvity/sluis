@@ -2,7 +2,6 @@ package writer_test
 
 import (
 	"context"
-	"crypto/rand"
 	"strings"
 	"sync"
 	"testing"
@@ -13,7 +12,7 @@ import (
 
 	"github.com/truvity/sluis/audit/index/s3scan"
 	"github.com/truvity/sluis/audit/internal/writer"
-	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/sdk/catalogue"
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
@@ -116,15 +115,7 @@ func buildExtendingOn(t *testing.T, archive *storetest.Memory, records writer.Lo
 	all := profiles(t)
 	all["evidence"] = evidence
 
-	root := make([]byte, 32)
-	if _, err := rand.Read(root); err != nil {
-		t.Fatal(err)
-	}
-	provider, err := keys.NewLocal(root, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = provider.Close() })
+	provider := keystest.New(t)
 
 	at := day(t, "2026-09-17T10:30:00Z")
 	var mu sync.Mutex

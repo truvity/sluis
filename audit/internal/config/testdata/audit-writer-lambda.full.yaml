@@ -9,13 +9,13 @@ archive:
   ca: /etc/audit/trust/ca.crt
   kmsKey: alias/audit-archive
 keys:
-  provider: transit
-  transit:
-    prefix: audit
-    openbao:
-      address: https://openbao.example.test:8200
-      mount: transit
-      tokenSecret: openbao/token
+  adapter: transit
+  instance: audit
+  pseudonym: audit-pseudonym
+  openbao:
+    address: https://openbao.example.test:8200
+    mount: transit
+    tokenSecret: openbao/token
 forgetIdentities: true
 dedupe:
   dynamodb:

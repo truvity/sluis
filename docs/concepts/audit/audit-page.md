@@ -46,7 +46,7 @@ A row shows a sentence rendered from the catalogue template (ICU MessageFormat, 
 
 A client-address column and an old-versus-new diff are planned.
 
-With `keys.provider: none`, the default, an identity shows as written and the page offers no resolve. The query service refuses it as unimplemented.
+With no `keys` block, the default, an identity shows as written and the page offers no resolve. The query service refuses it as unimplemented.
 
 ## Actions
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/sluis/audit/keys"
+	"github.com/truvity/sluis/audit/keys/keystest"
 	"github.com/truvity/sluis/audit/profile"
 	"github.com/truvity/sluis/audit/store/storetest"
 	"github.com/truvity/sluis/audit/writer"
@@ -46,10 +46,7 @@ func compose(t *testing.T, document string) map[string]*profile.Profile {
 // writing identifiers in clear or keeping nothing.
 func TestOpenRefusesAnIncompleteWriter(t *testing.T) {
 	ctx := context.Background()
-	provider, err := keys.NewLocal(nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	provider := keystest.New(t)
 	full := writer.Config{Archive: storetest.NewMemory(), Profiles: profiles(t), Keys: provider}
 	for name, c := range map[string]struct {
 		config writer.Config

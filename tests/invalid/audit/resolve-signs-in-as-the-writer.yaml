@@ -7,19 +7,21 @@ query:
       - url: https://id.example.test
         audience: audit
   config:
+    apiVersion: audit.truvity.github.io/audit-query/v2
+    deployment: /etc/audit/deployment.yaml
     grants: /etc/audit/grants.yaml
     sink:
       url: http://audit:8080
     searcher: s3scan
     archive:
-      bucket:
-        name: audit-archive
+      stateRoot: /audit/main
     keys:
-      provider: transit
-      transit:
-        openbao:
-          address: https://openbao.example.test:8200
-          login:
-            mount: jwt-devel
-            role: audit-writer
-            jwtFile: /var/run/openbao/token
+      adapter: transit
+      instance: audit
+      pseudonym: audit-pseudonym
+      openbao:
+        address: https://openbao.example.test:8200
+        login:
+          mount: jwt-devel
+          role: audit-writer
+          jwtFile: /var/run/openbao/token
