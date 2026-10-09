@@ -1,6 +1,6 @@
 # OpenBao Secrets adapter
 
-`adapters.secrets: {adapter: openbao}` keeps the Secrets port in an OpenBao KV version 2 mount, in the layout of [SSM v3](secrets.md#ssm-layout-v3). It needs no `platform.openbao` answer. Source: `internal/port/openbao`. The other adapters are listed in [adapters](adapters.md).
+`adapters.secrets: {adapter: openbao}` keeps the Secrets port in an OpenBao KV version 2 mount, in the `private/` and `export/` trees that the SSM adapter kept before [layout v4](secrets.md#ssm-layout); this adapter has no v4 layout yet. It needs no `platform.openbao` answer. Source: `internal/port/openbao`. The other adapters are listed in [adapters](adapters.md).
 
 ## Settings
 
@@ -44,7 +44,7 @@ kv/sluis/private/credentials/<kind>/<id>/<ref>       what sluis writes and reads
 kv/sluis/export/<path>                               what sluis copies out, for consumers
 ```
 
-Use `sluis/<instance>` as the root when the OpenBao has no namespace per installation. A root with a `private` or `export` segment is refused at start. On layout v4 the same grants apply to `internal/` and `external/`.
+Use `sluis/<instance>` as the root when the OpenBao has no namespace per installation. A root with a `private` or `export` segment is refused at start.
 
 ## Values
 
@@ -56,13 +56,13 @@ Use `sluis/<instance>` as the root when the OpenBao has no namespace per install
 
 ## Policy
 
-Least privilege for root `sluis` and mount `kv`, in the namespace. A consumer on layout v4 gets `read` on its own `kv/data/sluis/external/<kind>/<id>` only.
+Least privilege for root `sluis` and mount `kv`, in the namespace.
 
 ```hcl
 # what sluis writes and reads back
 path "kv/data/sluis/private/credentials/*"     { capabilities = ["create", "read", "update"] }
 path "kv/metadata/sluis/private/credentials/*" { capabilities = ["list", "delete"] }
-# layout v3's exports: only read and deleted by a migration
+# the retired exports: nothing writes them
 path "kv/data/sluis/export/*"     { capabilities = ["create", "read", "update"] }
 path "kv/metadata/sluis/export/*" { capabilities = ["list", "delete"] }
 # List("") (every secret) lists the two directories themselves; List of a

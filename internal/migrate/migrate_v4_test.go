@@ -18,9 +18,9 @@ import (
 // are the installation's.
 func v4Side(t *testing.T) (*store.Stores, *secretstore.Stores) {
 	t.Helper()
-	v4 := secretstore.FromStore(statememory.New(), secretstore.LayoutV4, "alias/example")
+	v4 := secretstore.FromStore(statememory.New(), "alias/example")
 	set := memory.New().Set()
-	set.Secrets = secretstore.NewSecrets(v4, nil, 0)
+	set.Secrets = secretstore.NewSecrets(v4, 0)
 	st := portSide(set, store.AdapterDynamoDB)
 	st.V4 = v4
 	return st, v4
@@ -39,7 +39,6 @@ func TestTheLegacyMoveWritesStraightIntoV4(t *testing.T) {
 	dst, v4 := v4Side(t)
 
 	to := side("new", dst)
-	to.SecretsLayout = "v4"
 	opt := installation
 	opt.ExportedGitHubApp = func(id string) bool { return id == "renovate" }
 	report, err := migrate.Run(ctx, side("old", src.stores), to, opt)
@@ -67,9 +66,6 @@ func TestTheLegacyMoveWritesStraightIntoV4(t *testing.T) {
 		t.Errorf("exports = %v, %v", names, err)
 	}
 	notes := strings.Join(report.Notes, "\n")
-	if !strings.Contains(notes, "layout v4") || strings.Contains(notes, "DEPRECATED") {
-		t.Errorf("notes = %q", notes)
-	}
 
 	// The ring is copied as it is: each entry keeps the context it was wrapped under.
 	var got string
@@ -82,20 +78,6 @@ func TestTheLegacyMoveWritesStraightIntoV4(t *testing.T) {
 	}
 	if !strings.Contains(notes, "wrapped under") {
 		t.Errorf("the report does not say what happens to the ring: %q", notes)
-	}
-}
-
-func TestADestinationOnV3IsDeprecated(t *testing.T) {
-	src := newLegacy(t)
-	seed(t, src.stores)
-	to := side("new", portSide(memory.New().Set(), store.AdapterDynamoDB))
-	to.SecretsLayout = "v3"
-	report, err := migrate.Run(ctx, side("old", src.stores), to, installation)
-	if err != nil || !report.OK {
-		t.Fatalf("Run = %v\n%s", err, report.JSON())
-	}
-	if !strings.Contains(strings.Join(report.Notes, "\n"), "DEPRECATED") {
-		t.Errorf("notes = %v, want the v3 destination called deprecated", report.Notes)
 	}
 }
 

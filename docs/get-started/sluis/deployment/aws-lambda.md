@@ -10,9 +10,9 @@ Start with [sluis on AWS Lambda](../aws-lambda.md). Design: [Lambda](../../../co
 
 - **Keys.** You supply the KMS keys by alias: `Keys.Sign`, and `Keys.Secrets` for the SSM parameters. The library looks them up, grants on them and creates none. To move from library-created keys, follow [the state operation](../../../guides/sluis/migrate/supply-your-own-signing-keys.md).
 
-- **Secrets layout.** `secrets.layout` is `v3` (the default), `transition` or `v4`. To move, see [move the secrets to layout v4](../../../guides/sluis/migrate/migrate-secrets-layout.md). A consumer of an `external/` secret reads it with `ExternalReadPolicy`.
+- **Secrets layout.** `secrets.layout` is `v4`, the only layout. To move off v3, see [the secrets layout](../../../guides/sluis/migrate/migrate-secrets-layout.md). A consumer of an `external/` secret reads it with `ExternalReadPolicy`.
 
-- **Blobs.** The bucket is S3 or S3-compatible. R2 takes credentials from an `internal/` address, which needs layout `transition` or `v4`. See [R2 storage](../../../guides/sluis/connect/r2-storage.md).
+- **Blobs.** The bucket is S3 or S3-compatible. R2 takes credentials from an `internal/` address, which needs the `ssm` secrets source. See [R2 storage](../../../guides/sluis/connect/r2-storage.md).
 
 - **Audit.** `LambdaArgs.Audit` installs an operational audit installation beside the function by default. `Audit.Presets` picks S3 or R2 for each archive store. The default is one operational bucket. `Audit.Use` sends to an existing installation. `Audit.Enabled: false` keeps records in the log only. See [the Pulumi library](../../../reference/sluis/pulumi-library.md#audit) and [audit deployment](../../audit/README.md).
 

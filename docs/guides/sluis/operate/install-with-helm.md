@@ -9,7 +9,7 @@ Install `oci://ghcr.io/truvity/charts/sluis` and sign in. One Deployment runs, c
 | Kubernetes | the pod | recovery sign-in asks this cluster's API server to review a ServiceAccount token |
 | AWS: DynamoDB table, S3 bucket, KMS key | state, blobs, signing | preset `k8s-aws`; `k8s-minimal` and `k8s-openbao` are unavailable ([adapters](../../../reference/sluis/adapters.md)) |
 | a pod identity for the AWS role | the above | EKS Pod Identity, or `serviceAccount.awsIdentity: irsa` with `awsRoleArn` |
-| SSM parameters or OpenBao | OAuth client, state secret, client secrets | layout in [secrets](../../../reference/sluis/secrets.md#ssm-layout-v3) |
+| SSM parameters or OpenBao | OAuth client, state secret, client secrets | layout in [secrets](../../../reference/sluis/secrets.md#ssm-layout) |
 | Gateway API and a `GatewayClass` controller | the route | without `route.host` no route renders: port-forward for a trial |
 | cert-manager and a `ClusterIssuer` | the Gateway's TLS certificate | KMS signing renders no signing Certificate |
 | a Google Workspace and an OAuth client | sign-in and the directory | [Google Workspace](../connect/google-workspace.md) |
@@ -65,14 +65,14 @@ The render writes `rendered/sluis.yaml` and `rendered/policy.yaml` ([installatio
 
 ```sh
 kubectl create namespace sluis
-aws ssm put-parameter --type SecureString --name /sluis/example/private/config/providers/google/default/client-id     --value <google client id>
-aws ssm put-parameter --type SecureString --name /sluis/example/private/config/providers/google/default/client-secret --value <google client secret>
-aws ssm put-parameter --type SecureString --name /sluis/example/private/config/issuer/state-secret --value "$(openssl rand -base64 32)"
+aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/providers/google/default/client-id     --value <google client id>
+aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/providers/google/default/client-secret --value <google client secret>
+aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/issuer/state-secret --value "$(openssl rand -base64 32)"
 # one per confidential client in the policy
-aws ssm put-parameter --type SecureString --name /sluis/example/private/config/clients/<client-id>/secret --value <random>
+aws ssm put-parameter --type SecureString --name /sluis/example/internal/config/clients/<client-id>/secret --value <random>
 ```
 
-List the names, never the values, with `aws ssm get-parameters-by-path --path /sluis/example/private/config/ --recursive --query 'Parameters[].Name'`.
+List the names, never the values, with `aws ssm get-parameters-by-path --path /sluis/example/internal/config/ --recursive --query 'Parameters[].Name'`.
 
 ## 3. Write the deployment values
 

@@ -133,7 +133,7 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 	e := &env{t: t, clock: &clock, rec: audittest.New(t)}
 	now := func() time.Time { return clock }
 	e.api = newFake(now)
-	e.stores = secretstore.FromStore(memory.New(), secretstore.LayoutV4, "")
+	e.stores = secretstore.FromStore(memory.New(), "")
 	cf := &config.Cloudflare{
 		Accounts: map[string]config.CloudflareAccount{"main": {ID: acct, Minter: "internal/cloudflare/main/minter"}},
 		Presets: map[string]config.CloudflarePreset{
@@ -155,7 +155,7 @@ func setup(t *testing.T, grants ...config.CloudflareGrant) *env {
 	e.api.put(cloudflare.Token{ID: r2Proto, Name: "proto r2", Status: cloudflare.StatusDisabled, Policies: policiesJSON("g-r2")})
 	e.m, err = minter.New(minter.Config{
 		Instance: "example", Cloudflare: cf, Grants: &config.PolicyCloudflare{Grants: grants},
-		Layout: e.stores.Layout, Internal: e.stores.Internal, External: e.stores.External,
+		Internal: e.stores.Internal, External: e.stores.External,
 		Dial: func(_ context.Context, id, token string) (minter.API, error) {
 			if id != acct {
 				return nil, fmt.Errorf("wrong account %s", id)

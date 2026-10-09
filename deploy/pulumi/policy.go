@@ -250,13 +250,9 @@ const (
 	sidWebID          = "SluisWebIdentity"
 )
 
-// SSM layout v3 (docs/decisions/0036) and v4 (docs/decisions/0041): one root
-// per installation, `/sluis/<instance>`. In v3 `private` is sluis's alone; in v4
-// `internal` is, and `external` is the typed documents consumers read, each
-// granted on its own side.
-
-// PrivateParameterPrefix is where sluis keeps its own secrets.
-func PrivateParameterPrefix(instance string) string { return SSMRoot(instance) + "/private" }
+// SSM layout v4 (docs/decisions/0041): one root per installation,
+// `/sluis/<instance>`. `internal` is sluis's alone, and `external` is the typed
+// documents consumers read, each granted on its own side.
 
 // ConfigParameterPrefix is the operator's and the stack's: the secrets a person
 // seeds (`config/providers/google/<id>/client-secret`,
@@ -265,16 +261,10 @@ func PrivateParameterPrefix(instance string) string { return SSMRoot(instance) +
 // them, by the names its http document gives; its own writes are under
 // `credentials/` (docs/reference/sluis/storage-layout.md).
 func ConfigParameterPrefix(instance string) string {
-	return PrivateParameterPrefix(instance) + "/config"
+	return InternalParameterPrefix(instance) + "/config"
 }
 
-// CredentialsParameterPrefix is where sluis writes the credentials of its
-// records, by kind.
-func CredentialsParameterPrefix(instance string) string {
-	return PrivateParameterPrefix(instance) + "/credentials"
-}
-
-// InternalParameterPrefix is where sluis keeps its own secrets on layout v4.
+// InternalParameterPrefix is where sluis keeps its own secrets.
 func InternalParameterPrefix(instance string) string { return SSMRoot(instance) + "/internal" }
 
 // ExternalParameterPrefix is where sluis keeps the typed documents consumers
@@ -345,28 +335,16 @@ type functionPolicyIn struct {
 // the Kubernetes pod's role carry (one process, one role), scoped to the one
 // root:
 //
-//   - private/credentials/*: read and write (the credentials of its records);
-//   - private/config/*: read only (the secrets its document names: the recovery
-//     password, the state secret, the OAuth client, the declared clients and
-//     workspaces); config/* is the operator's and the stack's;
-//   - layout v4: internal/credentials/* and external/*, read and write (with
-//     the parameters' history, which the rotation reads), internal/config/*
-//     read only;
+//   - internal/credentials/* and external/*, read and write (with the
+//     parameters' history, which the rotation reads);
+//   - internal/config/*: read only (the secrets its document names: the
+//     recovery password, the state secret, the OAuth client, the declared
+//     clients and workspaces); config/* is the operator's and the stack's;
 //   - with a customer-managed parameter key, its use through SSM only, for the
 //     parameters under those prefixes.
 func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare bool) []statement {
 	all := []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath, ssmPutParameter, ssmDeleteParameter}
-	st := []statement{{
-		"Sid":      sidPrivate,
-		"Effect":   "Allow",
-		"Action":   all,
-		"Resource": parameterArns(region, account, CredentialsParameterPrefix(instance)),
-	}, {
-		"Sid":      sidPrivate + "Config",
-		"Effect":   "Allow",
-		"Action":   []string{ssmGetParameter, ssmGetParameters, ssmGetParametersByPath},
-		"Resource": parameterArns(region, account, ConfigParameterPrefix(instance)),
-	}}
+	var st []statement
 	withHistory := append(append([]string{}, all...), ssmGetParameterHistory)
 	st = append(st, statement{
 		"Sid":      sidPrivate + "V4",
@@ -407,10 +385,7 @@ func ssmStatements(region, account, instance, parameterKeyArn string, cloudflare
 			"Resource": parameterArns(region, account, ExternalParameterPrefix(instance)+"/cloudflare"),
 		})
 	}
-	prefixes := []string{
-		CredentialsParameterPrefix(instance), ConfigParameterPrefix(instance),
-		InternalParameterPrefix(instance), ExternalParameterPrefix(instance),
-	}
+	prefixes := []string{InternalParameterPrefix(instance), ExternalParameterPrefix(instance)}
 	return append(st, parameterKeyStatements(parameterKeyArn, []string{kmsEncrypt, kmsDecrypt, "kms:GenerateDataKey"},
 		parameterArnsUnder(region, account, prefixes...))...)
 }

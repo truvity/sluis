@@ -311,15 +311,13 @@ func shape(t *testing.T, rec *recorder, out map[string]string, domain string) {
 		t.Errorf("sqs: %v", got)
 	}
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	// It reads its credentials and config on layout v3 and v4, and the
-	// external documents.
-	wantRead := v3v4Reads(ssmArn)
+	// It reads its credentials and config, and the external documents.
+	wantRead := v4Reads(ssmArn)
 	if got := g["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(wantRead)) {
 		t.Errorf("reads %v", got)
 	}
 	for _, res := range g["ssm:PutParameter"] {
-		if !strings.Contains(res, "/sluis/staging/private/credentials") && !strings.Contains(res, "/sluis/staging/internal/credentials") &&
-			!strings.Contains(res, "/sluis/staging/external") {
+		if !strings.Contains(res, "/sluis/staging/internal/credentials") && !strings.Contains(res, "/sluis/staging/external") {
 			t.Errorf("may put %s", res)
 		}
 	}
@@ -874,21 +872,21 @@ func TestTheStateSecretIsGeneratedOnceAndKeptSecret(t *testing.T) {
 			t.Errorf("random bytes: %v: 32 bytes and no keepers, or an apply rotates it", r.Inputs)
 		}
 		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-state-secret")
-		if prop(p, "name").StringValue() != "/sluis/staging/private/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
+		if prop(p, "name").StringValue() != "/sluis/staging/internal/config/issuer/state-secret" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		if !prop(p, "value").IsSecret() {
 			t.Error("the secret's value is not marked secret")
 		}
 		if !prop(p, "overwrite").BoolValue() {
-			t.Error("the parameter would refuse the value `sluis migrate ssm-layout` copied there first")
+			t.Error("the parameter would refuse a value copied there first")
 		}
 		if got := prop(p, "keyId"); got.HasValue() != (k != "") || (k != "" && got.StringValue() != key) {
 			t.Errorf("keyId %v with ParameterKeyArn %q", prop(p, "keyId"), k)
 		}
 	}
 	_, out := mustLambda(t, estate{})
-	if out["stateSecretParameter"] != "/sluis/staging/private/config/issuer/state-secret" {
+	if out["stateSecretParameter"] != "/sluis/staging/internal/config/issuer/state-secret" {
 		t.Errorf("output: %q", out["stateSecretParameter"])
 	}
 }
@@ -1293,7 +1291,7 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 			t.Errorf("random password: %v: at least 32 characters, no special ones, and no keepers, or an apply rotates it", r.Inputs)
 		}
 		p := rec.one(t, "aws:ssm/parameter:Parameter", "staging-recovery-password")
-		if prop(p, "name").StringValue() != "/sluis/staging/private/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
+		if prop(p, "name").StringValue() != "/sluis/staging/internal/config/recovery/password" || prop(p, "type").StringValue() != "SecureString" {
 			t.Errorf("parameter: %v", p.Inputs)
 		}
 		value := prop(p, "value")
@@ -1313,7 +1311,7 @@ func TestTheRecoveryPasswordIsGeneratedOnceStoredSecretAndMappedToAFile(t *testi
 		}
 	}
 	rec, out := mustLambda(t, estate{})
-	if out["recoveryPasswordParameter"] != "/sluis/staging/private/config/recovery/password" {
+	if out["recoveryPasswordParameter"] != "/sluis/staging/internal/config/recovery/password" {
 		t.Errorf("output: %q", out["recoveryPasswordParameter"])
 	}
 	files := layerFiles(t, rec)
@@ -1365,9 +1363,9 @@ func TestRecoveryEnabledIsWrittenIntoTheServiceDocument(t *testing.T) {
 func TestTheOneRoleReadsConfigAndWritesOnlyCredentialsAndExternalDocuments(t *testing.T) {
 	rec, _ := mustLambda(t, estate{})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
-	writes := v3v4Writes(ssmArn)
+	writes := v4Writes(ssmArn)
 	h := rolePolicy(t, rec)
-	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(v3v4Reads(ssmArn))) {
+	if got := h["ssm:GetParametersByPath"]; !reflect.DeepEqual(sortedCopy(got), sortedCopy(v4Reads(ssmArn))) {
 		t.Errorf("reads %v, want credentials, external documents and config", got)
 	}
 	for _, a := range []string{"ssm:PutParameter", "ssm:DeleteParameter"} {
@@ -1381,10 +1379,6 @@ func TestTheOneRoleReadsConfigAndWritesOnlyCredentialsAndExternalDocuments(t *te
 	}
 }
 
-func v3Writes(ssmArn string) []string {
-	return []string{ssmArn + "/sluis/staging/private/credentials", ssmArn + "/sluis/staging/private/credentials/*"}
-}
-
 func v4Writes(ssmArn string) []string {
 	return []string{
 		ssmArn + "/sluis/staging/internal/credentials", ssmArn + "/sluis/staging/internal/credentials/*",
@@ -1392,11 +1386,8 @@ func v4Writes(ssmArn string) []string {
 	}
 }
 
-func v3v4Writes(ssmArn string) []string { return append(v3Writes(ssmArn), v4Writes(ssmArn)...) }
-
-func v3v4Reads(ssmArn string) []string {
-	return append(v3v4Writes(ssmArn),
-		ssmArn+"/sluis/staging/private/config", ssmArn+"/sluis/staging/private/config/*",
+func v4Reads(ssmArn string) []string {
+	return append(v4Writes(ssmArn),
 		ssmArn+"/sluis/staging/internal/config", ssmArn+"/sluis/staging/internal/config/*")
 }
 
@@ -1440,7 +1431,6 @@ func TestTheParameterKeyIsHeldToTheRolesPrefixes(t *testing.T) {
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.ParameterKeyArn = key }})
 	ssmArn := arnp + "ssm:" + region + ":" + account + ":parameter"
 	want := []string{
-		ssmArn + "/sluis/staging/private/credentials/*", ssmArn + "/sluis/staging/private/config/*",
 		ssmArn + "/sluis/staging/internal/*", ssmArn + "/sluis/staging/external/*",
 	}
 	n := 0

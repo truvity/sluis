@@ -229,15 +229,10 @@ func (c Config) apply(t port.Table) (Config, error) {
 	return c, nil
 }
 
-// ssmLayoutV2Root is the SSM root of layout v2, which a document converted
-// from v1 keeps when it names none.
-const ssmLayoutV2Root = "/sluis"
-
 // ssmRoot is the ssm Secrets adapter's settings with its root: the serve
 // document's `secrets.root` when its source is ssm, which is the one root of an
-// installation (/sluis/<instance>, layout v3). The adapter may name it again,
-// and naming another is refused: one installation, one root. A document
-// converted from v1 that names neither keeps /sluis (layout v2) until it moves.
+// installation (/sluis/<instance>). The adapter may name it again,
+// and naming another is refused: one installation, one root.
 func (c Config) ssmRoot(settings port.Settings) (port.Settings, error) {
 	named, _ := settings["root"].(string)
 	want := c.SecretsRoot
@@ -246,8 +241,6 @@ func (c Config) ssmRoot(settings port.Settings) (port.Settings, error) {
 		return nil, fmt.Errorf("adapters.secrets: the ssm adapter's root %q is not secrets.root %q: an installation has one root", named, want)
 	case named != "":
 		return settings, nil
-	case want == "" && c.Converted:
-		want = ssmLayoutV2Root
 	case want == "":
 		return nil, errors.New("adapters.secrets: the ssm adapter has no root: set secrets: {source: ssm, root: /sluis/<instance>}")
 	}
@@ -279,6 +272,9 @@ func (c Config) ssmKey(settings port.Settings) (port.Settings, error) {
 }
 
 // secretsOf builds the Secrets port the plan chose, nil when none was chosen.
+// The ssm adapter is the installation's layout-v4 stores (internal/secretstore),
+// opened from the serve document's `secrets` section; every other adapter is
+// built from its settings and used as it is.
 func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if c.secrets == nil {
 		return nil, nil
@@ -296,6 +292,13 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 		if settings, err = c.ssmKey(settings); err != nil {
 			return nil, err
 		}
+		// The factory only checks the settings; the port is the v4 stores.
+		if _, err := d.Factory(ctx, settings); err != nil {
+			return nil, fmt.Errorf("adapters.secrets: %w", err)
+		}
+		root, _ := settings["root"].(string)
+		key, _ := settings["kmsKeyId"].(string)
+		return c.overLayout(ctx, root, key)
 	}
 	built, err := d.Factory(ctx, settings)
 	if err != nil {
@@ -305,34 +308,26 @@ func (c Config) secretsOf(ctx context.Context) (port.Secrets, error) {
 	if !ok {
 		return nil, fmt.Errorf("adapters.secrets: %q built a %T, which is not a port.Secrets", c.secrets.Adapter, built)
 	}
-	return c.overLayout(ctx, secrets)
+	return secrets, nil
 }
 
 // v4Holder carries the v4 stores out of [Config.secretsOf], which runs on a
 // copy of the Config.
 type v4Holder struct{ stores *secretstore.Stores }
 
-// overLayout puts the Secrets port over layout v4 when the document says so
-// (`secrets.layout: transition | v4`, ssm source): callers keep their paths and
-// the port maps them (internal/secretstore). On v3 it is the adapter itself.
-func (c Config) overLayout(ctx context.Context, v3 port.Secrets) (port.Secrets, error) {
-	layout, err := secretstore.ParseLayout(c.SecretsLayout)
-	if err != nil {
+// overLayout is the Secrets port over layout v4: callers keep their paths and
+// the port maps them (internal/secretstore).
+func (c Config) overLayout(ctx context.Context, root, kmsKeyID string) (port.Secrets, error) {
+	if err := secretstore.CheckLayout(c.SecretsLayout); err != nil {
 		return nil, err
-	}
-	if layout == secretstore.LayoutV3 {
-		return v3, nil
-	}
-	if c.secrets.Adapter != "ssm" {
-		return nil, fmt.Errorf("secrets.layout: %s needs the ssm secrets adapter, not %q", layout, c.secrets.Adapter)
 	}
 	open := c.OpenState
 	if open == nil {
 		open = openSSMState
 	}
 	stores, err := secretstore.Open(ctx, &config.Secrets{
-		Source: "ssm", Root: c.SecretsRoot, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
-		KMSKeyID: c.SecretsKMSKey, Layout: string(layout),
+		Source: "ssm", Root: root, Region: c.SecretsRegion, Endpoint: c.SecretsEndpoint,
+		KMSKeyID: kmsKeyID, Layout: config.SecretsLayoutV4,
 	}, open)
 	if err != nil {
 		return nil, err
@@ -340,7 +335,7 @@ func (c Config) overLayout(ctx context.Context, v3 port.Secrets) (port.Secrets, 
 	if c.v4 != nil {
 		c.v4.stores = stores
 	}
-	return secretstore.NewSecrets(stores, v3, c.SecretsGrace), nil
+	return secretstore.NewSecrets(stores, c.SecretsGrace), nil
 }
 
 // decodeStrict reads a settings object into v, refusing a key v lacks.

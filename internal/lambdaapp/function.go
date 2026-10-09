@@ -173,7 +173,7 @@ func (f *flusher) Flush(ctx context.Context) {
 func open(ctx context.Context, file string) (*Function, error) {
 	// The KMS signer's state secret (signingKey.kms.stateSecret) is a secret
 	// like any other: the document names it, and its `secrets` source (ssm)
-	// reads /sluis/<instance>/private/config/issuer/state-secret.
+	// reads /sluis/<instance>/internal/config/issuer/state-secret.
 	cfg, err := rosterapp.Load(file)
 	if err != nil {
 		return nil, err

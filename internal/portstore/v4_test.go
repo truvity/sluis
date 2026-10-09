@@ -18,7 +18,7 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		now := time.Unix(1700000000, 0).UTC()
 		set := e.open(t)
-		stores := secretstore.FromStore(memory.New(), secretstore.LayoutV4, "")
+		stores := secretstore.FromStore(memory.New(), "")
 		b := portstore.New(set).WithV4(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
 
 		// A runner App: pending stays internal; installed is the document.
@@ -99,39 +99,15 @@ func TestAppsExportOnLayoutV4(t *testing.T) {
 	})
 }
 
-// In transition both layouts hold the key: v3 readers still work.
-func TestAppsKeepBothLayoutsInTransition(t *testing.T) {
-	each(t, func(t *testing.T, e env) {
-		now := time.Unix(1700000000, 0).UTC()
-		set := e.open(t)
-		stores := secretstore.FromStore(memory.New(), secretstore.LayoutTransition, "")
-		b := portstore.New(set).WithV4(stores)
-
-		runner := portstore.NewGitHubRunnerApps(b)
-		rrec := runnerapp.Record{Tier: "stable", Org: "acme", AppID: 3, AppSlug: "acme-stable", InstallationID: 4, ConnectedAt: now, ConnectedBy: "ada@acme.example"}
-		if err := runner.Put(ctx, rrec, "RUNNER-KEY"); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := stores.External.GitHubRunnerApp("stable", "acme").Get(ctx); err != nil {
-			t.Fatal(err)
-		}
-		// A v3 reader (no v4) still finds the key.
-		old := portstore.NewGitHubRunnerApps(portstore.New(set))
-		if key, ok, err := old.PrivateKey(ctx, "stable", "acme"); err != nil || !ok || key != "RUNNER-KEY" {
-			t.Fatalf("v3 reader = %q, %v, %v", key, ok, err)
-		}
-	})
-}
-
 // A catalogue App's webhook secret is the App's, not the key's: a rewrite of
 // the key at install keeps it, it is in the exported document when there is
-// one (and only there once v3 readers are gone), and the key still reads back
+// one, and the key still reads back
 // whole beside it.
 func TestACatalogueAppKeepsItsWebhookSecretAcrossWrites(t *testing.T) {
 	each(t, func(t *testing.T, e env) {
 		now := time.Unix(1700000000, 0).UTC()
 		set := e.open(t)
-		stores := secretstore.FromStore(memory.New(), secretstore.LayoutV4, "")
+		stores := secretstore.FromStore(memory.New(), "")
 		b := portstore.New(set).WithV4(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
 		cat := portstore.NewGitHubCatalogueApps(b)
 

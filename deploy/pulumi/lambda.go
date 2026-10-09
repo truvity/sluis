@@ -43,13 +43,13 @@ const DefaultSigningKeyRS256Alias = "alias/sluis-signing-rs256"
 const DefaultWrappedSigningKeyAlias = "alias/sluis-signing-wrapped"
 
 // StateSecretParameterName is the SSM parameter of the issuer's state secret,
-// `/sluis/<instance>/private/config/issuer/state-secret`.
+// `/sluis/<instance>/internal/config/issuer/state-secret`.
 func StateSecretParameterName(instance string) string {
 	return ConfigParameterPrefix(instance) + "/" + stateSecretName
 }
 
 // RecoveryPasswordParameterName is the SSM parameter of the recovery password,
-// `/sluis/<instance>/private/config/recovery/password`: a SecureString the
+// `/sluis/<instance>/internal/config/recovery/password`: a SecureString the
 // library generates and keeps across applies, which the http document names
 // (`recovery.passwordSecret`) and its `secrets` source reads.
 func RecoveryPasswordParameterName(instance string) string {
@@ -70,7 +70,7 @@ type LambdaArgs struct {
 	Region    string
 	AccountID string
 	// Instance is the installation's name (`acme`, `prod`): its SSM root is
-	// `/sluis/<instance>` (layout v3), so two installations share an account.
+	// `/sluis/<instance>`, so two installations share an account.
 	// Lower-case letters, digits and dashes. Required.
 	Instance string
 
@@ -118,7 +118,7 @@ type LambdaArgs struct {
 	// function runs), which the configuration layer holds at
 	// /opt/sluis/sluis.yaml; the function's SLUIS_CONFIG names it. Required. It
 	// holds no secret: a secret is named, and its `secrets` source reads it from
-	// /sluis/<instance>/private/config/.
+	// /sluis/<instance>/internal/config/.
 	//
 	// Deprecated: write an Installation and let the library render the document.
 	// Config, Policy and PolicyPath keep working for one minor and are removed
@@ -429,7 +429,7 @@ type FunctionArgs struct {
 
 // RecoveryArgs is the recovery sign-in: the way in for the day no directory can
 // vouch for anybody, which on Lambda is a generated password at
-// /sluis/<instance>/private/config/recovery/password.
+// /sluis/<instance>/internal/config/recovery/password.
 //
 // The password and its parameter exist whatever Enabled says, so that turning
 // recovery off and on again is a configuration change and never a rotation.
@@ -583,7 +583,7 @@ type Lambda struct {
 	ConfigLayerArn pulumi.StringOutput
 
 	// StateSecretParameter is the name of the SSM SecureString that holds the
-	// issuer's OAuth-state secret, `/sluis/<instance>/private/config/issuer/state-secret`: 32
+	// issuer's OAuth-state secret, `/sluis/<instance>/internal/config/issuer/state-secret`: 32
 	// random bytes, base64. The library generates it and keeps it across applies.
 	StateSecretParameter pulumi.StringOutput
 
@@ -598,7 +598,7 @@ type Lambda struct {
 	AuditQueueArn pulumi.StringOutput
 
 	// RecoveryPasswordParameter is the name of the SSM SecureString that holds the
-	// recovery password, `/sluis/<instance>/private/config/recovery/password`: 40 random
+	// recovery password, `/sluis/<instance>/internal/config/recovery/password`: 40 random
 	// letters and digits with no look-alikes. Only the name is an output, never the
 	// value; an operator reads it with `aws ssm get-parameter --with-decryption`.
 	RecoveryPasswordParameter pulumi.StringOutput
@@ -861,9 +861,8 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 // `bootstrap` (provided.al2023, arm64, no VPC), with ONE role:
 //
 //   - logs to its own group; S3 on the blob bucket; DynamoDB on the table; SSM
-//     read and write under /sluis/<instance>/private/credentials/* (layout v3)
-//     and /sluis/<instance>/internal/credentials/* and /external/* (layout v4,
-//     with the parameters' history); SSM read under .../private/config/* and
+//     read and write under /sluis/<instance>/internal/credentials/* and
+//     /external/* (with the parameters' history); SSM read under
 //     .../internal/config/* (the secrets its document names);
 //     sqs:SendMessage on the audit queue;
 //   - kms:Sign and kms:GetPublicKey on the signing keys (remote signing) or, with
@@ -1213,8 +1212,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 	if err != nil {
 		return nil, fmt.Errorf("sluis state secret: %w", err)
 	}
-	// Overwrite: `sluis migrate ssm-layout` may have copied the same value to
-	// the v3 path first.
+	// Overwrite: the same value may have been copied to this path first.
 	pargs := &ssm.ParameterArgs{
 		Name:      pulumi.String(StateSecretParameterName(a.Instance)),
 		Type:      pulumi.String("SecureString"),

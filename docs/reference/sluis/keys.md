@@ -1,6 +1,6 @@
 # Keys: the logical key layout
 
-The records the service keeps in State, by logical key. The in-memory and legacy adapters use the key as written; the AWS adapters use [storage layout](storage-layout.md) v3, derived in `internal/port/keys.go`. State's contract: [ports](ports.md#state).
+The records the service keeps in State, by logical key. The in-memory and legacy adapters use the key as written; the AWS adapters use the [storage layout](storage-layout.md), derived in `internal/port/keys.go`. State's contract: [ports](ports.md#state).
 
 No access pattern needs a secondary index. Sessions are listed per person under `ses.<person>.`, and `sid.<sid>` resolves a session id to its person. Listing every session scans all `ses.` partitions: an operator action.
 

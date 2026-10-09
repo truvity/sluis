@@ -9,7 +9,7 @@ import (
 func init() {
 	port.Register(port.Descriptor{
 		Name: "openbao", Concern: port.ConcernSecrets,
-		Summary: "Dynamic secrets as KV version 2 secrets in an OpenBao mount, laid out like SSM (layout v3); " +
+		Summary: "Dynamic secrets as KV version 2 secrets in an OpenBao mount, laid out under its own `private/` and `export/` trees; " +
 			"logs in with a ServiceAccount or web identity JWT.",
 		Requires:    port.Requires{OpenBao: true},
 		SecretStore: true,

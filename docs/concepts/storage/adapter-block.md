@@ -36,7 +36,7 @@ Each shape decides which backends it accepts: [sluis deployment](../../get-start
 
 Secrets and published values sit at addresses of one layout: `<root>/internal/...` and `<root>/external/<kind>/<id>`. Each address holds one versioned JSON document. See [layout v4](../../reference/sluis/storage-layout.md).
 
-sluis selects the layout with `secrets.layout` (`v3`, `transition`, `v4`). `v3` is the default for now. `sluis migrate secrets-layout` moves an installation.
+sluis keeps its secrets in layout v4; `secrets.layout` can only be `v4`, the default.
 
 ## Decided in
 

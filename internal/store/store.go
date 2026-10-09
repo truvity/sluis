@@ -77,8 +77,7 @@ type Config struct {
 	SecretsKMSKey string
 	// Secrets layout (ADR 0041): the serve document's `secrets.layout`,
 	// `.region`, `.endpoint` and `.grace` when its source is ssm. The layout
-	// is v3 (the default) unless it is "transition" or "v4"; those put the
-	// Secrets port over layout v4 (internal/secretstore).
+	// is v4, the only one; the Secrets port is over it (internal/secretstore).
 	SecretsLayout   string
 	SecretsRegion   string
 	SecretsEndpoint string
@@ -99,9 +98,6 @@ type Config struct {
 
 	// v4 is where secretsOf leaves the v4 stores it built, for [Stores.V4].
 	v4 *v4Holder
-	// Converted is a document converted from v1: an `ssm` secrets adapter
-	// that names no root keeps v1's layout, /sluis.
-	Converted bool
 
 	// secrets is the secrets adapter the plan chose, nil when nothing chose one.
 	secrets *port.Choice
@@ -189,7 +185,7 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 	}
 	if b.CredentialsRef != "" {
 		if c.v4 == nil || c.v4.stores == nil {
-			return nil, errors.New("credentialsRef needs the installation's secrets on layout v4 or transition (secrets.layout), where the internal address is")
+			return nil, errors.New("credentialsRef needs the installation's secrets on the ssm secrets source (secrets.source), where the internal address is")
 		}
 		doc, err := c.v4.stores.Internal.S3Credentials(b.CredentialsRef)
 		if err != nil {
@@ -208,10 +204,10 @@ func (c Config) s3Blob(ctx context.Context) (*s3blob.Blob, error) {
 	}
 	if b.Credentials != nil {
 		if c.v4 == nil || c.v4.stores == nil {
-			return nil, errors.New("credentials.preset needs the installation's secrets on layout v4 or transition (secrets.layout), where the minter credential is")
+			return nil, errors.New("credentials.preset needs the installation's secrets on the ssm source (secrets.source), where the minter credential is")
 		}
 		m, err := minter.New(minter.Config{
-			Instance: c.Instance, Cloudflare: c.Cloudflare, Layout: c.v4.stores.Layout,
+			Instance: c.Instance, Cloudflare: c.Cloudflare,
 			Internal: c.v4.stores.Internal, External: c.v4.stores.External, Dial: c.dial(),
 		})
 		if err != nil {
@@ -264,8 +260,6 @@ func FromServe(f *config.Serve) (Config, error) {
 
 		DynamoDB: dynamoOf(f.Ports),
 		sel:      selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", f.SigningKey),
-
-		Converted: f.Converted(),
 	}
 	c.SetSecrets(f.Secrets)
 	if f.Ports != nil && f.Ports.Blob != nil && f.Ports.Blob.S3 != nil && f.Ports.Blob.S3.Credentials != nil {
@@ -320,8 +314,7 @@ func FromRoster(f *config.Roster) Config {
 	c := Config{
 		Adapter: adapterOf(f.Ports), Release: orDefault(f.Release, "sluis"), Kube: KubeRequired,
 		Blob: blobOf(f.Ports), DynamoDB: dynamoOf(f.Ports),
-		sel:       selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", nil),
-		Converted: f.Converted(),
+		sel: selectionOf(f.Ports, f.Platform, f.Preset, f.Adapters, f.Audit != nil && f.Audit.Writer != "", nil),
 	}
 	if c.Adapter == AdapterMemory {
 		c.Kube = KubeNone
@@ -381,7 +374,7 @@ type Stores struct {
 	// composition root put in Config.Secrets. Nil delivers none.
 	Secrets secrets.Source
 	// V4 is the installation's secrets on layout v4: Internal and External
-	// over one state store. Nil on layout v3, the default.
+	// over one state store. Nil when the secrets are not the ssm source's.
 	V4 *secretstore.Stores
 	// Shared is true when the state is one every replica sees: a Valkey.
 	Shared bool
@@ -549,7 +542,7 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 }
 
 // deprecationDocs is where the way off the legacy store is written down.
-const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/guides/sluis/migrate/migrate-secrets-layout.md"
+const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/guides/sluis/migrate/migrate-state.md"
 
 // warnDeprecated says, once per open, that the legacy store and Valkey go away:
 // they are deprecated since v1.74.0 and removed in v1.75. It changes nothing else.

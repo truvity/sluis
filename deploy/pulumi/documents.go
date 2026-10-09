@@ -24,7 +24,7 @@ const (
 	docPolicy = "policy"
 )
 
-// The names of the configuration secrets this library writes, in layout v3.
+// The names of the configuration secrets this library writes.
 const (
 	stateSecretName      = "issuer/state-secret"
 	recoveryPasswordName = "recovery/password"
@@ -514,14 +514,14 @@ func own(m map[string]any, where, key, value string) error {
 	return nil
 }
 
-// SSMRoot is an installation's SSM root in layout v3: `/sluis/<instance>`.
+// SSMRoot is an installation's SSM root: `/sluis/<instance>`.
 func SSMRoot(instance string) string { return "/sluis/" + instance }
 
 var instancePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // validInstance is an instance name: lower-case letters, digits and dashes, and
 // never `private` or `export`, which would nest its tree under another's (or
-// under layout v2's /sluis/private and /sluis/export).
+// under the old /sluis/private and /sluis/export).
 func validInstance(s string) bool {
 	return instancePattern.MatchString(s) && s != "private" && s != "export"
 }

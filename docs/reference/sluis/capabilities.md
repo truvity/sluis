@@ -18,7 +18,7 @@ The presets `server`, `k8s-minimal` and `k8s-openbao` are unavailable; `aws-serv
 |---|---|---|
 | Ports as Go interfaces (`internal/port`) and the apps depending on them | ✅ | ✅ |
 | Domain stores on the ports: workspaces and credentials, GitHub organisations and Apps, a person's GitHub link (the token pair in Secrets, compare-and-swap refresh), runner and catalogue Apps, the Slack records, the console's session key (`internal/portstore`; any `ports.adapter` but `legacy`, which needs a Secrets adapter) | ✅ | ✅ |
-| Secrets in OpenBao (`adapters.secrets: openbao`, layout v3, compare-and-swap by KV `cas`; in the Unreleased section of the changelog) | 🧪 | 🧪 |
+| Secrets in OpenBao (`adapters.secrets: openbao`, compare-and-swap by KV `cas`; in the Unreleased section of the changelog) | 🧪 | 🧪 |
 | Export: copies of the secrets the console keeps (retired by [0041](../../decisions/0041-the-secret-contract.md): a consumer reads the typed document at `external/<kind>/<id>`, [exports](exports.md)) | retired | retired |
 | Export: the External Secrets `PushSecret`s of the chart (`slackApps[].push`, `directory.push`, `githubApps.push`, `githubApps.catalogue[].push`, `slackState.push`; need `config.store: kubernetes`) | deprecated, replaced by the above | n/a |
 | Inputs: mounted ConfigMaps and Secrets | ✅ | n/a |

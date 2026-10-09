@@ -2,8 +2,7 @@
 
 !!! warning "Deprecated"
     The legacy store (`ports.adapter: legacy`, the default) and Valkey are deprecated in v1.74.0 and removed in v1.75.
-    Move off them with `sluis migrate`: see [migrate the State](../../guides/sluis/migrate/migrate-state.md) and
-    [migrate the secrets layout](../../guides/sluis/migrate/migrate-secrets-layout.md).
+    Move off them with `sluis migrate`: see [migrate the State](../../guides/sluis/migrate/migrate-state.md).
 
 You have an installation on Kubernetes that keeps its state in Kubernetes objects and Valkey. By the end you can recognise the legacy store and keep it healthy. You also know the path to the DynamoDB state of [Kubernetes with AWS storage](kubernetes-aws.md).
 

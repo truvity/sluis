@@ -45,7 +45,7 @@ func TestTheControllerCarriesTheServiceDocumentsSecretsLayout(t *testing.T) {
 	// The backend of the v4 stores is memory, holding the blob's credentials.
 	mem := statememory.New()
 	cfg.stores.OpenState = func(context.Context, string, ...state.Option) (state.Store, error) { return mem, nil }
-	creds, err := secretstore.FromStore(mem, secretstore.LayoutV4, "").Internal.S3Credentials("internal/blobs/r2")
+	creds, err := secretstore.FromStore(mem, "").Internal.S3Credentials("internal/blobs/r2")
 	if err != nil {
 		t.Fatal(err)
 	}

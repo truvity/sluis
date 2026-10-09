@@ -114,10 +114,10 @@ func sortStrings(s []string) []string {
 // when its copy is older than the refresh; a read that fails keeps the copy.
 func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 	f := &fakeSSM{params: map[string]string{
-		"/sluis/example/private/config/issuer/state-secret":                "seed",
-		"/sluis/example/private/config/providers/google/default/client-id": "id",
-		"/sluis/example/private/credentials/github-org/acme/key":           "not config",
-		"/sluis/other/private/config/issuer/state-secret":                  "another installation's",
+		"/sluis/example/internal/config/issuer/state-secret":                "seed",
+		"/sluis/example/internal/config/providers/google/default/client-id": "id",
+		"/sluis/example/private/credentials/github-org/acme/key":            "not config",
+		"/sluis/other/internal/config/issuer/state-secret":                  "another installation's",
 	}}
 	now := time.Unix(0, 0)
 	src := &secrets.SSM{API: f, Root: "/sluis/example", Refresh: 5 * time.Minute, Now: func() time.Time { return now }}
@@ -134,7 +134,7 @@ func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 	if _, err := src.Get(ctx, "credentials/github-org/acme/key"); !errors.Is(err, secrets.ErrNotFound) {
 		t.Errorf("a credential is not configuration: %v", err)
 	}
-	f.params["/sluis/example/private/config/issuer/state-secret"] = "rotated"
+	f.params["/sluis/example/internal/config/issuer/state-secret"] = "rotated"
 	if v, _ := src.Get(ctx, "issuer/state-secret"); v != "seed" {
 		t.Errorf("read again before the refresh: %q", v)
 	}
@@ -148,7 +148,7 @@ func TestTheSSMSourceReadsThePrefixAndRefreshes(t *testing.T) {
 		t.Errorf("a failed read lost the copy: %q %v", v, err)
 	}
 	if _, err := secrets.NewSSM(ctx, "/sluis", "", "", 0); err == nil {
-		t.Error("a v2 root was accepted: layout v3 is /sluis/<instance>")
+		t.Error("a v2 root was accepted: an instance root is /sluis/<instance>")
 	}
 }
 
@@ -182,7 +182,7 @@ func TestALegacySourceReadsWhereV1SaidFirst(t *testing.T) {
 // A failed read is not tried again for a while, and a copy that cannot be read
 // again is served only for so long: then the source fails closed.
 func TestTheSSMSourceBacksOffAndFailsClosedWhenTooStale(t *testing.T) {
-	f := &fakeSSM{params: map[string]string{"/sluis/example/private/config/a": "1"}}
+	f := &fakeSSM{params: map[string]string{"/sluis/example/internal/config/a": "1"}}
 	now := time.Unix(0, 0)
 	src := &secrets.SSM{API: f, Root: "/sluis/example", Refresh: time.Minute, MaxStale: time.Hour, Now: func() time.Time { return now }}
 	ctx := context.Background()
@@ -233,34 +233,26 @@ func TestARootNamedPrivateOrExportIsRefused(t *testing.T) {
 	}
 }
 
-// The layout decides where the names are read: v3 under private/config, v4
-// under internal/config, and transition both, v4 winning.
-func TestSSMReadsTheConfigOfItsLayout(t *testing.T) {
+// The names are read under internal/config, never private/config.
+func TestSSMReadsTheInternalConfig(t *testing.T) {
 	ctx := context.Background()
 	api := &fakeSSM{params: map[string]string{
-		"/sluis/x/private/config/a":  "v3-a",
-		"/sluis/x/private/config/b":  "v3-b",
+		"/sluis/x/private/config/a":  "old-a",
+		"/sluis/x/private/config/b":  "old-b",
 		"/sluis/x/internal/config/a": "v4-a",
 		"/sluis/x/internal/config/c": "v4-c",
 	}}
-	for layout, want := range map[string]map[string]string{
-		"":           {"a": "v3-a", "b": "v3-b", "c": ""},
-		"v3":         {"a": "v3-a", "b": "v3-b", "c": ""},
-		"v4":         {"a": "v4-a", "b": "", "c": "v4-c"},
-		"transition": {"a": "v4-a", "b": "v3-b", "c": "v4-c"},
-	} {
-		src := &secrets.SSM{API: api, Root: "/sluis/x", Layout: layout}
-		for name, value := range want {
-			got, err := src.Get(ctx, name)
-			if value == "" {
-				if !errors.Is(err, secrets.ErrNotFound) {
-					t.Errorf("layout %q: %s = %q, %v; want absent", layout, name, got, err)
-				}
-				continue
+	src := &secrets.SSM{API: api, Root: "/sluis/x"}
+	for name, value := range map[string]string{"a": "v4-a", "b": "", "c": "v4-c"} {
+		got, err := src.Get(ctx, name)
+		if value == "" {
+			if !errors.Is(err, secrets.ErrNotFound) {
+				t.Errorf("%s = %q, %v; want absent", name, got, err)
 			}
-			if err != nil || got != value {
-				t.Errorf("layout %q: %s = %q, %v; want %q", layout, name, got, err, value)
-			}
+			continue
+		}
+		if err != nil || got != value {
+			t.Errorf("%s = %q, %v; want %q", name, got, err, value)
 		}
 	}
 	if err := secrets.CheckRoot("/sluis/internal"); err == nil {

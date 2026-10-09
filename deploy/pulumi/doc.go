@@ -57,11 +57,10 @@
 // at /opt/sluis, and a change to either publishes a new layer version and
 // updates the function (the old version is kept, for a rollback). The issuer's
 // OAuth-state secret and the recovery password are generated and kept in SSM
-// under the installation's root, /sluis/<instance> (layout v3).
-// /sluis/<instance>/private/* is sluis's alone, and config/* under it the
-// function reads. On layout v4 (docs/decisions/0041) /sluis/<instance>/internal/*
-// is sluis's alone and /sluis/<instance>/external/<kind>/<id> are the documents
-// consumers read, each granted on its own side.
+// under the installation's root, /sluis/<instance>.
+// (docs/decisions/0041) /sluis/<instance>/internal/* is sluis's alone, and
+// config/* under it the function reads; /sluis/<instance>/external/<kind>/<id>
+// are the documents consumers read, each granted on its own side.
 //
 // RenderPorts renders the `ports:` block of the processes' configuration from
 // the same names.

@@ -9,13 +9,13 @@
 //	      `valkey/password` is SLUIS_SECRET_VALKEY_PASSWORD. For a local run.
 //	file  the file <root>/<name>, read on every use, so a rotated Secret
 //	      mounted by the platform takes effect without a restart.
-//	ssm   the SecureString <root>/private/config/<name> of AWS SSM Parameter
-//	      Store (layout v3, root `/sluis/<instance>`): every parameter under
+//	ssm   the SecureString <root>/internal/config/<name> of AWS SSM Parameter
+//	      Store (root `/sluis/<instance>`): every parameter under
 //	      the prefix is read at once, decrypted, and read again when it is
 //	      older than the refresh (five minutes), so a rotation reaches a
 //	      function within that.
 //
-// The names are the layout's (docs/decisions/0036): `clients/<id>/secret`,
+// The names are the layout's (docs/decisions/0041): `clients/<id>/secret`,
 // `providers/google/<id>/client-id` and `client-secret`,
 // `issuer/state-secret`, `recovery/password`, `directory/<id>/key`,
 // `valkey/password`. Nothing here logs or returns a value in an error.

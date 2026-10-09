@@ -255,8 +255,7 @@ func TestTheSSMRootIsTheDocumentsSecretsRoot(t *testing.T) {
 			sel: ssm(map[string]any{"root": "/sluis/example"})}, ""},
 		"another root named": {Config{Adapter: AdapterLegacy, Kube: KubeNone, SecretsRoot: "/sluis/example",
 			sel: ssm(map[string]any{"root": "/sluis/staging"})}, "one root"},
-		"no root at all":        {Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: ssm(nil)}, "no root"},
-		"a converted v1 config": {Config{Adapter: AdapterLegacy, Kube: KubeNone, Converted: true, sel: ssm(nil)}, ""},
+		"no root at all": {Config{Adapter: AdapterLegacy, Kube: KubeNone, sel: ssm(nil)}, "no root"},
 	} {
 		c, _, err := tc.cfg.plan(ctx, quiet)
 		if err == nil {

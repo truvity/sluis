@@ -113,12 +113,6 @@ func parseMigrate(args []string, out io.Writer) (migrateFlags, bool, error) {
 
 // migrateCmd is `sluis migrate`.
 func migrateCmd(out io.Writer, args []string) error {
-	if len(args) > 0 && args[0] == "ssm-layout" {
-		return migrateSSMLayout(out, args[1:])
-	}
-	if len(args) > 0 && args[0] == "secrets-layout" {
-		return migrateSecretsLayout(out, args[1:])
-	}
 	f, done, err := parseMigrate(args, out)
 	if err != nil || done {
 		return err
@@ -169,7 +163,7 @@ func migrateCmd(out io.Writer, args []string) error {
 // openSide reads one configuration and opens its storage.
 //
 // It also returns which of the side's catalogue GitHub Apps have `export: true`,
-// from the policy the document names (layout v4 puts those keys at
+// from the policy the document names (those keys are at
 // external/github/<app>).
 func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string) (*kube.Client, error)) (migrate.Side, func(string) bool, error) {
 	one, err := config.Load[config.Sluis](file)
@@ -190,14 +184,9 @@ func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string
 		return migrate.Side{}, nil, err
 	}
 	side := migrate.Side{Name: file, Stores: st, BlobID: migrate.BlobID(sc)}
-	if cfg.Secrets != nil && cfg.Secrets.Source == "ssm" {
-		if side.SecretsLayout = cfg.Secrets.Layout; side.SecretsLayout == "" {
-			side.SecretsLayout = config.SecretsLayoutV3
-		}
-	}
 	pol, err := config.PolicyOf(one, nil)
 	if err != nil {
-		// Only layout v4 needs the catalogue (to know which Apps are exported).
+		// Only the v4 stores need the catalogue (to know which Apps are exported).
 		log.WarnContext(ctx, "the policy document could not be read: no catalogue App is treated as exported", slog.String("file", file),
 			slog.String("error", err.Error()))
 		return side, nil, nil

@@ -231,7 +231,7 @@
     },
     "cloudflare": {
       "additionalProperties": false,
-      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/guides/sluis/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs `secrets.layout: v4` or `transition`. Unset is off.",
+      "description": "sluis as the STS for Cloudflare API tokens and R2 credentials (docs/guides/sluis/cloudflare-tokens.md). Cloudflare has no web-identity federation, so sluis holds one minter credential per account and hands out short-lived account tokens cloned from a DISABLED prototype token. Needs the ssm secrets source. Unset is off.",
       "properties": {
         "accounts": {
           "additionalProperties": {
@@ -1234,7 +1234,7 @@
                 },
                 "credentials": {
                   "additionalProperties": false,
-                  "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, `secrets.layout` v4 or transition, and the `cloudflare` section.",
+                  "description": "Instead of a static document, sluis mints its own R2 credentials from a Cloudflare preset: the account's minter credential clones the preset's prototype, the credentials are renewed with a third of their lifetime left and minted again once after a 403. Exclusive with `credentialsRef`. Needs `endpoint`, the ssm secrets source, and the `cloudflare` section.",
                   "properties": {
                     "preset": {
                       "description": "A key of `cloudflare.presets` that has an `endpoint` (an R2 preset).",
@@ -1248,7 +1248,7 @@
                   "type": "object"
                 },
                 "credentialsRef": {
-                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (`secrets.layout: v4` or `transition`). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
+                  "description": "The internal address, `internal/<kind>/<id>`, of the `s3-credentials/v1` document (`access_key_id`, `secret_access_key`) that holds the static credentials for `endpoint`, in the installation's secrets store (the ssm secrets source). Read at start and again after an answer of 403, at most once a minute. Needs `endpoint`; `region` defaults to `auto` with it. Any other address is refused. This static document is the simple way and needs nothing else: no `cloudflare` section is involved.",
                   "pattern": "^internal/[a-z0-9][a-z0-9-]{0,30}/[a-z0-9][a-z0-9._-]{0,62}$",
                   "type": "string"
                 },
@@ -1439,7 +1439,7 @@
         "grace": {
           "$ref": "#/$defs/duration",
           "default": "24h",
-          "description": "`ssm`, layout `transition` or `v4`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
+          "description": "`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap)."
         },
         "kmsKeyId": {
           "description": "`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused.",
@@ -1447,11 +1447,9 @@
           "type": "string"
         },
         "layout": {
-          "default": "v3",
-          "description": "`ssm`: the storage layout of the installation's secrets. `v3` keeps them under `<root>/private/`. `transition` reads v4 first and falls back to v3, and writes every value to v4 and then to v3. `v4` keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Changing it is `sluis migrate secrets-layout`, never a start-time upgrade.",
+          "default": "v4",
+          "description": "`ssm`: the storage layout of the installation's secrets: `v4`, the only one and the default. It keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first.",
           "enum": [
-            "v3",
-            "transition",
             "v4"
           ]
         },
@@ -1472,7 +1470,7 @@
         },
         "source": {
           "default": "env",
-          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/private/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (layout v3, root /sluis/<instance>).",
+          "description": "`env`: the variable SLUIS_SECRET_<NAME> (the name upper-cased, every other character an underscore), for a local run. `file`: the file <root>/<name>, read on every use, so a rotated mount takes effect without a restart. `ssm`: the SecureString <root>/internal/config/<name> in AWS SSM Parameter Store, every one under the prefix read at once and again after `refresh` (root /sluis/<instance>).",
           "enum": [
             "env",
             "file",

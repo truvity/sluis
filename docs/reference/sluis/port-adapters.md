@@ -13,20 +13,16 @@ Settings, engine mapping, limits and IAM of each adapter beyond the [port contra
 
 ## The SSM adapter
 
-`internal/port/ssm`, `adapters.secrets.adapter: ssm`, or the `aws-hybrid`, `aws-serverless` and `k8s-aws` presets. One SecureString parameter per secret. Runs on Kubernetes and Lambda.
+`internal/port/ssm`, `adapters.secrets.adapter: ssm`, or the `aws-hybrid`, `aws-serverless` and `k8s-aws` presets. It opens the layout-v4 stores of `secrets` (`internal/secretstore`): one SecureString parameter per secret. Runs on Kubernetes and Lambda.
 
 | Aspect | Behavior |
 |---|---|
-| `root` | `/sluis/<instance>`. A serve document's `secrets.root` supplies it; naming another here is refused. A v1 document with none keeps `/sluis` |
+| `root` | `/sluis/<instance>`. `secrets.root` supplies it; naming another here is refused |
 | `kmsKeyId` | Key id, ARN or alias. Unset is `alias/aws/ssm` |
 | `region`, `endpoint` | `endpoint` is for LocalStack |
 | Paths | [storage layout](storage-layout.md#ssm-the-ssm-secrets-adapter) |
-| Text values | Stored as is |
-| Binary values | Non-UTF-8 values, or values starting `sluis-b64:`, are stored as `sluis-b64:` plus base64, so at most about 6 KiB |
-| Tier | Intelligent-Tiering: standard (4 KiB, free), advanced (8 KiB, billed) when needed, never downgraded. `MaxSecret` is checked first |
-| Version | SSM parameter version, a counter per write |
-| `PutIfVersion` | Not atomic. Reads the version, then writes with Overwrite; a writer in between is overwritten. Creation (empty version) is atomic |
-| Concurrency | The target lease serialises writers of one secret. Secrets that need true compare-and-swap need another adapter |
+| Size | 4 KiB standard; up to 8 KiB advanced (billed, never downgraded) |
+| Update | Read, then write with Overwrite: not atomic, a writer in between is overwritten. Creation is atomic. The target lease serialises writers |
 
 IAM for the sluis role, on the parameters of the root:
 
@@ -38,7 +34,6 @@ IAM for the sluis role, on the parameters of the root:
     "ssm:PutParameter", "ssm:DeleteParameter"
   ],
   "Resource": [
-    "<the SSM parameter ARNs of /sluis/<instance>/private/credentials/*>",
     "<the SSM parameter ARNs of /sluis/<instance>/internal/credentials/* and /external/*>"
   ]
 }
@@ -46,11 +41,11 @@ IAM for the sluis role, on the parameters of the root:
 
 | Grant | Applies to |
 |---|---|
-| Read-only `GetParameter`, `GetParameters`, `GetParametersByPath` on `/sluis/<instance>/private/config/*` | The console function only. Controllers are denied |
+| Read-only `GetParameter`, `GetParameters`, `GetParametersByPath` on `/sluis/<instance>/internal/config/*` | The console function only. Controllers are denied |
 | `kms:Decrypt`, `kms:Encrypt` on the key | Only when `kmsKeyId` is set |
-| `ssm:GetParameterHistory` | Layout v4, the service role |
+| `ssm:GetParameterHistory` | The service role |
 | Resources `<prefix>` and `<prefix>/*` | Every read grant: `GetParametersByPath` is authorised against the path itself |
-| `ssm:GetParameter` (and `kms:Decrypt`) on the exact `/sluis/<instance>/external/<kind>/<id>` parameters | A consumer's External Secrets Operator. Never `private/*` or `internal/*` |
+| `ssm:GetParameter` (and `kms:Decrypt`) on the exact `/sluis/<instance>/external/<kind>/<id>` parameters | A consumer's External Secrets Operator. Never `internal/*` |
 
 ## The sqs adapter
 

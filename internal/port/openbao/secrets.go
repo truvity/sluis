@@ -17,8 +17,9 @@ import (
 )
 
 // This file is the [port.Secrets] adapter over an OpenBao (or Vault) KV
-// version 2 mount, laid out exactly as the ssm adapter lays out SSM (layout v3,
-// docs/decisions/0036): the same Client, the same login and the same
+// version 2 mount, laid out in the `private/` and `export/` trees the ssm
+// adapter used before layout v4 (docs/decisions/0036; the ssm adapter is on v4
+// now, this one has no v4 yet): the same Client, the same login and the same
 // TLS-verified connection as the Export adapter, a different shape of key.
 //
 // # Layout

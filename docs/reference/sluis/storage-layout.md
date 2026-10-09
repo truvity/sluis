@@ -1,29 +1,30 @@
 # Storage layout
 
-Layout v3 on the AWS adapters, with layout v4 for SSM. A record has a kind and an id: `pk` and `sk` in DynamoDB, `credentials/<kind>/<id>/<ref>` in Secrets, `a/b` for a two-part id. The mapping is in `internal/port/keys.go`, logical keys in [keys](keys.md). Decided in [ADR 0036](../../decisions/0036-configuration-is-immutable-per-instance.md).
+Layout v4 for SSM, and the AWS adapters' tables. A record has a kind and an id: `pk` and `sk` in DynamoDB, `credentials/<kind>/<id>/<ref>` in Secrets, `a/b` for a two-part id. The mapping is in `internal/port/keys.go`, logical keys in [keys](keys.md). Decided in [ADR 0036](../../decisions/0036-configuration-is-immutable-per-instance.md).
 
 ## SSM (the `ssm` Secrets adapter)
 
-`<root>` is `/sluis/<instance>`, the serve document's `secrets.root`. An instance is not named `private`, `export`, `internal` or `external`. `<root>/private/*` is sluis's alone: `config/` holds secrets a document names ([names](secrets.md#the-names)), `credentials/` what sluis writes.
+`<root>` is `/sluis/<instance>`, the serve document's `secrets.root`. An instance is not named `private`, `export`, `internal` or `external`. `<root>/internal/*` is sluis's alone: `config/` holds secrets a document names ([names](secrets.md#the-names)), `credentials/` what sluis writes. `<root>/external/<kind>/<id>` is a typed document a consumer reads ([secrets](secrets.md#the-external-documents)).
 
 | SSM path | What it is | Who writes it |
 |---|---|---|
-| `<root>/private/config/providers/google/<provider>/client-id`, `client-secret` | the Google OAuth client of the directory (`oauthClient.provider`) | an operator seeds it; sluis reads it |
-| `<root>/private/config/clients/<oidc-client-id>/secret` | the secret of a confidential client of the issuer | an operator seeds it |
-| `<root>/private/config/issuer/state-secret` | the issuer's sign-in state secret (32 random bytes, base64) | `deploy/pulumi` generates it (`StateSecretParameterName(instance)`) |
-| `<root>/private/config/recovery/password` | the recovery password | `deploy/pulumi` generates it |
-| `<root>/private/config/directory/<id>/key` | a declared workspace's service-account key | an operator seeds it |
-| `<root>/private/config/valkey/password` | the shared store's password | an operator seeds it |
-| `<root>/private/credentials/console/session-key` | the key the console signs its sessions with | sluis (one stable item) |
-| `<root>/private/credentials/directory/<provider>/<workspace-id>/<ref>` | an identity directory's credential (`directory/google/<workspace-id>`; later `directory/entra/<tenant-id>`) | sluis |
-| `<root>/private/credentials/github-org/<org>/<ref>` | an organisation's App key | sluis |
-| `<root>/private/credentials/github-app/link/<ref>` | the link App's client secret | sluis |
-| `<root>/private/credentials/github-app/<app-id>/<ref>` | a catalogue GitHub App's key | sluis |
-| `<root>/private/credentials/github-link/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |
-| `<root>/private/credentials/github-runner-app/<tier>/<org>/<ref>` | a runner App's key | sluis |
-| `<root>/private/credentials/slack-workspace/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
-| `<root>/private/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret and bot token | sluis |
-| `<root>/export/<export-name>` | a copy for a consumer (retired: see [Exports](#exports-retired)) | nothing, since ADR 0041 |
+| `<root>/internal/config/providers/google/<provider>/client-id`, `client-secret` | the Google OAuth client of the directory (`oauthClient.provider`) | an operator seeds it; sluis reads it |
+| `<root>/internal/config/clients/<oidc-client-id>/secret` | the secret of a confidential client of the issuer (read as the `oidc/v1` document `external/oidc/<id>`) | an operator seeds it |
+| `<root>/internal/config/issuer/state-secret` | the issuer's sign-in state secret (32 random bytes, base64) | `deploy/pulumi` generates it (`StateSecretParameterName(instance)`) |
+| `<root>/internal/config/recovery/password` | the recovery password | `deploy/pulumi` generates it |
+| `<root>/internal/config/directory/<id>/key` | a declared workspace's service-account key | an operator seeds it |
+| `<root>/internal/config/valkey/password` | the shared store's password | an operator seeds it |
+| `<root>/internal/credentials/console/session-key` | the key the console signs its sessions with | sluis (one stable item) |
+| `<root>/internal/credentials/directory/<provider>/<workspace-id>/<ref>` | an identity directory's credential (`directory/google/<workspace-id>`; later `directory/entra/<tenant-id>`) | sluis |
+| `<root>/internal/credentials/github-org/<org>/<ref>` | an organisation's App key | sluis |
+| `<root>/internal/credentials/github-app/link/<ref>` | the link App's client secret | sluis |
+| `<root>/internal/credentials/github-app/<app-id>/<ref>` | a catalogue GitHub App's key, until it is installed or when it is not exported | sluis |
+| `<root>/internal/credentials/github-link/<github-user-id>/<ref>` | a person's GitHub token pair | sluis |
+| `<root>/internal/credentials/slack-workspace/<team>/<ref>` | a Slack workspace's client secret and bot token | sluis |
+| `<root>/internal/credentials/slack-app/<app-id>/<ref>` | a catalogue Slack App's client secret | sluis |
+| `<root>/external/oidc/<id>` | a generated or seeded client's secret, an `oidc/v1` document | sluis, or an operator |
+| `<root>/external/github/<id>` | an installed App's key: a catalogue App with `export: true`, or `runner-<tier>-<org>` for a runner App, a `github/v1` document | sluis |
+| `<root>/external/slack/<id>` | a catalogue Slack App's bot token, a `slack/v1` document | sluis |
 
 | Rule | Meaning |
 |---|---|
@@ -32,21 +33,7 @@ Layout v3 on the AWS adapters, with layout v4 for SSM. A record has a kind and a
 | Unsafe id segment | A `~`, an empty segment or one starting `u-` is written `u-` plus its bytes in hex |
 | `directory/<provider>/` | The provider is the record's `backend` (`google`). A credential saved before its record is under `google` |
 
-`sluis migrate ssm-layout --to-root /sluis/<instance>` copies the `config/` items from the one-root layout and deletes nothing. `sluis migrate` moves the credentials ([secrets](secrets.md#ssm-layout-v3)). IAM follows the root.
-
-### Layout v4 (`secrets.layout: v4`)
-
-`private/` and `export/` become `internal/` and `external/`; `external/<kind>/<id>` is a typed document ([secrets](secrets.md#ssm-layout-v4)). Move with `sluis migrate secrets-layout --to v4`, then `--delete-v3` ([guide](../../guides/sluis/migrate/migrate-secrets-layout.md)). A legacy in-cluster installation moves with `sluis migrate` straight into v4.
-
-| v3 | v4 address |
-|---|---|
-| `private/config/<name>` | `internal/config/<name>` |
-| `private/config/clients/<id>/secret`, `private/credentials/oidc-client/<id>/secret` | `external/oidc/<id>` |
-| `private/credentials/github-runner-app/<tier>/<org>/<ref>` (installed) | `external/github/runner-<tier>-<org>` |
-| `private/credentials/github-app/<id>/<ref>` (installed, `export: true`) | `external/github/<id>` |
-| the bot token in `private/credentials/slack-app/<id>/<ref>` | `external/slack/<id>` |
-| every other `private/credentials/<kind>/<id>/<ref>` | `internal/credentials/<kind>/<id>/<ref>` |
-| `export/<name>` | none: the exports copies do not exist in v4 |
+IAM follows the root. Layout v3 (`private/` and `export/`) was removed in v1.75; to move an installation still on it, see [move the secrets to layout v4](../../guides/sluis/migrate/migrate-secrets-layout.md).
 
 ## DynamoDB (the `dynamodb` State, Index and Trigger adapter)
 
@@ -117,7 +104,7 @@ One table with string `pk` (hash) and string `sk` (range). `pk` is the kind, so 
 
 The logical key maps to kind and credential path as follows.
 
-| Logical key (unchanged) | v2 `pk` / `sk` | credential path under `<root>/private/` |
+| Logical key (unchanged) | v2 `pk` / `sk` | credential path under `<root>/internal/` |
 |---|---|---|
 | `ws.dir.<provider>.<id>` (was `ws.dir.<id>`) | `directory` / `<provider>/<id>` | `credentials/directory/<provider>/<id>/<ref>` |
 | `gh.org.<org>` | `github-org` / `<org>` | `credentials/github-org/<org>/<ref>` |
@@ -161,4 +148,4 @@ The logical key maps to kind and credential path as follows.
 
 ## Exports (retired)
 
-Layout v3's `<root>/export/<path>` copies are retired ([ADR 0041](../../decisions/0041-the-secret-contract.md)). A consumer reads `<root>/external/<kind>/<id>`: [secrets](secrets.md#the-external-documents) has the kinds and schemas, [exports](exports.md) the old sources.
+The `<root>/export/<path>` copies of layout v3 are retired ([ADR 0041](../../decisions/0041-the-secret-contract.md)). A consumer reads `<root>/external/<kind>/<id>`: [secrets](secrets.md#the-external-documents) has the kinds and schemas, [exports](exports.md) the old sources.
