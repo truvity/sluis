@@ -12,7 +12,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
-import { access, forHowLong, github, issuerIsSameOrigin, personName, reason, roleName, sessions, sourceName, type Me } from "./api";
+import { access, forHowLong, github, issuerIsSameOrigin, issuerFailure, personName, roleName, sessions, sourceName, type Me } from "./api";
 import type { ExplainRequest, ExplainResponse } from "./gen/directoryroster/v1/access_pb";
 import { RevokeScope, type Session } from "./gen/accessissuer/v1/session_pb";
 import { formatChain } from "./heldChain";
@@ -101,6 +101,7 @@ export function Explanation({
   const found = useAsync(
     () => (sessionsOf ? sessions.listSessions({ identity: sessionsOf }) : Promise.resolve(undefined)),
     [sessionsOf],
+    issuerFailure,
   );
 
   const revoke = async (session: Session) => {
@@ -111,7 +112,7 @@ export function Explanation({
       onDone?.(`Ended the session on ${session.clientId}.`);
       found.reload();
     } catch (error) {
-      setSessionFailure(reason(error));
+      setSessionFailure(issuerFailure(error));
     } finally {
       setBusy(undefined);
     }
@@ -127,7 +128,7 @@ export function Explanation({
       onDone?.("Ended that browser's sessions.");
       found.reload();
     } catch (error) {
-      setSessionFailure(reason(error));
+      setSessionFailure(issuerFailure(error));
     } finally {
       setBusy(undefined);
     }
@@ -161,7 +162,7 @@ export function Explanation({
       );
       found.reload();
     } catch (error) {
-      setSessionFailure(reason(error));
+      setSessionFailure(issuerFailure(error));
     } finally {
       setBusy(undefined);
     }
@@ -339,6 +340,7 @@ export function Explanation({
         >
           <Loading busy={found.loading} />
           <Failure error={found.error ?? sessionFailure} />
+          {found.error ? null : (
           <SessionsPanel
             sessions={found.value?.sessions ?? []}
             signIns={found.value?.signIns}
@@ -348,6 +350,7 @@ export function Explanation({
             revoking={busy}
             empty="No open session."
           />
+          )}
         </Section>
       ) : null}
 

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { reason } from "./api";
+import { debounced } from "./debounce";
 
 export type Async<T> = {
   loading: boolean;
@@ -9,14 +10,14 @@ export type Async<T> = {
 };
 
 /** Load something, keep the last value while reloading, surface failures. */
-export function useAsync<T>(load: () => Promise<T>, deps: unknown[] = []): Async<T> {
+export function useAsync<T>(load: () => Promise<T>, deps: unknown[] = [], describe: (error: unknown) => string = reason): Async<T> {
   const [state, setState] = useState<{ loading: boolean; value?: T; error?: string }>({ loading: true });
 
   const run = useCallback(() => {
     setState((previous) => ({ ...previous, loading: true, error: undefined }));
     load()
       .then((value) => setState({ loading: false, value }))
-      .catch((error: unknown) => setState({ loading: false, error: reason(error) }));
+      .catch((error: unknown) => setState({ loading: false, error: describe(error) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
@@ -52,4 +53,18 @@ export function useHashView(fallback: string): [string, (next: string) => void] 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return [view, (next: string) => { window.location.hash = next; }];
+}
+
+/** Commit `draft` after it has been still for `ms`, and again at once
+ *  when the returned function is called (Enter). `commit` may change on
+ *  every render; only a new `draft` restarts the wait. */
+export function useDebouncedCommit<T>(draft: T, commit: (value: T) => void, ms: number): () => void {
+  const latest = useRef({ draft, commit });
+  latest.current = { draft, commit };
+  useEffect(() => {
+    const d = debounced(() => latest.current.commit(latest.current.draft), ms);
+    d.call();
+    return d.cancel;
+  }, [draft, ms]);
+  return useCallback(() => latest.current.commit(latest.current.draft), []);
 }

@@ -12,7 +12,6 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 
 import { access, matcherKind } from "./api";
@@ -20,7 +19,7 @@ import type { ExplainRequest, PolicyGroup } from "./gen/directoryroster/v1/acces
 import { useAsync } from "./hooks";
 import { Explanation } from "./Person";
 import { paths } from "./router";
-import { Facet, Failure, Loading, Mono, Names, Nothing, Page, Ref, Section, State } from "./ui";
+import { Facet, Failure, InfoTip, Loading, Mono, Names, Nothing, Page, Ref, Section } from "./ui";
 
 /** The kind of rule, which is also the tab. `directory` is the one this
  *  page used to omit, and it is the majority of the estate. */
@@ -52,7 +51,6 @@ type Row = {
   rule: string;
   group: string;
   needs: keyof typeof dependsOn;
-  declared: boolean;
   // A GitHub binding feeds a team or an organisation rather than an
   // internal group, so what it feeds has no group page to link to and
   // opens no client.
@@ -74,7 +72,6 @@ function githubRow(kind: Kind, group: string, feeds: string, role: string, group
     group: feeds,
     filterGroup: group,
     needs: needsOf(groups, group),
-    declared: true,
     team: true,
     role,
   };
@@ -130,7 +127,6 @@ export function Rules() {
       rule: m.address,
       group: g.name,
       needs: "directory" as const,
-      declared: true,
     })),
     ...g.rules.map((rule) => ({
       key: `${g.name}:${rule.kind}:${rule.rule}`,
@@ -138,7 +134,6 @@ export function Rules() {
       rule: rule.rule,
       group: g.name,
       needs: "proof" as const,
-      declared: true,
     })),
   ]);
 
@@ -196,7 +191,6 @@ export function Rules() {
                 <TableCell>Feeds</TableCell>
                 <TableCell>Opens</TableCell>
                 <TableCell>Depends on</TableCell>
-                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -207,7 +201,7 @@ export function Rules() {
                   <TableCell>
                     {row.team ? (
                       <>
-                        <Mono>{row.group}</Mono>
+                        {feeds(row)}
                         {row.role === "maintainer" ? (
                           <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                             as maintainer
@@ -230,14 +224,10 @@ export function Rules() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={dependsOn[row.needs].why}>
-                      <Typography variant="body2" component="span" sx={{ borderBottom: "1px dotted", cursor: "help" }}>
-                        {dependsOn[row.needs].label}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell align="right">
-                    <State kind={row.declared ? "declared" : "console"} />
+                    <Typography variant="body2" component="span">
+                      {dependsOn[row.needs].label}
+                    </Typography>
+                    <InfoTip label={`Why this depends on ${dependsOn[row.needs].label}`}>{dependsOn[row.needs].why}</InfoTip>
                   </TableCell>
                 </TableRow>
               ))}
@@ -250,6 +240,24 @@ export function Rules() {
         <Simulator />
       </Section>
     </Page>
+  );
+}
+
+/** What a GitHub binding feeds, linked to the page about it: the
+ *  organisation for an org binding, `org/team` for a team. */
+function feeds(row: Row) {
+  if (row.kind === "github-org") {
+    return (
+      <Ref to={paths.githubOrganisation(row.group)} mono>
+        {row.group}
+      </Ref>
+    );
+  }
+  const [org, ...team] = row.group.split("/");
+  return (
+    <Ref to={paths.githubTeam(org, team.join("/"))} mono>
+      {row.group}
+    </Ref>
   );
 }
 
