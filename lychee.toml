@@ -13,7 +13,6 @@ max_concurrency = 8
 # 429 is a host asking for patience, not a dead link.
 accept = ["200..=204", "429"]
 user_agent = "Mozilla/5.0 (compatible; sluis-docs-link-check)"
-include_fragments = false
 
 exclude = [
   # GitHub's edit and blob URLs need a sign-in or point at files this very
