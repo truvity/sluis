@@ -1043,7 +1043,7 @@
       "properties": {
         "adapter": {
           "default": "legacy",
-          "description": "`legacy` keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
+          "description": "`legacy` is deprecated in v1.74.0 and removed in v1.75: migrate with `sluis migrate`. It keeps state where it has always been kept: the namespace's ConfigMaps and Secrets and, when `valkey` is set, Valkey. `memory` keeps all of it in this process, which a restart loses: for a local run and the demonstration, and not with `store: kubernetes` or `valkey`.  `dynamodb` keeps the same in one DynamoDB table (`ports.dynamodb`), with the platform's credentials, and takes its Blob from `legacy` unless `ports.blob` names its own.",
           "enum": [
             "legacy",
             "memory",
@@ -1573,7 +1573,7 @@
     },
     "valkey": {
       "additionalProperties": false,
-      "description": "The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
+      "description": "Deprecated in v1.74.0, removed in v1.75: migrate with `sluis migrate`. The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
       "properties": {
         "address": {
           "allOf": [

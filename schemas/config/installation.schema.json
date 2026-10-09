@@ -2612,7 +2612,7 @@
     },
     "valkey": {
       "additionalProperties": false,
-      "description": "The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
+      "description": "Deprecated in v1.74.0, removed in v1.75: migrate with `sluis migrate`. The shared store for logins in progress and snapshots. Unset keeps both in memory, correct for one replica.",
       "properties": {
         "address": {
           "allOf": [

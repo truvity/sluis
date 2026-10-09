@@ -46,3 +46,6 @@ func openK8s(_ context.Context, cfg Config, _ *slog.Logger) (*Stores, error) {
 	return nil, fmt.Errorf("ports.adapter: %q needs Kubernetes or Valkey, neither of which is in the Lambda build; "+
 		"use %q", cfg.Adapter, AdapterDynamoDB)
 }
+
+// valkeyConfigured is always false: the Lambda build has no Valkey.
+func (Config) valkeyConfigured() bool { return false }

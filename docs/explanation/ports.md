@@ -49,7 +49,7 @@ The table is a summary; [adapters](../reference/adapters.md) is the registry's o
 - **DynamoDB has no cheap change feed**, so `Watch` and the Trigger poll the prefix: a stream needs a consumer, a second
   IAM surface and shard handling, and the port's contract (at-least-once, reconcile by listing) allows it.
 - **A notification is a hint.** The lease and the backstop schedule make a duplicate or a lost one harmless.
-- **The `legacy` adapter is temporary.** It wraps today's ConfigMaps, Secrets and Valkey and is deleted when the
+- **The `legacy` adapter is temporary, and deprecated in v1.74.0 (removed in v1.75).** It wraps today's ConfigMaps, Secrets and Valkey and is deleted when the
   migration of [0031](../decisions/0031-a-generic-migration-tool.md) has run.
 - **One suite, every adapter.** The conformance suite is the gate for adding or changing an adapter and for the
   migration tool, where each adapter is a source and a destination
