@@ -1,8 +1,10 @@
-# Getting started on Kubernetes
+# Getting started: Kubernetes with AWS storage
 
 From nothing to an installation that archives a record, indexes it and verifies it, using the
 chart in direct mode (the writer is the receiver; no stream). Start here; to move to a stream
-later see [run the chart in stream mode](../how-to/run-stream-mode.md).
+later see [run the chart in stream mode](../how-to/run-stream-mode.md). To run the services themselves (NATS,
+PostgreSQL, Secrets) in the cluster, with the archive on AWS S3 or R2, see
+[the services in the cluster](in-cluster.md).
 
 An installation belongs to one application and runs in that application's namespace, rendered
 by the application's own chart with this repository's chart as a dependency
@@ -18,7 +20,7 @@ when one is missing.
 |---|---|
 | a bucket and a prefix for this application | [prepare the bucket](../how-to/prepare-the-bucket.md) |
 | a Postgres database and a role for each part | [prepare the database](../how-to/prepare-the-database.md) |
-| a reference clock for the clock-sync job | an NTP address the pods can reach (`169.254.169.123` on AWS) |
+| a reference clock for the clock-sync job | an NTP address the pods can reach (`169.254.169.123` on AWS, the instance's own time service; elsewhere, for example, `pool.ntp.org`) |
 | a workload identity for the pods | Pod Identity or IRSA annotations on each component's ServiceAccount |
 | the images | `ghcr.io/truvity/audit/` (`audit-writer`, `audit-query`, `audit-observe`, `audit-notary` and `audit`, the toolchain the jobs run), one tag that also stamps the chart; none has a shell |
 | the application's catalogue | **nothing to install:** the application registers it with the receiver at start-up |
