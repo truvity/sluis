@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -46,7 +45,7 @@ func fixture(t *testing.T, shared, leased bool, stored string) *App {
 			t.Fatal(err)
 		}
 	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	m, err := minter.New(minter.Config{
 		Instance: "example", Cloudflare: doc(), Internal: stores.Internal, External: stores.External, Log: log,
 		Dial: func(context.Context, string, string) (minter.API, error) {
