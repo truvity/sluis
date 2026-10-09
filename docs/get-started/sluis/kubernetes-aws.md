@@ -128,7 +128,7 @@ openbao:
   auth: {method: jwt, mount: jwt-demo, role: sluis, tokenFile: /var/run/openbao/token}
 ```
 
-Set `exports.openbao.token.audience` to the audience in your role's `bound_audiences`. The chart projects the login token with it. The server's CA is the system's unless you set `exports.openbao.caBundle` (the PEM) and `caFile` in the block; the chart refuses values that disagree. The state secret goes under `<root>/private/config/issuer/state-secret` in that mount, not in SSM. The role's policy is in the [OpenBao secrets adapter](../../reference/sluis/openbao-secrets-adapter.md).
+Set `adapters.openbao.token.audience` to the audience in your role's `bound_audiences`. The chart projects the login token with it. The server's CA is the system's unless you set `adapters.openbao.caBundle` (the PEM) and `caFile` in the block; the chart refuses values that disagree. The state secret goes under `<root>/private/config/issuer/state-secret` in that mount, not in SSM. The role's policy is in the [OpenBao secrets adapter](../../reference/sluis/openbao-secrets-adapter.md).
 
 ## 4. Install the chart in documents mode
 

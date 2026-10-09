@@ -202,8 +202,8 @@ sluis.checks: everything the service's config must agree with.
 {{- $secretsOpenbao := eq (dig "adapters" "secrets" "adapter" "" $c) "openbao" -}}
 {{- if $secretsOpenbao -}}
 {{- $set := dig "adapters" "secrets" "settings" dict $c -}}
-{{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.caFile" "got" $set.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "exports.openbao.caBundle" "present" (not (empty .Values.exports.openbao.caBundle))) -}}
-{{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $set) "want" "/var/run/openbao/token" "source" "exports.openbao.token.audience" "present" (not (empty .Values.exports.openbao.token.audience))) -}}
+{{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.caFile" "got" $set.caFile "want" "/var/run/access-issuer/openbao-ca/ca.pem" "source" "adapters.openbao.caBundle" "present" (not (empty .Values.adapters.openbao.caBundle))) -}}
+{{- include "sluis.expectPath" (dict "key" "config.adapters.secrets.settings.auth.tokenFile" "got" (dig "auth" "tokenFile" "" $set) "want" "/var/run/openbao/token" "source" "adapters.openbao.token.audience" "present" (not (empty .Values.adapters.openbao.token.audience))) -}}
 {{- end -}}
 {{- /*
   Recovery is the one thing left that asks the API server, and deliberately

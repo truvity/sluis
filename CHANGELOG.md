@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **Breaking: the chart's `exports.openbao.*` values are now `adapters.openbao.*`.** The key named the layout v3 exports, which no longer exist; it only configures the CA bundle and the projected login token of the `openbao` secrets adapter. `exports.openbao.caBundle` becomes `adapters.openbao.caBundle`, `exports.openbao.token.audience` becomes `adapters.openbao.token.audience` and `exports.openbao.token.expirationSeconds` becomes `adapters.openbao.token.expirationSeconds`. The mount paths and the rendered objects are unchanged. A values file that still sets `exports` is refused by the schema.
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).

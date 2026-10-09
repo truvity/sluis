@@ -54,7 +54,7 @@ policy:
       runnerTiers: [preview, stable]
 serviceAccount:
   awsIdentity: pod-identity
-exports:
+adapters:
   openbao:
     caBundle: |
       -----BEGIN CERTIFICATE-----

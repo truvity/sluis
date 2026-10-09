@@ -1,5 +1,5 @@
 # A caFile the chart mounts nothing at fails the render, naming the value that mounts it.
-# error: config.adapters.secrets.settings.caFile is "/etc/ca.pem" and the chart renders nothing there: set exports.openbao.caBundle
+# error: config.adapters.secrets.settings.caFile is "/etc/ca.pem" and the chart renders nothing there: set adapters.openbao.caBundle
 config:
   issuerURL: https://issuer.example
   adapters:
