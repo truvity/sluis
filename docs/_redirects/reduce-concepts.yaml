@@ -1,0 +1,4 @@
+concepts/sluis/doctrine.md: concepts/sluis/README.md
+concepts/sluis/one-process.md: concepts/sluis/design.md
+concepts/audit/metering.md: concepts/audit/billing.md
+concepts/sluis/github-pass.md: concepts/sluis/github-controller.md

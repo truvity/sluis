@@ -1,98 +1,63 @@
-# The Audit page
+# What is the Audit page?
 
-One page, in the application's own console. It is a React component from
-`@truvity/audit-react` (`react/`, over the query client `@truvity/audit` in `ts/`) that the console renders
-like any other page of itself, and it calls the query service of the
-installation in that application's namespace.
+The Audit page is a React component from `@truvity/audit-react`, over the query client `@truvity/audit` in `ts/`. The application's own console renders it. It calls the query service of the installation in that application's namespace.
 
-There is no standalone console and no second surface. A console existed in
-the earlier design because a central installation served several
-applications and had no console of its own to live in; an installation now
-belongs to one application, which already has one
-([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
+There is no standalone console. An installation belongs to one application, which already has a console.
 
-## Who the token belongs to
+## Whose token it uses
 
-The page holds **no credentials of its own** and does no authentication. It
-is handed a transport with a bearer, and the query service decides what that
-bearer may read.
+The page holds no credentials and does no authentication. It receives a transport with a bearer, and the query service decides what that bearer may read.
 
-**The usual case: the console's own gateway-issued token.** The console sits
-behind a gateway that authenticates the person and issues the token their
-session already carries. The page calls the query service directly with it.
-The query service lists that issuer and audience among its grants, and the
-grants say which profiles, tenants, operations and period the person may
-read. Nothing is minted for the page, and nothing about the audit trail is
-configured in the console beyond the query service's address.
+The usual bearer is the console's gateway-issued session token. The query service lists that issuer and audience among its grants, and the grants say which profiles, tenants, operations and period the person may read. Configure only the query service's address in the console.
 
 ```mermaid
 flowchart TB
-  P["the person"] --> GW["the application's gateway<br/>issues the session's token"]
-  GW --> C["the application's console<br/>hosts the Audit page"]
+  P["the person"] --> GW["gateway<br/>issues the session token"]
+  GW --> C["console<br/>hosts the Audit page"]
   C -- "the console's own token" --> Q["query service"]
   Q --> IDX[("index")]
   Q --> S3[("archive")]
 ```
 
-**A console whose session is a cookie of its own** cannot hand the page a
-bearer, because it has none. Such a console proxies the query service and
-mints a short-lived token per person from the claims of its own session,
-with an audience the query service trusts. A console that is itself an
-issuer, or sits beside one, mints such a token cheaply, and the token never
-reaches the browser; a cookie console with no issuer is the one for which
-this costs a signing key, a mint path and a proxy route, and where a
-gateway-issued token is preferred if there is one. Either way the grants are
-the query service's, not the console's.
+A console whose session is a cookie has no bearer. It proxies the query service and mints a short-lived token per person from its session claims, with an audience the query service trusts. The token never reaches the browser. This needs a signing key, a mint path and a proxy route, so prefer a gateway-issued token when you have one. See [a console with a session of its own](../../guides/audit/connect/connect-an-application.md#a-console-with-a-session-of-its-own).
 
-**Where the query service lives.** The page's calls go to the query service
-by whichever address the console can reach. A console that runs in the
-cluster keeps that address in-cluster (or proxies, as above), and the
-installation gets no public name. A public name, `<host>/<installation>` or
-`<app host>/audit`, is needed only when the console calling the query service
-runs outside the cluster; the chart publishes it through Gateway API
-(`query.route`, see the [chart README](../../../charts/audit/README.md#publishing-the-query-service)).
+## Where the query service lives
 
-Both are described from the application's side in
-[integrating](../../guides/audit/connect/connect-an-application.md#the-audit-page), and the cookie case in
-[a console with a session of its own](../../guides/audit/connect/connect-an-application.md#a-console-with-a-session-of-its-own).
+A console in the cluster keeps the query service address in-cluster, or proxies. The installation then has no public name. You need `<host>/<installation>` or `<app host>/audit` only when the console runs outside the cluster. The chart publishes it through Gateway API with `query.route`; see the [chart README](../../../charts/audit/README.md#publishing-the-query-service) and [integrating](../../guides/audit/connect/connect-an-application.md#the-audit-page).
 
 ## Navigation
 
-Profiles are the top level. A person sees only the profiles their grant
-allows, as the query service's `Access` reports them. Inside a profile:
-a facet sidebar and a qualifier box (`actor:` `action:` `target:` `outcome:` `tenant:`
-and a time range) that compiles to the typed filter, then the
-reverse-chronological table. A tenant scope and a histogram are planned.
+Profiles are the top level. A person sees only the profiles their grant allows, as the query service's `Access` reports them. Inside a profile:
 
-The page shows one installation, which is one application's trail. A view
-over several applications is a read across several prefixes, not a surface
-here.
+- a facet sidebar;
+- a qualifier box (`actor:`, `action:`, `target:`, `outcome:`, `tenant:` and a time range) that compiles to the typed filter;
+- the reverse-chronological table.
+
+A tenant scope and a histogram are planned. The page shows one application's trail. A view over several applications is a read across several prefixes.
 
 ## Row
 
-A human sentence rendered from the catalogue template (ICU MessageFormat,
-locale-aware), outcome and time, shown with its UTC offset. Expanding shows the JSON,
-filter-for and filter-out on the values it offers, pivots by request id,
-trace id, actor and target, a permalink by event id, and a seal badge with
-three states: not sealed yet, sealed but not yet verified, and verified.
+A row shows a sentence rendered from the catalogue template (ICU MessageFormat, locale-aware), the outcome and the time with its UTC offset. Expanding a row shows:
+
+- the JSON, with filter-for and filter-out on its values;
+- pivots by request id, trace id, actor and target;
+- a permalink by event id;
+- a seal badge: not sealed yet, sealed but not verified, or verified.
+
 A client-address column and an old-versus-new diff are planned.
 
-Where the deployment runs no pseudonymisation keys — the default — an
-identity is shown as it was written, and the page offers no resolve: the
-query service refuses the operation as unimplemented rather than returning
-nothing
-([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)).
+With `keys.provider: none`, the default, an identity shows as written and the page offers no resolve. The query service refuses it as unimplemented.
 
 ## Actions
 
-Live tail (polls the tail cursor) and copy permalink. An export action is planned.
+The page offers live tail, which polls the tail cursor, and copy permalink. An export action is planned. Each action is a read, and the query service records it.
 
-Every one of them is a read of the trail, so every one of them is itself
-recorded. The page does nothing to make that so; the query service does.
+## Grafana
 
-## Not Grafana
+Grafana's Postgres datasource suits operator dashboards over the counts table. It cannot scope by the viewer's tenant claim, render catalogue sentences, run export jobs or show integrity. It complements the page.
 
-Grafana's Postgres datasource is right for operator dashboards over the
-counts table. It cannot scope by the viewer's tenant claim, render
-catalogue sentences, run export jobs or show integrity, so it complements
-the page.
+## Decided in
+
+- [0049 Authentication and authorization plug points](../../decisions/0049-authentication-and-authorization-plug-points.md).
+- [0053 One installation per service or product](../../decisions/0053-one-installation-per-service-or-product.md).
+- [0055 No pseudonymisation keys by default](../../decisions/0055-no-pseudonymisation-keys-by-default.md).

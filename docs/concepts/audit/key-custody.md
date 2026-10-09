@@ -1,277 +1,98 @@
-# Keys: what they are for, how many, where they live
+# Where do audit keys live?
 
-**Pseudonymisation keys are off by default.** `keys.provider: none` is what a
-deployment runs unless it says otherwise: no key directory, no login to a
-secret manager, no `identity/` prefix, and resolve refused as unimplemented.
-Most installations need none of it, because the identifiers they record are
-already opaque and the staff they record are meant to be readable
-([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)). Such a
-deployment declares `external_identifiers_are_opaque` instead, and skips
-everything on this page about pseudonymisation.
+Audit uses two kinds of key. Pseudonymisation keys are off by default. Signing keys sign seals and are independent of pseudonyms.
 
-Everything below about pseudonymisation keys applies to **a deployment that
-must be able to crypto-shred**: one whose contract demands erasure of an
-identifier from a locked archive, or whose records unavoidably carry direct
-identifiers. That is a deliberate choice, made once and recorded by the
-deployer, and it cannot be undone or migrated afterwards.
-
-The **signing key is different**: it is for seals
-([0061](../../decisions/0061-seals.md)): the notary signs each closed hour with it. It does not depend on what the deployment does about pseudonyms.
-[Signing key](#signing-key) is that half of the page.
-
-| kind | what it does | how many | who holds it | ends by |
+| kind | does | how many | held by | ends by |
 |---|---|---|---|---|
-| **pseudonymisation** (symmetric), off by default | turns an identifier into a stable pseudonym; seals the identity behind it | one per **tenant × purpose**, created on first use | the writer (make), resolve (open) | destruction — that is erasure |
-| **signing** (asymmetric), for seals | signs the seals | one per installation | the signer only, never the writer | replacement, with the old public half kept |
-
-Neither is ever rotated, and that is deliberate.
-
-## Why keys at all
-
-The archive is write-once under Object Lock, for years. Two things follow.
-
-- A person can lawfully ask to be forgotten, and some profiles must not hold
-  a directly identifying name in the first place. Nothing in the archive can
-  be deleted or edited, so where a record does carry such a name, the only
-  way to honour that is to write something that **can be made meaningless
-  later**: a pseudonym under a key, and destroy the key. Where the
-  identifier was opaque to begin with there is nothing to make meaningless,
-  which is why the default is no keys at all.
-- Object Lock stops deletion. It does not prove the trail is complete and
-  genuine to anyone outside: a record can be added beside the real ones, a
-  quiet hour cannot be told from an emptied one, and a copy (an export, a
-  replica, a restored backup) carries no lock at all. **Seals** will prove all
-  three, to anyone with the public key. Until they are built, `audit verify`
-  checks the per-object `sha256` and per-record hashes, which needs no key.
+| pseudonymisation (symmetric) | turns an identifier into a stable pseudonym and seals the identity behind it | one per tenant and purpose, created on first use | the writer makes, resolve opens | destruction, which is erasure |
+| signing (asymmetric) | signs seals | one per installation | the notary only, never the writer | replacement, with the old public half kept |
 
 ## Pseudonymisation keys
 
-### The requirement
+No keys is the default (`keys` unset, or the deprecated `keys.provider: none`): no key directory, no `identity/` prefix, and resolve refused as unimplemented. Such a deployment declares `external_identifiers_are_opaque` and skips the rest of this section.
 
-- The **same person, same tenant, same purpose** always gets the same
-  pseudonym, for the whole retention: that is what lets an investigation
-  follow one actor through years of records.
-- The **same person under two purposes** gets two unrelated pseudonyms. The
-  security copy and the billing copy of one event cannot be joined on a
-  person, which digital-identity regulation requires of a wallet provider.
-- Nobody without the key can compute, check or reverse a pseudonym. A plain
-  hash fails this: hash every e-mail you know and compare.
-- Destroying one tenant's key for one purpose erases exactly that tenant's
-  people in that purpose, and nothing else.
-- The way back (resolve) exists for the cases the law requires, is available
-  to almost nobody, is itself recorded, and dies with the key.
+Choose a provider only if the contract demands erasure of an identifier from a locked archive. The choice is permanent: moving keys means a new identity for every person.
 
-So the key model is **one key per (tenant, purpose)**, where a purpose is a
-profile's name. A deployment with two profiles and a thousand tenants has two
-thousand keys. They are created on first use — the first record for a tenant
-in a profile — never in advance.
+The model is one key per tenant and purpose, where a purpose is a profile name. The same person, tenant and purpose always yield the same pseudonym. Two purposes yield unrelated pseudonyms.
 
-### How a key is used
+```text
+pseudonym = "ps_" + base64url( HMAC-SHA256( key[tenant, purpose], identifier ) )
+```
 
-For a record whose profile says an actor kind is pseudonymised:
+For resolve, the writer also seals the identifier with AES-GCM under a sealing key derived from the data key. The sealed form lands at `identity/tenant=<t>/purpose=<p>/<pseudonym>`. Set `ForgetIdentities` or `--keep-identities=false` to turn this off.
 
-    pseudonym = "ps_" + base64url( HMAC-SHA256( key[tenant, purpose], identifier ) )
+| provider | where the key lives | use it for |
+|---|---|---|
+| `none` | no keys | anything that need not crypto-shred |
+| `local` | 32-byte data keys wrapped under a 32-byte root in a Secret, as files in `keys.local.dir` | tests, a laptop, one instance |
+| `transit` | a key per tenant and purpose inside an OpenBAO or Vault transit engine, named `<prefix>.<purpose>.<tenant>` | more than one replica, or secrets already in OpenBAO |
+| `kms` (`keys.adapter`) | data keys from `GenerateDataKey` under one customer-managed KMS key, wrapped copies in the index database or SSM (`keys.state`) | AWS without OpenBAO |
 
-The identifier is what the emitter sent (`alice@example.com`, a user id).
-The writer replaces it with the pseudonym in that profile's copy. Other
-profiles that keep the kind in clear keep the identifier.
+With `local`, set the root with `keys.local.rootFile`. Two writers sharing a directory agree, because creation is create-once via link. Two writers with separate directories do not, and the writer refuses that. A replica count above one without `keys.local.dir` is refused. The chart's `keysVolume` holds the directory.
 
-For resolve, the writer also **seals** the identifier under the same key
-(AES-GCM, with a sealing key derived from the data key so one key never
-serves two algorithms) and stores the sealed form in the archive beside the
-records, at `identity/tenant=<t>/purpose=<p>/<pseudonym>`. Opening it needs
-the same key. A deployment that wants no way back turns this off
-(`ForgetIdentities` / `--keep-identities=false`).
+With `transit`, the writer creates each key on first use and signs in with the pod's projected service-account token on a JWT auth mount. Key material never leaves the engine. Policy scopes each role:
 
-### Never rotated
+- The writer may `hmac` and `encrypt` on its purposes and touch nothing under `transit/keys`.
+- The resolve role may `decrypt` and nothing else.
+- Only a human eraser role reaches `rotate`, `config` and `trim`.
 
-Rotating a pseudonymisation key would give every person a second, unrelated
-pseudonym from the rotation on, and break the one property the security copy
-is kept for. The threat rotation answers (a leaked key) is answered here by
-where the key lives (below), not by changing it.
+[OpenBAO keys](../../guides/audit/operate/configure-openbao-keys.md) has the engine set-up.
 
-### Destroyed, and the tombstone
+With `kms`, the encryption context names the tenant and purpose, and a processor's IAM role is scoped to the purposes it may unwrap. Set `keys.adapter: kms` and `keys.state`: `backend: database` keeps wrapped secrets in your PostgreSQL with no SSM, `backend: ssm` under `root`. Without `keys.state` the writer cannot pseudonymise.
 
-`audit key destroy --tenant <t> --purpose <p> --by <who> --reason <why>`
-is erasure. It refuses while a legal hold covers the tenant, and refuses
-without a writer to record `audit.key.destroyed` through: an erasure the
-trail does not mention is one nobody can prove was lawful.
+## Never rotated
 
-After it, the pseudonyms in the archive stay, and nothing can ever compute
-or match them again, and every sealed identity is unreadable. The provider
-leaves a **tombstone** — a marker that the key existed and is gone — so that
-a later record for the same tenant does not quietly mint a fresh key and hand
-the same person a new identity. The marker is checked before any key is
-created.
+Rotating a pseudonymisation key gives every person a second, unrelated pseudonym.
 
-### Where the keys live: three providers
+## Destroying a key
 
-**`local`.** Each data key is 32 random bytes, generated by the writer,
-wrapped (AES-GCM) under a 32-byte **root** the deployment supplies in a
-Secret, named by `keys.local.rootFile`, and stored as a file in the directory
-`keys.local.dir`. The root never leaves the
-Secret; the directory holds only wrapped keys and tombstones. Two writers
-sharing one directory agree (create-once via link, so a race mints one key,
-not two); two writers with separate directories do **not**, and the writer
-refuses that. Losing the directory is losing every tenant's pseudonyms
-silently, so the chart's `keysVolume` is what holds it, and a replica count
-above one without `keys.local.dir` is refused. It is right for tests and
-for a single instance; a production deployment should want one of the
-other two.
+`audit key destroy --tenant <t> --purpose <p> --by <who> --reason <why>` is erasure. It refuses while a legal hold covers the tenant. It refuses without a writer to record `audit.key.destroyed`.
 
-**`transit` (OpenBAO or Vault).** There is no root and no directory. Each
-(tenant, purpose) is a **key inside the transit engine**, named
-`<prefix>.<purpose>.<tenant>`, created by the writer on first use through
-the encrypt endpoint. The key material never leaves the engine: a pseudonym
-is the engine's HMAC of the identifier under that key, a seal is the
-engine's encryption, both pinned to the key's first version. What OpenBAO
-adds, concretely:
+The pseudonyms stay in the archive but nothing can compute or match them, and every sealed identity is unreadable. The provider leaves a tombstone, checked before any key is created, so a later record cannot mint a fresh key.
 
-- **No shared state between replicas.** Every writer asks the same engine,
-  so any number of replicas agree without a shared volume.
-- **Nothing to back up or lose.** The keys are in the engine's storage,
-  covered by its own snapshots and DR.
-- **Scope by policy, per role.** The engine's policy decides who may do what
-  with which purposes: the writer may `hmac` and `encrypt` on its purposes
-  and touch nothing under `transit/keys`; the query service's resolve role
-  may `decrypt` and nothing else; a metering role gets its purpose only;
-  only a human eraser role reaches `rotate`, `config` and `trim`. A leaked
-  writer credential can make pseudonyms and cannot open or erase any.
-- **No stored credential.** The writer signs in with the pod's projected
-  service-account token on a JWT auth mount, so there is no long-lived
-  token to leak or rotate.
-- **Erasure as a tombstone the engine keeps.** Destroy rotates the key
-  once, raises the minimum usable version past the first, and trims the
-  first version away. The key remains, unusable for anything written under
-  it, and cannot be re-created; a tenant destroyed before it was ever seen
-  gets a key made and destroyed at once.
-
-The full engine set-up and the policies per role are in
-[OpenBAO keys](../../guides/audit/operate/configure-openbao-keys.md).
-
-**`kms` (AWS KMS envelope).** One customer-managed
-KMS key per deployment is the root. Each (tenant, purpose) data key is
-minted by `GenerateDataKey` with an encryption context naming the tenant and
-purpose, and the wrapped copy is stored in a key table (the index database)
-beside a tombstone column. The writer unwraps into memory on first use; a
-processor's IAM role is scoped by the encryption context to the purposes it
-may unwrap. It is the same model as `local` with KMS as the root and a
-database as the directory, and it is the choice for a deployment with no
-OpenBAO. Not a single KMS key with derived children: KMS cannot HMAC per
-tenant without a key per tenant, and per-tenant KMS keys would cost and
-count in the thousands.
-
-### Which one
-
-- Anything that does not have to crypto-shred: `none`, the default.
-- Tests, a laptop, a single-instance trial that does: `local`.
-- Anything with more than one replica, or where secrets already live in
-  OpenBAO: `transit`.
-- A deployment on AWS with no OpenBAO: `kms`. The KMS key provider (`keys.adapter: kms`) is built and runs in a pod through the SDK's default credential chain: it signs the notary's seals, and, with `keys.state.backend: database`, it pseudonymises with the per-tenant secrets wrapped under the KMS key and kept in your PostgreSQL, so it needs no SSM.
-- The key options for a deployment are, then, KMS (AWS) or OpenBao transit; the seals use either today (below).
-
-The choice is permanent for a deployment. Moving keys between providers
-would mean either re-keying every tenant (a new identity for every person)
-or exporting key material, which two of the three providers exist to make
-impossible.
+With `transit`, destroy rotates the key once, raises the minimum usable version past the first and trims the first version. A tenant destroyed before it was seen gets a key made and destroyed at once.
 
 ## Signing key
 
-### The requirement
+The notary (`audit-notary`) signs each hourly seal ES384 with a P-384 key. The writer must have no path to that key. The chart refuses a notary that shares the writer's ServiceAccount, cloud role annotations or OpenBAO role.
 
-A seal ([0061](../../decisions/0061-seals.md)) is signed ES384, with a **P-384**
-key, by the notary (`audit-notary`), which runs hourly. The v0 digest job and
-its ed25519 and P-256 keys were removed with the v0 layout.
+| source | setup | rights |
+|---|---|---|
+| AWS KMS `ECC_NIST_P384`, `SIGN_VERIFY` | create once, outside the chart | notary: `kms:Sign`, `kms:GetPublicKey` on that key |
+| OpenBAO transit `ecdsa-p384` | `bao write transit/keys/audit-seal type=ecdsa-p384` | notary: `update` on `transit/sign/<key>`, `read` on `transit/keys/<key>` |
+| key file, P-384 PEM (PKCS#8 or SEC 1) | from a Secret | development; the private half sits beside the archive's credentials |
 
-The signing key must be one the **writer cannot use**. Whoever can write the
-archive and also sign for it can choose what to sign. So the notary has its
-own identity and its own credentials, and the writer's have no path to the key;
-the chart refuses a notary that runs as the writer (the same ServiceAccount, the
-same cloud role annotations, or the same OpenBAO role).
+```sh
+aws kms create-key --key-spec ECC_NIST_P384 --key-usage SIGN_VERIFY \
+  --description "audit seals"
+aws kms create-alias --alias-name alias/audit-seal --target-key-id <key id>
+```
 
-### Where it lives
+The notary signs a SHA-384 digest (`MessageType DIGEST`, `ECDSA_SHA_384`). A key of another spec is refused at start. CloudTrail `Sign` events record when the notary signed.
 
-- **AWS KMS** (`ECC_NIST_P384`, `SIGN_VERIFY`) is the one to use on AWS. The
-  private half never leaves KMS. Create it once, outside the chart:
+`audit key public --kms-key alias/audit-seal --thumbprint` prints the RFC 7638 thumbprint a verifier pins. `--jwks` prints the JWK Set for `keys/roots.jwks`. The default is PEM.
 
-  ```sh
-  aws kms create-key --key-spec ECC_NIST_P384 --key-usage SIGN_VERIFY \
-    --description "audit seals"
-  aws kms create-alias --alias-name alias/audit-seal --target-key-id <key id>
-  ```
+The notary writes `keys/roots.jwks` once if the bucket has none. It refuses to sign if the file omits its key.
 
-  The notary signs a SHA-384 digest (`MessageType DIGEST`, `ECDSA_SHA_384`), so
-  the signing input can be any size. Its role needs `kms:Sign` and
-  `kms:GetPublicKey` on that key and nothing else of KMS; the writer's role
-  needs neither, and the key policy should say so rather than rely on what an
-  IAM policy omits. Every signature is in KMS's own log, and CloudTrail's
-  `Sign` events against the key are the independent record of when the notary
-  signed. A key of another spec is refused at start, before anything is signed.
-- **OpenBAO transit** (`ecdsa-p384`): the same separation for a deployment
-  whose secrets live in OpenBAO. The notary's policy may `update` on
-  `transit/sign/<key>` and `read` on `transit/keys/<key>`; the writer's may not.
-  `bao write transit/keys/audit-seal type=ecdsa-p384`.
-- **A key file** (a P-384 private key in PEM, PKCS#8 or SEC 1, from a Secret):
-  for development, and for a deployment that accepts that the private half is in
-  the cluster beside the archive's credentials. It proves the objects have not
-  changed since they were sealed, and not that the operator did not choose what
-  to seal.
+### Trust is the pin
 
-`audit key public --kms-key alias/audit-seal --thumbprint` prints the RFC 7638
-thumbprint a verifier pins, and `--jwks` the JWK Set that goes in
-`keys/roots.jwks`; the default is the PEM. The notary writes
-`keys/roots.jwks` itself, once, if the bucket has none; if the bucket has one
-that does not list the notary's key, it refuses to sign, because the file is the
-operator's.
-
-### Trust is the pin, not the bucket
-
-An auditor believes a key because **they pinned its thumbprint**, which they
-took from you out of band (the output of `audit key public --thumbprint`, in
-their contract or their configuration), and not because the key is in the
-bucket. `keys/roots.jwks` and everything under `keys/` is distribution. A
-verifier ignores a key that is not pinned, so someone with write access to the
-bucket cannot add a root. Give the thumbprint to every verifier, and tell them
-before it changes.
+An auditor trusts a key because they pinned its thumbprint, taken from you out of band. Anything under `keys/` is distribution. A verifier ignores an unpinned key, so bucket write access cannot add a root. Tell verifiers before the thumbprint changes.
 
 ### Delegation
 
-A root can delegate: a statement, signed by the root, that another key may sign
-seals for some profiles and tenants for at most 25 hours, which a notary then
-holds in place of the root, renewed daily, with the root offline or in a
-hardware module. `audit verify` already checks them: the window, the scope,
-the 25-hour limit, a revocation by a root from a time, and that no root but a
-pinned one counts. **The notary does not take a delegation yet**: it signs with
-the key it is given, which must be listed in `keys/roots.jwks` as a root, so
-the KMS key above is the root today, and the day it is a delegate is a change
-to the notary and not to the contract.
+A root can sign a statement that another key may sign seals for given profiles and tenants for at most 25 hours. `audit verify` checks the window, the scope, the limit, revocation and that only a pinned root counts. The notary does not take a delegation yet: its key must be listed in `keys/roots.jwks` as a root.
 
-### Replaced, not rotated
+### Replacement
 
-A signing key can be replaced. A seal names its key by thumbprint, so seals
-made by the old key still verify as long as the verifier pins the old
-thumbprint as well as the new one. What must never happen is losing a public
-half: keep every one that ever signed, beside the archive, for as long as the
-archive lives, and keep every verifier's pins for as long as there are seals
-under them. Replacing the key does not break the chain: `prev` is a hash of the
-previous seal's bytes, whoever signed it.
+Replace a signing key freely. A seal names its key by thumbprint, so old seals verify while the verifier pins the old thumbprint too. Keep every public half that ever signed, and every verifier pin. The chain survives: `prev` hashes the previous seal's bytes.
 
-## Identities on the platform
+## Platform identities
 
-On Kubernetes the cloud identity of a component is its ServiceAccount (Pod
-Identity, IRSA), so the chart gives every component one of its own, bindable
-separately through `serviceAccount`, `receiver.serviceAccount`,
-`query.serviceAccount` and `jobs.*.serviceAccount`. This is what keeps the
-separations above true on a cluster: the receiver publishes and holds neither
-the bucket nor a key, so it must not run as the writer, and in stream mode the
-chart refuses a receiver and a writer that share a ServiceAccount name.
+On Kubernetes each component has its own ServiceAccount, bindable through `serviceAccount`, `receiver.serviceAccount`, `query.serviceAccount` and `jobs.*.serviceAccount`. In stream mode the chart refuses a receiver and writer that share a ServiceAccount name.
 
-## What a deployment supplies
+## Decided in
 
-| provider | Secret or engine | rights |
-|---|---|---|
-| `none` (default) | nothing | — |
-| `local` | a 32-byte root in a Secret; a persistent, shared directory | — |
-| `transit` | an OpenBAO transit mount in the environment's namespace; a JWT role per component | writer: `hmac`, `encrypt` on its purposes; resolve: `decrypt`; eraser (human): `read`, `update` on `transit/keys/<prefix>.*` |
-| signing, KMS (for seals) | one asymmetric key | the signer: `kms:Sign`, `kms:GetPublicKey` |
-| signing, transit (for seals) | one `ecdsa-p384` transit key | the signer: `transit/sign/<key>`, `read` on the key |
+- [0047 Identity tiers and pseudonymisation](../../decisions/0047-identity-tiers-and-pseudonymisation.md).
+- [0052 Key providers](../../decisions/0052-key-providers.md).
+- [0055 No pseudonymisation keys by default](../../decisions/0055-no-pseudonymisation-keys-by-default.md).
+- [0061 Seals](../../decisions/0061-seals.md).

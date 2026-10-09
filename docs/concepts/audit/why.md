@@ -1,64 +1,37 @@
-# Why
+# Why does audit exist?
 
-Organisations end up with several audit logs that disagree. One product
-writes an activity table in its database. Another writes lines to a log
-pipeline that samples. A billing system counts requests in its own store.
-An identity provider keeps events for thirty days. When an auditor asks who
-did what, or a customer disputes an invoice, or a regulator asks for
-evidence, each answer comes from a different place with a different shape,
-a different retention and a different idea of who the actor was.
+Organisations keep several audit logs that disagree. One product writes an activity table. Another writes sampled log lines. A billing system counts requests in its own store. An identity provider keeps events for thirty days. Each answer to an auditor, a disputing customer or a regulator has a different shape, retention and idea of the actor.
 
-This component exists so that there is one answer.
+Audit gives one answer.
 
-## What it must be
+## What it provides
 
-- **Complete.** A record that was accepted is never lost. Privileged and
-  billable actions do not complete until the record is durable, and an
-  action that is not worth keeping does not belong in the catalogue.
-- **Immutable and provable.** Copies live under S3 Object Lock in
-  compliance mode where a framework demands it. Every object names the
-  SHA-256 of its bytes and every record its own hash. A `verify` command lets
-  an auditor check them from the archive alone, without trusting the
-  operator; seals ([0061](../../decisions/0061-seals.md)) will add that nothing was
-  removed.
-- **Purpose-bound.** The same event is kept once per purpose, each copy with
-  the fields, identity treatment and retention that purpose justifies.
-  Security keeps client addresses for a year. Billing keeps quantities for
-  seven years and no people. Evidence keeps lifecycle facts for seven years
-  after expiry. A tenant's history keeps sentences and diffs for as long as
-  the product promises.
-- **Owned by the application it records.** One installation belongs to one
-  application, in its namespace, rendered by its chart
-  ([0053](../../decisions/0053-one-installation-per-service-or-product.md)). No
-  team waits on another team's audit service to ship, and no application
-  holds the archive's credentials.
-- **Extensible without forks.** Applications add their own data through
-  predefined slots described in JSON Schema, register an action catalogue,
-  and every generic component understands them at runtime.
-- **Searchable.** Faceted search with typed predicates, cursor pagination,
-  a tail cursor for pulls, exports, and a viewer.
-- **Metered.** The same records feed usage-based billing, with idempotent
-  projections and immutable monthly statements.
+| property | meaning |
+|---|---|
+| Complete | An accepted record is never lost. Privileged and billable actions wait until the record is durable. |
+| Immutable and provable | Copies live under S3 Object Lock in compliance mode where a framework demands it. Each object names the SHA-256 of its bytes and each record its own hash. `verify` checks them from the archive alone. Seals add proof that nothing was removed. |
+| Purpose-bound | One event is kept once per purpose, with that purpose's fields, identity treatment and retention. |
+| Owned by the application | One installation belongs to one application, in its namespace, with no shared audit service to wait on. |
+| Extensible | Applications add data through JSON Schema slots and register an action catalogue. |
+| Searchable | Faceted search, typed predicates, cursor pagination, a tail cursor, exports and a viewer. |
+| Metered | The same records feed usage billing with idempotent projections and immutable monthly statements. |
+
+Purpose-bound copies differ by profile. Security keeps client addresses for a year. Billing keeps quantities for seven years and no people. Evidence keeps lifecycle facts for seven years after expiry. A tenant's history keeps sentences and diffs as long as the product promises.
 
 ## What it is not
 
-- **Not an application log pipeline.** Logs are for operators debugging a
-  system; they may be sampled, rotated, and dropped under pressure. Audit
-  records are facts with a legal life.
-- **Not a SIEM.** It exports to one, in OCSF, ECS or OpenTelemetry form.
-- **Not the wallet's transaction log.** A digital-identity wallet keeps its
-  own log of presentations on the user's device, and the wallet provider
-  must not be able to read it. This component never carries presentation
-  contents, attribute values or identifiers that would let transactions be
-  linked. It sees operational events, whose subjects are the identifiers the
-  application itself minted, and nothing else.
-- **Not a ledger database.** Object storage is the record; every database
-  is a rebuildable projection.
+- Not an application log pipeline. Logs may be sampled, rotated and dropped. Audit records are facts with a legal life.
+- Not a SIEM. It exports to one in OCSF, ECS or OpenTelemetry form.
+- Not a wallet's transaction log. It never carries presentation contents, attribute values or identifiers that link transactions.
+- Not a ledger database. Object storage is the record, and every database is a rebuildable projection.
 
 ## Who reads it
 
-A security analyst during an incident. A tenant administrator wondering who
-removed a colleague. A finance controller reconciling a month. A customer
-disputing an invoice. An internal auditor collecting ISMS evidence. A
-conformity assessment body under eIDAS. A tax inspector seven years later.
-Each of them reads a different profile of the same records.
+A security analyst during an incident, a tenant administrator, a finance controller, a customer disputing an invoice, an internal auditor, a conformity assessment body under eIDAS and a tax inspector seven years later. Each reads a different profile of the same records.
+
+## Decided in
+
+- [0045 S3 Object Lock as the record](../../decisions/0045-s3-object-lock-as-the-record.md)
+- [0044 Profiles composed from framework profiles](../../decisions/0044-profiles-composed-from-framework-profiles.md)
+- [0053 One installation per service or product](../../decisions/0053-one-installation-per-service-or-product.md)
+- [0061 Seals](../../decisions/0061-seals.md)

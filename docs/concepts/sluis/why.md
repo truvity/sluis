@@ -1,144 +1,49 @@
-# Why sluis exists
+# Why does sluis exist?
 
-The [README](../../../README.md) says what it is and where it sits among the
-alternatives. This page is the longer argument: the situation it starts
-from, the problems it solves, and the principles that decide every
-design question after that.
+An installation already has corporate directories, a CI platform that signs a token for each job, clusters that issue ServiceAccount tokens, and infrastructure that speaks OIDC. It lacks something that turns "Alice is in `platform-admins`" into "Alice may assume role `power` in account 1111". That needs one policy and no stored secret.
 
-## The situation it starts from
+## The problems
 
-An installation already has, or can have for free:
+1. Groups are not in anyone's token. Google's ID token has none. Entra's has them with an overage limit.
+2. Leavers must lose access without a click, and only on an answer the directory vouches for. A hiccup must not remove anyone.
+3. Several directories need one policy file, not one admin console each.
+4. AWS trust policies for a custom issuer see only `sub`, `aud`, `amr` and `email`. Group-based roles need an issuer that gates audiences by policy.
+5. An EKS cluster trusts one external OIDC issuer, so people and CI jobs must both arrive through it.
+6. CI and workloads must get cloud and cluster credentials from the token their platform already gave them.
+7. Consoles need login, session, sign-out and a bearer without implementing any of it.
 
-- **corporate directories** — Google Workspace for each company, Entra
-  next — where every employee already exists, with a password, MFA and
-  device policy;
-- **a CI platform** — GitHub Actions — that gives every job a signed,
-  short-lived identity token;
-- **clusters** whose API servers give every ServiceAccount the same
-  kind of token, and publish the key set that verifies it;
-- **infrastructure that speaks OIDC** — Kubernetes, AWS, ArgoCD, Kargo,
-  any console behind a gateway.
-
-What it does not have is the connective tissue: something that turns
-"Alice is in group platform-admins in the globex.example Workspace" into
-"Alice may assume role power in account 1111, is cluster-admin on prod,
-and is an operator in the directory console", and turns "this is job
-4711 of acme/platform on master" into "this job may deploy to
-dev" — with one place to read the policy and no stored secret
-anywhere.
-
-## The problems, concretely
-
-1. **Groups are not in anyone's token.** Google's ID token carries no
-   groups. Entra's does, with an overage limit, and only for Entra.
-   Every relying party that authorizes by group needs someone to read
-   the directory.
-2. **Leavers must lose access without a click.** A suspended account
-   keeps any session it already has unless something notices. That
-   something must know whether its answer can be trusted, or it will
-   remove access on a hiccup. The same holds where membership lives outside a
-   token: GitHub teams and Slack channels are kept in step with the groups, and
-   a leaver is removed only on an answer the directory vouches for.
-3. **Several directories, one policy.** Two companies, two Workspaces,
-   later a third tenant; the mapping to infrastructure roles must live
-   in one file, not in each Workspace's admin console and each cluster's
-   RBAC.
-4. **AWS without Identity Center.** A trust policy for a custom issuer
-   can see only `sub`, `aud`, `amr` and `email`. Group-based cloud roles
-   need an issuer that gates *audiences* by policy. No corporate IdP
-   does that.
-5. **One issuer per cluster.** An EKS cluster trusts one external OIDC
-   issuer. People and CI jobs must both arrive through it, so a GitHub
-   token has to be exchanged somewhere.
-6. **Machines with no secrets.** CI and workloads must obtain cloud and
-   cluster credentials from the token their platform already gave them,
-   under a policy that is the same file as the human one.
-7. **Consoles without login code.** Every internal UI needs login,
-   session, sign-out and a bearer to read. None of them should implement
-   any of it.
-
-## Why not just…
+## Why not an existing tool
 
 | Tool | What it gives | Where it stops |
 |---|---|---|
-| **Google Workspace as the issuer** | one issuer for both Workspaces, sign-in, MFA | no groups in the token; no audience gating for AWS; cannot exchange a CI token; no second directory behind the same issuer |
-| **dex** | a stateless federating issuer, Kubernetes-friendly, a ConfigMap | no hook to look up groups, so Google users have none; fixed claims; no policy; no audience gating; token exchange without rules. The right shape, one step short |
-| **Zitadel, Keycloak, Authentik** | federation, a login hook, machine users | a database, an operator and a login UI to run; a directory reader per tenant, a login hook to compute roles, a broker for CI tokens to write. The eighty percent of an IdP that costs and the twenty percent that is used |
-| **Okta, Auth0, Entra ID** | everything, rented | policy lives in their UI and their API, not in git; machine identities are secrets to rotate; the infrastructure's identity depends on a vendor's uptime and pricing |
-| **AWS IAM Identity Center** | AWS roles by group, SCIM from the directory | answers only AWS, not clusters, consoles or CI |
-| **GitHub → AWS direct federation** | zero code for CI to AWS | policy sprawls into every account's trust policies keyed on subject patterns; nothing for clusters, because a cluster trusts one issuer |
-| **Teleport, Boundary, an access mesh** | a full access plane with agents | its own agent model and identity store; SSO connectors are enterprise features; it replaces the gateway rather than sitting behind it |
+| Google Workspace as issuer | One issuer, sign-in, MFA. | No groups in the token, no audience gating, no CI exchange. |
+| dex | A stateless federating issuer. | No group lookup for Google, fixed claims, no policy, no audience gating. |
+| Zitadel, Keycloak, Authentik | Federation, login hooks, machine users. | A database, an operator and a login UI to run, and a directory reader to write. |
+| Okta, Auth0, Entra ID | Everything, rented. | Policy lives in their UI and machine identities are secrets. |
+| AWS IAM Identity Center | AWS roles by group. | Answers only AWS. |
+| GitHub to AWS federation | CI to AWS with no code. | Policy sprawls across trust policies, and clusters are not served. |
+| Teleport, Boundary | A full access plane. | Its own agents and identity store, and it replaces the gateway. |
 
-None of these is wrong. Each solves two or three of the seven problems.
-sluis is the smallest set of parts that solves all seven with
-the things the installation already has.
+Each tool solves two or three of the seven problems. sluis solves all seven with what the installation already has.
 
 ## Principles
 
-These decide every design question, and when two of them conflict the
-earlier one wins.
+When two conflict, the earlier one wins.
 
-1. **Verify, never authenticate.** A password, a user record, MFA or a
-   consent screen is an identity provider's job, not a feature here.
-   There are no users in this system, only sessions.
-2. **Configuration is chart values.** No database, no operator, no
-   admin UI that writes policy. The policy is a file in git; the console
-   reads it and never edits it, so `git log` is the complete history of
-   access to infrastructure. What the console does write — a directory it
-   connected, a GitHub App an owner created, a Slack workspace an owner
-   connected, a confirmation, and the records of Slack channels that people
-   rather than infrastructure own — is bootstrap, removal and a few records of
-   its own, each audited, kept in a handful of ConfigMaps and Secrets a copy of
-   restores. Those records never name an internal group and never grant access
-   to infrastructure.
-3. **Almost nothing is a secret.** One signing key. The OAuth client
-   credentials the corporate IdP issued. The refresh token a directory
-   admin's consent produced, the key of a GitHub App an owner
-   created from the console, and the bot token of a Slack App an owner
-   installed. Nothing else — machines prove themselves
-   with tokens their own platform issued, and the issuer holds no
-   credential to verify them, only a public key set. The one more throwaway is
-   a Slack app configuration token, used once and never stored.
-4. **Strict where implemented, and not one grant more.** Three grants
-   and three endpoints — six things — cover a browser, a CLI with a
-   browser to confirm in, and a machine that already holds a token. Each one that is served passes the
-   conformance suite; each one that is not needed is not served, because
-   every served endpoint is surface to keep truthful.
-5. **One issuer, one policy, one vocabulary.** However many clusters,
-   accounts and corporate directories, there is one `iss`, one file, and
-   one flat `groups` claim that nothing downstream re-maps.
-6. **Authoritative or hold.** A failed probe, a stale snapshot, a domain
-   claimed twice: all read as "not authoritative", and nothing removes
-   access on that answer.
-7. **The lightest footprint for the relying party too.** ArgoCD, Kargo
-   and a cluster each get a client id and an issuer URL and nothing else
-   to configure. A console with no OpenID of its own gets a chart.
-
-## What a token is for, now that it can be two things
-
-Through v1.28 a token was minted for the client asking, because the
-client and the thing a person reached were the same object. That stopped
-holding once a client — an editor, a hosted assistant, anything speaking
-the Model Context Protocol — is not itself what a token is *for*: a
-**resource** may be declared instead, named by the client with the
-`resource` parameter (RFC 8707), and it becomes the token's audience,
-gated by its own `requires` alongside the client's. And a client this
-installation does not deploy and cannot enumerate may identify itself
-with a URL that serves a document about itself (a Client ID Metadata
-Document) instead of a row in the policy, admitted only from an
-allow-listed origin. Both are declared, gated the same way as everything
-else, and off unless an installation writes them — see
-[reference/policy.md](../../reference/sluis/policy.md#resources--what-a-token-is-for).
+1. Verify, never authenticate. Passwords, user records and MFA belong to the identity provider. There are no users here, only sessions.
+2. Configuration is chart values. The policy is a file in git that the console reads and never edits, so `git log` is the history of access. The console writes only bootstrap, removals and a few audited records of its own. They never name an internal group.
+3. Almost nothing is a secret: one signing key, the directory credentials, the GitHub App keys and the Slack bot tokens. Machines prove themselves with their platform's tokens.
+4. Serve only what is needed. Three grants and three endpoints cover a browser, a CLI and a machine. Every served endpoint must pass the conformance suite.
+5. One issuer, one policy, one vocabulary: one `iss`, one file, one flat `groups` claim.
+6. Authoritative or hold. A failed probe, a stale snapshot or a doubly claimed domain never removes access.
+7. Keep the relying party light. ArgoCD, Kargo and a cluster need a client id and an issuer URL.
 
 ## What it is not
 
-Not a customer-facing identity provider: a product whose customers sign
-in with their own IdP needs per-organisation federation, and only the
-directory connector here is reusable for that. Not a service mesh:
-workloads keep their platform identities. Not a secrets manager. Not a
-replacement for the corporate directory: it reads one, and if the
-directory is wrong, so is every token. Not a chat or source-hosting
-administrator: it keeps the membership of GitHub teams and Slack channels equal
-to groups it already resolves and does nothing else there — it creates no
-accounts, manages no user groups and removes no one from a public Slack
-channel.
+sluis is not a customer-facing identity provider, a service mesh or a secrets manager. It is not a replacement for the corporate directory: a wrong directory makes every token wrong. It is not a chat or source-hosting administrator. It keeps GitHub team and Slack channel membership equal to groups it already resolves. It creates no accounts, manages no user groups and removes no one from a public Slack channel.
+
+## Decided in
+
+- [ADR 0002: mission boundary: tokens and memberships](../../decisions/0002-mission-boundary-tokens-and-memberships.md)
+- [ADR 0008: credentials only where we govern membership](../../decisions/0008-credentials-only-where-we-govern-membership.md)
+- [ADR 0017: the Slack reconciler keeps membership only](../../decisions/0017-the-slack-reconciler-membership-only.md)

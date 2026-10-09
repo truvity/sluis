@@ -1,57 +1,68 @@
-# Billing: usage as a projection of records
+# Billing and metering
 
-Usage billing is a projection of records the installation already keeps. A
-billable action is an audit record that happens to carry a quantity, so the
-same completeness, the same deduplication and the same lock that make the
-trail evidence make the invoice defensible.
+Usage billing is a projection of records the installation already keeps. A billable action is an audit record that carries a quantity. Nothing here is in the request path.
 
-Nothing here is in the request path.
+## Where a billable record goes
 
-## The five slots
+The catalogue declares a billable action with `meter: {name, quantity_path, outcomes: [success]}` and `category: billing`. The per-action `profiles` list is deprecated.
 
-| # | slot | what the application adds | state |
+| # | slot | what happens | state |
 |---|---|---|---|
-| 1 | **catalogue** | on each billable action: `meter: {name, quantity_path, outcomes: [success]}` and `category: billing` (the destination that takes it keeps the metering copy; the per-action `profiles` list is deprecated) | built |
-| 2 | **emit** | nothing — the record carries `meter{name, quantity, unit}` | built |
-| 3 | **writer** | nothing — it splits a `billing` copy (tenant and meter, no actor, the metering profile's retention), and the dedupe table makes it exactly-once; the indexer then reads the meter fields from the object | built |
-| 4 | **rollups and statement** | a rollup row per tenant, meter and hour, filled at index time; a monthly CronJob writes an immutable statement object naming the seal of the archive it was computed from (once seals exist) | rollups partly built; the statement not built |
-| 5 | **export** | push the statement's totals to a billing system, or invoice from the statement object | the application's |
+| 1 | catalogue | the application declares the meter | built |
+| 2 | emit | the record carries `meter{name, quantity, unit}` | built |
+| 3 | writer | splits a `billing` copy and dedupes by record id | built |
+| 4 | rollups and statement | a rollup row per tenant, meter and hour at index time; a monthly CronJob writes the statement | rollups partly built, statement not built |
+| 5 | export | the application pushes the totals or invoices from the statement | the application's |
 
-## The rules that make it defensible
+The indexer reads the meter fields from the object. It does not add anything to the request path.
 
-- **A billable action is `block`.** If the record cannot be kept, the
-  operation does not happen. An invoice line that exists without a record,
-  or a record that exists without the operation, is the failure mode worth
-  paying a round trip to avoid.
-- **The meter counts only the outcomes it declares.** A refused call is not
-  billable, and that is a property of the catalogue, not of a query someone
-  wrote later.
-- **Exactly once.** The dedupe table absorbs a redelivery, so a writer
-  restart or a stream redelivery cannot double a customer's bill.
-- **The statement is immutable and self-describing.** It names the period,
-  the rollups it summed and the seal of the archive it was computed from,
-  and it is written into the archive under the metering profile's lock. A
-  dispute six years later is answered by re-reading it, and by verifying the
-  seal it names.
-- **The billing copy holds no people.** The metering profile omits actor and
-  subject: quantities per tenant and meter, which is what finance, a
-  customer in a dispute and a tax inspector are entitled to see. Who did it
-  is in the security copy, under the security profile's retention.
+## What a billing record holds
+
+A billable record carries `meter` with `name`, `quantity` (decimal string), `unit`, `kind` (`count` or `gauge`) and flat `dimensions`.
+
+The billing copy keeps `id`, `occurred_at`, `recorded_at`, `source`, `action`, `tenant_id`, `meter` and `origin_hash`. It omits actor and subject, so the two copies of one record cannot be joined on a person.
+
+Where a deployment runs pseudonymisation keys, the two copies also carry different pseudonyms for one person.
+
+## Which records count
+
+The catalogue lists the outcomes a metered action counts. The default is success only, so a refused call is not billable. An action that bills attempts lists those outcomes. The rollup reads the list from the catalogue and never guesses.
+
+A count is an event. A gauge, such as stored bytes, is an absolute sample emitted hourly and billed as the average over the period. Never emit deltas.
+
+A billable action is `block`. If the record cannot be kept, the operation does not happen.
+
+## Projection and period close
+
+| table | columns |
+|---|---|
+| `usage_dedup` | `id`, `source`, `seen_at`, kept for the framework profile's dedupe window |
+| `usage_hourly` | `tenant_id`, `meter`, `hour`, `quantity`, `event_count`, `last_event_id`, upserted idempotently |
+| `usage_statement` | `tenant_id`, `meter`, `period`, `quantity`, `event_id_range`, `seal_key`, `computed_at`, written once |
+
+The period closes `close_after_hours` after its end (default 72). Later events are flagged, not billed. Corrections are credit notes, never rewrites.
+
+The statement is immutable. It names the period, the rollups it summed and the seal of the archive it was computed from. It is written under the metering profile's lock.
+
+Reprocessing replays the period's billing copies into a fresh rollup and diffs it against the statement. The diff is kept as the reconciliation.
+
+## Rating
+
+A rating engine, such as a payment provider's meters or an in-house one, receives rollups in pre-aggregated mode. Use an idempotency key per tenant, meter and hour. The rating engine is never the evidence store.
 
 ## What to watch
 
-- **The rollup lag**: rollups are written at index time, by the indexer
-  (`audit-observe`), a settle window after the object is put, so an indexer
-  that is behind or cannot index is a count that is not counting. The
-  `audit.observe.index.deferred` counter and the `audit.observe.index.lag`
-  histogram are the ones to alert on.
-- **The monthly close**: a statement is written after the period ends and
-  after the last hour of it is sealed
-  ([0061](../../decisions/0061-seals.md)). Running it earlier produces a
-  statement that names a seal that does not cover the period.
-- **A meter renamed** is a new meter. The old name keeps its history; the
-  rollups do not migrate.
+| signal | meaning |
+|---|---|
+| `audit.observe.index.deferred` counter and `audit.observe.index.lag` histogram | the indexer is behind, so the rollups undercount |
+| a statement run before the last hour is sealed | the statement names a seal that does not cover the period |
+| a renamed meter | a new meter: the old name keeps its history and rollups do not migrate |
 
-Retention for the metering copy is the metering framework profile's — seven years under
-`billing-nl`, for the Dutch tax administration's retention duty. See
-[which framework profiles a deployment composes](which-profiles-to-compose.md).
+The metering copy keeps seven years under `billing-nl`. See [which framework profiles to compose](which-profiles-to-compose.md). To switch billing on, see [enable billing](../../guides/audit/operate/enable-billing.md). Quotas count the same meter: [usage quotas](usage-quotas.md).
+
+## Decided in
+
+- [0044 Profiles composed from framework profiles](../../decisions/0044-profiles-composed-from-framework-profiles.md)
+- [0045 S3 Object Lock as the record](../../decisions/0045-s3-object-lock-as-the-record.md)
+- [0047 Identity tiers and pseudonymisation](../../decisions/0047-identity-tiers-and-pseudonymisation.md)
+- [0061 Seals](../../decisions/0061-seals.md)
