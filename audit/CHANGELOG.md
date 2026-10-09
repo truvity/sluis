@@ -1,5 +1,7 @@
 # Changelog
 
+> 0.x history, frozen at v0.16.0. From v1.74.0 see [../CHANGELOG.md](../CHANGELOG.md).
+
 All notable changes to this project are documented here, one `## vX.Y.Z`
 heading per released tag, newest first. A section describes the state of the
 repository at that version, not the history of edits that got there.

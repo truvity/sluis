@@ -2,6 +2,12 @@
 
 The words this repository uses precisely.
 
+## The model
+
+- **Directory**: where people and their groups come from.
+- **Policy**: the file in git that maps directory groups and machine identities to internal groups, per audience.
+- **Issuer and controllers**: one process that mints tokens and reconciles GitHub and Slack from the same file.
+
 ## The directory
 
 | Term | Means |

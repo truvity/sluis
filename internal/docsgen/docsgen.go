@@ -44,6 +44,7 @@ var regions = map[string]struct {
 	"audit-actions":           {"docs/reference/audit-actions.md", auditActions},
 	"telemetry-alerts":        {"docs/reference/telemetry.md", telemetryAlerts},
 	"adr-index":               {"docs/decisions/README.md", adrIndex},
+	"artifacts":               {"docs/reference/artifacts.md", artifacts},
 }
 
 // Run regenerates every region. With write it rewrites the pages that differ;

@@ -11,7 +11,7 @@ Pick the road you are on.
 | connecting an application | [Connect an application](how-to/connect-an-application.md), then [emit records](how-to/emit-records.md) |
 | reading or auditing the trail | [Read the trail](how-to/read-the-trail.md), then [verify the trail](how-to/verify-the-trail.md) |
 | upgrading | [the upgrade pages](how-to/upgrade/v0.13.md), linked from the [CHANGELOG](../../audit/CHANGELOG.md) |
-| working on this repository | [repository layout](reference/repository-layout.md) and [CONTRIBUTING](../../audit/CONTRIBUTING.md) |
+| working on this repository | [repository layout](reference/repository-layout.md) and [CONTRIBUTING](../../CONTRIBUTING.md#audit) |
 
 ## By section
 

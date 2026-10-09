@@ -9,82 +9,46 @@ Do NOT open a public issue for security vulnerabilities.
 
 ## Supported Versions
 
-Only the latest release is supported with security updates.
+Only the latest release is supported with security updates. One repository, one
+version: sluis and audit are released together.
 
 | Version | Supported |
 |---------|-----------|
-| latest  | ✅        |
-| older   | ❌        |
+| latest  | yes       |
+| older   | no        |
 
-## Design notes relevant to a reviewer
+## Design properties that matter for reports
 
-- The service **holds directory credentials so that its consumers hold
-  none**. Credentials — OAuth refresh tokens, service-account keys, the
-  private keys of the GitHub Apps an owner created from the console,
-  people's GitHub link tokens, the Slack Apps' client secrets and bot tokens — live only in Kubernetes Secrets in its
-  own namespace; the ServiceAccount holds a namespaced Role, never a
-  cluster-wide one. The console never returns secret material and the
-  logs never print it. An operator may copy five of those Secrets, and the Slack state, out as
-  a backup; the copy's custody is the operator's.
-- The service is **read-only against the directory**: every scope it
-  asks for is a read-only Admin SDK scope. A compromised service can
-  enumerate accounts and groups; it cannot change them. Its write
-  surfaces are **GitHub** and **Slack**. The GitHub controller invites,
-  adds, promotes and removes members of the organisations listed in
-  `githubRoster.actsIn`, with a key that lives only in its namespace. The
-  Slack controller creates or adopts channels, invites people and, in
-  `strict` private channels, removes them, in the workspaces listed in
-  `slackRoster.actsIn`, with a bot token that lives only in its namespace (a
-  Secret mounted read-only into the controller, whose ServiceAccount can
-  update one report ConfigMap and read no Secret through the API). The
-  console can also archive an ordinary Slack channel, only when an operator
-  ticks *Also archive in Slack* when forgetting its record, and never a Slack
-  Connect channel. Both controllers remove only on an answer the directory
-  vouches for, never an owner, bot, app, guest or deactivated account, and
-  never more than half of a channel, team or organisation without an
-  operator's confirmation of exactly that set. The app configuration token an
-  operator pastes to create a Slack App is used for one call and is never
-  stored or logged. Every request- or Slack-derived value is routed through
-  `logsafe` before it is logged, so a crafted value cannot forge a log record.
-- The safety-critical output is the per-domain **authoritative** flag.
-  Consumers that remove access act only on authoritative answers; a failed
-  probe, a partial read, a stale snapshot or a domain conflict all read as
-  "not authoritative", never as "gone".
-- Every service here trusts **exactly two anchors** and never a third
-  ([docs/explanation/trust.md](docs/explanation/trust.md)): the cluster (a
-  ServiceAccount token checked by TokenReview, audience-bound,
-  allow-listed) for workloads in the same cluster, and the issuer (its
-  JWKS, an audience) for everything else. A workload calling the
-  console's API presents its ServiceAccount token, verified against its
-  cluster's published key set, so the service holds access to no
-  cluster; a person presents the issuer's own session. NetworkPolicy
-  gates both as the second layer, never the only one. Break-glass is the cluster anchor used as the floor: a
-  ServiceAccount token a person mints with cluster RBAC, no stored
-  credential in a cluster; outside one, a generated password held only
-  as an Argon2id digest.
-- The service **authenticates nobody.** Sign-in is always delegated to
-  an identity provider; the service verifies the result and applies the
-  policy. As a security token service it verifies proofs produced
-  elsewhere — a corporate sign-in, a GitHub job's token, a cluster's
-  ServiceAccount token — and holds no passwords, no users and no MFA. Of
-  its own tokens, only the access token of a CLI sign-in at a public
-  client declaring `sign_in_exchange` is a proof for exchange; an ID
-  token is not (1.5.5).
-- **A client may describe itself over HTTPS** (a Client ID Metadata
-  Document, off unless `client_documents.origins` names a host): the
-  fetch is an outbound request whose target — a URL — is steered by the
-  `client_id` a caller presents, so it is an SSRF surface bounded by that
-  allow-list. Every fetch is capped at 64 KiB and 5 seconds, follows no
-  redirect, is cached for 10 minutes with no stale fallback on a failure,
-  and a declared client in the policy always wins over a document one.
-  See [docs/reference/policy.md](docs/reference/policy-clients.md#clients-that-describe-themselves).
-- The **audit trail** is kept by an audit installation connected as a
-  plugin, which sluis reaches as its own workload (a projected
-  service-account token) and holds no bucket or key for. Ordinary records
-  never wait on it; a recovery sign-in does, and is refused when its record
-  cannot be kept. The console's Audit page reads the installation with a
-  short-lived token minted for the person signed in, never passed to the
-  browser. The client
-  address in a record is read from `X-Forwarded-For` only as far as
-  `audit.forwardedForTrustedHops` says, so set it to the deployment's
-  own proxies and no more.
+Each property links the page that owns it; this file does not restate them.
+
+### sluis
+
+- It **authenticates nobody**: sign-in stays with the corporate directory, and sluis
+  verifies proofs produced elsewhere. It holds no passwords, no users and no MFA.
+  [trust](docs/explanation/trust.md)
+- It trusts **exactly two anchors**, the cluster and the issuer, and never a third.
+  [trust](docs/explanation/trust.md)
+- It holds directory credentials so that its consumers hold none, and is **read-only
+  against the directory**. Its write surfaces are GitHub and Slack, acting only in the
+  organisations and workspaces the policy names. [safety](docs/explanation/safety.md)
+- Removals act only on an **authoritative** answer; a failed probe, a partial read or a stale
+  snapshot reads as "not authoritative", never as "gone", and a controller never removes
+  more than half of a set without an operator's confirmation. [safety](docs/explanation/safety.md)
+- A client may describe itself over HTTPS only when `client_documents.origins` allows its
+  host (an SSRF surface bounded by that list: 64 KiB, 5 seconds, no redirect).
+  [policy clients](docs/reference/policy-clients.md#clients-that-describe-themselves)
+- Every request-derived value is routed through `logsafe` before it is logged.
+- The client address in an audit record is read from `X-Forwarded-For` only as far as
+  `audit.forwardedForTrustedHops` says: set it to the deployment's own proxies and no more.
+
+### audit
+
+- Records are append-only; the store is expected to carry S3 Object Lock in compliance
+  mode. [prepare the bucket](docs/audit/how-to/prepare-the-bucket.md)
+- Every read of the audit trail is itself recorded.
+- Subjects are referenced by identifiers or keyed pseudonyms, never by identity attributes.
+  [ADR 0047](docs/decisions/0047-identity-tiers-and-pseudonymisation.md)
+- The split writer is the most privileged component: it holds unwrapped pseudonymisation
+  keys in memory. Reports about it are especially welcome.
+- sluis reaches audit as its own workload; ordinary records never wait on it, and a recovery
+  sign-in is refused when its record cannot be kept. [audit](docs/explanation/audit.md)
