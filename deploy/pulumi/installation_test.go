@@ -217,6 +217,45 @@ func withCloudflare(in *sluisconfig.Installation) {
 	}
 }
 
+// An R2 preset's endpoint is handed to clients, not called by the function, so
+// a document carrying one renders without AllowEndpoints; an endpoint the
+// function would call is refused beside it, and so is the same key anywhere
+// else in the Cloudflare section.
+func TestAnR2PresetEndpointIsNotAnEndpointOfTheFunction(t *testing.T) {
+	const r2 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
+	in := exampleInstallation(t)
+	withCloudflare(in)
+	in.Cloudflare.Presets["blobs"] = sluisconfig.CloudflarePreset{
+		Account: "main", Prototype: "proto-r2-0001", Description: "R2", Endpoint: r2,
+		Lifetime: sluisconfig.Duration(15 * time.Minute), Rotation: sluisconfig.Duration(5 * time.Minute),
+	}
+	rec, _ := mustLambda(t, withInstallation(in, nil))
+	if doc := layerFiles(t, rec)["sluis/sluis.yaml"]; !strings.Contains(doc, r2) {
+		t.Errorf("the R2 endpoint is not in the document:\n%s", doc)
+	}
+
+	cf := "cloudflare: {accounts: {main: {id: 0123456789abcdef0123456789abcdef, minter: internal/cloudflare/main/minter}}, " +
+		"presets: {blobs: {account: main, prototype: proto-r2-0001, description: R2, lifetime: 15m, rotation: 5m, endpoint: '" + r2 + "'}}}\n"
+	if _, _, err := buildLambda(t, estate{config: "issuerURL: https://x.example\n" + cf}); err != nil {
+		t.Errorf("a document with an R2 preset: %v", err)
+	}
+	for name, c := range map[string]struct{ config, at string }{
+		"a dynamodb endpoint beside it": {
+			config: "issuerURL: https://x.example\nports: {adapter: dynamodb, dynamodb: {table: t, endpoint: 'https://evil.example'}}\n" + cf,
+			at:     "ports.dynamodb.endpoint",
+		},
+		"a secrets endpoint beside it": {
+			config: "issuerURL: https://x.example\nsecrets: {endpoint: 'https://evil.example'}\n" + cf,
+			at:     "secrets.endpoint",
+		},
+	} {
+		_, _, err := buildLambda(t, estate{config: c.config})
+		if err == nil || !strings.Contains(err.Error(), "("+c.at+")") {
+			t.Errorf("%s: error %v, want the refusal naming %s", name, err, c.at)
+		}
+	}
+}
+
 // An installation that declares Cloudflare presets gets the rotation schedule
 // and the function's grants on exactly the minter, the record of minted ids and
 // the stored credentials; one that does not gets neither.

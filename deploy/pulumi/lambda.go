@@ -287,7 +287,10 @@ type LambdaArgs struct {
 	// (`secrets.endpoint`, `ports.dynamodb.endpoint`, any `endpoint`), for a
 	// test against LocalStack. Off, a document naming one is refused: an
 	// endpoint the documents point at is where the function reads its secrets
-	// and its State from, and a forged one would serve forged secrets.
+	// and its State from, and a forged one would serve forged secrets. A
+	// Cloudflare R2 preset's `cloudflare.presets.<name>.endpoint` is not one:
+	// it is handed to clients with the credentials and the function never
+	// calls it, so it needs no AllowEndpoints.
 	AllowEndpoints bool
 
 	// audit is what Audit resolved to (planAudit), set once.

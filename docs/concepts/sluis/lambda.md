@@ -78,9 +78,9 @@ hold none; they are SSM parameters read by path.
   `Package` is copied to a temporary file before it is hashed and deployed, so what is checked is what runs.
 - **The configuration layer is retained** (`SkipDestroy`), so that a rollback is re-pointing a function. If a secret got
   into a document, rotate it and delete the layer versions that hold it with `aws lambda delete-layer-version`.
-- **The library refuses what would redirect the function's reads.** A document that names any `endpoint`
-  (`secrets.endpoint`, `ports.dynamodb.endpoint`, ...) is refused unless `AllowEndpoints` is set for a LocalStack test: a
-  forged endpoint serves forged secrets and State. `Telemetry.Env` takes only the layer's own variables, so the
+- **The library refuses what would redirect the function's reads.** A document naming an `endpoint` the function calls
+  (`secrets.endpoint`, `ports.dynamodb.endpoint`, ...; R2 presets aside) is refused unless `AllowEndpoints` is set: a
+  forged endpoint serves forged secrets and State. `Telemetry.Env` takes only the layer's own variables: the
   environment cannot carry `SLUIS_*`, `LD_*` or another `AWS_*` variable.
 - **An `aws` matcher with no `role` admits every role of the account**, including roles created later; the issuer warns
   at start ([the reference](../../reference/sluis/lambda.md#two-audiences-two-doors)).
