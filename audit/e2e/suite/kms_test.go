@@ -26,7 +26,8 @@ func runJob(t *testing.T, cronjob string, patience time.Duration) string {
 	ns := shared.names.Namespace
 	job := cronjob + "-e2e-" + randomTenant(t)[len("e2e-suite-"):]
 	kubectl := func(args ...string) (string, error) {
-		out, err := exec.CommandContext(ctx, "kubectl", append([]string{"--context", kctx, "-n", ns}, args...)...).CombinedOutput() //nolint:gosec // fixed argv, no shell
+		argv := append([]string{"--context", kctx, "-n", ns}, args...)
+		out, err := exec.CommandContext(ctx, "kubectl", argv...).CombinedOutput() //nolint:gosec // fixed argv, no shell
 		return string(out), err
 	}
 	if out, err := kubectl("create", "job", job, "--from=cronjob/"+cronjob); err != nil {
