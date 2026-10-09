@@ -2141,8 +2141,8 @@
         },
         "interval": {
           "$ref": "#/$defs/config-audit-observe.v2.duration",
-          "default": "30s",
-          "description": "How often a pass runs when nothing woke it. A lost wake-up costs at most this."
+          "default": "5m",
+          "description": "How often a pass runs when nothing woke it. Without a `wake` the worst-case delay from an object reaching the archive to its rows being searchable is `settle` plus this; with one, a notification makes a pass run at once and this is only the bound on a lost one."
         },
         "listen": {
           "additionalProperties": false,
@@ -2169,6 +2169,25 @@
           "minItems": 1,
           "type": "array",
           "uniqueItems": true
+        },
+        "readiness": {
+          "additionalProperties": false,
+          "description": "When `/readyz` fails for want of progress. Liveness is not affected, so a stalled indexer is not restarted into a crash loop.",
+          "properties": {
+            "failedPasses": {
+              "default": 3,
+              "description": "How many indexing passes in a row may fail before `/readyz` fails.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "staleIntervals": {
+              "default": 3,
+              "description": "How many `interval`s may pass without a successful pass before `/readyz` fails.",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "type": "object"
         },
         "secrets": {
           "$ref": "#/$defs/config-audit-observe.v2.secrets"
@@ -7343,6 +7362,43 @@
               },
               "type": "object"
             },
+            "indexFailing": {
+              "additionalProperties": false,
+              "description": "Indexing passes keep failing.",
+              "properties": {
+                "enabled": {
+                  "description": "Render the rule.",
+                  "type": "boolean"
+                },
+                "for": {
+                  "description": "How long the condition holds before the alert fires, as a duration.",
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Labels added to this rule only.",
+                  "type": "object"
+                },
+                "minPasses": {
+                  "description": "The fewest failed passes in the window that count.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "ratio": {
+                  "description": "The share of passes that failed, over 30m.",
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "severity": {
+                  "description": "The severity label.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
             "indexLag": {
               "additionalProperties": false,
               "description": "The index is behind the archive.",
@@ -7370,6 +7426,37 @@
                   "description": "The p99 lag, in seconds.",
                   "minimum": 1,
                   "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "indexStalled": {
+              "additionalProperties": false,
+              "description": "No indexing pass has succeeded for too long: the index is stuck behind its cursor.",
+              "properties": {
+                "enabled": {
+                  "description": "Render the rule.",
+                  "type": "boolean"
+                },
+                "for": {
+                  "description": "How long the condition holds before the alert fires, as a duration.",
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Labels added to this rule only.",
+                  "type": "object"
+                },
+                "maxAgeSeconds": {
+                  "description": "Seconds without a successful pass past which the index is taken to be stalled. At least three poll intervals of the indexer.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "severity": {
+                  "description": "The severity label.",
+                  "type": "string"
                 }
               },
               "type": "object"

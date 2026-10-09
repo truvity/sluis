@@ -21,12 +21,32 @@ a role that can only read.
 | `archive` | `archive`, required | | the archive to follow (`bucket`, `prefix`). It has no `lockMode`: this process reads. The catalogues and their extension schemas are read from it too |
 | `database` | `database`, required | | the index, as the indexer's **own** role (`audit migrate --observe`): read and write on the index and its cursors, nothing of the deduplication table, not the owner, and not the writer's or the query service's |
 | `settle` | duration | `2m` | how far behind now the cursor stays. An object's key is fixed when its put starts and it is visible when it ends, so it must be longer than a put can take and than the clocks of the writers and of this process can disagree. It is the least time between a record's acknowledgement and its appearance in search |
-| `interval` | duration | `30s` | the poll: how often a pass runs when nothing woke it. A lost wake-up costs at most this |
+| `interval` | duration | `5m` | the poll: how often a pass runs when nothing woke it. The worst-case delay from an object reaching the archive to its rows being searchable is `settle` plus this unless a `wake` is configured; with one a pass runs at once and `interval` only bounds a lost notification |
+| `readiness.failedPasses` | integer, at least 1 | `3` | `/readyz` fails once this many passes in a row have failed |
+| `readiness.staleIntervals` | integer, at least 1 | `3` | `/readyz` fails once this many `interval`s have passed without a successful pass |
 | `batch` | integer, at least 1 | `500` | rows written in one transaction; a transaction ends at an object's end |
 | `profiles` | list of strings, at least one, unique | every profile the archive has | the profiles to follow. Profiles and tenants are discovered by listing |
 | `wake.nats.nats`, `wake.nats.subject` | `nats` (url, `tokenFile`), string | | a subject carrying the bucket's notifications. Their content is never read |
 | `wake.sqs` | `sqs` | | a queue of the bucket's notifications that is the indexer's own: each message wakes a pass and is deleted. Credentials are the SDK's ambient ones |
 <!-- /generated -->
+
+**Latency.** Without a wake the worst case is `settle` + `interval`: seven minutes with the
+defaults, a record acknowledged just after a pass began being searchable after the next
+one. For low latency configure `wake.sqs` or `wake.nats` (a pass then runs when the bucket
+notifies, and the 5-minute poll only catches a notification that was lost) and lower
+`settle` only as far as a put can be trusted to finish.
+
+**A stalled index is visible.** A pass that fails is retried at the next poll and the pod
+stays up, so the indexer reports it: `/readyz` also fails (`passes`, which does not affect
+`/healthz`, so a failing indexer is not restarted into a crash loop) once
+`readiness.failedPasses` passes in a row failed or no pass succeeded for
+`readiness.staleIntervals` intervals. The `audit_observe_passes_total` counter and the
+`audit_observe_pass_since_success_seconds` gauge back the chart's `AuditIndexStalled` and
+`AuditIndexPassesFailing` alerts. A failing pass is logged with the object and the reason
+once for each distinct error, and again only every half hour.
+
+**Readers are as new as the writer.** The indexer and the query service must run the same
+audit release as the writer or a newer one; see [upgrading to v1.74](../how-to/upgrade/v1.74.md).
 
 Exactly one of `wake.nats` and `wake.sqs`, or neither. A wake-up only makes the
 next pass come sooner: nothing a pass does depends on it, so a notification

@@ -40,6 +40,8 @@ func telemetryValues() m {
 				"emitterDrops":     rule("Records an emitter's queue gave up.", nil),
 				"indexLag":         rule("The index is behind the archive.", m{"thresholdSeconds": integer("The p99 lag, in seconds.", 1, nil)}),
 				"indexDeferred":    rule("Rows reached the archive and not the index.", nil),
+				"indexStalled":     rule("No indexing pass has succeeded for too long: the index is stuck behind its cursor.", m{"maxAgeSeconds": integer("Seconds without a successful pass past which the index is taken to be stalled. At least three poll intervals of the indexer.", 1, nil)}),
+				"indexFailing":     rule("Indexing passes keep failing.", m{"ratio": m{"type": "number", "minimum": 0, "maximum": 1, "description": "The share of passes that failed, over 30m."}, "minPasses": integer("The fewest failed passes in the window that count.", 1, nil)}),
 				"writerRejections": rule("The writer refuses a share of the records it is sent.", m{"ratio": m{"type": "number", "minimum": 0, "maximum": 1, "description": "The share refused."}, "minRecords": integer("The fewest refusals in the window that count.", 1, nil)}),
 				"consumerFailing":  rule("A queue consumer's target keeps failing its batches.", nil),
 				"sealStale":        rule("The newest sealed hour of a profile is too old: the notary has stopped.", m{"maxAgeSeconds": integer("The age of the newest sealed hour, in seconds, past which the notary is taken to have stopped.", 1, nil)}),

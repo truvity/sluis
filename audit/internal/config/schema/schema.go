@@ -517,7 +517,11 @@ func observeSchema() m {
 		"database": m{"$ref": "#/$defs/postgres",
 			"description": "The index, as the role `audit migrate --observe` granted: read and write on the index and its cursors, and nothing of the deduplication table. Not the owner, and not the writer's or the query service's."},
 		"settle":   duration("How far behind now the cursor stays. An object's key is fixed when its put starts and it is visible when the put ends, so a later key can be visible before an earlier one; this must be longer than a writer's put can take and than the clocks of the writers and of this process can disagree. It is the least time between a record's acknowledgement and its appearance in search.", "2m"),
-		"interval": duration("How often a pass runs when nothing woke it. A lost wake-up costs at most this.", "30s"),
+		"interval": duration("How often a pass runs when nothing woke it. Without a `wake` the worst-case delay from an object reaching the archive to its rows being searchable is `settle` plus this; with one, a notification makes a pass run at once and this is only the bound on a lost one.", "5m"),
+		"readiness": obj("When `/readyz` fails for want of progress. Liveness is not affected, so a stalled indexer is not restarted into a crash loop.", m{
+			"failedPasses":   integer("How many indexing passes in a row may fail before `/readyz` fails.", 1, 3),
+			"staleIntervals": integer("How many `interval`s may pass without a successful pass before `/readyz` fails.", 1, 3),
+		}),
 		"batch":    integer("How many rows are written in one transaction. A transaction ends at an object's end, so an object is never split.", 1, 500),
 		"profiles": m{"type": "array", "minItems": 1, "uniqueItems": true, "items": str("A profile name."), "description": "The profiles to follow. Unset follows every profile the archive has, found by listing."},
 		"wake": m{

@@ -64,6 +64,26 @@ The archive is unaffected. Look at whether `audit-observe` is running and at its
 log, then at the database's CPU, locks and connection pool. A large backlog (a
 new index, a reset cursor) shows here too until the indexer has caught up.
 
+### AuditIndexStalled
+
+No indexing pass has completed for longer than the threshold, so the index is stuck
+behind its cursor: search is empty or stale while `audit-observe` stays running
+(its `/readyz` is failing, which the pod's Ready condition shows, but a pod that is
+not Ready is not restarted). The indexer's log has `an indexing pass failed`, naming
+the object and the reason once for each distinct error and again only every half hour.
+The usual cause after an upgrade is a reader older than the writer: the catalogue
+the writer registered is one the reader's release does not accept (v1.74.0 replaced
+a catalogue action's `profiles` with `category`), the error is a schema message such as
+`does not satisfy catalogue.schema.json`. Upgrade `audit-observe` and `audit-query`
+to the writer's release or a newer one; the next pass resumes from the cursor and
+nothing is indexed twice. Other causes: the bucket or the database cannot be reached.
+
+### AuditIndexPassesFailing
+
+More than half of the indexer's passes in the last 30 minutes failed. Read the log
+as for `AuditIndexStalled`; this fires first when some passes still succeed, for
+example when one tenant's object fails and the others carry on.
+
 ### AuditIndexRowsDeferred
 
 The indexer could not index objects the archive holds. Its log line

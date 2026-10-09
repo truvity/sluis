@@ -465,7 +465,7 @@ func TestObserveTakesItsDefaultsAndRefusesWhatItCannotUse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Settle.D().String() != "2m0s" || o.Interval.D().String() != "30s" || o.Batch != 500 || o.Listen.Address != ":8080" {
+	if o.Settle.D().String() != "2m0s" || o.Interval.D().String() != "5m0s" || o.Batch != 500 || o.Listen.Address != ":8080" {
 		t.Errorf("defaults not applied: %+v", o)
 	}
 	for name, body := range map[string]string{

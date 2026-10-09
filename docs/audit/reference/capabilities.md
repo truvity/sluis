@@ -47,7 +47,7 @@ only with the previous release's CLI (v0.6.x).
 | chart value `telemetry.otlp` (`endpoint`, `protocol`, `extraEnv`): the OpenTelemetry environment on every pod | 🧪 | — | — |
 | telemetry from a Lambda with the function role's identity and no secret (the OTLP extension layer `audit-otlp`, which sluis publishes, [AWS](../how-to/aws-send-lambda-telemetry.md)) | — | 🧪 | — |
 | traces over OTLP: server and client spans, `traceparent` across NATS headers and SQS attributes, no personal data on a span | 🧪 | 🧪 | 🧪 |
-| chart `renders: alerts`: seven alert rules as a `VMRule` or `PrometheusRule`, unit-tested on vmalert-tool | 🧪 | 🧪 | 🧪 |
+| chart `renders: alerts`: nine alert rules as a `VMRule` or `PrometheusRule`, unit-tested on vmalert-tool | 🧪 | 🧪 | 🧪 |
 | chart `renders: dashboards`: the audit overview for Grafana's sidecar, held to the observability dashboard lint | 🧪 | 🧪 | 🧪 |
 
 The `s3` sink works against any store that speaks the S3 API; on a store

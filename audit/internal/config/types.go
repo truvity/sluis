@@ -391,6 +391,17 @@ type Observe struct {
 	// Profiles limits what is followed; unset follows every profile.
 	Profiles []string `json:"profiles,omitempty"`
 	Wake     *Wake    `json:"wake,omitempty"`
+	// Readiness says when a stalled indexer stops being ready.
+	Readiness ObserveReadiness `json:"readiness,omitzero"`
+}
+
+// ObserveReadiness is when /readyz of the indexer fails for want of progress.
+type ObserveReadiness struct {
+	// FailedPasses is how many passes in a row may fail before it fails.
+	FailedPasses int `json:"failedPasses,omitempty"`
+	// StaleIntervals is how many intervals may pass since the last successful
+	// pass before it fails.
+	StaleIntervals int `json:"staleIntervals,omitempty"`
 }
 
 // Seals is what `audit verify` is given to check seals with: the roots it

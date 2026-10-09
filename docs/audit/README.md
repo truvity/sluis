@@ -45,7 +45,7 @@ Tasks and runbooks. A runbook has one template: purpose, preconditions, before y
 | Operate | [recover from an outage](how-to/recover-from-an-outage.md), [replay dead-lettered records](how-to/replay-dead-lettered-records.md), [repair or rebuild the index](how-to/rebuild-the-index.md), [diagnose a scheduled job](how-to/diagnose-a-scheduled-job.md), [read from the replica](how-to/read-from-the-replica.md) |
 | Verify and hold | [verify the trail](how-to/verify-the-trail.md), [investigate a failed verification](how-to/investigate-a-failed-verification.md), [place a legal hold](how-to/place-a-legal-hold.md) |
 | Keys | [erase a tenant's keys](how-to/erase-a-tenants-keys.md), [fix the key directory](how-to/fix-the-key-directory.md) |
-| Upgrade | [v0.13](how-to/upgrade/v0.13.md), [v0.6](how-to/upgrade/v0.6.md) |
+| Upgrade | [v1.74](how-to/upgrade/v1.74.md), [v0.13](how-to/upgrade/v0.13.md), [v0.6](how-to/upgrade/v0.6.md) |
 | Contribute | [test the kind tier](how-to/test-the-kind-tier.md) |
 
 ## Reference
