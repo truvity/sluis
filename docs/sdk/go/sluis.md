@@ -1,20 +1,8 @@
-# Go module `github.com/truvity/sluis`
+# Go module
 
-**Status:** built. Packages: `identity`, `tokens`, `policy`, `config`, and `backend` (the contract a directory backend
-implements, see [extending](../../guides/sluis/extend.md)). The TypeScript counterpart is [typescript.md](../typescript/sluis.md).
+The module `github.com/truvity/sluis` verifies a caller, exchanges tokens and evaluates policy. Packages: `identity`, `tokens`, `policy`, `config`, `backend` ([extending](../../guides/sluis/extend.md)). TypeScript: [`@truvity/sluis`](../typescript/sluis.md).
 
-What a Go service behind the gateway imports, so that it implements none of three things itself: **who is calling**,
-**may they do this**, and **how do I call the next service as myself**. The shape follows
-[trust.md](../../concepts/sluis/trust.md): **exactly two verifiers**, one per anchor, and one `Verified`
-(`Subject, Email, Name, GivenName, FamilyName, Groups, ServiceAccount`) whichever proved the caller, so a handler never
-learns which anchor answered and cannot come to depend on it. The module is where the two-anchor rule stops being
-documentation and becomes the shape a service is given. Its rules: no framework leaks across packages, every verifier
-is constructed from an anchor's coordinates and nothing else, no global state, no third verifier and no group
-re-mapping anywhere. The worked example is [service to service](../../guides/sluis/connect/service-to-service.md).
-
-sluis uses this itself rather than keeping a copy. A library its
-own author does not use is a library nobody has tested against a real
-listener.
+Both verifiers of [trust](../../concepts/sluis/trust.md) return one `Verified`: `Subject, Email, Name, GivenName, FamilyName, Groups, ServiceAccount`. See [service to service](../../guides/sluis/connect/service-to-service.md).
 
 ```go
 import (
@@ -24,80 +12,28 @@ import (
 )
 ```
 
-## Rendering an installation's documents — `config`
+## Issuer anchor
 
-```go
-import "github.com/truvity/sluis/config"
-
-in, err := config.LoadInstallation("installation.yaml")
-service, policy, err := config.Render(in)   // sluis.yaml and policy.yaml, as bytes
-```
-
-The public configuration package: the document types of the service document (v3) and
-the policy document (v2), `Load` and `Validate` against the authored schemas, and the
-[installation](../../reference/sluis/installation-document.md), the typed input an estate
-writes once. `Render` is deterministic and holds both outputs to the loader the service
-runs at start; it is what `sluisctl render` and the Pulumi library
-(`LambdaArgs.Installation`) call, so no estate hand-renders the documents
-([0038](../../decisions/0038-estates-render-through-sluis.md)). `config.InstallationSchema()`
-is the authored schema of the installation. A program that is not sluis never imports
-`internal/config`.
-
-## An MCP server's own side — `identity/resource`
-
-```go
-res, _ := resource.New(resource.Config{IssuerURL: "https://access.example", ResourceURL: "https://mcp.example.com/metrics", Scope: "openid"})
-mux.Handle(res.Path(), res.Metadata())
-mux.Handle("/", res.Protect(mcp))
-```
-
-`Protect` verifies the bearer for the resource's own URL and answers the
-RFC 9728 challenge; `Metadata` serves the Protected Resource Metadata.
-[connect/mcp.md](../../guides/sluis/connect/mcp.md#a-go-server-identityresource) is the
-guide, and `resource-proxy` is the same thing as a sidecar for a server
-you did not write.
-
-## A console behind a proxy that forwards a bearer — the issuer anchor
-
-The gateway in front (gateway-native OIDC, or an [oauth2-proxy run by hand](../../guides/sluis/connect/oauth2-proxy.md) on
-another gateway) makes no difference here: the module reads whatever forwards a verified bearer.
+Use this anchor for a console behind a proxy that forwards a bearer, such as an [oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md).
 
 ```go
 issuer := &identity.Issuer{
     URL:      "https://access.example",
-    Audience: "roster.example",   // this console's client id at the issuer
+    Audience: "console.example",   // this console's client id at the issuer
 }
 
 mux := http.NewServeMux()
-mux.Handle(identity.WhoAmIPath, identity.WhoAmI(version))   // GET /.access/whoami, for the UI
-mux.Handle("/admin/", identity.Require("all:roster:operator")(admin))
+mux.Handle(identity.WhoAmIPath, identity.WhoAmI(version))   // GET /.access/whoami
+mux.Handle("/admin/", identity.Require("all:console:operator")(admin))
 
 http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
 ```
 
-**A struct rather than a constructor, and no context.** A service must
-start whether or not the issuer is reachable, and an issuer that is down
-must not be a service that will not boot. Discovery is lazy and cached:
-the first request after the issuer returns is the one that pays for it,
-and the key set refetches itself when a signature names a key it has not
-seen, which makes rotation a non-event.
+Discovery is lazy. `Middleware` never refuses. `Require` refuses without naming a group that would work; with no group it admits any vouched caller. The `WhoAmI` body is in [contracts](../../reference/sluis/contracts.md#the-whoami-endpoint).
 
-**`Middleware` establishes; `Require` refuses.** They are separate
-because a listener serves pages that run before anybody is established —
-a health endpoint, a login page, a landing page — and a middleware that
-refused for them is one every such route has to be excluded from. Wrap
-everything in `Middleware`, and put `Require` on the routes that need it.
-`Require` with no group means *any caller this installation vouches for*,
-which is a real posture where the issuer's `requires` is already the gate.
+## Cluster anchor
 
-A refusal never names the group that would have worked: a caller learning
-which group opens a door has learned something it had no way to ask.
-
-## A service on the cluster network — the cluster anchor
-
-For a workload calling a service in the **same** cluster. Anything
-further away exchanges its token at the issuer first and arrives as an
-ordinary bearer.
+Use this anchor for a workload calling a service in the same cluster.
 
 ```go
 cluster := &identity.Cluster{
@@ -110,67 +46,35 @@ cluster := &identity.Cluster{
 http.ListenAndServe(":8080", identity.Middleware(cluster, issuer)(mux))
 ```
 
-**`Review` is supplied, not built.** Otherwise every consumer that only
-needs the issuer would inherit Kubernetes client libraries for a code
-path it never runs.
+You supply `Review` and `Groups`; a TokenReview carries no policy. Verifiers run in order and the first answer wins. A verifier that cannot reach the issuer stops the chain.
 
-**`Groups` is stated by the listener**, because a TokenReview says *who*
-and never *what they may do* — the policy is not reachable from here. A
-token the issuer signed carries its groups; a ServiceAccount token does
-not.
+## MCP server
 
-Several verifiers are tried in order and the first that answers wins. A
-verifier that could not **reach** the issuer stops the chain rather than
-falling through, because trying the next one would turn an outage into
-*your token is bad* and send a legitimate caller to authenticate again,
-repeatedly.
+`Protect` answers the RFC 9728 challenge. See [MCP](../../guides/sluis/connect/mcp.md#a-go-server-identityresource).
 
-## What it never does
+```go
+res, _ := resource.New(resource.Config{IssuerURL: "https://access.example", ResourceURL: "https://mcp.example.com/metrics", Scope: "openid"})
+mux.Handle(res.Path(), res.Metadata())
+mux.Handle("/", res.Protect(mcp))
+```
 
-**No group re-mapping, anywhere.** The name in the policy is the name in
-the token is the name in the role check. A second vocabulary is a second
-place for access to mean something different.
-
-**One whoami shape.** `WhoAmI` serves `GET /.access/whoami`; the body is specified once, in
-[contracts](../../reference/sluis/contracts.md#the-whoami-endpoint), and the UI half reads it ([typescript.md](../typescript/sluis.md)).
-
-**No token parsing in a browser.** That is the TypeScript package's rule
-and this one's corollary: the browser asks the application, and the
-application answers from what it verified.
-
-## Exchange, and the two credential shapes
+## Token exchange
 
 ```go
 exchanger := &tokens.Exchanger{Issuer: "https://access.example", ClientID: "local-dev"}
 token, err := exchanger.Exchange(ctx, subject, tokens.TypeJWT, "aws:111122223333:power")
 ```
 
-`TypeJWT` labels a proof from outside — a GitHub job's token, a
-ServiceAccount token. A sign-in of this issuer's own is presented as
-`tokens.TypeAccessToken`, and only the access token of a live session at
-a `public` client declaring `sign_in_exchange: true`, presented by that
-client, is taken; an ID token, or any other token this issuer signs, is
-refused. The client is presented in **HTTP Basic**: the issuer reads an
-exchange's client from Basic alone and never from a posted `client_id`,
-so getting that wrong is refused as *invalid client* — an error about
-the client rather than about the mistake. A refusal comes back as
-`tokens.ErrRefused`, carrying the issuer's own sentence, which names the
-audience and the groups the proof holds.
+Use `tokens.TypeJWT` for an outside proof, such as a GitHub job token. Use `tokens.TypeAccessToken` for a sign-in of this issuer: only the access token of a live session at a `public` client with `sign_in_exchange: true`. Send the client in HTTP Basic. A refusal is `tokens.ErrRefused`.
 
-A GitHub App installation token of a catalogue App is the same exchange
-with the App named instead of an audience, narrowed by repositories and
-permissions:
+For a GitHub App installation token, name the App ([contract](../../reference/sluis/contracts.md#installation-tokens-at-token)):
 
 ```go
 exchanger := &tokens.Exchanger{Issuer: "https://access.example", ClientID: "github-app:publisher"}
 minted, err := exchanger.GitHubInstallationToken(ctx, subject, tokens.TypeJWT, "publisher",
 	[]string{"app"}, map[string]string{"contents": "read"})
-// minted.AccessToken, minted.Expires, and what GitHub granted: minted.Repositories, minted.Permissions
+// minted.AccessToken, minted.Expires, minted.Repositories, minted.Permissions
 ```
-
-It asks for `tokens.TypeGitHubInstallationToken`, and a refusal is
-`tokens.ErrRefused` in the same way
-([contract](../../reference/sluis/contracts.md#installation-tokens-at-token)).
 
 ```go
 tokens.WriteExecCredential(os.Stdout, apiVersion, token)   // kubectl reads this
@@ -178,44 +82,37 @@ creds, _ := tokens.AssumeRoleWithWebIdentity(ctx, nil, roleARN, who, token.Acces
 tokens.WriteCredentialProcess(os.Stdout, creds)            // the AWS SDKs read this
 ```
 
-`AssumeRoleWithWebIdentity` is **unsigned**, which is why the AWS path
-needs no stored key: the token is the proof, and the account's trust
-policy decides what it opens.
-
 ## Policy
 
 ```go
 declared, _ := policy.LoadDeclared("/etc/sluis/policy")  // a file or a directory
-set, _ := policy.NewSet(declared)                                // validated once, at load
+set, _ := policy.NewSet(declared)                         // validated once, at load
 
 result := set.Evaluate(policy.Input{
     Email:           "alice@example.com",
     DirectoryGroups: groups,      // what the directory confirmed
-    Authoritative:   true,        // and whether that answer may be acted on
+    Authoritative:   true,        // whether that answer may be acted on
 })
 ```
 
-The same `Input` carries the other two proofs: `GitHub` — repository,
-owner, ref, workflow, environment, visibility, as the job's token says —
-and `ServiceAccount` — cluster, namespace, name. A person, a CI job and
-a workload are the same evaluation against the same matchers.
+`Input` also takes `GitHub` and `ServiceAccount` proofs. `LoadDeclared` refuses `team_id`, `domains` and `owner` under a Slack workspace, and `owner` under a GitHub organisation.
 
-`policy.Policy` also carries the `slack` and `people` tables.
-`Set.SlackWorkspaceDeclared(key)` and `Set.SlackWorkspaceKeys()` say which Slack
-workspaces the policy names; `Policy.PeopleByAddress()` maps every listed
-address to its person; `Set.Declared()` returns the declared policy, read-only,
-for a caller that validates a definition of its own against it (a console
-channel record). `LoadDeclared` refuses `team_id`, `domains` and `owner` under a
-Slack workspace and `owner` under a GitHub organisation, with a message saying
-where each now comes from.
+| accessor | returns |
+|---|---|
+| `Set.SlackWorkspaceDeclared(key)` | whether the policy declares that Slack workspace key |
+| `Set.SlackWorkspaceKeys()` | every declared Slack workspace key, sorted |
+| `Set.Declared()` | the declared `Policy` in force, read-only, to validate a definition of your own against |
+| `Policy.PeopleByAddress()` | every address in the `people` table, normalised, mapped to its person's key |
 
-One layer. There was a second that a console could write; it is gone,
-because a console that can disagree with git is a second
-source of truth and a merge to reconcile them.
+## Configuration
 
-## Not built yet
+```go
+import "github.com/truvity/sluis/config"
 
-`authz` (role helpers over `Verified`), `directory` (a client for the
-endpoint that returns when something needs it again), and the adapters
-for fiber, gRPC and connect. Each is additive: they sit on the same
-`Verified` and change nothing above.
+in, err := config.LoadInstallation("installation.yaml")
+service, policy, err := config.Render(in)   // sluis.yaml and policy.yaml, as bytes
+```
+
+`config` holds the service (v3) and policy (v2) document types and the [installation](../../reference/sluis/installation-document.md). `Render` is deterministic and backs `sluisctl render`.
+
+Decided in: [0038](../../decisions/0038-estates-render-through-sluis.md).

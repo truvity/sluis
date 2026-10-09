@@ -1,35 +1,12 @@
 # TypeScript package `@truvity/sluis`
 
-**Status:** built. Three entry points: the root (`fetchIdentity()` and the `Identity` type), `/react` (`useIdentity()`,
-`<UserBadge/>`) and `/server` (a Node verifier, below). The Go counterpart is [go-module.md](../go/sluis.md).
-
-What a console needs from the identity it is behind: who the caller is,
-what that gets them, and the way out. The browser half parses no token —
-the browser asks the application it is already talking to, and the
-application, which has verified whatever the gateway or the issuer gave
-it, answers. A package that verified tokens in a browser would need the
-issuer's keys, its clock and its rules in every console.
-
-That verification is the server half, under `/server`, for an
-application whose backend is Node. It is the Go `identity` package's
-issuer anchor in TypeScript: the same checks, the same caller, the same
-`whoami` body — see [The server half](#the-server-half).
-
-Published to GitHub Packages by each release, at the tag's version
-(`v1.5.0` publishes `1.5.0`), built and tested once in the release
-workflow. The package is the repository root — `ts/package.json` is the
-inner build and is not what anybody installs — which is why the import
-path has no `-ts` in it.
-
-The registry scope and token are set once, in [the SDK overview](../README.md#installing-from-github-packages).
+Entry points: the root (`fetchIdentity()`, `Identity`), `/react` (`useIdentity()`, `<UserBadge/>`) and `/server` (a Node verifier). The Go counterpart is the [Go module](../go/sluis.md). Set the registry scope once, in the [SDK overview](../README.md#installing-from-github-packages).
 
 ```sh
 yarn add @truvity/sluis@^1.8.0
 ```
 
-A git install (`github:truvity/sluis#<tag>`) no longer works:
-`ts/dist` is not committed, and nothing builds it on install. `react` and `@mui/material` are optional peers: an
-application with neither pays for neither.
+`react` (18 or later) and `@mui/material` (6 or later) are optional peers.
 
 ```tsx
 import { useIdentity, UserBadge } from "@truvity/sluis/react";
@@ -40,23 +17,17 @@ function Header() {
 }
 ```
 
-## Four states, not three
+The browser half parses no token. It asks the application, which has verified the caller. `fetchIdentity` is its only network call: the package ships no clients for the console's services. If `/.access/whoami` is not served, the UI renders as signed out. `useIdentity()` asks once on mount and aborts on unmount.
+
+## Status
 
 ```ts
 type Status = "loading" | "signed-in" | "signed-out" | "unknown";
 ```
 
-`unknown` is the one worth explaining, and the reason this returns a
-status rather than an identity or null: it means the question could not
-be *asked*. A console that showed a sign-in button because one request
-failed would send a signed-in person to authenticate again for nothing —
-the same mistake, in a browser, that this project refuses to make in a
-directory. A 401 or a 403 is an answer and reads as `signed-out`; a
-network failure or a 502 does not.
+A 401 or 403 reads as `signed-out`. A network failure or a 502 reads as `unknown`: show no sign-in button. `UserBadge` renders all four.
 
-`UserBadge` renders all four, including that one.
-
-## What comes back
+## Identity
 
 ```ts
 interface Identity {
@@ -74,21 +45,11 @@ interface Identity {
 }
 ```
 
-Those are the fields `/.access/whoami` serves; the endpoint is specified once, in
-[contracts](../../reference/sluis/contracts.md#the-whoami-endpoint), and the console's own answer adds its roles and scopes. If it is not
-served, the UI renders as signed out. `useIdentity()` asks once on mount
-and aborts on unmount: the answer changes when a session ends, and that is
-something the application discovers on its next call rather than something
-a poll would catch usefully.
+The endpoint is specified in [contracts](../../reference/sluis/contracts.md#the-whoami-endpoint).
 
-## Not here
+## Server half
 
-Generated Connect-Web clients for the console's services. The console
-is in this repository and generates them itself; no other
-console calls those services, so shipping them would be surface with no
-consumer. `fetchIdentity` is deliberately the whole of the network code.
-
-## The server half
+`/server` is the Go issuer anchor in TypeScript.
 
 ```ts
 import { Issuer, middleware, requireGroups, whoami, whoamiPath, identityOf } from "@truvity/sluis/server";
@@ -101,33 +62,14 @@ app.use("/admin", requireGroups("dev:url-shortener:deployer"));
 app.get("/me", (req, res) => res.json(identityOf(req)));
 ```
 
-- **`Issuer`** verifies an access token against the issuer's published
-  keys: signature, `iss`, expiry, and an `aud` of this service's own client
-  id. The audience is required — a token minted for another service is a
-  valid token, and accepting it would make every audience the issuer
-  serves a way in. Discovery is lazy, so the service starts whether or not
-  the issuer is up.
-- **The signing algorithm is the issuer's to say.** The verifier accepts
-  what the discovery document advertises as
-  `id_token_signing_alg_values_supported`, which follows from the
-  installation's key — ES384 for the chart's default P-384 key, RS256 for
-  an RSA one — so a service needs no setting to follow a key change. An
-  issuer that advertises nothing gets the four the issuer can sign with
-  (RS256, ES256, ES384, ES512); `none` and HMAC are never accepted. A
-  caller that wants to pin narrows with `algorithms: ["ES384"]`.
-- **Two errors, not one.** `Unverified` is a token that did not verify,
-  and says nothing about why. `IssuerUnreachable` is an outage; never
-  answer it with a 401, which would send a signed-in person back to sign in
-  for nothing.
-- **`middleware`** reads the token from `x-auth-request-access-token` or
-  the bearer, and establishes the caller for `identityOf(request)`. It
-  refuses nothing, because some routes run before anybody is established.
-  `requireGroups` refuses: 401 for nobody, 403 for the wrong groups, and it
-  never names the groups that would have worked.
-- **What a caller is:** `subject`, `email`, `name`, `givenName`,
-  `familyName`, `groups`, and `serviceAccount` for a workload. The names are
-  for display; never authorize on them.
+`Issuer` checks signature, `iss`, expiry and an `aud` equal to your client id. The audience is required. Discovery is lazy.
 
-Only the issuer anchor is here. A ServiceAccount token from the pod next
-door is verified with the Kubernetes API, which is Go's `Cluster`; a Node
-service reaches its callers through the issuer.
+The verifier accepts the algorithms the discovery document lists in `id_token_signing_alg_values_supported`. Without a list it accepts RS256, ES256, ES384 and ES512. It rejects `none` and HMAC. Pin with `algorithms: ["ES384"]`.
+
+`Unverified` is a bad token. `IssuerUnreachable` is an outage: never answer it with a 401.
+
+`middleware` reads `x-auth-request-access-token` or the bearer. `requireGroups` answers 401 for nobody and 403 for the wrong groups, and never names the groups that would work.
+
+`identityOf(request)` returns `subject`, `email`, `name`, `givenName`, `familyName`, `groups` and `serviceAccount`. Do not authorize on the display names.
+
+Only the issuer anchor ships here. A Node service reaches in-cluster callers through the issuer.
