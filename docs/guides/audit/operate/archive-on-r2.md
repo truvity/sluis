@@ -1,34 +1,15 @@
 # Put the archive on an S3-compatible store (Cloudflare R2)
 
-The archive may live on any store that speaks the S3 API at an endpoint of its
-own. Cloudflare R2 is the one this has been measured against. Such an archive is
-written with **no Object Lock** (the lock is an AWS S3 guarantee another store
-does not make, so the `attested` preset on an endpoint is refused at configuration
-and at store construction), so it holds the `operational` or `standard` preset,
-not `attested`. Its integrity rests on the objects' hashes and, with the
-notary, on the seals.
+Put the archive on any store that speaks the S3 API at an endpoint of its own; Cloudflare R2 is the
+one measured. Such a store has no Object Lock, so it holds the `operational` or `standard` preset and
+refuses `attested`. Its integrity rests on the objects' hashes and the notary's seals.
 
-## 1. The bucket and its credentials
+## 1. Read the credentials sluis rotates
 
-Create the bucket at the store, and an API token that can read and write it.
-Write the pair as a SecureString at the installation's `internal/` address, as a
-JSON object, once, by hand. It must not pass through Pulumi, which would keep it
-in the stack's state:
-
-```sh
-aws ssm put-parameter --type SecureString \
-  --name /audit/main/internal/archive/operational \
-  --value "$(printf '{"accessKeyID":"%s","secretAccessKey":"%s"}' "$ID" "$SECRET")"
-```
-
-The Pulumi library's output `ArchiveCredentialsPaths` lists the names, per preset.
-
-## 2. The installation
-
-The store is the storage of a **preset**, in the deployment document
-([0068](../../../decisions/0068-storage-is-configured-per-preset.md)). A preset on an
-endpoint is `operational` or `standard`; an installation may keep another preset
-on AWS S3 beside it.
+To keep no long-lived R2 secret and no Cloudflare minter in audit, declare an R2 preset in sluis
+([mint short-lived Cloudflare tokens](../../sluis/cloudflare-tokens.md)). sluis keeps its current
+credential at `external/cloudflare/<preset>` and replaces it every `rotation`. Name that address on
+the audit preset:
 
 ```yaml
 presets:
@@ -37,46 +18,89 @@ presets:
     prefix: operational/
     region: auto
     endpoint: https://<account>.r2.cloudflarestorage.com
-    credentials: internal/archive/operational   # below the state root
+    credentials_ref: external/cloudflare/audit-r2
 ```
 
-With the Pulumi library:
+Each process reads the document, reads it again within a minute and before it expires, and once
+more after a 403. It mints nothing.
+
+## 2. Give the Lambda functions the parameter
 
 ```go
 auditpulumi.New(ctx, "main", &auditpulumi.Args{
     Presets: map[string]auditpulumi.PresetStorage{
         "operational": {
-            Bucket:   "acme-audit",
-            Prefix:   "operational/",
-            Endpoint: "https://<account>.r2.cloudflarestorage.com",
-            // Region defaults to "auto", which R2 signs with.
-            // CredentialsAddress defaults to internal/archive/operational.
+            Bucket:         "acme-audit",
+            Prefix:         "operational/",
+            Endpoint:       "https://<account>.r2.cloudflarestorage.com",
+            CredentialsRef: "external/cloudflare/audit-r2",
         },
     },
+    // The sluis installation's SSM root, and the key its SecureStrings are encrypted with.
+    Sluis: &auditpulumi.SluisArgs{Root: "/sluis/main", KeyArn: "<sluis secrets key ARN>"},
     // ... Ingest, Writer; no Keys.Archive: the store encrypts at rest itself.
 })
 ```
 
-The process configuration names where the credentials are read from:
+The library writes `archive: {sluisRoot: /sluis/main}` and grants the writer and the notary
+`ssm:GetParameter` on `/sluis/main/external/cloudflare/audit-r2` only, plus `kms:Decrypt` through SSM.
+
+## 3. Give the pods a projected file
+
+Sync the document into a Secret with the external secrets operator, then mount it as a directory:
 
 ```yaml
-archive:
-  stateRoot: /audit/main
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: audit-r2
+spec:
+  refreshInterval: 1m
+  secretStoreRef: {kind: ClusterSecretStore, name: sluis-ssm}
+  target: {name: audit-r2}
+  data:
+    - secretKey: audit-r2
+      remoteRef: {key: /sluis/main/external/cloudflare/audit-r2}
 ```
 
-On Kubernetes the chart renders `presets` into the deployment document and the
-component's `config.archive` carries the state root; the pod's identity needs
-`ssm:GetParameter` on the credentials parameter.
+```yaml
+writer:            # and observe, query, jobs.* that read the archive
+  config:
+    archive: {sluisDir: /etc/audit/sluis}
+  secretMounts:
+    - {secretName: audit-r2, mountPath: /etc/audit/sluis/external/cloudflare}
+```
+
+Keep `refreshInterval` plus the kubelet's sync well under the sluis preset's `lifetime - rotation`.
+Never mount the key with `subPath`: such a file does not follow the rotation. The pods need no AWS
+identity; the operator's identity needs `ssm:GetParameter` on the one parameter.
+
+## Static credentials
+
+Without a sluis installation, write a token's pair once as a SecureString at the installation's
+`internal/` address. It must not pass through Pulumi, which would keep it in the stack's state:
+
+```sh
+aws ssm put-parameter --type SecureString \
+  --name /audit/main/internal/archive/operational \
+  --value "$(printf '{"accessKeyID":"%s","secretAccessKey":"%s"}' "$ID" "$SECRET")"
+```
+
+Name it with `credentials: internal/archive/operational` in place of `credentials_ref`, and set
+`archive.stateRoot: /audit/main`. `PresetStorage.CredentialsAddress` defaults to that address, and
+the output `ArchiveCredentialsPaths` lists it per preset.
+
+`credentials_preset` makes every process mint its own token with the Cloudflare minter, which can
+mint anything the account owner can. Prefer `credentials_ref`.
 
 ## What does not carry over
 
 - `key_alias` is refused on a preset at an endpoint, and so are `Create`,
   `Keys.Archive` and the other settings of an AWS bucket. Retention and tiering
   are the store's lifecycle rules, which you configure there.
-- An `attested` preset is refused at an endpoint: Object Lock is S3 only.
 - `Observe`, `Query` and `ArchiveWriter` are IAM roles over AWS buckets; they get
   nothing for a preset on an endpoint, whose workloads read it with the credentials
-  in the state store.
+  above.
 
 ## The compressed-write checksum
 

@@ -92,7 +92,20 @@ type PresetStorage struct {
 	// token with a minter token and renews before they expire. Exclusive with
 	// Credentials, and only with Endpoint. The static Credentials stay the
 	// default and the simpler path.
+	//
+	// It needs the minter credential, which can mint anything the Cloudflare
+	// account owner can, in the custody of every process that reads the
+	// archive. CredentialsRef is the mode to prefer.
 	CredentialsPreset *CredentialsPreset `json:"credentials_preset,omitempty"`
+	// CredentialsRef is the address, in the secret store of the sluis
+	// installation that rotates them, of the R2 credentials sluis keeps for a
+	// Cloudflare preset: `external/cloudflare/<preset>`, a `cloudflare/v1`
+	// document (ADR 0070). The process reads it below `archive.sluisRoot` on
+	// SSM, or below `archive.sluisDir` where a secrets operator projected it,
+	// and reads it again before the credential expires and after a 403. It
+	// mints nothing and holds no minter. Exclusive with Credentials and
+	// CredentialsPreset, and only with Endpoint.
+	CredentialsRef string `json:"credentials_ref,omitempty"`
 	// KeyAlias is the alias of the KMS key this preset's objects are encrypted
 	// with, a name and not a key (`alias/...`). Empty is the installation's
 	// archive key (or the bucket's default). Only on AWS S3.
@@ -167,9 +180,15 @@ func ParseDeployment(raw []byte) (*Deployment, error) {
 	return &d, nil
 }
 
+// CredentialsRefPattern is a `credentials_ref`: the external address sluis
+// keeps an R2 preset's rotated credential at, `external/cloudflare/<preset>`,
+// with the preset named as sluis names it (a DNS label).
+const CredentialsRefPattern = `^external/cloudflare/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`
+
 var (
-	categoryRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
-	aliasRE    = regexp.MustCompile(`^alias/[A-Za-z0-9/_-]+$`)
+	credentialsRefRE = regexp.MustCompile(CredentialsRefPattern)
+	categoryRE       = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+	aliasRE          = regexp.MustCompile(`^alias/[A-Za-z0-9/_-]+$`)
 )
 
 // check is what the strict parse cannot say about destinations: the names of
@@ -246,6 +265,20 @@ func (s PresetStorage) check(name Preset) []error {
 		}
 		if _, err := c.LifetimeDuration(); err != nil {
 			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_preset.%w", name, err))
+		}
+	}
+	if ref := s.CredentialsRef; ref != "" {
+		if s.Credentials != "" || s.CredentialsPreset != nil {
+			problems = append(problems, fmt.Errorf("deployment: preset %s names credentials_ref and credentials or credentials_preset: "+
+				"one source of credentials, not two", name))
+		}
+		if !s.External() {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_ref names R2 credentials for a store at an endpoint; "+
+				"set endpoint, or leave credentials_ref out", name))
+		}
+		if !credentialsRefRE.MatchString(ref) {
+			problems = append(problems, fmt.Errorf("deployment: preset %s: credentials_ref %q is not external/cloudflare/<preset>, "+
+				"the address sluis keeps an R2 preset's rotated credentials at", name, ref))
 		}
 	}
 	if s.External() {

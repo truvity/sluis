@@ -260,6 +260,23 @@ func TestAuditArchiveCanReuseTheBlobStore(t *testing.T) {
 	}
 }
 
+// A preset reading the R2 credentials this installation rotates is pointed at
+// the installation's own root without being told.
+func TestAuditCredentialsRefDefaultsToThisInstallation(t *testing.T) {
+	au := installAudit(t)
+	au.Presets = map[string]arp.AuditPreset{"operational": {
+		PresetStorage: auditpulumi.PresetStorage{Bucket: "acme-audit", CredentialsRef: "external/cloudflare/audit-r2"}, ReuseBlobStore: true,
+	}}
+	rec, _ := mustLambda(t, auditEstate(t, au, onBlobStore(r2())))
+	layer := auditLayer(t, rec)
+	if !strings.Contains(layer["audit/audit.yaml"], "sluisRoot: /sluis/") {
+		t.Errorf("the writer's configuration lacks the sluis root:\n%s", layer["audit/audit.yaml"])
+	}
+	if !strings.Contains(layer["audit/deployment.yaml"], "credentials_ref: external/cloudflare/audit-r2") {
+		t.Errorf("the deployment document lacks the ref:\n%s", layer["audit/deployment.yaml"])
+	}
+}
+
 // Use sends to an installation that exists and installs nothing.
 func TestAuditUseInstallsNothingAndSendsToTheQueue(t *testing.T) {
 	other := strings.Repeat("2", 12)

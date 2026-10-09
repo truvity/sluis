@@ -517,10 +517,26 @@
     "archive": {
       "additionalProperties": false,
       "description": "The archive the records are in: what the s3scan searcher reads. Get answers where a copy is and, until seals vouch for it, nothing about whether it has been verified.",
+      "not": {
+        "required": [
+          "sluisRoot",
+          "sluisDir"
+        ]
+      },
       "properties": {
         "ca": {
           "description": "A bundle of certificate authorities, for a store whose certificate is not signed by a public root.",
           "minLength": 1,
+          "type": "string"
+        },
+        "sluisDir": {
+          "description": "The directory a secrets operator projects the documents a preset's `credentials_ref` names into: the document is read at `<sluisDir>/<credentials_ref>`, and read again when it changes and before the credential expires. Mount the Secret as a directory, not with subPath, so the file follows the rotation. Exclusive with `sluisRoot`.",
+          "pattern": "^/",
+          "type": "string"
+        },
+        "sluisRoot": {
+          "description": "The SSM root of the secret store of the sluis installation that rotates a preset's `credentials_ref` (`/sluis/<instance>`). The document is read at `<sluisRoot>/<credentials_ref>` with the process's own identity, and read again before the credential expires. Exclusive with `sluisDir`; needed when a preset names `credentials_ref` and the process reads SSM.",
+          "pattern": "^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
           "type": "string"
         },
         "stateRoot": {

@@ -90,6 +90,10 @@ type AuditArgs struct {
 	Keys auditpulumi.KeysArgs
 	// State is the installation's state store; see auditpulumi.StateArgs.
 	State auditpulumi.StateArgs
+	// Sluis is where a preset's CredentialsRef, the R2 credentials sluis
+	// rotates, is read from. Unset with a CredentialsRef, it is this
+	// installation: `/sluis/<Instance>` and ParameterKeyArn.
+	Sluis *auditpulumi.SluisArgs
 
 	// Notary, Alerts, Telemetry and Observe are the audit library's own; they
 	// are for the presets above operational, which the profiles ask for. Leave them out under operational (the library refuses them there).
@@ -319,7 +323,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 		}
 		presets[name] = st
 	}
-	for name, st := range presets {
+	for name, st := range presets { //nolint:gocritic // read-only configuration, copied once per preset
 		if st.Endpoint == "" && st.Create && st.Bucket == "" {
 			st.Bucket = auditpulumi.PresetBucketName(auditpulumi.ArchiveBucketName(p.name, a.AccountID, a.Region), name)
 			presets[name] = st
@@ -329,9 +333,19 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 				"and a different one from the blob bucket", name)
 		}
 	}
-	created := false
-	for _, st := range presets {
+	created, refs := false, false
+	for _, st := range presets { //nolint:gocritic // read-only configuration, copied once per preset
 		created = created || st.Create
+		refs = refs || st.CredentialsRef != ""
+	}
+	sluis := au.Sluis
+	if sluis == nil && refs {
+		// The credentials this installation rotates, under its own root.
+		if a.ParameterKeyArn == "" && a.Keys != nil && a.Keys.Secrets != "" {
+			return nil, errors.New("sluispulumi: LambdaArgs.Audit.Presets name CredentialsRef and the secrets key is named by alias (Keys.Secrets): " +
+				"set LambdaArgs.Audit.Sluis with the key's ARN, which the audit roles are granted Decrypt on")
+		}
+		sluis = &auditpulumi.SluisArgs{Root: SSMRoot(a.Instance), KeyArn: a.ParameterKeyArn}
 	}
 	if created && archive.Encryption == "" && au.Keys.Archive == "" {
 		archive.Encryption = auditpulumi.EncryptionS3
@@ -351,6 +365,7 @@ func (a *LambdaArgs) auditInstallArgs(p *auditPlan, role pulumi.StringInput) (*a
 		LogRetentionDays: a.LogRetentionDays,
 		Keys:             au.Keys,
 		State:            au.State,
+		Sluis:            sluis,
 		Archive:          archive,
 		Presets:          presets,
 		Ingest:           auditpulumi.IngestArgs{Senders: senders, Redrivers: au.Redrivers},

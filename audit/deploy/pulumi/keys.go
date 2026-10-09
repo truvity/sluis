@@ -81,6 +81,48 @@ type StateArgs struct {
 	KeyArn string
 }
 
+// SluisArgs is the sluis installation whose secret store holds the R2
+// credentials a preset's CredentialsRef names (ADR 0070): sluis rotates them
+// there, and the functions read them with their own roles.
+type SluisArgs struct {
+	// Root is the SSM root of that installation's secret store,
+	// `/sluis/<instance>`, without a trailing slash.
+	Root string
+	// KeyArn is the customer-managed KMS key its SecureStrings are encrypted
+	// with (sluis's `secrets.kmsKeyId`). The roles are granted Decrypt on it
+	// through SSM only. Empty means the AWS-managed key `alias/aws/ssm`, which
+	// needs no grant.
+	KeyArn string
+}
+
+// sluisRootRE is an SSM root of a sluis installation: /sluis/<instance>.
+var sluisRootRE = regexp.MustCompile(`^/sluis/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
+
+// checkSluis holds Args.Sluis to the presets: it is required where a preset
+// names CredentialsRef, and refused where none does.
+func (a *Args) checkSluis() error {
+	var refs []string
+	for _, s := range a.stores {
+		if s.stored() {
+			refs = append(refs, fmt.Sprintf("Presets[%q].CredentialsRef", s.Preset))
+		}
+	}
+	switch {
+	case len(refs) == 0 && a.Sluis != nil:
+		return errors.New("auditpulumi: Sluis is set and no preset names CredentialsRef: it is where those credentials are read from. Leave it out")
+	case len(refs) == 0:
+		return nil
+	case a.Sluis == nil || a.Sluis.Root == "":
+		return fmt.Errorf("auditpulumi: %s is set and Sluis.Root is not: name the SSM root of the sluis installation that rotates "+
+			"the credentials (/sluis/<instance>)", strings.Join(refs, ", "))
+	case !sluisRootRE.MatchString(a.Sluis.Root):
+		return fmt.Errorf("auditpulumi: Sluis.Root %q must be the SSM root of a sluis installation, /sluis/<instance>", a.Sluis.Root)
+	case a.Sluis.KeyArn != "" && !kmsArnRE.MatchString(a.Sluis.KeyArn):
+		return fmt.Errorf("auditpulumi: Sluis.KeyArn %q must be the ARN of a KMS key", a.Sluis.KeyArn)
+	}
+	return nil
+}
+
 var aliasRE = regexp.MustCompile(`^alias/[a-zA-Z0-9/_-]+$`)
 
 // checkAlias refuses what the storage port refuses: an ARN, a key id, an AWS

@@ -96,6 +96,21 @@ type PresetPlan struct {
 	// Minted, when set, is how the store's R2 credentials are minted for the
 	// process from a Cloudflare preset (mutually exclusive with Credentials).
 	Minted *MintedCredentials
+	// Stored, when set, is where the R2 credentials a sluis installation
+	// rotates for the store are read (the preset's credentials_ref).
+	Stored *StoredCredentials
+}
+
+// StoredCredentials is a store whose credentials are the ones a sluis
+// installation rotates: the document's address in that installation's secret
+// store, and where that store is reached from this process.
+type StoredCredentials struct {
+	// Ref is the document's address, external/cloudflare/<preset>.
+	Ref string
+	// Root is the SSM root of the sluis installation's secret store
+	// (archive.sluisRoot); Dir the directory the documents are projected into
+	// (archive.sluisDir). Exactly one is set.
+	Root, Dir string
 }
 
 // MintedCredentials is a store whose credentials are minted: the preset's
@@ -140,6 +155,16 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 						"it is the root of the state store the minter credential is read from", name))
 				}
 				plan.Minted = &MintedCredentials{Preset: name, Spec: *cp, Root: a.StateRoot}
+			}
+			if ref := st.CredentialsRef; ref != "" {
+				switch {
+				case a.SluisRoot == "" && a.SluisDir == "":
+					problems = append(problems, fmt.Errorf("preset %s names credentials_ref %s and neither archive.sluisRoot nor archive.sluisDir is set: "+
+						"name the SSM root of the sluis installation that rotates it, or the directory it is projected into", name, ref))
+				case a.SluisRoot != "" && a.SluisDir != "":
+					problems = append(problems, errors.New("archive.sluisRoot and archive.sluisDir are both set: the rotated credentials are read from one place"))
+				}
+				plan.Stored = &StoredCredentials{Ref: ref, Root: a.SluisRoot, Dir: a.SluisDir}
 			}
 			if st.Credentials != "" {
 				if a.StateRoot == "" {
@@ -197,6 +222,14 @@ func OpenArchive(ctx context.Context, d *profile.Deployment, profiles map[string
 		options := plan.Options
 		if plan.Minted != nil {
 			prov, err := mintedProvider(ctx, *plan.Minted)
+			if err != nil {
+				return nil, fmt.Errorf("preset %s: %w", name, err)
+			}
+			cache := aws.NewCredentialsCache(prov)
+			minted, options.Reauth = cache, reauthenticate(prov, cache)
+		}
+		if plan.Stored != nil {
+			prov, err := storedProvider(ctx, *plan.Stored)
 			if err != nil {
 				return nil, fmt.Errorf("preset %s: %w", name, err)
 			}

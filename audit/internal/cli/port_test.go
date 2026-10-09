@@ -1,9 +1,15 @@
+//nolint:lll // fixtures are one-line documents
 package cli
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/truvity/sluis/storage/state/memory"
 )
@@ -67,5 +73,69 @@ func TestTheMinterTokenIsReadFromItsDocumentAndNeverEchoed(t *testing.T) {
 		if _, err := readMinter(ctx, st, addr); err == nil || strings.Contains(err.Error(), "m1nter-secret") {
 			t.Errorf("%s: %v", addr, err)
 		}
+	}
+}
+
+// The rotated document is read at its address of the sluis installation's
+// secret store, again after a 403 once it was rotated, and its secret is never
+// in an error.
+func TestTheRotatedCredentialsAreReadFromTheSluisStore(t *testing.T) {
+	ctx := context.Background()
+	st := memory.New()
+	doc := func(id string) []byte {
+		return []byte(`{"schema":"cloudflare/v1","access_key_id":"` + id + `","secret_access_key":"s3cret-` + id + `","endpoint":"https://acct.r2.example.test","expires_on":"` +
+			time.Now().Add(15*time.Minute).UTC().Format(time.RFC3339) + `"}`)
+	}
+	rev, err := st.Put(ctx, "external/cloudflare/r2", doc("k1"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prov, err := storedFromState(st, "/sluis/main", "external/cloudflare/r2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := aws.NewCredentialsCache(prov)
+	if c, err := cache.Retrieve(ctx); err != nil || c.AccessKeyID != "k1" {
+		t.Fatalf("first read: %+v %v", c, err)
+	}
+	if _, err = st.Put(ctx, "external/cloudflare/r2", doc("k2"), rev); err != nil {
+		t.Fatal(err)
+	}
+	if replaced, err := reauthenticate(prov, cache).Reauthenticate(ctx); err != nil || !replaced {
+		t.Fatalf("after a 403: %v %v", replaced, err)
+	}
+	if c, _ := cache.Retrieve(ctx); c.AccessKeyID != "k2" {
+		t.Fatalf("after a rotation: %s", c.AccessKeyID)
+	}
+
+	missing, _ := storedFromState(st, "/sluis/main", "external/cloudflare/absent")
+	if _, err := missing.Retrieve(ctx); err == nil || !strings.Contains(err.Error(), "/sluis/main/external/cloudflare/absent") {
+		t.Fatalf("a missing document: %v", err)
+	}
+	if _, err = st.Put(ctx, "external/cloudflare/token", []byte(`{"schema":"cloudflare/v1","token":"s3cret-t","expires_on":"2099-01-01T00:00:00Z"}`), ""); err != nil {
+		t.Fatal(err)
+	}
+	token, _ := storedFromState(st, "/sluis/main", "external/cloudflare/token")
+	if _, err := token.Retrieve(ctx); err == nil || strings.Contains(err.Error(), "s3cret") {
+		t.Fatalf("a token preset's document: %v", err)
+	}
+}
+
+// With archive.sluisDir the document is the file a secrets operator projected.
+func TestTheRotatedCredentialsAreReadFromAProjectedFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "external", "cloudflare"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"schema":"cloudflare/v1","access_key_id":"k1","secret_access_key":"s","expires_on":"` + time.Now().Add(15*time.Minute).UTC().Format(time.RFC3339) + `"}`
+	if err := os.WriteFile(filepath.Join(dir, "external", "cloudflare", "r2"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prov, err := storedProvider(context.Background(), StoredCredentials{Ref: "external/cloudflare/r2", Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, err := prov.Retrieve(context.Background()); err != nil || c.AccessKeyID != "k1" {
+		t.Fatalf("%+v %v", c, err)
 	}
 }

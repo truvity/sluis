@@ -39,6 +39,9 @@ func archiveConfig(a *Args) map[string]any {
 	if len(a.endpointStores()) > 0 {
 		out["stateRoot"] = a.State.Root
 	}
+	if a.Sluis != nil {
+		out["sluisRoot"] = a.Sluis.Root
+	}
 	// With SSE-S3 and the AWS-managed key there is no key to name: the bucket's
 	// default encryption applies.
 	if a.Archive.Encryption == EncryptionKMS {

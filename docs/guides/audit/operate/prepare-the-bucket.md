@@ -165,10 +165,16 @@ presets:
   the installation's state store below `archive.stateRoot`, of a JSON object
   `{accessKeyID, secretAccessKey}`, read with the process's own identity. No secret is in a
   file. Unset, the SDK's ambient credentials are used, which is what a workload identity provides.
+- **The R2 credentials sluis rotates**, on Cloudflare R2: instead of `credentials`,
+  `credentials_ref: external/cloudflare/<preset>` names the document a sluis installation keeps
+  for one of its R2 presets. The process reads it below `archive.sluisRoot` on SSM, or below
+  `archive.sluisDir` where a secrets operator projected it, and holds no minter. It is the mode to
+  prefer; see [put the archive on R2](archive-on-r2.md).
 - **Credentials minted for the process**, on Cloudflare R2: instead of `credentials`, a
   `credentials_preset` makes the process clone a disabled Cloudflare prototype token with a
-  minter token and renew the resulting credentials with a third of their lifetime left. The static
-  `credentials` stay the default and need no Cloudflare account; the two are exclusive.
+  minter token and renew the resulting credentials with a third of their lifetime left. Every
+  process that reads the archive then holds the minter: prefer `credentials_ref`. The three
+  sources are exclusive.
 
   ```yaml
   presets:

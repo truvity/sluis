@@ -72,13 +72,14 @@ func deploymentSchema() m {
 
 func presetStorage() m {
 	return obj("Where one install preset keeps its copies: a bucket of its own.", m{
-		"bucket":      str("The bucket."),
-		"prefix":      m{"type": "string", "pattern": "^([^/].*/)?$", "description": "The prefix within the bucket every key of this preset lives under, ending in a slash (`standard/`). Required wherever the bucket is shared with another installation."},
-		"region":      str("The region. For a store at an endpoint, `auto` unless the store says otherwise."),
-		"endpoint":    str("The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only."),
-		"path_style":  boolean("Address the bucket as endpoint/bucket/key, for a store whose certificate does not cover a bucket subdomain. Only with `endpoint`."),
-		"credentials": str("The address, below the installation's state root, of the static credentials of a store at an endpoint: a JSON object {accessKeyID, secretAccessKey} in the state store, read with the process's own identity. Only with `endpoint`: on AWS the workload's identity is the credential."),
-		"credentials_preset": obj("Instead of static credentials, mint the store's R2 credentials for this process: it clones a disabled Cloudflare prototype token with the minter token and renews with a third of the lifetime left (and mints again once after a 403). Exclusive with `credentials`; only with `endpoint`. The static `credentials` stay the default and need no Cloudflare account.", m{
+		"bucket":          str("The bucket."),
+		"prefix":          m{"type": "string", "pattern": "^([^/].*/)?$", "description": "The prefix within the bucket every key of this preset lives under, ending in a slash (`standard/`). Required wherever the bucket is shared with another installation."},
+		"region":          str("The region. For a store at an endpoint, `auto` unless the store says otherwise."),
+		"endpoint":        str("The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only."),
+		"path_style":      boolean("Address the bucket as endpoint/bucket/key, for a store whose certificate does not cover a bucket subdomain. Only with `endpoint`."),
+		"credentials":     str("The address, below the installation's state root, of the static credentials of a store at an endpoint: a JSON object {accessKeyID, secretAccessKey} in the state store, read with the process's own identity. Only with `endpoint`: on AWS the workload's identity is the credential."),
+		"credentials_ref": m{"type": "string", "pattern": `^external/cloudflare/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, "description": "The R2 credentials a sluis installation rotates for a Cloudflare preset, by their address in its secret store: `external/cloudflare/<preset>`, a `cloudflare/v1` document. The process reads it below `archive.sluisRoot` (SSM) or `archive.sluisDir` (a projected file), reads it again before the credential expires and after a 403, and mints nothing. The recommended mode on R2. Exclusive with `credentials` and `credentials_preset`; only with `endpoint`."},
+		"credentials_preset": obj("Instead of static credentials, mint the store's R2 credentials for this process: it clones a disabled Cloudflare prototype token with the minter token and renews with a third of the lifetime left (and mints again once after a 403). Every process that reads the archive then holds the minter, which can mint anything the Cloudflare account owner can: prefer `credentials_ref`. Exclusive with `credentials` and `credentials_ref`; only with `endpoint`.", m{
 			"account":   str("The Cloudflare account id."),
 			"minter":    str("The address, below the installation's state root, of the minter credential: a `cloudflare-minter/v1` document {schema, token} holding an account token with Account API Tokens Read and Write. It can mint anything the account owner can, so its custody is the owner's; the refusal list in the minting code is the only guard."),
 			"prototype": str("The id of the DISABLED account token whose policies and condition every minted token copies. An active prototype, or one granting token admin, billing, account settings, memberships or Access identity providers, is refused at every mint."),

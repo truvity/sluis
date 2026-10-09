@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **audit: read the R2 credentials sluis rotates, `credentials_ref`; audit no longer needs a Cloudflare minter.** A preset of the deployment document at an `endpoint` may name `credentials_ref: external/cloudflare/<preset>`: the `cloudflare/v1` document a sluis installation rotates for one of its R2 presets (ADR 0070). The process reads it below the new `archive.sluisRoot` (the sluis installation's SSM root, with the process's own identity) or `archive.sluisDir` (a directory a secrets operator projected it into), reads it again within a minute and before it expires, and once more after a 403 (one read per 30 seconds); an expired document is refused, naming where it was read. Nothing is minted and no minter is read. Exclusive with `credentials` and `credentials_preset`. The audit Pulumi library takes `PresetStorage.CredentialsRef` and `Args.Sluis{Root, KeyArn}` (required with a `CredentialsRef`, refused without), writes `archive.sluisRoot` into both functions' configuration, and grants the writer and the notary `ssm:GetParameter` on exactly `<Sluis.Root>/external/cloudflare/<preset>` and `kms:Decrypt` on `Sluis.KeyArn` through SSM, and nothing of a minter; `ArchiveCredentialsPaths` names that parameter. The chart mounts the Secret with each component's `secretMounts` and refuses `credentials_ref` without an `endpoint` or beside another source. The shared code is `cloudflare.StoredProvider` in `github.com/truvity/sluis/storage/cloudflare`. `credentials_preset` keeps working, and its docs now say it puts the minter in every process that reads the archive; `credentials_ref` is the mode to prefer. See [put the archive on R2](docs/guides/audit/operate/archive-on-r2.md).
+
 ## v1.74.0-rc.3
 
 ### Fixed

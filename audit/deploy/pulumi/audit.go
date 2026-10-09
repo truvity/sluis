@@ -103,8 +103,9 @@ type Audit struct {
 	// SecureString there, a JSON object {"accessKeyID": ..., "secretAccessKey": ...},
 	// before the first record (docs/guides/audit/operate/archive-on-r2.md); for a preset with
 	// CredentialsPreset it is the MINTER credential's address (a cloudflare-minter/v1
-	// document). A preset on AWS S3
-	// has none: the roles are the credential.
+	// document); for a preset with CredentialsRef it is the parameter sluis
+	// rotates the credentials at, below Sluis.Root, which nobody writes by
+	// hand. A preset on AWS S3 has none: the roles are the credential.
 	ArchiveCredentialsPaths pulumi.StringMapOutput
 	// SecretsRoot is the SSM parameter path the writer reads the secrets its
 	// configuration names from: create the SecureStrings under it. Empty when the
@@ -191,6 +192,9 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		// writes the record of the tokens it minted at one, never anything wider.
 		var credentials, records []string
 		for _, e := range endpoints {
+			if e.stored() {
+				continue // read from the sluis installation's store: sluisGrant
+			}
 			if e.minted() {
 				credentials = append(credentials, e.minterPath(a.State.Root))
 				records = append(records, e.recordPath(a.State.Root))
@@ -213,6 +217,36 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 			g.Read = append(g.Read, credentials...)
 			g.Write = append(g.Write, records...)
 			notaryState = &g
+		}
+	}
+
+	// What each function may read of the sluis installation's store: the one
+	// parameter of each preset's CredentialsRef, and nothing else there.
+	var sluisWriter, sluisNotary *stateGrant
+	if a.Sluis != nil && (ingest || notary) {
+		region := a.Region
+		if region == "" {
+			r, err := aws.GetRegion(ctx, nil, child)
+			if err != nil {
+				return nil, fmt.Errorf("auditpulumi: the region for the SSM grant (pass the AWS provider with pulumi.Provider, or set Args.Region): %w", err)
+			}
+			region = r.Region
+		}
+		// The account was looked up above: a preset with CredentialsRef is at an
+		// endpoint, so needState holds.
+		g := stateGrant{Region: region, Account: accountID, KeyArn: a.Sluis.KeyArn}
+		for _, e := range endpoints {
+			if e.stored() {
+				g.Read = append(g.Read, e.storedPath(a.Sluis.Root))
+			}
+		}
+		if ingest {
+			w := g
+			sluisWriter = &w
+		}
+		if notary {
+			n := g
+			sluisNotary = &n
 		}
 	}
 
@@ -374,7 +408,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 			Role: writerRole.Name,
 			Policy: applyPolicy(refs, []any{table.Arn, queue.Arn, writerLogs.Arn}, func(b []bucketGrant, v []any) string {
 				return writerPolicy(b, grantKeys, v[0].(string), v[1].(string), v[2].(string), audience, grant,
-					append(writerKeyStatements(keyArns, a.instance(name)), writerState.statements()...))
+					append(append(writerKeyStatements(keyArns, a.instance(name)), writerState.statements()...), sluisWriter.statements()...))
 			}),
 		}, child); err != nil {
 			return nil, err
@@ -410,7 +444,7 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 		if _, err := iam.NewRolePolicy(ctx, name+"-notary", &iam.RolePolicyArgs{
 			Role: notaryRole.Name,
 			Policy: applyPolicy(refs, []any{notaryLogs.Arn}, func(b []bucketGrant, v []any) string {
-				return notaryPolicy(b, grantKeys, keyArns.Seal, v[0].(string), audience, notaryState.statements())
+				return notaryPolicy(b, grantKeys, keyArns.Seal, v[0].(string), audience, append(notaryState.statements(), sluisNotary.statements()...))
 			}),
 		}, child); err != nil {
 			return nil, err
@@ -477,6 +511,10 @@ func New(ctx *pulumi.Context, name string, args *Args, opts ...pulumi.ResourceOp
 	credentialsPaths := pulumi.StringMap{}
 	if ingest || notary {
 		for _, e := range endpoints {
+			if e.stored() {
+				credentialsPaths[string(e.Preset)] = pulumi.String(e.storedPath(a.Sluis.Root))
+				continue
+			}
 			if e.minted() {
 				credentialsPaths[string(e.Preset)] = pulumi.String(e.minterPath(a.State.Root))
 				continue
