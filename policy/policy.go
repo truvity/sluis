@@ -1231,8 +1231,8 @@ func conventional(name string) bool {
 //   - any GitHub binding (organisation [GitHubOrg.Members] or team
 //     [GitHubTeam.Members]/[GitHubTeam.Maintainers])
 //   - any Slack binding (a channel's [SlackChannel.From])
-//   - this hub's own roles (groups whose [thing] segment is [ThingSelf] and
-//     whose role is [RoleOperator] or [RoleViewer], which the hub reads
+//   - this hub's own roles (groups whose [thing] segment is [ThingSelf] or
+//     [ThingSluis] and whose role is [RoleOperator] or [RoleViewer], which the hub reads
 //     directly from the token)
 //   - catalogueGroups — see below
 //
@@ -1384,7 +1384,7 @@ func (p Policy) Unconsumed(catalogueGroups ...string) []string {
 	for name := range p.Groups {
 		for _, target := range p.groupKeyTargets(name) {
 			_, thing, role, ok := SplitGroup(target)
-			if ok && thing == ThingSelf && hubRoles[role] {
+			if ok && (thing == ThingSelf || thing == ThingSluis) && hubRoles[role] {
 				consumed[target] = true
 			}
 		}

@@ -24,14 +24,14 @@ The issuer serves three grants, named in `grant_types_supported` (`authorization
 
 ## Client secrets
 
-`POST /.access/client-secrets/rotate`, `/show` and `/purge` take `{"client": "<id>"}`; `rotate` also takes `overlap_seconds` (absent is 24h, `0` a hard cut, at most 604800). The caller sends a bearer token this issuer issued to `console` or `accessctl` (sluisctl's default client id), with the operators group in `groups`. Answers hold times and flags, never a secret. Without the feature the path answers `404`.
+`POST /.access/client-secrets/rotate`, `/show` and `/purge` take `{"client": "<id>"}`; `rotate` also takes `overlap_seconds` (absent is 24h, `0` a hard cut, at most 604800). The caller sends a bearer token this issuer issued to `sluis-console` or `sluisctl`, or to `console` or `accessctl` (their older ids, still accepted), with the operators group in `groups`. Answers hold times and flags, never a secret. Without the feature the path answers `404`.
 
 | Status | Means |
 |---|---|
 | `200` | done; `rotate` answers the rotation time, the overlap and any discarded earlier previous secret, `show` the metadata, `purge` `deleted` |
 | `400` | the body is not JSON naming the client, or the overlap is outside 0 to 7 days |
 | `401` | no bearer, or one that was not accepted (logged and counted, not audited) |
-| `403` | the token is not for `console` or `accessctl`, or the caller is not an operator |
+| `403` | the token is not for `sluis-console`, `sluisctl`, `console` or `accessctl`, or the caller is not an operator |
 | `404` | no stored secret for the client |
 | `409` | the client's secret is being changed by another call; try again |
 | `422` | the client is not generated (`rotate`), or still generated (`purge`: only an orphan is purged) |
