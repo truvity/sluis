@@ -1,6 +1,8 @@
 ## Unreleased
 
-## v1.74.2
+## v1.74.3
+
+v1.74.2 was tagged without its module pins and has no release.
 
 A patch for sluis on Lambda with generated client secrets: a cold start no longer reads one SSM record per generated client. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
 
