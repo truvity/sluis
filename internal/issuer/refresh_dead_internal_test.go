@@ -3,6 +3,7 @@ package issuer
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"testing"
 	"time"
@@ -160,7 +161,7 @@ func TestTheFingerprintKeyIsDerivedAndNeverTheSecret(t *testing.T) {
 		t.Error("the fingerprint key is the secret, or part of it")
 	}
 	// Not the derivation the sign-in state uses, under any label.
-	if bytes.Equal(key, (&SigningKey{seed: seed}).Derive(fingerprintLabel)) {
+	if bytes.Equal(key, hmacOf(seed, []byte(fingerprintLabel))) {
 		t.Error("the fingerprint key is the sign-in state's HMAC derivation, not one of its own")
 	}
 	if bytes.Equal(fingerprintKey(nil), fingerprintKey(nil)) {
@@ -248,4 +249,11 @@ func TestPresentCallsDeadOnlyATerminalState(t *testing.T) {
 			})
 		})
 	}
+}
+
+// hmacOf is what the signing key derives for a label: HMAC-SHA256 of the label under the seed.
+func hmacOf(seed, label []byte) []byte {
+	mac := hmac.New(sha256.New, seed)
+	mac.Write(label)
+	return mac.Sum(nil)
 }

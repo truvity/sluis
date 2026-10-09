@@ -1,4 +1,4 @@
-package issuer
+package signer
 
 import (
 	"context"
@@ -127,7 +127,7 @@ func KMSSigningKeyFor(ctx context.Context, api KMSAPI, ref string, seed []byte, 
 	default:
 		return nil, fmt.Errorf("issuer: KMS key %q has a %T public key", ref, parsed)
 	}
-	id, err := thumbprint(pub)
+	id, err := Thumbprint(pub)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package issuerapp_test
 
 import (
 	"context"
+	"github.com/truvity/sluis/internal/signer"
 	"io"
 	"log/slog"
 	"net/http"
@@ -70,7 +71,7 @@ func stubHub(_ *testing.T, found, suspended bool) issuer.Directory {
 func bootWithSignIn(t *testing.T, hub issuer.Directory, provider *stubProvider, issuerURL *string) *appWithSignIn {
 	t.Helper()
 	app := bootWith(t, hub)
-	key, err := issuer.NewSigningKey()
+	key, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatalf("key: %v", err)
 	}

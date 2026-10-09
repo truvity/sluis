@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"github.com/truvity/sluis/internal/signer"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestAVerifyOnlyKeyKeepsTheKidTheFileSignerGave(t *testing.T) {
 		t.Fatal(err)
 	}
 	der, _ := x509.MarshalPKCS8PrivateKey(priv)
-	old, err := issuer.ParseSigningKey(pemBlock(t, "PRIVATE KEY", der))
+	old, err := signer.ParseSigningKey(pemBlock(t, "PRIVATE KEY", der))
 	if err != nil {
 		t.Fatal(err)
 	}

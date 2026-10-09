@@ -2,6 +2,7 @@ package issuer_test
 
 import (
 	"context"
+	"github.com/truvity/sluis/internal/signer"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -182,10 +183,10 @@ func TestTheKeyRingReportsWhatItPublishesAndSinceWhen(t *testing.T) {
 	metricsReader()
 	ctx := context.Background()
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	ring := issuer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil)
+	ring := signer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
 	ring.SetClock(func() time.Time { return at })
 
-	key, err := issuer.NewSigningKey()
+	key, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}

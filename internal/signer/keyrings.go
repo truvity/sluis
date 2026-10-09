@@ -1,4 +1,4 @@
-package issuer
+package signer
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	jose "github.com/go-jose/go-jose/v4"
-	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
 // KeyRings is every algorithm this installation signs with at once, each
@@ -163,8 +162,8 @@ func (k *KeyRings) Configure(cfg KeyRingConfig) {
 // union: a relying party fetches ONE key set and has to find whichever
 // algorithm its own token carries in it, whether that token came from the
 // RS256 ring or the ES384 one.
-func (k *KeyRings) Published() []op.Key {
-	var out []op.Key
+func (k *KeyRings) Published() []PublicKey {
+	var out []PublicKey
 	for _, ring := range k.rings {
 		out = append(out, ring.Published()...)
 	}
@@ -199,4 +198,14 @@ func (k *KeyRings) Status() map[jose.SignatureAlgorithm]KeyRingStatus {
 		out[alg] = ring.Status()
 	}
 	return out
+}
+
+// Signing is the key that signs for alg, as the [Ring] the signer signs from
+// asks for it.
+func (k *KeyRings) Signing(alg jose.SignatureAlgorithm) (ActiveKey, bool) {
+	key := k.Active(alg)
+	if key == nil {
+		return ActiveKey{}, false
+	}
+	return ActiveKey{KID: key.ID(), Algorithm: key.SignatureAlgorithm(), Key: key.Key()}, true
 }

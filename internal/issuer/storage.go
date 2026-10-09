@@ -200,7 +200,7 @@ func (a *authRequest) Done() bool                         { return a.IsDone }
 type Storage struct {
 	iss    *Issuer
 	verify Verifier
-	keys   *KeyRings
+	keys   *signer.KeyRings
 	// signer signs the tokens this package hand-signs and publishes the
 	// keys (internal/signer); the library-minted paths still take their key
 	// from keys through [Storage.SigningKey].
@@ -370,10 +370,10 @@ func (noClientSecrets) Resolve(context.Context, string) (clientcreds.Secrets, bo
 // what naming an algorithm at all is for.
 func NewStorage(
 	iss *Issuer, verify Verifier, secrets clientcreds.Lookup,
-	key *SigningKey, additional []*SigningKey, state State,
+	key *signer.SigningKey, additional []*signer.SigningKey, state State,
 ) (*Storage, error) {
 	if key == nil {
-		generated, err := NewSigningKey()
+		generated, err := signer.NewSigningKey()
 		if err != nil {
 			return nil, err
 		}
@@ -385,7 +385,7 @@ func NewStorage(
 	if state == nil {
 		state = NewMemoryState()
 	}
-	keys, err := NewKeyRings(key, additional, state, KeyRingConfig{}, nil)
+	keys, err := signer.NewKeyRings(key, additional, state, signer.KeyRingConfig{}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("issuer: adopt the signing keys: %w", err)
 	}
@@ -398,10 +398,14 @@ func NewStorage(
 	// assertion fails, so there is no device state to keep and no way for
 	// a device code to be stored by something that changed its mind.
 	return &Storage{
-		iss:           iss,
-		verify:        verify,
-		keys:          keys,
-		signer:        newRingSigner(keys, iss.Config().TokenLifetime),
+		iss:    iss,
+		verify: verify,
+		keys:   keys,
+		signer: signer.New(keys, signer.Limits{MaxLifetime: map[signer.Purpose]time.Duration{
+			signer.PurposeAccess: iss.Config().TokenLifetime,
+			// A logout token carries no exp.
+			signer.PurposeLogout: 0,
+		}}),
 		secrets:       secrets,
 		state:         state,
 		documents:     newDocumentClients(iss.Policy().ClientDocuments()),
@@ -409,7 +413,7 @@ func NewStorage(
 		now:           time.Now,
 		// The session index's clock, so that time a test moves for the
 		// sessions moves for the cache's TTL too.
-		dead: newDeadRefreshes(fingerprintKey(key.seed), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
+		dead: newDeadRefreshes(fingerprintKey(key.Seed()), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
 			func() time.Time { return iss.Sessions().now() }),
 	}, nil
 }
@@ -419,7 +423,7 @@ func NewStorage(
 // and [policy.Resource] can only check that the VALUE is one of
 // [policy.SigningAlgs] — they know nothing of what keys exist — so this is
 // the one place, at issuer start, that both are in hand together.
-func checkSigningAlgorithms(set *policy.Set, keys *KeyRings) error {
+func checkSigningAlgorithms(set *policy.Set, keys *signer.KeyRings) error {
 	// By index rather than by value: [policy.ClientView] and
 	// [policy.ResourceView] are wide structs, and copying one per
 	// iteration is what the linter objects to -- see [policy.Set.Clients].
@@ -455,20 +459,20 @@ func checkSigningAlgorithms(set *policy.Set, keys *KeyRings) error {
 // key never seen before is published immediately and starts signing only
 // after its activation delay, and the key it supersedes stays published
 // for its overlap before dropping out.
-func (s *Storage) Rotate(ctx context.Context, key *SigningKey) error {
+func (s *Storage) Rotate(ctx context.Context, key *signer.SigningKey) error {
 	return s.keys.Rotate(ctx, key)
 }
 
 // RotateKnown refreshes a signing key the rings already hold without ever
 // adopting a new one: the older keys of a KMS list.
-func (s *Storage) RotateKnown(ctx context.Context, key *SigningKey) error {
+func (s *Storage) RotateKnown(ctx context.Context, key *signer.SigningKey) error {
 	return s.keys.RotateKnown(ctx, key)
 }
 
 // UseWrappedSigning makes the key rings generate, wrap and rotate their own
 // keys (the `kms-wrapped` signing adapter), and starts the rotation: from here
 // every signing and every JWKS request, and [Storage.MaintainKeys], keep it going.
-func (s *Storage) UseWrappedSigning(ws *WrappedSigning) {
+func (s *Storage) UseWrappedSigning(ws *signer.WrappedSigning) {
 	s.keys.UseWrapped(ws)
 }
 
@@ -482,7 +486,7 @@ func (s *Storage) MaintainKeys(ctx context.Context) { s.keys.Maintain(ctx) }
 // lifetime, chiefly, which [KeyRingConfig.Overlap] must be at least as
 // long as. Call it before serving; [KeyRing.Configure] is not meant to be
 // changed while replicas are actively rotating.
-func (s *Storage) ConfigureKeyRotation(cfg KeyRingConfig) {
+func (s *Storage) ConfigureKeyRotation(cfg signer.KeyRingConfig) {
 	s.keys.Configure(cfg)
 }
 
@@ -571,7 +575,7 @@ func (s *Storage) signingAlgorithmFor(id string) jose.SignatureAlgorithm {
 // accept whatever the installation default is.
 func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorithm, error) {
 	algs := s.keys.Algorithms()
-	for _, k := range s.verifyOnlyKeys(s.keys.Published()) {
+	for _, k := range s.verifyOnlyKeys(opKeys(s.keys.Published())) {
 		if !slices.Contains(algs, k.Algorithm()) {
 			algs = append(algs, k.Algorithm())
 		}
@@ -587,10 +591,7 @@ func (s *Storage) KeySet(ctx context.Context) ([]op.Key, error) {
 	if err != nil {
 		return nil, err
 	}
-	published := make([]op.Key, 0, len(public))
-	for _, k := range public {
-		published = append(published, publishedKey{id: k.KID, alg: k.Algorithm, pub: k.Key})
-	}
+	published := opKeys(public)
 	return append(published, s.verifyOnlyKeys(published)...), nil
 }
 

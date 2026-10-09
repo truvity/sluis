@@ -3,6 +3,7 @@ package issuer_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/truvity/sluis/internal/signer"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -79,9 +80,9 @@ resources:
 //
 // told is where a Back-Channel Logout token lands, for the one test that
 // needs it; every other test simply never reads from it.
-func newMultiAlgServer(t *testing.T) (server *httptest.Server, told <-chan string, primary, rsaKey *issuer.SigningKey) {
+func newMultiAlgServer(t *testing.T) (server *httptest.Server, told <-chan string, primary, rsaKey *signer.SigningKey) {
 	t.Helper()
-	primary, err := issuer.NewSigningKey() // P-384 / ES384, matching the chart's own default
+	primary, err := signer.NewSigningKey() // P-384 / ES384, matching the chart's own default
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,20 +92,20 @@ func newMultiAlgServer(t *testing.T) (server *httptest.Server, told <-chan strin
 }
 
 // newMultiAlgServerWith is the same server over the keys the caller made.
-func newMultiAlgServerWith(t *testing.T, primary, rsaKey *issuer.SigningKey) *httptest.Server {
+func newMultiAlgServerWith(t *testing.T, primary, rsaKey *signer.SigningKey) *httptest.Server {
 	t.Helper()
 	server, _ := newMultiAlgServerKeys(t, primary, rsaKey)
 	return server
 }
 
-func newMultiAlgServerKeys(t *testing.T, primary, rsaKey *issuer.SigningKey) (*httptest.Server, <-chan string) {
+func newMultiAlgServerKeys(t *testing.T, primary, rsaKey *signer.SigningKey) (*httptest.Server, <-chan string) {
 	t.Helper()
 	return newMultiAlgServerState(t, primary, rsaKey, issuer.NewMemoryState())
 }
 
 // newMultiAlgServerState is the same over a shared state the caller may have
 // seeded: another replica's key already recorded there.
-func newMultiAlgServerState(t *testing.T, primary, rsaKey *issuer.SigningKey, state issuer.State) (*httptest.Server, <-chan string) {
+func newMultiAlgServerState(t *testing.T, primary, rsaKey *signer.SigningKey, state issuer.State) (*httptest.Server, <-chan string) {
 	t.Helper()
 
 	toldCh := make(chan string, 8)
@@ -129,7 +130,7 @@ func newMultiAlgServerState(t *testing.T, primary, rsaKey *issuer.SigningKey, st
 	}}
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, dir, state)
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*issuer.SigningKey{rsaKey}, state)
+	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*signer.SigningKey{rsaKey}, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
@@ -462,12 +463,12 @@ func TestSigningMintForFollowsItsOwnTargetAudience(t *testing.T) {
 	state := issuer.NewMemoryState()
 	iss := issuer.New(issuer.Config{URL: "https://issuer.example"}, set, dir, state)
 
-	primary, err := issuer.NewSigningKey()
+	primary, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
 	rsaKey := rsaSigningKey(t)
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*issuer.SigningKey{rsaKey}, state)
+	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*signer.SigningKey{rsaKey}, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

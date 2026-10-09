@@ -1,4 +1,4 @@
-package issuer_test
+package signer_test
 
 import (
 	"context"
@@ -10,11 +10,9 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"net/http"
-	"net/url"
+	"github.com/truvity/sluis/internal/signer"
 	"strings"
 	"testing"
 	"time"
@@ -113,7 +111,7 @@ var kmsSeed = []byte(strings.Repeat("s", 32))
 func TestAKMSKeySignsATokenThatVerifies(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
-	key, err := issuer.KMSSigningKey(context.Background(), fake, "alias/sluis-signing", kmsSeed)
+	key, err := signer.KMSSigningKey(context.Background(), fake, "alias/sluis-signing", kmsSeed)
 	if err != nil {
 		t.Fatalf("KMSSigningKey: %v", err)
 	}
@@ -160,12 +158,12 @@ func TestAKMSKeySignsATokenThatVerifies(t *testing.T) {
 func TestAKMSKeyHasTheKidAFileKeyWouldHave(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
-	key, err := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
+	key, err := signer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
 	der, _ := x509.MarshalPKCS8PrivateKey(fake.key)
-	file, err := issuer.ParseSigningKey(pemOf("PRIVATE KEY", der))
+	file, err := signer.ParseSigningKey(pemOf("PRIVATE KEY", der))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +181,7 @@ func TestAKMSKeyOfTheWrongShapeIsRefused(t *testing.T) {
 	} {
 		fake := newFakeKMS(t)
 		mutate(fake)
-		if _, err := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed); err == nil {
+		if _, err := signer.KMSSigningKey(context.Background(), fake, "k", kmsSeed); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -200,7 +198,7 @@ func TestAMissingGetPublicKeyGrantIsNamed(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
 	fake.pubErr = apiErr{"AccessDeniedException"}
-	_, err := issuer.KMSSigningKey(context.Background(), fake, "alias/sluis-signing", kmsSeed)
+	_, err := signer.KMSSigningKey(context.Background(), fake, "alias/sluis-signing", kmsSeed)
 	if err == nil || !strings.Contains(err.Error(), "kms:GetPublicKey") {
 		t.Fatalf("got %v", err)
 	}
@@ -208,7 +206,7 @@ func TestAMissingGetPublicKeyGrantIsNamed(t *testing.T) {
 
 func TestAShortStateSecretIsRefused(t *testing.T) {
 	t.Parallel()
-	if _, err := issuer.KMSSigningKey(context.Background(), newFakeKMS(t), "k", []byte("short")); err == nil {
+	if _, err := signer.KMSSigningKey(context.Background(), newFakeKMS(t), "k", []byte("short")); err == nil {
 		t.Fatal("accepted")
 	}
 }
@@ -216,7 +214,7 @@ func TestAShortStateSecretIsRefused(t *testing.T) {
 func TestAKMSFailureSurfacesFromSign(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
-	key, err := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
+	key, err := signer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,8 +229,8 @@ func TestAKMSFailureSurfacesFromSign(t *testing.T) {
 func TestAKMSKeyDerivesFromItsStateSecret(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
-	a, _ := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
-	b, _ := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
+	a, _ := signer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
+	b, _ := signer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
 	if string(a.Derive("x")) != string(b.Derive("x")) || string(a.Derive("x")) == string(a.Derive("y")) {
 		t.Fatal("derivation is not stable per label")
 	}
@@ -242,10 +240,10 @@ func pemOf(kind string, der []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: kind, Bytes: der})
 }
 
-func ringAt(t *testing.T, state issuer.State, clock *settableClock) *issuer.KeyRing {
+func ringAt(t *testing.T, state issuer.State, clock *settableClock) *signer.KeyRing {
 	t.Helper()
-	ring := issuer.NewKeyRing(jose.ES384, state,
-		issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: 10 * time.Minute}, nil)
+	ring := signer.NewKeyRing(jose.ES384, state,
+		signer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: 10 * time.Minute}, nil)
 	ring.SetClock(clock.now)
 	return ring
 }
@@ -259,12 +257,12 @@ func TestARetiredKeyStaysRetiredWhileItIsStillListed(t *testing.T) {
 	clock := newSettableClock(time.Now())
 	ring := ringAt(t, state, clock)
 	fake := newFakeKMS(t)
-	a, err := issuer.KMSSigningKey(ctx, fake, "a", kmsSeed)
+	a, err := signer.KMSSigningKey(ctx, fake, "a", kmsSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fakeB := newFakeKMS(t)
-	b, _ := issuer.KMSSigningKey(ctx, fakeB, "b", kmsSeed)
+	b, _ := signer.KMSSigningKey(ctx, fakeB, "b", kmsSeed)
 
 	_ = ring.Observe(ctx, a)
 	_ = ring.Observe(ctx, b) // new: waits the delay
@@ -303,14 +301,14 @@ func TestAMigrationDoesNotSignWithAKeyBeforeItsDelay(t *testing.T) {
 	ctx := context.Background()
 	state := issuer.NewMemoryState()
 	clock := newSettableClock(time.Now())
-	file, err := issuer.NewSigningKey()
+	file, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = ringAt(t, state, clock).Observe(ctx, file) // another replica, still on files
 
 	ring := ringAt(t, state, clock)
-	k, _ := issuer.KMSSigningKey(ctx, newFakeKMS(t), "k", kmsSeed)
+	k, _ := signer.KMSSigningKey(ctx, newFakeKMS(t), "k", kmsSeed)
 	_ = ring.Observe(ctx, k)
 	if got := ring.Active(); got != nil {
 		t.Fatalf("signing with %s before the delay", got.ID())
@@ -327,7 +325,7 @@ func TestAMigrationDoesNotSignWithAKeyBeforeItsDelay(t *testing.T) {
 func TestASignatureThatDoesNotVerifyIsRefused(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
-	key, err := issuer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
+	key, err := signer.KMSSigningKey(context.Background(), fake, "k", kmsSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +341,7 @@ func TestAnEmptyKeyIdIsRefused(t *testing.T) {
 	t.Parallel()
 	fake := newFakeKMS(t)
 	fake.arn = ""
-	if _, err := issuer.KMSSigningKey(context.Background(), fake, "alias/x", kmsSeed); err == nil {
+	if _, err := signer.KMSSigningKey(context.Background(), fake, "alias/x", kmsSeed); err == nil {
 		t.Fatal("fell back to the alias")
 	}
 }
@@ -355,9 +353,9 @@ func TestOnlyTheLastListedKeyIsRecordedAsNew(t *testing.T) {
 	ctx := context.Background()
 	clock := newSettableClock(time.Now())
 	ring := ringAt(t, issuer.NewMemoryState(), clock)
-	var keys []*issuer.SigningKey
+	var keys []*signer.SigningKey
 	for _, ref := range []string{"a", "b", "c"} {
-		k, err := issuer.KMSSigningKey(ctx, newFakeKMS(t), ref, kmsSeed)
+		k, err := signer.KMSSigningKey(ctx, newFakeKMS(t), ref, kmsSeed)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -385,8 +383,8 @@ func TestAStateErrorTreatsAnEarlierKeyAsRetired(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	ring := ringAt(t, failingGets{issuer.NewMemoryState()}, newSettableClock(time.Now()))
-	a, _ := issuer.KMSSigningKey(ctx, newFakeKMS(t), "a", kmsSeed)
-	b, _ := issuer.KMSSigningKey(ctx, newFakeKMS(t), "b", kmsSeed)
+	a, _ := signer.KMSSigningKey(ctx, newFakeKMS(t), "a", kmsSeed)
+	b, _ := signer.KMSSigningKey(ctx, newFakeKMS(t), "b", kmsSeed)
 	_ = ring.ObserveKnown(ctx, a)
 	_ = ring.Observe(ctx, b)
 	assertPublished(t, ring, b.ID())
@@ -395,7 +393,7 @@ func TestAStateErrorTreatsAnEarlierKeyAsRetired(t *testing.T) {
 func TestAnRSAKMSKeySignsRS256(t *testing.T) {
 	t.Parallel()
 	fake := newFakeRSAKMS(t)
-	key, err := issuer.KMSSigningKeyFor(context.Background(), fake, "alias/rs", kmsSeed, jose.RS256)
+	key, err := signer.KMSSigningKeyFor(context.Background(), fake, "alias/rs", kmsSeed, jose.RS256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,20 +431,20 @@ func TestAKMSKeyOfTheWrongAlgorithmShapeIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	// An EC key where RS256 is asked for, and an RSA key where ES384 is.
-	if _, err := issuer.KMSSigningKeyFor(ctx, newFakeKMS(t), "k", kmsSeed, jose.RS256); err == nil {
+	if _, err := signer.KMSSigningKeyFor(ctx, newFakeKMS(t), "k", kmsSeed, jose.RS256); err == nil {
 		t.Error("an EC key was accepted for RS256")
 	}
-	if _, err := issuer.KMSSigningKeyFor(ctx, newFakeRSAKMS(t), "k", kmsSeed, jose.ES384); err == nil {
+	if _, err := signer.KMSSigningKeyFor(ctx, newFakeRSAKMS(t), "k", kmsSeed, jose.ES384); err == nil {
 		t.Error("an RSA key was accepted for ES384")
 	}
 	bad := newFakeRSAKMS(t)
 	bad.spec = types.KeySpecRsa2048 // reports 2048 while the key is 3072
-	if _, err := issuer.KMSSigningKeyFor(ctx, bad, "k", kmsSeed, jose.RS256); err == nil {
+	if _, err := signer.KMSSigningKeyFor(ctx, bad, "k", kmsSeed, jose.RS256); err == nil {
 		t.Error("a spec that disagrees with the key was accepted")
 	}
 	enc := newFakeRSAKMS(t)
 	enc.usage = types.KeyUsageTypeEncryptDecrypt
-	if _, err := issuer.KMSSigningKeyFor(ctx, enc, "k", kmsSeed, jose.RS256); err == nil {
+	if _, err := signer.KMSSigningKeyFor(ctx, enc, "k", kmsSeed, jose.RS256); err == nil {
 		t.Error("an ENCRYPT_DECRYPT key was accepted")
 	}
 }
@@ -455,7 +453,7 @@ func TestAKMSKeyOfTheWrongAlgorithmShapeIsRefused(t *testing.T) {
 func TestAnRSASignatureThatDoesNotVerifyIsRefused(t *testing.T) {
 	t.Parallel()
 	fake := newFakeRSAKMS(t)
-	key, err := issuer.KMSSigningKeyFor(context.Background(), fake, "k", kmsSeed, jose.RS256)
+	key, err := signer.KMSSigningKeyFor(context.Background(), fake, "k", kmsSeed, jose.RS256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,9 +473,9 @@ func TestKMSRingsRotateIndependently(t *testing.T) {
 	ctx := context.Background()
 	state := issuer.NewMemoryState()
 	clock := newSettableClock(time.Now())
-	cfg := issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: 10 * time.Minute}
-	es := issuer.NewKeyRing(jose.ES384, state, cfg, nil)
-	rs := issuer.NewKeyRing(jose.RS256, state, cfg, nil)
+	cfg := signer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: 10 * time.Minute}
+	es := signer.NewKeyRing(jose.ES384, state, cfg, nil)
+	rs := signer.NewKeyRing(jose.RS256, state, cfg, nil)
 	es.SetClock(clock.now)
 	rs.SetClock(clock.now)
 
@@ -508,71 +506,11 @@ func TestKMSRingsRotateIndependently(t *testing.T) {
 	}
 }
 
-func mustKMSKey(t *testing.T, api issuer.KMSAPI, alg jose.SignatureAlgorithm) *issuer.SigningKey {
+func mustKMSKey(t *testing.T, api signer.KMSAPI, alg jose.SignatureAlgorithm) *signer.SigningKey {
 	t.Helper()
-	k, err := issuer.KMSSigningKeyFor(context.Background(), api, "k", kmsSeed, alg)
+	k, err := signer.KMSSigningKeyFor(context.Background(), api, "k", kmsSeed, alg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return k
-}
-
-// A client pinned to signing_alg RS256 gets its token from the KMS RS256 ring,
-// while the default audience is signed by the KMS ES384 key.
-func TestAPinnedRS256ClientIsSignedByTheKMSRSAKey(t *testing.T) {
-	t.Parallel()
-	es := mustKMSKey(t, newFakeKMS(t), jose.ES384)
-	rs := mustKMSKey(t, newFakeRSAKMS(t), jose.RS256)
-	server := newMultiAlgServerWith(t, es, rs)
-
-	b := newBrowser(t, server)
-	b.signIn()
-	pinned := redeem(t, b, b.authorize("&resource="+url.QueryEscape("https://resource.example/rs256")))
-	header, _ := verifiedHeader(t, server, pinned["access_token"].(string))
-	if header["alg"] != string(jose.RS256) || header["kid"] != rs.ID() {
-		t.Fatalf("pinned access token header = %v, want RS256 by the KMS RSA key %s", header, rs.ID())
-	}
-	plain, _ := verifiedHeader(t, server, pinned["id_token"].(string))
-	if plain["alg"] != string(jose.ES384) || plain["kid"] != es.ID() {
-		t.Fatalf("default id token header = %v, want ES384 by the KMS EC key", plain)
-	}
-}
-
-// M1: a client pinned to RS256 whose ring has no active signer (its only key
-// is another replica's old one, and this replica's new key is not yet
-// activated) gets an error, never an ES384 token.
-func TestAPinnedRS256ClientNeverFallsBackToES384(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	state := issuer.NewMemoryState()
-	// Another replica recorded an RSA key, immediately active there.
-	other := issuer.NewKeyRing(jose.RS256, state, issuer.KeyRingConfig{}, nil)
-	if err := other.Observe(ctx, mustKMSKey(t, newFakeRSAKMS(t), jose.RS256)); err != nil {
-		t.Fatal(err)
-	}
-	es := mustKMSKey(t, newFakeKMS(t), jose.ES384)
-	fresh := mustKMSKey(t, newFakeRSAKMS(t), jose.RS256) // new here: waits its delay
-	server, _ := newMultiAlgServerState(t, es, fresh, state)
-
-	b := newBrowser(t, server)
-	b.signIn()
-	sentTo := b.authorize("&resource=" + url.QueryEscape("https://resource.example/rs256"))
-	for strings.HasPrefix(sentTo, "/") {
-		_, sentTo, _ = b.do(http.MethodGet, sentTo)
-	}
-	back, _ := url.Parse(sentTo)
-	form := url.Values{
-		"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")},
-		"redirect_uri": {"http://localhost:8000/callback"}, "client_id": {"local-dev"}, "code_verifier": {pkceVerifier},
-	}
-	resp, err := http.Post(server.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode())) //nolint:noctx // a test
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	var body map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&body)
-	if tok, ok := body["access_token"].(string); ok {
-		t.Fatalf("an RS256-pinned request got a token (%s...) while the RS256 ring had no signer", tok[:10])
-	}
 }

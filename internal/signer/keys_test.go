@@ -1,4 +1,4 @@
-package issuer_test
+package signer_test
 
 import (
 	"crypto"
@@ -8,11 +8,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"github.com/truvity/sluis/internal/signer"
 	"testing"
 
 	jose "github.com/go-jose/go-jose/v4"
-
-	"github.com/truvity/sluis/internal/issuer"
 )
 
 // The key arrives from somewhere else — cert-manager issuing one,
@@ -39,7 +38,7 @@ func TestASigningKeyIsReadWhicheverWayItWasWritten(t *testing.T) {
 
 	ids := map[string]string{}
 	for name, encoded := range encodings {
-		parsed, parseErr := issuer.ParseSigningKey(encoded)
+		parsed, parseErr := signer.ParseSigningKey(encoded)
 		if parseErr != nil {
 			t.Fatalf("%s: %v", name, parseErr)
 		}
@@ -65,7 +64,7 @@ func TestASigningKeyIsReadWhicheverWayItWasWritten(t *testing.T) {
 	// And two keys are two ids, which is what makes rotation possible:
 	// the previous public key can stay in the JWKS without either being
 	// mistaken for the other.
-	other, err := issuer.NewSigningKey()
+	other, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatalf("NewSigningKey: %v", err)
 	}
@@ -98,7 +97,7 @@ func TestAnUnreadableSigningKeyIsRefused(t *testing.T) {
 		"an EC key on a curve with no JOSE algorithm": pem.EncodeToMemory(
 			&pem.Block{Type: "PRIVATE KEY", Bytes: weakBytes}),
 	} {
-		if _, err := issuer.ParseSigningKey(encoded); err == nil {
+		if _, err := signer.ParseSigningKey(encoded); err == nil {
 			t.Errorf("%s was accepted as a signing key", name)
 		}
 	}
@@ -128,7 +127,7 @@ func TestEachKeyKindSignsItsOwnAlgorithm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: marshal: %v", name, err)
 		}
-		parsed, err := issuer.ParseSigningKey(pem.EncodeToMemory(
+		parsed, err := signer.ParseSigningKey(pem.EncodeToMemory(
 			&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
