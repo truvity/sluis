@@ -499,7 +499,7 @@ controllers record for themselves, each with its own service-account token.
 Not a console service: the issuer's token endpoint, documented here
 because it is the contract a job, a script or `sluisctl` codes against
 when it asks for a GitHub App installation token of a
-[catalogue App](../../guides/sluis/connect/github-app-tokens.md#minting-a-token). It
+[catalogue App](../../guides/sluis/connect/github-app-tokens.md#2-mint-a-token). It
 is RFC 8693 token exchange on the same `/token` as every other exchange;
 a request is an installation token's when **both**
 `requested_token_type` is the type below **and** `audience` starts

@@ -446,7 +446,7 @@ type RecoveryArgs struct {
 // DEPRECATED and are accepted for one release: set, the library still builds
 // the domain with mutual TLS and the truststore bucket as it did, with a
 // warning, so that an existing stack keeps its resources until it moves to the
-// edge module (docs/guides/sluis/migrate/cutover.md). Leave all four unset to build the API
+// edge module (docs/guides/sluis/migrate/move-the-domain-to-the-edge-module.md). Leave all four unset to build the API
 // alone. They are all or none.
 type APIArgs struct {
 	// DomainName is the custom domain.
@@ -1162,7 +1162,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		_ = ctx.Log.Warn("sluispulumi: LambdaArgs.API.DomainName, CertificateArn, TruststorePEM and TruststoreBucketName are deprecated "+
 			"and are removed after the next minor: the custom domain, the certificate and the truststore are the edge module's "+
 			"(github.com/truvity/sluis/deploy/pulumi/edge/cloudflare), which keeps the truststore in the blob bucket; "+
-			"docs/guides/sluis/migrate/cutover.md moves a stack without replacing the domain", nil)
+			"docs/guides/sluis/migrate/move-the-domain-to-the-edge-module.md moves a stack without replacing the domain", nil)
 		domain, truststore, err := newLegacyDomain(ctx, name, &a, api, stage, tags, child)
 		if err != nil {
 			return nil, err

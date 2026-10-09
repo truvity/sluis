@@ -1,47 +1,24 @@
 # Connect an infrastructure-as-code program
 
-**Anchor:** a [catalogue GitHub App](github-apps-catalogue.md). A Pulumi
-or Terraform program that manages a GitHub organisation acts as an App of
-its own — never as a person's account, and never as this service.
+A Pulumi or Terraform program that manages a GitHub organisation acts as a [catalogue GitHub App](github-apps-catalogue.md), the `iac` App in the [default set](github-apps-catalogue.md#1-declare-an-app). It does not act as a person or as sluis. The program owns structure: repositories, teams, rulesets and settings. sluis owns the identities and credentials.
 
-There is a line through GitHub ownership, and it is worth saying plainly:
+## Before you start
 
-> **This service owns identities and credentials. The
-> infrastructure-as-code program owns structure, and names identities
-> rather than creating them.**
+- Prefer the exchange ([mint a token](github-app-tokens.md#2-mint-a-token)). Use the store only when an apply must run while sluis is upgraded, replaced or restored.
 
-So the program creates repositories, teams, rulesets and organisation
-settings; the Apps those repositories are automated by are declared in
-this deployment's catalogue, created by an owner from the console, and
-their keys are held here. The program's *own* identity is one of those
-Apps — `iac` in the [default set](github-apps-catalogue.md#a-default-set)
-— and this page is how it gets hold of it.
+- The store holds the App's private key. Whoever reads it acts as the App, outside the audit trail.
 
-## Two ways to hold the credential, and which to choose
+- `push` needs `config.store: kubernetes` and an External Secrets store you already have.
 
-| | **From a secret store** | **Exchanged at run time** |
+| | From a secret store | Exchanged at run time |
 |---|---|---|
-| The program reads | a path in OpenBAO, Vault or a cloud manager | an installation token from this issuer's `/token` |
-| It depends on | the store being up | the issuer being up, and the job having a proof |
-| The credential is | the App's **private key**, durable | a token, minted per run, an hour at most |
-| Left in the audit trail | nothing here; the store's own log | one `roster.github_token.minted` record per run |
-| Right for | an apply that must not be blocked by this service — a program that manages the estate, including this service's own deployment | every CI job, every script, every person |
+| Program reads | a path in OpenBao, Vault or a cloud manager | an installation token from `/token` |
+| Credential | the App's private key, durable | a token of at most an hour |
+| Audit trail | the store's own log | one `roster.github_token.minted` record per run |
 
-**Take the exchange unless you cannot.** A job that can ask for a token
-holds nothing between runs, is narrowed to the repositories and
-permissions one grant allows, and leaves a record of every mint; that is
-[minting a token](github-app-tokens.md#minting-a-token), and it is
-the whole of what CI needs.
+## Steps
 
-The store is for the case the exchange cannot serve: a program whose
-apply must run while this service is being upgraded, replaced or
-restored — the program that manages the platform this service runs on. It
-buys that independence with a second durable copy of a key, which is a
-real cost and is [dealt with below](#the-copy-is-a-real-credential).
-
-## Declaring the App and its projection
-
-One entry in the catalogue, with a `push` block:
+### 1. Declare the App and its push
 
 ```yaml
 githubApps:
@@ -50,67 +27,38 @@ githubApps:
       org: example-org
       description: The program that manages the organisation
       permissions:
-        organization_administration: write   # org settings, org rulesets
-        members: write                       # teams and their membership
-        administration: write                # repositories, their settings and rulesets
+        organization_administration: write
+        members: write
+        administration: write
         contents: read
         metadata: read
       installation: all
       push:
         secretStore:
-          name: example-store      # a SecretStore or ClusterSecretStore you already have
+          name: example-store
           kind: ClusterSecretStore # SecretStore (default) | ClusterSecretStore
         remoteKey: platform/github-apps/iac
-        refreshInterval: 1h        # optional; 1h
+        refreshInterval: 1h        # optional
         deletionPolicy: None       # optional; None (default) | Delete
 ```
 
-`push` is off unless an entry carries it. The chart invents neither the
-store nor the path: both are named here, by whoever runs the deployment.
-It renders one External Secrets
-[`PushSecret`](https://external-secrets.io/latest/api/pushsecret/) per
-entry, `<release>-github-app-<id>`, which copies **three keys and
-nothing else** out of the Secret this service keeps every catalogue App
-in:
+`push` is off unless an entry carries it. The chart renders one External Secrets [`PushSecret`](https://external-secrets.io/latest/api/pushsecret/) per entry, `<release>-github-app-<id>`. It copies three keys and nothing else:
 
-| In the store, at `remoteKey` | From | Is |
+| In the store at `remoteKey` | From | Is |
 |---|---|---|
 | `app_id` | `<id>.github_app_id` | the App's numeric id |
 | `installation_id` | `<id>.github_app_installation_id` | its installation on the organisation |
-| `private_key` | `<id>.github_app_private_key` | the App's private key, PEM, as GitHub issued it |
+| `private_key` | `<id>.github_app_private_key` | the App's private key, PEM |
 
-Never the record, never another App's keys, never the whole Secret. The
-three exist only once the App is **installed**, so nothing is pushed for
-an App an operator created and stopped at.
+The keys exist once the App is installed. Two entries pushing to one path in one store are refused at render. Roll out the release.
 
-Two entries pushing to one path in one store is refused at render: one
-would overwrite the other, and whoever read that path could not tell
-which App's key they held. `push` also needs `config.store:
-kubernetes`, because with any other store there is no Secret to push
-from.
+### 2. Create and install
 
-## The operator's steps
+On the console's GitHub page, *Apps* tab, press *Create* on the App. An owner confirms GitHub's manifest, then installs on the organisation. The service writes the keys and the PushSecret copies them within its refresh interval. Roll back by removing the entry.
 
-1. **Declare.** Add the entry above to the deployment's values and roll
-   the release out. The catalogue is read once at start.
-2. **Create.** On the console's GitHub page, *Apps* tab → the App (listed
-   under its organisation) → *Create* on its page. An owner of the organisation confirms GitHub's
-   manifest; GitHub hands this service the key, once.
-3. **Install.** The browser goes on to the install page; the owner
-   installs on the organisation.
-4. **The credential appears.** The service writes the three keys; the
-   PushSecret copies them to the store within its refresh interval. From
-   then on the program reads them like any other stored secret.
+### 3. Read it in the program
 
-Nothing in steps 2 and 3 is typed, pasted or downloaded, which is the
-point of the catalogue. Step 4 is the only moment a key of this service's
-leaves it.
-
-## A Pulumi program in Go
-
-The program reads the three properties from the store and builds a GitHub
-provider with them. Everything after that is ordinary: resources with
-`pulumi.Provider(gh)` act as the App.
+Pulumi in Go:
 
 ```go
 package main
@@ -123,11 +71,6 @@ import (
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-		// The App's credential, where the PushSecret put it. The vault
-		// provider is configured by the stack (address, namespace) and
-		// authenticates as whoever runs the apply -- a CI job's own
-		// identity, or a person's sign-in. Nothing of this service is
-		// involved at this moment, which is the reason for this path.
 		app, err := kv.LookupSecretV2(ctx, &kv.LookupSecretV2Args{
 			Mount: "kv",
 			Name:  "platform/github-apps/iac",
@@ -136,8 +79,7 @@ func main() {
 			return err
 		}
 
-		// The key is a secret: mark it so, or it is written to the
-		// stack's state in the clear.
+		// Mark the key secret, or the stack state holds it in the clear.
 		pem := pulumi.ToSecret(pulumi.String(app.Data["private_key"])).(pulumi.StringOutput)
 
 		gh, err := github.NewProvider(ctx, "github", &github.ProviderArgs{
@@ -152,7 +94,6 @@ func main() {
 			return err
 		}
 
-		// From here the program owns structure, and only structure.
 		_, err = github.NewRepository(ctx, "docs", &github.RepositoryArgs{
 			Name:       pulumi.String("docs"),
 			Visibility: pulumi.String("private"),
@@ -162,20 +103,7 @@ func main() {
 }
 ```
 
-The provider mints its own installation tokens from that key and renews
-them as it runs; nothing here caches one.
-
-Two things that bite:
-
-- **The PEM keeps its newlines.** What the store holds is the file GitHub
-  issued. A store or a shell that flattens it into one line gives
-  *could not parse private key*, and the fix is at the reading end, not
-  by re-encoding what this service wrote.
-- **Secrets in state.** A provider's inputs are recorded in the stack's
-  state. `pulumi.ToSecret` above is what keeps the key encrypted there;
-  without it a state file is a copy of the credential too.
-
-### Terraform, in a few lines
+Terraform:
 
 ```hcl
 data "vault_kv_secret_v2" "iac" {
@@ -193,13 +121,11 @@ provider "github" {
 }
 ```
 
-The same caveat applies harder: a Terraform state file holds data-source
-results in the clear, so the state belongs in a backend with encryption
-and access control of its own.
+Terraform state holds data-source results in the clear, so use an encrypted backend. Keep the PEM's newlines: a flattened key fails with *could not parse private key*.
 
-### The other way, for a CI job
+### 4. Use the exchange in CI instead
 
-A job that can reach this issuer should not read the store at all:
+A job that can reach the issuer should not read the store:
 
 ```yaml
 permissions:
@@ -209,7 +135,7 @@ steps:
     uses: truvity/sluis@v1.11.0
     with:
       issuer: https://access.example.com
-      github-app: ci-automation      # the catalogue id
+      github-app: ci-automation
       repositories: docs
       permissions: pull_requests:write
   - run: gh pr review --approve "$PR"
@@ -217,41 +143,18 @@ steps:
       GH_TOKEN: ${{ steps.access.outputs.github-token }}
 ```
 
-The job holds no key, the token dies within the hour, and the request is
-in the audit trail with the grant it was decided under
-([details](github-app-tokens.md#minting-a-token)). The same is
-available to a laptop and to any script as `sluisctl github-token`.
+A laptop or script uses `sluisctl github-token`.
 
-## The copy is a real credential
+## Rotate and remove
 
-What lands in the store is **the App's private key**, not a token and not
-a derived thing. Anything holding it can act as the App for as long as
-the App exists, without asking this service and without appearing in its
-audit trail.
+- GitHub has no API to replace an App's key. To rotate, press *Disconnect* on the App's page and create the App again. The new key goes to the same path.
 
-That means:
+- A key generated in the App's GitHub settings invalidates sluis's copy too.
 
-- **Rotate it as a credential.** The App's key is the thing to rotate,
-  not the copy; rotating the copy alone changes nothing. GitHub has no
-  API to replace an App's key, so the honest procedure is *Disconnect* on
-  the App's page and create it again from the catalogue: a new App, a new
-  key, pushed to the same path, picked up by the program at its next
-  apply. An owner who instead generates a new key in the App's settings
-  on GitHub invalidates this service's copy as well, and the App's page
-  says so.
-- **The store is in the App's blast radius.** Whoever can read that path
-  can act as the App; with the `iac` App's permissions that is the
-  organisation. Give the path its own policy, and read it only from the
-  program.
-- **Removing the declaration does not remove the copy.**
-  `deletionPolicy: None` leaves what was written for somebody to remove
-  deliberately — a chart change should not break a consumer's next apply
-  from a distance. `Delete` reverses that trade; pick it knowingly.
-- **Push one App, not the catalogue.** Every entry carrying `push` is
-  another durable copy. The Apps whose consumers can exchange a token
-  should not carry one.
+- Give the path its own store policy.
 
-Backing up the *whole* Secret for restore is a different job with a
-different shape — one PushSecret over every key, including each App's
-record — and it is
-[Backing it up](github-app-keys.md#backing-it-up).
+- `deletionPolicy: None` leaves the copy when you remove the entry. `Delete` removes it.
+
+- Push only Apps whose consumers cannot exchange a token.
+
+To back up the whole Secret, see [backing it up](github-app-keys.md#2-back-it-up).

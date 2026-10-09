@@ -7,6 +7,7 @@ A person signs in once and uses ordinary AWS CLI profiles, one per role they are
 ## What you need
 
 - An IAM OIDC identity provider for the issuer URL in the account, and a role whose trust policy checks the audience.
+
 - `sluisctl` and a person in the group the client `requires`.
 
 ## The policy snippet
@@ -47,7 +48,7 @@ region = eu-central-1
 ## Verify
 
 `aws sts get-caller-identity --profile power@111122223333` names the assumed role. A wrong `aud` condition fails as
-`AccessDenied` on `AssumeRoleWithWebIdentity` with no hint which half is wrong.
+`AccessDenied` on `AssumeRoleWithWebIdentity`.
 
 ## Undo
 

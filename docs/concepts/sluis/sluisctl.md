@@ -36,7 +36,7 @@ exchanges the job's token per audience and prepares exactly what is ours to prep
 `k8s:<cluster>` audience, a profile `<role>@<account>` per `aws:<account>:<role>` audience (with
 `web_identity_token_file` pointing at the exchanged token), and optionally a GitHub App installation token. Inside it
 are `curl`, `jq` and two files. Pin a release; there is no floating `v1`. Inputs and outputs are in
-[Connect GitHub Actions](../../guides/sluis/connect/github-actions.md#workflow-side-the-action).
+[Connect GitHub Actions](../../guides/sluis/connect/github-actions.md#3-use-the-action).
 
 **Everything downstream of an AWS credential is AWS's tooling and runs on top of those profiles**: ECR login,
 CodeArtifact tokens, any other service. Neither the action nor the CLI wraps them, on purpose: many registries are just

@@ -1,45 +1,38 @@
-# Adding an adapter in a fork
+# Add an adapter in a fork
 
-An adapter you need that the [matrix](../../reference/sluis/adapters.md) shows as *on
-request* (or that is not there at all) is an extension: a new package that
-registers itself. Nothing in the existing adapters changes. sluis is MIT-licensed,
-so a fork may add it and run it.
+Add an adapter the [matrix](../../reference/sluis/adapters.md) lists as *on request*, or omits, as a new package that registers itself. Existing adapters do not change. Pick the concern and preset first ([choosing a deployment](../../get-started/sluis/README.md)).
 
-Read [choosing a deployment](../../get-started/sluis/README.md) first to see which concern
-and preset the adapter belongs to.
+## 1. Write the package
 
-## The checklist
+Create `internal/port/<name>` implementing the concern's port: `port.State` (optionally `port.Index` and `port.Trigger`), `port.Secrets`, `port.Blob` or `port.Trigger`. Copy the shape of `internal/port/dynamodb` or `internal/port/s3blob`.
 
-1. **The adapter package** under `internal/port/<name>`. It implements the
-   concern's port: `port.State` for state (optionally `port.Index` and
-   `port.Trigger`), `port.Secrets` for secrets, `port.Blob` for blobs,
-   `port.Trigger` for trigger. Look at `internal/port/dynamodb` or
-   `internal/port/s3blob` for the shape.
-2. **`port.Register` with an honest Descriptor**, from an `init` function: name,
-   concern, a one-sentence summary, what it `Requires` (AWS, Kubernetes,
-   OpenBao), the runtimes it works on (leave empty only if it works on all),
-   `ProcessLocal` if it keeps data in the process, `SecretStore` if it is a real
-   secret store, and a `Factory` from its settings. Start refuses an adapter whose
-   requirements the platform does not meet, so an optimistic descriptor only moves
-   the failure into production. Import the package from `internal/store` so the
-   process links it.
-3. **Pass the port's conformance suite**: `porttest.Run` (state),
-   `porttest.RunSecrets`, `porttest.RunExport` or the suite of your concern, from
-   a `conformance_test.go` in your package. An adapter that does not pass it is not
-   an adapter.
-4. **The config schema entry**, then `just config-schemas`. The schemas under
-   `schemas/config` and the chart's `values.schema.json` are generated and
-   checked for drift.
-5. **The chart's values and templates**: RBAC and network egress the adapter needs, with the goldens
-   (`just golden`; review the diff). Settings reach the adapter through the service document's `adapters.<concern>.settings`.
-6. **A Pulumi resource in `deploy/pulumi`** if it needs cloud infrastructure (a
-   table, a queue, a key, a role grant).
-7. **Regenerate the matrix**: `just adapters-doc`. Your adapter appears as
-   implemented, and leaves the on-request catalogue (`port.Catalogue`): delete its
-   entry there. `just docs-check` fails while the committed matrix is stale.
+## 2. Register it
 
-Then add an entry under `## Unreleased` in `CHANGELOG.md`, and run `just check`.
+Call `port.Register` from an `init` function with a Descriptor:
 
-## Offer it upstream
+- name, concern and a one-sentence summary;
 
-Offer it upstream as a PR; that's how an on-request row becomes implemented.
+- `Requires` (AWS, Kubernetes, OpenBao) and the runtimes it works on, empty only for all;
+
+- `ProcessLocal` if it keeps data in the process, and `SecretStore` if it is a real secret store;
+
+- a `Factory` from its settings.
+
+Start refuses an adapter whose requirements the platform does not meet. Import the package from `internal/store` so the process links it.
+
+## 3. Pass the conformance suite
+
+Call `porttest.Run` (state), `porttest.RunSecrets`, `porttest.RunExport` or your concern's suite from a `conformance_test.go` in the package.
+
+## 4. Generate and check
+
+```sh
+just config-schemas   # schemas/config and the chart's values.schema.json
+just golden           # chart goldens; review the diff
+just adapters-doc     # the matrix
+just check
+```
+
+Add the schema entry before `config-schemas`. Add the chart's RBAC, egress and values before `golden`; settings reach the adapter through `adapters.<concern>.settings`. Delete the adapter's entry from `port.Catalogue` so it leaves the on-request list. Add a Pulumi resource in `deploy/pulumi` if it needs cloud infrastructure. Add a line under `## Unreleased` in `CHANGELOG.md`.
+
+Offer the adapter upstream as a PR to turn an on-request row into an implemented one.

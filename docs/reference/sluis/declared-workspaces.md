@@ -43,4 +43,4 @@ One that cannot be adopted stops the service.
   administrator's own domain is pre-selected, the tenant's other domains are listed and off, and *all, including ones
   added later* is an explicit option. It can be changed afterwards on the directory's page.
 
-To declare a workspace step by step: [Connect a corporate directory](../../guides/sluis/connect/corporate-directory.md).
+To declare a workspace step by step: [Connect a corporate directory](../../guides/sluis/connect/google-workspace.md).

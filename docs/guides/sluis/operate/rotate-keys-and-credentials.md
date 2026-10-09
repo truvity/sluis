@@ -1,74 +1,53 @@
 # Rotate keys and credentials
 
-## Purpose
-
-Replace a workspace credential, the session key, an OAuth client secret or a Slack token, and know it took effect.
-
-## Preconditions
-
-- Operator access to the console, and `kubectl` on the namespace for the restart.
-- The new value, written to the place that holds it (the console's Reconnect or Upload key, or the named Secret).
+Replace a workspace credential, the session key, an OAuth client secret or a Slack token, and confirm it took effect.
 
 ## Before you start
 
-- **The Secrets and ConfigMaps are a projection, not a live source.** Nothing in the service watches them: writing a new
-  value rotates nothing on a running pod. Which ones need a restart differs, as `charts/sluis/values.yaml` states it:
-  - `workspace-credentials`: **restart**. The credential is read once, when a replica first opens that workspace (at
-    start, or at the console's connect ceremony), and the open reader is held in memory. Only disconnecting drops a
-    reader, which also revokes the credential and deletes the snapshot: that is removal, not rotation.
-  - `session-key`: **restart**. Read once while the stores are wired. Deleting it takes effect on the restart, not on the
-    delete.
-  - `github-links` (App): **no restart**. The record and its credential are read on every use.
-- **The silence is the hazard.** A rotation that has not taken effect looks exactly like one that has, until a restart
-  hours or weeks later picks up the new value, or, if the written value was wrong, takes the directory down at a moment
-  nobody connects to the change. Measured on 2026-09-21: a deliberately corrupted credential went unnoticed for 14
-  minutes of normal operation, probes and a successful directory read included.
-- **Restoring from a backup is a rotation** and needs the same restart.
-- **Never copy the session key anywhere.** There is no `session.push`, deliberately.
+- You need operator access to the console and `kubectl` on the namespace.
+
+- Secrets and ConfigMaps are a projection, not a live source. Nothing watches them, so writing a value rotates nothing on a running pod.
+
+  - `workspace-credentials`: restart. A replica reads the credential once, when it first opens that workspace.
+  - `session-key`: restart. It is read once while the stores are wired.
+  - `github-links` (App): no restart. The record and credential are read on every use.
+
+- A rotation that has not taken effect looks like one that has, until a later restart picks up the value. A wrong value then takes the directory down at an unrelated moment. A corrupted credential went unnoticed for 14 minutes of normal operation (measured 2026-09-21).
+
+- A restore from a backup is a rotation and needs the same restart.
+
+- Never copy the session key anywhere. No `session.push` exists.
 
 ## Steps
 
-### 1. Write the new value
+1. Write the new value:
 
-**Run** per credential:
+   - Consent credential: **Reconnect**. This revokes the old refresh token at Google. Only the replica that served the click opens the new reader.
+   - Service-account key connected through the console: **Upload key** again with the new JSON.
+   - Declared service-account key: replace the named Secret. Delete the old key in Google Cloud only after step 3.
+   - Generated confidential client secret (`secret: {generate: true}`): follow [rotate a client secret](rotate-a-client-secret.md); no restart.
+   - OAuth client secret: update the declared Secret. The console cannot set it. Existing refresh tokens keep working.
+   - Slack bot token: press **Connect** on the workspace. The controller reads the new token from `<release>-slack-credentials` within about two minutes. No restart. A configuration token is needed only when the scopes grew.
+   - Catalogue Slack App: reinstall from the Apps tab. A `slackApps[].push` consumer sees the new value when External Secrets refreshes it (default 1h).
+   - Session key: delete `Secret <release>-session-key`.
 
-- **Consent credential:** Reconnect. The old refresh token is revoked at Google as part of it, and the replica that
-  served the click opens the new reader; every other replica holds its old one.
-- **Service-account key, connected through the console:** Upload key again with the new JSON; the old one is replaced.
-- **Service-account key, declared:** replace the named Secret. Delete the old key in Google Cloud only after step 3
-  shows the new one was read.
-- **A confidential client's secret the issuer generates** (`secret: {generate: true}`): not a restart. Follow
-  [rotate a client secret](rotate-a-client-secret.md); the rest of this page does not apply.
-- **OAuth client secret:** update the declared Secret. The console cannot set it (`SettingsService` has `GetSettings` and
-  no `SetOAuthClient`, because a credential a console can change is one somebody can change from a browser). Existing
-  refresh tokens keep working; the secret is used only to exchange and refresh.
-- **Slack bot token:** press **Connect** on the workspace (a reinstall; a configuration token is needed only when the
-  roster's scopes grew). The new token is written to `<release>-slack-credentials`; the controller reads it within about
-  two minutes and passes straight away, **no restart**.
-- **Catalogue Slack App:** reinstall from the Apps tab. A consumer of a `slackApps[].push` copy reads the new value when
-  External Secrets refreshes it (default 1h).
-- **Session key:** delete `Secret <release>-session-key`.
+2. Restart, except for the Slack bot token and a GitHub App. For the session key everyone signs in again.
 
-**Expect** the new value stored.
-**Verify** step 3.
-**Rollback**: write the previous value back and do step 2 again; the old credential may be revoked already, in which case
-it is Reconnect.
+   ```sh
+   kubectl -n <namespace> rollout restart deploy/<release>
+   kubectl -n <namespace> rollout status deploy/<release>
+   ```
 
-### 2. Restart
+3. Confirm from the log that every replica read the new credential.
 
-**Run** `kubectl -n <namespace> rollout restart deploy/<release>` (not for the Slack bot token or a GitHub App).
-**Expect** a rolling restart; for the session key, everyone signs in again (the service mints a fresh one).
-**Verify** `kubectl -n <namespace> rollout status deploy/<release>`.
-**Rollback**: none, because a restart changes nothing but what it reads.
+   ```sh
+   kubectl -n <namespace> logs deploy/<release> --since=10m | grep 'opened a workspace this replica had not seen'
+   ```
 
-### 3. Confirm from the log
+## Verify
 
-**Run** `kubectl -n <namespace> logs deploy/<release> --since=10m | grep 'opened a workspace this replica had not seen'`.
-**Expect** a line for each rotated workspace, on every replica.
-**Verify** the directory page's health is ok and its next probe succeeds.
-**Rollback**: none, because it only reads.
+The directory page's health is ok and its next probe succeeds. Then delete the old credential at its source and record the rotation date.
 
-## Afterwards
+## Roll back
 
-- Delete the old credential at its source only after the log shows the new one was read.
-- Add the date to the installation's rotation record; tell whoever owns the upstream account.
+Write the previous value back and restart. If the old credential is already revoked, **Reconnect**.

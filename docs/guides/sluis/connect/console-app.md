@@ -1,88 +1,45 @@
 # Connect a console
 
-**Anchor:** the issuer — a console is for people. If the same service
-also has an API that workloads call, that API is a second listener on the
-other anchor: [service-to-service.md](service-to-service.md).
+Give a web console for people a login against the issuer. A service API that workloads call is a second listener: see [service to service](service-to-service.md).
 
-A web UI with a service API, behind the gateway, with two roles. What you
-write, what you deploy, what you never implement.
+## Before you start
 
-## Two shapes, and which one is yours
+- Pick the shape first with [choose native or gateway OIDC](choosing-native-or-gateway-oidc.md).
+- A console keeps its own hostname. Only the directory console shares the issuer hostname, under `/console/` ([console](../../../concepts/sluis/console.md)).
+- Never list your sign-out landing page in `redirects`. The render refuses an address in both `redirects` and `signed_out`.
 
-|  | gateway-native OIDC | its own flow |
+| | Gateway OIDC | Own flow |
 |---|---|---|
-| **Use when** | the console has no authorization model of its own, or is not yours to change, and it sits behind Envoy Gateway | you are writing it, and it needs identity *inside* itself |
-| **Who runs the login** | the gateway's `SecurityPolicy`, which forwards a verified bearer | the console: it sends a browser to `/authorize` and reads what comes back |
-| **You deploy** | your chart plus a `SecurityPolicy` — no chart of ours | your chart |
-| **The client is** | confidential: the gateway holds the secret | public, with PKCE — no secret to rotate |
+| Login runs in | The gateway `SecurityPolicy`, which forwards a verified bearer | The console, which sends the browser to `/authorize` |
+| Client kind | `confidential`, the gateway holds the secret | `public`, with PKCE |
+| You deploy | Your chart and a [`SecurityPolicy`](envoy-gateway-oidc.md), or [oauth2-proxy](oauth2-proxy.md) on another gateway | Your chart |
 
-**Gateway-native OIDC is the default for a console with no authorization
-model of its own, on Envoy Gateway** — a `SecurityPolicy` with `oidc:`
-against a declared client, gated by that client's `requires`, nothing of
-ours in front
-([ADR 0001](../../../decisions/0001-sessions-and-an-absolute-limit.md)).
+## Steps
 
-Write your own flow (the right column above) when the console needs
-identity *inside* itself: per-user authorization from `groups`, per-user
-audit, or tokens of its own to call something else.
+### 1. Declare the groups and the client
 
-**For a gateway that is not Envoy Gateway**, use upstream `oauth2-proxy`
-yourself — see [oauth2-proxy recipe](oauth2-proxy.md)
-for the recipe. The `access-proxy` chart was removed in v1.32.0
-([ADR 0003](../../../decisions/0003-deprecate-access-proxy.md)).
+```yaml
+groups:
+  all:myconsole:operator: { members: [myconsole-admins@example.com] }
+  all:myconsole:viewer:   { members: [everyone@example.com] }
+clients:
+  myconsole.example.internal:
+    kind: confidential          # public for your own flow, with no secret
+    secret: myconsole-client
+    display_name: My Console    # shown on the sign-in page
+    description: the team's dashboard
+    redirects:  [https://myconsole.example.internal/oauth2/callback]
+    signed_out: [https://myconsole.example.internal/]
+    requires:   [all:myconsole:operator, all:myconsole:viewer]
+    # backchannel_logout_uri: https://myconsole.example.internal/backchannel
+```
 
-See [choosing-native-or-gateway-oidc.md](choosing-native-or-gateway-oidc.md)
-for the decision between the two paths and [envoy-gateway-oidc.md](envoy-gateway-oidc.md)
-for the `SecurityPolicy` itself, with its traps.
+The group name is the value in the token, so name it what the console checks. Nobody outside `requires` gets a token. `display_name` and `description` are shown to anyone who starts a sign-in. Only a console with its own flow can take `backchannel_logout_uri`. Group naming is in [trust](../../../concepts/sluis/trust.md#naming).
 
-**A third shape exists and is not yours**: a console the issuer itself
-serves, mounted on the issuer's own origin. It signs in as a client of
-the issuer and then reads the SSO session directly rather than redeeming
-the code, because the process holding the session is the one serving the
-page. That is the directory console, and it is a property of that pair
-rather than a pattern to copy. The directory console's areas (Overview,
-IDENTITY, ACCESS, SYSTEMS with GitHub and Slack, ADMIN) are described in
-[the design](../../../concepts/sluis/console.md) and in
-[Slack](slack-workspace.md) and [GitHub](github-organisation.md).
-
-The directory console holds the same sign-in to the same standard as any
-other client, on every request. A sign-in past the installation's absolute
-limit, or one whose person the directory reports suspended or not found, is
-refused and ended, and the browser must sign in again. If the directory is
-unreachable, the last-known answer admits for the hold window (4 hours by
-default) and the sign-in ends past it. A recovery sign-in (recognised by how
-it was made, not by its subject) skips the directory and keeps the absolute
-limit. Losing a console role does not end the sign-in: the console refuses those calls by role. See
-[what the console asks of the SSO
-session](../../../concepts/sluis/sessions.md#what-the-console-asks-of-the-sso-session).
-
-## What you write
-
-- **Backend in Go**: wrap everything in `identity.Middleware(issuer)` and
-  put `identity.Require("all:myconsole:operator")` on the routes that
-  need it. `Middleware` establishes and `Require` refuses — separate,
-  because a health endpoint and a landing page run before anybody is
-  established. Serve `identity.WhoAmI(version)` at
-  `identity.WhoAmIPath`, which is what the frontend asks.
-- **Backend in Node**: the same three pieces from
-  `@truvity/sluis/server` — `middleware(issuer)`,
-  `requireGroups(...)`, and `whoami(version)` at `whoamiPath`, answering
-  the same body Go does. Connect-style, so Express and Nest on Express
-  take them as they are.
-- **Frontend**: `useIdentity()` and `<UserBadge/>` from the TypeScript
-  package, `@truvity/sluis` on GitHub Packages
-  ([installing it](../../../sdk/typescript/sluis.md)). Views in the URL
-  fragment, dist embedded in the binary.
-- **Nothing else**: no login page, no session, no token parsing, no
-  sign-out logic — and no signing-algorithm setting. Both verifiers accept
-  what the issuer's discovery document advertises, so they follow the
-  installation's key (ES384 with the chart's default, RS256 with an RSA
-  key set at `signingKey.certificate`, e.g. `{algorithm: RSA, size: 2048,
-  encoding: PKCS1}` for an installation whose other relying parties need
-  RS256 — [reference](../../../reference/sluis/configuration.md)).
+### 2. Verify tokens in the backend
 
 ```go
-issuer := &identity.Issuer{URL: "https://access.example", Audience: "myconsole.example.internal"}
+issuer := &identity.Issuer{URL: "https://issuer.example.internal", Audience: "myconsole.example.internal"}
 
 mux := http.NewServeMux()
 mux.Handle(identity.WhoAmIPath, identity.WhoAmI(version))
@@ -95,7 +52,7 @@ http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
 import express from "express";
 import { Issuer, middleware, requireGroups, whoami, whoamiPath } from "@truvity/sluis/server";
 
-const issuer = new Issuer({ url: "https://access.example", audience: "myconsole.example.internal" });
+const issuer = new Issuer({ url: "https://issuer.example.internal", audience: "myconsole.example.internal" });
 
 const app = express();
 app.use(middleware(issuer));
@@ -103,93 +60,27 @@ app.get(whoamiPath, whoami(version));
 app.use("/admin", requireGroups("all:myconsole:operator"), admin);
 ```
 
-Either way the caller carries `name`, `givenName` and `familyName` beside
-the address and the groups, read from the access token. A console that
-shows who is signed in has no userinfo call to make.
+`Middleware` establishes the caller and `Require` refuses, so health and landing routes run before anyone is established. The caller carries `name`, `givenName`, `familyName`, the address and the groups, so there is no userinfo call. Both verifiers follow the key the issuer advertises, so set no signing algorithm ([configuration](../../../reference/sluis/configuration.md)).
 
-There is no `authz` package: role helpers over `Verified` are designed
-and not built ([the Go module](../../../sdk/go/sluis.md)).
-`Require` is what exists, and it takes the group names as the policy
-spells them — the name in the policy is the name in the token is the name
-in the check.
+### 3. Use the frontend package
 
-## What you deploy
+Use `useIdentity()` and `<UserBadge/>` from `@truvity/sluis` ([install](../../../sdk/typescript/sluis.md)). The console writes no login page, session, token parsing or sign-out logic.
 
-For gateway-native OIDC on Envoy Gateway, use a `SecurityPolicy` of the
-gateway's own (see [envoy-gateway-oidc.md](envoy-gateway-oidc.md)).
-For a gateway that is not Envoy Gateway, run `oauth2-proxy` yourself
-(see [oauth2-proxy recipe](oauth2-proxy.md) for the
-recipe; the `access-proxy` chart was removed in v1.32.0).
-For your own flow in the console, your chart alone and no proxy at all:
+### 4. Attach the route
 
-A platform that publishes its listeners as a `ListenerSet` is attached
-to with `parentRefs` written out in full — `group`, `kind`,
-`name`, `namespace` — in your gateway's configuration.
+If your platform publishes listeners as a `ListenerSet`, write `parentRefs` in full: `group`, `kind`, `name`, `namespace`. Point DNS for the hostname at the gateway.
 
-Your console keeps **its own hostname**. The one exception in the family
-is the directory console, which shares its issuer's hostname under
-`/console/` so that its session pages are same-origin with the issuer —
-the third shape above, and a property of that pair rather than a pattern
-for yours.
+## Traps
 
-and the policy that puts people in those groups and admits them to the
-client — the group's **name** is the value in the token, so name it what
-the console checks:
+- Long work inside a request dies at the gateway route timeout. Trigger it and poll.
+- Test authorization at the handler. An unwired role check still passes its unit test.
+- Never mount an operator RPC on the service API port.
+- No `authz` package exists. Pass `Require` the group names as the policy spells them ([Go module](../../../sdk/go/sluis.md)).
 
-```yaml
-groups:
-  all:myconsole:operator: { members: [myconsole-admins@example.com] }
-  all:myconsole:viewer:   { members: [everyone@example.com] }
-clients:
-  myconsole.example.internal:
-    # For gateway-native OIDC or upstream oauth2-proxy: `kind:
-    # confidential`, the gateway/proxy holds the secret. Running your own
-    # flow in the browser: `kind: public`, no secret, redirect is your
-    # own callback.
-    kind: confidential
-    secret: myconsole-client
-    display_name: My Console            # what the sign-in page says: "Sign in to continue to My Console"
-    description: the team's dashboard  # one line under it; both are shown to anyone who starts a sign-in
-    redirects:  [https://myconsole.example.internal/oauth2/callback]
-    signed_out: [https://myconsole.example.internal/]
-    requires:   [all:myconsole:operator, all:myconsole:viewer]
-    # backchannel_logout_uri: https://myconsole.example.internal/backchannel   # only a console running its own flow can take one
-```
+## Verify
 
-`display_name` and `description` are what the sign-in page shows in
-place of "the application that sent you here", which is what every
-phishing page also says; keep them free of anything a stranger should
-not read. A console running its own flow may opt in to back-channel logout with
-`backchannel_logout_uri`; gateway-native OIDC and upstream oauth2-proxy
-cannot receive back-channel logout because the session is held by a key
-only the browser's cookie has.
+Open the console signed out and expect a redirect to the issuer. Sign in as a viewer and expect `identity.WhoAmIPath` to answer with your identity.
 
-`all:<app>:<role>` is an application role under the
-[naming rule](../../../concepts/sluis/trust.md#naming): scoped to the tenant the app
-serves, and `all` until the app can tell tenants apart. A console that
-is really a view onto one cluster binds that cluster's tier instead
-(`prod:k8s:viewer`), the way ArgoCD does.
+## Decided in
 
-`requires` is the primary gate — nobody outside those groups gets a
-token at all, so on the proxied shape the proxy never sees a session. The
-proxy's `allow` above is defence in depth and the place to narrow one
-route further.
-
-**Never register your sign-out landing page as a redirect too.** Landing
-on a redirect URI starts the sign-in the person just ended, and the
-render refuses the combination for that reason. If your front page sends
-an unauthenticated browser to `/authorize`, then your front page is not a
-place to land after signing out — leave `signed_out` off and the issuer
-shows its own page, which says what happened.
-
-DNS for the hostname, and the namespace label the fleet egress policy
-selects, are the deployment's two remaining edits.
-
-## Traps that were real
-
-- Long work inside a request dies at the gateway's route timeout: trigger
-  and poll.
-- Test authorization at the handler level, not on the pure function; a
-  role check that exists and is never wired passes its unit test.
-- The console listener and the service API are two listeners for a
-  reason; never mount an operator RPC on the API port.
+[ADR 0001](../../../decisions/0001-sessions-and-an-absolute-limit.md), [ADR 0003](../../../decisions/0003-deprecate-access-proxy.md).

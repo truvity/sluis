@@ -1,87 +1,62 @@
 # Run more than one replica
 
-## Purpose
-
-Run `sluis serve` at two or more replicas so a node loss or a rollout does not stop sign-in or pause reconciling.
-
-## Preconditions
-
-- A State every replica shares: `config.ports.adapter: dynamodb` (or the `k8s-aws` preset). A cluster still on `legacy`
-  moves first ([migrate the State](../migrate/migrate-state.md), [cutover](../migrate/cutover.md)).
-- A signing key every replica reads (`signingKey.existingSecret` or the chart's `Certificate`; KMS-wrapped on AWS).
+Run `sluis serve` at two or more replicas so a node loss or a rollout stops neither sign-in nor reconciling.
 
 ## Before you start
 
-- **`replicaCount` above 1 with a controller is refused at render** unless the adapter is `dynamodb`: on `legacy` or
-  `memory` a lease lives in each pod's own memory, so every replica would act on every target and make each change twice.
-  Without a controller, `legacy` with `valkey.address` shares the issuer's state. The reasons are in
-  [why more than one replica is safe](../../../concepts/sluis/high-availability.md).
-- **A replica on a process-local store looks like an intermittent failure.** The log says `keeping logins in progress in
-  memory: correct for one replica`. If you see it with two replicas, the State is not shared.
-- **The chart renders no PodDisruptionBudget, no anti-affinity and no topology-spread rule** (checked against
-  `charts/sluis/templates/`). `values.schema.json` has `"additionalProperties": false` and no `affinity` or
-  `topologySpreadConstraints`, so a stray `affinity:` key is refused at render, not ignored. You add those yourself.
-- **A rollout is the default `RollingUpdate`.** A pod that crashes at start never becomes Ready and the old pods keep
-  serving ([check health](check-health.md#2-a-rollout-that-does-not-complete)). Prefer not to set `Recreate`: it deletes
-  the old pod first.
-  The upgrade that made the SSO cookie a random secret needs care here: while an older replica still serves, or after a
-  rollback, it accepts a sign-in id as the cookie, so the protection holds only once no older replica serves traffic.
-- **`/keys` must reach verifiers with no caching header added in front of it.** A proxy or CDN that adds one brings back
-  the stale-JWKS window the key ring's `activationDelay` exists to avoid.
-- **A client that changes its own metadata document** may be seen with old values by one replica and new by another for
-  up to 10 minutes.
+- Every replica needs a shared State: `config.ports.adapter: dynamodb` or the `k8s-aws` preset. A `legacy` cluster moves first ([migrate the State](../migrate/migrate-state.md), [cutover](../migrate/cutover.md)).
+
+- Every replica needs a signing key: `signingKey.existingSecret`, the chart's `Certificate`, or a KMS-wrapped key on AWS.
+
+- The chart refuses `replicaCount` above 1 with a controller unless the adapter is `dynamodb`. Without a controller, `legacy` with `valkey.address` shares the issuer's state.
+
+- A replica on a process-local store looks like an intermittent failure. Its log says `keeping logins in progress in memory: correct for one replica`.
+
+- The chart renders no PodDisruptionBudget, anti-affinity or topology-spread rule, and `values.schema.json` refuses an `affinity` key. Add them yourself.
+
+- Keep the default `RollingUpdate`. `Recreate` deletes the old pod first, and a pod that crashes at start never becomes Ready ([check health](check-health.md#2-a-rollout-that-does-not-complete)).
+
+- Add no caching header to `/keys` in front of the service.
+
+- A changed client metadata document may show old values on a replica for 10 minutes.
 
 ## Steps
 
-### 1. Set the count
+1. Set `replicaCount: 2` or more in the values and render. With `legacy` and a controller the render fails naming `config.ports.adapter`.
 
-**Run** set `replicaCount: 2` (or more) in the values and render.
-**Expect** the render accepts it; with `legacy` and a controller it fails naming `config.ports.adapter`.
-**Verify** the render output has `replicas: 2` on the Deployment.
-**Rollback**: set `replicaCount: 1`.
+2. Apply a PodDisruptionBudget of your own. For anti-affinity, use a Helm post-renderer or a `kustomize` patch over `helm template`.
 
-### 2. Add a disruption budget and spread
+   ```yaml
+   apiVersion: policy/v1
+   kind: PodDisruptionBudget
+   metadata:
+     name: sluis
+   spec:
+     minAvailable: 1
+     selector:
+       matchLabels:
+         app.kubernetes.io/name: sluis
+         app.kubernetes.io/instance: <the release name>
+   ```
 
-**Run** apply a PodDisruptionBudget of your own, and a Helm post-renderer or `kustomize` patch over `helm template` for
-anti-affinity if you want one:
+3. Roll out.
 
-```yaml
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: sluis
-spec:
-  minAvailable: 1
-  selector:
-    matchLabels:
-      # the chart's selector labels (`sluis.selectorLabels` in _helpers.tpl)
-      app.kubernetes.io/name: sluis
-      app.kubernetes.io/instance: <the release name>
-```
+   ```sh
+   kubectl -n <namespace> rollout status deploy/<release>
+   ```
 
-**Expect** `kubectl get pdb` shows `ALLOWED DISRUPTIONS` of 1.
-**Verify** drain a node in a test cluster; one replica stays Ready.
-**Rollback**: delete the PodDisruptionBudget.
+4. To run one tick by hand, use `sluis tick <github|slack> <target> --config <file>`. It runs once under the target's lease and acts only where the target is enabled ([enable an organisation](../enable-github-organisation.md)). With `legacy` it refuses unless the controller is scaled to 0 and you pass `--unsafe-local-lease`.
 
-### 3. Roll out and check
+## Verify
 
-**Run** `kubectl -n <namespace> rollout status deploy/<release>`.
-**Expect** both pods Ready; probes are `/healthz` (liveness, follows nothing outside the process) and `/readyz`
-(readiness, follows the State; `timeoutSeconds: 3`, `failureThreshold: 3`, `periodSeconds: 10`, so a replica leaves
-rotation within about thirty seconds of real trouble).
-**Verify** each pod's log says `keeping state in DynamoDB`, and `access_roster.leases.contended` is non-zero while
-`AccessRosterLeaseLost` stays quiet ([telemetry](../../../reference/sluis/telemetry.md)).
-**Rollback**: set `replicaCount: 1` and roll out.
+`kubectl get pdb` shows `ALLOWED DISRUPTIONS` of 1, and draining a node in a test cluster leaves one replica Ready. Both pods log `keeping state in DynamoDB`. `access_roster.leases.contended` is non-zero while `AccessRosterLeaseLost` stays quiet ([telemetry](../../../reference/sluis/telemetry.md)).
 
-### 4. One tick by hand
+`/healthz` is liveness and checks nothing outside the process. `/readyz` follows the State: `periodSeconds: 10`, `timeoutSeconds: 3`, `failureThreshold: 3`. A replica leaves rotation within about thirty seconds.
 
-**Run** `sluis tick <github|slack> <target> --config <file>` runs one target's tick once under its lease. With the
-`legacy` adapter it refuses unless the controller is scaled to 0 and `--unsafe-local-lease` is passed, because the
-controller's lease does not exclude it.
-**Expect** one pass and its report.
-**Verify** the report's `tick.outcome`.
-**Rollback**: none, because a tick acts only where the target is enabled ([enable an organisation](../enable-github-organisation.md)).
+## Roll back
 
-## Afterwards
+Set `replicaCount: 1` and roll out. Each replica sweeps every interval, so two replicas make about twice the GitHub and Slack API calls.
 
-- Each replica sweeps every interval, so expect about twice the GitHub and Slack API calls.
+## Decided in
+
+[Why more than one replica is safe](../../../concepts/sluis/high-availability.md).

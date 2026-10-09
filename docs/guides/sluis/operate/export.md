@@ -1,37 +1,28 @@
 # Export what the console holds
 
-## Purpose
-
 Write every Secret and ConfigMap the service manages to one file, for an offline copy.
-
-## Preconditions
-
-- `kubectl` access to the service's namespace, on the `legacy` (Kubernetes objects) State. On a State adapter the
-  credentials are in the Secrets port ([back up and restore](back-up-and-restore.md#on-a-state-adapter)).
 
 ## Before you start
 
-- **The export contains credentials.** Treat the file as one: encrypt it, keep it off shared disks, and delete it when
-  its purpose is served.
-- Prefer the copies the chart renders ([back up and restore](back-up-and-restore.md)) for a standing backup; this is a
-  one-off.
+- You need `kubectl` access to the service's namespace on the `legacy` State. A State adapter keeps credentials in the Secrets port: see [back up and restore](back-up-and-restore.md#on-a-state-adapter).
+- The export contains credentials. Encrypt the file and delete it when done.
+- For a standing backup, prefer the copies the chart renders ([back up and restore](back-up-and-restore.md)).
 
 ## Steps
 
-### 1. Export
+1. Export the managed objects:
 
-**Run**
+   ```sh
+   kubectl -n <namespace> get secret,configmap \
+     -l app.kubernetes.io/managed-by=directory-roster -o yaml > sluis-export.yaml
+   ```
 
-```sh
-kubectl -n <namespace> get secret,configmap \
-  -l app.kubernetes.io/managed-by=directory-roster -o yaml > sluis-export.yaml
-```
+   `directory-roster` is a legacy identifier, renamed in v1.75–v1.76: the chart still labels objects with it.
 
-**Expect** a YAML list of the managed objects.
-**Verify** `grep -c '^  kind:' sluis-export.yaml` is the number of objects you expect (the five GitHub and workspace
-Secrets, the Slack objects, the session key).
-**Rollback**: delete the file.
+## Verify
 
-## Afterwards
+`grep -c '^  kind:' sluis-export.yaml` equals the objects you expect. Those are the five GitHub and workspace Secrets, the Slack objects and the session key.
 
-- Store it where backups go, encrypted, and record who has it.
+## Roll back
+
+Delete the file.

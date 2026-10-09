@@ -2,13 +2,12 @@
 
 ## Goal
 
-A console with no OpenID flow of its own, behind any other gateway, gets a login and a forwarded bearer from upstream
-oauth2-proxy, run by you, as a confidential client of the issuer.
+A console with no OpenID flow of its own, behind any other gateway, gets a login and a forwarded bearer. You run oauth2-proxy as a confidential client of the issuer.
 
 ## What you need
 
 - A gateway that can route a hostname to the proxy and `/oauth2/*` to it.
-- Two Secrets you own: the client's secret and the proxy's cookie secret (never generated in a template that re-renders).
+- Two Secrets you own: the client's secret and the proxy's cookie secret. Do not generate the cookie secret in a template that re-renders.
 
 ## The policy snippet
 
@@ -33,14 +32,12 @@ oauth2-proxy \
   --skip-provider-button --http-address=:4180 --upstream=http://backend-service:8080/
 ```
 
-`--email-domain=*` is deliberate: admission is the client's `requires`. Sign-out is two halves: point the console's link at
-`/oauth2/sign_out?rd=` followed by the percent-encoded issuer `end_session` address, or the issuer still holds the sign-in.
+`--email-domain=*` admits everyone the client's `requires` admits. Point the console's sign-out link at `/oauth2/sign_out?rd=` followed by the percent-encoded issuer `end_session` address. Otherwise the issuer keeps the sign-in.
 
 ## Verify
 
 The backend receives `Authorization: Bearer` that its identity verifier accepts. After sign-out a click asks for sign-in
-again. oauth2-proxy cannot receive Back-Channel Logout, so a removed person is stopped at the next refresh, bounded by
-`ttl_cap` and `--cookie-lifetime`.
+again. oauth2-proxy cannot receive Back-Channel Logout. A removed person is stopped at the next refresh, bounded by `ttl_cap` and `--cookie-lifetime`.
 
 ## Undo
 
