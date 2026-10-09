@@ -1,5 +1,15 @@
 ## Unreleased
 
+### Added
+
+- **The Pulumi library: `LambdaArgs.Function.ReservedConcurrency` (`*int`).** The function's reserved concurrency: a ceiling on the environments that run at once. Nil leaves the function unreserved, as before. A ceiling costs nothing, is not provisioned concurrency, and bounds a herd of cold starts. An estate that capped the function by hand sets the cap here, or the next apply removes it. Zero and negative values are refused. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
+
+### Fixed
+
+- **A herd of Lambda cold starts no longer fails on a throttled SSM.** After an outage, clients behind a proxy returned at once; every new environment read its configuration from SSM, SSM answered `ThrottlingException`, the SDK gave up after 3 attempts, and the start failed (`sluis could not start`, a 500 that clients retried). The SSM clients the service reads its configuration and secrets with now make 6 attempts with full-jitter backoff (100 ms doubling to 1 s, at most 3.4 s of delays in all), and one read of the configuration is bounded at 6 seconds, inside a Lambda init's 10. A start also lists nothing any more. It proved the Secrets port answers by listing every stored credential, and it now reads the console's session key, which it needs anyway. It looked for orphaned client secrets by listing every generated client's record, which is now the scheduled pass's alone (the 5-minute tick on a server, the directory refresh on Lambda). A start reads SSM once for the session key and once per page of its configuration. A test counts it against a fake SSM: 5 calls before and 3 after, for 16 parameters, and the listings grew a page per 10 records.
+- **A Lambda invocation waits at most one second for telemetry, and only once per backoff.** The flush before an invocation returns had a 3-second deadline, and the OTLP exporter retried a refused export until that deadline. While the telemetry layer had no token (the issuer it exchanges with was saturated) every invocation took 3.0 s more. The exporters no longer retry on Lambda, the flush is bounded at 1 second, and after a failed flush the next ones are skipped for 5 seconds, doubling to 5 minutes, until one succeeds. Telemetry is dropped rather than delay a response.
+- **The console's setup step names this installation's recovery password parameter.** *Turn off the recovery password* showed `/sluis/private/config/recovery/password` whatever the instance and secrets layout. It now shows the parameter the running service reads, for example `/sluis/<instance>/internal/config/recovery/password` on layout v4, from the new `GetPolicyResponse.recovery_password_location`.
+
 ## v1.74.0
 
 The code of v1.74.0-rc.4, proven on a live installation. The changes since v1.73.0 are in the release candidates' sections below, newest first.
