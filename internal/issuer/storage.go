@@ -1108,6 +1108,15 @@ func (s *Storage) Pending(id string) (Pending, error) {
 		out.Client = declared
 	}
 
+	// The same for the resource a token is asked FOR: its declared
+	// `display_name`, or the URL itself when it declares none.
+	if req.Resource != "" {
+		out.ResourceName = req.Resource
+		if declared, ok := s.iss.Policy().Resource(req.Resource); ok {
+			out.ResourceName = declared.Title(req.Resource)
+		}
+	}
+
 	// Whether the request would open an agent-class chain as the policy
 	// stands now, for the pages to bypass a silent completion and say so.
 	// [Storage.Complete] decides the class again, and is what enforces it.
