@@ -1,6 +1,7 @@
 package issuer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +57,13 @@ const (
 	// URIs is not locked out for an afternoon, long enough that a browser
 	// redirect does not wait on somebody else's web server every time.
 	documentCacheFor = 10 * time.Minute
+	// documentCacheMin and documentCacheMax bound what the origin's
+	// `Cache-Control` may ask for. The floor stops `no-store` or
+	// `max-age=0` turning every sign-in into a fetch from somebody else's
+	// web server; the ceiling stops a long `max-age` outliving a client's
+	// correction of its redirect URIs by a day.
+	documentCacheMin = time.Minute
+	documentCacheMax = 24 * time.Hour
 	// documentNameMax bounds the display name taken from the document.
 	//
 	// That name is shown on the sign-in page BEFORE anybody has proved
@@ -95,6 +104,33 @@ type documentClients struct {
 
 	mu     sync.Mutex
 	cached map[string]cachedDocument
+}
+
+// cacheLifetime is how long a response may be reused: its `max-age`,
+// held between [documentCacheMin] and [documentCacheMax], and
+// [documentCacheFor] when it states none. `no-store`, `no-cache` and
+// `max-age=0` ask for the floor.
+func cacheLifetime(header http.Header) time.Duration {
+	life := documentCacheFor
+	for _, value := range header.Values("Cache-Control") {
+		for _, directive := range strings.Split(value, ",") {
+			name, arg, _ := strings.Cut(strings.TrimSpace(directive), "=")
+			switch strings.ToLower(name) {
+			case "no-store", "no-cache":
+				return documentCacheMin
+			case "max-age":
+				seconds, err := strconv.ParseInt(strings.Trim(arg, `"`), 10, 64)
+				if err != nil || seconds < 0 {
+					continue
+				}
+				if seconds > int64(documentCacheMax/time.Second) {
+					seconds = int64(documentCacheMax / time.Second)
+				}
+				life = time.Duration(seconds) * time.Second
+			}
+		}
+	}
+	return max(documentCacheMin, min(life, documentCacheMax))
 }
 
 type cachedDocument struct {
@@ -150,7 +186,7 @@ func (d *documentClients) Resolve(ctx context.Context, clientID string) (policy.
 		return client, nil
 	}
 
-	client, err := d.loadWithRetry(ctx, target)
+	client, life, err := d.loadWithRetry(ctx, target)
 	if err != nil {
 		// BOUNDED STALE-WHILE-ERROR, on the transport only. If the origin
 		// could not be reached (timeout, reset, 5xx) and a copy that was
@@ -177,7 +213,7 @@ func (d *documentClients) Resolve(ctx context.Context, clientID string) (policy.
 	}
 
 	d.mu.Lock()
-	d.cached[clientID] = cachedDocument{client: client, until: d.now().Add(documentCacheFor)}
+	d.cached[clientID] = cachedDocument{client: client, until: d.now().Add(life)}
 	d.mu.Unlock()
 
 	return client, nil
@@ -215,17 +251,17 @@ func (d *documentClients) fromStale(clientID string) (policy.Client, bool) {
 
 // loadWithRetry is [documentClients.load] with one retry of a transient
 // failure, after a short backoff, and never past the caller's context.
-func (d *documentClients) loadWithRetry(ctx context.Context, target *url.URL) (policy.Client, error) {
-	client, err := d.load(ctx, target)
+func (d *documentClients) loadWithRetry(ctx context.Context, target *url.URL) (policy.Client, time.Duration, error) {
+	client, life, err := d.load(ctx, target)
 	if err == nil || !errors.Is(err, errTransient) || ctx.Err() != nil {
-		return client, err
+		return client, life, err
 	}
 
 	timer := time.NewTimer(d.backoff)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return policy.Client{}, err
+		return policy.Client{}, 0, err
 	case <-timer.C:
 	}
 	return d.load(ctx, target)
@@ -257,17 +293,30 @@ func documentURL(clientID string) (*url.URL, error) {
 		// fragment makes the two disagree in a way nobody can see.
 		return nil, fmt.Errorf("%w: a client document URL carries no fragment", ErrUnknownTarget)
 	}
+	// draft-ietf-oauth-client-id-metadata-document 3: the URL has a path
+	// component, and no dot segments. A bare origin names a site, not a
+	// document, and a dot segment is a second spelling of another id that a
+	// byte-for-byte comparison would not see as the same.
+	if target.Path == "" || target.Path == "/" {
+		return nil, fmt.Errorf("%w: a client document URL has a path component; %q names only an origin", ErrUnknownTarget, clientID)
+	}
+	for _, segment := range strings.Split(target.EscapedPath(), "/") {
+		switch strings.ToLower(segment) {
+		case ".", "..", "%2e", "%2e%2e", ".%2e", "%2e.":
+			return nil, fmt.Errorf("%w: a client document URL has no dot segments; %q has %q", ErrUnknownTarget, clientID, segment)
+		}
+	}
 	return target, nil
 }
 
 // load fetches and validates one document.
-func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Client, error) {
+func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Client, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(ctx, documentFetchTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
-		return policy.Client{}, fmt.Errorf("client document request: %w", err)
+		return policy.Client{}, 0, fmt.Errorf("client document request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
@@ -276,7 +325,7 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 		if !errors.Is(err, errRedirected) {
 			err = fmt.Errorf("%w: %w", errTransient, err)
 		}
-		return policy.Client{}, fmt.Errorf("fetch the client document at %s: %w", target.Redacted(), err)
+		return policy.Client{}, 0, fmt.Errorf("fetch the client document at %s: %w", target.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -285,17 +334,17 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 		if resp.StatusCode >= 500 {
 			kind = errTransient
 		}
-		return policy.Client{}, fmt.Errorf("%w: the client document at %s answered %s", kind, target.Redacted(), resp.Status)
+		return policy.Client{}, 0, fmt.Errorf("%w: the client document at %s answered %s", kind, target.Redacted(), resp.Status)
 	}
 
 	// One byte past the limit is enough to know it was exceeded, and
 	// enough not to have read the rest.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, documentMaxBytes+1))
 	if err != nil {
-		return policy.Client{}, fmt.Errorf("%w: read the client document at %s: %w", errTransient, target.Redacted(), err)
+		return policy.Client{}, 0, fmt.Errorf("%w: read the client document at %s: %w", errTransient, target.Redacted(), err)
 	}
 	if len(body) > documentMaxBytes {
-		return policy.Client{}, fmt.Errorf("the client document at %s is larger than %d bytes", target.Redacted(), documentMaxBytes)
+		return policy.Client{}, 0, fmt.Errorf("the client document at %s is larger than %d bytes", target.Redacted(), documentMaxBytes)
 	}
 
 	var doc struct {
@@ -305,7 +354,7 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 		ClientURI    string   `json:"client_uri"`
 	}
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return policy.Client{}, fmt.Errorf("the client document at %s is not JSON: %w", target.Redacted(), err)
+		return policy.Client{}, 0, fmt.Errorf("the client document at %s is not JSON: %w", target.Redacted(), err)
 	}
 
 	// THE CHECK THAT MATTERS MOST. Without it a document served anywhere
@@ -315,12 +364,12 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 	// name its holder chose. The draft requires the equality; this is
 	// where it is enforced.
 	if doc.ClientID != target.String() {
-		return policy.Client{}, fmt.Errorf(
+		return policy.Client{}, 0, fmt.Errorf(
 			"the client document at %s calls itself %q; a document's `client_id` is the URL it is served from",
 			target.Redacted(), doc.ClientID)
 	}
 	if len(doc.RedirectURIs) == 0 {
-		return policy.Client{}, fmt.Errorf("the client document at %s declares no redirect_uris", target.Redacted())
+		return policy.Client{}, 0, fmt.Errorf("the client document at %s declares no redirect_uris", target.Redacted())
 	}
 
 	return policy.Client{
@@ -336,7 +385,7 @@ func (d *documentClients) load(ctx context.Context, target *url.URL) (policy.Cli
 		// a client does not get to say who may use it.
 		Requires: d.allow.Requires,
 		TTLCap:   d.allow.TTLCap,
-	}, nil
+	}, cacheLifetime(resp.Header), nil
 }
 
 // documentName is the name shown on the sign-in page, bounded.
@@ -360,4 +409,61 @@ func documentName(name string, target *url.URL) string {
 		return name[:documentNameMax]
 	}
 	return name
+}
+
+// refusalHolder carries, from the storage back to the handler that
+// installed it, why a client document could not be used.
+type refusalHolder struct{ err error }
+
+type refusalHolderKey struct{}
+
+// noteClientRefusal records why the client lookup failed, if a handler is
+// waiting to hear it.
+func noteClientRefusal(ctx context.Context, err error) {
+	if holder, ok := ctx.Value(refusalHolderKey{}).(*refusalHolder); ok {
+		holder.err = err
+	}
+}
+
+// libraryClientRefusal is the sentence the library answers with when the
+// storage cannot return a client; it drops the storage's reason.
+const libraryClientRefusal = "unable to retrieve client by id"
+
+// namedClientRefusal puts the reason a client document was refused into
+// the answer to `/authorize`, after the library's "unable to retrieve
+// client by id", which drops it.
+//
+// The storage notes the reason on the request's context and the library's
+// answer is amended on the way out, whichever form it takes (the page the
+// person sees, or the OAuth error a program reads). Nothing is looked up
+// here, so a request the library never resolves costs no fetch.
+func namedClientRefusal(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != authorizePath {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		holder := &refusalHolder{}
+		recorder := &captured{header: http.Header{}}
+		next.ServeHTTP(recorder, r.WithContext(context.WithValue(r.Context(), refusalHolderKey{}, holder)))
+
+		body := recorder.body.Bytes()
+		if holder.err != nil && recorder.status >= http.StatusBadRequest && bytes.Contains(body, []byte(libraryClientRefusal)) {
+			reason := holder.err.Error()
+			if strings.Contains(recorder.header.Get("Content-Type"), "json") {
+				encoded, _ := json.Marshal(reason)
+				reason = string(encoded[1 : len(encoded)-1])
+			}
+			body = bytes.Replace(body, []byte(libraryClientRefusal), []byte(libraryClientRefusal+": "+reason), 1)
+			recorder.header.Del("Content-Length")
+		}
+
+		copyHeader(w.Header(), recorder.header)
+		if recorder.status == 0 {
+			recorder.status = http.StatusOK
+		}
+		w.WriteHeader(recorder.status)
+		_, _ = w.Write(body)
+	})
 }

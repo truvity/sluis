@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -167,6 +168,27 @@ func TestDiscoveryAdvertisesOnlyWhatIsServed(t *testing.T) {
 				strings.HasSuffix(name, "_auth_signing_alg_values_supported") {
 				t.Errorf("%s advertises %q, which this issuer does not serve", path, name)
 			}
+		}
+	}
+}
+
+// A client document URL that cannot be used is refused with the reason,
+// and not only the library's "unable to retrieve client by id".
+func TestAuthorizeNamesWhyAClientDocumentWasRefused(t *testing.T) {
+	t.Parallel()
+
+	handler := asMetadataHandler(t, "http://issuer.example", true)
+	for name, tc := range map[string]struct{ id, want string }{
+		"no path":     {"https://clients.example", "path component"},
+		"dot segment": {"https://clients.example/a/../c.json", "dot segments"},
+		"not allowed": {"https://other.example/c.json", "not among the origins"},
+	} {
+		query := "/authorize?response_type=code&scope=openid&redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fcb" +
+			"&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256" +
+			"&client_id=" + url.QueryEscape(tc.id)
+		rec := asGet(t, handler, http.MethodGet, query)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Errorf("%s: /authorize = %d %s, want a 400 naming %q", name, rec.Code, rec.Body, tc.want)
 		}
 	}
 }
