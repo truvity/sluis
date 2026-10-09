@@ -780,7 +780,22 @@ func (k *Keys) check() error {
 	case "kms":
 		if k.Pseudonym != nil && k.State == nil {
 			return errors.New("keys.pseudonym with the kms adapter needs keys.state: the per-tenant secrets behind a pseudonym " +
-				"are generated once, wrapped under the key, and kept in the installation's state store")
+				"are generated once, wrapped under the key, and kept in the index database (backend: database) " +
+				"or the installation's SSM Parameter Store (backend: ssm)")
+		}
+		if k.State != nil {
+			switch k.State.Backend {
+			case "database":
+				if k.State.Root != "" || k.State.Address != "" {
+					return errors.New("keys.state with backend database takes no root or address: the wrapped secrets are in the index database")
+				}
+			case "ssm", "":
+				if k.State.Root == "" || k.State.Address == "" {
+					return errors.New("keys.state with backend ssm needs root and address")
+				}
+			default:
+				return fmt.Errorf("keys.state.backend %q is not one of ssm, database", k.State.Backend)
+			}
 		}
 		if k.OpenBAO != nil || k.RootFile != "" {
 			return errors.New("keys.openbao and keys.rootFile are for the transit and local adapters, not kms")

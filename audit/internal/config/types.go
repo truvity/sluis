@@ -227,11 +227,21 @@ type (
 		// State is where the wrapped per-tenant secrets behind the pseudonym
 		// purpose are kept with the kms adapter (SSM Parameter Store, under
 		// Root). Nothing in it is usable without the pseudonym key.
-		State *StateRef `json:"state,omitempty"`
+		State *KeysState `json:"state,omitempty"`
 		// OpenBAO is the transit adapter's server.
 		OpenBAO *OpenBAO `json:"openbao,omitempty"`
 		// RootFile is the local adapter's root, a file of 32 bytes.
 		RootFile string `json:"rootFile,omitempty"`
+	}
+
+	// KeysState is where the kms adapter keeps the wrapped per-tenant secrets
+	// behind the pseudonym purpose: in the installation's SSM Parameter Store
+	// (backend ssm, under Root/Address), or in the index database (backend
+	// database) through the process's own `database`, which needs no SSM.
+	KeysState struct {
+		Backend string `json:"backend,omitempty"`
+		Root    string `json:"root,omitempty"`
+		Address string `json:"address,omitempty"`
 	}
 
 	// StateRef is a place in the installation's state store (SSM Parameter Store

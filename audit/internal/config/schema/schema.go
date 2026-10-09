@@ -263,10 +263,11 @@ func keysDef() m {
 			"pseudonym": entry("The key the per-tenant pseudonym secrets are wrapped under. Provisioned only for an installation that pseudonymises (the attested preset, or a profile that needs pseudonyms)."),
 			"conceal":   entry("The key identities are sealed under, for the cases the law requires them to be recoverable."),
 			"archive":   entry("The key the archive's objects are encrypted with (for S3, the SSE-KMS alias)."),
-			"state": obj("Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.", m{
-				"root":    str("The SSM path prefix of the installation, for example /audit/main."),
-				"address": str("The key below the root, for example internal/pseudonym."),
-			}, "root", "address"),
+			"state": obj("Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the index database (`backend: database`, through the process's own `database`; no SSM), or the installation's SSM Parameter Store (`backend: ssm`, under `root`/`address`). Nothing in it is usable without the pseudonym key.", m{
+				"backend": m{"enum": []string{"ssm", "database"}, "description": "`database` keeps them in the index database; `ssm` (the default, for a config that gives a root) in SSM Parameter Store."},
+				"root":    str("With backend ssm, the SSM path prefix of the installation, for example /audit/main."),
+				"address": str("With backend ssm, the key below the root, for example internal/pseudonym."),
+			}),
 			"openbao":  def("openbao"),
 			"rootFile": str("The local adapter's root: a file of 32 bytes."),
 			"provider": m{"enum": []string{"none", "local", "transit"}, "deprecated": true, "description": "Deprecated: use `adapter`. `none`, `local` (a root and a directory) or `transit` (OpenBAO), with a key per tenant and purpose."},
