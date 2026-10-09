@@ -407,9 +407,9 @@ func (a *Authorizer) admissions(result policy.Result) []ClientAdmission {
 // operator because it is in the operators group.
 func roleOf(result policy.Result) Role {
 	switch {
-	case result.Has(policy.GroupOperators):
+	case slices.ContainsFunc(result.Groups, policy.IsOperators):
 		return RoleOperator
-	case result.Has(policy.GroupViewers):
+	case slices.ContainsFunc(result.Groups, policy.IsViewers):
 		return RoleViewer
 	default:
 		return RoleNone

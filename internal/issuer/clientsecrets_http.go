@@ -119,7 +119,7 @@ func clientSecretsHandler(
 			}
 			operator := false
 			for _, g := range groups {
-				operator = operator || g == policy.GroupOperators
+				operator = operator || policy.IsOperators(g)
 			}
 			if !operator {
 				clientcreds.CountAdminRefused(r.Context(), "forbidden")

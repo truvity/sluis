@@ -199,7 +199,7 @@ func withGroups(identity string, groups []string) caller {
 	held := caller{identity: identity}
 
 	for _, group := range groups {
-		if group == policy.GroupOperators {
+		if policy.IsOperators(group) {
 			held.operator = true
 
 			break
