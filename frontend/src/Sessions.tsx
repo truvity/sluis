@@ -21,7 +21,7 @@ import {
     ago,
     at,
     howName,
-    reason,
+    issuerFailure,
     sessions as sessionsClient,
     until,
 } from "./api";
@@ -30,8 +30,9 @@ import {
     type Session,
     type SignIn,
 } from "./gen/accessissuer/v1/session_pb";
+import { useDebouncedCommit } from "./hooks";
 import { paths } from "./router";
-import { Facet, Facets, Failure, Loading, Nothing, Page, Ref } from "./ui";
+import { Facet, Facets, Failure, InfoTip, Loading, Nothing, Page, Ref } from "./ui";
 
 /** Sessions live in the issuer (docs/explanation/sessions.md, "Where
  *  session management lives"): one refresh token, described, per
@@ -473,22 +474,25 @@ function SessionsTable({
                         <TableCell>Client</TableCell>
                         <TableCell>Way in</TableCell>
                         <TableCell>
-                            <Tooltip title="Sessions with the same mark came from one browser. Signing the browser out ends its sign-in too, which revoking the rows does not. Blank is a session with no browser behind it — a token exchange.">
-                                <span>Browser</span>
-                            </Tooltip>
+                            Browser
+                            <InfoTip label="About the Browser column">
+                                Sessions with the same mark came from one browser. Signing the browser out ends its sign-in too, which revoking the rows does not. Blank is a session with no browser behind it — a token exchange.
+                            </InfoTip>
                         </TableCell>
                         <TableCell>
-                            <Tooltip title="Agent: software that keeps its own refresh token and works in the background. A browser sign-out keeps it; a revoke or its deadline ends it.">
-                                <span>Class</span>
-                            </Tooltip>
+                            Class
+                            <InfoTip label="About the Class column">
+                                Agent: software that keeps its own refresh token and works in the background. A browser sign-out keeps it; a revoke or its deadline ends it.
+                            </InfoTip>
                         </TableCell>
                         <TableCell>Opened</TableCell>
                         <TableCell>Last used</TableCell>
                         <TableCell>Expires</TableCell>
                         <TableCell>
-                            <Tooltip title="The latest it may live, however often it is refreshed.">
-                                <span>Deadline</span>
-                            </Tooltip>
+                            Deadline
+                            <InfoTip label="About the Deadline column">
+                                The latest it may live, however often it is refreshed.
+                            </InfoTip>
                         </TableCell>
                         <TableCell align="right" />
                     </TableRow>
@@ -595,8 +599,21 @@ function SessionsTable({
  *  else; this still refuses to render the list for one, in case the
  *  page is reached another way. */
 export function SessionsPage({ operator }: { operator: boolean }) {
+    // What the boxes show, and what the issuer is asked. Every listing
+    // is audited on the issuer's side, so typing "alice" must not be five
+    // of them: the filter applies 300 ms after the last keystroke, or at
+    // once on Enter.
+    const [draft, setDraft] = useState({ identity: "", clientId: "" });
     const [identity, setIdentity] = useState("");
     const [clientId, setClientId] = useState("");
+    const applyDraft = useDebouncedCommit(
+        draft,
+        (next) => {
+            setIdentity(next.identity);
+            setClientId(next.clientId);
+        },
+        300,
+    );
     const [how, setHow] = useState("");
     const [items, setItems] = useState<Session[]>([]);
     const [signIns, setSignIns] = useState<SignIn[]>([]);
@@ -605,6 +622,10 @@ export function SessionsPage({ operator }: { operator: boolean }) {
     const [loadingMore, setLoadingMore] = useState(false);
     const [busy, setBusy] = useState<string | undefined>();
     const [failure, setFailure] = useState<string | undefined>();
+    // Whether the LISTING failed, as opposed to an act on a row: only then
+    // is there nothing to say about what is open, so no table is drawn
+    // under the error claiming "no open session matches".
+    const [listFailed, setListFailed] = useState(false);
 
     const load = useCallback(() => {
         setLoading(true);
@@ -612,11 +633,18 @@ export function SessionsPage({ operator }: { operator: boolean }) {
         sessionsClient
             .listSessions({ identity, clientId, contains: true, pageSize: 100 })
             .then((response) => {
+                setListFailed(false);
                 setItems(response.sessions);
                 setSignIns(response.signIns);
                 setNextToken(response.nextPageToken);
             })
-            .catch((error: unknown) => setFailure(reason(error)))
+            .catch((error: unknown) => {
+                setListFailed(true);
+                setItems([]);
+                setSignIns([]);
+                setNextToken("");
+                setFailure(issuerFailure(error));
+            })
             .finally(() => setLoading(false));
     }, [identity, clientId]);
 
@@ -638,7 +666,7 @@ export function SessionsPage({ operator }: { operator: boolean }) {
             setItems((prev) => [...prev, ...response.sessions]);
             setNextToken(response.nextPageToken);
         } catch (error) {
-            setFailure(reason(error));
+            setFailure(issuerFailure(error));
         } finally {
             setLoadingMore(false);
         }
@@ -654,7 +682,7 @@ export function SessionsPage({ operator }: { operator: boolean }) {
             });
             load();
         } catch (error) {
-            setFailure(reason(error));
+            setFailure(issuerFailure(error));
         } finally {
             setBusy(undefined);
         }
@@ -676,7 +704,7 @@ export function SessionsPage({ operator }: { operator: boolean }) {
             await sessionsClient.revokeSessions({ identity });
             load();
         } catch (error) {
-            setFailure(reason(error));
+            setFailure(issuerFailure(error));
         } finally {
             setBusy(undefined);
         }
@@ -692,7 +720,7 @@ export function SessionsPage({ operator }: { operator: boolean }) {
             });
             load();
         } catch (error) {
-            setFailure(reason(error));
+            setFailure(issuerFailure(error));
         } finally {
             setBusy(undefined);
         }
@@ -731,15 +759,17 @@ export function SessionsPage({ operator }: { operator: boolean }) {
                     size="small"
                     label="Person contains"
                     placeholder="ada"
-                    value={identity}
-                    onChange={(e) => setIdentity(e.target.value.trim())}
+                    value={draft.identity}
+                    onChange={(e) => setDraft({ ...draft, identity: e.target.value.trim() })}
+                    onKeyDown={(e) => e.key === "Enter" && applyDraft()}
                 />
                 <TextField
                     size="small"
                     label="Client contains"
                     placeholder="argo"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value.trim())}
+                    value={draft.clientId}
+                    onChange={(e) => setDraft({ ...draft, clientId: e.target.value.trim() })}
+                    onKeyDown={(e) => e.key === "Enter" && applyDraft()}
                 />
                 <Facet
                     value={how}
@@ -755,18 +785,22 @@ export function SessionsPage({ operator }: { operator: boolean }) {
             <Loading busy={loading} />
             <Failure error={failure} />
 
-            <SignIns
-                signIns={signIns}
-                onSignOutAll={signOutEverything}
-                busy={busy}
-            />
+            {listFailed ? null : (
+                <>
+                    <SignIns
+                        signIns={signIns}
+                        onSignOutAll={signOutEverything}
+                        busy={busy}
+                    />
 
-            <SessionsTable
-                sessions={shown}
-                onRevoke={revoke}
-                onSignOutBrowser={signOutBrowser}
-                revoking={busy}
-            />
+                    <SessionsTable
+                        sessions={shown}
+                        onRevoke={revoke}
+                        onSignOutBrowser={signOutBrowser}
+                        revoking={busy}
+                    />
+                </>
+            )}
 
             {nextToken ? (
                 <Box sx={{ mt: 2 }}>

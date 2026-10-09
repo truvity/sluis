@@ -16,6 +16,7 @@ import { SlackChannelService } from "./gen/directoryroster/v1/slack_channels_pb"
 import { SlackService } from "./gen/directoryroster/v1/slack_pb";
 import { CloudflareService } from "./gen/directoryroster/v1/cloudflare_pb";
 import { SessionService, How } from "./gen/accessissuer/v1/session_pb";
+import { hubReason, issuerReason } from "./reasonModel";
 
 // The hub's own services, reached under wherever this console is
 // mounted. `import.meta.env.BASE_URL` is "/" by default and carries
@@ -276,9 +277,9 @@ export function roleName(r: Role): string {
  *  after signing out in another tab, or after ending the very browser
  *  session the page was using. */
 export function reason(err: unknown): string {
-  if (!(err instanceof Error)) return String(err);
-  if (/^\[unauthenticated\]/.test(err.message)) {
-    return "Your sign-in here has ended — reload the page to sign in again.";
-  }
-  return err.message.replace(/^\[[a-z_]+\]\s*/, "");
+  return hubReason(err);
 }
+
+/** The same, for a call the ISSUER answered (the session service). See
+ *  reasonModel.ts for why a refusal there is not "your sign-in ended". */
+export const issuerFailure = issuerReason;

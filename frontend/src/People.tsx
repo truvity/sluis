@@ -184,7 +184,7 @@ function GitHubAccount({ cell }: { cell: GitHubCell }) {
   }
   return (
     <Tooltip title={cell.title}>
-      <Typography component="span" variant="body2" color="text.secondary" aria-label={cell.title}>
+      <Typography component="span" variant="body2" color="text.secondary" role="img" aria-label={cell.title} tabIndex={0}>
         —
       </Typography>
     </Tooltip>
