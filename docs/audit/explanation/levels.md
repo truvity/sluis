@@ -24,6 +24,7 @@ vocabulary for choosing a deployment, not chart or library options.
 | `aws-eks` | the chart on EKS, Pod Identity, S3, notary job on KMS | `full` | chart, [direct](direct-mode.md) or [stream](stream-mode.md) |
 | `aws-hybrid` | Lambdas for ingest and the notary in AWS, observe and query on Kubernetes with IRSA | `full` | AWS library plus chart (`writer.enabled: false`, `observe`, `query`) |
 | `k8s-openbao` | the chart on any cluster, seals and keys on OpenBao Transit, S3 or compatible | `full` with a lock, else `lite` | chart (`jobs.notary` with `signer.transit`) |
+| `in-cluster` | the chart with its services in the cluster: NATS, PostgreSQL, secrets as Kubernetes Secrets; the archive on AWS S3 or R2; seals with KMS or OpenBao transit | `full` on AWS S3 with a lock, else `lite` | chart ([in the cluster](../getting-started/in-cluster.md)) |
 | `k8s-minimal` | the chart, S3-compatible store, no lock, no notary | `lite` | chart |
 | `server` | the binaries on a host, a local seal key | `lite` | [direct](direct-mode.md) |
 

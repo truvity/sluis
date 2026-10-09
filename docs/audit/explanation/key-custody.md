@@ -167,7 +167,8 @@ count in the thousands.
 - Tests, a laptop, a single-instance trial that does: `local`.
 - Anything with more than one replica, or where secrets already live in
   OpenBAO: `transit`.
-- A deployment on AWS with no OpenBAO: `kms`, once built (designed, not built today).
+- A deployment on AWS with no OpenBAO: `kms`, once built (designed, not built today). <!-- TODO(coordinator): kms provider status from #428 -->
+- The key options for a deployment are, then, KMS (AWS) or OpenBao transit; the seals use either today (below).
 
 The choice is permanent for a deployment. Moving keys between providers
 would mean either re-keying every tenant (a new identity for every person)
