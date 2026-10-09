@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/secretstore"
@@ -36,12 +37,15 @@ func (s *GitHubRunnerApps) Put(ctx context.Context, record runnerapp.Record, pri
 	if err != nil {
 		return err
 	}
+	if err = s.checkFree(ctx, record); err != nil {
+		return err
+	}
 	key := runnerKey(record.Tier, record.Org)
 	// An installed runner App is exported (ADR 0041): its document is the one
 	// copy on layout v4, with the ids from the record.
 	exported := record.Installed() && s.b.v4Writes()
 	if exported {
-		doc := s.b.v4.External.GitHubRunnerApp(record.Tier, record.Org)
+		doc := s.b.externalRunnerApp(record.Tier, record.Org)
 		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey, ""); err != nil {
 			return err
 		}
@@ -54,6 +58,23 @@ func (s *GitHubRunnerApps) Put(ctx context.Context, record runnerapp.Record, pri
 	}
 	raw := json.RawMessage(keys[runnerapp.RecordKey(record.Tier, record.Org)])
 	return s.b.editItem(ctx, key, 0, func(*item) (*item, error) { return &item{Record: raw, Secret: ref}, nil })
+}
+
+// checkFree refuses a record whose App id another tier and organisation
+// already has: ids are `runner-<tier>-<org>`, and a tier or an organisation
+// may hold a dash, so `a-b` in `c` and `a` in `b-c` are one id.
+func (s *GitHubRunnerApps) checkFree(ctx context.Context, record runnerapp.Record) error {
+	kept, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, other := range kept {
+		if other.ID() == record.ID() && (other.Tier != record.Tier || other.Org != record.Org) {
+			return fmt.Errorf("portstore: the runner App of tier %s in %s has the id %s, which the App of tier %s in %s has",
+				record.Tier, record.Org, record.ID(), other.Tier, other.Org)
+		}
+	}
+	return nil
 }
 
 // List returns every App's record, sorted by organisation, then tier.
@@ -84,7 +105,7 @@ func (s *GitHubRunnerApps) List(ctx context.Context) ([]runnerapp.Record, error)
 // PrivateKey reads one App's key.
 func (s *GitHubRunnerApps) PrivateKey(ctx context.Context, tier, org string) (string, bool, error) {
 	if s.b.v4Reads() {
-		if doc, ok, err := s.b.getGitHub(ctx, s.b.v4.External.GitHubRunnerApp(tier, org)); err != nil || ok {
+		if doc, ok, err := s.b.getGitHub(ctx, s.b.externalRunnerApp(tier, org)); err != nil || ok {
 			return doc.PrivateKey, ok, err
 		}
 	}
@@ -103,7 +124,7 @@ func (s *GitHubRunnerApps) PrivateKey(ctx context.Context, tier, org string) (st
 // Delete forgets one App.
 func (s *GitHubRunnerApps) Delete(ctx context.Context, tier, org string) error {
 	if s.b.v4Writes() {
-		if err := s.b.deleteExternal(ctx, s.b.v4.External.Store(), "github/runner-"+tier+"-"+org); err != nil {
+		if err := s.b.deleteExternalApp(ctx, appid.RunnerID(tier, org)); err != nil {
 			return err
 		}
 	}
@@ -135,7 +156,7 @@ func (s *GitHubCatalogueApps) Put(ctx context.Context, record catalogueapp.Recor
 	// one, or one not exported, stays an internal credential.
 	exported := s.exported(record)
 	if exported {
-		doc := s.b.v4.External.GitHubApp(record.ID)
+		doc := s.b.externalApp(record.ID)
 		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey, hook); err != nil {
 			return err
 		}
@@ -172,7 +193,7 @@ func (s *GitHubCatalogueApps) PutWebhookSecret(ctx context.Context, id, secret s
 	key := ghCatalogueKey(id)
 	exported := s.exported(record)
 	if exported {
-		doc := s.b.v4.External.GitHubApp(id)
+		doc := s.b.externalApp(id)
 		if err = s.b.putGitHub(ctx, doc, record.AppID, record.InstallationID, privateKey, secret); err != nil {
 			return err
 		}
@@ -198,8 +219,8 @@ func (s *GitHubCatalogueApps) WebhookSecret(ctx context.Context, id string) (str
 }
 
 func (s *GitHubCatalogueApps) webhookSecret(ctx context.Context, id string) (string, bool, error) {
-	if s.b.v4Reads() && secretstore.CheckAppName(id) == nil {
-		doc, ok, err := s.b.getGitHub(ctx, s.b.v4.External.GitHubApp(id))
+	if s.b.v4Reads() && appid.CheckCatalogueID(id) == nil {
+		doc, ok, err := s.b.getGitHub(ctx, s.b.externalApp(id))
 		if err != nil && !errors.Is(err, secretstore.ErrReservedName) {
 			return "", false, err
 		}
@@ -280,7 +301,7 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 	}
 	var privateKey string
 	if s.b.v4Reads() && record.Installed() {
-		doc, ok, err := s.b.getGitHub(ctx, s.b.v4.External.GitHubApp(record.ID))
+		doc, ok, err := s.b.getGitHub(ctx, s.b.externalApp(record.ID))
 		if err != nil && !errors.Is(err, secretstore.ErrReservedName) {
 			return catalogueapp.Record{}, "", false, err
 		}
@@ -300,8 +321,8 @@ func (s *GitHubCatalogueApps) Get(ctx context.Context, id string) (catalogueapp.
 
 // Delete forgets one App.
 func (s *GitHubCatalogueApps) Delete(ctx context.Context, id string) error {
-	if s.b.v4Writes() && secretstore.CheckAppName(id) == nil {
-		if err := s.b.deleteExternal(ctx, s.b.v4.External.Store(), "github/"+id); err != nil {
+	if s.b.v4Writes() && appid.CheckCatalogueID(id) == nil {
+		if err := s.b.deleteExternalApp(ctx, id); err != nil {
 			return err
 		}
 	}

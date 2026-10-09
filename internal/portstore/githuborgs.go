@@ -44,6 +44,18 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 	if err != nil {
 		return err
 	}
+	if record.AppRef != "" {
+		// The key is the App's, kept once: the item holds the record only.
+		if _, err = NewGitHubApps(s.b).requireKey(ctx, record.AppRef); err != nil {
+			return err
+		}
+		return s.b.editItem(ctx, ghOrgKey(record.Org), 0, func(*item) (*item, error) {
+			return &item{Record: json.RawMessage(rawRecord)}, nil
+		})
+	}
+	if s.b.v5 != nil {
+		return fmt.Errorf("portstore: on layout v5 the key is the App's, not %s's; name the App in app_ref", record.Org)
+	}
 	credential.Record = nil
 	rawCredential, err := connection.EncodeCredential(credential)
 	if err != nil {
@@ -112,8 +124,16 @@ func (s *GitHubOrgs) List(ctx context.Context) ([]connection.Record, error) {
 func (s *GitHubOrgs) Credential(ctx context.Context, org string) (connection.Credential, bool, error) {
 	key := ghOrgKey(org)
 	it, err := s.b.getItem(ctx, key)
-	if err != nil || it == nil || it.Secret == "" {
+	if err != nil {
 		return connection.Credential{}, false, err
+	}
+	if it != nil && len(it.Record) > 0 {
+		if record, err := connection.DecodeRecord(string(it.Record)); err == nil && record.AppRef != "" {
+			return s.appCredential(ctx, record)
+		}
+	}
+	if it == nil || it.Secret == "" {
+		return connection.Credential{}, false, nil
 	}
 	plain, err := s.b.getSecret(ctx, key, it.Secret)
 	if err != nil {
@@ -121,6 +141,18 @@ func (s *GitHubOrgs) Credential(ctx context.Context, org string) (connection.Cre
 	}
 	credential, err := connection.DecodeCredential(plain)
 	return credential, err == nil, err
+}
+
+// appCredential is the credential of an organisation that names an App: the
+// App's key, and the ids the organisation's record holds.
+func (s *GitHubOrgs) appCredential(ctx context.Context, record connection.Record) (connection.Credential, bool, error) {
+	key, ok, err := NewGitHubApps(s.b).PrivateKey(ctx, record.AppRef)
+	if err != nil || !ok {
+		return connection.Credential{}, false, err
+	}
+	return connection.Credential{
+		Version: connection.Version, Org: record.Org, AppID: record.AppID, InstallationID: record.InstallationID, PrivateKey: key,
+	}, true, nil
 }
 
 // Delete forgets one organisation, its pass request and its confirmation.

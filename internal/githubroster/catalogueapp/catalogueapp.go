@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/status"
 )
 
@@ -75,6 +76,11 @@ type Record struct {
 	Org     string `json:"org"`
 	AppID   int64  `json:"app_id"`
 	AppSlug string `json:"app_slug"`
+	// Purpose is always `catalogue`: Encode sets it. A record written before
+	// it existed has none and is read as a catalogue App's all the same.
+	Purpose appid.Purpose `json:"purpose,omitempty"`
+	// Labels are the App's own, for a reader that selects Apps by them.
+	Labels map[string]string `json:"labels,omitempty"`
 	// InstallationID is zero between Create and Install.
 	InstallationID int64     `json:"installation_id,omitempty"`
 	HTMLURL        string    `json:"html_url,omitempty"`
@@ -103,7 +109,14 @@ func Encode(r Record, privateKey string) (map[string][]byte, error) {
 	if !catalogue.ValidID(r.ID) || !status.ValidOrg(r.Org) || r.AppID == 0 || r.AppSlug == "" || privateKey == "" {
 		return nil, fmt.Errorf("catalogueapp: an App needs an id, an organisation, an App id, a slug and a key: %q/%q", r.ID, r.Org)
 	}
+	if err := appid.CheckCatalogueID(r.ID); err != nil {
+		return nil, err
+	}
+	if err := appid.CheckLabels(r.Labels); err != nil {
+		return nil, err
+	}
 	r.Version = Version
+	r.Purpose = appid.Catalogue
 	record, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
@@ -160,5 +173,9 @@ func DecodeRecord(raw []byte) (Record, error) {
 	if r.Version != Version {
 		return Record{}, fmt.Errorf("%w: %d", ErrVersion, r.Version)
 	}
+	if r.Purpose != "" && r.Purpose != appid.Catalogue {
+		return Record{}, fmt.Errorf("catalogueapp: a record of the purpose %q", r.Purpose)
+	}
+	r.Purpose = appid.Catalogue
 	return r, nil
 }

@@ -145,12 +145,14 @@ var rules5 = []rule5{
 	r5(ModuleSlack, "user-cache", "cache.slack.user.", convDots),
 
 	// github: one kind `app` for every App, keyed by its id; the link App is
-	// `link`, a catalogue App is its id, a runner App is `runner/<a>/<b>`.
+	// `link`, a catalogue App is its id, a runner App is `runner-<tier>-<org>`
+	// (the id its exported key has had since ADR 0041). A catalogue id may be
+	// neither `link` nor begin `runner-`.
 	r5(ModuleGitHub, "org", "gh.org.", convID),
 	r5(ModuleGitHub, "link", "gh.link.", convID),
 	r5exact(ModuleGitHub, "app", "app.gh.link", "link"),
-	{keyRule: keyRule{prefix: "app.gh.cat.", kind: "app", refuse: "link", refusePrefix: "runner/"}, module: ModuleGitHub},
-	{keyRule: keyRule{prefix: "app.gh.runner.", kind: "app", conv: convDots, idPrefix: "runner/"}, module: ModuleGitHub},
+	{keyRule: keyRule{prefix: "app.gh.cat.", kind: "app", refuse: "link", refusePrefix: "runner-"}, module: ModuleGitHub},
+	{keyRule: keyRule{prefix: "app.gh.runner.", kind: "app", conv: convDashes, idPrefix: "runner-"}, module: ModuleGitHub},
 	r5(ModuleGitHub, "claim", "gate.github-claim.", convID),
 	r5(ModuleGitHub, "gate", "gate.github.", convDots),
 

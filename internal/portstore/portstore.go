@@ -47,6 +47,7 @@ import (
 
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secretstore"
+	"github.com/truvity/sluis/storage/state"
 )
 
 // ErrBusy is a record that kept changing under every retry of a
@@ -76,6 +77,10 @@ type Base struct {
 	// [Base.WithV4]).
 	v4        *secretstore.Stores
 	exportApp func(id string) bool
+
+	// v5 puts the GitHub Apps' credentials and exports on layout v5 (see
+	// [Base.WithV5]).
+	v5 *secretstore.StoresV5
 }
 
 // New returns the base over a set of ports.
@@ -166,7 +171,8 @@ var errNoSecrets = errors.New("portstore: no Secrets: a credential is never writ
 // winner's item names. That is what keeps a single-use refresh token from
 // being overwritten by a stale writer.
 func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (string, error) {
-	if b.Secrets == nil {
+	app, v5 := b.appOfKey(key)
+	if b.Secrets == nil && !v5 {
 		return "", errNoSecrets
 	}
 	var raw [12]byte
@@ -174,6 +180,12 @@ func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (str
 		return "", fmt.Errorf("%w: %w", port.ErrUnavailable, err)
 	}
 	ref := hex.EncodeToString(raw[:])
+	if v5 {
+		if _, err := b.v5.GitHub().AppCredential(app, ref).Put(ctx, plaintext, ""); err != nil {
+			return "", err
+		}
+		return ref, nil
+	}
 	if _, err := b.Secrets.Put(ctx, secretPath(key, ref), plaintext); err != nil {
 		return "", err
 	}
@@ -182,6 +194,13 @@ func (b *Base) newSecret(ctx context.Context, key string, plaintext []byte) (str
 
 // getSecret reads the credential an item names.
 func (b *Base) getSecret(ctx context.Context, key, ref string) ([]byte, error) {
+	if app, ok := b.appOfKey(key); ok {
+		val, _, err := b.v5.GitHub().AppCredential(app, ref).Get(ctx)
+		if errors.Is(err, state.ErrNotFound) {
+			return nil, port.ErrNotFound
+		}
+		return val, err
+	}
 	if b.Secrets == nil {
 		return nil, errNoSecrets
 	}
@@ -196,11 +215,16 @@ func (b *Base) getSecret(ctx context.Context, key, ref string) ([]byte, error) {
 // and best effort: a secret that is left behind is unreachable, and the next
 // removal of the key's item does not know it, so a failure is not an error.
 func (b *Base) dropSecrets(ctx context.Context, key string, refs ...string) {
-	if b.Secrets == nil {
+	app, v5 := b.appOfKey(key)
+	if b.Secrets == nil && !v5 {
 		return
 	}
 	for _, ref := range refs {
-		if ref != "" {
+		switch {
+		case ref == "":
+		case v5:
+			_ = b.v5.GitHub().DeleteAppCredential(ctx, app, ref)
+		default:
 			_ = b.Secrets.Delete(ctx, secretPath(key, ref))
 		}
 	}
