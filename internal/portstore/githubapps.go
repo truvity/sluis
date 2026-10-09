@@ -61,7 +61,8 @@ func (s *GitHubApps) List(ctx context.Context) ([]GitHubApp, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range catalogue {
+	for i := range catalogue {
+		r := &catalogue[i]
 		out = append(out, GitHubApp{
 			ID: r.ID, Purpose: appid.Catalogue, Labels: r.Labels, Org: r.Org, AppID: r.AppID, AppSlug: r.AppSlug,
 			InstallationID: r.InstallationID, HTMLURL: r.HTMLURL, ConnectedAt: r.ConnectedAt, ConnectedBy: r.ConnectedBy,
@@ -71,7 +72,8 @@ func (s *GitHubApps) List(ctx context.Context) ([]GitHubApp, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range runners {
+	for i := range runners {
+		r := &runners[i]
 		out = append(out, GitHubApp{
 			ID: r.ID(), Purpose: appid.Runner, Labels: r.Labels, Org: r.Org, Tier: r.Tier, AppID: r.AppID, AppSlug: r.AppSlug,
 			InstallationID: r.InstallationID, HTMLURL: r.HTMLURL, ConnectedAt: r.ConnectedAt, ConnectedBy: r.ConnectedBy,
@@ -87,9 +89,9 @@ func (s *GitHubApps) Get(ctx context.Context, id string) (GitHubApp, bool, error
 	if err != nil {
 		return GitHubApp{}, false, err
 	}
-	for _, a := range all {
-		if a.ID == id {
-			return a, true, nil
+	for i := range all {
+		if all[i].ID == id {
+			return all[i], true, nil
 		}
 	}
 	return GitHubApp{}, false, nil

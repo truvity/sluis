@@ -68,7 +68,8 @@ func (s *GitHubRunnerApps) checkFree(ctx context.Context, record runnerapp.Recor
 	if err != nil {
 		return err
 	}
-	for _, other := range kept {
+	for i := range kept {
+		other := &kept[i]
 		if other.ID() == record.ID() && (other.Tier != record.Tier || other.Org != record.Org) {
 			return fmt.Errorf("portstore: the runner App of tier %s in %s has the id %s, which the App of tier %s in %s has",
 				record.Tier, record.Org, record.ID(), other.Tier, other.Org)
