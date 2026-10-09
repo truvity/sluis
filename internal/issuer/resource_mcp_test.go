@@ -55,11 +55,18 @@ func TestAResourcePathIsNotCaseFolded(t *testing.T) {
 	b := newBrowser(t, server)
 	b.signIn()
 
-	status, _, body := b.do(http.MethodGet, "/authorize?client_id=local-dev&response_type=code&scope=openid"+
+	// The client's redirect URI is registered, so the refusal goes back
+	// to it (RFC 8707) rather than being shown here.
+	status, where, body := b.do(http.MethodGet, "/authorize?client_id=local-dev&response_type=code&scope=openid"+
 		"&redirect_uri="+url.QueryEscape("http://localhost:8000/callback")+
 		"&resource="+url.QueryEscape("https://resource.example/RS256"))
-	if status != http.StatusBadRequest || !strings.Contains(body, "invalid_target") {
-		t.Errorf("a different path = %d %s, want invalid_target", status, body)
+	if status != http.StatusFound || !strings.HasPrefix(where, "http://localhost:8000/callback?") ||
+		!strings.Contains(where, "error=invalid_target") {
+		t.Errorf("a different path = %d %q %s, want a redirect carrying invalid_target", status, where, body)
+	}
+	// And it is an authorization response like any other (RFC 9207).
+	if !strings.Contains(where, "iss="+url.QueryEscape("http://issuer.example")) {
+		t.Errorf("the invalid_target redirect %q does not carry iss", where)
 	}
 }
 

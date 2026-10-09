@@ -57,7 +57,7 @@ func withResource(ctx context.Context, resource string) context.Context {
 // means; this issuer's answer is that it means nothing anybody should
 // rely on, so more than one is refused rather than silently narrowed to
 // the first.
-func resourceIndicators(resources func(string) (policy.Resource, bool), next http.Handler) http.Handler {
+func resourceIndicators(resources func(string) (policy.Resource, bool), clients clientLookup, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != authorizePath && !tokenPaths[r.URL.Path] {
 			next.ServeHTTP(w, r)
@@ -80,13 +80,13 @@ func resourceIndicators(resources func(string) (policy.Resource, bool), next htt
 			return
 		case 1:
 		default:
-			refuseTarget(w, r, "more than one `resource` was asked for; this issuer mints a token for one resource at a time")
+			refuseTarget(w, r, clients, "more than one `resource` was asked for; this issuer mints a token for one resource at a time")
 			return
 		}
 
 		wanted := asked[0]
 		if err := validateIndicator(wanted); err != nil {
-			refuseTarget(w, r, err.Error())
+			refuseTarget(w, r, clients, err.Error())
 			return
 		}
 		// The scheme and the host are case-insensitive (RFC 3986 6.2.2.1,
@@ -105,7 +105,7 @@ func resourceIndicators(resources func(string) (policy.Resource, bool), next htt
 		if _, ok := resources(wanted); !ok {
 			// Naming it, because the alternative is somebody comparing
 			// two URLs by eye for an afternoon.
-			refuseTarget(w, r, fmt.Sprintf("%q is not a resource this installation declares; "+
+			refuseTarget(w, r, clients, fmt.Sprintf("%q is not a resource this installation declares; "+
 				"a resource indicator is matched exactly, so a trailing slash or a different scheme "+
 				"is a different resource", wanted))
 			return
@@ -134,8 +134,66 @@ func validateIndicator(raw string) error {
 
 // refuseTarget answers as RFC 8707 says to, in whichever form the caller
 // reads: a page for a browser, the OAuth error for a program.
-func refuseTarget(w http.ResponseWriter, r *http.Request, description string) {
+//
+// At `/authorize` the error goes back to the client as a redirect when the
+// request names a `redirect_uri` the client has registered (RFC 8707 2),
+// so a client that is misconfigured learns it from the response it is
+// already waiting for instead of hanging on a page it cannot read. Only
+// then: a redirect to an address nobody registered is an open redirector,
+// so with no client, or a `redirect_uri` that is not the client's, the
+// person is shown the page as before.
+func refuseTarget(w http.ResponseWriter, r *http.Request, clients clientLookup, description string) {
+	if r.URL.Path == authorizePath && clients != nil {
+		if to, ok := targetRedirect(r, clients, description); ok {
+			http.Redirect(w, r, to, http.StatusFound)
+			return
+		}
+	}
 	refuseWith(w, r, string(oidc.InvalidTarget), description)
+}
+
+// clientLookup finds a client by id, as the storage does.
+type clientLookup func(ctx context.Context, clientID string) (op.Client, error)
+
+// targetRedirect builds the `invalid_target` redirect, and reports false
+// when the request has no redirect URI it may be sent to. The check is the
+// library's own, so what counts as registered (a loopback address on any
+// port for a native client, an exact match otherwise) is the same here as
+// where the library would have sent the code.
+func targetRedirect(r *http.Request, clients clientLookup, description string) (string, bool) {
+	clientID := r.Form.Get("client_id")
+	redirect := r.Form.Get("redirect_uri")
+	if clientID == "" || redirect == "" {
+		return "", false
+	}
+	found, err := clients(r.Context(), clientID)
+	if err != nil || found == nil {
+		return "", false
+	}
+	if op.ValidateAuthReqRedirectURI(found, redirect, oidc.ResponseTypeCode) != nil {
+		return "", false
+	}
+	target, err := url.Parse(redirect)
+	if err != nil {
+		return "", false
+	}
+
+	result := url.Values{}
+	result.Set("error", string(oidc.InvalidTarget))
+	result.Set("error_description", description)
+	if state := r.Form.Get("state"); state != "" {
+		result.Set("state", state)
+	}
+	if r.Form.Get("response_mode") == string(oidc.ResponseModeFragment) {
+		target.Fragment = result.Encode()
+		return target.String(), true
+	}
+	if target.RawQuery != "" {
+		target.RawQuery += "&"
+	}
+	target.RawQuery += result.Encode()
+
+	return target.String(), true
 }
 
 // refuseRequest answers an authorization request that is malformed with

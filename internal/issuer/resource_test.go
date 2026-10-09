@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/policy"
 )
@@ -44,7 +46,7 @@ func TestAResourceTheInstallationDeclaresIsCarriedThrough(t *testing.T) {
 	t.Parallel()
 
 	got := &reached{}
-	mw := resourceIndicators(declaredResources("https://mcp.example/"), got.handler())
+	mw := resourceIndicators(declaredResources("https://mcp.example/"), nil, got.handler())
 
 	req := httptest.NewRequest(http.MethodGet,
 		authorizePath+"?client_id=c&resource="+url.QueryEscape("https://mcp.example/"), nil)
@@ -64,7 +66,7 @@ func TestNoResourceIsTheOrdinaryCase(t *testing.T) {
 	t.Parallel()
 
 	got := &reached{}
-	mw := resourceIndicators(declaredResources("https://mcp.example/"), got.handler())
+	mw := resourceIndicators(declaredResources("https://mcp.example/"), nil, got.handler())
 	mw.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, authorizePath+"?client_id=c", nil))
 
 	if !got.called {
@@ -110,7 +112,7 @@ func TestAResourceIsRefusedRatherThanIgnored(t *testing.T) {
 			t.Parallel()
 
 			got := &reached{}
-			mw := resourceIndicators(declaredResources("https://mcp.example/"), got.handler())
+			mw := resourceIndicators(declaredResources("https://mcp.example/"), nil, got.handler())
 			rec := httptest.NewRecorder()
 			mw.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, authorizePath+"?client_id=c&"+tc.query, nil))
 
@@ -150,7 +152,7 @@ func TestTheTokenEndpointIsGuardedToo(t *testing.T) {
 			t.Parallel()
 
 			got := &reached{}
-			mw := resourceIndicators(declaredResources("https://mcp.example/"), got.handler())
+			mw := resourceIndicators(declaredResources("https://mcp.example/"), nil, got.handler())
 			rec := httptest.NewRecorder()
 
 			body := strings.NewReader("grant_type=authorization_code&resource=" +
@@ -325,5 +327,69 @@ func TestBothGatesApply(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no longer a declared resource") {
 		t.Errorf("refusal %q reads as a missing group rather than a withdrawn resource", err)
+	}
+}
+
+// RFC 8707: a resource at /authorize that is refused goes back to the
+// client as `invalid_target` in a redirect when the redirect URI is one the
+// client registered, and as a page when it is not.
+func TestAnInvalidTargetIsRedirectedOnlyToARegisteredURI(t *testing.T) {
+	t.Parallel()
+
+	known := func(_ context.Context, id string) (op.Client, error) {
+		if id != "an-editor" {
+			return nil, errors.New("unknown client")
+		}
+		return &client{id: id, declared: policy.Client{
+			Kind:      policy.KindPublic,
+			Redirects: []string{"https://app.example/cb"},
+		}}, nil
+	}
+	bad := "&resource=" + url.QueryEscape("https://elsewhere.example/")
+
+	for name, tc := range map[string]struct {
+		query    string
+		redirect bool
+	}{
+		"registered":           {"client_id=an-editor&redirect_uri=https://app.example/cb&state=s1", true},
+		"registered, fragment": {"client_id=an-editor&redirect_uri=https://app.example/cb&state=s1&response_mode=fragment", true},
+		"unregistered":         {"client_id=an-editor&redirect_uri=https://evil.example/cb&state=s1", false},
+		"no redirect_uri":      {"client_id=an-editor&state=s1", false},
+		"unknown client":       {"client_id=nobody&redirect_uri=https://app.example/cb", false},
+		"no client":            {"redirect_uri=https://app.example/cb", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := &reached{}
+			mw := resourceIndicators(declaredResources("https://mcp.example/"), known, got.handler())
+			rec := httptest.NewRecorder()
+			mw.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, authorizePath+"?"+tc.query+bad, nil))
+
+			if got.called {
+				t.Fatal("the request reached the library")
+			}
+			if !tc.redirect {
+				if rec.Code != http.StatusBadRequest {
+					t.Errorf("status = %d, want the 400 page", rec.Code)
+				}
+				return
+			}
+			if rec.Code != http.StatusFound {
+				t.Fatalf("status = %d, want a redirect", rec.Code)
+			}
+			to, err := url.Parse(rec.Header().Get("Location"))
+			if err != nil || to.Host != "app.example" || to.Path != "/cb" {
+				t.Fatalf("Location = %q, want the client's redirect URI", rec.Header().Get("Location"))
+			}
+			params := to.Query()
+			if strings.Contains(tc.query, "fragment") {
+				params, _ = url.ParseQuery(to.Fragment)
+			}
+			if params.Get("error") != string(oidc.InvalidTarget) || params.Get("state") != "s1" ||
+				params.Get("error_description") == "" {
+				t.Errorf("redirect parameters = %v, want invalid_target with the state echoed", params)
+			}
+		})
 	}
 }
