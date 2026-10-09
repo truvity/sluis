@@ -2,6 +2,8 @@ module github.com/truvity/sluis/audit/sdk
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/otelconnect v0.10.0
