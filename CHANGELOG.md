@@ -15,6 +15,11 @@
 - **Breaking: `sluis migrate secrets-layout`, `sluis migrate ssm-layout` and the destination-layout notes of `sluis migrate`.** `sluis migrate` still copies a legacy in-cluster store or any other storage into a destination; a destination on the `ssm` source is written in layout v4, and the report no longer carries a note about the layout or a `DEPRECATED` warning for v3.
 - **Breaking (Pulumi library): the layout-v3 parameters and grants.** The issuer's state secret and the recovery password are written at `/sluis/<instance>/internal/config/...` (`StateSecretParameterName`, `RecoveryPasswordParameterName`, `ConfigParameterPrefix`), where the service reads them, and not at `private/config/...`. The value is the same, so the first apply adopts the v4 copies `sluis migrate` already wrote (`overwrite` is set), then deletes the old ones at the end: [upgrade to v1.75](docs/guides/sluis/upgrade/v1.75.md). The roles lose their grants on `private/credentials/*` and `private/config/*`, and `PrivateParameterPrefix` and `CredentialsParameterPrefix` are gone.
 
+### Added
+
+- **`sluis` is a multi-call binary on urfave/cli v3 (docs/decisions/0071).** The root command gets the module subcommands `issuer`, `console`, `github`, `slack`, `cloudflare`, `google` and `backup`. `issuer` runs what `sluis serve` runs, `github` and `slack` run the controller's loop alone, and a module with no process of its own yet (`console`, `cloudflare`, `google`, `backup`) answers `not yet split` and exits 1. `serve`, `controller`, `tick` and `migrate` are unchanged, and so is the Lambda binary. The root `--help` text is now generated.
+- **An import-boundary test pins the module boundaries that hold today.** Only the issuer's process (the future signer) imports the signing-key adapters; the GitHub, Slack and Cloudflare packages import neither the issuer front end nor each other; the issuer library imports no process.
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).

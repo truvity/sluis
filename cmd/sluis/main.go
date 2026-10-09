@@ -9,6 +9,11 @@
 //	sluis tick slack <target> --config <file>   one Slack workspace's tick, once
 //	sluis migrate --from <config> --to <config>  copy the State between storages (docs/decisions/0031)
 //
+// The command line is a urfave/cli v3 tree (commands.go): one multi-call binary,
+// one module per process (docs/decisions/0071). The module commands (issuer, console, github, slack,
+// cloudflare, google, backup) run today's behaviour for their role where one exists, and answer "not yet
+// split" where it does not; the commands above stay as they are.
+//
 // Each subcommand is configured by one file and reads nothing else (see
 // internal/config). Everything a subcommand decides is assembled in its own
 // package, internal/rosterapp and internal/{github,slack}roster/app; this file
@@ -44,7 +49,6 @@ import (
 	"github.com/truvity/sluis/internal/rosterapp"
 	slackapp "github.com/truvity/sluis/internal/slackroster/app"
 	"github.com/truvity/sluis/internal/telemetry"
-	"github.com/truvity/sluis/internal/version"
 )
 
 func main() {
@@ -67,76 +71,6 @@ const unsafeLocalLease = "--unsafe-local-lease"
 // errUsage is a command line that names no subcommand, or one that does not
 // exist: reported as usage, not as a crash.
 var errUsage = errors.New("usage error")
-
-func usage(out io.Writer) {
-	_, _ = fmt.Fprint(out, `Usage: sluis <command> [--config <file>]
-
-Commands:
-  serve                 the one process: the issuer, the directory hub and the console, and the controllers the document names
-  controller github     (deprecated) the GitHub controller alone: keeps each organisation's teams as the policy says
-  controller slack      (deprecated) the Slack controller alone: keeps each workspace's channels as the policy says
-  tick github <target>  one GitHub tick, once: an organisation's login, or github:links for the link check
-  tick slack <target>   one Slack tick, once: a workspace's key
-  migrate               copy the State from one storage to another: --from <config> --to <config>
-
-Each command but migrate takes --config <file> and nothing else but --version and --help (a tick also
-takes its target, first); migrate takes --from and --to, each a configuration file, and its own flags
-(--dry-run, --overwrite, --i-have-stopped-writers: see 'sluis migrate --help'). A file is
-validated against schemas/config/<command>.schema.json (sluis, the one document, for serve; controller-github
-and controller-slack for a controller that runs apart, which may also read the one document; a tick and migrate
-read either) before anything starts. A tick runs under the
-target's lease and exits 0 when another runner holds it.
-
-A tick REFUSES to run while the leases are held in this process only (no shared State, which is the
-case until B3): a running controller would not be kept off the same target. After scaling the
-controller to 0, --unsafe-local-lease runs the tick anyway.
-`)
-}
-
-func run(args []string, out io.Writer) error {
-	if len(args) == 0 {
-		usage(out)
-		return fmt.Errorf("%w: give a command", errUsage)
-	}
-	switch args[0] {
-	case "-h", "-help", "--help", "help":
-		usage(out)
-		return nil
-	case "--version", "-version", "version":
-		_, _ = fmt.Fprintln(out, "sluis", version.String())
-		return nil
-	case "serve":
-		return start(out, "sluis serve", "sluis", args[1:], serve)
-	case "controller":
-		if len(args) < 2 {
-			usage(out)
-			return fmt.Errorf("%w: sluis controller needs a target: github or slack", errUsage)
-		}
-		switch args[1] {
-		case "github":
-			return start(out, "sluis controller github", "controller-github", args[2:], controllerGitHub)
-		case "slack":
-			return start(out, "sluis controller slack", "controller-slack", args[2:], controllerSlack)
-		}
-		return fmt.Errorf("%w: sluis controller %q: the targets are github and slack", errUsage, args[1])
-	case "tick":
-		if len(args) < 2 {
-			usage(out)
-			return fmt.Errorf("%w: sluis tick needs a kind and a target: github or slack, then the target", errUsage)
-		}
-		switch args[1] {
-		case "github":
-			return startTick(out, "sluis tick github", "controller-github", args[2:], tickGitHub)
-		case "slack":
-			return startTick(out, "sluis tick slack", "controller-slack", args[2:], tickSlack)
-		}
-		return fmt.Errorf("%w: sluis tick %q: the kinds are github and slack", errUsage, args[1])
-	case "migrate":
-		return migrateCmd(out, args[1:])
-	}
-	usage(out)
-	return fmt.Errorf("%w: %q is not a command", errUsage, args[0])
-}
 
 // runner is one subcommand's body: it reads the file it is given, assembles
 // what it runs, and runs it until ctx ends.
