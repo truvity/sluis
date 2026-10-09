@@ -41,9 +41,12 @@ var SpanAttributeAllowlist = map[attribute.Key]bool{
 	AttrTransport: true, AttrDelivery: true, AttrDurability: true, AttrOutcome: true,
 	AttrRecords: true, AttrRejected: true, AttrTenant: true, AttrAction: true,
 
-	"rpc.system": true, "rpc.service": true, "rpc.method": true,
-	"rpc.connect_rpc.error_code": true,
-	"http.request.method":        true, "http.response.status_code": true, "http.route": true,
+	// What otelconnect v0.10 sets (attributes.go: rpc.system.name, rpc.method,
+	// rpc.response.status_code and error.type on a failure), the current RPC
+	// semantic conventions. The pre-1.40 rpc.system, rpc.service and
+	// rpc.connect_rpc.error_code are gone from it.
+	"rpc.system.name": true, "rpc.method": true, "rpc.response.status_code": true, "error.type": true,
+	"http.request.method": true, "http.response.status_code": true, "http.route": true,
 	"url.path": true,
 }
 
