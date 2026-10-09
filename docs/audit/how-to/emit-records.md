@@ -35,13 +35,13 @@ application holds the address of a Service and nothing else.
 
 ```mermaid
 sequenceDiagram
-  participant App as the application
+  participant App as application
   participant R as receiver
   participant S3 as archive
-  App->>R: RegisterCatalogue (at start-up, with its token)
-  R-->>App: accepted, or refused with the reasons
+  App->>R: RegisterCatalogue (at start-up)
+  R-->>App: accepted, or refused with reasons
   Note over App: a request arrives
-  App->>App: emitter.Record — fill, validate against the catalogue
+  App->>App: emitter.Record: fill, validate
   App->>R: Record (block: wait)
   R->>S3: one locked copy per profile
   R-->>App: durable

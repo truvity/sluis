@@ -6,17 +6,26 @@ Kubernetes build is unchanged and stays what an estate runs where it runs Kubern
 ([decision 0026](../decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)). The events, the
 environment, the role and the version rules are in the [reference](../reference/lambda.md).
 
+**Calls in.** The only inbound paths are the API Gateway HTTP API and EventBridge Scheduler (one schedule per target); the function also invokes itself asynchronously and reads its config layer at start.
+
+```mermaid
+flowchart TB
+  GW["API Gateway<br/>HTTP API"] -->|"payload 2.0"| F["the function"]
+  SCH["EventBridge Scheduler<br/>one schedule per target"] -->|"tick, exports,<br/>refresh"| F
+  L["config layer<br/>/opt/sluis"] -.->|"read at start"| F
+  F -->|"async invoke: run"| F
+```
+
+**Calls out.** Every dependency is an AWS API the function reaches over its role.
+
 ```mermaid
 flowchart LR
-    GW[API Gateway HTTP API] -->|payload 2.0| F[the function]
-    SCH[EventBridge Scheduler<br/>one schedule per target] -->|tick, exports, refresh| F
-    F -->|async invoke: run| F
-    F --> D[(DynamoDB<br/>state, sessions, leases)]
-    F --> B[(S3 blobs)]
-    F -->|kms:Sign| K[KMS]
-    F -->|secrets, credentials| P[SSM Parameter Store]
-    L[config layer<br/>/opt/sluis] -.->|read at start| F
-    F -->|emit| Q[SQS audit]
+  F["the function"]
+  F --> D[("DynamoDB<br/>state, sessions, leases")]
+  F --> B[("S3 blobs")]
+  F -->|"kms:Sign"| K["KMS"]
+  F -->|"secrets, credentials"| P["SSM Parameter Store"]
+  F -->|"emit"| Q["SQS audit"]
 ```
 
 ## One binary, one zip, one function

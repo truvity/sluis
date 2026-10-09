@@ -1,3 +1,6 @@
+// Package docscheck holds the audit documentation to its shape: page length and
+// closed generated regions. Links, anchors and retired names are checked for the
+// whole tree by hack/check-docs-hygiene.py and mkdocs build --strict.
 package docscheck
 
 import (
@@ -16,6 +19,17 @@ var (
 	regionOpen  = regexp.MustCompile(`^<!-- generated: ([a-z0-9-]+) -->\s*$`)
 	regionClose = regexp.MustCompile(`^<!-- /generated -->\s*$`)
 )
+
+// root is the audit module, two levels above this package. Its documentation
+// lives in the repository's docs/audit tree, one level above the module.
+func root(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
 
 func docPages(t *testing.T) []string {
 	t.Helper()

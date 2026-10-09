@@ -11,31 +11,36 @@ stream to use.
 
 ## What it looks like
 
+**Write path.** Every workload of the application emits to the same writer, which puts the object in the bucket and marks the id in the database.
+
 ```mermaid
 flowchart TB
-  subgraph ns["the application's namespace"]
-    subgraph APP["application pods"]
-      E["emit"]
-    end
-    subgraph CTL["a second workload of the same application"]
-      E2["emit"]
-    end
-    RW["audit-writer ×2<br/>receiver = writer"]
-    Q["audit-query ×1"]
-    OB["audit-observe ×1<br/>the indexer"]
-    PG[("database")]
-    CJ["CronJobs<br/>verify, purge, clock-sync"]
-    E --> RW
-    E2 --> RW
-    RW -- "dedupe, registry" --> PG
-    OB -- "index, cursors" --> PG
-    Q -- "reads" --> PG
-    E -- "the console's Audit page" --> Q
-  end
+  E["application pods<br/>emit"]
+  E2["a second workload<br/>emit"]
+  RW["audit-writer ×2<br/>receiver = writer"]
   S3[("the environment's bucket<br/>audit/app/")]
+  PG[("database")]
+  E --> RW
+  E2 --> RW
   RW --> S3
-  OB -- "lists, reads" --> S3
+  RW -- "dedupe, registry" --> PG
+```
+
+**Read path and jobs.** The indexer fills the index; the query service answers the console's Audit page; the CronJobs verify and purge the bucket.
+
+```mermaid
+flowchart TB
+  CON["the console's<br/>Audit page"]
+  Q["audit-query ×1"]
+  OB["audit-observe ×1<br/>the indexer"]
+  CJ["CronJobs<br/>verify, purge, clock-sync"]
+  PG[("database")]
+  S3[("the environment's bucket")]
+  CON --> Q
+  Q -- "reads" --> PG
   Q --> S3
+  OB -- "index, cursors" --> PG
+  OB -- "lists, reads" --> S3
   CJ --> S3
 ```
 
@@ -49,17 +54,16 @@ A privileged sign-in, declared `block` in the catalogue:
 
 ```mermaid
 sequenceDiagram
-  participant P as the person
-  participant A as the application
+  participant P as person
+  participant A as application
   participant R as receiver = writer
   participant S3 as bucket
   participant PG as database
-
   P->>A: sign in, good proof
   A->>A: validate against the catalogue
-  A->>R: Record, block (Connect, projected token)
-  R->>R: verify the caller, stamp the observer, split per profile
-  R->>S3: put object, retention from the profile
+  A->>R: Record, block
+  R->>R: verify, stamp, split
+  R->>S3: put object
   S3-->>R: stored
   R->>PG: mark the id
   R-->>A: durable

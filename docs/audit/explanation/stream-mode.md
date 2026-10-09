@@ -11,69 +11,78 @@ makes batching worth having, a metering profile, and — if quotas are wanted
 
 ## What it looks like
 
+**Write path.** Pods emit to the receiver, which publishes to JetStream; the writers drain it into the object bucket and the database, and the usage consumer feeds the quota cache.
+
 ```mermaid
 flowchart TB
-  subgraph ns["the application's namespace"]
-    subgraph APP["application pods"]
-      E["emit"]
-    end
-    R["receiver ×2"]
-    NATS[("JetStream<br/>the application's account")]
-    W["writer ×N<br/>consumer mode"]
-    U["usage consumer ×1<br/>quotas only"]
-    Q["audit-query ×2"]
-    PG[("the application's Postgres<br/>database audit:<br/>index, cursors, dedupe, rollups")]
-    VK[("cache<br/>quotas only")]
-    CJ["CronJobs<br/>verify, purge, clock-sync"]
-    ST["statement CronJob<br/>billing only, monthly"]
-    E --> R --> NATS
-    NATS --> W --> PG
-    NATS --> U --> VK
-    Q --> PG
-    ST --> PG
-  end
+  E["application pods<br/>emit"]
+  R["receiver ×2"]
+  NATS[("JetStream<br/>the application's account")]
+  W["writer ×N<br/>consumer mode"]
+  U["usage consumer ×1<br/>quotas only"]
+  PG[("the application's Postgres<br/>index, cursors,<br/>dedupe, rollups")]
   S3[("the environment's bucket<br/>audit/app/")]
+  VK[("cache<br/>quotas only")]
+  E --> R --> NATS
+  NATS --> W
+  NATS --> U
+  W --> PG
   W --> S3
-  Q --> S3
-  CJ --> S3
-  ST --> S3
-  CONS["the application's console"] -- "its own token" --> Q
+  U --> VK
 ```
 
-The stream is a buffer with a bounded horizon, not a store: the record
-becomes durable evidence when the writer puts the object. What the stream
-buys is that the application is never waiting for S3, that a writer rollout
-becomes a backlog rather than a hole, and that a second consumer can read
-the same records for something else.
+**Read path and jobs.** The query service, the CronJobs and the billing statement read the same database and bucket; the console reaches the query service with its own token.
 
-## One record
+**Read path and jobs.** The query service, the CronJobs and the billing statement read the same database and bucket; the console reaches the query service with its own token.
 
-A billable action, declared `block` because it will appear on an invoice:
+```mermaid
+flowchart TB
+  CONS["the application's console"]
+  Q["audit-query ×2"]
+  CJ["CronJobs<br/>verify, purge, clock-sync"]
+  ST["statement CronJob<br/>billing only, monthly"]
+  PG[("database audit")]
+  S3[("the environment's bucket")]
+  CONS -- "its own token" --> Q
+  Q --> PG
+  Q --> S3
+  CJ --> S3
+  ST --> PG
+  ST --> S3
+```
+
+**A billed operation, answered.** The caller gets its result as soon as JetStream has replicated the record.
 
 ```mermaid
 sequenceDiagram
-  participant C as the caller
-  participant A as an application pod
+  participant C as caller
+  participant A as app pod
   participant R as receiver
+  participant N as JetStream
+  C->>A: a billed operation
+  A->>A: validate, meter quantity 1
+  A->>R: Record, block
+  R->>N: publish
+  N-->>R: replicated
+  R-->>A: durable
+  A-->>C: result
+```
+
+**Then, moments later.** The writer drains JetStream into the bucket and the database, and the indexer follows the bucket.
+
+```mermaid
+sequenceDiagram
   participant N as JetStream
   participant W as writer
   participant S3 as bucket
   participant PG as database
   participant O as indexer
-
-  C->>A: an operation that is billed
-  A->>A: validate, the record carries meter quantity 1
-  A->>R: Record, block
-  R->>N: publish
-  N-->>R: acknowledged, replicated
-  R-->>A: durable
-  A-->>C: result
-  N->>W: a batch, moments later
-  W->>S3: put the security copy and the billing copy
+  N->>W: a batch
+  W->>S3: put both copies
   W->>PG: dedupe by id
   W-->>N: acknowledge the batch
-  O->>S3: list from the cursor, once the object is past the settle window
-  O->>PG: rows, facet counts, rollup per tenant, meter and hour, and the cursor
+  O->>S3: list from the cursor
+  O->>PG: rows, rollups, cursor
 ```
 
 The writer acknowledges to the stream only after the objects are in the

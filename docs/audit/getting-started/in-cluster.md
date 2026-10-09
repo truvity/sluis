@@ -17,7 +17,7 @@ The chart takes references to all of these and refuses to render when one is mis
 | a NATS server the pods can reach | any cluster NATS with JetStream enabled; the example uses `nats://nats.nats.svc:4222` |
 | a PostgreSQL database, an owner and a role for each part | [prepare the database](../how-to/prepare-the-database.md) |
 | an S3 bucket and a prefix | AWS S3, or Cloudflare R2 (use AWS S3 where Object Lock may be needed: `attested` is AWS S3 only); [prepare the bucket](../how-to/prepare-the-bucket.md) |
-| a key for the seals | an AWS KMS key, or OpenBao transit; <!-- TODO(coordinator): kms provider status from #428 --> see [key custody](../explanation/key-custody.md) |
+| a key for the seals | an AWS KMS key, or OpenBao transit; see [key custody](../explanation/key-custody.md). Pseudonymising under KMS needs a conceal key (`keys.conceal`, a symmetric KMS key) as well |
 | the secrets | Kubernetes Secrets named in the values, delivered by an operator such as External Secrets |
 | a reference clock | an NTP address the pods can reach, for example `pool.ntp.org` (on AWS, `169.254.169.123` is the instance's own time service) |
 | the images | `ghcr.io/truvity/audit/`, one tag that also stamps the chart |

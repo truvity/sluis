@@ -8,7 +8,9 @@
    description named docs/explanation/verify-and-issue.md for months.
 
 2. BANNED NAMES. The product was renamed (docs/decisions/0035-renamed-to-sluis.md):
-   `access-roster`, `access-issuer` and the NATS adapter are gone. They stay in
+   `access-roster`, `access-issuer` and the NATS adapter are gone, and so is the
+   archived repository github.com/truvity/audit (audit lives in this repository; link
+   its pages relatively). They stay in
    places that are history (docs/decisions, CHANGELOG.md, skipped here) and
    in identifiers that deliberately kept the old name (group names, URNs,
    label keys, an npm alias), which hack/docs-hygiene-allow.tsv lists with a
@@ -41,8 +43,17 @@ ALLOW = ROOT / "hack" / "docs-hygiene-allow.tsv"
 SKIP_DIRS = {".git", "node_modules", ".devbox", "dist", ".next", "build", ".venv"}
 # History: what an old name is allowed to appear in.
 HISTORY = ("docs/decisions/", "CHANGELOG.md")
+# audit's own tree: its vocabulary is its own (it runs on NATS), so only the
+# repository-wide terms apply there.
+AUDIT_TREES = ("audit/", "docs/audit/", "charts/audit/")
+SLUIS_ONLY = {"NATS", "access-issuer", "access-roster"}
+
+
+def is_history(path):
+    return path.startswith(HISTORY[0]) or path.rsplit("/", 1)[-1] == HISTORY[1]
 
 TERMS = {
+    "github.com/truvity/audit": re.compile(r"github\.com/truvity/audit\b"),
     "NATS": re.compile(r"\bNATS\b"),
     "access-issuer": re.compile(r"access-issuer"),
     "access-roster": re.compile(r"access-roster"),
@@ -53,11 +64,6 @@ def files():
     out = []
     for p in sorted(ROOT.rglob("*")):
         if not p.is_file() or any(part in SKIP_DIRS for part in p.relative_to(ROOT).parts):
-            continue
-        # audit/ and its chart are a component with its own vocabulary and its
-        # own link check (audit/internal/docscheck); the retired-name rules
-        # here are sluis's.
-        if rel(p).startswith(("audit/", "docs/audit/", "charts/audit/")):
             continue
         if p.suffix == ".md" or p.name == "Chart.yaml":
             out.append(p)
@@ -176,13 +182,15 @@ def check_names(allow, baseline):
     errors, found = [], {}
     for p in files():
         path = rel(p)
-        if path.startswith(HISTORY[0]) or path == HISTORY[1]:
+        if is_history(path):
             continue
+        terms = {t: rx for t, rx in TERMS.items()
+                 if not (t in SLUIS_ONLY and path.startswith(AUDIT_TREES))}
         rules = [rx for glob, rx, _ in allow if fnmatch.fnmatch(path, glob)]
         for lineno, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
             for rx in rules:
                 line = rx.sub(" ", line)
-            for term, rx in TERMS.items():
+            for term, rx in terms.items():
                 for _ in rx.finditer(line):
                     found.setdefault((path, term), []).append(lineno)
     for (path, term), lines in sorted(found.items()):

@@ -1,7 +1,7 @@
 # Audit
 
 sluis does not keep its own audit trail. It records into an installation of
-[truvity/audit](https://github.com/truvity/audit) that belongs to this application: with `audit.writer` set it
+[audit](../audit/README.md) that belongs to this application: with `audit.writer` set it
 registers its catalogue and sends its records to that one address, and with `audit.query` set it shows the
 installation's view as the console's Audit page; with neither it keeps nothing beyond the log line every record also
 is, and has no page. On AWS the sink is SQS ([ports](../reference/ports.md#audit-sink)). Setting it up: [connect an audit installation](../how-to/connect-audit-installation.md).

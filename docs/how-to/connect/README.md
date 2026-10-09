@@ -38,7 +38,7 @@ sluis; *out* means sluis calls it or manages it; *both* means each.
 | SSH | people, machines and hosts | in | [ssh](ssh.md) | |
 | PostgreSQL | short-lived client certificates | in | [postgresql](postgresql.md) | |
 | R2 credential broker | prefix-scoped object credentials | in | [r2-storage](r2-storage.md) | |
-| Cloudflare tokens and R2 (queued) | short-lived tokens and R2 credentials | both | next release candidate | [R2](../../sluis/examples/cloudflare-r2-credentials.md), [token](../../sluis/examples/cloudflare-api-token.md) |
+| Cloudflare tokens and R2 | short-lived tokens and R2 credentials | both | [cloudflare-tokens](../cloudflare-tokens.md) | [R2](../../sluis/examples/cloudflare-r2-credentials.md), [token](../../sluis/examples/cloudflare-api-token.md) |
 
 ## Directories, GitHub and Slack
 

@@ -26,14 +26,14 @@ for a second consumer to read.
 | 5 | **the denial is a record** | a refusal is an action in the catalogue, `async`, so that a customer's "you cut me off" has an answer | the application's |
 
 ```mermaid
-flowchart LR
+flowchart TB
   N[("JetStream")] --> U["usage consumer"]
   U --> VK[("counter cache")]
-  GW["the decision point<br/>gateway ext_authz or middleware"] --> VK
-  PLAN[("the application's plan table")] --> GW
+  PLAN[("the application's<br/>plan table")] --> GW["the decision point<br/>gateway ext_authz<br/>or middleware"]
+  GW --> VK
   REC["reconciler, hourly"] --> PG[("index rollups")]
   REC --> VK
-  GW -- "a refusal is itself a record" --> R["receiver"]
+  GW -- "a refusal is<br/>itself a record" --> R["receiver"]
 ```
 
 ## Fail open, and say so

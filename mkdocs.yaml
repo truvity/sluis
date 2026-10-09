@@ -68,7 +68,17 @@ plugins:
   - awesome-nav
   - privacy
   - redirects:
-      redirect_maps: {}
+      redirect_maps:
+        # The SDK pages moved under sdk/.
+        reference/go-module.md: sdk/go/sluis.md
+        audit/reference/emitter-library.md: sdk/go/audit-emitter.md
+        reference/typescript.md: sdk/typescript/sluis.md
+
+extra_css:
+  - assets/diagrams.css
+
+extra_javascript:
+  - assets/diagrams.js
 
 hooks:
   - hack/mkdocs_hooks.py
@@ -93,8 +103,11 @@ markdown_extensions:
       check_paths: true
   - pymdownx.superfences:
       custom_fences:
+        # Not class "mermaid": Material would draw that one itself, inside a
+        # closed shadow root, scaled to the column and out of reach of CSS.
+        # docs/assets/diagrams.js draws these at natural size with a zoom view.
         - name: mermaid
-          class: mermaid
+          class: diagram-source
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true

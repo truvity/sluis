@@ -1,0 +1,89 @@
+# Link checking for the documentation (lychee.toml). A pull request gets an
+# offline pass over the Markdown it changes: relative links and anchors, no
+# network, so it is fast and never flaky. Once a week the built site is checked
+# online, every external link, and a failure opens (or comments on) an issue.
+name: Links
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "**/*.md"
+      - "lychee.toml"
+      - ".github/workflows/links.yaml"
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: links-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changed:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: List the Markdown this pull request changes
+        id: files
+        run: |
+          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- '*.md' > changed.txt
+          echo "count=$(wc -l < changed.txt)" >> "$GITHUB_OUTPUT"
+      - name: Check them offline
+        if: steps.files.outputs.count != '0'
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --offline --no-progress --root-dir "${{ github.workspace }}" --files-from changed.txt
+          fail: true
+
+  site:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: hack/pages-requirements.txt
+      - name: Build the documentation
+        run: |
+          pip install -r hack/pages-requirements.txt
+          mkdocs build --strict -d _site
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lycheecache
+          key: lychee-${{ github.run_id }}
+          restore-keys: lychee-
+      - name: Check every link, online
+        id: lychee
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --no-progress --root-dir "${{ github.workspace }}/_site" '_site/**/*.html'
+          fail: false
+          output: lychee-report.md
+      - name: Open an issue when a link is dead
+        if: steps.lychee.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Dead links in the documentation"
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          body="The weekly link check of the built site found dead links (run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+
+          $(cat lychee-report.md)"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+          exit 1

@@ -106,7 +106,7 @@ to infrastructure; the trail is the history of these records. [The design](conso
 
 | Term | Means |
 |---|---|
-| **audit installation** | an installation of [truvity/audit](https://github.com/truvity/audit) that keeps the trail. It belongs to this application and runs in its namespace: one address takes both the catalogue this service registers at start-up and every record it sends |
+| **audit installation** | an installation of [audit](../audit/README.md) that keeps the trail. It belongs to this application and runs in its namespace: one address takes both the catalogue this service registers at start-up and every record it sends |
 | **action** | one thing that can happen, declared in the catalogue (`internal/audit/catalogue/roster.yaml`): `roster.person.signed_in`, `roster.github_member.invited`, `roster.slack_member.invited`, `roster.slack_action.held`, `roster.slack_removals.confirmed`, … Each has one constructor in `internal/audit/events.go` |
 | **record** | one action that happened, or was refused: who acted, who it concerns, what it was about, how it ended. Every record is also one log line, sharing its id |
 | **block** | the one delivery that waits: a recovery sign-in is kept by the installation before it succeeds, and refused when it cannot be |
