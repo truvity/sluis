@@ -2,9 +2,11 @@ package issuer
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
-	"github.com/zitadel/oidc/v3/pkg/op"
+
+	"github.com/truvity/sluis/policy"
 )
 
 // requirePKCE refuses, before any login page, an authorization request
@@ -17,7 +19,7 @@ import (
 // code (RFC 7636, OAuth 2.1). Both are refused with `invalid_request`.
 // A confidential client may omit PKCE; if it sends a challenge, the
 // method must still be S256.
-func requirePKCE(storage op.Storage, next http.Handler) http.Handler {
+func requirePKCE(policies func() *policy.Set, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != authorizePath || (r.Method != http.MethodGet && r.Method != http.MethodPost) {
 			next.ServeHTTP(w, r)
@@ -35,8 +37,7 @@ func requirePKCE(storage op.Storage, next http.Handler) http.Handler {
 			return
 		}
 		if challenge == "" {
-			if client, err := storage.GetClientByClientID(r.Context(), r.Form.Get("client_id")); err == nil &&
-				client.AuthMethod() == oidc.AuthMethodNone {
+			if publicClient(policies(), r.Form.Get("client_id")) {
 				refuseRequest(w, r, "a public client must send a `code_challenge` (PKCE, method S256)")
 				return
 			}
@@ -44,4 +45,15 @@ func requirePKCE(storage op.Storage, next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// publicClient reports whether an id names a public client without
+// resolving it: a declared one by its kind, and a client that describes
+// itself by its URL, which is public always. An id that names nothing
+// known is left to the library to refuse.
+func publicClient(set *policy.Set, clientID string) bool {
+	if declared, ok := set.Client(clientID); ok {
+		return declared.Kind == policy.KindPublic
+	}
+	return strings.HasPrefix(clientID, "https://")
 }
