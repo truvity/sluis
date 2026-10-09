@@ -139,7 +139,9 @@ type Server struct {
 }
 
 // NewServer is the server of one module.
-func NewServer(module string) *Server { return &Server{module: module, handlers: map[string]*handler{}} }
+func NewServer(module string) *Server {
+	return &Server{module: module, handlers: map[string]*handler{}}
+}
 
 // Module is the module the server answers for.
 func (s *Server) Module() string { return s.module }
