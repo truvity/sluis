@@ -18,18 +18,47 @@ const maxBody = 1 << 20
 // RPCPath is where a module's Service answers calls.
 const RPCPath = "/rpc"
 
-// Verifier checks the bearer of a call and says who it is. On Kubernetes it is
-// a TokenReview of a projected ServiceAccount token whose audience is this
-// module (docs/decisions/0071, 4).
+// Verifier checks the bearer of a call and says who it is (the token's
+// subject). On Kubernetes it is a TokenReview of a projected ServiceAccount
+// token whose audience is this module (docs/decisions/0071, 4).
 type Verifier func(ctx context.Context, bearer string) (subject string, err error)
 
 // TokenSource yields the bearer for a call to the module whose audience is
 // given (internal/consoleauth.Source, one per audience).
 type TokenSource func(ctx context.Context, audience string) (string, error)
 
+// HandlerOption configures [Server.Handler].
+type HandlerOption func(*handlerConfig)
+
+type handlerConfig struct{ classes map[string]string }
+
+// WithClasses maps verified subjects to caller classes, for a subject whose
+// ServiceAccount is not named for its class.
+func WithClasses(classes map[string]string) HandlerOption {
+	return func(c *handlerConfig) { c.classes = classes }
+}
+
+// ClassOfSubject is the caller class of a verified subject: the ServiceAccount's
+// name for `system:serviceaccount:<namespace>:<name>`, the subject itself
+// otherwise.
+func ClassOfSubject(subject string) string {
+	if rest, ok := strings.CutPrefix(subject, "system:serviceaccount:"); ok {
+		if _, name, found := strings.Cut(rest, ":"); found && name != "" {
+			return name
+		}
+	}
+	return subject
+}
+
 // Handler serves the module's calls at [RPCPath]. A call with no bearer, or one
-// verify refuses, is a 401 and reaches no method.
-func (s *Server) Handler(verify Verifier) http.Handler {
+// verify refuses, is a 401 and reaches no method. The caller class is the
+// verified subject's ([ClassOfSubject], or [WithClasses]); the request body
+// has no say in it.
+func (s *Server) Handler(verify Verifier, opts ...HandlerOption) http.Handler {
+	var hc handlerConfig
+	for _, o := range opts {
+		o(&hc)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+RPCPath, func(w http.ResponseWriter, r *http.Request) {
 		bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -47,9 +76,13 @@ func (s *Server) Handler(verify Verifier) http.Handler {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		class, mapped := hc.classes[subject]
+		if !mapped {
+			class = ClassOfSubject(subject)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(s.Dispatch(WithCaller(r.Context(), subject), req))
+		_ = json.NewEncoder(w).Encode(s.Dispatch(WithCaller(r.Context(), class), req))
 	})
 	return mux
 }
@@ -78,7 +111,7 @@ func (c *HTTPCaller) Call(ctx context.Context, module, method string, payload []
 	if err != nil {
 		return nil, &Error{Code: CodeUnavailable, Message: "no credential for " + module}
 	}
-	body, err := json.Marshal(Request{Kind: Kind, Module: module, Method: method, Payload: payload})
+	body, err := json.Marshal(Request{V: Version, Kind: Kind, Module: module, Method: method, Payload: payload})
 	if err != nil {
 		return nil, err
 	}

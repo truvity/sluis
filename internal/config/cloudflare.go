@@ -52,7 +52,7 @@ type CloudflareServe struct {
 // function or a Kubernetes Service (docs/decisions/0071).
 type CloudflareRemote struct {
 	// Function is the module's Lambda function, name or ARN; it is invoked
-	// through its `live` alias.
+	// through its `live-issuer` alias.
 	Function string `json:"function,omitempty"`
 	// URL is the module's Service, called with the pod's projected token.
 	URL string `json:"url,omitempty"`

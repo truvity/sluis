@@ -31,7 +31,7 @@ func cloudflareSchema() m {
 			}, "account", "prototype", "description", "lifetime", "rotation"),
 		},
 		"remote": obj("Where the minter is when it is not this process: the on-demand token exchange calls the Cloudflare module there (docs/decisions/0071), and this document then declares no `accounts` or `presets`. Set exactly one of `function` and `url`. Unset keeps the minter in this process.", m{
-			"function":  str("The module's Lambda function, name or ARN. It is invoked through its `live` alias."),
+			"function":  str("The module's Lambda function, name or ARN. It is invoked through its `live-issuer` alias."),
 			"url":       url("The module's Kubernetes Service. A call carries the pod's projected ServiceAccount token."),
 			"audience":  str("The audience of that token. The module's name, `cloudflare`, when unset."),
 			"tokenFile": str("Where the projected token is mounted. `/var/run/secrets/sluis/cloudflare/token` when unset."),

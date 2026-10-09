@@ -6,7 +6,7 @@ import (
 )
 
 // Target is where one module is reached when it is not in this process. Set
-// Function for a Lambda function (its `live` alias), URL for a Kubernetes
+// Function for a Lambda function (the alias of the caller's class), URL for a Kubernetes
 // Service. Neither: the module is in this process.
 type Target struct {
 	Function string `json:"function,omitempty"`

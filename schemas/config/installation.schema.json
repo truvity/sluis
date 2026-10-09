@@ -1303,7 +1303,7 @@
               "type": "string"
             },
             "function": {
-              "description": "The module's Lambda function, name or ARN. It is invoked through its `live` alias.",
+              "description": "The module's Lambda function, name or ARN. It is invoked through its `live-issuer` alias.",
               "minLength": 1,
               "type": "string"
             },

@@ -33,7 +33,7 @@ func rpcEvent(t *testing.T) json.RawMessage {
 func TestAnRPCEventIsAnsweredByTheModuleServerWithTheInvokedAlias(t *testing.T) {
 	h := lambdaapp.NewHTTP(http.NotFoundHandler(), nil, nil).WithRPC(echoServer())
 	ctx := lambdacontext.NewContext(context.Background(), &lambdacontext.LambdaContext{
-		InvokedFunctionArn: strings.Join([]string{"arn", "partition", "lambda", "region", "account", "function", "cloudflare", "live"}, ":")})
+		InvokedFunctionArn: strings.Join([]string{"arn", "partition", "lambda", "region", "account", "function", "cloudflare", "live-issuer"}, ":")})
 	out, err := h.Handle(ctx, rpcEvent(t))
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestAnRPCEventIsAnsweredByTheModuleServerWithTheInvokedAlias(t *testing.T) 
 		t.Fatal(err)
 	}
 	body, err := modcall.Result(res)
-	if err != nil || !strings.Contains(string(body), `"said":"hi"`) || !strings.Contains(string(body), `"caller":"live"`) {
+	if err != nil || !strings.Contains(string(body), `"said":"hi"`) || !strings.Contains(string(body), `"caller":"issuer"`) {
 		t.Fatalf("%s %v", body, err)
 	}
 }

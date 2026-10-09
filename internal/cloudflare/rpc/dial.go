@@ -20,7 +20,7 @@ import (
 const DefaultTokenFile = "/var/run/secrets/sluis/cloudflare/token"
 
 // Dial is the [Minting] in the module the document's `cloudflare.remote` names:
-// its Lambda function (the `live` alias) or its Kubernetes Service.
+// its Lambda function (the `live-issuer` alias) or its Kubernetes Service.
 func Dial(ctx context.Context, r *config.CloudflareRemote, log *slog.Logger) (*Client, error) {
 	if r == nil {
 		return nil, errors.New("cloudflare.remote is not set")
@@ -33,7 +33,7 @@ func Dial(ctx context.Context, r *config.CloudflareRemote, log *slog.Logger) (*C
 		if err != nil {
 			return nil, fmt.Errorf("cloudflare.remote: %w", err)
 		}
-		lambda = lambdacall.New(awslambda.NewFromConfig(awsCfg, func(*awslambda.Options) {}), cfg)
+		lambda = lambdacall.New(awslambda.NewFromConfig(awsCfg, func(*awslambda.Options) {}), cfg).As(CallerIssuer)
 	case r.URL != "":
 		file := r.TokenFile
 		if file == "" {
