@@ -51,7 +51,8 @@ func TestV5PathGolden(t *testing.T) {
 	if _, err := s.OIDCExternal().Client("rp").Put(ctx, secretstore.OIDCv1{ClientID: "rp", ClientSecret: "s"}, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GitHubExternal().App("runner-small-org").Put(ctx, secretstore.GitHubv1{AppID: "1", InstallationID: "2", PrivateKey: "k", WebhookSecret: "w"}, ""); err != nil {
+	gh := secretstore.GitHubv1{AppID: "1", InstallationID: "2", PrivateKey: "k", WebhookSecret: "w"}
+	if _, err := s.GitHubExternal().App("runner-small-org").Put(ctx, gh, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SlackExternal().App("bot").Put(ctx, secretstore.Slackv1{BotToken: "t"}, ""); err != nil {
