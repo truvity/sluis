@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -91,6 +92,39 @@ func Flush(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// instanceID names this process, or this Lambda execution environment, among
+// the others of the same service: one random UUID per process. Without it two
+// concurrent environments export the same cumulative series under one resource
+// and the backend sees one counter going up and down.
+var instanceID = sync.OnceValue(uuid.NewString)
+
+// Resource is what every metric and span of this process is attributed to: the
+// SDK's default, the service's name (unless OTEL_SERVICE_NAME names it) and
+// version, a per-process service.instance.id, and, inside AWS Lambda, the
+// function, the execution environment (its log stream) and the cloud it runs in.
+func Resource(service, version string) (*resource.Resource, error) {
+	attributes := []attribute.KeyValue{
+		attribute.String("service.version", version),
+		attribute.String("service.instance.id", instanceID()),
+	}
+	if strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")) == "" {
+		attributes = append(attributes, attribute.String("service.name", service))
+	}
+	if name := os.Getenv("AWS_LAMBDA_FUNCTION_NAME"); name != "" {
+		attributes = append(attributes,
+			attribute.String("cloud.provider", "aws"),
+			attribute.String("faas.name", name),
+		)
+		if instance := os.Getenv("AWS_LAMBDA_LOG_STREAM_NAME"); instance != "" {
+			attributes = append(attributes, attribute.String("faas.instance", instance))
+		}
+		if region := os.Getenv("AWS_REGION"); region != "" {
+			attributes = append(attributes, attribute.String("cloud.region", region))
+		}
+	}
+	return resource.Merge(resource.Default(), resource.NewSchemaless(attributes...))
+}
+
 // Start installs the global meter provider when a collector is named for
 // metrics and the global tracer provider (and the W3C trace-context
 // propagator) when one is named for traces, and returns what flushes and
@@ -100,11 +134,7 @@ func Start(ctx context.Context, service, version string, log *slog.Logger) (func
 	if !Enabled() && !TracesEnabled() {
 		return func(context.Context) error { return nil }, nil
 	}
-	attributes := []attribute.KeyValue{attribute.String("service.version", version)}
-	if strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")) == "" {
-		attributes = append(attributes, attribute.String("service.name", service))
-	}
-	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(attributes...))
+	res, err := Resource(service, version)
 	if err != nil {
 		return nil, fmt.Errorf("telemetry: the resource: %w", err)
 	}

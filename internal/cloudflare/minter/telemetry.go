@@ -21,6 +21,10 @@ import (
 // The alert fires when the last rotation is older than twice the interval.
 const meterName = "github.com/truvity/sluis/cloudflare"
 
+// unknownPreset is the `preset` label of a request that names a preset the
+// policy does not declare. The name a caller supplies is never a label.
+const unknownPreset = "unknown"
+
 type instruments struct {
 	lastRotation metric.Int64Gauge
 	rotation     metric.Int64Gauge

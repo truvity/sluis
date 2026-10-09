@@ -441,7 +441,13 @@ func reasonOf(err error) (reason, detail string) {
 // refused records a refusal.
 func (m *Minter) refused(ctx context.Context, actor audit.Actor, preset, variant, reason, detail string, denied bool) {
 	m.cfg.record(ctx, audit.CloudflareTokenRefused(actor, preset, variant, reason, detail, denied))
-	meters.mint(ctx, preset, variant, "refused")
+	label := preset
+	if reason == "unknown_preset" {
+		// The caller named it; the audit record keeps the (sanitised) name, a
+		// metric label must stay in a set the policy bounds.
+		label = unknownPreset
+	}
+	meters.mint(ctx, label, variant, "refused")
 }
 
 // fail records a mint that did not complete, and logs it without the error's
