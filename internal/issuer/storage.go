@@ -614,7 +614,7 @@ func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.
 		// did not declare, so the log is where a reader sees that one was
 		// admitted at all, and which URL it was.
 		s.logger().InfoContext(ctx, "admitted a client that describes itself",
-			slog.String("client", clientID), slog.String("name", resolved.DisplayName))
+			logattr.SafeString("client", clientID), logattr.SafeString("name", resolved.DisplayName))
 		return &client{id: clientID, declared: resolved, lifetime: s.tokenLifetime(resolved), signing: signing}, nil
 	case errors.Is(err, errNotADocumentClient):
 		return nil, fmt.Errorf("%w: %q", ErrUnknownTarget, clientID)
