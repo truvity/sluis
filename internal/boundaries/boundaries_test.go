@@ -129,11 +129,11 @@ func TestModuleBoundaries(t *testing.T) {
 			sees:   "internal/module/slack",
 		},
 		{
-			name:   "the issuer module wraps no provider module",
-			from:   []string{"internal/module/issuer"},
+			name: "the issuer module wraps no provider module",
+			from: []string{"internal/module/issuer"},
 			forbid: []string{"internal/module/github", "internal/module/slack", "internal/module/cloudflare",
 				"internal/githubroster", "internal/slackroster", "internal/cloudflare"},
-			sees:   "internal/module/issuer",
+			sees: "internal/module/issuer",
 		},
 		{
 			name:   "the Cloudflare module wraps only the Cloudflare role",
