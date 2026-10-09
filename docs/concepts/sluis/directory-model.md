@@ -1,6 +1,6 @@
-# The directory model
+# What is a workspace?
 
-A **workspace** is one connected corporate directory:
+A **workspace** is one connected corporate directory.
 
 ```
 Workspace {
@@ -16,37 +16,36 @@ Workspace {
 }
 ```
 
-The console calls a workspace a **directory**, and the groups it holds **directory groups** (it said *provider*
-before). The rail puts each under its own heading, *Identity* and *Access*, so the two sides read as mirrors; the
-model, the URLs and the API keep the older word.
+The console calls a workspace a **directory** and its groups **directory groups**. The model, the URLs and the API keep the word workspace.
 
-- **Domains are discovered, not typed.** After connecting, the tenant's domain list is read and re-read on every
-  probe. A domain that moves between tenants follows automatically: the backend never lets one domain belong to two
-  tenants at once, so the move is sequential. Should two connected workspaces ever claim one domain, neither is
-  authoritative for it until the conflict clears, and the console says so.
-- **Routing is by email domain.** Every request naming an address is answered by the workspace serving that domain.
-  An address in no served domain gets `in_domain=false`: no opinion, never "gone".
-- **Serving is narrower than owning.** A workspace answers for every domain its tenant owns unless it is narrowed to
-  a subset. What is left out is still discovered and still shown, so an operator can tell "not our business" from
-  "missing"; it routes nothing and its accounts are not kept.
+## Domains are discovered
 
-  Three things fall out of it. A tenant that happens to own a domain another tenant serves is no longer a conflict,
-  so two overlapping directories can coexist. The choice cannot grant anything, because the only domains that may be
-  named are the ones discovery returned: the ceiling is the directory's own verified list, and every setting is a
-  subtraction from it. And because the served list is intersected with discovery rather than trusted over it, a
-  domain moving between tenants hands over on its own.
-- **Authoritative is per domain.** A domain is authoritative when its workspace's last probe succeeded within the
-  freshness window and no other workspace serves it too. Consumers that remove access act only on authoritative
-  answers; this flag is the safety-critical part of the contract.
+After connecting, sluis reads the tenant's domain list and re-reads it on every probe. A domain that moves between tenants follows automatically, because a backend never lets one domain belong to two tenants at once.
 
-A failure to reach a directory is an error and never an empty answer. The hold window rests on that distinction: an
-identity keeps its last-known groups for a bounded time only while "I could not ask" can be told from "the directory
-says nothing".
+If two connected workspaces claim one domain, neither is authoritative for it until the conflict clears, and the console says so.
 
-The window applies to the console as it does to a silent sign-in. While a directory cannot be reached, a person it
-last admitted keeps console access for the window (4 hours by default) and the sign-in ends past it; a person the
-directory says is suspended or not found is refused at once and the sign-in ended
-([sessions](sessions.md#what-the-console-asks-of-the-sso-session)).
+## Routing is by email domain
 
-The groups, the flat membership and the live flag of every account are kept as one snapshot per workspace:
-[freshness](freshness.md) says how it is read and refreshed.
+The workspace serving an address's domain answers every request that names the address. An address in no served domain gets `in_domain=false`: no opinion, never "gone".
+
+## Serving is narrower than owning
+
+A workspace answers for every domain its tenant owns unless `serve` narrows it. A domain left out is still discovered and shown, but it routes nothing and its accounts are not kept.
+
+You can name only domains that discovery returned, so every setting subtracts from the directory's own verified list. A tenant that owns a domain another tenant serves is no conflict, so overlapping directories can coexist.
+
+## Authoritative is per domain
+
+A domain is authoritative when its workspace's last probe succeeded within the freshness window and no other workspace serves it. Consumers that remove access act only on authoritative answers.
+
+## A failure is an error, never an empty answer
+
+A failure to reach a directory is an error. An identity keeps its last-known groups for a bounded time only while "I could not ask" differs from "the directory says nothing".
+
+The same window applies to the console. While a directory cannot be reached, a person it last admitted keeps console access for the window, 4 hours by default. The sign-in ends after it. A person the directory reports suspended or not found is refused at once and the sign-in ends ([sessions](sessions.md#what-the-console-asks-of-the-sso-session)).
+
+The service keeps the groups, the flat membership and each account's live flag as one snapshot per workspace. See [freshness](freshness.md).
+
+## Decided in
+
+- [ADR 0018: Do not configure what the product knows](../../decisions/0018-do-not-configure-what-the-product-knows.md)

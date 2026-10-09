@@ -81,7 +81,7 @@ accept on the next pass), *waiting for acceptance*, *active*, *needs you*
 
 - **Create, edit, delete:** the operator over the **host** workspace's owner
   (the directory recorded as the host's owner when it was connected, see
-  [slack-workspace.md](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)),
+  [slack-workspace.md](../../../concepts/sluis/slack-reconciler.md#where-a-workspaces-team-owner-and-domains-come-from)),
   or the installation-wide operator. The
   operator of a **guest** workspace's owner alone may not: a channel is owned
   by its host.

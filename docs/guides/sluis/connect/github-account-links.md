@@ -1,6 +1,6 @@
 # Link a GitHub account to a person
 
-GitHub tells an organisation outside its Enterprise Cloud plan nothing about which work address a member has. This page is how a person links their account, how the link App is set up once, and how links are checked. The controller's use of links is in [How a GitHub pass decides](../../../concepts/sluis/github-pass.md).
+GitHub tells an organisation outside its Enterprise Cloud plan nothing about which work address a member has. This page is how a person links their account, how the link App is set up once, and how links are checked. The controller's use of links is in [How a GitHub pass decides](../../../concepts/sluis/github-controller.md).
 
 Not the App and not an owner can say it, so each person shows it themselves, once.
 

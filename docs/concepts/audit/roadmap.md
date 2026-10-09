@@ -1,23 +1,22 @@
-# Roadmap
+# What is planned for audit?
 
-Work that is wanted but not started. Each entry is a note, not a commitment:
-nothing here is built, and none of it changes what the pages elsewhere
-describe.
-
-R2 is a supported archive store, with governance-grade retention.
-
-## To do
-
-Nothing is queued.
+Nothing is queued. R2 is a supported archive store with governance-grade retention.
 
 ## Parked
 
-A Cloudflare Cron Worker as the notary over R2, and Cloudflare Queues as an
-ingest transport and the change feed for observe, are parked: R2's locks are
-governance-grade only, and the target is S3 Object Lock in compliance mode
-with Lambda and Kubernetes as the platforms
-([0058](../../decisions/0058-three-parts-installed-independently.md),
-[0065](../../decisions/0065-archive-retention-and-lifecycle.md)). Cloudflare stays a
-proxy and DNS in front of an installation. Both would depend on the
-[bucket contract](../../reference/audit/bucket-contract.md), which is a target a store
-other than S3 would have to meet.
+Three Cloudflare items are parked:
+
+| item | state |
+|---|---|
+| Cron Worker as the notary over R2 | parked |
+| Cloudflare Queues as an ingest transport | parked |
+| Cloudflare Queues as the observe change feed | parked |
+
+R2's locks are governance-grade only. The target is S3 Object Lock in compliance mode on Lambda and Kubernetes. Cloudflare stays a proxy and DNS in front of an installation.
+
+A store other than S3 would have to meet the [bucket contract](../../reference/audit/bucket-contract.md).
+
+## Decided in
+
+- [0058 Three parts installed independently](../../decisions/0058-three-parts-installed-independently.md)
+- [0065 Archive retention and lifecycle](../../decisions/0065-archive-retention-and-lifecycle.md)

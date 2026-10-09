@@ -1,6 +1,6 @@
 # GitHub roster reference
 
-The objects the GitHub controller and the console keep, and what the policy render refuses. The reasoning is in [How a GitHub pass decides](../../concepts/sluis/github-pass.md); to connect an organisation see [Connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md).
+The objects the GitHub controller and the console keep, and what the policy render refuses. The reasoning is in [How a GitHub pass decides](../../concepts/sluis/github-controller.md); to connect an organisation see [Connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md).
 
 ## What connecting leaves behind
 

@@ -19,7 +19,7 @@ The domain scope is what makes domain discovery possible at all: which
 addresses this service answers for is decided by reading a tenant's own
 domain list, not by configuration. The domains a directory serves are also how
 the Slack controller finds a person in the workspaces the directory owns
-([where they come from](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)).
+([where they come from](../../../concepts/sluis/slack-reconciler.md#where-a-workspaces-team-owner-and-domains-come-from)).
 
 **Admin consent, through the console.** The installation registers one
 OAuth client, the way a SaaS vendor would, and every company connects by
@@ -95,5 +95,5 @@ put them back and the next start rebuilds the records. The chart renders a
 recovery copy for this one with `directory.push`. A directory that is the owner
 of GitHub organisations or Slack workspaces also owns their access: see
 [GitHub](github-organisation.md) and
-[Slack](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from).
+[Slack](../../../concepts/sluis/slack-reconciler.md#where-a-workspaces-team-owner-and-domains-come-from).
 Connecting and disconnecting are recorded in the audit trail.

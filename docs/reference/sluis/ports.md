@@ -165,7 +165,7 @@ credential from anywhere else.
 Records the service's own actions in an audit installation. Transports: `connect`
 (the audit installation's receiver) and `sqs` (a queue its writer Lambda consumes). A record that cannot be written durably
 refuses the action it describes where the action is a sign-in, as today
-([design](../../concepts/sluis/design.md#audit)).
+([audit](../../concepts/sluis/audit.md)).
 
 The `sqs` adapter's settings, IAM and durability are in [adapter details](port-adapters.md#the-sqs-adapter). The sink is chosen by the `audit` concern of the resolved table: `connect` (the
 `audit.writer` of a service document), `log` (the log line only) or `sqs`.

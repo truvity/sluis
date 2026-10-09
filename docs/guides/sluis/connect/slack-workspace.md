@@ -10,7 +10,7 @@ audit actions are in [Slack reference](../../../reference/sluis/slack.md). How a
 There are three kinds of channel: a **policy channel** bound in git to internal groups, a **console channel**
 ([manage them](slack-console-channels.md)) and a **Slack Connect channel** ([connect them](slack-connect-channels.md)).
 A workspace's team, owner and domains are not in the policy; see
-[where they come from](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from).
+[where they come from](../../../concepts/sluis/slack-reconciler.md#where-a-workspaces-team-owner-and-domains-come-from).
 
 The operator procedure to switch the controller from dry run to acting (reading the report, adding the key to
 `enabledWorkspaces`, rolling out) is [Enable a Slack workspace](../enable-slack-workspace.md).

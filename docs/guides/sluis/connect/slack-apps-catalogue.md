@@ -49,7 +49,7 @@ is not a scope name, a name or description Slack would refuse, or an entry
 whose `workspace` the policy's `slack.workspaces` does not name. Add the
 workspace's key to the policy first, then connect it on the console's Slack
 area: the policy never carries its team, owner or domains (see
-[where they come from](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)).
+[where they come from](../../../concepts/sluis/slack-reconciler.md#where-a-workspaces-team-owner-and-domains-come-from)).
 Until the workspace is connected, and has recorded its team at its first
 install, Create and Install are refused with *connect the workspace first*.
 

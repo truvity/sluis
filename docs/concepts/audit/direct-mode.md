@@ -1,24 +1,19 @@
-# Direct mode
+# What is direct mode?
 
-The receiver is the writer. A record arrives over Connect, is validated,
-split per profile, rolled into an object and put into the bucket, and only
-then acknowledged. There is no stream and nothing to consume.
+The receiver is the writer. A record arrives over Connect, is validated, split per profile, rolled into an object and put into the bucket. The receiver acknowledges only then. There is no stream and nothing to consume.
 
-This is the shape for an internal service — an identity service, an
-operations console, anything whose record rate is tens or hundreds a minute
-rather than thousands a second — and for any cluster that has no message
-stream to use.
+Use it for an internal service with tens or hundreds of records a minute, or for a cluster without a message stream.
 
-## What it looks like
+## Write path
 
-**Write path.** Every workload of the application emits to the same writer, which puts the object in the bucket and marks the id in the database.
+Every workload of the application emits to the same writer. The writer puts the object in the bucket and marks the id in the database.
 
 ```mermaid
 flowchart TB
   E["application pods<br/>emit"]
-  E2["a second workload<br/>emit"]
+  E2["second workload<br/>emit"]
   RW["audit-writer ×2<br/>receiver = writer"]
-  S3[("the environment's bucket<br/>audit/app/")]
+  S3[("environment bucket<br/>audit/app/")]
   PG[("database")]
   E --> RW
   E2 --> RW
@@ -26,16 +21,20 @@ flowchart TB
   RW -- "dedupe, registry" --> PG
 ```
 
-**Read path and jobs.** The indexer fills the index; the query service answers the console's Audit page; the CronJobs verify and purge the bucket.
+Two receiver replicas are safe. The deduplication table is in Postgres, so two pods cannot write one record twice. The application's client follows the Service to whichever pod is ready.
+
+## Read path and jobs
+
+The indexer fills the index. The query service answers the console's Audit page. The CronJobs verify and purge the bucket.
 
 ```mermaid
 flowchart TB
-  CON["the console's<br/>Audit page"]
+  CON["console<br/>Audit page"]
   Q["audit-query ×1"]
-  OB["audit-observe ×1<br/>the indexer"]
+  OB["audit-observe ×1<br/>indexer"]
   CJ["CronJobs<br/>verify, purge, clock-sync"]
   PG[("database")]
-  S3[("the environment's bucket")]
+  S3[("environment bucket")]
   CON --> Q
   Q -- "reads" --> PG
   Q --> S3
@@ -44,13 +43,9 @@ flowchart TB
   CJ --> S3
 ```
 
-Two receiver replicas are safe: the deduplication table is in Postgres, so
-two pods cannot write the same record twice, and the application's client
-follows the Service to whichever is ready.
-
 ## One record
 
-A privileged sign-in, declared `block` in the catalogue:
+A privileged sign-in is declared `block` in the catalogue.
 
 ```mermaid
 sequenceDiagram
@@ -71,20 +66,17 @@ sequenceDiagram
   Note over A,S3: the bucket refuses, so the sign-in is refused
 ```
 
-An `async` record takes the same path, except that the application does not
-wait: it is queued, batched with whatever else is queued, and the batch is put
-and acknowledged as one. The application's queue holds a record from the
-moment it is recorded until that acknowledgement — one flush interval plus a
-round trip, and that is the loss window if the pod dies. The emitter's `Flush`
-and `Batch` are the knobs.
+An `async` record takes the same path without the wait. The application queues it, batches it with the queued records, then puts and acknowledges the batch as one.
+
+The record stays queued from `Record` until that acknowledgement. One flush interval plus a round trip is the loss window if the pod dies. The emitter's `Flush` and `Batch` tune it.
 
 ## Running it
 
-The values, the index's database and the checks are in the
-[Kubernetes tutorial](../../get-started/audit/kubernetes.md) (the whole of
-[`charts/audit/examples/direct.yaml`](../../../charts/audit/examples/direct.yaml) is rendered by the
-chart's own tests) and [prepare the database](../../guides/audit/operate/prepare-the-database.md). The index
-is behind the archive by the indexer's settle window (two minutes by default,
-[0062](../../decisions/0062-observe-follows-the-bucket.md)); anything that must see a record
-sooner reads the sink's acknowledgement, not the index. What to do when something fails is
-in [recover from an outage](../../guides/audit/operate/recover-from-an-outage.md).
+The index lags the archive by the indexer's settle window, two minutes by default. Anything that must see a record sooner reads the sink's acknowledgement, not the index.
+
+The values and checks are in the [Kubernetes tutorial](../../get-started/audit/kubernetes.md) and [prepare the database](../../guides/audit/operate/prepare-the-database.md). The chart's tests render all of [`charts/audit/examples/direct.yaml`](../../../charts/audit/examples/direct.yaml). For failures, see [recover from an outage](../../guides/audit/operate/recover-from-an-outage.md).
+
+## Decided in
+
+- [0053 One installation per service or product](../../decisions/0053-one-installation-per-service-or-product.md)
+- [0062 Observe follows the bucket](../../decisions/0062-observe-follows-the-bucket.md)

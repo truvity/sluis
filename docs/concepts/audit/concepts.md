@@ -2,44 +2,25 @@
 
 ## Record
 
-One thing that happened, as seen by one source. Described in
-[record.proto](../../../audit/proto/audit/v1/record.proto). The spine is: `id`,
-`occurred_at`, `recorded_at`, `source`, `action`, `operation`, `outcome`,
-`tenant_id`, `actor`, `targets`, `context`. Around the spine: `subject`,
-`capture`, `previous_attributes`, `data`, `meter`, `attributes`, `unmapped`.
+A record is one thing that happened, as seen by one source. It is defined in [record.proto](../../../audit/proto/audit/v1/record.proto). The spine is `id`, `occurred_at`, `recorded_at`, `source`, `action`, `operation`, `outcome`, `tenant_id`, `actor`, `targets` and `context`. Around it sit `subject`, `capture`, `previous_attributes`, `data`, `meter`, `attributes` and `unmapped`.
 
-Which fields a copy carries is decided by the profile it is written under.
-For **core fields**, framework profiles name what must, may and may never be kept, and a
-field no framework profile names is dropped. For **extension properties**, the schema
-annotates each with a **class** (shared, audit, metering, history or
-evidence) and a PII level, and a profile keeps the classes its framework profiles keep.
-The record itself does not say which copies carry a core field;
-`audit profile explain <name>` prints what a profile keeps.
+A profile decides which fields a copy carries. Framework profiles name what a core field must, may and may never keep. A field no framework profile names is dropped. Each extension property carries a class (shared, audit, metering, history or evidence) and a PII level, and a profile keeps the classes its framework profiles keep. `audit profile explain <name>` prints what a profile keeps.
 
-The record carries **identifiers, never identity attributes**. Names and
-e-mail addresses are resolved at read time by whoever may see them.
+The record carries identifiers, never identity attributes. Whoever may see names and e-mail addresses resolves them at read time.
 
 ## Action and operation
 
-`action` is fine-grained and namespaced by source: `wallet.credential.issued`,
-`roster.session.revoked` (`roster` is the source name sluis keeps). `operation` is one of seven coarse values:
-create, access, modify, remove, authentication, transfer, restore. Both
-appear on every record so a reader can filter broadly or precisely.
+`action` is fine-grained and namespaced by source, for example `wallet.credential.issued`. `operation` is one of seven values: create, access, modify, remove, authentication, transfer, restore. Both appear on every record.
 
 ## Catalogue
 
-Per source, the list of its actions and what each carries: operation,
-framework categories, profiles, capture level, delivery mode, target types,
-the schema of its `data`, a sentence template per locale, and an optional
-meter. Also the source's actor kinds, target types, context areas and
-meters. Authored next to the emitting code, validated in that code's CI,
-registered at deploy, copied into the archive on first use. Format:
-[catalogue.schema.json](../../../audit/sdk/schemas/catalogue.schema.json).
+A catalogue lists a source's actions and what each carries: operation, framework categories, profiles, capture level, delivery mode, target types, the schema of `data`, a sentence template per locale and an optional meter. It also lists the source's actor kinds, target types, context areas and meters.
+
+You author it next to the emitting code and validate it in that code's CI. It is registered at deploy and copied into the archive on first use. The format is [catalogue.schema.json](../../../audit/sdk/schemas/catalogue.schema.json).
 
 ## Extension slots
 
-Fixed places in the record where a source attaches its own data, each keyed
-by a discriminator that selects a registered JSON Schema:
+A slot is a fixed place where a source attaches its own data. A discriminator selects a registered JSON Schema.
 
 | slot | keyed by |
 |---|---|
@@ -49,62 +30,38 @@ by a discriminator that selects a registered JSON Schema:
 | `context.areas.<area>` | area |
 | `meter.dimensions` | meter |
 
-Extension schemas are closed objects with every property annotated with its
-class and PII level. See [extension points](../../reference/audit/extension-points.md).
+Extension schemas are closed objects. Every property carries its class and PII level. See [extension points](../../reference/audit/extension-points.md).
 
 ## Actor kinds and identity tiers
 
-An actor kind is registered with a **category**: internal (staff),
-external (end users, customers' people), machine (services, API keys, the
-system). Framework profiles decide the identity treatment per category: clear,
-pseudonym, scoped or omit. Tenant identifiers are legal entities and stay
-in clear everywhere. Internal actors stay in clear for the security
-retention because accountability is a legal obligation.
+An actor kind has a category: internal (staff), external (end users and customers' people) or machine (services, API keys, the system). Framework profiles set the identity treatment per category: clear, pseudonym, scoped or omit.
 
-What a framework profile asks for is not always what a copy gets. A deployment that
-runs no key provider — the default since
-[0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md) — declares
-that the identifiers it receives for external people are already opaque,
-and a framework profile's `pseudonym` is then treated as `clear`: the identifier
-written is the one the application minted, which identifies nobody without
-the application's own database. A deployment that must be able to
-crypto-shred chooses a key provider instead, and then external actors and
-subjects become a keyed pseudonym per tenant and purpose, so copies cannot
-be joined on a person and erasure is key destruction.
-`audit profile explain <name>` prints the effective treatment either way.
+Tenant identifiers stay in clear everywhere. Internal actors stay in clear for the security retention.
+
+With no key provider, the default, you declare that external identifiers are already opaque. A framework profile's `pseudonym` then behaves as `clear`. With a key provider, external actors and subjects become a keyed pseudonym per tenant and purpose, and erasure is key destruction. See [key custody](key-custody.md).
 
 ## Profiles and framework profiles
 
-A **framework profile** is what one framework requires: fields, categories, identity
-treatment, retention, integrity, review, with citations. A **profile** is a
-deployment's composition of framework profiles plus a destination. The split writer
-produces one copy per profile. See [framework profiles](../../../audit/profiles/README.md).
+A framework profile is what one framework requires: fields, categories, identity treatment, retention, integrity and review, with citations. A profile is a deployment's composition of framework profiles plus a destination. The writer produces one copy per profile. See [framework profiles](../../../audit/profiles/README.md).
 
 ## Prefixes
 
-Each profile copy lands under `records/<profile>/<tenant>/` and then the
-**hour of ingest**, one object per ingest batch, with Object Lock retention set
-per object. A record's own date does not decide where it lives; a reader finds
-it by the hour it was ingested. The profile comes first because a lifecycle rule
-filters by literal prefix and takes no wildcards, so a rule per profile is only
-expressible that way; a role scoped to one customer still works, because the
-tenant is the next component and a policy's resource may carry a wildcard. The
-layout is specified in the [bucket contract](../../reference/audit/bucket-contract.md).
+Each copy lands under `records/<profile>/<tenant>/` and then the hour of ingest, one object per ingest batch, with Object Lock retention set per object. A reader finds a record by the hour it was ingested, not the date it occurred. The [bucket contract](../../reference/audit/bucket-contract.md) specifies the layout.
 
-What describes the records is copied on first use: the catalogue as registered
-under `catalogue/<app>/<version>`, written once, and its extension schemas, the
-record's own schema and its proto under a schema prefix. A locked object
-outlives this repository, and a record whose schema has been deleted is a record
-nobody can read.
+The writer copies the descriptions on first use. The catalogue lands at `catalogue/<app>/<version>`, written once. The extension schemas, the record's schema and its proto land under a schema prefix.
 
 ## Projections
 
-Everything that is not a prefix copy: the facet index and counts table, the
-metering rollups and statements, SIEM exports, analytics tables. All
-idempotent, all rebuildable from the prefixes.
+A projection is anything that is not a prefix copy: the facet index and counts, metering rollups and statements, SIEM exports and analytics tables. Each is idempotent and rebuildable from the prefixes.
 
 ## Meta-events
 
-Reads and exports of the trail, catalogue and profile changes, key
-destruction, legal holds, verifications, writer lifecycle and the daily clock
-check are records too, in the [common catalogue](../../../audit/sdk/catalogue/common.yaml).
+These are records too, in the [common catalogue](../../../audit/sdk/catalogue/common.yaml): reads and exports of the trail, catalogue and profile changes, key destruction, legal holds, verifications, writer lifecycle and the daily clock check.
+
+## Decided in
+
+- [0043 Record schema](../../decisions/0043-record-schema-proto-with-json-schema-slots.md).
+- [0044 Profiles composed from framework profiles](../../decisions/0044-profiles-composed-from-framework-profiles.md).
+- [0047 Identity tiers and pseudonymisation](../../decisions/0047-identity-tiers-and-pseudonymisation.md).
+- [0055 No pseudonymisation keys by default](../../decisions/0055-no-pseudonymisation-keys-by-default.md).
+- [0060 v1 bucket layout](../../decisions/0060-v1-bucket-layout.md).

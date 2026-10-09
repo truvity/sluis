@@ -1,28 +1,10 @@
-# Architecture
+# How is audit built?
 
-One installation belongs to one application. This page says what the parts
-are, what each holds and must never hold, how the application's catalogue
-binds them together, what an acknowledgement means, and what can be lost.
+One installation belongs to one application. [Concepts](concepts.md) defines the vocabulary. [Direct mode](direct-mode.md) and [stream mode](stream-mode.md) show each shape as run.
 
-[Concepts](concepts.md) defines the vocabulary. The
-[deployment pages](direct-mode.md) show each shape as it is actually
-run. The [decisions](../../decisions/README.md) say why, starting with
-[0053](../../decisions/0053-one-installation-per-service-or-product.md).
-
-This page describes what is built. The target architecture — three parts
-installed independently over a versioned bucket contract, a sink
-acknowledgement that says how durable it is, and signed seals — is in the
-decisions from
-[0058](../../decisions/0058-three-parts-installed-independently.md) to
-[0065](../../decisions/0065-archive-retention-and-lifecycle.md), the
-[bucket contract](../../reference/audit/bucket-contract.md) and the
-[capabilities](../../reference/audit/capabilities.md) matrix, which says what exists on each
-platform. Where they differ from this page, this page is the present and
-they are the direction.
+The [bucket contract](../../reference/audit/bucket-contract.md) and the [capabilities](../../reference/audit/capabilities.md) matrix state what exists per platform.
 
 ## The parts
-
-**Write path.** The emit library hands a validated record to the receiver, which puts it straight to the writer (direct mode) or publishes it to JetStream first (stream mode); the writer locks objects in the bucket, which is the record.
 
 ```mermaid
 flowchart TB
@@ -31,217 +13,106 @@ flowchart TB
   NATS[("JetStream<br/>stream mode only")]
   W["writer<br/>audit-writer"]
   S3[("the environment's bucket<br/>THE RECORD")]
-  PG[("database<br/>dedupe, registry")]
+  PG[("database<br/>dedupe, registry, index")]
+  O["indexer<br/>audit-observe"]
+  Q["query service<br/>audit-query"]
+  UI["Audit page"]
   E -- "Connect,<br/>ack = durable" --> R
-  R -- "direct mode:<br/>put, then ack" --> W
-  R -- "stream mode:<br/>publish" --> NATS
+  R -- "direct: put, then ack" --> W
+  R -- "stream: publish" --> NATS
   NATS --> W
   W -- "locked objects" --> S3
   W --> PG
-```
-
-**Read path.** The indexer fills the index from the bucket, the nightly job verifies it, and the query service answers the Audit page from the index and the bucket.
-
-```mermaid
-flowchart TB
-  UI["Audit page<br/>in the application's console"]
-  Q["query service<br/>audit-query"]
-  O["indexer<br/>audit-observe"]
-  V["verify CronJob<br/>nightly"]
-  S3[("the environment's bucket")]
-  PG[("database<br/>the index")]
-  UI -- "the console's<br/>own token" --> Q
-  Q -- "reads the index" --> PG
+  O -- "lists from a cursor" --> S3
+  O -- "index rows, cursors" --> PG
+  UI -- "console's own token" --> Q
+  Q --> PG
   Q --> S3
-  O -- "lists from a cursor,<br/>reads" --> S3
-  O -- "index rows,<br/>cursors" --> PG
-  V --> S3
 ```
 
 | part | runs as | holds | never holds |
 |---|---|---|---|
-| **emit** | a library in the application (`emit`) | the compiled-in catalogue, a bounded in-memory queue | credentials for the bucket, the index or the stream |
-| **receiver** | `audit-writer`, one or two pods, the application's front door over Connect | the stream's credentials in stream mode, and it serves `RegisterCatalogue` | — |
-| **writer** | the same image in consumer mode, N pods (stream mode); the receiver itself (direct mode) | write rights on its prefix, a database role for the dedupe table and the registry | the index, and any way to hand a record back to a caller |
-| **stream** | one JetStream stream on the application's own account (stream mode only) | records not yet archived, replicated | — |
-| **bucket** | one per environment, Object Lock in compliance mode where a profile demands it | every record, one copy per profile, locked where the profile demands it | — |
-| **indexer** | `audit-observe`, one pod ([0062](../../decisions/0062-observe-follows-the-bucket.md), [0066](../../decisions/0066-indexer-and-query-are-separate-processes.md)) | read on the archive, its own database role: the index and its cursors | write on the archive, the dedupe table |
-| **index** | one database in the application's existing Postgres | rows, facet counts, cursors, rollups, and the writer's dedupe table and registry beside them under another role | anything that is not rebuildable |
-| **notary** | `audit-notary`, an hourly CronJob | read on the prefix, put under `seals/`, the seal key | write on `records/`; the writer's identity |
-| **verify** | a CronJob | read on the prefix, and nothing else | write rights on the archive |
-| **query service** | `audit-query`, one or two pods | a read-only index role, read on the prefix, the application's grants | write on the archive or the index |
-| **Audit page** | a React component in the application's console | nothing — it calls the query service with the console's own token | credentials of its own |
-| **usage consumer** | a small Deployment, [quotas](../../guides/audit/operate/enable-usage-quotas.md) only | the counter cache | — |
+| emit | library in the application | compiled-in catalogue, bounded in-memory queue | bucket, index or stream credentials |
+| receiver | `audit-writer`, one or two pods | stream credentials in stream mode | none |
+| writer | consumer mode, N pods; the receiver in direct mode | write on its prefix, a dedupe and registry role | the index, any way to hand a record back |
+| indexer | `audit-observe`, one pod | read on the archive, the index role | write on the archive, the dedupe table |
+| notary | `audit-notary`, hourly CronJob | read on the prefix, put under `seals/`, the seal key | write on `records/` |
+| verify | nightly CronJob | read on the prefix | write on the archive |
+| query service | `audit-query`, one or two pods | read-only index role, read on the prefix | write on the archive or index |
+| Audit page | React component in the console | nothing | credentials |
+| usage consumer | small Deployment, [quotas](../../guides/audit/operate/enable-usage-quotas.md) only | the counter cache | none |
 
-Two things follow from the table. The application holds no credentials for
-anything the trail is kept in, so a compromised application pod cannot reach
-the archive except by emitting records. And nothing in the write path can
-read a record back out: the query service is the only way in, and it records
-every read.
+The application holds no credentials for the trail. A compromised application pod can reach the archive only by emitting records. Nothing in the write path can read a record back. The query service is the only way in, and it records every read.
 
-## The catalogue is the contract
+The bucket is one per environment, Object Lock in compliance mode where a profile demands it. The index is one database in the application's Postgres: rows, facet counts, cursors, rollups, and the writer's dedupe table under another role. Nothing in it is unrebuildable.
 
-One YAML file lives next to the application's code, with a JSON Schema for
-each action that carries data. It names every action the application
-records and, for each, what kind of operation it is, what frameworks call
-it, which profiles keep a copy (and therefore for how long), what it is
-about, who may act, the schema of its data, its delivery, and how it reads
-as a sentence.
+## The catalogue
 
-```mermaid
-flowchart LR
-  CAT["catalogue<br/>one YAML plus data schemas<br/>in the application's repository"]
-  CAT --> CI["CI: audit validate, check-emitters<br/>the code emits exactly what is declared"]
-  CAT --> EM["emit library<br/>refuses a record that does not match,<br/>before it leaves the application"]
-  CAT --> RW["receiver and writer<br/>validate again, decide delivery,<br/>profile copies, retention"]
-  CAT --> Q["query service and Audit page<br/>render each record as its sentence,<br/>know the facets"]
-  CAT --> S3[("archive: schema/…<br/>a copy of every version ever used")]
-```
+One YAML file lives with the application code, with a JSON Schema per action that carries data. It names each action's operation, framework categories, profile copies, subject, actors, data schema, delivery and sentence template.
 
-- **One per application, not shared.** What is shared, and shipped here, is
-  the format and the [framework profiles](../../../audit/profiles/README.md) that profiles are
-  composed from. A catalogue names profiles; it never defines them.
-- **Versioned with the code.** Every record names the catalogue version it
-  was written under, and the archive keeps a copy of every version, so a
-  record written last year still reads correctly after the catalogue
-  changed.
-- **It reaches the receiver at start-up**, over `RegisterCatalogue`. A
-  malformed catalogue is refused and the application does not start; a
-  receiver that is merely unreachable is retried. There is no registry
-  service: the receiver serves that call, because an installation has one
-  application to hear it from
-  ([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
-- **One constructor per action in the application's code**, so the name is
-  spelled once and `check-emitters` can hold the code to the file.
+- A catalogue is one per application. It names [framework profiles](../../../audit/profiles/README.md) and never defines them.
+- Every record names its catalogue version. The archive keeps every version.
+- The catalogue reaches the receiver at start-up over `RegisterCatalogue`. A malformed catalogue is refused and the application does not start. An unreachable receiver is retried.
+- Use one constructor per action, so `check-emitters` can hold the code to the file.
 
-[The catalogue reference](../../reference/audit/catalogue.md) is the full format.
+CI runs `audit validate` and `check-emitters`. The emit library refuses a mismatching record. The receiver and writer validate again. The query service renders sentences from it. See [the catalogue reference](../../reference/audit/catalogue.md).
 
 ## What an acknowledgement means
 
-Delivery is chosen per action in the catalogue, not per installation.
+Delivery is set per action in the catalogue.
 
-| delivery | the application's call returns | if the receiver is down | for |
+| delivery | the call returns | receiver down | for |
 |---|---|---|---|
-| `block` | when the receiver has acknowledged durability | the action **fails** | a privileged sign-in, a key destruction, a billable operation |
-| `async` (default) | at once | the record waits in a bounded queue and is retried with backoff | everything else |
+| `block` | when the receiver acknowledges durability | the action fails | privileged sign-in, key destruction, billable operations |
+| `async` (default) | at once | the record waits in a bounded queue and retries with backoff | everything else |
 
-**The acknowledgement says how durable the batch is.** `Archived` is the
-object in the bucket: the receiver puts every batch it takes before answering,
-in direct mode. `Queued` is a replicated queue's acknowledgement, from a
-stream or an SQS queue. `Logged` is a line in the process's log. The
-difference between the deliveries is only who waits — the application under
-`block`, its own queue under `async`. A chain's start-up guard,
-`sink.Require`, refuses one that can never give what the deployment needs.
-[0059](../../decisions/0059-sink-durability-and-transports.md) has the reasoning;
-it supersedes [0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md).
+The acknowledgement states durability. `Archived` is the object in the bucket, which the receiver puts before answering in direct mode. `Queued` is a replicated queue's acknowledgement. `Logged` is a log line. The start-up guard `sink.Require` refuses a chain that can never give what the deployment needs.
 
 ## What each mode can lose
 
-A `block` record is never lost in either mode: the application had no
-acknowledgement to act on. For `async`:
+A `block` record is never lost. For `async`:
 
-| what happens | direct mode | stream mode |
+| event | direct mode | stream mode |
 |---|---|---|
-| the application's pod dies with records still queued | whatever has not been acknowledged: one flush interval of records (default one second) plus the batch in flight | the same, and shorter, because a publish is quicker than a put |
-| the writer dies with records gathered from the stream | not applicable | nothing: they were never acknowledged to the stream, which redelivers them |
-| the receiver or writer crashes | nothing — it acknowledged nothing it had not stored | nothing |
-| a long receiver outage overflows the queue | the oldest are dropped and counted | the same, but a replicated stream makes the outage a rollout's seconds |
-| the application's container restarts, pod intact | the queue is gone, as in the first row | the same |
+| application pod dies with records queued | unacknowledged records: one flush interval (default one second) plus the batch in flight | the same, shorter |
+| writer dies holding stream records | not applicable | nothing, because the stream redelivers |
+| receiver or writer crashes | nothing | nothing |
+| long receiver outage overflows the queue | oldest dropped and counted | the same |
+| container restarts, pod intact | the queue is gone, as in row one | the same |
 
-Every record the queue gives up is written to the application's log by the
-emitter, with its identifier and the reason. A record lost with a dying pod
-cannot be, and what remains of it is whatever the application logged about
-the action. Watch `audit.emit.queue.pending`, which tells you a queue is
-filling, and alert on `audit.emit.records.dropped`, which tells you one
-overflowed.
-
-Graceful shutdown of a receiver or writer is readiness off, flush the roll,
-exit. Two direct-mode replicas are safe because the dedupe table is in
-Postgres, not in a pod.
-
-## Batching, not aggregation
-
-Neither the receiver nor the writer ever combines two records into one.
-Every record is stored as it was emitted. What they do is **batch** — many
-records become one object per profile, tenant and day per batch taken. In
-stream mode the writer gathers across fetches first — up to a size, a count or
-a window of no more than half a minute — so that a trickle of records does not
-become a trickle of objects
-— and keep **projections beside the records**: index rows, facet counts,
-rollups, usage counters. Every projection can be recomputed from the archive
-with `audit reindex`, which is why none of them is backed up and none of
-them is the record.
+The emitter logs each record the queue gives up, with its identifier and reason. Alert on `audit.emit.records.dropped`. Watch `audit.emit.queue.pending`.
 
 ## The life of one record
 
-1. **The application records an action.** The emitter fills what it knows (id,
-   time, source, sequence, the request's client address and ids), validates the
-   record against the catalogue — the action exists, the data matches its
-   schema, nothing on the negative list is present — and delivers it as the
-   catalogue declares.
-2. **The receiver stamps what it verified itself**: `recorded_at`, the observer
-   taken from the caller's verified token, and the `origin_hash` over the
-   canonical form. A caller never says who it is. In stream mode the stamping
-   has to happen here, because the writers on the other side read messages and
-   have no caller to verify; they keep a stamp whose hash still describes its
-   record, and stamp afresh one that does not.
-3. **The writer splits the record** into one copy per profile the action names.
-   Each copy keeps only the fields that profile's framework profiles allow (default-deny),
-   and each identity is treated by its category: kept in clear, replaced by a
-   keyed pseudonym, or dropped. With `keys.provider: none` — the default — there
-   are no pseudonyms, and
-   [0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md) says what the
-   deployment must declare instead.
-4. **It rolls copies into objects** — one per ingest batch, profile and tenant,
-   keyed by the hour of ingest — and puts each under an Object Lock retention
-   computed from the profile: a fixed number of days, or years after the thing
-   the record is about expires. Nothing is acknowledged before the object is in
-   the bucket. A record the writer cannot take goes to the dead-letter prefix,
-   never nowhere.
-5. **It marks** the record's id as written, so that a redelivery is absorbed
-   exactly once. The writer does not index: the indexer finds the object by
-   listing the bucket from its cursor once it is older than the settle window,
-   and writes each copy's row and facet counts a couple of minutes later
-   ([0062](../../decisions/0062-observe-follows-the-bucket.md)).
-6. **Every night the verify job** checks the previous day's objects against the
-   [bucket contract](../../reference/audit/bucket-contract.md) — each object's key, metadata
-   and bytes, and the hash of every record — and records what it checked. Seals
-   ([0061](../../decisions/0061-seals.md)), which say that nothing was removed or
-   added, are made hourly by the notary and checked with `--root`.
-7. **A reader asks** through the query service. Their token names them; the
-   grants say which profiles, tenants, operations and period they may read, and
-   the grant becomes one more term of the query, so there is no path to a row
-   outside it. The read is itself recorded.
+1. The emitter fills id, time, source, sequence, client address and ids. It validates against the catalogue and delivers as declared.
+2. The receiver stamps `recorded_at`, the observer from the caller's verified token, and `origin_hash`. In stream mode it stamps here, because writers have no caller to verify. They keep a stamp whose hash matches and stamp afresh otherwise.
+3. The writer splits the record into one copy per profile, keeps only the allowed fields, and treats each identity by category. See [the writer](split-writer.md).
+4. The writer rolls copies into objects per ingest batch, profile and tenant, keyed by the hour of ingest. It puts each under an Object Lock retention computed from the profile. A record it cannot take goes to the dead-letter prefix.
+5. The writer marks the id as written. The indexer lists the bucket once an object passes the settle window and writes the rows and facet counts a couple of minutes later.
+6. The verify job checks the previous day's objects nightly. The notary makes [seals](integrity.md) hourly, checked with `--root`.
+7. A reader asks the query service. Their grant becomes one term of the query, and the read is recorded.
 
-The installation keeps its own account of itself in the archive it writes,
-and every job records what it did, so the trail says when it was and was not
-being kept.
+The writer and every job record their own activity in the archive.
 
 ## The two shapes
 
 | | [direct](direct-mode.md) | [stream](stream-mode.md) |
 |---|---|---|
-| for | an internal service, low volume, or a cluster with no stream | a product: many pods, metering, quotas |
-| the receiver | is the writer: it puts to the bucket | publishes to JetStream |
-| writers | the receiver's own pods | N consumers, scaled apart |
-| `async` loss window | one flush interval, plus the batch in flight | the same, and shorter |
-| needs | a bucket, a database | a bucket, a database, a NATS account |
+| for | internal service, low volume, no stream | product with many pods, metering, quotas |
+| receiver | is the writer and puts to the bucket | publishes to JetStream |
+| writers | the receiver's pods | N consumers, scaled apart |
+| needs | bucket, database | bucket, database, NATS account |
 
-Switching an installation from direct to stream is a change to the
-receiver's configuration. It does not change a single record, because the
-archive's layout is the same either way — which is also why two
-installations on different versions can share one bucket.
+Switching from direct to stream changes only the receiver's configuration. The archive layout is the same, so installations on different versions can share a bucket.
 
 ## Extensions
 
-Both are projections of the same records, switched on per installation, and
-neither puts anything new in the request path.
+Both are projections switched on per installation and add nothing to the request path.
 
-- [Billing](../../guides/audit/operate/enable-billing.md): rollups at index time and an
-  immutable monthly statement.
-- [Usage quotas](../../guides/audit/operate/enable-usage-quotas.md): a second stream consumer
-  counting into a cache, a decision point in front of the application, and
-  an hourly reconciler that corrects the cache from the index.
+- [Billing](../../guides/audit/operate/enable-billing.md): rollups at index time and an immutable monthly statement.
+- [Usage quotas](../../guides/audit/operate/enable-usage-quotas.md): a second stream consumer counting into a cache, a decision point, and an hourly reconciler.
+
+Receiver and writer never combine records. They batch many records into one object per profile, tenant and day per batch. Projections (index rows, facet counts, rollups, usage counters) rebuild from the archive with `audit reindex`, so none is backed up.
 
 ## What is built
 
@@ -250,10 +121,20 @@ neither puts anything new in the request path.
 | record, catalogue, framework profiles, emitter, writer, query service, v1 bucket layout, verify, legal holds, retention addenda | built |
 | searchers: Postgres, archive scan, memory | built |
 | signers: key file, AWS KMS, OpenBAO transit | built |
-| key providers `local` and OpenBAO `transit`; AWS KMS envelope designed | built, and off by default |
-| one configuration file per binary, validated against a schema ([0063](../../decisions/0063-one-validated-configuration-file.md)) | built; the chart passes it through |
-| the chart, instantiated per application: `mode`, receiver, writer, query service, the four jobs, the extension toggles | built; a golden per shape, and every documented example rendered |
-| `@truvity/audit`: query client, sentences; `@truvity/audit-react`: React hooks and view | built; published to GitHub Packages at each release tag |
+| key providers `local`, OpenBAO `transit` and AWS KMS | built, off by default |
+| one validated configuration file per binary | built |
+| chart per application, golden per shape | built |
+| `@truvity/audit`, `@truvity/audit-react` | built; published to GitHub Packages at each release tag |
 | TypeScript emitter | designed, not built |
 | billing statement, usage consumer, reconciler | designed, not built |
 | exporters (OCSF, ECS, Parquet), adapters | designed, not built |
+
+## Decided in
+
+- [0053 One installation per service or product](../../decisions/0053-one-installation-per-service-or-product.md).
+- [0058 Three parts installed independently](../../decisions/0058-three-parts-installed-independently.md).
+- [0059 Sink durability and transports](../../decisions/0059-sink-durability-and-transports.md).
+- [0061 Seals](../../decisions/0061-seals.md).
+- [0062 Observe follows the bucket](../../decisions/0062-observe-follows-the-bucket.md).
+- [0065 Archive retention and lifecycle](../../decisions/0065-archive-retention-and-lifecycle.md).
+- [0066 Indexer and query are separate processes](../../decisions/0066-indexer-and-query-are-separate-processes.md).

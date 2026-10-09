@@ -1,4 +1,6 @@
-# Failure semantics
+# What happens when something fails?
+
+Each row names a failure and what consumers and operators see.
 
 | Situation | What consumers and operators see |
 |---|---|
@@ -21,8 +23,13 @@
 | The audit installation cannot be reached | records queue in the process; sign-ins are not refused, except a recovery sign-in, which fails closed |
 | The whole installation is down | no new sign-ins; existing sessions and tokens live to expiry; [recovery](recovery.md) is by cluster proof |
 
-The rule under all of them: **access is removed only on an authoritative answer.** Everything that can go wrong
-degrades to *provisional*, never to "gone".
+## Access is removed only on an authoritative answer
 
-What operators do about each of these is in [day two](../../guides/sluis/operate/day-two.md); the controllers' refusals are collected
-in [safety](safety.md).
+Every failure degrades to *provisional*, never to "gone".
+
+To act on a failure, see [day two](../../guides/sluis/operate/day-two.md). [Safety](safety.md) collects the controllers' refusals.
+
+## Decided in
+
+- [ADR 0029: Ticks per target under a lease](../../decisions/0029-ticks-per-target-under-a-lease.md)
+
