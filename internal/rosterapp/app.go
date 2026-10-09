@@ -72,6 +72,11 @@ type Config struct {
 	Instance   string
 	// CloudflareDial opens a Cloudflare account; nil is the real client.
 	CloudflareDial minter.Dialer
+	// SkipStartSecretsPass leaves the issuer's generated client secrets to the
+	// scheduled pass instead of reading each one as the process starts. A
+	// function that starts cold in a herd sets it (see
+	// [issuerapp.Deps.SkipStartSecretsPass]).
+	SkipStartSecretsPass bool
 }
 
 // LogLevel is the level the process should log at. It is the issuer's,
@@ -316,10 +321,11 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	// is passed: a login that forced a live read on every sign-in would
 	// turn one corporate directory's slowness into everybody's.
 	deps := issuerapp.Deps{
-		Stores:    stores,
-		Directory: hublocal.New(directory.Hub(), 0),
-		Console:   directory.ConsoleHandler(),
-		Ready:     append([]health.Dependency{directory.Readiness()}, controllerReady...),
+		SkipStartSecretsPass: cfg.SkipStartSecretsPass,
+		Stores:               stores,
+		Directory:            hublocal.New(directory.Hub(), 0),
+		Console:              directory.ConsoleHandler(),
+		Ready:                append([]health.Dependency{directory.Readiness()}, controllerReady...),
 		// The SAME policy, loaded once. Both halves read policyDir, so
 		// they would ordinarily agree — but their fallbacks differ, and
 		// two halves that can disagree about the policy is the class of

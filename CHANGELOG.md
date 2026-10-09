@@ -53,6 +53,16 @@
 
 - **The lambda build of `cmd/sluis` is a Lambda entry too.** Started by the Lambda runtime (no arguments, `AWS_LAMBDA_RUNTIME_API` set) it serves API Gateway events and scheduler ticks through the same dispatch as `cmd/sluis-lambda`, now one function, `lambdaapp.Start`, that both mains call. Elsewhere the command line is the entry, and the Kubernetes build has no event dispatch. `cmd/sluis-lambda` remains the released Lambda binary until the release moves; its behaviour is unchanged.
 
+## v1.74.3
+
+v1.74.2 was tagged without its module pins and has no release.
+
+A patch for sluis on Lambda with generated client secrets: a cold start no longer reads one SSM record per generated client. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
+
+### Changed
+
+- **A Lambda start no longer settles the generated clients' secrets.** Every new environment read one SSM record per `secret: {generate: true}` client at start, about twenty calls for an installation with that many, and wrote the ones that were missing. After a deploy all environments start cold at once; SSM throttled them, the init ran past Lambda's 10 seconds (`Runtime.ExitError`) and requests failed for 10 to 60 seconds. The start now reads none of them: the token endpoint reads a client's record when the client first authenticates and reuses it for 30 seconds (a refused secret is read again at most every 5 seconds, so a rotation still propagates), and the scheduled refresh settles the secrets, as it already did. A generated client that has neither a record nor an input secret authenticates after the first refresh (at most 15 minutes after the first deploy); until then it is refused. A server process (Kubernetes) still settles them at start. The configuration read is unchanged: 40 parameters are 4 pages of 10.
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
