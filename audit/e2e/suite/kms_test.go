@@ -158,7 +158,9 @@ func TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase(t *testing.T) {
 	writerDB := openDSN(ctx, t, shared.writerDSN)
 	defer func() { _ = writerDB.Close() }()
 	var wrapped int
-	suffix := "%/" + base64.RawURLEncoding.EncodeToString([]byte(tenant))
+	// The id the kms adapter gives the (profile, tenant) pair: the profile is the
+	// purpose of the pseudonym key and is part of what is encoded.
+	suffix := "mac/pseudonym/" + base64.RawURLEncoding.EncodeToString([]byte("security/"+tenant))
 	if err := writerDB.QueryRowContext(ctx, `select count(*) from audit_wrapped_keys where id like $1`, suffix).Scan(&wrapped); err != nil {
 		t.Fatalf("read the wrapped keys as the writer role: %v", err)
 	}
