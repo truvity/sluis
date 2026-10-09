@@ -20,6 +20,7 @@ import (
 
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/internal/config/schema"
+	"github.com/truvity/sluis/audit/internal/observe"
 )
 
 // writeAs writes a file of the given kind in version 2, unless the body says its
@@ -1042,5 +1043,35 @@ func TestTheNotaryNamesItsSealKeyOneWay(t *testing.T) {
 		if _, err := config.LoadNotary(writeAs(t, "audit-notary", body)); err == nil {
 			t.Errorf("%s: the file was accepted", name)
 		}
+	}
+}
+
+// The poll's default is written twice, in the loader and in the published
+// schema, and both are the indexer's own: they may not drift.
+func TestTheIndexerPollDefaultsAgree(t *testing.T) {
+	o, err := config.LoadObserve(writeAs(t, "audit-observe", "deployment: /d.yaml\ndatabase: {url: 'postgres://u@h/db'}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Interval.D() != observe.DefaultInterval {
+		t.Errorf("the loader defaults to %v, the indexer to %v", o.Interval.D(), observe.DefaultInterval)
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "schemas", "config", "audit-observe.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Properties struct {
+			Interval struct {
+				Default string `json:"default"`
+			} `json:"interval"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	d, err := time.ParseDuration(doc.Properties.Interval.Default)
+	if err != nil || d != observe.DefaultInterval {
+		t.Errorf("the schema defaults to %q, the indexer to %v (%v)", doc.Properties.Interval.Default, observe.DefaultInterval, err)
 	}
 }
