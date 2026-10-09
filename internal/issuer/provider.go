@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/truvity/sluis/internal/signer"
 	"html"
 	"net/http"
 	"net/url"
@@ -122,7 +123,7 @@ func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 	// attacker could use, and it means an algorithm rotation (RSA to
 	// ECDSA, say) needs no corresponding change here. Discovery is the
 	// one place that DOES stay dynamic; see [Storage.SignatureAlgorithms].
-	supported := signingAlgorithmStrings()
+	supported := signer.SigningAlgorithmStrings()
 	options = append(options,
 		op.WithAccessTokenVerifierOpts(op.WithSupportedAccessTokenSigningAlgorithms(supported...)),
 		op.WithIDTokenHintVerifierOpts(op.WithSupportedIDTokenHintSigningAlgorithms(supported...)),
@@ -201,7 +202,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	verifier := op.NewAccessTokenVerifier(
 		iss.Config().URL,
 		keySetOf(storage),
-		op.WithSupportedAccessTokenSigningAlgorithms(signingAlgorithmStrings()...),
+		op.WithSupportedAccessTokenSigningAlgorithms(signer.SigningAlgorithmStrings()...),
 	)
 	sessionsService := NewSessionsService(iss, verifier, signIn.Secure)
 	sessionsService.announce = signIn.Announce

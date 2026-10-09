@@ -90,7 +90,7 @@ type Config struct {
 	signingKeyFile     string
 	// additionalSigningKeyFiles are every OTHER algorithm this
 	// installation signs with at once, one file per algorithm, beside the
-	// primary [Config.signingKeyFile] -- see [issuer.KeyRings] and the
+	// primary [Config.signingKeyFile] -- see [signer.KeyRings] and the
 	// chart's `signingKey.additional`.
 	additionalSigningKeyFiles []string
 	// kmsKeys, when set, replace signingKeyFile: AWS KMS keys, oldest
@@ -119,7 +119,7 @@ type Config struct {
 	agentLifetimes issuer.AgentLifetimes
 
 	// keyActivationDelay, keyOverlap and keyPollInterval govern live
-	// signing-key rotation; see [issuer.KeyRingConfig] and
+	// signing-key rotation; see [signer.KeyRingConfig] and
 	// [watchSigningKey].
 	keyActivationDelay time.Duration
 	keyOverlap         time.Duration
@@ -275,7 +275,7 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	if k == nil {
 		k = &config.SigningKey{}
 	}
-	c.keyActivationDelay = dur(k.ActivationDelay, issuer.DefaultKeyActivationDelay)
+	c.keyActivationDelay = dur(k.ActivationDelay, signer.DefaultKeyActivationDelay)
 	// Overlap defaults to this deployment's OWN token lifetime plus a margin
 	// for clock skew, rather than the package's constant: the whole point of
 	// the setting is that it must cover whatever this installation actually
@@ -284,9 +284,9 @@ func FromConfig(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 	// verifiers' clocks.
 	c.keyOverlap = dur(k.Overlap, 0)
 	if c.keyOverlap <= 0 {
-		c.keyOverlap = c.tokenLifetime + issuer.KeyOverlapSkew
+		c.keyOverlap = c.tokenLifetime + signer.KeyOverlapSkew
 	}
-	c.keyPollInterval = dur(k.PollInterval, issuer.DefaultKeyPollInterval)
+	c.keyPollInterval = dur(k.PollInterval, signer.DefaultKeyPollInterval)
 	c.verifyOnly = k.VerifyOnly
 	// The activation delay must be longer than the poll interval so that a
 	// newly published key has at least one complete poll cycle to be seen
@@ -367,7 +367,7 @@ func dur(d *config.Duration, fallback time.Duration) time.Duration {
 type Deps struct {
 	// KMS is the client for signingKey.kms. Nil builds one from the AWS
 	// default credential chain; a test supplies a fake.
-	KMS issuer.KMSAPI
+	KMS signer.KMSAPI
 	// Keys is the key service behind `keys` (the sign key of the wrapped ring).
 	// Nil opens the one `keys.adapter` names; a test supplies the local one.
 	Keys keys.Backend
@@ -435,7 +435,7 @@ type Deps struct {
 // App is an assembled issuer.
 type App struct {
 	// kms is set when the primary key lives in AWS KMS; Run polls it.
-	kms []*issuer.KMSKeyRefs
+	kms []*signer.KMSKeyRefs
 	// wrapped is set when the keys are KMS-wrapped; Run keeps them rotating.
 	wrapped bool
 	// state is the shared state the secret fingerprint lives in.
@@ -573,12 +573,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		return nil, err
 	}
 	var (
-		key     *issuer.SigningKey
-		kmsRefs []*issuer.KMSKeyRefs
-		kmsRest []*issuer.SigningKey
-		kmsMore []*issuer.SigningKey
+		key     *signer.SigningKey
+		kmsRefs []*signer.KMSKeyRefs
+		kmsRest []*signer.SigningKey
+		kmsMore []*signer.SigningKey
 	)
-	var wrapped *issuer.WrappedSigning
+	var wrapped *signer.WrappedSigning
 	switch {
 	case cfg.kmsWrapped != nil:
 		wrapped, key, kmsMore, err = wrappedSigningKeys(ctx, cfg, deps, stores, shared, log)
@@ -653,7 +653,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// The delays a deployment named, or their defaults: NewStorage seeded
 	// the ring before either was known, so this is applied before the
 	// poller in Run starts feeding it anything more.
-	storage.ConfigureKeyRotation(issuer.KeyRingConfig{
+	storage.ConfigureKeyRotation(signer.KeyRingConfig{
 		ActivationDelay: cfg.keyActivationDelay,
 		Overlap:         cfg.keyOverlap,
 	})
@@ -664,7 +664,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		if wcErr != nil {
 			return nil, wcErr
 		}
-		storage.ConfigureKeyRotation(issuer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
+		storage.ConfigureKeyRotation(signer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
 		storage.UseWrappedSigning(wrapped)
 	}
 	// The earlier KMS keys, in order: refreshed if the installation knows
@@ -968,12 +968,12 @@ func (g *googleSignIn) Identify(ctx context.Context, code string) (string, error
 // credential is an exception to how everything else here gets one.
 //
 // No file configured means a local run, which generates one and says so.
-func signingKey(ctx context.Context, cfg Config, log *slog.Logger) (*issuer.SigningKey, error) {
+func signingKey(ctx context.Context, cfg Config, log *slog.Logger) (*signer.SigningKey, error) {
 	if cfg.signingKeyFile == "" {
 		log.WarnContext(ctx, "generating a signing key for this process: every restart invalidates "+
 			"every token it signed, and two replicas would sign with two keys. "+
 			"A deployment sets signingKey.file")
-		return issuer.NewSigningKey()
+		return signer.NewSigningKey()
 	}
 	encoded, err := os.ReadFile(cfg.signingKeyFile) //nolint:gosec // the path is deployment configuration
 	if err != nil {
@@ -983,7 +983,7 @@ func signingKey(ctx context.Context, cfg Config, log *slog.Logger) (*issuer.Sign
 		return nil, fmt.Errorf("read the signing key: %w — a deployment provides it as a Secret, "+
 			"issued by cert-manager or delivered by external-secrets, mounted at that path", err)
 	}
-	key, err := issuer.ParseSigningKey(encoded)
+	key, err := signer.ParseSigningKey(encoded)
 	if err != nil {
 		return nil, err
 	}
@@ -1002,15 +1002,15 @@ func signingKey(ctx context.Context, cfg Config, log *slog.Logger) (*issuer.Sign
 // naming one that has no key (requirement 2), and a deployment whose
 // mount is broken should fail before it serves a single request rather
 // than the first time somebody reaches a client that names it.
-func additionalSigningKeys(ctx context.Context, cfg Config, log *slog.Logger) ([]*issuer.SigningKey, error) {
-	out := make([]*issuer.SigningKey, 0, len(cfg.additionalSigningKeyFiles))
+func additionalSigningKeys(ctx context.Context, cfg Config, log *slog.Logger) ([]*signer.SigningKey, error) {
+	out := make([]*signer.SigningKey, 0, len(cfg.additionalSigningKeyFiles))
 	for _, path := range cfg.additionalSigningKeyFiles {
 		encoded, err := os.ReadFile(path) //nolint:gosec // the path is deployment configuration
 		if err != nil {
 			return nil, fmt.Errorf("read an additional signing key: %w — a deployment provides it as a "+
 				"Secret, issued by cert-manager or delivered by external-secrets, mounted at that path", err)
 		}
-		key, err := issuer.ParseSigningKey(encoded)
+		key, err := signer.ParseSigningKey(encoded)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
@@ -1023,7 +1023,7 @@ func additionalSigningKeys(ctx context.Context, cfg Config, log *slog.Logger) ([
 
 // watchSigningKey re-reads every mounted key file on an interval and
 // feeds every version this replica reads to the storage's key rings — see
-// [issuer.KeyRings] for the schedule that turns that into rotation with no
+// [signer.KeyRings] for the schedule that turns that into rotation with no
 // restart, one file routed to its OWN algorithm's track (requirement six
 // of live rotation: rotating one never disturbs another's). It runs
 // until ctx is done, which happens together with the two listeners in
@@ -1038,7 +1038,7 @@ func additionalSigningKeys(ctx context.Context, cfg Config, log *slog.Logger) ([
 // that failed loudly over a read that would have succeeded thirty seconds
 // later would turn a non-event into an incident. The same is true of a
 // path that names an algorithm nothing was configured for at start
-// ([issuer.KeyRings.Rotate] refuses it) — logged and skipped, not fatal,
+// ([signer.KeyRings.Rotate] refuses it) — logged and skipped, not fatal,
 // because the deployment is already running with what it started with.
 func watchSigningKey(ctx context.Context, paths []string, interval time.Duration, storage *issuer.Storage, log *slog.Logger) {
 	paths = nonEmpty(paths)
@@ -1046,7 +1046,7 @@ func watchSigningKey(ctx context.Context, paths []string, interval time.Duration
 		return
 	}
 	if interval <= 0 {
-		interval = issuer.DefaultKeyPollInterval
+		interval = signer.DefaultKeyPollInterval
 	}
 
 	ticker := time.NewTicker(interval)
@@ -1075,7 +1075,7 @@ func pollSigningKeyFile(ctx context.Context, path string, storage *issuer.Storag
 			slog.String("file", path), slog.Any("error", err))
 		return
 	}
-	key, err := issuer.ParseSigningKey(encoded)
+	key, err := signer.ParseSigningKey(encoded)
 	if err != nil {
 		log.WarnContext(ctx, "a re-read signing key could not be parsed; keeping the previous one",
 			slog.String("file", path), slog.Any("error", err))
@@ -1294,8 +1294,8 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 // named; starting without it would sign with fewer keys than the deployment
 // declared.
 func kmsSigningKeys(
-	ctx context.Context, cfg Config, api issuer.KMSAPI, log *slog.Logger,
-) (refs []*issuer.KMSKeyRefs, earlier []*issuer.SigningKey, primary *issuer.SigningKey, more []*issuer.SigningKey, err error) {
+	ctx context.Context, cfg Config, api signer.KMSAPI, log *slog.Logger,
+) (refs []*signer.KMSKeyRefs, earlier []*signer.SigningKey, primary *signer.SigningKey, more []*signer.SigningKey, err error) {
 	seed, err := readStateSecret(ctx, cfg, cfg.kmsStateSecret, "signingKey.kms.stateSecret")
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -1311,12 +1311,12 @@ func kmsSigningKeys(
 		}
 		api = kms.NewFromConfig(awsCfg)
 	}
-	sets := []*issuer.KMSKeyRefs{{Alg: jose.ES384, API: api, Refs: cfg.kmsKeys, Seed: seed}}
+	sets := []*signer.KMSKeyRefs{{Alg: jose.ES384, API: api, Refs: cfg.kmsKeys, Seed: seed}}
 	for _, a := range cfg.kmsAdditional {
 		if jose.SignatureAlgorithm(a.Alg) != jose.RS256 || len(a.Keys) == 0 {
 			return nil, nil, nil, nil, fmt.Errorf("signingKey.kms.additional: %q needs alg RS256 and keys", a.Alg)
 		}
-		sets = append(sets, &issuer.KMSKeyRefs{Alg: jose.SignatureAlgorithm(a.Alg), API: api, Refs: a.Keys, Seed: seed})
+		sets = append(sets, &signer.KMSKeyRefs{Alg: jose.SignatureAlgorithm(a.Alg), API: api, Refs: a.Keys, Seed: seed})
 	}
 	seen := map[string]string{}
 	for n, set := range sets {
@@ -1351,11 +1351,11 @@ func kmsSigningKeys(
 // previous key as a file read that fails does. Re-reading is what notices an
 // alias moved to another key: it reads as a new kid and is scheduled as one.
 func watchKMSKeys(
-	ctx context.Context, sets []*issuer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger,
+	ctx context.Context, sets []*signer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger,
 	checkSecret func(context.Context) error,
 ) {
 	if interval <= 0 {
-		interval = issuer.DefaultKeyPollInterval
+		interval = signer.DefaultKeyPollInterval
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -1376,9 +1376,9 @@ func watchKMSKeys(
 }
 
 // pollKMSRefs re-reads one algorithm's list.
-func pollKMSRefs(ctx context.Context, refs *issuer.KMSKeyRefs, storage *issuer.Storage, log *slog.Logger) {
+func pollKMSRefs(ctx context.Context, refs *signer.KMSKeyRefs, storage *issuer.Storage, log *slog.Logger) {
 	for i, ref := range refs.Refs {
-		one := issuer.KMSKeyRefs{Alg: refs.Alg, API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
+		one := signer.KMSKeyRefs{Alg: refs.Alg, API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
 		keys, err := one.Load(ctx)
 		if err != nil {
 			log.WarnContext(ctx, "could not re-read a KMS signing key; keeping the previous one",
@@ -1493,11 +1493,11 @@ func wrappedFromPort(k *port.KMSWrappedSigning) (*config.SigningKeyKMSWrapped, e
 // configuration: the algorithms default to ES384 and RS256, the rotation to
 // every 24h, the pre-publish to `signingKey.activationDelay` and the retention
 // to `signingKey.overlap` (the token lifetime plus a skew margin), and then the
-// schedule is held to what makes it safe (see [issuer.WrappedConfig.Validate]).
-func (c Config) wrappedConfig() (issuer.WrappedConfig, error) {
+// schedule is held to what makes it safe (see [signer.WrappedConfig.Validate]).
+func (c Config) wrappedConfig() (signer.WrappedConfig, error) {
 	k := c.kmsWrapped
-	out := issuer.WrappedConfig{
-		RotateEvery: dur(k.RotateEvery, issuer.DefaultWrappedRotateEvery),
+	out := signer.WrappedConfig{
+		RotateEvery: dur(k.RotateEvery, signer.DefaultWrappedRotateEvery),
 		Prepublish:  dur(k.Prepublish, c.keyActivationDelay),
 		Retain:      dur(k.Retain, c.keyOverlap),
 		Interval:    c.keyPollInterval,
@@ -1578,7 +1578,7 @@ func signKey(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*key
 // first algorithm's key is the primary.
 func wrappedSigningKeys(
 	ctx context.Context, cfg Config, deps Deps, stores *store.Stores, state issuer.State, log *slog.Logger,
-) (*issuer.WrappedSigning, *issuer.SigningKey, []*issuer.SigningKey, error) {
+) (*signer.WrappedSigning, *signer.SigningKey, []*signer.SigningKey, error) {
 	wcfg, err := cfg.wrappedConfig()
 	if err != nil {
 		return nil, nil, nil, err
@@ -1609,7 +1609,7 @@ func wrappedSigningKeys(
 		}
 		return ran, inner
 	}
-	ws, err := issuer.NewWrappedSigning(wcfg, key, seed, lease, log)
+	ws, err := signer.NewWrappedSigning(wcfg, key, seed, lease, log)
 	if err != nil {
 		return nil, nil, nil, err
 	}

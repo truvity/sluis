@@ -1,7 +1,8 @@
-package issuer_test
+package signer_test
 
 import (
 	"context"
+	"github.com/truvity/sluis/internal/signer"
 	"testing"
 	"time"
 
@@ -16,13 +17,13 @@ import (
 func TestKeyRingsDefaultIsThePrimaryAlgorithm(t *testing.T) {
 	t.Parallel()
 
-	primary, err := issuer.NewSigningKey() // P-384 / ES384
+	primary, err := signer.NewSigningKey() // P-384 / ES384
 	if err != nil {
 		t.Fatal(err)
 	}
 	rsaKey := rsaSigningKey(t) // RS256
 
-	rings, err := issuer.NewKeyRings(primary, []*issuer.SigningKey{rsaKey}, issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil)
+	rings, err := signer.NewKeyRings(primary, []*signer.SigningKey{rsaKey}, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,17 +45,17 @@ func TestKeyRingsDefaultIsThePrimaryAlgorithm(t *testing.T) {
 func TestKeyRingsRefusesTwoKeysOfTheSameAlgorithm(t *testing.T) {
 	t.Parallel()
 
-	primary, err := issuer.NewSigningKey() // ES384
+	primary, err := signer.NewSigningKey() // ES384
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := issuer.NewSigningKey() // also ES384
+	second, err := signer.NewSigningKey() // also ES384
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := issuer.NewKeyRings(primary, []*issuer.SigningKey{second},
-		issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil); err == nil {
+	if _, err := signer.NewKeyRings(primary, []*signer.SigningKey{second},
+		issuer.NewMemoryState(), signer.KeyRingConfig{}, nil); err == nil {
 		t.Fatal("two ES384 keys were both accepted; each algorithm needs exactly one")
 	}
 }
@@ -69,14 +70,14 @@ func TestKeyRingsRotatingOneAlgorithmLeavesAnotherUntouched(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	esKey1, err := issuer.NewSigningKey() // ES384
+	esKey1, err := signer.NewSigningKey() // ES384
 	if err != nil {
 		t.Fatal(err)
 	}
 	rsaKey := rsaSigningKey(t) // RS256, the one key this installation will ever have for it
 
-	rings, err := issuer.NewKeyRings(esKey1, []*issuer.SigningKey{rsaKey}, issuer.NewMemoryState(),
-		issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}, nil)
+	rings, err := signer.NewKeyRings(esKey1, []*signer.SigningKey{rsaKey}, issuer.NewMemoryState(),
+		signer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +87,7 @@ func TestKeyRingsRotatingOneAlgorithmLeavesAnotherUntouched(t *testing.T) {
 	}
 
 	// Rotate ES384 through a full cycle: a second key seen, then adopted.
-	esKey2, err := issuer.NewSigningKey()
+	esKey2, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +110,7 @@ func TestKeyRingsRotatingOneAlgorithmLeavesAnotherUntouched(t *testing.T) {
 	published := rings.Published()
 	rs256Count, es384Count := 0, 0
 	for _, key := range published {
-		switch key.Algorithm() {
+		switch key.Algorithm {
 		case jose.RS256:
 			rs256Count++
 		case jose.ES384:
@@ -125,16 +126,16 @@ func TestKeyRingsRotatingOneAlgorithmLeavesAnotherUntouched(t *testing.T) {
 }
 
 // Rotate refuses an algorithm nothing was configured for at start: adding
-// one is a restart (a fresh [issuer.KeyRings]), never a poll tick, because
+// one is a restart (a fresh [signer.KeyRings]), never a poll tick, because
 // every OTHER replica shares no track for it to land on.
 func TestKeyRingsRotateRefusesAnUnconfiguredAlgorithm(t *testing.T) {
 	t.Parallel()
 
-	primary, err := issuer.NewSigningKey() // ES384 only
+	primary, err := signer.NewSigningKey() // ES384 only
 	if err != nil {
 		t.Fatal(err)
 	}
-	rings, err := issuer.NewKeyRings(primary, nil, issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil)
+	rings, err := signer.NewKeyRings(primary, nil, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

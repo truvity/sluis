@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/truvity/sluis/internal/signer"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func ParseVerifyOnlyKey(raw []byte, id, alg string, until time.Time) (VerifyOnly
 		id = jwkID
 	}
 	if id == "" {
-		if id, err = thumbprint(pub); err != nil {
+		if id, err = signer.Thumbprint(pub); err != nil {
 			return VerifyOnlyKey{}, err
 		}
 	}
@@ -162,6 +163,28 @@ func (s *Storage) verifyOnlyKeys(published []op.Key) []op.Key {
 			continue
 		}
 		out = append(out, publishedKey{id: k.ID, alg: k.Alg, pub: k.Pub})
+	}
+	return out
+}
+
+// publishedKey is one entry in the JWKS as the library wants it: enough to
+// verify a signature, never enough to make one.
+type publishedKey struct {
+	id  string
+	alg jose.SignatureAlgorithm
+	pub any
+}
+
+func (k publishedKey) ID() string                         { return k.id }
+func (k publishedKey) Algorithm() jose.SignatureAlgorithm { return k.alg }
+func (k publishedKey) Use() string                        { return "sig" }
+func (k publishedKey) Key() any                           { return k.pub }
+
+// opKeys is the signer's public keys as the library's key type.
+func opKeys(public []signer.PublicKey) []op.Key {
+	out := make([]op.Key, 0, len(public))
+	for _, k := range public {
+		out = append(out, publishedKey{id: k.KID, alg: k.Algorithm, pub: k.Key})
 	}
 	return out
 }

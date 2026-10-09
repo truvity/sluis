@@ -1,4 +1,4 @@
-package issuer
+package signer
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
-	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
 // KeyRingConfig governs how a [KeyRing] adopts a rotated signing key.
@@ -216,13 +215,8 @@ type KeyRing struct {
 // every key ever [KeyRing.Observe]d on it must sign with alg, so that this
 // ring's schedule -- and the shared-store keys it schedules through, see
 // [keyRingIndexKey] -- never mixes two algorithms' keys together. state is
-// where the schedule is shared with every other replica; nil keeps it in
-// this process alone, which is right for a single replica and a local run
-// and wrong for more — the same trade [State] itself documents.
+// where the schedule is shared with every other replica; it is required.
 func NewKeyRing(alg jose.SignatureAlgorithm, state State, cfg KeyRingConfig, log *slog.Logger) *KeyRing {
-	if state == nil {
-		state = NewMemoryState()
-	}
 	if log == nil {
 		log = slog.Default()
 	}
@@ -638,17 +632,17 @@ func (r *KeyRing) Active() *SigningKey {
 // Published is every key currently in the JWKS: the active one, every key
 // waiting out its activation delay, and every retiring one still inside
 // its overlap.
-func (r *KeyRing) Published() []op.Key {
+func (r *KeyRing) Published() []PublicKey {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	out := make([]op.Key, 0, len(r.published))
+	out := make([]PublicKey, 0, len(r.published))
 	for id := range r.published {
 		e, ok := r.entries[id]
 		if !ok {
 			continue
 		}
-		out = append(out, publishedKey{id: e.ID, alg: e.Algorithm, pub: e.JWK.Key})
+		out = append(out, PublicKey{KID: e.ID, Algorithm: e.Algorithm, Key: e.JWK.Key})
 	}
 	return out
 }

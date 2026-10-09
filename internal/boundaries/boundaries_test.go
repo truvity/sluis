@@ -6,7 +6,11 @@
 package boundaries
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -285,5 +289,46 @@ func TestTheMinterExemptionsAreHeldToUse(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// The ring, its wrapped-key generation and the KMS keys live in internal/signer.
+// The issuer still holds the keys of the library's own mint paths
+// (signer.SigningKey, signer.KeyRings and signer.WrappedSigning, which
+// Storage.UseWrappedSigning takes), and nothing else of the ring's internals:
+// a package-level import rule cannot say that, so this reads the issuer's
+// sources and refuses a reference to the names below.
+func TestTheIssuerNamesNoRingInternals(t *testing.T) {
+	internals := []string{"KeyRing", "KeyRingStatus", "NewKeyRing", "NewWrappedSigning", "WrappedConfig", "WrappedLease",
+		"KMSAPI", "KMSSigningKey", "KMSSigningKeyFor", "KMSKeyRefs", "EncryptionContext", "ParseSigningKey"}
+	files, err := filepath.Glob("../issuer/*.go")
+	if err != nil || len(files) < 20 {
+		t.Fatalf("the sweep found %d issuer files (%v): it listed the wrong thing", len(files), err)
+	}
+	seen := 0
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), f, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(parsed, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := sel.X.(*ast.Ident); ok && id.Name == "signer" {
+				seen++
+				if slices.Contains(internals, sel.Sel.Name) {
+					t.Errorf("%s names signer.%s: the ring's internals belong to internal/signer", f, sel.Sel.Name)
+				}
+			}
+			return true
+		})
+	}
+	if seen == 0 {
+		t.Error("the issuer references nothing of the signer: the rule checked nothing")
 	}
 }

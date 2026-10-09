@@ -102,8 +102,8 @@ type Ring interface {
 	// Maintain gives the ring its chance to rotate and to absorb keys other
 	// replicas recorded. Called before every Sign and PublicKeys.
 	Maintain(ctx context.Context)
-	// Active is the key that signs for an algorithm, or false.
-	Active(alg jose.SignatureAlgorithm) (ActiveKey, bool)
+	// Signing is the key that signs for an algorithm, or false.
+	Signing(alg jose.SignatureAlgorithm) (ActiveKey, bool)
 	// Default is the algorithm used when a request names none.
 	Default() jose.SignatureAlgorithm
 	// Published is every published key.
@@ -116,16 +116,16 @@ type Limits struct {
 	MaxLifetime map[Purpose]time.Duration
 }
 
-type local struct {
+type inProcess struct {
 	ring   Ring
 	limits Limits
 }
 
 // New is the in-process signer over a ring.
-func New(ring Ring, limits Limits) Signer { return &local{ring: ring, limits: limits} }
+func New(ring Ring, limits Limits) Signer { return &inProcess{ring: ring, limits: limits} }
 
 // check applies the limits to a request.
-func (s *local) check(req Request) error {
+func (s *inProcess) check(req Request) error {
 	limit, ok := s.limits.MaxLifetime[req.Purpose]
 	if _, known := typ[req.Purpose]; !ok || !known {
 		return fmt.Errorf("%w %q", ErrUnknownPurpose, req.Purpose)
@@ -153,7 +153,7 @@ func (s *local) check(req Request) error {
 }
 
 // Sign implements [Signer].
-func (s *local) Sign(ctx context.Context, req Request) (Signed, error) {
+func (s *inProcess) Sign(ctx context.Context, req Request) (Signed, error) {
 	if err := s.check(req); err != nil {
 		return Signed{}, err
 	}
@@ -162,7 +162,7 @@ func (s *local) Sign(ctx context.Context, req Request) (Signed, error) {
 	if alg == "" {
 		alg = s.ring.Default()
 	}
-	active, ok := s.ring.Active(alg)
+	active, ok := s.ring.Signing(alg)
 	if !ok {
 		return Signed{}, ErrNoKey
 	}
@@ -185,7 +185,7 @@ func (s *local) Sign(ctx context.Context, req Request) (Signed, error) {
 }
 
 // PublicKeys implements [Signer].
-func (s *local) PublicKeys(ctx context.Context) ([]PublicKey, error) {
+func (s *inProcess) PublicKeys(ctx context.Context) ([]PublicKey, error) {
 	s.ring.Maintain(ctx)
 	return s.ring.Published(), nil
 }

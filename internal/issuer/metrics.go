@@ -30,10 +30,14 @@ type issuerInstruments struct {
 	dead     metric.Int64Counter
 }
 
+// meterName is the instrumentation scope of the issuer's instruments, the
+// same one the key ring's use.
+const meterName = "github.com/truvity/access-roster/issuer"
+
 var issuerMetrics = newIssuerInstruments()
 
 func newIssuerInstruments() issuerInstruments {
-	meter := otel.Meter(keyRingMeterName)
+	meter := otel.Meter(meterName)
 	// Instrument creation fails only on an invalid name, which these are not;
 	// a failed one is a no-op instrument, never a stopped issuer.
 	tokens, _ := meter.Int64Counter("access_issuer.tokens.issued",

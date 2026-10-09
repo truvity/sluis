@@ -1,4 +1,4 @@
-package issuer
+package signer
 
 import (
 	"crypto"
@@ -37,7 +37,7 @@ import (
 // every rollout, and two replicas with two keys hand out tokens that half
 // the fleet cannot verify.
 //
-// The id is the key's own RFC 7638 thumbprint rather than a name given to
+// The id is the key's own RFC 7638 Thumbprint rather than a name given to
 // it. That is what lets a key arrive from anywhere: nothing has to carry
 // an id beside it, two services reading the same Secret compute the same
 // one, and a key and its id cannot be separated because the id is a
@@ -116,7 +116,7 @@ func newSigningKey(key crypto.Signer) (*SigningKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, err := thumbprint(key.Public())
+	id, err := Thumbprint(key.Public())
 	if err != nil {
 		return nil, err
 	}
@@ -165,13 +165,13 @@ func seed(key crypto.Signer) ([]byte, error) {
 	return encoded, nil
 }
 
-// thumbprint is the RFC 7638 JWK thumbprint of the public half, which is
+// Thumbprint is the RFC 7638 JWK Thumbprint of the public half, which is
 // what every JWKS consumer already knows how to compute.
 //
 // RFC 7638 hashes only the key's required members -- kty, n and e for RSA,
 // kty, crv, x and y for EC -- so neither `alg` nor `use` enters it, and an
 // RSA key keeps the id it had before this function stopped naming RS256.
-func thumbprint(pub crypto.PublicKey) (string, error) {
+func Thumbprint(pub crypto.PublicKey) (string, error) {
 	jwk := jose.JSONWebKey{Key: pub, Use: "sig"}
 	sum, err := jwk.Thumbprint(crypto.SHA256)
 	if err != nil {
@@ -204,30 +204,16 @@ func (k *SigningKey) ID() string { return k.id }
 //
 // The label separates purposes: two derivations of the same key are
 // unrelated, so a value one of them signs cannot be replayed at another.
+// Seed is the secret this key was made with, for deriving a value that must
+// outlive a restart with the key (the issuer's dead-refresh fingerprint). It
+// is never the private key; nil for a key with no seed.
+func (k *SigningKey) Seed() []byte { return k.seed }
+
 func (k *SigningKey) Derive(label string) []byte {
 	mac := hmac.New(sha256.New, k.seed)
 	mac.Write([]byte(label))
 	return mac.Sum(nil)
 }
-
-// publishedKey is one entry in the JWKS: enough to verify a signature,
-// never enough to make one.
-//
-// It is its own type rather than a view over [SigningKey] because a
-// [KeyRing] publishes keys it never held the private half of — one
-// another replica reported having seen, kept here only so this replica
-// forgets neither the key nor its schedule across a restart. Building a
-// SigningKey for those would need a private key that does not exist here.
-type publishedKey struct {
-	id  string
-	alg jose.SignatureAlgorithm
-	pub any
-}
-
-func (k publishedKey) ID() string                         { return k.id }
-func (k publishedKey) Algorithm() jose.SignatureAlgorithm { return k.alg }
-func (k publishedKey) Use() string                        { return "sig" }
-func (k publishedKey) Key() any                           { return k.pub }
 
 // signingAlgorithms are every algorithm a [SigningKey] can ever produce:
 // RS256 for RSA, ES256/ES384/ES512 for the three curves this issuer
@@ -250,9 +236,9 @@ func (k publishedKey) Key() any                           { return k.pub }
 // see [Storage.SignatureAlgorithms].
 var signingAlgorithms = []jose.SignatureAlgorithm{jose.RS256, jose.ES256, jose.ES384, jose.ES512}
 
-// signingAlgorithmStrings is [signingAlgorithms] as the library's options
+// SigningAlgorithmStrings is [signingAlgorithms] as the library's options
 // want them.
-func signingAlgorithmStrings() []string {
+func SigningAlgorithmStrings() []string {
 	out := make([]string, len(signingAlgorithms))
 	for i, alg := range signingAlgorithms {
 		out[i] = string(alg)

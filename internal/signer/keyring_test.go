@@ -1,4 +1,4 @@
-package issuer_test
+package signer_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"github.com/truvity/sluis/internal/signer"
 	"slices"
 	"sort"
 	"sync"
@@ -40,11 +41,11 @@ func (c *settableClock) set(at time.Time) {
 	c.at = at
 }
 
-// rsaSigningKey builds a [issuer.SigningKey] over a fresh RSA key, the way
+// rsaSigningKey builds a [signer.SigningKey] over a fresh RSA key, the way
 // [keys_test.go] does, for the one test here that has to exercise a
 // concrete non-default algorithm: an installation rotating from RSA to
 // its P-384 default.
-func rsaSigningKey(t *testing.T) *issuer.SigningKey {
+func rsaSigningKey(t *testing.T) *signer.SigningKey {
 	t.Helper()
 	raw, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -54,7 +55,7 @@ func rsaSigningKey(t *testing.T) *issuer.SigningKey {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	key, err := issuer.ParseSigningKey(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}))
+	key, err := signer.ParseSigningKey(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -63,18 +64,18 @@ func rsaSigningKey(t *testing.T) *issuer.SigningKey {
 
 // publishedIDs is every key id a ring currently publishes, sorted so two
 // rings' answers can be compared directly.
-func publishedIDs(t *testing.T, ring *issuer.KeyRing) []string {
+func publishedIDs(t *testing.T, ring *signer.KeyRing) []string {
 	t.Helper()
 	published := ring.Published()
 	out := make([]string, 0, len(published))
 	for _, k := range published {
-		out = append(out, k.ID())
+		out = append(out, k.KID)
 	}
 	sort.Strings(out)
 	return out
 }
 
-func assertPublished(t *testing.T, ring *issuer.KeyRing, want ...string) {
+func assertPublished(t *testing.T, ring *signer.KeyRing, want ...string) {
 	t.Helper()
 	got := publishedIDs(t, ring)
 	sorted := append([]string{}, want...)
@@ -91,10 +92,10 @@ func TestKeyRingFirstKeyIsActiveImmediately(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := newSettableClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	ring := issuer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil)
+	ring := signer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
 	ring.SetClock(clock.now)
 
-	key, err := issuer.NewSigningKey()
+	key, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,10 +122,10 @@ func TestKeyRingRotationSchedule(t *testing.T) {
 
 	const delay = 2 * time.Minute
 	const overlap = time.Hour
-	ring := issuer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), issuer.KeyRingConfig{ActivationDelay: delay, Overlap: overlap}, nil)
+	ring := signer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), signer.KeyRingConfig{ActivationDelay: delay, Overlap: overlap}, nil)
 	ring.SetClock(clock.now)
 
-	key1, err := issuer.NewSigningKey()
+	key1, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestKeyRingRotationSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key2, err := issuer.NewSigningKey()
+	key2, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,11 +197,11 @@ func TestKeyRingTokenSignedBeforeRotationVerifiesDuringOverlap(t *testing.T) {
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	clock := newSettableClock(t0)
 
-	ring := issuer.NewKeyRing(jose.ES384, issuer.NewMemoryState(),
-		issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}, nil)
+	ring := signer.NewKeyRing(jose.ES384, issuer.NewMemoryState(),
+		signer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}, nil)
 	ring.SetClock(clock.now)
 
-	key1, err := issuer.NewSigningKey()
+	key1, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,12 +210,12 @@ func TestKeyRingTokenSignedBeforeRotationVerifiesDuringOverlap(t *testing.T) {
 	}
 
 	payload := []byte(`{"sub":"ada@north.example"}`)
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: key1.SignatureAlgorithm(), Key: key1.Key()},
+	joseSigner, err := jose.NewSigner(jose.SigningKey{Algorithm: key1.SignatureAlgorithm(), Key: key1.Key()},
 		(&jose.SignerOptions{}).WithHeader("kid", key1.ID()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	signed, err := signer.Sign(payload)
+	signed, err := joseSigner.Sign(payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +225,7 @@ func TestKeyRingTokenSignedBeforeRotationVerifiesDuringOverlap(t *testing.T) {
 	}
 
 	// Rotate, and move well into the overlap.
-	key2, err := issuer.NewSigningKey()
+	key2, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,17 +250,17 @@ func TestKeyRingTokenSignedBeforeRotationVerifiesDuringOverlap(t *testing.T) {
 // verifyAgainst checks token against whichever published key in ring
 // carries kid, the way [localKeys.VerifySignature] tries every published
 // key for an incoming token.
-func verifyAgainst(t *testing.T, ring *issuer.KeyRing, token, kid string) bool {
+func verifyAgainst(t *testing.T, ring *signer.KeyRing, token, kid string) bool {
 	t.Helper()
 	jws, err := jose.ParseSigned(token, []jose.SignatureAlgorithm{jose.RS256, jose.ES256, jose.ES384, jose.ES512})
 	if err != nil {
 		t.Fatalf("parse the token: %v", err)
 	}
 	for _, key := range ring.Published() {
-		if key.ID() != kid {
+		if key.KID != kid {
 			continue
 		}
-		if _, err := jws.Verify(&jose.JSONWebKey{Key: key.Key(), KeyID: key.ID(), Algorithm: string(key.Algorithm())}); err == nil {
+		if _, err := jws.Verify(&jose.JSONWebKey{Key: key.Key, KeyID: key.KID, Algorithm: string(key.Algorithm)}); err == nil {
 			return true
 		}
 	}
@@ -268,20 +269,20 @@ func verifyAgainst(t *testing.T, ring *issuer.KeyRing, token, kid string) bool {
 
 // A [KeyRing] is now locked to ONE algorithm for its life — each
 // algorithm gets its own track, namespaced in the shared store by that
-// algorithm (see [issuer.KeyRing.Algorithm]) — so a key of a DIFFERENT
+// algorithm (see [signer.KeyRing.Algorithm]) — so a key of a DIFFERENT
 // algorithm is refused rather than silently adopted as a rotation. Before
 // per-audience signing this was "just a rotation"; now it would mean an
 // RS256 key landing on the ES384 track, which every OTHER replica reads
 // by that track's own namespaced keys and would never learn to publish.
 // Changing which algorithm a ring signs is a restart — a fresh
-// [issuer.KeyRings] — not a poll tick.
+// [signer.KeyRings] — not a poll tick.
 func TestKeyRingRefusesAKeyOfTheWrongAlgorithm(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	ring := issuer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil)
+	ring := signer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
 
-	ecKey, err := issuer.NewSigningKey() // P-384 / ES384
+	ecKey, err := signer.NewSigningKey() // P-384 / ES384
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,11 +315,11 @@ func TestKeyRingASecondReplicaSharingTheStorePublishesTheSameSet(t *testing.T) {
 	shared := issuer.NewMemoryState()
 	shared.SetClock(clock.now)
 
-	cfg := issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}
-	replicaA := issuer.NewKeyRing(jose.ES384, shared, cfg, nil)
+	cfg := signer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}
+	replicaA := signer.NewKeyRing(jose.ES384, shared, cfg, nil)
 	replicaA.SetClock(clock.now)
 
-	key1, err := issuer.NewSigningKey()
+	key1, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +327,7 @@ func TestKeyRingASecondReplicaSharingTheStorePublishesTheSameSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key2, err := issuer.NewSigningKey()
+	key2, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +345,7 @@ func TestKeyRingASecondReplicaSharingTheStorePublishesTheSameSet(t *testing.T) {
 	// Replica B starts only now, and its own mounted file already holds
 	// key2 alone — key1 has already been superseded by the time it comes
 	// up, exactly like a pod that restarts after a rotation.
-	replicaB := issuer.NewKeyRing(jose.ES384, shared, cfg, nil)
+	replicaB := signer.NewKeyRing(jose.ES384, shared, cfg, nil)
 	replicaB.SetClock(clock.now)
 	if err := replicaB.Observe(ctx, key2); err != nil {
 		t.Fatal(err)
@@ -371,11 +372,11 @@ func TestKeyRingNeverSignsWithAKeyItHasNotReadItself(t *testing.T) {
 	shared := issuer.NewMemoryState()
 	shared.SetClock(clock.now)
 
-	cfg := issuer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}
-	fast := issuer.NewKeyRing(jose.ES384, shared, cfg, nil)
+	cfg := signer.KeyRingConfig{ActivationDelay: time.Minute, Overlap: time.Hour}
+	fast := signer.NewKeyRing(jose.ES384, shared, cfg, nil)
 	fast.SetClock(clock.now)
 
-	key1, err := issuer.NewSigningKey()
+	key1, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +384,7 @@ func TestKeyRingNeverSignsWithAKeyItHasNotReadItself(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key2, err := issuer.NewSigningKey()
+	key2, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +395,7 @@ func TestKeyRingNeverSignsWithAKeyItHasNotReadItself(t *testing.T) {
 	// slow is a replica whose own file read is stuck on key1 — its node's
 	// kubelet, say, has not projected the update yet — but it still learns
 	// OF key2's existence from the shared store.
-	slow := issuer.NewKeyRing(jose.ES384, shared, cfg, nil)
+	slow := signer.NewKeyRing(jose.ES384, shared, cfg, nil)
 	slow.SetClock(clock.now)
 	if err := slow.Observe(ctx, key1); err != nil {
 		t.Fatal(err)
@@ -428,9 +429,9 @@ func TestKeyRingNeverSignsWithAKeyItHasNotReadItself(t *testing.T) {
 func TestKeyRingPublishedKeyMaterialVerifies(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	ring := issuer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), issuer.KeyRingConfig{}, nil)
+	ring := signer.NewKeyRing(jose.ES384, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
 
-	key, err := issuer.NewSigningKey()
+	key, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,94 +443,11 @@ func TestKeyRingPublishedKeyMaterialVerifies(t *testing.T) {
 	if len(published) != 1 {
 		t.Fatalf("published = %d keys, want 1", len(published))
 	}
-	pub, ok := published[0].Key().(crypto.PublicKey)
+	pub, ok := published[0].Key.(crypto.PublicKey)
 	if !ok {
-		t.Fatalf("published key material is %T, want a crypto.PublicKey", published[0].Key())
+		t.Fatalf("published key material is %T, want a crypto.PublicKey", published[0].Key)
 	}
 	if _, ok := pub.(interface{ Equal(crypto.PublicKey) bool }); !ok {
 		t.Fatalf("published key material %T has no Equal method to compare against the source key", pub)
-	}
-}
-
-// The plumbing end to end: a [issuer.Storage] built with one key adopts a
-// rotated one through [issuer.Storage.Rotate], and everything that signs
-// through it — the OpenID surface's own key, the JWKS, and [issuer.Storage.MintFor]
-// — follows the same schedule rather than each holding its own idea of
-// which key is current.
-func TestStorageRotateAdoptsANewSigningKey(t *testing.T) {
-	t.Parallel()
-	dir := &fakeDirectory{standing: map[string]issuer.Standing{
-		"ada@north.example": live("directory-admins@north.example"),
-	}}
-	iss := newIssuer(t, dir)
-
-	key1, err := issuer.NewSigningKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, key1, nil, issuer.NewMemoryState())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A real, tiny delay rather than zero: [issuer.KeyRingConfig] treats
-	// zero as "use the default", and this test wants the schedule to run
-	// its course in real time instead of asserting on its own arithmetic —
-	// that is what TestKeyRingRotationSchedule already does with an
-	// injected clock.
-	storage.ConfigureKeyRotation(issuer.KeyRingConfig{ActivationDelay: time.Nanosecond, Overlap: time.Hour})
-
-	ctx := context.Background()
-	signing, err := storage.SigningKey(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if signing.ID() != key1.ID() {
-		t.Fatalf("signs with %s, want the seed key %s", signing.ID(), key1.ID())
-	}
-
-	key2, err := issuer.NewSigningKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.Rotate(ctx, key2); err != nil {
-		t.Fatal(err)
-	}
-
-	keys, err := storage.KeySet(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(keys) != 2 {
-		t.Fatalf("published %d keys right after rotation, want 2: publish before sign", len(keys))
-	}
-	if signing, err = storage.SigningKey(ctx); err != nil {
-		t.Fatal(err)
-	} else if signing.ID() != key1.ID() {
-		t.Fatalf("signs with %s immediately after rotation, want it to keep signing with key1 until activation", signing.ID())
-	}
-
-	time.Sleep(time.Millisecond)                      // past the one-nanosecond activation delay
-	if err := storage.Rotate(ctx, key2); err != nil { // the next poll tick, same key
-		t.Fatal(err)
-	}
-
-	if signing, err = storage.SigningKey(ctx); err != nil {
-		t.Fatal(err)
-	} else if signing.ID() != key2.ID() {
-		t.Fatalf("signs with %s, want key2 once its activation delay elapsed", signing.ID())
-	}
-
-	// MintFor signs with whatever is active NOW, not with the key the
-	// storage was built with.
-	token, _, err := storage.MintFor(ctx, "ada@north.example", "aws:1111:power", time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	signed, err := jose.ParseSigned(token, []jose.SignatureAlgorithm{jose.RS256, jose.ES256, jose.ES384, jose.ES512})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := signed.Verify(key2.Key().(crypto.Signer).Public()); err != nil {
-		t.Errorf("MintFor did not sign with the newly active key: %v", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"encoding/json"
 	"errors"
+	"github.com/truvity/sluis/internal/signer"
 	"slices"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestMintForSignsWhatAnExchangeWouldDecide(t *testing.T) {
 		"nobody@north.example": live(),
 	}}
 	iss := newIssuer(t, dir)
-	key, err := issuer.NewSigningKey()
+	key, err := signer.NewSigningKey()
 	if err != nil {
 		t.Fatal(err)
 	}

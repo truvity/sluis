@@ -230,7 +230,7 @@ func TestSigningKeyRotatesUnderARunningIssuerWithNoRestart(t *testing.T) {
 // primary but fed to its own track. Rotating it must leave the primary
 // key's own kid untouched throughout -- the property
 // [TestKeyRingsRotatingOneAlgorithmLeavesAnotherUntouched] proves at the
-// [issuer.KeyRing] layer, proven again here through the real files,
+// [signer.KeyRing] layer, proven again here through the real files,
 // pollers and HTTP surface a deployment actually runs.
 func TestAdditionalSigningKeyRotatesOnItsOwnFileIndependently(t *testing.T) {
 	primaryDir, primaryPath := newProjectedKeyDir(t)

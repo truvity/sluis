@@ -26,7 +26,7 @@ func (r *ring) Default() jose.SignatureAlgorithm { return r.def }
 func (r *ring) Published() []signer.PublicKey {
 	return []signer.PublicKey{{KID: "a", Algorithm: r.def}}
 }
-func (r *ring) Active(a jose.SignatureAlgorithm) (signer.ActiveKey, bool) {
+func (r *ring) Signing(a jose.SignatureAlgorithm) (signer.ActiveKey, bool) {
 	k, ok := r.active[a]
 	return k, ok
 }

@@ -1,4 +1,4 @@
-package issuer
+package signer
 
 import (
 	"bytes"
@@ -119,7 +119,7 @@ type replica struct {
 type wrapEnv struct {
 	kms    *spyKeys
 	key    *keys.Key
-	state  *MemoryState
+	state  *memState
 	leases *memory.Store
 	clock  *wrapClock
 	algs   []jose.SignatureAlgorithm
@@ -130,7 +130,7 @@ type wrapEnv struct {
 
 // flakyState is the shared state with writes of key ring entries that can fail.
 type flakyState struct {
-	*MemoryState
+	*memState
 	env *wrapEnv
 }
 
@@ -138,10 +138,10 @@ func (f flakyState) SetIfAbsent(ctx context.Context, key string, value []byte, t
 	if f.env.failWrites && strings.HasPrefix(key, "issuer:keyring:entry:") {
 		return false, errors.New("state unavailable")
 	}
-	return f.MemoryState.SetIfAbsent(ctx, key, value, ttl)
+	return f.memState.SetIfAbsent(ctx, key, value, ttl)
 }
 
-func (e *wrapEnv) shared() State { return flakyState{MemoryState: e.state, env: e} }
+func (e *wrapEnv) shared() State { return flakyState{memState: e.state, env: e} }
 
 func newWrapEnv(t *testing.T, algs ...jose.SignatureAlgorithm) *wrapEnv {
 	t.Helper()
@@ -149,7 +149,7 @@ func newWrapEnv(t *testing.T, algs ...jose.SignatureAlgorithm) *wrapEnv {
 		algs = []jose.SignatureAlgorithm{jose.ES384}
 	}
 	clock := &wrapClock{t: wrapT0}
-	state := NewMemoryState()
+	state := newMemState()
 	state.SetClock(clock.now)
 	spy := newSpy(t)
 	return &wrapEnv{kms: spy, key: openSign(t, spy, keys.ContextSpec{}), state: state, leases: memory.New(), clock: clock, algs: algs}
@@ -203,7 +203,7 @@ func (r *replica) maintain() { r.rings.Maintain(context.Background()) }
 func (r *replica) published(alg jose.SignatureAlgorithm) []string {
 	var out []string
 	for _, k := range r.rings.rings[alg].Published() {
-		out = append(out, k.ID())
+		out = append(out, k.KID)
 	}
 	return out
 }
@@ -243,8 +243,8 @@ func signAndVerify(t *testing.T, r *replica, alg jose.SignatureAlgorithm) string
 		t.Fatalf("kid %q, want %q", got, active.ID())
 	}
 	for _, k := range r.rings.Published() {
-		if k.ID() == active.ID() {
-			if _, err := parsed.Verify(k.Key()); err != nil {
+		if k.KID == active.ID() {
+			if _, err := parsed.Verify(k.Key); err != nil {
 				t.Fatalf("%s token does not verify with the published key: %v", alg, err)
 			}
 			return active.ID()
@@ -283,8 +283,8 @@ func TestWrappedFirstStartGeneratesActiveKeysForEveryAlgorithm(t *testing.T) {
 	}
 	// The JWKS carries public keys only, of the right shape.
 	for _, k := range r.rings.Published() {
-		if _, ok := k.Key().(interface{ Public() any }); ok {
-			t.Errorf("%s publishes a private key", k.ID())
+		if _, ok := k.Key.(interface{ Public() any }); ok {
+			t.Errorf("%s publishes a private key", k.KID)
 		}
 	}
 }
@@ -306,12 +306,12 @@ func TestWrappedNoPlaintextPrivateKeyIsStored(t *testing.T) {
 			// The key is DER; the state holds JSON, so base64 is how it would appear.
 			for _, needle := range [][]byte{plain, []byte(base64.StdEncoding.EncodeToString(plain)),
 				[]byte(base64.RawURLEncoding.EncodeToString(plain)), plain[len(plain)-40:]} {
-				if bytes.Contains(v.value, needle) {
+				if bytes.Contains(v.data, needle) {
 					t.Fatalf("%s holds plaintext private key material", key)
 				}
 			}
 		}
-		if strings.Contains(string(v.value), "PRIVATE KEY") {
+		if strings.Contains(string(v.data), "PRIVATE KEY") {
 			t.Fatalf("%s holds a PEM private key", key)
 		}
 		checked++
