@@ -43,7 +43,7 @@ func announceStorage(t *testing.T, base string, n int) *issuer.Storage {
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true},
 		set, &fakeDirectory{}, issuer.NewMemoryState())
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

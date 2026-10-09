@@ -164,7 +164,7 @@ func TestACompletedRequestIsNotCompletedAgainAsSomebodyElse(t *testing.T) {
 	engineer := Standing{Found: true, Authoritative: true, Groups: []string{"eng@north.example"}}
 	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set,
 		aDirectory{"ada@north.example": engineer, "eve@north.example": engineer}, NewMemoryState())
-	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	storage, err := NewTestStorage(iss, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

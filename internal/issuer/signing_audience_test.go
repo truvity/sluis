@@ -130,7 +130,7 @@ func newMultiAlgServerState(t *testing.T, primary, rsaKey *signer.SigningKey, st
 	}}
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, dir, state)
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*signer.SigningKey{rsaKey}, state)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, primary, []*signer.SigningKey{rsaKey}, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
@@ -468,7 +468,7 @@ func TestSigningMintForFollowsItsOwnTargetAudience(t *testing.T) {
 		t.Fatal(err)
 	}
 	rsaKey := rsaSigningKey(t)
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, primary, []*signer.SigningKey{rsaKey}, state)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, primary, []*signer.SigningKey{rsaKey}, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
@@ -616,7 +616,7 @@ func TestSigningAlgWithNoConfiguredKeyRefusesAtStart(t *testing.T) {
 			// RS256 key anywhere -- so the RS256 pin above must refuse
 			// construction rather than let the FIRST request to reach it
 			// discover the gap.
-			_, err = issuer.NewStorage(iss, nil, nil, nil, nil, nil)
+			_, err = issuer.NewTestStorage(iss, nil, nil, nil, nil, nil)
 			if err == nil {
 				t.Fatalf("%s naming signing_alg: RS256 with no RS256 key configured was accepted", name)
 			}

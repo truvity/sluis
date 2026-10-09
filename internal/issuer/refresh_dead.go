@@ -3,7 +3,6 @@ package issuer
 import (
 	"container/list"
 	"context"
-	"crypto/hkdf"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -141,16 +140,12 @@ func newDeadRefreshes(key []byte, limit int, confirm, ttl time.Duration, now fun
 }
 
 // fingerprintKey is the HMAC key of the cache and of the logged fingerprint:
-// derived with HKDF and a label of its own from seed, the secret the
-// installation's sign-in state is derived from ([SigningKey.Derive]: the
-// configured state secret for a KMS key, the private key's encoding for a
-// file key), never the raw secret. With no seed it is drawn at random, for
-// this process alone.
-func fingerprintKey(seed []byte) []byte {
-	if len(seed) > 0 {
-		if key, err := hkdf.Key(sha256.New, seed, nil, fingerprintLabel, sha256.Size); err == nil {
-			return key
-		}
+// the secret the signer derived for [fingerprintLabel] from the installation's
+// sign-in state secret (HKDF, never the raw secret; see [signer.Directory]).
+// With none it is drawn at random, for this process alone.
+func fingerprintKey(derived []byte) []byte {
+	if len(derived) > 0 {
+		return derived
 	}
 
 	key := make([]byte, sha256.Size)

@@ -292,14 +292,17 @@ func TestTheMinterExemptionsAreHeldToUse(t *testing.T) {
 }
 
 // The ring, its wrapped-key generation and the KMS keys live in internal/signer.
-// The issuer still holds the keys of the library's own mint paths
-// (signer.SigningKey, signer.KeyRings and signer.WrappedSigning, which
-// Storage.UseWrappedSigning takes), and nothing else of the ring's internals:
-// a package-level import rule cannot say that, so this reads the issuer's
-// sources and refuses a reference to the names below.
+// The issuer holds no key material: it names signer.Signer, signer.Directory and
+// the public types, and not signer.SigningKey, signer.KeyRings,
+// signer.WrappedSigning nor anything else of the ring's internals. A
+// package-level import rule cannot say that, so this reads the issuer's
+// non-test sources and refuses a reference to the names below.
 func TestTheIssuerNamesNoRingInternals(t *testing.T) {
 	internals := []string{"KeyRing", "KeyRingStatus", "NewKeyRing", "NewWrappedSigning", "WrappedConfig", "WrappedLease",
-		"KMSAPI", "KMSSigningKey", "KMSSigningKeyFor", "KMSKeyRefs", "EncryptionContext", "ParseSigningKey"}
+		"KMSAPI", "KMSSigningKey", "KMSSigningKeyFor", "KMSKeyRefs", "EncryptionContext", "ParseSigningKey",
+		// The issuer holds no key material: the library signs through an opaque
+		// signer over signer.Signer, and rotation is fed to the rings by the wiring.
+		"SigningKey", "KeyRings", "WrappedSigning", "NewSigningKey", "NewKeyRings"}
 	files, err := filepath.Glob("../issuer/*.go")
 	if err != nil || len(files) < 20 {
 		t.Fatalf("the sweep found %d issuer files (%v): it listed the wrong thing", len(files), err)

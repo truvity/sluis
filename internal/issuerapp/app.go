@@ -451,8 +451,10 @@ type App struct {
 	health  http.Handler
 	issuer  *issuer.Issuer
 	storage *issuer.Storage
-	cfg     Config
-	log     *slog.Logger
+	// keys are the signer's rings: rotation is fed to them, not to the issuer.
+	keys *signer.KeyRings
+	cfg  Config
+	log  *slog.Logger
 }
 
 // MintFor signs a short-lived access token for a person signed in to this
@@ -637,7 +639,12 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if stores.Ports.Secrets != nil {
 		core.UseClientSecrets(secretsAdmin)
 	}
-	storage, err := issuer.NewStorage(core, verifiers, creds, key, additionalKeys, shared)
+	keys, err := signer.NewKeyRings(key, additionalKeys, shared, signer.KeyRingConfig{}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("adopt the signing keys: %w", err)
+	}
+	storage, err := issuer.NewStorage(core, verifiers, creds,
+		signer.New(keys, signer.LimitsFor(core.Config().TokenLifetime)), keys, shared)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +660,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// The delays a deployment named, or their defaults: NewStorage seeded
 	// the ring before either was known, so this is applied before the
 	// poller in Run starts feeding it anything more.
-	storage.ConfigureKeyRotation(signer.KeyRingConfig{
+	keys.Configure(signer.KeyRingConfig{
 		ActivationDelay: cfg.keyActivationDelay,
 		Overlap:         cfg.keyOverlap,
 	})
@@ -664,13 +671,13 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		if wcErr != nil {
 			return nil, wcErr
 		}
-		storage.ConfigureKeyRotation(signer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
-		storage.UseWrappedSigning(wrapped)
+		keys.Configure(signer.KeyRingConfig{ActivationDelay: wc.Prepublish, Overlap: wc.Retain})
+		keys.UseWrapped(wrapped)
 	}
 	// The earlier KMS keys, in order: refreshed if the installation knows
 	// them, never newly adopted.
 	for _, extra := range kmsRest {
-		if err = storage.RotateKnown(ctx, extra); err != nil {
+		if err = keys.RotateKnown(ctx, extra); err != nil {
 			return nil, fmt.Errorf("adopt a KMS signing key: %w", err)
 		}
 	}
@@ -762,7 +769,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	// the request metrics see the status the client got. The route is a fixed
 	// set of names (issuer.Route), never the path.
 	handler = telemetry.HTTPHandler(handler, "access-issuer", issuer.Route)
-	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
+	app := &App{handler: handler, health: healthMux, issuer: core, storage: storage, keys: keys, cfg: cfg, log: log, kms: kmsRefs, wrapped: wrapped != nil, state: shared,
 		generated: generated, creds: creds, credStore: stores.Ports.Secrets, leases: leases}
 	// At start, and not only on the tick, so a first deploy has its secrets as
 	// soon as it serves. A client that fails here does not stop the issuer: it
@@ -848,7 +855,7 @@ func (a *App) Run(ctx context.Context) error {
 	group.Go(func() error { return serve(gctx, a.cfg.healthPort, a.health, "health", a.log) })
 	if a.kms != nil {
 		group.Go(func() error {
-			watchKMSKeys(gctx, a.kms, a.cfg.keyPollInterval, a.storage, a.log, func(c context.Context) error {
+			watchKMSKeys(gctx, a.kms, a.cfg.keyPollInterval, a.keys, a.log, func(c context.Context) error {
 				return checkStateSecret(c, a.state, a.kms[0].Seed)
 			})
 			return nil
@@ -865,7 +872,7 @@ func (a *App) Run(ctx context.Context) error {
 			ticker := time.NewTicker(a.cfg.keyPollInterval)
 			defer ticker.Stop()
 			for {
-				a.storage.MaintainKeys(gctx)
+				a.keys.Maintain(gctx)
 				select {
 				case <-gctx.Done():
 					return nil
@@ -876,7 +883,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	group.Go(func() error {
 		paths := append([]string{a.cfg.signingKeyFile}, a.cfg.additionalSigningKeyFiles...)
-		watchSigningKey(gctx, paths, a.cfg.keyPollInterval, a.storage, a.log)
+		watchSigningKey(gctx, paths, a.cfg.keyPollInterval, a.keys, a.log)
 		return nil
 	})
 	return group.Wait()
@@ -1040,7 +1047,7 @@ func additionalSigningKeys(ctx context.Context, cfg Config, log *slog.Logger) ([
 // path that names an algorithm nothing was configured for at start
 // ([signer.KeyRings.Rotate] refuses it) — logged and skipped, not fatal,
 // because the deployment is already running with what it started with.
-func watchSigningKey(ctx context.Context, paths []string, interval time.Duration, storage *issuer.Storage, log *slog.Logger) {
+func watchSigningKey(ctx context.Context, paths []string, interval time.Duration, keys *signer.KeyRings, log *slog.Logger) {
 	paths = nonEmpty(paths)
 	if len(paths) == 0 {
 		return
@@ -1058,7 +1065,7 @@ func watchSigningKey(ctx context.Context, paths []string, interval time.Duration
 			return
 		case <-ticker.C:
 			for _, path := range paths {
-				pollSigningKeyFile(ctx, path, storage, log)
+				pollSigningKeyFile(ctx, path, keys, log)
 			}
 		}
 	}
@@ -1068,7 +1075,7 @@ func watchSigningKey(ctx context.Context, paths []string, interval time.Duration
 // the storage's key rings, which route it to the track for its own
 // algorithm. Split out of [watchSigningKey] so that one bad file's
 // `continue` cannot accidentally skip the others sharing its tick.
-func pollSigningKeyFile(ctx context.Context, path string, storage *issuer.Storage, log *slog.Logger) {
+func pollSigningKeyFile(ctx context.Context, path string, keys *signer.KeyRings, log *slog.Logger) {
 	encoded, err := os.ReadFile(path) //nolint:gosec // the path is deployment configuration
 	if err != nil {
 		log.WarnContext(ctx, "could not re-read a signing key; keeping the previous one",
@@ -1081,7 +1088,7 @@ func pollSigningKeyFile(ctx context.Context, path string, storage *issuer.Storag
 			slog.String("file", path), slog.Any("error", err))
 		return
 	}
-	if err := storage.Rotate(ctx, key); err != nil {
+	if err := keys.Rotate(ctx, key); err != nil {
 		log.WarnContext(ctx, "a re-read signing key could not be adopted", slog.String("file", path), slog.Any("error", err))
 	}
 }
@@ -1351,7 +1358,7 @@ func kmsSigningKeys(
 // previous key as a file read that fails does. Re-reading is what notices an
 // alias moved to another key: it reads as a new kid and is scheduled as one.
 func watchKMSKeys(
-	ctx context.Context, sets []*signer.KMSKeyRefs, interval time.Duration, storage *issuer.Storage, log *slog.Logger,
+	ctx context.Context, sets []*signer.KMSKeyRefs, interval time.Duration, keys *signer.KeyRings, log *slog.Logger,
 	checkSecret func(context.Context) error,
 ) {
 	if interval <= 0 {
@@ -1369,17 +1376,17 @@ func watchKMSKeys(
 				log.WarnContext(ctx, "the KMS state secret check failed", slog.Any("error", err))
 			}
 			for _, refs := range sets {
-				pollKMSRefs(ctx, refs, storage, log)
+				pollKMSRefs(ctx, refs, keys, log)
 			}
 		}
 	}
 }
 
 // pollKMSRefs re-reads one algorithm's list.
-func pollKMSRefs(ctx context.Context, refs *signer.KMSKeyRefs, storage *issuer.Storage, log *slog.Logger) {
+func pollKMSRefs(ctx context.Context, refs *signer.KMSKeyRefs, keys *signer.KeyRings, log *slog.Logger) {
 	for i, ref := range refs.Refs {
 		one := signer.KMSKeyRefs{Alg: refs.Alg, API: refs.API, Refs: []string{ref}, Seed: refs.Seed}
-		keys, err := one.Load(ctx)
+		loaded, err := one.Load(ctx)
 		if err != nil {
 			log.WarnContext(ctx, "could not re-read a KMS signing key; keeping the previous one",
 				slog.String("key", ref), slog.Any("error", err))
@@ -1388,11 +1395,11 @@ func pollKMSRefs(ctx context.Context, refs *signer.KMSKeyRefs, storage *issuer.S
 		// List order is age: only the LAST key may be newly recorded. The
 		// earlier ones are re-read to refresh a key the ring holds, and a
 		// retired one is never brought back by being listed.
-		rotate := storage.RotateKnown
+		rotate := keys.RotateKnown
 		if i == len(refs.Refs)-1 {
-			rotate = storage.Rotate
+			rotate = keys.Rotate
 		}
-		if err := rotate(ctx, keys[0]); err != nil {
+		if err := rotate(ctx, loaded[0]); err != nil {
 			log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", slog.String("key", ref), slog.Any("error", err))
 		}
 	}

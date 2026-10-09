@@ -2,6 +2,8 @@ package signer
 
 import (
 	"context"
+	"crypto/hkdf"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,7 +33,11 @@ import (
 type KeyRings struct {
 	rings   map[jose.SignatureAlgorithm]*KeyRing
 	primary jose.SignatureAlgorithm
+	// seed is the primary key's, for [KeyRings.Secret].
+	seed []byte
 }
+
+var _ Directory = (*KeyRings)(nil)
 
 // NewKeyRings builds one KeyRing per algorithm among primary and
 // additional, sharing state and cfg.
@@ -56,7 +62,7 @@ func NewKeyRings(primary *SigningKey, additional []*SigningKey, state State, cfg
 		log = slog.Default()
 	}
 
-	out := &KeyRings{rings: map[jose.SignatureAlgorithm]*KeyRing{}, primary: primary.SignatureAlgorithm()}
+	out := &KeyRings{rings: map[jose.SignatureAlgorithm]*KeyRing{}, primary: primary.SignatureAlgorithm(), seed: primary.Seed()}
 
 	for _, key := range append([]*SigningKey{primary}, additional...) {
 		if key == nil {
@@ -208,4 +214,26 @@ func (k *KeyRings) Signing(alg jose.SignatureAlgorithm) (ActiveKey, bool) {
 		return ActiveKey{}, false
 	}
 	return ActiveKey{KID: key.ID(), Algorithm: key.SignatureAlgorithm(), Key: key.Key()}, true
+}
+
+// ActiveKID implements [Directory].
+func (k *KeyRings) ActiveKID(alg jose.SignatureAlgorithm) (string, bool) {
+	key := k.Active(alg)
+	if key == nil {
+		return "", false
+	}
+	return key.ID(), true
+}
+
+// Secret implements [Directory]: HKDF-SHA-256 of the primary key's seed under
+// label, never the seed itself.
+func (k *KeyRings) Secret(label string) []byte {
+	if len(k.seed) == 0 {
+		return nil
+	}
+	out, err := hkdf.Key(sha256.New, k.seed, nil, label, sha256.Size)
+	if err != nil {
+		return nil
+	}
+	return out
 }

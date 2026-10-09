@@ -200,11 +200,12 @@ func (a *authRequest) Done() bool                         { return a.IsDone }
 type Storage struct {
 	iss    *Issuer
 	verify Verifier
-	keys   *signer.KeyRings
-	// signer signs the tokens this package hand-signs and publishes the
-	// keys (internal/signer); the library-minted paths still take their key
-	// from keys through [Storage.SigningKey].
+	// signer signs every token, those this package builds and those the
+	// OpenID library mints (through [Storage.SigningKey]), and publishes the
+	// keys (internal/signer). dir is its read-only view: which algorithms and
+	// which key id. The issuer holds no key.
 	signer  signer.Signer
+	dir     signer.Directory
 	secrets clientcreds.Lookup
 	// verifyOnly are public keys published beside the rings' (UseVerifyOnly),
 	// and now is the clock that ends them.
@@ -349,17 +350,13 @@ func (noClientSecrets) Resolve(context.Context, string) (clientcreds.Secrets, bo
 //
 // secrets resolves a confidential client's secrets (the current one and, for
 // a while after a rotation, the previous), which live in the credentials or in
-// the installation's inputs and never in the policy file. key is the primary
-// signing key; a nil one is generated, which is right for a local run and
-// wrong for a deployment — see [SigningKey]. additional is every OTHER
-// algorithm this installation signs with at once, at most one key per
-// algorithm — see [KeyRings]. Together they seed the [KeyRings] this
-// storage keeps for the life of the process: a later key, read after a
-// rotation, is fed to it with [Storage.Rotate] rather than by building a
-// new Storage. state is where a login in progress lives, and where each
-// ring's schedule is shared with every other replica; a nil one is kept
-// in this process, which is right for one replica and wrong for more —
-// see [State].
+// the installation's inputs and never in the policy file. sg signs every token
+// and publishes the keys, and dir is its read-only directory of algorithms
+// (both are internal/signer over the same key rings; the issuer holds no key
+// and feeds the rings no key: rotation is the caller's, on the rings). state
+// is where a login in progress lives, and where each ring's schedule is
+// shared with every other replica; a nil one is kept in this process, which is
+// right for one replica and wrong for more -- see [State].
 //
 // This is also THE PLACE policy and keys meet, and so the one place a
 // policy naming a `signing_alg` this installation has no key for can be
@@ -370,14 +367,10 @@ func (noClientSecrets) Resolve(context.Context, string) (clientcreds.Secrets, bo
 // what naming an algorithm at all is for.
 func NewStorage(
 	iss *Issuer, verify Verifier, secrets clientcreds.Lookup,
-	key *signer.SigningKey, additional []*signer.SigningKey, state State,
+	sg signer.Signer, dir signer.Directory, state State,
 ) (*Storage, error) {
-	if key == nil {
-		generated, err := signer.NewSigningKey()
-		if err != nil {
-			return nil, err
-		}
-		key = generated
+	if sg == nil || dir == nil {
+		return nil, errors.New("issuer: a signer and its directory are required")
 	}
 	if secrets == nil {
 		secrets = noClientSecrets{}
@@ -385,11 +378,7 @@ func NewStorage(
 	if state == nil {
 		state = NewMemoryState()
 	}
-	keys, err := signer.NewKeyRings(key, additional, state, signer.KeyRingConfig{}, nil)
-	if err != nil {
-		return nil, fmt.Errorf("issuer: adopt the signing keys: %w", err)
-	}
-	if err := checkSigningAlgorithms(iss.Policy(), keys); err != nil {
+	if err := checkSigningAlgorithms(iss.Policy(), dir); err != nil {
 		return nil, err
 	}
 	// Nothing here implements op.DeviceAuthorizationStorage, and that is
@@ -398,14 +387,10 @@ func NewStorage(
 	// assertion fails, so there is no device state to keep and no way for
 	// a device code to be stored by something that changed its mind.
 	return &Storage{
-		iss:    iss,
-		verify: verify,
-		keys:   keys,
-		signer: signer.New(keys, signer.Limits{MaxLifetime: map[signer.Purpose]time.Duration{
-			signer.PurposeAccess: iss.Config().TokenLifetime,
-			// A logout token carries no exp.
-			signer.PurposeLogout: 0,
-		}}),
+		iss:           iss,
+		verify:        verify,
+		signer:        sg,
+		dir:           dir,
 		secrets:       secrets,
 		state:         state,
 		documents:     newDocumentClients(iss.Policy().ClientDocuments()),
@@ -413,7 +398,7 @@ func NewStorage(
 		now:           time.Now,
 		// The session index's clock, so that time a test moves for the
 		// sessions moves for the cache's TTL too.
-		dead: newDeadRefreshes(fingerprintKey(key.Seed()), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
+		dead: newDeadRefreshes(fingerprintKey(dir.Secret(fingerprintLabel)), deadRefreshEntries, deadRefreshConfirm, deadRefreshTTL,
 			func() time.Time { return iss.Sessions().now() }),
 	}, nil
 }
@@ -423,7 +408,7 @@ func NewStorage(
 // and [policy.Resource] can only check that the VALUE is one of
 // [policy.SigningAlgs] — they know nothing of what keys exist — so this is
 // the one place, at issuer start, that both are in hand together.
-func checkSigningAlgorithms(set *policy.Set, keys *signer.KeyRings) error {
+func checkSigningAlgorithms(set *policy.Set, keys signer.Directory) error {
 	// By index rather than by value: [policy.ClientView] and
 	// [policy.ResourceView] are wide structs, and copying one per
 	// iteration is what the linter objects to -- see [policy.Set.Clients].
@@ -452,44 +437,6 @@ func checkSigningAlgorithms(set *policy.Set, keys *signer.KeyRings) error {
 
 // ---------------------------------------------------------------- keys
 
-// Rotate feeds a freshly re-read signing key to this storage's key ring —
-// the whole of live rotation. A caller polling the mounted key file calls
-// this on every read, whether or not the content changed; see
-// [KeyRing.Observe] for the schedule that decides what happens next: a
-// key never seen before is published immediately and starts signing only
-// after its activation delay, and the key it supersedes stays published
-// for its overlap before dropping out.
-func (s *Storage) Rotate(ctx context.Context, key *signer.SigningKey) error {
-	return s.keys.Rotate(ctx, key)
-}
-
-// RotateKnown refreshes a signing key the rings already hold without ever
-// adopting a new one: the older keys of a KMS list.
-func (s *Storage) RotateKnown(ctx context.Context, key *signer.SigningKey) error {
-	return s.keys.RotateKnown(ctx, key)
-}
-
-// UseWrappedSigning makes the key rings generate, wrap and rotate their own
-// keys (the `kms-wrapped` signing adapter), and starts the rotation: from here
-// every signing and every JWKS request, and [Storage.MaintainKeys], keep it going.
-func (s *Storage) UseWrappedSigning(ws *signer.WrappedSigning) {
-	s.keys.UseWrapped(ws)
-}
-
-// MaintainKeys runs the wrapped keys' rotation once: cheap, and a no-op until
-// the interval has passed. A process with a loop of its own calls it on a
-// timer, so rotation does not wait for traffic.
-func (s *Storage) MaintainKeys(ctx context.Context) { s.keys.Maintain(ctx) }
-
-// ConfigureKeyRotation overrides every ring's activation delay and
-// overlap once a deployment's own settings are known — its token
-// lifetime, chiefly, which [KeyRingConfig.Overlap] must be at least as
-// long as. Call it before serving; [KeyRing.Configure] is not meant to be
-// changed while replicas are actively rotating.
-func (s *Storage) ConfigureKeyRotation(cfg signer.KeyRingConfig) {
-	s.keys.Configure(cfg)
-}
-
 // SigningKey implements [op.AuthStorage]: the key this replica currently
 // signs with.
 //
@@ -514,29 +461,30 @@ func (s *Storage) ConfigureKeyRotation(cfg signer.KeyRingConfig) {
 // marked the carrier would look, from here, identical to one that was
 // never asked to be anything but the default.
 func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
-	s.keys.Maintain(ctx)
-	alg := s.keys.Default()
+	s.dir.Maintain(ctx)
+	alg := s.dir.Default()
 	if id, ok := signingAudienceFrom(ctx).get(); ok {
 		alg = s.signingAlgorithmFor(id)
 	}
 
-	active := s.keys.Active(alg)
-	if active == nil && !s.keys.Has(alg) {
+	kid, ok := s.dir.ActiveKID(alg)
+	if !ok && !s.dir.Has(alg) {
 		// No ring exists for this algorithm: checkSigningAlgorithms refuses
 		// that at start for anything a policy row names, so this is an
 		// algorithm nobody configured, and the default answers.
-		active = s.keys.Active(s.keys.Default())
+		alg = s.dir.Default()
+		kid, ok = s.dir.ActiveKID(alg)
 	}
-	if active == nil && s.keys.Has(alg) {
+	if !ok && s.dir.Has(alg) {
 		// The ring exists but has no signer yet (its key is unactivated, or
 		// retired): never a token of ANOTHER algorithm, which a relying
 		// party pinned to this one would reject or, worse, accept.
 		return nil, fmt.Errorf("issuer: no signing key is available yet for %s", alg)
 	}
-	if active == nil {
+	if !ok {
 		return nil, errors.New("issuer: no signing key is available yet")
 	}
-	return active, nil
+	return s.libraryKey(ctx, alg, kid)
 }
 
 // signingAlgorithmFor is the algorithm a token FOR audience id is signed
@@ -561,7 +509,7 @@ func (s *Storage) signingAlgorithmFor(id string) jose.SignatureAlgorithm {
 			return jose.SignatureAlgorithm(client.SigningAlg)
 		}
 	}
-	return s.keys.Default()
+	return s.dir.Default()
 }
 
 // SignatureAlgorithms implements [op.AuthStorage]. It is what the
@@ -573,9 +521,13 @@ func (s *Storage) signingAlgorithmFor(id string) jose.SignatureAlgorithm {
 // to accept a token a moment away from expiring under a previous key, and
 // one that reads `aud` for a client with no `signing_alg` still has to
 // accept whatever the installation default is.
-func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorithm, error) {
-	algs := s.keys.Algorithms()
-	for _, k := range s.verifyOnlyKeys(opKeys(s.keys.Published())) {
+func (s *Storage) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
+	public, err := s.signer.PublicKeys(ctx)
+	if err != nil {
+		return nil, err
+	}
+	algs := s.dir.Algorithms()
+	for _, k := range s.verifyOnlyKeys(opKeys(public)) {
 		if !slices.Contains(algs, k.Algorithm()) {
 			algs = append(algs, k.Algorithm())
 		}
@@ -585,7 +537,7 @@ func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorith
 }
 
 // KeySet implements [op.AuthStorage]: every key currently published, by
-// every configured algorithm, signing or retiring — see [KeyRings.Published].
+// every configured algorithm, signing or retiring — see [signer.Signer.PublicKeys].
 func (s *Storage) KeySet(ctx context.Context) ([]op.Key, error) {
 	public, err := s.signer.PublicKeys(ctx)
 	if err != nil {

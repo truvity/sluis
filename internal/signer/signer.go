@@ -38,10 +38,14 @@ const (
 	PurposeAccess Purpose = "access"
 	// PurposeLogout is an OpenID back-channel logout token: typ logout+jwt.
 	PurposeLogout Purpose = "logout"
+	// PurposeIDToken is a token the OpenID library mints through the issuer's
+	// storage: an ID token, or an access token the library builds itself. typ
+	// JWT, and bounded by the same lifetime as an access token.
+	PurposeIDToken Purpose = "id_token"
 )
 
 // typ is the JWT type header of a purpose.
-var typ = map[Purpose]string{PurposeAccess: "JWT", PurposeLogout: "logout+jwt"}
+var typ = map[Purpose]string{PurposeAccess: "JWT", PurposeLogout: "logout+jwt", PurposeIDToken: "JWT"}
 
 var (
 	// ErrUnknownPurpose is a request for a purpose the signer does not sign.
@@ -84,6 +88,39 @@ type Signer interface {
 	// PublicKeys is every key currently published: the signing one, those
 	// waiting out their activation delay and the retiring ones.
 	PublicKeys(ctx context.Context) ([]PublicKey, error)
+}
+
+// Directory is the read-only view of the key rings the issuer needs beside
+// [Signer]: which algorithms exist, which key signs for one, and a secret
+// derived from the installation's. It hands out no key: not a signing key, not
+// the seed one is derived from.
+type Directory interface {
+	// Maintain gives the rings their chance to rotate before a key is chosen.
+	Maintain(ctx context.Context)
+	// Default is the installation's own algorithm.
+	Default() jose.SignatureAlgorithm
+	// Has reports whether a key is configured for alg.
+	Has(alg jose.SignatureAlgorithm) bool
+	// Configured is every algorithm a key exists for, sorted.
+	Configured() []jose.SignatureAlgorithm
+	// Algorithms is every algorithm with a currently published key, sorted.
+	Algorithms() []jose.SignatureAlgorithm
+	// ActiveKID is the id of the key signing for alg now, or false.
+	ActiveKID(alg jose.SignatureAlgorithm) (string, bool)
+	// Secret is an HKDF-derived secret for a label, stable across restarts
+	// and replicas as long as the primary key is; nil when there is no seed.
+	Secret(label string) []byte
+}
+
+// LimitsFor is the per-purpose limits of a deployment whose tokens live at most
+// tokenLifetime: every JWT purpose is capped at it, and a logout token carries
+// no exp.
+func LimitsFor(tokenLifetime time.Duration) Limits {
+	return Limits{MaxLifetime: map[Purpose]time.Duration{
+		PurposeAccess:  tokenLifetime,
+		PurposeIDToken: tokenLifetime,
+		PurposeLogout:  0,
+	}}
 }
 
 // ActiveKey is the key a ring signs with now.

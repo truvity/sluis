@@ -28,7 +28,7 @@ func TestStorageRotateAdoptsANewSigningKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, key1, nil, issuer.NewMemoryState())
+	storage, keys, err := issuer.NewTestStorageRings(iss, fakeVerifier{}, nil, key1, nil, issuer.NewMemoryState())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestStorageRotateAdoptsANewSigningKey(t *testing.T) {
 	// its course in real time instead of asserting on its own arithmetic —
 	// that is what TestKeyRingRotationSchedule already does with an
 	// injected clock.
-	storage.ConfigureKeyRotation(signer.KeyRingConfig{ActivationDelay: time.Nanosecond, Overlap: time.Hour})
+	keys.Configure(signer.KeyRingConfig{ActivationDelay: time.Nanosecond, Overlap: time.Hour})
 
 	ctx := context.Background()
 	signing, err := storage.SigningKey(ctx)
@@ -52,16 +52,16 @@ func TestStorageRotateAdoptsANewSigningKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.Rotate(ctx, key2); err != nil {
+	if err := keys.Rotate(ctx, key2); err != nil {
 		t.Fatal(err)
 	}
 
-	keys, err := storage.KeySet(ctx)
+	published, err := storage.KeySet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(keys) != 2 {
-		t.Fatalf("published %d keys right after rotation, want 2: publish before sign", len(keys))
+	if len(published) != 2 {
+		t.Fatalf("published %d keys right after rotation, want 2: publish before sign", len(published))
 	}
 	if signing, err = storage.SigningKey(ctx); err != nil {
 		t.Fatal(err)
@@ -69,8 +69,8 @@ func TestStorageRotateAdoptsANewSigningKey(t *testing.T) {
 		t.Fatalf("signs with %s immediately after rotation, want it to keep signing with key1 until activation", signing.ID())
 	}
 
-	time.Sleep(time.Millisecond)                      // past the one-nanosecond activation delay
-	if err := storage.Rotate(ctx, key2); err != nil { // the next poll tick, same key
+	time.Sleep(time.Millisecond)                   // past the one-nanosecond activation delay
+	if err := keys.Rotate(ctx, key2); err != nil { // the next poll tick, same key
 		t.Fatal(err)
 	}
 

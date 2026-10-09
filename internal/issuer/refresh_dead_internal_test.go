@@ -3,7 +3,6 @@ package issuer
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"testing"
 	"time"
@@ -149,20 +148,15 @@ func TestTheDeadRefreshWarningIsRateLimitedAcrossTokens(t *testing.T) {
 	}
 }
 
-func TestTheFingerprintKeyIsDerivedAndNeverTheSecret(t *testing.T) {
+func TestTheFingerprintKeyIsTheDerivedSecretOrRandom(t *testing.T) {
 	t.Parallel()
-	seed := []byte("the installation's state secret, 32+ bytes long")
+	// The derivation itself (HKDF, never the seed) is the signer's:
+	// see signer.KeyRings.Secret.
+	derived := bytes.Repeat([]byte{7}, sha256.Size)
 
-	key := fingerprintKey(seed)
-	if !bytes.Equal(key, fingerprintKey(seed)) {
-		t.Error("the same secret derived two keys; replicas would fingerprint a token differently")
-	}
-	if bytes.Equal(key, seed) || bytes.Contains(seed, key) || len(key) != sha256.Size {
-		t.Error("the fingerprint key is the secret, or part of it")
-	}
-	// Not the derivation the sign-in state uses, under any label.
-	if bytes.Equal(key, hmacOf(seed, []byte(fingerprintLabel))) {
-		t.Error("the fingerprint key is the sign-in state's HMAC derivation, not one of its own")
+	key := fingerprintKey(derived)
+	if !bytes.Equal(key, derived) {
+		t.Error("the secret the signer derived was not used; replicas would fingerprint a token differently")
 	}
 	if bytes.Equal(fingerprintKey(nil), fingerprintKey(nil)) {
 		t.Error("with no secret, two processes drew the same key")
@@ -249,11 +243,4 @@ func TestPresentCallsDeadOnlyATerminalState(t *testing.T) {
 			})
 		})
 	}
-}
-
-// hmacOf is what the signing key derives for a label: HMAC-SHA256 of the label under the seed.
-func hmacOf(seed, label []byte) []byte {
-	mac := hmac.New(sha256.New, seed)
-	mac.Write(label)
-	return mac.Sum(nil)
 }

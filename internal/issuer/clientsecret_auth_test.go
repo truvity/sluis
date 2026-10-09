@@ -42,7 +42,7 @@ clients:
 		t.Fatalf("set: %v", err)
 	}
 	iss := issuer.New(issuer.Config{URL: "https://issuer.example"}, set, &fakeDirectory{}, issuer.NewMemoryState())
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, l, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, l, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

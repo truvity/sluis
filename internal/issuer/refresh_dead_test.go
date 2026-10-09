@@ -152,7 +152,7 @@ func newDeadRigWith(t *testing.T, absolute time.Duration, listener string) *dead
 	trail := audittest.New(t)
 	iss.UseAudit(trail)
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, state)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

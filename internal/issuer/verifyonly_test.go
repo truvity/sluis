@@ -111,7 +111,7 @@ func TestVerifyOnlyKeysArePublishedUntilTheyExpire(t *testing.T) {
 	shared := issuer.NewMemoryState()
 	iss := issuer.New(issuer.Config{URL: "https://issuer.example"}, set, &fakeDirectory{}, shared)
 	ec, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, shared)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, shared)
 	if err != nil {
 		t.Fatal(err)
 	}

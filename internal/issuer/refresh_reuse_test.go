@@ -241,7 +241,7 @@ func newReuseRigWith(t *testing.T, absolute time.Duration, listener string) *reu
 	trail := audittest.New(t)
 	iss.UseAudit(trail)
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, state)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

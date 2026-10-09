@@ -187,7 +187,7 @@ func TestGroupsScopingEnforceScopesMintFor(t *testing.T) {
 	iss := issuer.New(issuer.Config{
 		URL: "http://issuer.example", AllowInsecure: true, GroupsScoping: issuer.GroupsScopingEnforce,
 	}, set, adaDirectory(), issuer.NewMemoryState())
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestGroupsScopingEnforceLeavesTheGateAndLifetimeUnaffected(t *testing.T) {
 		URL: "http://issuer.example", AllowInsecure: true,
 		GroupsScoping: issuer.GroupsScopingEnforce, TokenLifetime: 24 * time.Hour,
 	}, set, adaDirectory(), issuer.NewMemoryState())
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
