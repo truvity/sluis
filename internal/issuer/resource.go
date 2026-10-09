@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/policy"
 )
@@ -186,4 +187,24 @@ func defaultScope(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// resourceWithinGrant holds a token request's `resource` to the grant's
+// (RFC 8707 2.2): the request may name the resource the grant was
+// authorized for, or none, and nothing else. Naming another is
+// `invalid_target`, never a token for the grant's resource under a
+// different name. This issuer mints for one resource at a time, so the
+// subset of one is that one or nothing.
+func resourceWithinGrant(ctx context.Context, request op.TokenRequest) error {
+	asked := resourceFromContext(ctx)
+	if asked == "" {
+		return nil
+	}
+	if granted := resourceOf(request); asked != granted {
+		return &oidc.Error{
+			ErrorType:   oidc.InvalidTarget,
+			Description: "`resource` is not within the resource this grant was authorized for",
+		}
+	}
+	return nil
 }
