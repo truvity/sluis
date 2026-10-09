@@ -17,5 +17,8 @@
 // versions.
 //
 // [Open] builds the two namespaces from a serve document's `secrets` section.
-// The `layout` of that section can only be v4 ([CheckLayout]).
+// The `layout` of that section can only be v4 ([CheckLayout]). Layout v5
+// ([StoresV5], [LayoutV5]) names the module first, internal/<module>/<name> and
+// external/<module>/<name>, through one view type per module; it is not yet
+// selectable by a document.
 package secretstore
