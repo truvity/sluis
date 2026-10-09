@@ -10,10 +10,10 @@
 //	file  the file <root>/<name>, read on every use, so a rotated Secret
 //	      mounted by the platform takes effect without a restart.
 //	ssm   the SecureString <root>/internal/config/<name> of AWS SSM Parameter
-//	      Store (root `/sluis/<instance>`): every parameter under
-//	      the prefix is read at once, decrypted, and read again when it is
-//	      older than the refresh (five minutes), so a rotation reaches a
-//	      function within that.
+//	      Store (root `/sluis/<instance>`): a name is read by itself,
+//	      decrypted, when it is first asked for (nothing is read at
+//	      start), and read again when its copy is older than the refresh
+//	      (one minute), so a rotation reaches a function within that.
 //
 // The names are the layout's (docs/decisions/0041): `clients/<id>/secret`,
 // `providers/google/<id>/client-id` and `client-secret`,

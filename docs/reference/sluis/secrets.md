@@ -11,7 +11,7 @@ secrets:
   source: ssm          # env | file | ssm
   root: /sluis/example    # file: a directory; ssm: the installation's root
   region: eu-west-1    # ssm only
-  refresh: 5m          # ssm only
+  refresh: 1m          # ssm only
   kmsKeyId: alias/example   # ssm only: the key the service's own writes are encrypted with
   layout: v4           # ssm only: v4 (the only value and the default), see "SSM layout"
   grace: 24h           # ssm only: how long a rotated client secret's previous value is accepted
@@ -21,7 +21,7 @@ secrets:
 |---|---|---|
 | `env` (the default) | the variable `SLUIS_SECRET_<NAME>`: the name upper-cased, every character that is not a letter or a digit an underscore (`valkey/password` is `SLUIS_SECRET_VALKEY_PASSWORD`). Two names may not share a variable | once, at start; for a local run |
 | `file` | the file `<root>/<name>` | on every use, so a rotated Secret the platform mounts takes effect without a restart. The chart's `secrets` value projects each name as a file under `/var/run/sluis/secrets` |
-| `ssm` | the SecureString `<root>/internal/config/<name>` of AWS SSM Parameter Store | every parameter under `<root>/internal/config/` at once (decrypted, paged), and again once `refresh` (`5m`) has passed |
+| `ssm` | the SecureString `<root>/internal/config/<name>` of AWS SSM Parameter Store | that one parameter, decrypted, on first use and again once `refresh` (`1m`) has passed. Nothing is read at start |
 
 
 An undelivered name stops the start and appears in the error, never its value. Kubernetes defaults to `file`, Lambda to `ssm`. See [OpenBao](openbao-secrets-adapter.md).

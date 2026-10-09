@@ -1498,8 +1498,8 @@
         },
         "refresh": {
           "$ref": "#/$defs/duration",
-          "default": "5m",
-          "description": "`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it."
+          "default": "1m",
+          "description": "`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it."
         },
         "region": {
           "description": "`ssm`: the region. Unset follows the AWS SDK's own resolution.",

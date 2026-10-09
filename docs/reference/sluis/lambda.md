@@ -99,7 +99,7 @@ Lambda refuses `legacy` adapters; audit uses `sqs`.
 /sluis/<instance>/external/<kind>/<id>       documents consumers read
 ```
 
-`internal/config/` is read at cold start and every `secrets.refresh` (5 minutes). See [secrets](secrets.md#the-names).
+Each name under `internal/config/` is read when first used and every `secrets.refresh` (1 minute) after. See [secrets](secrets.md#the-names).
 
 | Generated secret | Value | Rotation |
 |---|---|---|

@@ -236,7 +236,7 @@ func secretsSchema() m {
 		"root":     str("`file`: the directory the secrets are mounted under. `ssm`: the installation's root, /sluis/<instance>."),
 		"region":   str("`ssm`: the region. Unset follows the AWS SDK's own resolution."),
 		"endpoint": url("`ssm`: overrides the SSM address, for LocalStack."),
-		"refresh":  duration("`ssm`: how old the copy may be before it is read again: a rotated secret reaches every instance within it.", "5m"),
+		"refresh":  duration("`ssm`: how old a secret's copy may be before it is read again: a rotated secret reaches every instance within it.", "1m"),
 		"kmsKeyId": str("`ssm`: the id, ARN or alias of the customer-managed KMS key the parameters the service itself writes (its credentials) are encrypted with. Unset, the AWS-managed `alias/aws/ssm`. The `ssm` secrets adapter's `kmsKeyId` setting; naming another there is refused."),
 		"layout":   enum("`ssm`: the storage layout of the installation's secrets: `v4`, the only one and the default. It keeps them under `<root>/internal/` and `<root>/external/` (docs/decisions/0041-the-secret-contract.md). Layouts v3 and `transition` are gone; an installation still on one runs v1.74.x and `sluis migrate secrets-layout` first.", "v4", "v4"),
 		"grace":    duration("`ssm`: how long the previous value of a rotated client secret is still accepted: the document's previous revision, while the current one is younger than this (docs/decisions/0039-the-issuer-generates-confidential-client-secrets.md, the overlap).", "24h"),
