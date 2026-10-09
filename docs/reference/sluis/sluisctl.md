@@ -56,7 +56,8 @@ sluisctl policy render policy/ -o policy.yaml   # the one policy document an ins
 | Detail | Behavior |
 |---|---|
 | Source | `usage` in `cmd/sluisctl/main.go` |
-| Shared flags | `--audience`, `--issuer`, `--client`, defaulting to what `login` wrote. `aws` also takes `--role` |
+| Shared flags | `--audience`, `--issuer`, `--client`; the client defaults to what `login` wrote. `aws` also takes `--role` |
+| Issuer choice | `--issuer`, else `$SLUISCTL_ISSUER`, else the `issuer:` key of `config.yaml` (these three pin the issuer), else the one issuer with a live session. When none is pinned and more than one issuer has a live session, the command exits 2 and lists them, rather than using the most recent login. A session counts as live if its file parses, holds a refresh token and does not record an expiry in the past. With no live session the last login is used, so the error is "not signed in". `login` without `--issuer` uses the pin, else the last login |
 | `login` | Authorization code with PKCE on a loopback port. The policy client is `kind: public` with a loopback redirect and `sign_in_exchange: true`, else later commands exit 4 |
 | `version` | `sluisctl <version>`, or `sluisctl dev` without release ldflags, with commit and date when stamped. `--json` prints `{"version","commit","date"}`. No network, config or `HOME` |
 | `github-token` | `--app <id>`, `--repository <name>` (repeatable; none needs an all-repositories grant), `--permission <name>=<level>` (repeatable; none asks for the grant), `--json` prints `{"token","expires_at","repositories","permissions"}`. See [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md) |
@@ -123,7 +124,7 @@ The result passes every check the service runs at start. Exit codes as `render`.
 
 | File | Holds |
 |---|---|
-| `<config>/config.yaml` | Default issuer and client id, written by `login` |
+| `<config>/config.yaml` | `clientId` and `lastIssuer` (the last sign-in, not a pin), written by `login`; `issuer:` pins the issuer and is only ever set by hand. A file written by an older release holds the last login under `issuer:`, which therefore counts as a pin until that line is removed |
 | `<config>/sessions/<issuer>-<hash>.json` | One per issuer: refresh token, last access token and expiry. A stored issuer that disagrees with the lookup reads as not signed in. Rotated tokens are written back; a refused refresh reads as not signed in |
 | `<config>/sessions/<issuer>-<hash>.json.lock` | A refresh holds it, so concurrent commands do not spend the refresh token twice |
 | `<config>/session.json` | The single-issuer session of older releases, read for any issuer without its own file. Never deleted; a `login` writes that issuer's file, which wins |
