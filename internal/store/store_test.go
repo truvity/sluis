@@ -207,7 +207,8 @@ func deprecationWarnings(t *testing.T, f *config.Serve) []string {
 	}
 	defer st.Close()
 	var out []string
-	for _, r := range logs {
+	for i := range logs {
+		r := &logs[i]
 		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "deprecated in v1.74.0, removed in v1.75; migrate with `sluis migrate`") {
 			out = append(out, r.Message)
 		}

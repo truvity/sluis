@@ -550,8 +550,8 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 // deprecationDocs is where the way off the legacy store is written down.
 const deprecationDocs = "https://github.com/truvity/sluis/blob/master/docs/how-to/migrate-secrets-layout.md"
 
-// warnDeprecated says, once per open, that the legacy store and Valkey are
-// deprecated in v1.74.0 and removed in v1.75. It changes nothing else.
+// warnDeprecated logs, once per open, the notice for the legacy store and
+// Valkey (v1.74.0, removal in v1.75). It changes nothing else.
 func warnDeprecated(ctx context.Context, cfg Config, log *slog.Logger) {
 	if log == nil {
 		return
