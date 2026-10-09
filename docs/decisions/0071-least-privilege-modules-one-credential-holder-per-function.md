@@ -68,7 +68,7 @@ and schedule from one declaration, and one chart renders every Deployment.
    one multi-call binary whose urfave/cli v3 subcommands (`sluis issuer`, `sluis console`, `sluis github`,
    `sluis slack`, `sluis cloudflare`, `sluis google`, `sluis backup`) each run **exactly one module per process**.
    Besides these there are `cmd/sluis-restore` and `cmd/sluisctl`, which is unchanged. There is no all-in-one binary
-   that includes the signer. Each server main is built once per platform (build tags `lambda` and `k8s`) and composes
+   that includes the signer. Each server main is built once per platform (build tag `lambda` and its negation; `k8s` is added with the release move) and composes
    its module with that platform's adapters (Lambda: DynamoDB, SSM, KMS, the invoke transport, AppConfig; Kubernetes:
    the cluster state adapters, OpenBao or SSM, the Service and projected-token transport, ConfigMaps, probes).
    Least privilege comes from the per-function role and configuration, not from the binary: a `sluis slack` process is

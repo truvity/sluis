@@ -95,6 +95,39 @@ func TestModuleBoundaries(t *testing.T) {
 			sees:   "internal/cloudflare/minter",
 		},
 		{
+			// The contract every role implements: it knows no role.
+			name:   "the module contract imports no role",
+			from:   []string{"internal/module"},
+			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack"},
+			forbid: append(append(append(append([]string{}, front...), github...), slack...), append(cloudflare, "internal/module/github", "internal/module/slack", "internal/module/issuer")...),
+			sees:   "internal/module",
+		},
+		{
+			name:   "the GitHub module wraps only the GitHub role",
+			from:   []string{"internal/module/github"},
+			forbid: append(append(append([]string{}, front...), slack...), append(cloudflare, "internal/module/slack", "internal/module/issuer")...),
+			sees:   "internal/module/github",
+		},
+		{
+			name:   "the Slack module wraps only the Slack role",
+			from:   []string{"internal/module/slack"},
+			forbid: append(append(append([]string{}, front...), github...), append(cloudflare, "internal/module/github", "internal/module/issuer")...),
+			sees:   "internal/module/slack",
+		},
+		{
+			name:   "the issuer module wraps no provider module",
+			from:   []string{"internal/module/issuer"},
+			forbid: []string{"internal/module/github", "internal/module/slack", "internal/githubroster", "internal/slackroster"},
+			sees:   "internal/module/issuer",
+		},
+		{
+			// A role is assembled by its module and the main, never the reverse.
+			name:   "no role imports the module packages that wrap it",
+			from:   append(append(append([]string{}, front...), github...), append(slack, cloudflare...)...),
+			forbid: []string{"internal/module"},
+			sees:   "internal/issuer",
+		},
+		{
 			// The issuer front end is a library the processes compose; it does not
 			// compose them.
 			name: "the issuer library imports no process, server or provider controller",

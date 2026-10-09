@@ -2,19 +2,22 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/truvity/sluis/internal/module"
+	"github.com/truvity/sluis/internal/module/github"
+	"github.com/truvity/sluis/internal/module/issuer"
+	"github.com/truvity/sluis/internal/module/slack"
 	"github.com/truvity/sluis/internal/version"
 )
 
 // errNotSplit is what a module command answers while the module has no process
 // of its own: the role still runs inside `sluis serve`.
-var errNotSplit = errors.New("not yet split")
+var errNotSplit = module.ErrNotSplit
 
 const usageText = `Each command but migrate takes --config <file> and nothing else but --version and --help (a tick also
 takes its target, first); migrate takes --from and --to, each a configuration file, and its own flags
@@ -40,15 +43,21 @@ func legacy(name, usage string, body func(out io.Writer, args []string) error, o
 	}
 }
 
-// module is a command of the multi-call binary. run is today's behaviour for
-// the role, or nil while the role has none of its own.
-func module(name, usage string, out io.Writer, run func(out io.Writer, args []string) error) *cli.Command {
-	if run == nil {
-		return legacy(name, usage+" (not yet split)", func(io.Writer, []string) error {
-			return fmt.Errorf("sluis %s: %w: this module has no process of its own yet; its role still runs inside `sluis serve`", name, errNotSplit)
-		}, out)
-	}
-	return legacy(name, usage, run, out)
+// moduleCmd is the command of one module (docs/decisions/0071): `sluis <name>
+// --config <file>` runs it, `sluis <name> tick <target> --config <file>` ticks
+// it once. schema is the document the module reads.
+func moduleCmd(m module.Module, schema, usage string, out io.Writer) *cli.Command {
+	return legacy(m.Name(), usage, func(o io.Writer, args []string) error {
+		// A module with no process of its own refuses before it reads a file.
+		if u, ok := m.(module.Unsplit); ok {
+			return u.Run(context.Background(), "")
+		}
+		command := "sluis " + m.Name()
+		if len(args) > 0 && args[0] == "tick" {
+			return startTick(o, command+" tick", schema, args[1:], m.Tick)
+		}
+		return start(o, command, schema, args, m.Run)
+	}, out)
 }
 
 func init() {
@@ -59,10 +68,7 @@ func init() {
 }
 
 func newApp(out io.Writer) *cli.Command {
-	serveRun := func(o io.Writer, a []string) error { return start(o, "sluis serve", "sluis", a, serve) }
-	controllerRun := func(kind string, schema string, body runner) func(io.Writer, []string) error {
-		return func(o io.Writer, a []string) error { return start(o, "sluis controller "+kind, schema, a, body) }
-	}
+	serveRun := func(o io.Writer, a []string) error { return start(o, "sluis serve", "sluis", a, issuer.Module{}.Run) }
 	app := &cli.Command{
 		Name:           "sluis",
 		Usage:          "sluis: one multi-call binary, one module per process",
@@ -79,15 +85,13 @@ func newApp(out io.Writer) *cli.Command {
 			// The modules (docs/decisions/0071). Until a module has a process of its
 			// own, the issuer role is the one process `serve` is, and github and slack
 			// are the controllers' loops.
-			module("issuer", "the issuer role: today the one process of `serve`", out, serveRun),
-			module("console", "the console", out, nil),
-			module("github", "the GitHub module: today the GitHub controller's loop alone (deprecated form)", out,
-				controllerRun("github", "controller-github", controllerGitHub)),
-			module("slack", "the Slack module: today the Slack controller's loop alone (deprecated form)", out,
-				controllerRun("slack", "controller-slack", controllerSlack)),
-			module("cloudflare", "the Cloudflare module", out, nil),
-			module("google", "the Google directory module", out, nil),
-			module("backup", "the scheduled backup", out, nil),
+			moduleCmd(issuer.Module{}, "sluis", "the issuer role: today the one process of `serve`", out),
+			moduleCmd(module.Unsplit("console"), "sluis", "the console (not yet split)", out),
+			moduleCmd(github.Module{}, "controller-github", "the GitHub module: the controller's loop, or `tick <target>` once", out),
+			moduleCmd(slack.Module{}, "controller-slack", "the Slack module: the controller's loop, or `tick <target>` once", out),
+			moduleCmd(module.Unsplit("cloudflare"), "sluis", "the Cloudflare module (not yet split)", out),
+			moduleCmd(module.Unsplit("google"), "sluis", "the Google directory module (not yet split)", out),
+			moduleCmd(module.Unsplit("backup"), "sluis", "the scheduled backup (not yet split)", out),
 			// Today's commands, unchanged.
 			legacy("serve", "the one process: the issuer, the directory hub and the console, and the controllers the document names", serveRun, out),
 			legacy("controller", "(deprecated) a controller alone: github or slack", controllerCmd, out),
@@ -119,9 +123,9 @@ func controllerCmd(out io.Writer, args []string) error {
 	}
 	switch args[0] {
 	case "github":
-		return start(out, "sluis controller github", "controller-github", args[1:], controllerGitHub)
+		return start(out, "sluis controller github", "controller-github", args[1:], github.Module{Deprecated: "sluis controller github"}.Run)
 	case "slack":
-		return start(out, "sluis controller slack", "controller-slack", args[1:], controllerSlack)
+		return start(out, "sluis controller slack", "controller-slack", args[1:], slack.Module{Deprecated: "sluis controller slack"}.Run)
 	}
 	return fmt.Errorf("%w: sluis controller %q: the targets are github and slack", errUsage, args[0])
 }
@@ -132,9 +136,9 @@ func tickCmd(out io.Writer, args []string) error {
 	}
 	switch args[0] {
 	case "github":
-		return startTick(out, "sluis tick github", "controller-github", args[1:], tickGitHub)
+		return startTick(out, "sluis tick github", "controller-github", args[1:], github.Module{}.Tick)
 	case "slack":
-		return startTick(out, "sluis tick slack", "controller-slack", args[1:], tickSlack)
+		return startTick(out, "sluis tick slack", "controller-slack", args[1:], slack.Module{}.Tick)
 	}
 	return fmt.Errorf("%w: sluis tick %q: the kinds are github and slack", errUsage, args[0])
 }

@@ -90,3 +90,13 @@ func TestAnUnknownFlagOrCommandIsAUsageError(t *testing.T) {
 		}
 	}
 }
+
+// The module commands tick one target like `tick` does: no target, a usage error.
+func TestAModuleTickNeedsATarget(t *testing.T) {
+	for _, module := range []string{"github", "slack"} {
+		var out bytes.Buffer
+		if err := run([]string{module, "tick", "--config", "x.yaml"}, &out); !errors.Is(err, errUsage) {
+			t.Errorf("%s tick: %v", module, err)
+		}
+	}
+}
