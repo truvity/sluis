@@ -6,7 +6,7 @@ Record an application's actions from its own process: register the catalogue at 
 
 - You need a [catalogue](connect-an-application.md#the-catalogue), a receiver in the application's namespace and the application's projected ServiceAccount token.
 
-- The emitter is a Go module of its own: `go get github.com/truvity/sluis/audit/sdk`. It does not bring in the writer's database driver or object-store client ([layout](../../../reference/audit/repository-layout.md#the-sdk-module)).
+- The emitter is a Go module of its own: `go get github.com/truvity/sluis/audit/sdk`. It does not bring in the writer's database driver or object-store client ([layout](../../../reference/audit/repository-layout.md)).
 
 - A `block` action fails while the receiver is down. An `async` record queues and drops only when the queue overflows ([recover from an outage](../operate/recover-from-an-outage.md)).
 

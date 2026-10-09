@@ -1,6 +1,6 @@
 # Connect a GitHub organisation
 
-Bind groups to an organisation's teams, connect its App and run the controller. See [How a GitHub pass decides](../../../concepts/sluis/github-pass.md), the [Kubernetes objects](../../../reference/sluis/kubernetes-objects.md) and [Link a GitHub account to a person](github-account-links.md).
+Bind groups to an organisation's teams, connect its App and run the controller. See [How a GitHub pass decides](../../../concepts/sluis/github-controller.md), the [Kubernetes objects](../../../reference/sluis/kubernetes-objects.md) and [Link a GitHub account to a person](github-account-links.md).
 
 ## Before you start
 

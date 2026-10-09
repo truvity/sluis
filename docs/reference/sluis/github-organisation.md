@@ -1,7 +1,7 @@
 # GitHub organisation reference
 
 The objects the GitHub controller and the console keep for a connected organisation.
-Mechanics: [How a GitHub pass decides](../../concepts/sluis/github-pass.md). Setup: [Connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md).
+Mechanics: [How a GitHub pass decides](../../concepts/sluis/github-controller.md). Setup: [Connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md).
 
 ## Objects
 

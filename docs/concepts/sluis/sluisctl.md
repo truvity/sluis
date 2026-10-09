@@ -26,7 +26,7 @@ The GitHub Action, at the repository root, is for a repository that downloads no
 the job's token per audience. It prepares a kubeconfig context per `k8s:<cluster>` audience and a profile
 `<role>@<account>` per `aws:<account>:<role>` audience, with `web_identity_token_file` pointing at the exchanged token.
 It can also prepare a GitHub App installation token. It uses `curl`, `jq` and two files. Pin a release, because there is no
-floating `v1`. Inputs and outputs are in [Connect GitHub Actions](../../guides/sluis/connect/github-actions.md#workflow-side-the-action).
+floating `v1`. Inputs and outputs are in [Connect GitHub Actions](../../guides/sluis/connect/github-actions.md).
 
 Everything downstream of an AWS credential, such as ECR login or CodeArtifact tokens, is AWS's tooling running on those
 profiles. Neither the action nor the CLI wraps it ([recipes](../../guides/sluis/connect/registries-and-artifacts.md)).

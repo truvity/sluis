@@ -8,7 +8,7 @@ Start with [sluis on AWS Lambda](../aws-lambda.md). Design: [Lambda](../../../co
 
 - **DNS and certificate.** The core library stops at the HTTP API and has no custom domain. An edge module adds one: [behind Cloudflare](aws-behind-cloudflare.md), or the planned [AWS edge module](README.md#aws-edge-module).
 
-- **Keys.** You supply the KMS keys by alias: `Keys.Sign`, and `Keys.Secrets` for the SSM parameters. The library looks them up, grants on them and creates none. To move from library-created keys, follow [the state operation](../../../guides/sluis/migrate/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones).
+- **Keys.** You supply the KMS keys by alias: `Keys.Sign`, and `Keys.Secrets` for the SSM parameters. The library looks them up, grants on them and creates none. To move from library-created keys, follow [the state operation](../../../guides/sluis/migrate/supply-your-own-signing-keys.md).
 
 - **Secrets layout.** `secrets.layout` is `v3` (the default), `transition` or `v4`. To move, see [move the secrets to layout v4](../../../guides/sluis/migrate/migrate-secrets-layout.md). A consumer of an `external/` secret reads it with `ExternalReadPolicy`.
 

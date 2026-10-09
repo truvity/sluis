@@ -306,7 +306,7 @@ On another identity `scope` is ignored.
 | Issuer endpoints | [endpoints](endpoints.md) |
 | GitHub organisation | [connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md) |
 | GitHub Apps | [GitHub Apps catalogue](../../guides/sluis/connect/github-apps-catalogue.md) |
-| Installation tokens | [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md#minting-a-token) |
+| Installation tokens | [GitHub App tokens](../../guides/sluis/connect/github-app-tokens.md) |
 | Slack workspace | [connect a Slack workspace](../../guides/sluis/connect/slack-workspace.md) |
 | Slack console channels | [Slack console channels](../../guides/sluis/connect/slack-console-channels.md) |
 | Slack Connect channels | [Slack Connect channels](../../guides/sluis/connect/slack-connect-channels.md) |

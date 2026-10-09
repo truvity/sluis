@@ -1,6 +1,6 @@
 # Link a GitHub account to a person
 
-Link each GitHub account to a work address so the controller can place it. The controller's use of links is in [How a GitHub pass decides](../../../concepts/sluis/github-pass.md).
+Link each GitHub account to a work address so the controller can place it. The controller's use of links is in [How a GitHub pass decides](../../../concepts/sluis/github-controller.md).
 
 ## Before you start
 

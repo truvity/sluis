@@ -84,7 +84,7 @@ A notification may be duplicated or lost; the lease and the backstop cover both.
 |---|---|
 | Inputs | Read-only policy, [configuration file](../../decisions/0032-one-configuration-file-one-binary-one-chart.md) and operator secrets. Sluis holds no permission to write them |
 | Identity | `Verify(token, audiences) (subject, error)`. Inbound: ServiceAccount or AWS federation token ([connect AWS workloads](../../guides/sluis/connect/aws-workloads.md), [ADR 0030](../../decisions/0030-workload-identity-on-both-platforms.md)). Outbound: the platform's own token or role |
-| Audit sink | `connect`, `sqs` or `log`, from the `audit` concern. A sign-in is refused when its record cannot be written ([design](../../concepts/sluis/design.md#audit)). Settings: [the sqs adapter](port-adapters.md#the-sqs-adapter) |
+| Audit sink | `connect`, `sqs` or `log`, from the `audit` concern. A sign-in is refused when its record cannot be written ([design](../../concepts/sluis/design.md)). Settings: [the sqs adapter](port-adapters.md#the-sqs-adapter) |
 
 ## Conformance
 

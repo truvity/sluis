@@ -40,7 +40,7 @@ See [high availability](../../docs/concepts/sluis/high-availability.md#the-contr
 - [Install with Helm](../../docs/guides/sluis/operate/install-with-helm.md)
 - [Telemetry](../../docs/reference/sluis/telemetry.md#wiring-it-with-the-chart)
 - [Secrets](../../docs/reference/sluis/secrets.md#the-external-documents)
-- [GitHub Apps example set](../../docs/guides/sluis/connect/github-apps-catalogue.md#a-default-set), shipped as `examples/github-apps.yaml`
-- [Slack controller](../../docs/guides/sluis/connect/slack-workspace.md#running-the-controller)
+- [GitHub Apps example set](../../docs/guides/sluis/connect/github-apps-catalogue.md), shipped as `examples/github-apps.yaml`
+- [Slack controller](../../docs/guides/sluis/connect/slack-workspace.md)
 - [Back up and restore](../../docs/guides/sluis/operate/back-up-and-restore.md)
 - [CHANGELOG](../../CHANGELOG.md) for upgrades

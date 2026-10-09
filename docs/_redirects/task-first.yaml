@@ -208,7 +208,7 @@ reference/declared-workspaces.md: reference/sluis/declared-workspaces.md
 reference/endpoints.md: reference/sluis/endpoints.md
 reference/exports.md: reference/sluis/exports.md
 reference/github-apps.md: reference/sluis/github-apps.md
-reference/github-roster.md: reference/sluis/github-roster.md
+reference/github-roster.md: reference/sluis/github-organisation.md
 reference/installation-document.md: reference/sluis/installation-document.md
 reference/keys.md: reference/sluis/keys.md
 reference/kubernetes-objects.md: reference/sluis/kubernetes-objects.md

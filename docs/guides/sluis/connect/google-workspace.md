@@ -10,7 +10,7 @@ Let sluis read a Google Workspace tenant's users, groups and domains. Create the
 
 - Consent as a Super Admin. The token dies with that account; a narrower role fails with a 403.
 
-Every credential reads these four read-only scopes. The domain scope also feeds [Slack domain discovery](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from).
+Every credential reads these four read-only scopes. The domain scope also feeds [Slack domain discovery](../../../concepts/sluis/slack-pass.md).
 
 ```text
 https://www.googleapis.com/auth/admin.directory.user.readonly

@@ -272,12 +272,12 @@ leak-canary:
 #
 # The generated regions of the docs (`<!-- generated: name -->`) must be
 # what `just docs-generate` writes. hack/check-docs-budget.py holds the pages to
-# docs/WRITING.md (word budget, sentence length, banned phrases); it only warns
-# for now, and so does the check for the old product names (--warn-terms).
+# docs/WRITING.md (word budget, sentence length, banned phrases) and fails on a
+# finding, as does the check for the old product names.
 docs-check:
     ./hack/check-docs-symbols.py
-    ./hack/check-docs-hygiene.py --warn-terms
-    ./hack/check-docs-budget.py
+    ./hack/check-docs-hygiene.py
+    ./hack/check-docs-budget.py --fail
     ./hack/check-changelog-headings.py
     go run ./cmd/docsgen -check
     go test -count=1 ./internal/contractsdoc/ ./internal/port/matrixdoc/

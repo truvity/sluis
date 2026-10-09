@@ -4,7 +4,7 @@ sluis keeps no audit trail of its own. It records into an installation of [audit
 
 With `audit.writer` set, sluis registers its catalogue and sends every record to that address. With `audit.query` set, the console shows the installation's view as its Audit page. With neither, sluis keeps only the log line each record also is, and the console has no Audit page.
 
-On AWS the sink is SQS ([ports](../../reference/sluis/ports.md#audit-sink)). To set it up, see [connect an audit installation](../../guides/sluis/connect-audit-installation.md).
+On AWS the sink is SQS ([ports](../../reference/sluis/ports.md)). To set it up, see [connect an audit installation](../../guides/sluis/connect-audit-installation.md).
 
 ## The catalogue defines every record
 

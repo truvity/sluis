@@ -24,7 +24,7 @@ directory:
 | `serve` | no | The tenant domains this installation serves. Empty serves every domain, including ones added later |
 | `syncGroups` | no | The groups kept. Empty keeps every group in the served domains |
 
-A workspace that cannot be adopted stops the service. Steps: [Connect a corporate directory](../../guides/sluis/connect/corporate-directory.md).
+A workspace that cannot be adopted stops the service. Steps: [Connect a corporate directory](../../guides/sluis/connect/google-workspace.md).
 
 ## Behaviour
 

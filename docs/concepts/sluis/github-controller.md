@@ -2,13 +2,13 @@
 
 The GitHub controller is a loop inside the sluis process, enabled by `controllers.github` in the service document ([one process](design.md#one-process)). It has no listener and no console. It holds the GitHub App keys and writes to GitHub.
 
-Each pass makes an organisation's teams and membership match the policy's `github` table. To connect an organisation, see [connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md). For the Secrets and records, see the [GitHub controller reference](../../reference/sluis/github-roster.md).
+Each pass makes an organisation's teams and membership match the policy's `github` table. To connect an organisation, see [connect a GitHub organisation](../../guides/sluis/connect/github-organisation.md). For the Secrets and records, see the [GitHub controller reference](../../reference/sluis/github-organisation.md).
 
 ## Who is who
 
 The controller asks the console who holds each group in the policy's `github` table. A GitHub account belongs to the person who [linked it](../../guides/sluis/connect/github-account-links.md), by the work addresses GitHub verified on it. On an Enterprise Cloud organisation, addresses in its verified domains count as well.
 
-Two matches never displace a person's link: a [public profile address](../../guides/sluis/connect/github-account-links.md#where-a-link-comes-from) the directory has, and a pairing imported by an operator RPC after three checks.
+Two matches never displace a person's link: a [public profile address](../../guides/sluis/connect/github-account-links.md) the directory has, and a pairing imported by an operator RPC after three checks.
 
 The controller re-checks a self-link every pass. One account with addresses in two workspaces is one member. An address two accounts claim links to neither and is held.
 

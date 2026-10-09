@@ -25,7 +25,7 @@ storage/            the state and keys module both products use
 docs/               see docs/WRITING.md
 ```
 
-`serve` runs the whole service in one process: [one process](docs/concepts/sluis/one-process.md), [ADR 0037](docs/decisions/0037-one-process-everywhere.md).
+`serve` runs the whole service in one process: [one process](docs/concepts/sluis/design.md), [ADR 0037](docs/decisions/0037-one-process-everywhere.md).
 Public Go packages stay free of Kubernetes and framework specifics outside the adapters and store implementations.
 Anything a product might import lives behind a storage interface.
 
@@ -71,7 +71,7 @@ The retired names stay out of the docs except where `hack/docs-hygiene-allow.tsv
 
 - Keep the chart `version` at `0.0.0`. The release workflow stamps the tag at package time.
 
-- Change the audit catalogue only with a new catalogue `version` and its `testdata/released/` fixture in the same pull request. See [extend](docs/guides/sluis/extend.md#7-an-audit-action).
+- Change the audit catalogue only with a new catalogue `version` and its `testdata/released/` fixture in the same pull request. See [extend](docs/guides/sluis/change-the-audit-catalogue.md).
 
 ### Logging
 
