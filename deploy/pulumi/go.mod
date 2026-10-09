@@ -2,6 +2,8 @@ module github.com/truvity/sluis/deploy/pulumi
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.48.0
 	github.com/pulumi/pulumi-random/sdk/v4 v4.21.2
