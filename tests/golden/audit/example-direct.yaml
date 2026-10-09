@@ -299,7 +299,7 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-clock-sync/v2
     ntp:
-    - 169.254.169.123
+    - pool.ntp.org
     sink:
       tokenFile: /var/run/audit/token
       url: http://audit:8080
@@ -1065,7 +1065,7 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: b444aa8cf1bcc3515fc8eed8f150d51f7956cc0be36e99a0cf936e5bf16d6cae
+            checksum/config: c82bd7aeee4c2e0c28a66d60f5854cb9164917d9524dd943aeb00f6316843c64
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-clock-sync

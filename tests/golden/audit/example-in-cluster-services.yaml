@@ -13,13 +13,14 @@ metadata:
 
 ---
 # Source: audit/templates/serviceaccount.yaml
-# Reading is a different privilege from writing: this identity reads the
-# archive and writes exports, and holds a key only to open sealed identifiers
-# if it may resolve. Pod Identity, IRSA or an OpenBAO role binds here.
+# The indexer reads the archive and writes the index. It holds the index's
+# write credential, which the writer must not, and reads what the writer wrote
+# without being able to write it: a different identity from either. Pod
+# Identity or IRSA binds here, with get and list on the archive and nothing more.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: audit-query
+  name: audit-observe
   labels:
     helm.sh/chart: audit-0.0.0
     app.kubernetes.io/name: audit
@@ -29,14 +30,14 @@ metadata:
 
 ---
 # Source: audit/templates/serviceaccount.yaml
-# The indexer reads the archive and writes the index. It holds the index's
-# write credential, which the writer must not, and reads what the writer wrote
-# without being able to write it: a different identity from either. Pod
-# Identity or IRSA binds here, with get and list on the archive and nothing more.
+# Sealing is a different privilege from writing: whoever can write the archive
+# and can also sign for it can choose what to sign. This identity reads the
+# records, puts seals and keys/roots.jwks, and uses the seal key; the writer's
+# role has no use of that key, and this one has no write to records/.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: audit-observe
+  name: audit-notary
   labels:
     helm.sh/chart: audit-0.0.0
     app.kubernetes.io/name: audit
@@ -69,20 +70,6 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: audit-receiver
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-
----
-# Source: audit/templates/serviceaccount.yaml
-# Purging deletes from the archive, a different privilege from appending to it.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: audit-purge
   labels:
     helm.sh/chart: audit-0.0.0
     app.kubernetes.io/name: audit
@@ -126,9 +113,6 @@ data:
     apiVersion: audit.truvity.github.io/audit-deployment/v2
     external_identifiers_are_opaque: true
     profiles:
-      billing:
-        frameworks:
-        - billing-nl
       security:
         frameworks:
         - security
@@ -136,17 +120,8 @@ data:
       standard:
         bucket: audit-eu-example-1
         key_alias: alias/audit-archive
-        prefix: audit/app/
+        prefix: audit/
         region: eu-example-1
-  # The document a writer's config names as `workloads`: the issuers trusted to
-  # name a calling workload, and the source each speaks for.
-  workloads.yaml: |
-    issuers:
-      - url: "https://oidc.example.com/id/CLUSTER"
-        audience: "audit"
-    workloads:
-      - source: app
-        subject: system:serviceaccount:app:api
 
 ---
 # Source: audit/templates/configmap.yaml
@@ -166,27 +141,18 @@ data:
   # schemas/config/ at start-up, and by this chart's values.schema.json before
   # it renders.
   config.yaml: |
+    anonymousWrites: true
     apiVersion: audit.truvity.github.io/audit-writer/v2
     database:
-      passwordSecret: database-password
-      url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
     deployment: /etc/audit/deployment.yaml
     replicas: 3
-    roll:
-      interval: 30s
-      maxRecords: 5000
-    secrets:
-      root: /etc/audit/secrets
-      source: file
     stream:
-      ackWait: 2m
-      batch: 100
       consumer: audit-writer
       name: AUDIT
       nats:
-        tokenFile: /var/run/audit/stream/token
-        url: nats://nats.app.svc:4222
-    workloads: /etc/audit/workloads.yaml
+        url: nats://nats.nats.svc:4222
 
 ---
 # Source: audit/templates/configmap.yaml
@@ -206,21 +172,51 @@ data:
   # schemas/config/ at start-up, and by this chart's values.schema.json before
   # it renders.
   config.yaml: |
+    anonymousWrites: true
     apiVersion: audit.truvity.github.io/audit-writer/v2
     database:
-      passwordSecret: database-password
-      url: postgres://audit_writer@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+      url: postgres://audit_writer@postgres.postgres.svc:5432/audit?sslmode=require
     deployment: /etc/audit/deployment.yaml
     mode: receiver
-    secrets:
-      root: /etc/audit/secrets
-      source: file
     stream:
       name: AUDIT
       nats:
-        tokenFile: /var/run/audit/stream/token
-        url: nats://nats.app.svc:4222
-    workloads: /etc/audit/workloads.yaml
+        url: nats://nats.nats.svc:4222
+
+---
+# Source: audit/templates/cronjobs.yaml
+# Hourly. Seals the hours that have closed and settled since the last seal, for
+# every profile and tenant, into the signed chain: one seal per hour, empty
+# hours too, each naming the one before. It resumes past a missed run on its
+# own, so a failed hour needs no operator, and a rerun of a sealed hour writes
+# nothing. It signs, and it runs as an identity of its own that the writer's is
+# not: whoever can write the archive and can also sign for it can choose what
+# to sign.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-notary-config
+  labels:
+    helm.sh/chart: audit-0.0.0
+    app.kubernetes.io/name: audit
+    app.kubernetes.io/instance: audit
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: notary
+data:
+  # What the binary reads with --config: validated against
+  # schemas/config/ at start-up, and by this chart's values.schema.json before
+  # it renders.
+  config.yaml: |
+    apiVersion: audit.truvity.github.io/audit-notary/v2
+    deployment: /etc/audit/deployment.yaml
+    keys:
+      adapter: kms
+      seal:
+        key: alias/audit-seal
+    sink:
+      url: http://audit:8080
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -250,38 +246,7 @@ data:
     apiVersion: audit.truvity.github.io/audit-verify/v2
     deployment: /etc/audit/deployment.yaml
     sink:
-      tokenFile: /var/run/audit/token
       url: http://audit:8080
-
----
-# Source: audit/templates/cronjobs.yaml
-# Daily. Brings the index and the deduplication table back within what the
-# profiles allow. It never touches the archive: those objects are released by
-# their object lock, which is what makes a retention a retention.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: audit-purge-config
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: purge
-data:
-  # What the binary reads with --config: validated against
-  # schemas/config/ at start-up, and by this chart's values.schema.json before
-  # it renders.
-  config.yaml: |
-    apiVersion: audit.truvity.github.io/audit-purge/v2
-    database:
-      passwordSecret: database-password
-      url: postgres://audit_purge@db.example.com:5432/audit?sslmode=verify-full
-    deployment: /etc/audit/deployment.yaml
-    secrets:
-      root: /etc/audit/secrets
-      source: file
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -308,7 +273,6 @@ data:
     ntp:
     - pool.ntp.org
     sink:
-      tokenFile: /var/run/audit/token
       url: http://audit:8080
 
 ---
@@ -331,89 +295,9 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-observe/v2
     database:
-      passwordSecret: observe-database-password
-      url: postgres://audit_observe@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+      url: postgres://audit_observe@postgres.postgres.svc:5432/audit?sslmode=require
     deployment: /etc/audit/deployment.yaml
-    secrets:
-      root: /etc/audit/secrets
-      source: file
-    settle: 2m
-
----
-# Source: audit/templates/query.yaml
-# Who may sign in to the query service, and what each caller may read. A
-# changed file must reach a running service, so the pods carry its checksum.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: audit-grants
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: query
-data:
-  grants.yaml: |
-    issuers:
-    - audience: audit
-      url: https://gateway.example.com
-
----
-# Source: audit/templates/query.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: audit-query-config
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: query
-data:
-  # What the binary reads with --config: validated against
-  # schemas/config/ at start-up, and by this chart's values.schema.json before
-  # it renders.
-  config.yaml: |
-    apiVersion: audit.truvity.github.io/audit-query/v2
-    database:
-      passwordSecret: query-database-password
-      url: postgres://audit_query@db.example.com:5432/audit?sslmode=verify-full
-    deployment: /etc/audit/deployment.yaml
-    grants: /etc/audit/grants.yaml
-    secrets:
-      root: /etc/audit/secrets
-      source: file
-    sink:
-      tokenFile: /var/run/audit/token
-      url: http://audit:8080
-
----
-# Source: audit/templates/query.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: audit-query
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: query
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/component: query
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
 
 ---
 # Source: audit/templates/writer.yaml
@@ -470,8 +354,8 @@ spec:
         app.kubernetes.io/instance: audit
         app.kubernetes.io/component: observe
       annotations:
-        checksum/config: a9af695186c2e0007809bc77c46f29744067123875e0251c319457b2c9373406
-        checksum/deployment: 17e293bc4aa21b3e611a098ea214e8ee77b2a776fe5c2f12d01e9ef7f23ac694
+        checksum/config: a5de0a49c39b323c6417db11f9f0a62eebf057f7bc9984ed4e31532ef35f88ae
+        checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
     spec:
       serviceAccountName: audit-observe
       
@@ -487,6 +371,13 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/audit/config.yaml
+          env:
+            
+            - name: AUDIT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: audit-observe-database
+                  key: password
           ports:
             - name: http
               containerPort: 8080
@@ -519,9 +410,6 @@ spec:
               readOnly: true
             
             
-            - name: secret-files
-              mountPath: /etc/audit/secrets
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -533,143 +421,6 @@ spec:
             name: audit-deployment
         
         
-        - name: secret-files
-          projected:
-            # Readable by the owner and the pod's fsGroup and by nobody else.
-            defaultMode: 0440
-            sources:
-              - secret:
-                  name: audit-db-observe
-                  items:
-                    - key: password
-                      path: observe-database-password
-        - name: tmp
-          emptyDir: {}
-
----
-# Source: audit/templates/query.yaml
-# The read path. It reads the index as a role that does not own the tables, so
-# the tenant policies bind it; it reads the archive for provenance; it records
-# every read through the writer before answering; and it holds the keys only
-# if it may resolve.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: audit-query
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/component: query
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: audit
-      app.kubernetes.io/instance: audit
-      app.kubernetes.io/component: query
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: audit
-        app.kubernetes.io/instance: audit
-        app.kubernetes.io/component: query
-      annotations:
-        checksum/config: 47aa415bdc1927aadf65c2e88dd75a056518f8917eb9e29c0aa746d0c4f79a8f
-        checksum/grants: e03b3dce56c32adc0160430a0d5b208943ddf4cdcd353d3ae69cb9bf517ba9d3
-        # A grant preset turns roles into profiles, so the profiles are part
-        # of what a grant means.
-        checksum/deployment: 17e293bc4aa21b3e611a098ea214e8ee77b2a776fe5c2f12d01e9ef7f23ac694
-    spec:
-      serviceAccountName: audit-query
-      
-      securityContext:
-        fsGroup: 65532
-        runAsNonRoot: true
-        runAsUser: 65532
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: query
-          image: ghcr.io/truvity/audit/audit-query:0.0.0
-          imagePullPolicy: IfNotPresent
-          args:
-            - --config=/etc/audit/config.yaml
-          ports:
-            - name: http
-              containerPort: 8080
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: http
-            # The checks together are bounded at 2s (internal/health); the default wait of 1s would fail a slow answer.
-            timeoutSeconds: 3
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-            readOnlyRootFilesystem: true
-          resources:
-            {}
-          volumeMounts:
-            - name: config
-              mountPath: /etc/audit/config.yaml
-              subPath: config.yaml
-              readOnly: true
-            - name: deployment
-              mountPath: /etc/audit/deployment.yaml
-              subPath: deployment.yaml
-              readOnly: true
-            - name: grants
-              mountPath: /etc/audit/grants.yaml
-              subPath: grants.yaml
-              readOnly: true
-            
-            
-            - name: secret-files
-              mountPath: /etc/audit/secrets
-              readOnly: true
-            - name: token-0
-              mountPath: /var/run/audit
-              readOnly: true
-            - name: tmp
-              mountPath: /tmp
-      volumes:
-        - name: config
-          configMap:
-            name: audit-query-config
-        - name: deployment
-          configMap:
-            name: audit-deployment
-        - name: grants
-          configMap:
-            name: audit-grants
-        
-        
-        - name: secret-files
-          projected:
-            # Readable by the owner and the pod's fsGroup and by nobody else.
-            defaultMode: 0440
-            sources:
-              - secret:
-                  name: audit-db-reader
-                  items:
-                    - key: password
-                      path: query-database-password
-        - name: token-0
-          projected:
-            sources:
-              - serviceAccountToken:
-                  path: token
-                  audience: "audit"
-                  expirationSeconds: 3600
         - name: tmp
           emptyDir: {}
 
@@ -701,12 +452,12 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 71331dec888421ed0b26a7d6af2353652eca72e8ce98412bab0655d12b4f82fc
+        checksum/config: 3b6ef20f19a37a2460451f4eef490b3d1f74e37e0884e353d40224ddfbc80cf2
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 17e293bc4aa21b3e611a098ea214e8ee77b2a776fe5c2f12d01e9ef7f23ac694
+        checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
         # And who may write: a changed issuer or mapping must reach it.
-        checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
+        checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
       # The process takes up to 30s to stop taking records and write what it
       # holds (the shutdown budget of audit-writer), after the preStop sleep
@@ -727,6 +478,13 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/audit/config.yaml
+          env:
+            
+            - name: AUDIT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: audit-database
+                  key: password
           ports:
             - name: http
               containerPort: 8080
@@ -764,18 +522,8 @@ spec:
               mountPath: /etc/audit/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
-            - name: deployment
-              mountPath: /etc/audit/workloads.yaml
-              subPath: workloads.yaml
-              readOnly: true
             
             
-            - name: secret-files
-              mountPath: /etc/audit/secrets
-              readOnly: true
-            - name: token-0
-              mountPath: /var/run/audit/stream
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -787,23 +535,6 @@ spec:
             name: audit-deployment
         
         
-        - name: secret-files
-          projected:
-            # Readable by the owner and the pod's fsGroup and by nobody else.
-            defaultMode: 0440
-            sources:
-              - secret:
-                  name: audit-db
-                  items:
-                    - key: password
-                      path: database-password
-        - name: token-0
-          projected:
-            sources:
-              - serviceAccountToken:
-                  path: token
-                  audience: "nats"
-                  expirationSeconds: 3600
         - name: tmp
           emptyDir: {}
 
@@ -835,12 +566,12 @@ spec:
       annotations:
         # A changed configuration must reach a running pod, and a file mounted
         # with subPath is never updated in place, so the pod is replaced.
-        checksum/config: 54490370fe275ae79f702aeddf44564794dac64ba128a940ccc82a3192ff7540
+        checksum/config: 12faa781670c0faa1ae729c64790d2cbdf0bd28f3cf6666f870067207ac90705
         # Likewise a change to the profile document, hashed whole: it also holds
         # externalIdentifiersAreOpaque, which changes what a profile keeps.
-        checksum/deployment: 17e293bc4aa21b3e611a098ea214e8ee77b2a776fe5c2f12d01e9ef7f23ac694
+        checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
         # And who may write: a changed issuer or mapping must reach it.
-        checksum/workloads: 360c77444ad031953e9da11ab72cb75391704ccd40c9012d4fa616346c75c587
+        checksum/workloads: 274aa3accbe10dbf671359ace426a24af2c33648b7017d8008c24e9eb79c4d06
     spec:
       # The process takes up to 30s to stop taking records and write what it
       # holds (the shutdown budget of audit-writer), after the preStop sleep
@@ -861,6 +592,13 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/audit/config.yaml
+          env:
+            
+            - name: AUDIT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: audit-database
+                  key: password
           ports:
             - name: http
               containerPort: 8080
@@ -891,18 +629,8 @@ spec:
               mountPath: /etc/audit/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
-            - name: deployment
-              mountPath: /etc/audit/workloads.yaml
-              subPath: workloads.yaml
-              readOnly: true
             
             
-            - name: secret-files
-              mountPath: /etc/audit/secrets
-              readOnly: true
-            - name: token-0
-              mountPath: /var/run/audit/stream
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -914,25 +642,79 @@ spec:
             name: audit-deployment
         
         
-        - name: secret-files
-          projected:
-            # Readable by the owner and the pod's fsGroup and by nobody else.
-            defaultMode: 0440
-            sources:
-              - secret:
-                  name: audit-db
-                  items:
-                    - key: password
-                      path: database-password
-        - name: token-0
-          projected:
-            sources:
-              - serviceAccountToken:
-                  path: token
-                  audience: "nats"
-                  expirationSeconds: 3600
         - name: tmp
           emptyDir: {}
+
+---
+# Source: audit/templates/cronjobs.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: audit-notary
+  labels:
+    helm.sh/chart: audit-0.0.0
+    app.kubernetes.io/name: audit
+    app.kubernetes.io/instance: audit
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "17 * * * *"
+  # A run that overlaps itself only does the same work twice.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: audit
+            app.kubernetes.io/instance: audit
+          annotations:
+            checksum/config: 94d7abbc83abf13463f9abe68076933d4130db80f5513525978d27df7bcc40c0
+            checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: audit-notary
+          
+          securityContext:
+            fsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: notary
+              image: ghcr.io/truvity/audit/audit-notary:0.0.0
+              imagePullPolicy: IfNotPresent
+              args:
+                - --config=/etc/audit/config.yaml
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/audit/config.yaml
+                  subPath: config.yaml
+                  readOnly: true
+                - name: deployment
+                  mountPath: /etc/audit/deployment.yaml
+                  subPath: deployment.yaml
+                  readOnly: true
+                
+                
+          volumes:
+            - name: config
+              configMap:
+                name: audit-notary-config
+            - name: deployment
+              configMap:
+                name: audit-deployment
+            
+            
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -960,8 +742,8 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: 93a9f7b12b084c68d3df3ef7a35b9c34ea7e0432c9b045a85b44b37ca02967f2
-            checksum/deployment: 17e293bc4aa21b3e611a098ea214e8ee77b2a776fe5c2f12d01e9ef7f23ac694
+            checksum/config: 5de5af53ee794bcf7195d9a0236dcd8aa74b76c3a6c97bcb6c14322059eaf109
+            checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-verify
@@ -996,9 +778,6 @@ spec:
                   readOnly: true
                 
                 
-                - name: token-0
-                  mountPath: /var/run/audit
-                  readOnly: true
           volumes:
             - name: config
               configMap:
@@ -1008,98 +787,6 @@ spec:
                 name: audit-deployment
             
             
-            - name: token-0
-              projected:
-                sources:
-                  - serviceAccountToken:
-                      path: token
-                      audience: "audit"
-                      expirationSeconds: 3600
-
----
-# Source: audit/templates/cronjobs.yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: audit-purge
-  labels:
-    helm.sh/chart: audit-0.0.0
-    app.kubernetes.io/name: audit
-    app.kubernetes.io/instance: audit
-    app.kubernetes.io/version: "0.0.0"
-    app.kubernetes.io/managed-by: Helm
-spec:
-  schedule: "41 4 * * *"
-  # A run that overlaps itself only does the same work twice.
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    spec:
-      template:
-        metadata:
-          labels:
-            app.kubernetes.io/name: audit
-            app.kubernetes.io/instance: audit
-          annotations:
-            checksum/config: 51fdfa0a65d12745d9ac4324c6f68c9027ac1a34140c426b117efe162b42ffb5
-            checksum/deployment: 17e293bc4aa21b3e611a098ea214e8ee77b2a776fe5c2f12d01e9ef7f23ac694
-        spec:
-          restartPolicy: OnFailure
-          serviceAccountName: audit-purge
-          
-          securityContext:
-            fsGroup: 65532
-            runAsNonRoot: true
-            runAsUser: 65532
-            seccompProfile:
-              type: RuntimeDefault
-          containers:
-            - name: purge
-              image: ghcr.io/truvity/audit/audit:0.0.0
-              imagePullPolicy: IfNotPresent
-              args:
-                - purge
-                - --config=/etc/audit/config.yaml
-              securityContext:
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop:
-                  - ALL
-                readOnlyRootFilesystem: true
-              volumeMounts:
-                - name: config
-                  mountPath: /etc/audit/config.yaml
-                  subPath: config.yaml
-                  readOnly: true
-                - name: deployment
-                  mountPath: /etc/audit/deployment.yaml
-                  subPath: deployment.yaml
-                  readOnly: true
-                
-                
-                - name: secret-files
-                  mountPath: /etc/audit/secrets
-                  readOnly: true
-          volumes:
-            - name: config
-              configMap:
-                name: audit-purge-config
-            - name: deployment
-              configMap:
-                name: audit-deployment
-            
-            
-            - name: secret-files
-              projected:
-                # Readable by the owner and the pod's fsGroup and by nobody else.
-                defaultMode: 0440
-                sources:
-                  - secret:
-                      name: audit-db-purge
-                      items:
-                        - key: password
-                          path: database-password
 
 ---
 # Source: audit/templates/cronjobs.yaml
@@ -1127,7 +814,7 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: c82bd7aeee4c2e0c28a66d60f5854cb9164917d9524dd943aeb00f6316843c64
+            checksum/config: 4d6e301724ac17a2de3ef96be9f2233bae08003d22247e93c5d9c0bdbbac211a
         spec:
           restartPolicy: OnFailure
           serviceAccountName: audit-clock-sync
@@ -1158,22 +845,10 @@ spec:
                   readOnly: true
                 
                 
-                - name: token-0
-                  mountPath: /var/run/audit
-                  readOnly: true
           volumes:
             - name: config
               configMap:
                 name: audit-clock-sync-config
-            
-            
-            - name: token-0
-              projected:
-                sources:
-                  - serviceAccountToken:
-                      path: token
-                      audience: "audit"
-                      expirationSeconds: 3600
 ---
 # Source: audit/templates/migrate.yaml
 # The identity this Job runs as, created as a hook of its own so that it
@@ -1226,14 +901,10 @@ data:
   config.yaml: |
     apiVersion: audit.truvity.github.io/audit-migrate/v2
     database:
-      passwordSecret: database-password
-      url: postgres://audit_owner@db.example.com:5432/audit?sslmode=verify-full
+      passwordSecret: AUDIT_DATABASE_PASSWORD
+      url: postgres://audit_owner@postgres.postgres.svc:5432/audit?sslmode=require
     observe: audit_observe
-    purge: audit_purge
     reader: audit_query
-    secrets:
-      root: /etc/audit/secrets
-      source: file
     writer: audit_writer
 
 ---
@@ -1283,6 +954,13 @@ spec:
           args:
             - migrate
             - --config=/etc/audit/config.yaml
+          env:
+            
+            - name: AUDIT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: audit-owner-database
+                  key: password
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -1296,23 +974,10 @@ spec:
               readOnly: true
             
             
-            - name: secret-files
-              mountPath: /etc/audit/secrets
-              readOnly: true
       volumes:
         - name: config
           configMap:
             name: audit-migrate-config
         
         
-        - name: secret-files
-          projected:
-            # Readable by the owner and the pod's fsGroup and by nobody else.
-            defaultMode: 0440
-            sources:
-              - secret:
-                  name: audit-db-owner
-                  items:
-                    - key: password
-                      path: database-password
 
