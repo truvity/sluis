@@ -333,7 +333,7 @@ RFC 8693 exchange on `/token`. It applies when `requested_token_type` is the typ
 | Parameter | Value |
 |---|---|
 | `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
-| `requested_token_type` | `urn:access-roster:params:oauth:token-type:github-installation-token` (Go: `tokens.TypeGitHubInstallationToken`) |
+| `requested_token_type` | `urn:sluis:params:oauth:token-type:github-installation-token` (Go: `tokens.TypeSluisGitHubInstallationToken`); the deprecated `urn:access-roster:params:oauth:token-type:github-installation-token` (`tokens.TypeGitHubInstallationToken`) is accepted until v1.76. The response's `issued_token_type` repeats the one asked |
 | `audience` | `github-app:<catalogue id>`, one |
 | `subject_token` | GitHub Actions token for the issuer URL, federated ServiceAccount token, or sign-in access token |
 | `subject_token_type` | `urn:ietf:params:oauth:token-type:jwt` (first two), `urn:ietf:params:oauth:token-type:access_token` (sign-in) |

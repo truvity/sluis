@@ -40,6 +40,13 @@ const (
 // audience then names a catalogue App, `github-app:<id>`.
 const TypeGitHubInstallationToken = "urn:access-roster:params:oauth:token-type:github-installation-token"
 
+// TypeSluisGitHubInstallationToken is the sluis spelling of
+// [TypeGitHubInstallationToken]. The issuer accepts both (the old one is
+// deprecated and goes in v1.76) and answers with the type the caller asked
+// for; the clients of this module still ask for the old one so that they keep
+// working against an issuer that predates the new name.
+const TypeSluisGitHubInstallationToken = "urn:sluis:params:oauth:token-type:github-installation-token"
+
 // GitHubAppAudiencePrefix is what an installation token's audience starts
 // with; the catalogue id follows it.
 const GitHubAppAudiencePrefix = "github-app:"
@@ -48,6 +55,22 @@ const GitHubAppAudiencePrefix = "github-app:"
 // credential minted from a preset instead of a token this issuer signs. The
 // audience then names the preset, `cloudflare:<preset>`.
 const TypeCloudflareToken = "urn:access-roster:params:oauth:token-type:cloudflare-token"
+
+// TypeSluisCloudflareToken is the sluis spelling of [TypeCloudflareToken], with
+// the same window as [TypeSluisGitHubInstallationToken].
+const TypeSluisCloudflareToken = "urn:sluis:params:oauth:token-type:cloudflare-token"
+
+// IsGitHubInstallationToken reports whether t names an installation token
+// under either spelling.
+func IsGitHubInstallationToken(t string) bool {
+	return t == TypeGitHubInstallationToken || t == TypeSluisGitHubInstallationToken
+}
+
+// IsCloudflareToken reports whether t names a Cloudflare credential under
+// either spelling.
+func IsCloudflareToken(t string) bool {
+	return t == TypeCloudflareToken || t == TypeSluisCloudflareToken
+}
 
 // CloudflareAudiencePrefix is what a Cloudflare credential's audience starts
 // with; the preset's name follows it.

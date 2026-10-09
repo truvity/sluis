@@ -83,7 +83,7 @@ func cloudflareTokens(iss *Issuer, storage *Storage, provider *op.Provider, next
 
 func claimsCloudflareToken(form url.Values) bool {
 	if form.Get("grant_type") != string(oidc.GrantTypeTokenExchange) ||
-		form.Get("requested_token_type") != tokens.TypeCloudflareToken {
+		!tokens.IsCloudflareToken(form.Get("requested_token_type")) {
 		return false
 	}
 	for _, audience := range form["audience"] {
@@ -188,7 +188,7 @@ func serveCloudflareToken(
 	}
 
 	response := cloudflareTokenResponse{
-		IssuedTokenType: tokens.TypeCloudflareToken,
+		IssuedTokenType: form.Get("requested_token_type"), // the spelling the caller used (both are accepted)
 		TokenType:       "N_A",
 		ExpiresIn:       max(int64(time.Until(minted.ExpiresOn).Seconds()), 0),
 		ExpiresOn:       minted.ExpiresOn.UTC().Format(time.RFC3339),

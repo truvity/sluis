@@ -69,7 +69,7 @@ func githubTokens(iss *Issuer, storage *Storage, provider *op.Provider, next htt
 // token's.
 func claimsGitHubToken(form url.Values) bool {
 	if form.Get("grant_type") != string(oidc.GrantTypeTokenExchange) ||
-		form.Get("requested_token_type") != tokens.TypeGitHubInstallationToken {
+		!tokens.IsGitHubInstallationToken(form.Get("requested_token_type")) {
 		return false
 	}
 	for _, audience := range form["audience"] {
@@ -185,7 +185,7 @@ func serveGitHubToken(
 
 	response := githubTokenResponse{
 		AccessToken:     minted.Token,
-		IssuedTokenType: tokens.TypeGitHubInstallationToken,
+		IssuedTokenType: form.Get("requested_token_type"), // the spelling the caller used (both are accepted)
 		// RFC 8693 2.2.1: the token is not an OAuth access token, so how it
 		// is presented is not this response's to say.
 		TokenType:    "N_A",
