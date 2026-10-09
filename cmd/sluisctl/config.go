@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,8 +20,16 @@ import (
 
 // Config is what `login` writes and every other command reads.
 type Config struct {
-	// Issuer is the sluis issuer this laptop signs in at.
-	Issuer string `yaml:"issuer"`
+	// Issuer PINS the issuer every command talks to when no --issuer is
+	// given: set by hand (or by $SLUISCTL_ISSUER, which wins), never by
+	// `login`. Releases before the ambiguity refusal had `login` write it,
+	// so a config.yaml from then holds the last login here and counts as a
+	// pin until that line is removed.
+	Issuer string `yaml:"issuer,omitempty"`
+	// LastIssuer is the issuer `login` signed in at most recently. It is a
+	// convenience for `login` itself and the fallback when no session is
+	// live; it is NOT a pin, and with two live sessions it decides nothing.
+	LastIssuer string `yaml:"lastIssuer,omitempty"`
 	// ClientID is the public client the flow runs as.
 	ClientID string `yaml:"clientId"`
 	// SSHKnownHosts is this laptop's own list of SSH host certificate
@@ -346,32 +355,116 @@ func readConfigFile() (Config, error) {
 	return cfg, nil
 }
 
-// loadConfig reads what login wrote, with the flags overriding it.
+// envIssuer pins the issuer for one shell or one credential_process, like
+// the issuer: key of config.yaml but ahead of it.
+const envIssuer = "SLUISCTL_ISSUER"
+
+// loadConfig reads the configuration and chooses the issuer, for every
+// command that needs one but `login`.
 //
-// A flag wins so that one laptop can talk to a second installation
-// without losing the first: `--issuer` is enough for a one-off, and
-// nothing is written unless login is what was asked for.
+// The issuer is, in order: --issuer, $SLUISCTL_ISSUER, the `issuer:` key of
+// config.yaml (these three are "pinned"), else the one issuer with a live
+// session. With more than one live session and nothing pinned it refuses,
+// because silently using the most recent login gave a user signed in at two
+// estates the wrong one, with an error that read as an expiry. With no live
+// session it falls back to the last login, which then reports "not signed in".
 func loadConfig(issuer, clientID string) (Config, error) {
+	return resolveConfig(issuer, clientID, false)
+}
+
+// loadLoginConfig is loadConfig for `login`: with nothing pinned it
+// signs in again at the last login, however many sessions are live.
+func loadLoginConfig(issuer, clientID string) (Config, error) {
+	return resolveConfig(issuer, clientID, true)
+}
+
+func resolveConfig(issuer, clientID string, forLogin bool) (Config, error) {
 	cfg, err := readConfigFile()
 	if err != nil {
 		return cfg, err
 	}
 
-	if issuer = strings.TrimSpace(issuer); issuer != "" {
-		cfg.Issuer = issuer
+	pinned := strings.TrimSpace(issuer)
+	if pinned == "" {
+		pinned = strings.TrimSpace(os.Getenv(envIssuer))
+	}
+	if pinned == "" {
+		pinned = strings.TrimSpace(cfg.Issuer)
 	}
 	if clientID = strings.TrimSpace(clientID); clientID != "" {
 		cfg.ClientID = clientID
 	}
-	cfg.Issuer = strings.TrimSuffix(cfg.Issuer, "/")
+
+	switch {
+	case pinned != "":
+		cfg.Issuer = pinned
+	case forLogin:
+		cfg.Issuer = cfg.LastIssuer
+	default:
+		live := liveSessionIssuers()
+		switch len(live) {
+		case 0:
+			cfg.Issuer = cfg.LastIssuer
+		case 1:
+			cfg.Issuer = live[0]
+		default:
+			return cfg, badUsage("more than one issuer has a live session (%s) and none is chosen: "+
+				"pass --issuer <url>, set $%s, or pin one with `issuer: <url>` in %s",
+				strings.Join(live, ", "), envIssuer, configFileHint())
+		}
+	}
+	cfg.Issuer = strings.TrimSuffix(strings.TrimSpace(cfg.Issuer), "/")
 
 	if cfg.Issuer == "" {
-		return cfg, badUsage("no issuer: pass --issuer, or run `sluisctl login --issuer ...` once")
+		return cfg, badUsage("no issuer: pass --issuer, set $%s, or run `sluisctl login --issuer ...` once", envIssuer)
 	}
 	if cfg.ClientID == "" {
 		cfg.ClientID = DefaultClientID
 	}
 	return cfg, nil
+}
+
+func configFileHint() string {
+	if path, err := configPath(); err == nil {
+		return path
+	}
+	return "the sluisctl config.yaml"
+}
+
+// liveSessionIssuers lists, sorted, the issuers that hold a session file
+// which could still be used: it parses, carries a refresh token and names
+// its issuer, and does not say it has expired (Expires is zero when the
+// issuer gave no end, which is the usual case). The single-issuer
+// session.json of old releases names no issuer and is not counted.
+func liveSessionIssuers() []string {
+	dir, err := configDir()
+	if err != nil {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "sessions"))
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		session, err := readSession(filepath.Join(dir, "sessions", e.Name()))
+		if err != nil || session.Issuer == "" {
+			continue
+		}
+		if !session.Expires.IsZero() && !session.Expires.After(time.Now()) {
+			continue
+		}
+		if !seen[session.Issuer] {
+			seen[session.Issuer] = true
+			out = append(out, session.Issuer)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // DefaultClientID is what a laptop signs in as when nothing says

@@ -36,7 +36,7 @@ func login(args []string) error {
 		return usageError{err}
 	}
 
-	cfg, err := loadConfig(*issuer, *clientID)
+	cfg, err := loadLoginConfig(*issuer, *clientID)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,14 @@ func login(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err = saveConfig(cfg); err != nil {
+	// Remember the sign-in, but never as a pin: `issuer:` stays whatever
+	// the person wrote there.
+	saved, err := readConfigFile()
+	if err != nil {
+		return err
+	}
+	saved.LastIssuer, saved.ClientID = cfg.Issuer, cfg.ClientID
+	if err = saveConfig(saved); err != nil {
 		return err
 	}
 	if err = saveSession(cfg.Issuer, session); err != nil {
