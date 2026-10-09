@@ -558,3 +558,20 @@ func TestARequestForAnUndeclaredAppIsTrailedAndNotKept(t *testing.T) {
 		t.Errorf("the trail holds %d of the request, want 1", len(g.minted()))
 	}
 }
+
+// Both spellings of the token type are accepted during the dual-name window
+// (INF-1497 retires the old one) and the answer carries the one that was asked.
+func TestBothSpellingsOfTheInstallationTokenTypeAreAnswered(t *testing.T) {
+	for _, asked := range []string{tokens.TypeGitHubInstallationToken, tokens.TypeSluisGitHubInstallationToken} {
+		t.Run(asked, func(t *testing.T) {
+			g := serveGitHubTokens(t)
+			status, body, _ := g.ask(t, "github-app:publisher", url.Values{
+				"subject_token": {"job:release.yml"}, "audience": {"github-app:publisher"},
+				"repositories": {"app lib-core"}, "scope": {"contents:read"}, "requested_token_type": {asked},
+			})
+			if status != http.StatusOK || body["issued_token_type"] != asked || body["access_token"] != g.github.Token {
+				t.Fatalf("mint = %d %v, want 200 with issued_token_type %q", status, body, asked)
+			}
+		})
+	}
+}

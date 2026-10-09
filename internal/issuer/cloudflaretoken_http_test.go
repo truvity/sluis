@@ -325,3 +325,20 @@ func TestGrantsListsTheCloudflarePresetsTheGroupsOpen(t *testing.T) {
 		}
 	}
 }
+
+// Both spellings of the token type are accepted during the dual-name window
+// (INF-1497 retires the old one) and the answer carries the one that was asked.
+func TestBothSpellingsOfTheCloudflareTokenTypeAreAnswered(t *testing.T) {
+	for _, asked := range []string{tokens.TypeCloudflareToken, tokens.TypeSluisCloudflareToken} {
+		t.Run(asked, func(t *testing.T) {
+			c := serveCloudflare(t, true)
+			status, body, _ := c.ask(t, "cloudflare:dns", url.Values{
+				"subject_token": {"job:release.yml"}, "audience": {"cloudflare:dns"}, "lifetime": {"300"},
+				"requested_token_type": {asked},
+			})
+			if status != http.StatusOK || body["issued_token_type"] != asked || body["access_token"] != "cf-token-value" {
+				t.Fatalf("mint = %d %v, want 200 with issued_token_type %q", status, body, asked)
+			}
+		})
+	}
+}
