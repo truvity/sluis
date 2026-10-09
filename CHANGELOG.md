@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.74.1
+
+A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
+
 ### Added
 
 - **The Pulumi library: `LambdaArgs.Function.ReservedConcurrency` (`*int`).** The function's reserved concurrency: a ceiling on the environments that run at once. Nil leaves the function unreserved, as before. A ceiling costs nothing, is not provisioned concurrency, and bounds a herd of cold starts. An estate that capped the function by hand sets the cap here, or the next apply removes it. Zero and negative values are refused. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
