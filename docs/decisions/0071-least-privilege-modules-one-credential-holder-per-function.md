@@ -1,4 +1,4 @@
-# 0071 — Least-privilege modules: one function per credential holder, one binary per function and platform
+# 0071 — Least-privilege modules: one function per credential holder, a separate signer and one multi-call binary
 
 **Status:** Accepted (2026-10-09). Supersedes [0037](0037-one-process-everywhere.md) (one process everywhere); amends
 [0036](0036-configuration-is-immutable-per-instance.md) (immutability moves from the instance to the execution
@@ -63,25 +63,33 @@ and schedule from one declaration, and one chart renders every Deployment.
    Deployment that needs them. Each module's internal API is Connect services with two transports: Lambda invoke on AWS,
    HTTP on Kubernetes and in local development.
 
-5. **Binaries per function and per platform, composed from shared packages.** `cmd/sluis-<module>-lambda` and
-   `cmd/sluis-<module>-k8s` for each of the eight modules, plus `cmd/sluis-restore` and `cmd/sluisctl`. A main only
-   composes its module with its platform's adapters (Lambda: DynamoDB, SSM, KMS, the invoke transport, AppConfig;
-   Kubernetes: the cluster state adapters, OpenBao or SSM, the Service and projected-token transport, ConfigMaps,
-   probes). There is no all-in-one binary. Import-boundary tests hold the line: a `-lambda` binary imports no
-   client-go or Kubernetes-only adapter, a `-k8s` binary imports no Lambda-only adapter, and the signer imports no
-   request-parsing package. Each test lists the binary's dependencies and fails on a forbidden prefix and on a sweep
-   that finds too few packages, and the linter's depguard rules say the same per directory.
+5. **A separate signer and one multi-call binary, composed from shared packages.** There are two server mains.
+   `cmd/sluis-signer` is a separate binary with a minimal dependency set: KMS, DynamoDB and its own code. `cmd/sluis` is
+   one multi-call binary whose urfave/cli v3 subcommands (`sluis issuer`, `sluis console`, `sluis github`,
+   `sluis slack`, `sluis cloudflare`, `sluis google`, `sluis backup`) each run **exactly one module per process**.
+   Besides these there are `cmd/sluis-restore` and `cmd/sluisctl`, which is unchanged. There is no all-in-one binary
+   that includes the signer. Each server main is built once per platform (build tags `lambda` and `k8s`) and composes
+   its module with that platform's adapters (Lambda: DynamoDB, SSM, KMS, the invoke transport, AppConfig; Kubernetes:
+   the cluster state adapters, OpenBao or SSM, the Service and projected-token transport, ConfigMaps, probes).
+   Least privilege comes from the per-function role and configuration, not from the binary: a `sluis slack` process is
+   started with the Slack role and document and holds no signing key, whatever code its file carries. Import-boundary
+   tests hold the line. Module packages must not import each other's credential adapters (the `github` module cannot
+   import the Slack adapter, the `google` module cannot import the Cloudflare minter, and so on); a Lambda build
+   imports no client-go or Kubernetes-only adapter, a Kubernetes build imports no Lambda-only adapter, and the signer
+   imports no request-parsing package and nothing outside its own set. Each test lists the binary's dependencies and
+   fails on a forbidden prefix and on a sweep that finds too few packages, and the linter's depguard rules say the same
+   per directory.
 
-6. **Lambda binaries are plain HTTP servers behind the AWS Lambda Web Adapter.** Each function is a zip on
+6. **Lambda builds are plain HTTP servers behind the AWS Lambda Web Adapter.** Each function is a zip on
    `provided.al2023` with a zip layer **we build** from a pinned adapter release and checksum, not the adapter
    project's public layer. Non-HTTP events (scheduler ticks, module-to-module invokes) arrive through the adapter's
-   pass-through path, `/events`, as a POST of the raw event. `/events` exists **only in the `-lambda` binaries**: its
+   pass-through path, `/events`, as a POST of the raw event. `/events` exists **only in the Lambda builds**: its
    server is bound to the loopback address, API Gateway never routes it, the handler refuses a request whose context
    is an API Gateway request, and the right to invoke is IAM. It dispatches a scheduler tick (`{"kind": ...}`) to the
    module's `Tick(ctx, kind)` and an `rpc` envelope (deliberately not shaped like an API Gateway event) to the
-   module's typed internal calls. The `-k8s` binaries have no `/events`: an in-process scheduler with leases calls
+   module's typed internal calls. The Kubernetes builds have no `/events`: an in-process scheduler with leases calls
    `Tick`, and module calls arrive on an authenticated `/rpc` route (projected token and NetworkPolicy). The business
-   logic is one set of functions per module; the two mains differ only in how they are reached.
+   logic is one set of functions per module; the two platform builds differ only in how they are reached.
 
 7. **Configuration.** On AWS each function reads one **AppConfig** profile, rendered and deployed by Pulumi; only the
    deployment role may call `appconfig:StartDeployment`. The validator is a Lambda that runs sluis's real loader on the
@@ -121,7 +129,7 @@ and schedule from one declaration, and one chart renders every Deployment.
 
 10. **Schedules and rollout.** Schedules are written once in a neutral form (`every: 5m` or a five-field cron);
     Pulumi translates them to EventBridge Scheduler expressions (a role per schedule, a retry policy, a dead-letter
-    queue) and the `-k8s` binaries give them to an in-process scheduler (gocron v2) that takes a lease per tick, so
+    queue) and the Kubernetes builds give them to an in-process scheduler (gocron v2) that takes a lease per tick, so
     handlers are idempotent and replicas do not double-run. Ticks: signer every 5 minutes (key ring); github, slack and
     google every 15 minutes plus on demand (run-now, and refresh on a cache miss); cloudflare a third of the shortest
     preset rotation, clamped to 1 to 15 minutes; backup daily; issuer and console have none. A tick with nothing to do
@@ -134,11 +142,13 @@ and schedule from one declaration, and one chart renders every Deployment.
     topology spread. Per-module defaults for replicas, resources, Lambda memory, timeout and reserved concurrency are
     in the chart values and the Pulumi library, not in this record.
 
-11. **Release.** Eight modules, each shipped as a native zip for Lambda and a dedicated multi-arch image for Kubernetes,
-    plus the adapter layer zip and `sluisctl` and `sluis-restore` archives, each with an SBOM and a checksum in one
+11. **Release.** Two server binaries, `sluis-signer` and the multi-call `sluis`, each shipped as a native zip for
+    Lambda and as one dedicated multi-arch image for Kubernetes. That makes two server zips and two server images, plus
+    the `sluisctl` and `sluis-restore` archives and the adapter layer zip, each with an SBOM and a checksum in one
     `checksums.txt`, signed. Lambda functions receive only native zips and zip layers, never container images, so that
-    the package digest an installation pins is the zip the function executes. Kubernetes receives one dedicated multi-arch
-    image per binary; there is no all-in-one binary or image.
+    the package digest an installation pins is the zip the function executes. Every function of the `sluis` zip runs
+    one module chosen by its subcommand, and the signer function runs the signer zip. Kubernetes receives one dedicated
+    multi-arch image per binary; there is no all-in-one binary or image that includes the signer.
 
 ## Consequences
 
@@ -161,8 +171,13 @@ and schedule from one declaration, and one chart renders every Deployment.
 - The Cloudflare minter credential, which Cloudflare does not bound by the creator's rights, lives only in the
   `cloudflare` module, with the refusals of ADR 0070
   enforced there.
-- Release and documentation grow: eight modules, sixteen mains, per-module documents, AppConfig profiles and chart
-  values. The Pulumi library renders them from one declaration, and a library and its binaries move together as before.
+- Release and documentation grow: eight modules, two server binaries, per-module documents, AppConfig profiles and
+  chart values. The Pulumi library renders them from one declaration, and a library and its binaries move together as
+  before.
+- The signer is where a separate build pays off. It has a smaller dependency and CVE surface than the multi-call
+  binary, its code hash is unchanged by releases that touch other modules (so the signer function is not redeployed for
+  them), and the compiler enforces its import boundary. The cost is that every other module's code is present in every
+  `sluis` function, so the protection there is the role, the document and the import-graph test, not the file.
 - A Lambda function carries up to three extensions (the adapter, the AppConfig agent and the Collector); their start-up
   cost is measured, not assumed.
 - Breaking: the all-in-one binary, the unified Lambda function and the one-document layout go, in the release that
@@ -176,8 +191,14 @@ and schedule from one declaration, and one chart renders every Deployment.
 - **Keep one process (0037).** One role for every credential; rejected for the blast radius above.
 - **In-process privilege separation.** On Lambda every goroutine and child process of an environment shares the role's
   credentials and memory, so it gives an accounting boundary and no enforcement.
-- **One binary that selects its module by configuration.** Every module's code is present in every function, so a wrong
-  or hostile document can enable code the role allows. Distinct binaries make the boundary a property of the file.
+- **One binary that selects its module by configuration.** A document could then enable code the role allows. Rejected
+  for the multi-call binary above, where the subcommand fixes the module before any document is read and the role
+  grants only that module's rights.
+- **One binary per module (D95 c, superseded by D204 c).** The most artifacts and the most release and signing work,
+  for isolation that the per-function role already gives. Kept only for the signer, where the build itself buys
+  something.
+- **One binary including the signer.** The signer would carry every SDK and be redeployed by every release. Rejected for
+  a separate signer.
 - **Function URLs.** Internet-reachable by construction. `lambda:InvokeFunction` is reachable only from the principals
   named and leaves a trail.
 - **A signer that signs digests or claims the issuer built.** The signer could verify nothing about what it signs, and
