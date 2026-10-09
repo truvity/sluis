@@ -126,7 +126,7 @@ func New(ring Ring, limits Limits) Signer { return &local{ring: ring, limits: li
 
 // check applies the limits to a request.
 func (s *local) check(req Request) error {
-	max, ok := s.limits.MaxLifetime[req.Purpose]
+	limit, ok := s.limits.MaxLifetime[req.Purpose]
 	if _, known := typ[req.Purpose]; !ok || !known {
 		return fmt.Errorf("%w %q", ErrUnknownPurpose, req.Purpose)
 	}
@@ -145,9 +145,9 @@ func (s *local) check(req Request) error {
 	}
 	// Whole seconds: iat and exp are each truncated, so a lifetime of 90.5s
 	// can read as 91s. The maximum is rounded up to match.
-	allowed := (max + time.Second - 1).Truncate(time.Second)
+	allowed := (limit + time.Second - 1).Truncate(time.Second)
 	if got := time.Duration(*c.EXP-*c.IAT) * time.Second; got > allowed {
-		return fmt.Errorf("%w: %s for %s, at most %s", ErrLifetime, got, req.Purpose, max)
+		return fmt.Errorf("%w: %s for %s, at most %s", ErrLifetime, got, req.Purpose, limit)
 	}
 	return nil
 }

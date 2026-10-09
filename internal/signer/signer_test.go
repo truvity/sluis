@@ -155,7 +155,8 @@ func TestRefusedRequestDoesNotTouchTheRing(t *testing.T) {
 func TestNoKeyAndBadPayload(t *testing.T) {
 	r, _, _ := newRing(t)
 	s := signer.New(r, limits())
-	if _, err := s.Sign(context.Background(), signer.Request{Purpose: signer.PurposeAccess, Algorithm: jose.ES512, Payload: []byte(`{}`)}); !errors.Is(err, signer.ErrNoKey) {
+	missing := signer.Request{Purpose: signer.PurposeAccess, Algorithm: jose.ES512, Payload: []byte(`{}`)}
+	if _, err := s.Sign(context.Background(), missing); !errors.Is(err, signer.ErrNoKey) {
 		t.Fatalf("got %v", err)
 	}
 	if _, err := s.Sign(context.Background(), signer.Request{Purpose: signer.PurposeAccess, Payload: []byte(`nope`)}); err == nil {
