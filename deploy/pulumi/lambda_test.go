@@ -1637,3 +1637,24 @@ func TestAPausedScheduleIsDeclaredDisabledAndTheRoleKeepsItsGrants(t *testing.T)
 		}
 	}
 }
+
+// A reserved concurrency is declared only when the estate sets one: nil leaves
+// the function unreserved, as before, and a ceiling the estate set by hand is
+// kept only by writing it here.
+func TestReservedConcurrencyIsTheEstatesCeiling(t *testing.T) {
+	rec, _ := mustLambda(t, estate{})
+	if got := prop(rec.one(t, fnType, "staging-http"), "reservedConcurrentExecutions"); !got.IsNull() {
+		t.Errorf("unset declared %v", got)
+	}
+	twenty := 20
+	rec, _ = mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Function.ReservedConcurrency = &twenty }})
+	if got := prop(rec.one(t, fnType, "staging-http"), "reservedConcurrentExecutions"); !got.IsNumber() || got.NumberValue() != 20 {
+		t.Errorf("declared %v, want 20", got)
+	}
+	for _, bad := range []int{0, -1} {
+		if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Function.ReservedConcurrency = &bad }}); err == nil ||
+			!strings.Contains(err.Error(), "ReservedConcurrency") {
+			t.Errorf("%d: %v", bad, err)
+		}
+	}
+}

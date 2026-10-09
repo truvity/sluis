@@ -416,6 +416,15 @@ type FunctionArgs struct {
 	// TimeoutSeconds defaults to 300, which a pass over a whole organisation
 	// needs. API Gateway cuts a request at 30 seconds whatever this says.
 	TimeoutSeconds int
+	// ReservedConcurrency is the function's reserved concurrency: a ceiling on
+	// how many environments run at once, carved out of the account's pool.
+	// Nil is unreserved, as before: the function scales to the account's limit.
+	// A ceiling costs nothing (it is not provisioned concurrency, which keeps
+	// environments warm and is billed); it bounds a herd of cold starts, each
+	// of which reads its configuration from SSM, and answers what is beyond it
+	// with 429. An estate that set a cap on the function by hand sets it here,
+	// or the next apply removes it. At least 1.
+	ReservedConcurrency *int
 }
 
 // RecoveryArgs is the recovery sign-in: the way in for the day no directory can
@@ -791,6 +800,10 @@ func (a *LambdaArgs) validate() (LambdaArgs, error) {
 	if out.Function.TimeoutSeconds == 0 {
 		out.Function.TimeoutSeconds = 300
 	}
+	if r := out.Function.ReservedConcurrency; r != nil && *r < 1 {
+		return out, fmt.Errorf("sluispulumi: LambdaArgs.Function.ReservedConcurrency %d is not a ceiling: at least 1, or nil for unreserved "+
+			"(0 would refuse every invocation)", *r)
+	}
 	if out.DirectoryRefresh.Disabled && out.DirectoryRefresh.Paused {
 		return out, errors.New("sluispulumi: DirectoryRefresh: Disabled leaves the schedule out and Paused declares it disabled: set one")
 	}
@@ -1105,6 +1118,9 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		Tags:          tags,
 		// No VpcConfig: the function reaches DynamoDB, S3, SSM, SQS and KMS over
 		// its public regional endpoints with the role's credentials.
+	}
+	if r := a.Function.ReservedConcurrency; r != nil {
+		fnArgs.ReservedConcurrentExecutions = pulumi.Int(*r)
 	}
 	if code != nil {
 		fnArgs.S3Bucket, fnArgs.S3Key, fnArgs.S3ObjectVersion = pulumi.String(code.Bucket), pulumi.String(code.Key), code.VersionID
