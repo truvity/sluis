@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go/v7/option"
-
 	"github.com/truvity/sluis/internal/cloudflare"
 	"github.com/truvity/sluis/internal/cloudflare/cfapi"
 )
@@ -63,7 +61,7 @@ func TestTheClientSpeaksTheMinterAPI(t *testing.T) {
 	var calls []call
 	srv := server(t, &calls)
 	ctx := context.Background()
-	api, err := cfapi.Dial(option.WithBaseURL(srv.URL+"/"))(ctx, acct, "minter-token")
+	api, err := cfapi.Dial(cfapi.WithBaseURL(srv.URL))(ctx, acct, "minter-token")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,5 +121,47 @@ func TestTheClientSpeaksTheMinterAPI(t *testing.T) {
 	}
 	if _, err = cfapi.Dial()(ctx, "", "t"); err == nil {
 		t.Error("dial without an account")
+	}
+}
+
+// A refusal that says to try again is repeated, except a create that might
+// have been done; an error never carries the body, which can hold a value.
+func TestRetriesAndErrors(t *testing.T) {
+	ctx := context.Background()
+	var gets, posts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			gets++
+			if gets < 3 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = io.WriteString(w, `{"success":false,"errors":[{"code":10000,"message":"busy"}],"result":null}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"success":true,"result":[{"id":"g1","name":"DNS Write"}]}`)
+		case http.MethodPost:
+			posts++
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = io.WriteString(w, `{"success":false,"errors":[{"code":1,"message":"upstream"}],"result":{"value":"leaked-value"}}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	api, err := cfapi.Dial(cfapi.WithBaseURL(srv.URL), cfapi.WithBackoff(time.Millisecond))(ctx, acct, "minter-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if groups, err := api.PermissionGroups(ctx); err != nil || groups["g1"] != "DNS Write" || gets != 3 {
+		t.Fatalf("groups = %v %v after %d calls, want success on the third", groups, err, gets)
+	}
+	_, err = api.CreateToken(ctx, cloudflare.NewToken{Name: "n", Policies: json.RawMessage(`[]`), ExpiresOn: time.Now()})
+	if err == nil || posts != 1 {
+		t.Fatalf("create = %v after %d calls, want one refused call", err, posts)
+	}
+	if strings.Contains(err.Error(), "leaked-value") || !strings.Contains(err.Error(), "HTTP 502") || !strings.Contains(err.Error(), "upstream") {
+		t.Errorf("error = %q", err)
+	}
+	if errors.Is(err, cloudflare.ErrNotFound) {
+		t.Error("a 502 is not ErrNotFound")
 	}
 }
