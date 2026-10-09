@@ -1,0 +1,75 @@
+{
+  "module": "cloudflare",
+  "method": "mint",
+  "caller": "issuer",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "mint",
+    "payload": {
+      "preset": "r2",
+      "caller": {
+        "Actor": {
+          "Kind": "person",
+          "ID": "a@example.com"
+        },
+        "Groups": [
+          "ops"
+        ]
+      },
+      "lifetime": 600000000000
+    },
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "mint",
+    "payload": {
+      "preset": "r2",
+      "caller": {
+        "Actor": {
+          "Kind": "person",
+          "ID": "a@example.com"
+        },
+        "Groups": [
+          "ops"
+        ]
+      },
+      "lifetime": 600000000000
+    }
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "Preset": "r2",
+      "Account": "",
+      "TokenID": "",
+      "Name": "",
+      "ExpiresOn": "2026-10-09T13:00:00Z",
+      "R2": true,
+      "Token": "",
+      "AccessKeyID": "id",
+      "SecretAccessKey": "secret",
+      "Endpoint": "https://r2.example",
+      "RenewAt": "0001-01-01T00:00:00Z"
+    }
+  },
+  "response_v1": {
+    "result": {
+      "Preset": "r2",
+      "Account": "",
+      "TokenID": "",
+      "Name": "",
+      "ExpiresOn": "2026-10-09T13:00:00Z",
+      "R2": true,
+      "Token": "",
+      "AccessKeyID": "id",
+      "SecretAccessKey": "secret",
+      "Endpoint": "https://r2.example",
+      "RenewAt": "0001-01-01T00:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "module": "cloudflare",
+  "method": "granted",
+  "caller": "console",
+  "request": {
+    "v": 2,
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "granted",
+    "payload": {
+      "caller": {
+        "Actor": {
+          "Kind": "person",
+          "ID": "a@example.com"
+        },
+        "Groups": [
+          "ops"
+        ]
+      }
+    },
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "deadline": 4102444800000
+  },
+  "request_v1": {
+    "kind": "rpc",
+    "module": "cloudflare",
+    "method": "granted",
+    "payload": {
+      "caller": {
+        "Actor": {
+          "Kind": "person",
+          "ID": "a@example.com"
+        },
+        "Groups": [
+          "ops"
+        ]
+      }
+    }
+  },
+  "response": {
+    "v": 2,
+    "result": {
+      "presets": [
+        {
+          "Name": "dns",
+          "Description": "",
+          "Account": "",
+          "R2": false,
+          "Endpoint": "",
+          "Lifetime": 3600000000000,
+          "Rotation": 0
+        }
+      ]
+    }
+  },
+  "response_v1": {
+    "result": {
+      "presets": [
+        {
+          "Name": "dns",
+          "Description": "",
+          "Account": "",
+          "R2": false,
+          "Endpoint": "",
+          "Lifetime": 3600000000000,
+          "Rotation": 0
+        }
+      ]
+    }
+  }
+}
