@@ -192,7 +192,14 @@ type Identity interface {
 
 // Set is every port, built once from configuration and passed down.
 type Set struct {
-	State    State
+	// Module is the module whose records State holds, and the only one it
+	// writes. Empty for a set that is not split by module.
+	Module Module
+	State  State
+	// Peers are read-only views of other modules' State, for the named
+	// cross-grants of ADR 0072 (the issuer reads google, github and slack).
+	// A module absent here cannot be read.
+	Peers    map[Module]StateReader
 	Index    Index
 	Blob     Blob
 	Trigger  Trigger
