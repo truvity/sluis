@@ -560,7 +560,7 @@ func TestARequestForAnUndeclaredAppIsTrailedAndNotKept(t *testing.T) {
 }
 
 // Both spellings of the token type are accepted during the dual-name window
-// (INF-1497 retires the old one) and the answer carries the one that was asked.
+// (the old one is retired in v1.76) and the answer carries the one that was asked.
 func TestBothSpellingsOfTheInstallationTokenTypeAreAnswered(t *testing.T) {
 	for _, asked := range []string{tokens.TypeGitHubInstallationToken, tokens.TypeSluisGitHubInstallationToken} {
 		t.Run(asked, func(t *testing.T) {
