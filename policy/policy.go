@@ -48,6 +48,12 @@ const (
 	// by the same rule as everyone else's.
 	ThingSelf = "access-roster"
 
+	// ThingSluis is the sluis spelling of [ThingSelf]. The hub reads both
+	// during the dual-name window and the old one goes in v1.76; a policy
+	// moves its groups (`all:sluis:operator`) once every estate runs a
+	// release that reads the new name.
+	ThingSluis = "sluis"
+
 	// ScopeAll is the scope of a role over the whole installation rather
 	// than one directory in it. A real answer, not a placeholder:
 	// `all:access-roster:operator` operates every connected directory,
@@ -91,6 +97,23 @@ var (
 	GroupReporters = ScopedGroup(ScopeAll, RoleReporter)
 )
 
+// IsOperators reports whether name is the installation-wide operators group
+// under either spelling of the thing.
+func IsOperators(name string) bool {
+	return name == GroupOperators || name == ScopedGroupOf(ThingSluis, ScopeAll, RoleOperator)
+}
+
+// IsViewers reports whether name is the installation-wide viewers group under
+// either spelling of the thing.
+func IsViewers(name string) bool {
+	return name == GroupViewers || name == ScopedGroupOf(ThingSluis, ScopeAll, RoleViewer)
+}
+
+// ScopedGroupOf is [ScopedGroup] with the thing spelled by the caller.
+func ScopedGroupOf(thing, workspace, role string) string {
+	return workspace + Separator + thing + Separator + role
+}
+
 // ScopedGroup names the group that grants one of this hub's roles over
 // one workspace — `C0example:access-roster:operator` administers that
 // tenant and no other — or over the whole installation, with [ScopeAll].
@@ -128,7 +151,7 @@ func ValidWorkspaceID(s string) bool {
 // named "all".
 func SplitScopedGroup(name string) (workspace, role string, mine bool) {
 	scope, thing, role, ok := SplitGroup(name)
-	if !ok || thing != ThingSelf {
+	if !ok || (thing != ThingSelf && thing != ThingSluis) {
 		return "", "", false
 	}
 
