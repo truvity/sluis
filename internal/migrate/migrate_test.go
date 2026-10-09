@@ -54,7 +54,7 @@ func TestLegacyToSharedCopiesEveryDomainAndVerifies(t *testing.T) {
 				domain, kind string
 				n            int
 			}{
-				{"directory", "workspaces", 2}, {"github", "organisations", 1}, {"github", "link-app", 1},
+				{"google", "workspaces", 2}, {"github", "organisations", 1}, {"github", "link-app", 1},
 				{"github", "runner-apps", 1}, {"github", "catalogue-apps", 1}, {"github", "links", 2},
 				{"github", "confirmations", 1}, {"github", "pass-requests", 1},
 				{"slack", "workspaces", 1}, {"slack", "catalogue-apps", 1}, {"slack", "shared-channels", 1},
@@ -454,7 +454,7 @@ func TestUnreadableSourceItemsAreReportedAndTheRestIsCopied(t *testing.T) {
 	if len(report.Unreadable) != 1 || report.Unreadable[0].Key != "broken" {
 		t.Errorf("unreadable = %+v", report.Unreadable)
 	}
-	if s := step(t, report, "directory", "workspaces"); s.Verified != 2 {
+	if s := step(t, report, "google", "workspaces"); s.Verified != 2 {
 		t.Errorf("the rest was not copied and verified: %+v", s)
 	}
 	if s := step(t, report, "slack", "shared-channels"); s.Source != 1 || s.Unreadable != 1 || s.Verified != 1 {
@@ -512,5 +512,29 @@ func TestSkipLeavesADomainOutAndTheReportCanBeKept(t *testing.T) {
 	obj, err := dstMem.Blobs().Read(ctx, "reports/migration.json")
 	if err != nil || !bytes.Contains(obj.Body, []byte(`"ok": true`)) {
 		t.Errorf("the report on the destination = %q, %v", obj.Body, err)
+	}
+}
+
+// The Google domain is `google` in the report and in --skip; `directory` is
+// accepted as its name for one release.
+func TestSkipAcceptsTheOldDirectoryNameForGoogle(t *testing.T) {
+	for _, name := range []string{migrate.DomainGoogle, migrate.DomainDirectory} {
+		src := portSide(memory.New().Set(), store.AdapterMemory)
+		seed(t, src)
+		dst := portSide(memory.New().Set(), store.AdapterMemory)
+		report, err := migrate.Run(ctx, side("a", src), side("b", dst), migrate.Options{
+			WritersStopped: true, Skip: []string{name, "issuer"},
+		})
+		if err != nil {
+			t.Fatalf("Skip %q: Run = %v", name, err)
+		}
+		for _, s := range report.Steps {
+			if s.Domain == "google" || s.Domain == "directory" {
+				t.Errorf("Skip %q ran the Google domain: %+v", name, s)
+			}
+		}
+	}
+	if slices.Contains(migrate.AllDomains, migrate.DomainDirectory) || !slices.Contains(migrate.AllDomains, migrate.DomainGoogle) {
+		t.Errorf("AllDomains = %v, want google and not directory", migrate.AllDomains)
 	}
 }

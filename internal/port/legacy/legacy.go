@@ -20,7 +20,7 @@
 //	State, ConfigMap families
 //	  gh.org.<org>    entry <org>.json of the <release>-github-orgs ConfigMap
 //	Blob
-//	  snapshots/<ws>          {<ws>}:snapshot in Valkey (the same gzip bytes)
+//	  google/<ws>             {<ws>}:snapshot in Valkey (the same gzip bytes)
 //	  reports/github/<key>    entry <key> of the <release>-github-status ConfigMap
 //	  reports/slack/<key>     entry <key> of the <release>-slack-status ConfigMap
 //

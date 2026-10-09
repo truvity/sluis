@@ -88,7 +88,7 @@ func setKind(set string) string {
 	return "?"
 }
 
-// blobKind is a blob name's family: `snapshots/` of `snapshots/<workspace>`.
+// blobKind is a blob name's family: `google/` of `google/<workspace>`.
 func blobKind(name string) string {
 	if family, _, ok := strings.Cut(name, "/"); ok {
 		return family + "/"

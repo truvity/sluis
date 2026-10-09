@@ -15,7 +15,7 @@ import (
 
 // Blob name families.
 const (
-	snapshotsPrefix    = "snapshots/"
+	googleBlobPrefix   = "google/"
 	githubReportPrefix = "reports/github/"
 	slackReportPrefix  = "reports/slack/"
 )
@@ -47,8 +47,8 @@ func snapshotKey(workspace string) string { return "{" + workspace + "}:snapshot
 
 func (b *Blob) locate(name string) (where, error) {
 	switch {
-	case strings.HasPrefix(name, snapshotsPrefix):
-		workspace := strings.TrimPrefix(name, snapshotsPrefix)
+	case strings.HasPrefix(name, googleBlobPrefix):
+		workspace := strings.TrimPrefix(name, googleBlobPrefix)
 		if workspace == "" || strings.ContainsAny(workspace, "{}") {
 			return where{}, unsupported("%q is not a snapshot name", name)
 		}
@@ -192,19 +192,19 @@ func (b *Blob) Delete(ctx context.Context, name string) error {
 func (b *Blob) List(ctx context.Context, prefix string) ([]string, error) {
 	var out []string
 	switch {
-	case strings.HasPrefix(prefix, snapshotsPrefix):
+	case strings.HasPrefix(prefix, googleBlobPrefix):
 		cache, err := b.cache()
 		if err != nil {
 			return nil, err
 		}
-		found, err := cache.Keys(ctx, "{"+strings.TrimPrefix(prefix, snapshotsPrefix))
+		found, err := cache.Keys(ctx, "{"+strings.TrimPrefix(prefix, googleBlobPrefix))
 		if err != nil {
 			return nil, unavailable(err)
 		}
 		for _, key := range found {
 			if workspace, ok := strings.CutSuffix(strings.TrimPrefix(key, "{"), "}:snapshot"); ok &&
 				strings.HasPrefix(key, "{") {
-				out = append(out, snapshotsPrefix+workspace)
+				out = append(out, googleBlobPrefix+workspace)
 			}
 		}
 	case strings.HasPrefix(prefix, githubReportPrefix), strings.HasPrefix(prefix, slackReportPrefix):

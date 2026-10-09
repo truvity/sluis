@@ -278,7 +278,7 @@ type sessionKeyDoc struct{ Key []byte }
 // kinds are every collection a migration copies, in the order it copies them.
 func kinds() []kind {
 	return []kind{
-		collection[workspaceDoc]("directory", "workspaces", listWorkspaces, putWorkspace),
+		collection[workspaceDoc](DomainGoogle, "workspaces", listWorkspaces, putWorkspace),
 
 		collection[orgDoc]("github", "organisations", listOrgs, func(ctx context.Context, d *Domains, v orgDoc) error {
 			return d.Orgs.Put(ctx, v.Record, v.Credential)
