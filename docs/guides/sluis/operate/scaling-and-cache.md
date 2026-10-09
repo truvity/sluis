@@ -13,7 +13,7 @@ Choose the replica count and size the directory snapshot cache.
 
 1. Set `replicaCount` (default 2). For more than one replica follow [high availability](high-availability.md). Each pod logs `keeping snapshots and the refresh lease in the state ports`.
 
-2. Estimate the snapshot size as the directories' size. The Blob port holds one gzip object `snapshots/<workspace>` per workspace, of the order of the number of accounts and groups.
+2. Estimate the snapshot size as the directories' size. The Blob port holds one gzip object `google/<workspace>` per workspace, of the order of the number of accounts and groups.
 
 ## Verify
 
