@@ -15,6 +15,10 @@ docs_dir: docs
 site_dir: _site
 strict: true
 
+# Redirect maps live in docs/_redirects/*.yaml (hack/mkdocs_hooks.py merges them).
+exclude_docs: |
+  _redirects/
+
 # Strict mode turns every warning into an error. These keep the checks on while
 # naming what each one covers.
 validation:

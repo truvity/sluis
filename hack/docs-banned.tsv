@@ -1,0 +1,21 @@
+# Phrases the documentation does not use (docs/WRITING.md, "Banned"). Checked by
+# hack/check-docs-budget.py outside fenced code, inline code and generated regions,
+# over docs/** (not docs/decisions or the CHANGELOG), the root README and
+# CONTRIBUTING, and the chart READMEs.
+# Columns, tab separated: a case-insensitive regex, then the reason shown with the warning.
+\bnote that\b	say the fact; the reader notices it
+\bit is worth\b	say the fact, not that it is worth saying
+\bin other words\b	say it once, plainly
+\bthat is,	say it once, plainly
+\bin practice\b	state what happens
+\bdeliberately\b	history and intent belong in an ADR
+\bby design\b	history and intent belong in an ADR
+\bon purpose\b	history and intent belong in an ADR
+\bexactly\b	emphasis; drop it
+\bthe whole of\b	say "all of" or name the parts
+\bfirst-class\b	say what the thing can do
+\bwhich is why\b	a justification; link the ADR under "Decided in"
+\bthe rule under\b	a justification; link the ADR under "Decided in"
+\bis the contract\b	state the behaviour
+\bis the keystone\b	state the behaviour
+ — 	an em-dash aside; make it a sentence or delete it

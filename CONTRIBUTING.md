@@ -58,7 +58,7 @@ proto/  gen/              contracts and committed generated code
 audit/                    the audit product, a Go module of its own
                           (see "Audit" below)
 storage/                  the state and keys module both products use
-docs/                     see "Writing documentation" below
+docs/                     see docs/WRITING.md
 ```
 
 Public Go packages stay free of Kubernetes and framework specifics
@@ -79,29 +79,8 @@ and the [documentation contract](https://github.com/truvity/policy/blob/master/d
 
 ## Writing documentation
 
-The reader's map is the documentation home, [docs/README.md](docs/README.md).
-This section is for the writer. A page belongs to one directory of its
-product's tree (`docs/` for sluis, `docs/audit/` for audit), by what the
-reader is doing:
-
-| directory | holds |
-|---|---|
-| `getting-started/` | one tutorial per deployment shape, from nothing to working |
-| `how-to/` | one task per page; a runbook uses one template (purpose, preconditions, before you start, steps with command and expected output, verify and rollback, afterwards); migration steps in `how-to/upgrade/vX.Y.md`, linked from the CHANGELOG |
-| `reference/` | configuration keys, chart values, API, catalogue, bucket contract |
-| `explanation/` | design and the why |
-| `docs/decisions/` | the ADRs, one series for both products; the template and index are `docs/decisions/README.md`; a decision is never edited after acceptance, it is superseded by a new one that links back |
-
-- Keep each fact in one place and link to it from the others.
-- Prefer a page under about 400 lines; split by audience, not by length.
-- Where reference can be produced from code, a schema or a release file, mark it
-  `<!-- generated: name -->` ... `<!-- /generated -->`; `just docs-generate` rewrites it and
-  `just docs-check` fails when it is stale. Do not edit inside the markers.
-- Documentation is held to the code: every command shown is one the binary takes, every
-  chart value named exists, and a relative link or anchor that does not resolve fails the gate.
-  When you rename a flag, a value or a heading, search the docs for it in the same change.
-- Where the documentation runs ahead of the code, say so where the name is used (`# not built yet`).
-- Mermaid diagrams: a `;` inside a sequence diagram message splits it.
+Every page is a tutorial, a how-to, a reference or an explanation, and `docs/decisions/` holds the why.
+The standard, the skeletons and the word limits are in [docs/WRITING.md](docs/WRITING.md); `just docs-check` enforces them.
 
 ## Toolchain
 
