@@ -2,7 +2,6 @@ package issuerapp_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +46,7 @@ clients:
 				next.ServeHTTP(w, r)
 			})
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

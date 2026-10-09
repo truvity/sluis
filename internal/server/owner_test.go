@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"slices"
 	"strings"
@@ -25,7 +24,7 @@ import (
 // one of those two and C0nowhere is not.
 func ownerHub(t *testing.T) *hub.Hub {
 	t.Helper()
-	h := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.DiscardHandler))
 	for _, tenant := range []struct{ id, domain string }{{"C0north", "north.example"}, {"C0south", "south.example"}} {
 		directory := fake.New(tenant.id, tenant.domain).WithAccount("admin@"+tenant.domain, "Admin", tenant.id)
 		if _, err := h.Adopt(context.Background(), hub.Workspace{ID: tenant.id, Admin: "admin@" + tenant.domain}, directory); err != nil {

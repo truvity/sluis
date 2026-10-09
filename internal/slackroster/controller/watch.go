@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/connection"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // watched reports a mounted key whose change wakes a pass: a workspace's own
@@ -60,7 +60,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 				digest, err := src.Digest(ctx)
 				if err != nil {
 					// Not read: unchanged, and the next poll asks again.
-					c.deps.Log.WarnContext(ctx, "the records could not be read for the change check", "error", logsafe.Error(err))
+					c.deps.Log.WarnContext(ctx, "the records could not be read for the change check", logattr.SafeError("error", err))
 					return lastDigest
 				}
 				lastDigest = digest
@@ -80,7 +80,8 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 			Changed: "a workspace's credentials changed",
 			OnRequest: func(workspace string) {
 				if err := c.deps.Trigger.Notify(ctx, workspace); err != nil {
-					c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", "workspace", logsafe.Value(workspace), "error", logsafe.Error(err))
+					c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", logattr.SafeString("workspace", workspace),
+						logattr.SafeError("error", err))
 				}
 			},
 		}.Run(ctx, c.deps.Log, wake)
@@ -95,7 +96,8 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 		Changed:  "a workspace's credentials changed",
 		OnRequest: func(workspace string) {
 			if err := c.deps.Trigger.Notify(ctx, workspace); err != nil {
-				c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", "workspace", logsafe.Value(workspace), "error", logsafe.Error(err))
+				c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", logattr.SafeString("workspace", workspace),
+					logattr.SafeError("error", err))
 			}
 		},
 	}.Run(ctx, c.deps.Log, wake)

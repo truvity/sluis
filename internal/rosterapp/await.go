@@ -34,7 +34,7 @@ func awaitConsole(ctx context.Context, log *slog.Logger, controller, url string)
 		}
 		if time.Now().After(deadline) {
 			log.WarnContext(ctx, "the console did not answer; the controller passes anyway",
-				"controller", controller, "wait", consoleWait.String())
+				slog.String("controller", controller), slog.String("wait", consoleWait.String()))
 			return
 		}
 		select {

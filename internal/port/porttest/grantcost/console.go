@@ -2,7 +2,6 @@ package grantcost
 
 import (
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +54,7 @@ func (h *Harness) Console() Whoami {
 					Email: strings.ToLower(session.Identity), Subject: session.Identity, Source: access.SourceOIDC,
 				}, true
 			},
-			Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Log: slog.New(slog.DiscardHandler),
 		}).Handler()
 	}
 

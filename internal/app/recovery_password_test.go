@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,7 +17,7 @@ import (
 func TestTheRecoveryPasswordIsReadFromItsSecret(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	dir := t.TempDir()
 
 	src := secrets.File{Root: dir}

@@ -372,7 +372,7 @@ func (r *run) steps(from, to Side) []step {
 		r.note("DEPRECATED: the destination is on secrets layout v3, which is written for this release only; " +
 			"set secrets.layout: v4 in the destination's installation document, so the secrets are written " +
 			"to internal/ and external/ (docs/how-to/migrate-secrets-layout.md)")
-		r.log.Warn("the destination is on secrets layout v3, which is deprecated: set secrets.layout: v4")
+		r.log.WarnContext(context.Background(), "the destination is on secrets layout v3, which is deprecated: set secrets.layout: v4")
 	case "v4":
 		r.note("the secrets are written straight into layout v4 (internal/ and external/) under the destination's key alias")
 	}
@@ -480,8 +480,8 @@ func (r *run) execute(ctx context.Context, steps []step) error {
 			}
 			sr.out.Copied++
 		}
-		r.log.InfoContext(ctx, "copied", "domain", sr.step.domain, "kind", sr.step.name,
-			"copied", sr.out.Copied, "present", sr.out.Present)
+		r.log.InfoContext(ctx, "copied", slog.String("domain", sr.step.domain), slog.String("kind", sr.step.name),
+			slog.Int("copied", sr.out.Copied), slog.Int("present", sr.out.Present))
 	}
 
 	// 3. Verify.

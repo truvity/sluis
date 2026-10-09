@@ -11,7 +11,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // DefaultWatchPoll is how often mounted credentials and records are looked
@@ -30,7 +30,7 @@ func Entries(dir string, log *slog.Logger) []string {
 		return nil
 	}
 	if err != nil {
-		log.Warn("a directory could not be listed", "dir", logsafe.Value(dir), "error", logsafe.Error(err))
+		log.WarnContext(context.Background(), "a directory could not be listed", logattr.SafeString("dir", dir), logattr.SafeError("error", err))
 		return nil
 	}
 	var names []string
@@ -55,7 +55,8 @@ func Digest(log *slog.Logger, dirs []string, keep func(name string) bool) [sha25
 			}
 			raw, err := os.ReadFile(filepath.Join(dir, name)) //nolint:gosec // the directory is a mounted Secret or ConfigMap
 			if err != nil {
-				log.Warn("a mounted file could not be read for the change check", "name", logsafe.Value(name), "error", logsafe.Error(err))
+				log.WarnContext(context.Background(), "a mounted file could not be read for the change check", logattr.SafeString("name", name),
+					logattr.SafeError("error", err))
 				continue
 			}
 			h.Write([]byte(dir + "\x00" + name + "\x00"))
@@ -125,17 +126,18 @@ func (w Watch) Run(ctx context.Context, log *slog.Logger, wake chan<- struct{}) 
 			if requests[subject].After(handled[subject]) {
 				handled[subject] = requests[subject]
 				if w.OnRequest != nil {
-					log.InfoContext(ctx, "a pass was requested for "+logsafe.Value(subject)+": ticking it now instead of at the next interval")
+					log.InfoContext(ctx, "a pass was requested: ticking it now instead of at the next interval",
+						logattr.SafeString("subject", subject))
 					w.OnRequest(subject)
 					continue
 				}
-				reason = "a pass was requested for " + logsafe.Value(subject)
+				reason = "a pass was requested for " + logattr.Safe(subject)
 			}
 		}
 		if reason == "" {
 			continue
 		}
-		log.InfoContext(ctx, reason+": passing now instead of at the next interval")
+		log.InfoContext(ctx, "passing now instead of at the next interval", slog.String("reason", reason))
 		select {
 		case wake <- struct{}{}:
 		default:

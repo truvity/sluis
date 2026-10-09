@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -54,7 +53,7 @@ func TestTheControllerCarriesTheServiceDocumentsSecretsLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a, err := New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	a, err := New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("the controller did not start: %v", err)
 	}

@@ -52,10 +52,10 @@ func forwardTo(ctx context.Context, cfg *config.Writer) (sink.Sink, func(), erro
 		if err != nil {
 			return nil, nil, err
 		}
-		slog.Info("publishing to the queue", "queue", f.SQS.QueueURL, "fifo", f.SQS.FIFO)
+		slog.InfoContext(ctx, "publishing to the queue", slog.String("queue", f.SQS.QueueURL), slog.Bool("fifo", f.SQS.FIFO))
 		return p, func() {}, nil
 	case f.Log != nil:
-		slog.Warn("forwarding to the log: a record is kept for as long as the log pipeline keeps it, and no longer")
+		slog.WarnContext(ctx, "forwarding to the log: a record is kept for as long as the log pipeline keeps it, and no longer")
 		return logsink.New(logsink.Options{}), func() {}, nil
 	}
 	return nil, nil, errors.New("forward names no transport")
@@ -89,7 +89,7 @@ func consumeSQS(ctx context.Context, q *config.ConsumeSQS, target sink.Sink, onS
 		Visibility: q.Visibility.D(),
 		OnError: func(err error) {
 			// The message is not deleted, so the queue brings it back.
-			slog.Error("the writer refused a batch from the queue", "error", err)
+			slog.ErrorContext(ctx, "the writer refused a batch from the queue", slog.Any("error", err))
 		},
 	})
 	if err != nil {
@@ -100,12 +100,12 @@ func consumeSQS(ctx context.Context, q *config.ConsumeSQS, target sink.Sink, onS
 	go func() {
 		defer close(done)
 		if err := c.Run(running); err != nil && ctx.Err() == nil && running.Err() == nil {
-			slog.Error("the queue consumer stopped", "error", err)
+			slog.ErrorContext(ctx, "the queue consumer stopped", slog.Any("error", err))
 			if onStopped != nil {
 				onStopped(err)
 			}
 		}
 	}()
-	slog.Info("consuming the queue", "queue", q.QueueURL)
+	slog.InfoContext(ctx, "consuming the queue", slog.String("queue", q.QueueURL))
 	return func() { cancel(); <-done }, nil
 }

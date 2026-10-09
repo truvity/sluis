@@ -55,7 +55,7 @@ func Run(ctx context.Context, log *slog.Logger, p Pacing, pass func(context.Cont
 			wait = min(p.PolicyRetry<<retries, PolicyRetryCap, p.Interval)
 			retries++
 			log.InfoContext(ctx, "the console answered under another policy, as it does while a rollout replaces it; passing again soon",
-				"in", wait, "retry", retries, "of", PolicyRetries)
+				slog.Duration("in", wait), slog.Int("retry", retries), slog.Int("of", PolicyRetries))
 		} else {
 			retries = 0
 		}

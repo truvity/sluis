@@ -3,7 +3,6 @@ package controller_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -25,7 +24,7 @@ var twoOrgs = map[string]policy.GitHubOrg{
 // tickers builds a controller over the rig with the given bindings, trigger and leases.
 func (r *rig) tickers(bind map[string]policy.GitHubOrg, trigger *memory.Store, leases *rails.Leases) *controller.Controller {
 	deps := controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bind, Policy: testPolicy,
 		Leases: leases,
 	}

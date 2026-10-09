@@ -3,6 +3,7 @@ package issuer
 import (
 	"context"
 	"crypto"
+	"log/slog"
 	"time"
 )
 
@@ -62,9 +63,9 @@ func (r *KeyRing) Maintain(ctx context.Context) {
 	switch {
 	case err != nil:
 		r.log.WarnContext(ctx, "could not generate the next signing key; will try again",
-			"algorithm", string(r.alg), "error", err)
+			slog.String("algorithm", string(r.alg)), slog.Any("error", err))
 	case !ran:
-		r.log.DebugContext(ctx, "another replica holds the key-generation lease", "algorithm", string(r.alg))
+		r.log.DebugContext(ctx, "another replica holds the key-generation lease", slog.String("algorithm", string(r.alg)))
 	}
 }
 
@@ -90,7 +91,7 @@ func (r *KeyRing) sync(ctx context.Context, h *wrapHooks) {
 	key, err := h.ws.unwrap(ctx, r.alg, id, pub, wrapped, wc)
 	if err != nil {
 		r.log.ErrorContext(ctx, "could not unwrap the active signing key; signing continues with the newest key this "+
-			"replica can sign with", "kid", id, "algorithm", string(r.alg), "error", err)
+			"replica can sign with", slog.String("kid", id), slog.String("algorithm", string(r.alg)), slog.Any("error", err))
 		return
 	}
 	r.mu.Lock()
@@ -173,5 +174,5 @@ func (r *KeyRing) warnStale(ctx context.Context, h *wrapHooks) {
 	r.lastStaleLog = now
 	r.log.ErrorContext(ctx, "the active signing key is far older than the rotation period: rotation is failing "+
 		"(KMS or State errors, or the key-generation lease is stuck); it keeps signing meanwhile",
-		"kid", e.ID, "algorithm", string(r.alg), "age", age.Round(time.Minute), "rotateEvery", h.rotateEvery)
+		slog.String("kid", e.ID), slog.String("algorithm", string(r.alg)), slog.Duration("age", age.Round(time.Minute)), slog.Duration("rotate_every", h.rotateEvery))
 }

@@ -54,7 +54,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		log.Info("listening", slog.String("addr", ln.Addr().String()))
+		log.InfoContext(ctx, "listening", slog.String("addr", ln.Addr().String()))
 		go func() { failed <- srv.Serve(ln) }()
 	}
 

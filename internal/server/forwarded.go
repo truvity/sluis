@@ -6,7 +6,7 @@ import (
 
 	"github.com/truvity/sluis/identity"
 	"github.com/truvity/sluis/internal/access"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // forwardedBearer turns a token an authenticating gateway forwarded into
@@ -55,7 +55,7 @@ func (b *forwardedBearer) identity(r *http.Request) (access.Principal, bool) {
 		// Why it failed goes to the log and not to the caller: telling an
 		// unauthenticated client what was wrong with its token helps it
 		// produce a better one.
-		b.log.WarnContext(r.Context(), "forwarded token rejected", "error", logsafe.Error(err))
+		b.log.WarnContext(r.Context(), "forwarded token rejected", logattr.SafeError("error", err))
 		return access.Principal{}, false
 	}
 
@@ -74,7 +74,7 @@ func (b *forwardedBearer) identity(r *http.Request) (access.Principal, bool) {
 	}
 	if who.Email == "" {
 		b.log.WarnContext(r.Context(), "forwarded token names neither an address nor a ServiceAccount",
-			"subject", logsafe.Value(who.Subject))
+			logattr.SafeString("subject", who.Subject))
 		return access.Principal{}, false
 	}
 

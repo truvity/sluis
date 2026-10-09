@@ -8,7 +8,7 @@ import (
 	"github.com/truvity/sluis/identity"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // workloadBearer reads a ServiceAccount token a workload presents to the
@@ -55,7 +55,7 @@ func workloadBearer(clusters issuer.Verifiers, log *slog.Logger) func(*http.Requ
 			// the log and never to the caller.
 			if !errors.Is(err, issuer.ErrUnverified) {
 				log.WarnContext(r.Context(), "a workload's token was refused at the console",
-					"error", logsafe.Error(err))
+					logattr.SafeError("error", err))
 			}
 			return access.Principal{}, false
 		}

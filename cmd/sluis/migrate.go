@@ -198,7 +198,8 @@ func openSide(ctx context.Context, file string, log *slog.Logger, kc func(string
 	pol, err := config.PolicyOf(one, nil)
 	if err != nil {
 		// Only layout v4 needs the catalogue (to know which Apps are exported).
-		log.WarnContext(ctx, "the policy document could not be read: no catalogue App is treated as exported", "file", file, "error", err.Error())
+		log.WarnContext(ctx, "the policy document could not be read: no catalogue App is treated as exported", slog.String("file", file),
+			slog.String("error", err.Error()))
 		return side, nil, nil
 	}
 	return side, pol.GitHubCatalogue().Exported, nil

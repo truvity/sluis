@@ -344,7 +344,7 @@ func TestTheTokenIsNotInErrorsOrLogs(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected an error")
 		}
-		log.Error("call failed", "err", err)
+		log.ErrorContext(context.Background(), "call failed", slog.Any("err", err))
 		if strings.Contains(err.Error(), token) {
 			t.Errorf("token in %q", err)
 		}

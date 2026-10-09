@@ -55,7 +55,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	default:
-		slog.Default().Error("sluis stopped", "error", err)
+		slog.Default().ErrorContext(context.Background(), "sluis stopped", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -206,7 +206,7 @@ func logger(ctx context.Context, service string, level slog.Level) (*slog.Logger
 		flush, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := shutdown(flush); err != nil {
-			log.Warn("metrics could not be flushed", "error", err)
+			log.WarnContext(ctx, "metrics could not be flushed", slog.Any("error", err))
 		}
 	}, nil
 }
@@ -244,7 +244,7 @@ func controllerGitHub(ctx context.Context, file string) error {
 		return err
 	}
 	defer flush()
-	log.WarnContext(ctx, deprecatedController, "command", "sluis controller github")
+	log.WarnContext(ctx, deprecatedController, slog.String("command", "sluis controller github"))
 
 	controller, err := githubapp.New(ctx, cfg, log)
 	if err != nil {
@@ -264,7 +264,7 @@ func controllerSlack(ctx context.Context, file string) error {
 		return err
 	}
 	defer flush()
-	log.WarnContext(ctx, deprecatedController, "command", "sluis controller slack")
+	log.WarnContext(ctx, deprecatedController, slog.String("command", "sluis controller slack"))
 
 	controller, err := slackapp.New(ctx, cfg, log)
 	if err != nil {
@@ -314,6 +314,6 @@ func tickSlack(ctx context.Context, file, target string, unsafeLocal bool) error
 
 func closeEmitter(log *slog.Logger, c interface{ Close() error }) {
 	if err := c.Close(); err != nil {
-		log.Warn("the audit emitter could not be closed cleanly; what its queue held is dropped", "error", err)
+		log.WarnContext(context.Background(), "the audit emitter could not be closed cleanly; what its queue held is dropped", slog.Any("error", err))
 	}
 }

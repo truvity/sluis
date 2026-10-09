@@ -10,6 +10,7 @@ linters:
     - lll
     - misspell
     - revive
+    - sloglint
     - staticcheck
     - unused
 
@@ -77,6 +78,21 @@ linters:
               desc: "audit never imports sluis (internal/independence)"
             - pkg: github.com/truvity/sluis/tokens
               desc: "audit never imports sluis (internal/independence)"
+    # Explicit over implicit: every slog call carries typed attributes
+    # (slog.String, slog.Int, ...), never alternating key/value pairs, so a
+    # misplaced argument is a compile error instead of a "!BADKEY" in
+    # production logs.
+    sloglint:
+      attr-only: true
+      no-global: all
+      context: all
+      static-msg: true
+      key-naming-case: snake
+      forbidden-keys:
+        - time
+        - level
+        - msg
+        - source
     lll:
       line-length: 160
     gocritic:
@@ -105,6 +121,19 @@ linters:
       - linters:
           - staticcheck
         text: 'SA1019: .*(KMSSigner|NewLocal|NewTransit|NewTransitSigner|keys\.Local|keys\.Transit|TransitSigner)'
+      # The program entry points and their examples own the process, and with
+      # it the default logger: they log before a logger could have been passed
+      # to them (flag and configuration errors, the first line of startup).
+      # Their call sites are typed like everyone else's.
+      - linters: [sloglint]
+        text: default logger should not be used
+        path: (cmd/[^/]+/.*|examples/.*)\.go
+      # Two library helpers that warn once while loading a document, before
+      # any logger exists; passing one in is a change of their signatures.
+      # A debt to retire, not a pattern to copy.
+      - linters: [sloglint]
+        text: default logger should not be used
+        path: (internal/config/load|profile/deployment)\.go
 
 formatters:
   enable:

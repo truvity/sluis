@@ -2,7 +2,6 @@ package controller_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -27,7 +26,7 @@ func startWatching(t *testing.T) *watchRig {
 		AppsDir: r.appsDir, RecordsDir: r.records, Enabled: map[string]bool{"globex": false},
 		Interval: time.Hour, CredentialPoll: 10 * time.Millisecond,
 	}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -110,7 +109,7 @@ func TestARequestedPassRunsOnceForANewerMarkerOnly(t *testing.T) {
 		AppsDir: r.appsDir, RecordsDir: r.records, Enabled: map[string]bool{"globex": false},
 		Interval: time.Hour, CredentialPoll: 10 * time.Millisecond,
 	}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,7 +137,7 @@ func TestANegativePollWatchesNothing(t *testing.T) {
 		AppsDir: r.appsDir, RecordsDir: r.records, Enabled: map[string]bool{"globex": false},
 		Interval: time.Hour, CredentialPoll: -1,
 	}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 	})
 	ctx, cancel := context.WithCancel(context.Background())

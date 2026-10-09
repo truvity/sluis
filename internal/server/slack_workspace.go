@@ -14,11 +14,11 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // SlackWorkspaces is where connected Slack workspaces are kept: each one's
@@ -252,7 +252,7 @@ func (c *Console) RequestSlackPass(
 			workspace, now.Sub(last).Round(time.Second)))
 	}
 	c.notify(ctx, workspace)
-	c.log().InfoContext(ctx, "a Slack pass was requested", "workspace", logsafe.Value(workspace), "by", logsafe.Value(who.Who()))
+	c.log().InfoContext(ctx, "a Slack pass was requested", logattr.SafeString("workspace", workspace), logattr.SafeString("by", who.Who()))
 	return connect.NewResponse(&directoryrosterv1.RequestSlackPassResponse{RequestedAt: timestampOf(now)}), nil
 }
 
@@ -364,7 +364,7 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 		r.URL.Query().Get("code"), console.slackWorkspaceRedirect())
 	if err != nil {
 		refuse(http.StatusConflict, "Slack accepted the install, and then would not hand over the bot token.", err.Error(),
-			"slack's oauth.v2.access refused: "+logsafe.Error(err), []string{
+			"slack's oauth.v2.access refused: "+logattr.Error(err), []string{
 				"The page was reloaded: the code Slack returns can be exchanged once.",
 				"More than ten minutes passed between approving and returning here.",
 				"This service cannot reach slack.com: the cluster's egress policy has to allow it.",
@@ -381,7 +381,7 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 		if bookErr != nil {
 			revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
 			refuse(http.StatusConflict, "The connection records could not be read.", bookErr.Error(),
-				"the connection records could not be read: "+logsafe.Error(bookErr)+"; "+revokedWords(revokeErr), nil)
+				"the connection records could not be read: "+logattr.Error(bookErr)+"; "+revokedWords(revokeErr), nil)
 			return
 		}
 		for other := range book {
@@ -413,11 +413,12 @@ func (s *ConsoleServer) slackWorkspaceCallback(w http.ResponseWriter, r *http.Re
 		// A token nobody keeps is one nobody can revoke later.
 		revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
 		refuse(http.StatusConflict, "The App is installed and its token could not be saved here. Install it again.", err.Error(),
-			"the token could not be kept: "+logsafe.Error(err)+"; "+revokedWords(revokeErr), nil)
+			"the token could not be kept: "+logattr.Error(err)+"; "+revokedWords(revokeErr), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "Slack workspace connected", "workspace", logsafe.Value(workspace), "team", logsafe.Value(installed.TeamID),
-		"scopes", logsafe.Value(strings.Join(record.Scopes, ",")), "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "Slack workspace connected", logattr.SafeString("workspace", workspace),
+		logattr.SafeString("team", installed.TeamID),
+		logattr.SafeString("scopes", strings.Join(record.Scopes, ",")), logattr.SafeString("by", actor))
 	console.record(r.Context(), audit.SlackWorkspaceConnected(audit.Identified(actor), subject))
 	http.Redirect(w, r, s.at("/#/slack"), http.StatusFound)
 }

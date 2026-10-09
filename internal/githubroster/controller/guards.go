@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/truvity/sluis/audit/sdk/record"
+	"github.com/truvity/sluis/storage/logattr"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/audit"
@@ -27,11 +29,12 @@ func (c *Controller) guards(ctx context.Context, client githubapp.Org, token str
 	g := reconcile.Guards{Pending: len(state.Invitations), Members: len(state.Members), Confirmed: confirmed, LinkedAt: map[int64]time.Time{}}
 	plan, known, err := client.Plan(ctx, token)
 	if err != nil {
-		c.deps.Log.WarnContext(ctx, "the organisation's seats could not be read; nobody is invited this pass", "org", client.Login, "error", err)
+		c.deps.Log.WarnContext(ctx, "the organisation's seats could not be read; nobody is invited this pass", slog.String("org", client.Login),
+			logattr.SafeError("error", err))
 	}
 	g.Plan, g.Known = plan, known && err == nil
 	if g.Failed, err = client.FailedInvitations(ctx, token); err != nil {
-		c.deps.Log.WarnContext(ctx, "failed invitations could not be read", "org", client.Login, "error", err)
+		c.deps.Log.WarnContext(ctx, "failed invitations could not be read", slog.String("org", client.Login), logattr.SafeError("error", err))
 	}
 	for _, l := range state.Links {
 		g.LinkedAt[l.ID] = l.LinkedAt
@@ -44,7 +47,7 @@ func (c *Controller) guards(ctx context.Context, client githubapp.Org, token str
 func (c *Controller) collaborators(ctx context.Context, client githubapp.Org, token string) []status.Account {
 	logins, err := client.OutsideCollaborators(ctx, token)
 	if err != nil {
-		c.deps.Log.WarnContext(ctx, "outside collaborators could not be read", "org", client.Login, "error", err)
+		c.deps.Log.WarnContext(ctx, "outside collaborators could not be read", slog.String("org", client.Login), logattr.SafeError("error", err))
 		return nil
 	}
 	out := make([]status.Account, 0, len(logins))
@@ -62,7 +65,7 @@ func (c *Controller) confirmations(ctx context.Context) map[string]string {
 	}
 	response, err := c.deps.Console.GetGitHubStatus(ctx, connect.NewRequest(&directoryrosterv1.GetGitHubStatusRequest{}))
 	if err != nil {
-		c.deps.Log.WarnContext(ctx, "confirmations could not be read; a tripped breaker stays tripped", "error", err)
+		c.deps.Log.WarnContext(ctx, "confirmations could not be read; a tripped breaker stays tripped", logattr.SafeError("error", err))
 		return out
 	}
 	for _, org := range response.Msg.GetOrganisations() {
@@ -99,7 +102,7 @@ func (c *Controller) matchProfiles(ctx context.Context, token string, members []
 		}
 		email, err := githubapp.PublicEmail(ctx, c.deps.GitHub, token, member.Login)
 		if err != nil {
-			c.deps.Log.WarnContext(ctx, "a profile could not be read", "login", member.Login, "error", err)
+			c.deps.Log.WarnContext(ctx, "a profile could not be read", logattr.SafeString("login", member.Login), logattr.SafeError("error", err))
 			continue
 		}
 		if email == "" || !c.liveInDirectory(ctx, email) {
@@ -119,7 +122,7 @@ func (c *Controller) matchProfiles(ctx context.Context, token string, members []
 	}
 	adopted, _, err := c.deps.Links.Adopt(ctx, candidates)
 	if err != nil {
-		c.deps.Log.ErrorContext(ctx, "profile matches could not be kept", "error", err)
+		c.deps.Log.ErrorContext(ctx, "profile matches could not be kept", logattr.SafeError("error", err))
 		return nil
 	}
 	var events []*record.Record

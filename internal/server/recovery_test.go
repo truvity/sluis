@@ -107,7 +107,7 @@ func TestTheForwardedIdentityMustBeAnAddress(t *testing.T) {
 	server := &ConsoleServer{
 		forwarded: ForwardedIdentity{EmailHeader: "X-Forwarded-Email", Issuer: "gateway"},
 		sessions:  &access.Sessions{},
-		log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log:       slog.New(slog.DiscardHandler),
 	}
 	for _, tc := range []struct {
 		value string
@@ -240,7 +240,7 @@ func TestTheSignInPageShowsTheRealCommand(t *testing.T) {
 			sessions:   sessions,
 			state:      access.NewStateCodec(make([]byte, 32), time.Minute),
 			connectors: map[string]Connector{"google": stubSignIn{}},
-			log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+			log:        slog.New(slog.DiscardHandler),
 		}
 		recorder := httptest.NewRecorder()
 		server.loginPage(recorder, httptest.NewRequest(http.MethodGet, "/login", nil))

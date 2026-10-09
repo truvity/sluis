@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"strconv"
 	"testing"
@@ -65,7 +64,7 @@ func newHandler(f *fakeSink) (*handler, *ages) {
 	a := &ages{}
 	return &handler{
 		target: f, age: a, now: func() time.Time { return time.UnixMilli(1_000_000_000) },
-		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log: slog.New(slog.DiscardHandler),
 	}, a
 }
 

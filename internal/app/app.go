@@ -324,11 +324,11 @@ const (
 func openSnapshots(ctx context.Context, st *store.Stores, log *slog.Logger) hub.SnapshotStore {
 	if !st.Usable {
 		log.InfoContext(ctx, "keeping snapshots in memory: correct for one replica, "+
-			"wasteful and inconsistent for more", "cache", "memory")
+			"wasteful and inconsistent for more", slog.String("cache", "memory"))
 		return hub.NewMemorySnapshots()
 	}
 	log.InfoContext(ctx, "keeping snapshots and the refresh lease in the state ports",
-		"cache", st.Name(), "adapter", st.Adapter)
+		slog.String("cache", st.Name()), slog.String("adapter", st.Adapter))
 	return hub.NewBlobSnapshots(st.Ports.Blob, st.Ports.State)
 }
 
@@ -358,7 +358,7 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 				return nil, fmt.Errorf("recovery.passwordSecret: %w", err)
 			}
 			log.InfoContext(ctx, "recovery sign-in is by the secret the configuration names",
-				"secret", src.Describe(cfg.recoveryLogin))
+				slog.String("secret", src.Describe(cfg.recoveryLogin)))
 		}
 		if password == "" && os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// A function instance would generate a password nobody can read except
@@ -382,7 +382,7 @@ func openRecovery(ctx context.Context, cfg Config, kept stores, src secrets.Sour
 
 	subject := access.ServiceAccountSubject(kept.namespace, cfg.recoveryAccount)
 	log.InfoContext(ctx, "recovery is by cluster access; nothing is stored",
-		"serviceAccount", cfg.recoveryAccount, "audience", cfg.recoveryAudience, "subject", subject)
+		slog.String("service_account", cfg.recoveryAccount), slog.String("audience", cfg.recoveryAudience), slog.String("subject", subject))
 	return &server.TokenRecovery{
 		Review:    kept.reviewToken,
 		Namespace: kept.namespace,
@@ -456,7 +456,7 @@ func openStores(ctx context.Context, cfg Config, st *store.Stores, log *slog.Log
 			return stores{}, err
 		}
 		log.WarnContext(ctx, "keeping state in memory: a restart loses every connected workspace, "+
-			"the memberships added here and every session", "store", storeMemory)
+			"the memberships added here and every session", slog.String("store", storeMemory))
 		return stores{
 			workspaces: hub.NewMemoryStore(),
 			settings:   settings.NewMemory(cfg.oauthDeclared),
@@ -482,7 +482,7 @@ func openPortStores(ctx context.Context, cfg Config, st *store.Stores, log *slog
 		return stores{}, err
 	}
 	log.InfoContext(ctx, "keeping the domain records in the state port, credentials in Secrets",
-		"adapter", st.Adapter, "shared", st.Shared)
+		slog.String("adapter", st.Adapter), slog.Bool("shared", st.Shared))
 	out := stores{
 		workspaces:          portstore.NewWorkspaces(base),
 		credentials:         portstore.NewCredentials(base),
@@ -652,7 +652,7 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	closeStores := func() {
 		if err := recorder.Close(); err != nil {
 			log.WarnContext(ctx, "the audit emitter could not be closed cleanly; what its queue held is dropped",
-				"error", err)
+				slog.Any("error", err))
 		}
 	}
 
@@ -678,9 +678,9 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	// token six months later.
 	if odd := declared.UnconventionalGroups(); len(odd) > 0 {
 		log.WarnContext(ctx, "some group names are neither a grant nor an identity",
-			"groups", odd,
-			"grant", "<scope>:<thing>:<role>",
-			"identity", "rung:<name>, emp:<slug>")
+			slog.Any("groups", odd),
+			slog.String("grant", "<scope>:<thing>:<role>"),
+			slog.String("identity", "rung:<name>, emp:<slug>"))
 	}
 
 	authorizer := access.NewAuthorizer(set, directory, cfg.holdWindow)
@@ -848,10 +848,10 @@ func New(ctx context.Context, cfg Config, st *store.Stores, log *slog.Logger) (*
 	// this is one half of one deployment, and a line naming a service
 	// reads as a second one having started.
 	log.InfoContext(ctx, "the directory is assembled",
-		"console", cfg.consolePort, "health", cfg.healthPort,
-		"demo", cfg.demo, "recovery", recoveryKind(recovery), "public", cfg.publicURL,
-		"signIn", cfg.loginDirectory, "cache", st.Name(), "store", cfg.store,
-		"version", version.String(), "policy", policySource(cfg.policy, cfg.demo))
+		slog.Int("console", cfg.consolePort), slog.Int("health", cfg.healthPort),
+		slog.Bool("demo", cfg.demo), slog.String("recovery", recoveryKind(recovery)), slog.String("public", cfg.publicURL),
+		slog.Bool("sign_in", cfg.loginDirectory), slog.String("cache", st.Name()), slog.String("store", cfg.store),
+		slog.String("version", version.String()), slog.String("policy", policySource(cfg.policy, cfg.demo)))
 
 	return &App{
 		fatal:   fatal,
@@ -901,7 +901,7 @@ func serve(ctx context.Context, port int, handler http.Handler, name string, log
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdown); err != nil {
-			log.WarnContext(ctx, "listener did not drain", "listener", name, "error", err)
+			log.WarnContext(ctx, "listener did not drain", slog.String("listener", name), slog.Any("error", err))
 		}
 	}()
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -1000,8 +1000,8 @@ func adoptDeclared(
 		}
 		adopted[ws.ID] = true
 		log.InfoContext(ctx, "declared workspace adopted",
-			"workspace", ws.ID, "backend", ws.Backend,
-			"admin", ws.Admin, "domains", ws.Domains, "served", ws.Served())
+			slog.String("workspace", ws.ID), slog.String("backend", ws.Backend),
+			slog.String("admin", ws.Admin), slog.Any("domains", ws.Domains), slog.Any("served", ws.Served()))
 	}
 	return adopted, nil
 }
@@ -1039,7 +1039,7 @@ func reopenStored(
 		}
 		if ws.Declared {
 			log.InfoContext(ctx, "forgetting a workspace the deployment no longer declares",
-				"workspace", ws.ID, "admin", ws.Admin)
+				slog.String("workspace", ws.ID), slog.String("admin", ws.Admin))
 			if err = kept.workspaces.Delete(ctx, ws.ID); err != nil {
 				return fmt.Errorf("forget declared workspace %s: %w", ws.ID, err)
 			}
@@ -1050,22 +1050,22 @@ func reopenStored(
 		if err != nil || !found {
 			log.WarnContext(ctx, "a connected workspace has no usable credential; "+
 				"it will answer for nothing until it is reconnected",
-				"workspace", ws.ID, "backend", ws.Backend, "error", err)
+				slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.Any("error", err))
 			continue
 		}
 		reader, err := openStored(ctx, connectors, ws.Backend, cred)
 		if err != nil {
 			log.WarnContext(ctx, "a connected workspace could not be reopened; "+
 				"it will answer for nothing until it is reconnected",
-				"workspace", ws.ID, "backend", ws.Backend, "error", err)
+				slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.Any("error", err))
 			continue
 		}
 		if err = directory.Attach(ctx, ws.ID, reader); err != nil {
 			return fmt.Errorf("attach workspace %s: %w", ws.ID, err)
 		}
 		log.InfoContext(ctx, "connected workspace reopened",
-			"workspace", ws.ID, "backend", ws.Backend, "credential", cred.Type,
-			"admin", cred.Admin, "served", ws.Served())
+			slog.String("workspace", ws.ID), slog.String("backend", ws.Backend), slog.String("credential", cred.Type),
+			slog.String("admin", cred.Admin), slog.Any("served", ws.Served()))
 	}
 	return nil
 }
@@ -1142,7 +1142,7 @@ func seedDemo(ctx context.Context, directory *hub.Hub, publicURL string, log *sl
 		connector.Adopt(tenant.Workspace.ID, tenant.Backend)
 		if _, err := directory.Adopt(ctx, tenant.Workspace, tenant.Backend); err != nil {
 			log.WarnContext(ctx, "demonstration tenant could not be adopted",
-				"workspace", tenant.Workspace.ID, "error", err)
+				slog.String("workspace", tenant.Workspace.ID), slog.Any("error", err))
 		}
 	}
 	log.InfoContext(ctx, "demonstration tenants adopted; no credential and no network is involved")

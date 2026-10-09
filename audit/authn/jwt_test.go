@@ -3,7 +3,6 @@ package authn_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +27,7 @@ func groups(mutate func(*jwt.Builder)) func(*jwt.Builder) {
 	}
 }
 
-func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func quiet() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 func bearer(token string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, "/", nil)

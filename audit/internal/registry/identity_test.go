@@ -3,7 +3,6 @@ package registry_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +27,7 @@ func TestTheRegistryBelievesTheServiceAccountNotTheCaller(t *testing.T) {
 	cluster := authtest.NewIssuer(t)
 	ctx := context.Background()
 	authn, err := authn.NewJWT(ctx, []authn.Issuer{{URL: cluster.URL, Audience: "audit"}},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

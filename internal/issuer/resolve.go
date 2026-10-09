@@ -258,7 +258,7 @@ func (r *Resolver) remember(ctx context.Context, email string, known lastKnown) 
 			return
 		}
 		slog.WarnContext(ctx, "the issuer could not store the last-known groups; keeping them in memory",
-			"error", err)
+			slog.Any("error", err))
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -289,7 +289,7 @@ func (r *Resolver) recall(ctx context.Context, email string) (lastKnown, bool) {
 			}
 			return lastKnown{groups: rec.Groups, at: rec.At}, true
 		}
-		slog.WarnContext(ctx, "the issuer could not read the last-known groups; using memory", "error", err)
+		slog.WarnContext(ctx, "the issuer could not read the last-known groups; using memory", slog.Any("error", err))
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -302,7 +302,7 @@ func (r *Resolver) recall(ctx context.Context, email string) (lastKnown, bool) {
 // the record still ends with its lifetime.
 func (r *Resolver) forget(ctx context.Context, email string) {
 	if err := r.Forget(ctx, email); err != nil {
-		slog.WarnContext(ctx, "the issuer could not delete the last-known groups", "error", err)
+		slog.WarnContext(ctx, "the issuer could not delete the last-known groups", slog.Any("error", err))
 	}
 }
 

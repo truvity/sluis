@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/link"
 	"github.com/truvity/sluis/internal/githubroster/status"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // GitHubLinkApp is where the link App is kept: its record, which the
@@ -177,7 +178,7 @@ func (s *ConsoleServer) githubLinkAppCallback(w http.ResponseWriter, r *http.Req
 	registration, err := githubapp.Convert(r.Context(), s.console.githubHTTP(), r.URL.Query().Get("code"))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "the link App was created and its credentials could not be collected",
-			"owner", logsafe.Value(owner), "error", logsafe.Error(err))
+			logattr.SafeString("owner", owner), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the link App, and then would not hand over its credentials.", err.Error(), []string{
 				"The page was reloaded: the code GitHub returns can be exchanged once.",
@@ -201,13 +202,13 @@ func (s *ConsoleServer) githubLinkAppCallback(w http.ResponseWriter, r *http.Req
 	credential := link.AppCredential{AppID: registration.ID, ClientID: registration.ClientID, ClientSecret: registration.ClientSecret}
 	if err = store.PutLinkApp(r.Context(), record, credential); err != nil {
 		s.log.ErrorContext(r.Context(), "the link App was created and could not be kept",
-			"owner", logsafe.Value(owner), "error", logsafe.Error(err))
+			logattr.SafeString("owner", owner), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the link App, and it could not be saved here. Delete it on GitHub and create it again.", err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "link App created", "owner", logsafe.Value(owner), "app", registration.ID,
-		"slug", logsafe.Value(registration.Slug), "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "link App created", logattr.SafeString("owner", owner), slog.Int64("app", registration.ID),
+		logattr.SafeString("slug", registration.Slug), logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.LinkAppConnected(audit.Identified(actor),
 		audit.App{ID: registration.ID, Slug: registration.Slug}, owner))
 	http.Redirect(w, r, s.at("/#/github"), http.StatusFound)
@@ -308,7 +309,7 @@ func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Reques
 		RefreshToken: tokens.RefreshToken, RefreshExpires: tokens.RefreshExpires,
 	}, now)
 	if err != nil {
-		s.log.ErrorContext(ctx, "a link could not be kept", "account", user.ID, "error", err)
+		s.log.ErrorContext(ctx, "a link could not be kept", slog.Int64("account", user.ID), logattr.SafeError("error", err))
 		s.linkProblem(w, r, http.StatusConflict, "The link could not be saved here. Try again in a minute.", err.Error())
 		return
 	}
@@ -320,8 +321,8 @@ func (s *ConsoleServer) githubLinkCallback(w http.ResponseWriter, r *http.Reques
 		}
 		s.console.record(ctx, audit.GitHubLinkCreated(accepted[0], l.Login))
 	}
-	s.log.InfoContext(ctx, "a GitHub account was linked", "account", user.ID, "login", logsafe.Value(user.Login),
-		"emails", logsafe.Value(strings.Join(accepted, ",")))
+	s.log.InfoContext(ctx, "a GitHub account was linked", slog.Int64("account", user.ID), logattr.SafeString("login", user.Login),
+		logattr.SafeString("emails", strings.Join(accepted, ",")))
 
 	var body strings.Builder
 	fmt.Fprintf(&body, `<h1>@%s is linked</h1><p>Linked to:</p><ul>`, html.EscapeString(user.Login))

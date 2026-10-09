@@ -210,8 +210,8 @@ func logDrop(logger *slog.Logger) func(*record.Record, string) {
 		logger = slog.Default()
 	}
 	return func(r *record.Record, reason string) {
-		logger.Warn("audit: a record was given up and is not in the trail",
-			"id", r.GetId(), "action", r.GetAction(), "source", r.GetSource(), "reason", reason)
+		logger.WarnContext(context.Background(), "audit: a record was given up and is not in the trail",
+			slog.String("id", r.GetId()), slog.String("action", r.GetAction()), slog.String("event_source", r.GetSource()), slog.String("reason", reason))
 	}
 }
 

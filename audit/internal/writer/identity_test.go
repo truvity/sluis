@@ -2,7 +2,6 @@ package writer_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +26,7 @@ func TestTheObserverIsTheServiceAccountThatPublished(t *testing.T) {
 	cluster := authtest.NewIssuer(t)
 	authn, err := authn.NewJWT(context.Background(),
 		[]authn.Issuer{{URL: cluster.URL, Audience: "audit"}},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

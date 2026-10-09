@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -12,7 +11,7 @@ import (
 	"github.com/truvity/sluis/internal/port/ssm"
 )
 
-var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+var quiet = slog.New(slog.DiscardHandler)
 
 // With none of the new keys, the table is what the `ports` keys have always
 // meant, whichever adapter they name.

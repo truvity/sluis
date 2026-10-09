@@ -20,7 +20,7 @@ import (
 func Announce(ctx context.Context, log *slog.Logger, t port.Table) {
 	info, _ := otel.Meter(meterName).Int64Gauge("sluis.adapter.info",
 		metric.WithDescription("The adapter in use for each concern; the value is always 1."))
-	attrs := make([]any, 0, 2*len(port.Concerns))
+	attrs := make([]slog.Attr, 0, len(port.Concerns))
 	for _, c := range port.Concerns {
 		ch, ok := t[c]
 		if !ok {
@@ -28,7 +28,7 @@ func Announce(ctx context.Context, log *slog.Logger, t port.Table) {
 		}
 		info.Record(ctx, 1, metric.WithAttributes(
 			attribute.String("concern", string(c)), attribute.String("adapter", ch.Adapter)))
-		attrs = append(attrs, string(c), ch.Adapter)
+		attrs = append(attrs, slog.String(string(c), ch.Adapter))
 	}
-	log.InfoContext(ctx, "adapters resolved", attrs...)
+	log.LogAttrs(ctx, slog.LevelInfo, "adapters resolved", attrs...)
 }

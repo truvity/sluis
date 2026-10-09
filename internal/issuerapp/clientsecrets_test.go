@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +62,7 @@ func tryBoot(t *testing.T, deps issuerapp.Deps, change ...func(*config.Serve)) (
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
-	return issuerapp.New(context.Background(), cfg, deps, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return issuerapp.New(context.Background(), cfg, deps, slog.New(slog.DiscardHandler))
 }
 
 // withSecrets is stores with a Secrets port and a State every replica sees, as

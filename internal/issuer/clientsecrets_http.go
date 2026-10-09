@@ -216,7 +216,7 @@ func clientSecretError(w http.ResponseWriter, err error) {
 // counted, never audited, since there is no actor to name.
 func refuseUnauthenticated(r *http.Request, action string) {
 	clientcreds.CountAdminRefused(r.Context(), "unauthenticated")
-	slog.WarnContext(r.Context(), "a request to manage client secrets carried no accepted token", "action", action)
+	slog.WarnContext(r.Context(), "a request to manage client secrets carried no accepted token", slog.String("action", action))
 }
 
 // denialReason is the audit reason for a refusal the caller can be told of; ""

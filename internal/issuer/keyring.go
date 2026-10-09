@@ -312,7 +312,7 @@ func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) 
 		if r.retiredIDs[key.id] || r.tombstoned(ctx, key.id, !mayRecord) {
 			if mayRecord {
 				r.log.WarnContext(ctx, "a retired signing key is listed as the newest; this installation "+
-					"retired it and will not adopt it again", "kid", key.id, "algorithm", string(key.alg))
+					"retired it and will not adopt it again", slog.String("kid", key.id), slog.String("algorithm", string(key.alg)))
 			}
 			return nil
 		}
@@ -325,7 +325,7 @@ func (r *KeyRing) observe(ctx context.Context, key *SigningKey, mayRecord bool) 
 			} else {
 				r.log.WarnContext(ctx, "a listed signing key that is not the newest is unknown to this installation "+
 					"and was not adopted (an alias re-pointed in a non-last position, or a key never seen)",
-					"kid", key.id, "algorithm", string(key.alg))
+					slog.String("kid", key.id), slog.String("algorithm", string(key.alg)))
 			}
 			r.recompute(ctx, now)
 			return nil
@@ -373,7 +373,7 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) (*
 	if members, err := r.state.Members(ctx, keyRingIndexKey(r.alg)); err != nil {
 		r.log.WarnContext(ctx, "could not tell whether this is the installation's first signing key; "+
 			"assuming it is only if this replica knows of none itself",
-			"error", err)
+			slog.Any("error", err))
 		immediate = len(r.entries) == 0
 	} else {
 		immediate = len(members) == 0
@@ -407,19 +407,19 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) (*
 		if len(key.wrapped) > 0 {
 			return nil, fmt.Errorf("issuer: encode the signing key %s for the shared store: %w", key.id, err)
 		}
-		r.log.ErrorContext(ctx, "could not encode a signing key for the shared store", "kid", key.id, "error", err)
+		r.log.ErrorContext(ctx, "could not encode a signing key for the shared store", slog.String("kid", key.id), slog.Any("error", err))
 	} else if won, err := r.state.SetIfAbsent(ctx, keyRingEntryKey(r.alg, key.id), encoded, keyRingEntryTTL); err != nil {
 		if len(key.wrapped) > 0 {
 			return nil, fmt.Errorf("issuer: record the signing key %s in the shared store: %w", key.id, err)
 		}
 		r.log.WarnContext(ctx, "could not record the signing key in the shared store; "+
-			"this replica keeps its own schedule for it and will retry", "kid", key.id, "error", err)
+			"this replica keeps its own schedule for it and will retry", slog.String("kid", key.id), slog.Any("error", err))
 	} else if !won {
 		// Another replica — or an earlier run of this one — already
 		// recorded this id. ITS schedule is canonical.
 		if stored, err := getJSON[ringEntry](ctx, r.state, keyRingEntryKey(r.alg, key.id)); err != nil {
 			r.log.WarnContext(ctx, "could not read the recorded schedule for a signing key another "+
-				"replica already published; keeping this replica's own guess", "kid", key.id, "error", err)
+				"replica already published; keeping this replica's own guess", slog.String("kid", key.id), slog.Any("error", err))
 		} else if stored != nil {
 			entry = stored
 		}
@@ -429,14 +429,14 @@ func (r *KeyRing) record(ctx context.Context, now time.Time, key *SigningKey) (*
 		if len(key.wrapped) > 0 {
 			return nil, fmt.Errorf("issuer: index the signing key %s in the shared store: %w", key.id, err)
 		}
-		r.log.WarnContext(ctx, "could not index a signing key in the shared store", "kid", key.id, "error", err)
+		r.log.WarnContext(ctx, "could not index a signing key in the shared store", slog.String("kid", key.id), slog.Any("error", err))
 	}
 
 	entry.signer = key
 
 	r.log.InfoContext(ctx, "a signing key was seen",
-		"kid", key.id, "algorithm", string(key.alg),
-		"seenAt", entry.SeenAt, "activateAt", entry.ActivateAt, "immediate", entry.ActivateAt.Equal(entry.SeenAt))
+		slog.String("kid", key.id), slog.String("algorithm", string(key.alg)),
+		slog.Time("seen_at", entry.SeenAt), slog.Time("activate_at", entry.ActivateAt), slog.Bool("immediate", entry.ActivateAt.Equal(entry.SeenAt)))
 	r.metrics.recordTransition(ctx, "seen", string(key.alg))
 
 	return entry, nil
@@ -456,7 +456,7 @@ func (r *KeyRing) absorb(ctx context.Context) {
 	ids, err := r.state.Members(ctx, keyRingIndexKey(r.alg))
 	if err != nil {
 		r.log.WarnContext(ctx, "could not read what other replicas have published; "+
-			"this replica's own view of the key ring is unaffected", "error", err)
+			"this replica's own view of the key ring is unaffected", slog.Any("error", err))
 		return
 	}
 
@@ -472,7 +472,7 @@ func (r *KeyRing) absorb(ctx context.Context) {
 
 		stored, err := getJSON[ringEntry](ctx, r.state, keyRingEntryKey(r.alg, id))
 		if err != nil {
-			r.log.WarnContext(ctx, "could not read a signing key another replica indexed", "kid", id, "error", err)
+			r.log.WarnContext(ctx, "could not read a signing key another replica indexed", slog.String("kid", id), slog.Any("error", err))
 			continue
 		}
 		if stored == nil {
@@ -484,8 +484,8 @@ func (r *KeyRing) absorb(ctx context.Context) {
 
 		r.entries[id] = stored
 		r.log.InfoContext(ctx, "a signing key published by another replica was seen",
-			"kid", id, "algorithm", string(stored.Algorithm),
-			"seenAt", stored.SeenAt, "activateAt", stored.ActivateAt)
+			slog.String("kid", id), slog.String("algorithm", string(stored.Algorithm)),
+			slog.Time("seen_at", stored.SeenAt), slog.Time("activate_at", stored.ActivateAt))
 		r.metrics.recordTransition(ctx, "seen", string(stored.Algorithm))
 	}
 }
@@ -503,10 +503,10 @@ func (r *KeyRing) refresh(ctx context.Context) {
 			continue
 		}
 		if err := r.state.Set(ctx, keyRingEntryKey(r.alg, id), encoded, keyRingEntryTTL); err != nil {
-			r.log.WarnContext(ctx, "could not refresh a published signing key's record", "kid", id, "error", err)
+			r.log.WarnContext(ctx, "could not refresh a published signing key's record", slog.String("kid", id), slog.Any("error", err))
 		}
 		if err := r.state.Add(ctx, keyRingIndexKey(r.alg), id, keyRingEntryTTL); err != nil {
-			r.log.WarnContext(ctx, "could not refresh the signing key index", "kid", id, "error", err)
+			r.log.WarnContext(ctx, "could not refresh the signing key index", slog.String("kid", id), slog.Any("error", err))
 		}
 	}
 }
@@ -558,7 +558,7 @@ func (r *KeyRing) recompute(ctx context.Context, now time.Time) {
 	if activeID != "" && activeID != r.activeID {
 		if e, ok := r.entries[activeID]; ok {
 			r.log.InfoContext(ctx, "the active signing key changed",
-				"kid", activeID, "algorithm", string(e.Algorithm), "previous", r.activeID)
+				slog.String("kid", activeID), slog.String("algorithm", string(e.Algorithm)), slog.String("previous", r.activeID))
 			r.metrics.recordTransition(ctx, "activated", string(e.Algorithm))
 		}
 	}
@@ -567,7 +567,7 @@ func (r *KeyRing) recompute(ctx context.Context, now time.Time) {
 		if !retired[id] {
 			continue
 		}
-		r.log.InfoContext(ctx, "a signing key retired", "kid", id, "algorithm", string(e.Algorithm))
+		r.log.InfoContext(ctx, "a signing key retired", slog.String("kid", id), slog.String("algorithm", string(e.Algorithm)))
 		r.metrics.recordTransition(ctx, "retired", string(e.Algorithm))
 		delete(r.entries, id)
 		if r.retiredIDs == nil {
@@ -628,9 +628,9 @@ func (r *KeyRing) Active() *SigningKey {
 		return nil
 	}
 	if best.ID != r.activeID {
-		r.log.Warn("signing with a key that is not yet the schedule's active one: "+
+		r.log.WarnContext(context.Background(), "signing with a key that is not yet the schedule's active one: "+
 			"this replica has not read the active key's private half from its own file yet",
-			"kid", best.ID, "scheduled", r.activeID)
+			slog.String("kid", best.ID), slog.String("scheduled", r.activeID))
 	}
 	return best.signer
 }

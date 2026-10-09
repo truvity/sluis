@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestVerifyOnlyKeysLoadAtStartAndAPrivateKeyStopsIt(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)

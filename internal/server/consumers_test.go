@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +36,7 @@ func TestOnlyDeclaredConsumersReachTheAPI(t *testing.T) {
 	guard := &Consumers{
 		Audience: "directory-roster",
 		Allowed:  []string{"system:serviceaccount:identity:mapper"},
-		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:      slog.New(slog.DiscardHandler),
 		Review: func(_ context.Context, token string, audiences []string) (string, error) {
 			if len(audiences) != 1 || audiences[0] != "directory-roster" {
 				t.Errorf("reviewed for %v, want the hub's own audience", audiences)
@@ -92,7 +91,7 @@ func TestNoDeclaredConsumersAdmitsNobody(t *testing.T) {
 	next, arrived := reached(t)
 	guard := &Consumers{
 		Audience: "directory-roster",
-		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:      slog.New(slog.DiscardHandler),
 		Review: func(context.Context, string, []string) (string, error) {
 			return "system:serviceaccount:identity:mapper", nil
 		},

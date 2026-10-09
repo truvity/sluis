@@ -3,7 +3,6 @@ package hub_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"slices"
 	"testing"
@@ -44,7 +43,7 @@ func newHarness(t *testing.T) *harness {
 		WithAccount("carol@two.example", "Carol", "Cat").
 		WithGroup("all@two.example", "carol@two.example")
 
-	h.hub = hub.New(h.store, hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h.hub = hub.New(h.store, hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.DiscardHandler))
 	h.hub.SetClock(func() time.Time { return h.clock })
 
 	ctx := context.Background()

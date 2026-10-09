@@ -96,7 +96,7 @@ func roundTrip(ctx context.Context, client *http.Client, build func() (*http.Req
 // waitOut counts, logs and passes one wait.
 func waitOut(ctx context.Context, kind string, wait time.Duration) error {
 	waits.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", kind)))
-	slog.WarnContext(ctx, "GitHub rate limit: waiting", "kind", kind, "wait", wait)
+	slog.WarnContext(ctx, "GitHub rate limit: waiting", slog.String("kind", kind), slog.Duration("wait", wait))
 	return Sleep(ctx, wait)
 }
 

@@ -156,7 +156,7 @@ func (l *Leases) Do(ctx context.Context, kind, target string, fn func(ctx contex
 	release, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
 	if err := lease.Release(release); err != nil {
-		l.log().WarnContext(ctx, "a lease could not be released; it expires on its own", "target", target, "error", err)
+		l.log().WarnContext(ctx, "a lease could not be released; it expires on its own", slog.String("target", target), slog.Any("error", err))
 	}
 	return true, nil
 }
@@ -180,19 +180,19 @@ func (l *Leases) keep(ctx context.Context, cancel context.CancelCauseFunc, lease
 		case err == nil:
 			lastGood = time.Now()
 		case errors.Is(err, ErrLost):
-			l.log().WarnContext(ctx, "a lease was lost; the tick stops before its next write", "target", target)
+			l.log().WarnContext(ctx, "a lease was lost; the tick stops before its next write", slog.String("target", target))
 			meters.lost.Add(ctx, 1, leaseAttr(kind))
 			cancel(ErrLost)
 			return
 		case ctx.Err() != nil:
 			return
 		case time.Since(lastGood) >= l.ttl():
-			l.log().WarnContext(ctx, "a lease could not be renewed for its whole lifetime; the tick stops", "target", target, "error", err)
+			l.log().WarnContext(ctx, "a lease could not be renewed for its whole lifetime; the tick stops", slog.String("target", target), slog.Any("error", err))
 			meters.lost.Add(ctx, 1, leaseAttr(kind))
 			cancel(ErrLost)
 			return
 		default:
-			l.log().WarnContext(ctx, "a lease could not be renewed; trying again", "target", target, "error", err)
+			l.log().WarnContext(ctx, "a lease could not be renewed; trying again", slog.String("target", target), slog.Any("error", err))
 		}
 	}
 }

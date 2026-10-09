@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"io"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -203,7 +202,7 @@ func connectServer(t *testing.T, store GitHubConnections) (*ConsoleServer, *Cons
 		console:  console,
 		state:    console.deps.State,
 		sessions: &access.Sessions{},
-		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log:      slog.New(slog.DiscardHandler),
 		mount:    "/console",
 	}
 	return server, console

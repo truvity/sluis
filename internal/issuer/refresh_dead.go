@@ -305,7 +305,7 @@ func withPresented(ctx context.Context, asked presentedRequest) context.Context 
 // answers the library's checks with ([refusedLater]).
 //
 // The id is UNAUTHENTICATED: it is what the request says, before or without
-// the client authenticating, so it is logged through logsafe and never
+// the client authenticating, so it is logged through logattr and never
 // acted on. A client authenticating with private_key_jwt names itself in
 // its assertion and not in the form, so its id is empty here. This never
 // parses the body itself: [resourceIndicators], in front of it, already

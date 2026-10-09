@@ -58,7 +58,7 @@ func kubeBackend(ctx context.Context, cfg Config, log *slog.Logger) (*legacy.Bac
 	case cfg.Kube == KubeRequired:
 		return nil, err
 	default:
-		log.WarnContext(ctx, "the namespace's objects are not available", "error", err)
+		log.WarnContext(ctx, "the namespace's objects are not available", slog.Any("error", err))
 	}
 	return backend, nil
 }
@@ -117,7 +117,7 @@ func openLegacy(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, err
 		case cfg.Kube == KubeRequired:
 			return nil, err
 		default:
-			log.WarnContext(ctx, "the namespace's objects are not available", "error", err)
+			log.WarnContext(ctx, "the namespace's objects are not available", slog.Any("error", err))
 		}
 	}
 
@@ -135,7 +135,7 @@ func openLegacy(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, err
 		st.Shared, st.Usable, st.pinger = true, true, shared
 		st.close = func() { _ = shared.Close() }
 		log.InfoContext(ctx, "sharing state in Valkey",
-			"cache", "valkey", "address", cfg.Valkey.Address, "cluster", cfg.Valkey.Cluster)
+			slog.String("cache", "valkey"), slog.String("address", cfg.Valkey.Address), slog.Bool("cluster", cfg.Valkey.Cluster))
 	}
 	// Observed once, here, where the adapter is chosen: every caller crosses
 	// the same seam, so every call is timed and counted without each of them

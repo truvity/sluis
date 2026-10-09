@@ -10,6 +10,7 @@ linters:
     - lll
     - misspell
     - revive
+    - sloglint
     - staticcheck
     - unused
 
@@ -61,6 +62,21 @@ linters:
             # the retired truvity/audit repository.
             - pkg: github.com/truvity/audit
               desc: "github.com/truvity/sluis/audit/sdk — the audit SDK of this repository"
+    # Explicit over implicit: every slog call carries typed attributes
+    # (slog.String, slog.Int, ...), never alternating key/value pairs, so a
+    # misplaced argument is a compile error instead of a "!BADKEY" in
+    # production logs.
+    sloglint:
+      attr-only: true
+      no-global: all
+      context: all
+      static-msg: true
+      key-naming-case: snake
+      forbidden-keys:
+        - time
+        - level
+        - msg
+        - source
     lll:
       line-length: 160
     gocritic:
@@ -71,6 +87,16 @@ linters:
         - rangeValCopy
 
   exclusions:
+    rules:
+      # Library code that logs through the process-wide default logger
+      # because no logger reaches it: threading one through is a change of
+      # its own (the callers are many and the signatures public to the
+      # module), and the call sites are already typed. Each file here is a
+      # debt to retire by passing a *slog.Logger in, not a pattern to copy;
+      # new code does not belong on this list.
+      - linters: [sloglint]
+        text: default logger should not be used
+        path: internal/(githubapp/ratelimit|issuer/clientsecrets_http|issuer/resolve|issuer/session|valkey/retry)\.go
     # gen/ is buf output, committed for `go get`-ability but never hand-edited.
     paths:
       - gen

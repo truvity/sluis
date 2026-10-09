@@ -3,7 +3,6 @@ package hub_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"slices"
 	"testing"
@@ -43,7 +42,7 @@ func newServedHarness(t *testing.T, serve ...string) *servedHarness {
 		WithGroup("theirs@other.example", "otto@other.example")
 
 	h.hub = hub.New(h.store, hub.NewMemorySnapshots(), hub.Config{},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	h.hub.SetClock(func() time.Time { return h.clock })
 
 	if _, err := h.hub.Adopt(context.Background(), hub.Workspace{
@@ -197,7 +196,7 @@ func TestOnlyTwoServingWorkspacesContestADomain(t *testing.T) {
 	store := hub.NewMemoryStore()
 	clock := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
 	directory := hub.New(store, hub.NewMemorySnapshots(), hub.Config{},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	directory.SetClock(func() time.Time { return clock })
 
 	holder := fake.New("C0holder", "shared.example", "holder.example").
@@ -246,7 +245,7 @@ func TestAServedDomainTheTenantLosesIsHandedOverAndFlagged(t *testing.T) {
 	store := hub.NewMemoryStore()
 	clock := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
 	directory := hub.New(store, hub.NewMemorySnapshots(), hub.Config{},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	directory.SetClock(func() time.Time { return clock })
 
 	// Today: the old tenant owns both domains and is narrowed to the one

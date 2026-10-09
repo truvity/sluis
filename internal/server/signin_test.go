@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -46,7 +45,7 @@ func (signInConnector) Exchange(context.Context, string, string) (hub.Workspace,
 func signInHarness(t *testing.T, email string) *ConsoleServer {
 	t.Helper()
 	ctx := context.Background()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 
 	directory := fake.New("C0north", "north.example").
 		WithAccount("ada@north.example", "Ada", "North").

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/access"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // AuditQuery is the audit installation's query service, and how the console
@@ -59,7 +59,7 @@ func (s *ConsoleServer) auditProxy() http.Handler {
 		},
 		Transport: transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			s.log.WarnContext(r.Context(), "the audit query service could not be reached", "error", logsafe.Error(err))
+			s.log.WarnContext(r.Context(), "the audit query service could not be reached", logattr.SafeError("error", err))
 			http.Error(w, "the audit trail cannot be read just now", http.StatusBadGateway)
 		},
 	}
@@ -81,7 +81,7 @@ func (s *ConsoleServer) auditProxy() http.Handler {
 				return
 			}
 			s.log.WarnContext(r.Context(), "a token for the audit trail could not be minted",
-				"who", logsafe.Value(id.Who()), "error", logsafe.Error(err))
+				logattr.SafeString("who", id.Who()), logattr.SafeError("error", err))
 			http.Error(w, "the audit trail cannot be read just now", http.StatusBadGateway)
 			return
 		}
