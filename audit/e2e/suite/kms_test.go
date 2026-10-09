@@ -163,7 +163,14 @@ func TestPseudonymsAreMadeUnderKMSWithTheKeysInTheDatabase(t *testing.T) {
 		t.Fatalf("read the wrapped keys as the writer role: %v", err)
 	}
 	if wrapped != 1 {
-		t.Fatalf("want one wrapped key for the tenant in the database, got %d", wrapped)
+		var ids []string
+		rows, _ := writerDB.QueryContext(ctx, `select id from audit_wrapped_keys`)
+		for rows != nil && rows.Next() {
+			var id string
+			_ = rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		t.Fatalf("want one wrapped key for the tenant %s in the database, got %d; the table holds %v", tenant, wrapped, ids)
 	}
 }
 
