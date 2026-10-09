@@ -1,8 +1,8 @@
 # Per-directory ceilings on prose words (hack/check-docs-budget.py). Each documentation pass lowers them.
-.	3229
-charts/audit	2740
-charts/sluis	1394
-docs	367
+.	2037
+charts/audit	250
+charts/sluis	233
+docs	89
 docs/concepts/audit	17659
 docs/concepts/sluis	35641
 docs/concepts/storage	785
@@ -23,6 +23,6 @@ docs/guides/storage	301
 docs/reference/audit	18281
 docs/reference/sluis	37577
 docs/reference/storage	368
-docs/sdk	249
-docs/sdk/go	1809
-docs/sdk/typescript	1502
+docs/sdk	121
+docs/sdk/go	669
+docs/sdk/typescript	704
