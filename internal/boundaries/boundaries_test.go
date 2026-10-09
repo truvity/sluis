@@ -7,6 +7,7 @@ package boundaries
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -61,6 +62,7 @@ func TestModuleBoundaries(t *testing.T) {
 	github := []string{"internal/githubroster", "internal/githubapp"}
 	slack := []string{"internal/slackroster", "internal/slackapp"}
 	cloudflare := []string{"internal/cloudflare"}
+	modules := []string{"internal/module/github", "internal/module/slack", "internal/module/issuer"}
 	front := []string{"internal/issuer", "internal/issuerapp", "internal/hub", "internal/hublocal", "internal/server",
 		"internal/rosterapp", "internal/lambdaapp"}
 
@@ -99,7 +101,7 @@ func TestModuleBoundaries(t *testing.T) {
 			name:   "the module contract imports no role",
 			from:   []string{"internal/module"},
 			except: []string{"internal/module/issuer", "internal/module/github", "internal/module/slack"},
-			forbid: append(append(append(append([]string{}, front...), github...), slack...), append(cloudflare, "internal/module/github", "internal/module/slack", "internal/module/issuer")...),
+			forbid: slices.Concat(front, github, slack, cloudflare, modules),
 			sees:   "internal/module",
 		},
 		{
