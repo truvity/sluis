@@ -8,65 +8,72 @@ relying party is under [how-to/connect/](../how-to/connect/README.md).
 Every arrow below rests on one of the **two trust anchors**, chosen by scope ([trust.md](trust.md)): the cluster for a
 workload calling a service in the same cluster, the issuer for everything further away. Each case names its anchor.
 
+**Identity in (①–⑤).** Directories, GitHub Actions and cluster ServiceAccounts give sluis its proofs; the issuer asks the directory who an address is.
+
 ```mermaid
 flowchart TB
-  subgraph in["Identity comes from"]
-    direction LR
-    gws["Google Workspace tenants<br/>(one per company)"]:::ext
-    entra["Microsoft Entra<br/>(later)"]:::ext
-    gh["GitHub Actions<br/>OIDC tokens"]:::ext
-    sa["Kubernetes<br/>ServiceAccounts"]:::ext
-  end
-
-  subgraph ar["sluis"]
-    direction LR
-    hub["the directory<br/>inside sluis"]:::hub
-    iss["sluis serve<br/>the issuer, the console"]:::token
-    ghr["the GitHub controller<br/>a loop inside sluis serve"]:::token
-    slr["the Slack controller<br/>a loop inside sluis serve"]:::token
-    lib["Go module · TS package<br/>inside applications"]:::token
-    ctl["sluisctl<br/>on laptops and in jobs"]:::token
-    act["exchange action<br/>in workflows"]:::token
-  end
-
-  subgraph out["Access goes to"]
-    direction LR
-    eks["Kubernetes API servers<br/>(one issuer each)"]:::ext
-    aws["AWS accounts<br/>(IAM OIDC provider each)"]:::ext
-    argo["ArgoCD · Kargo"]:::ext
-    proxy["gateway OIDC<br/>Envoy SecurityPolicy, or oauth2-proxy by hand"]:::ext
-    consoles["Consoles<br/>(ours and business test surfaces)"]:::ext
-    ghteams["GitHub organisations<br/>teams, and runner Apps"]:::ext
-    slack["Slack workspaces<br/>channels, Slack Connect"]:::ext
-    reg["ECR · CodeArtifact · any AWS service<br/>(on top of the profiles)"]:::ext
-  end
-
-  gws -- "① Admin SDK reads<br/>admin consent or SA key" --> hub
-  entra -. "① Graph reads (later)" .-> hub
-  gws -- "② OIDC sign-in<br/>people" --> iss
-  gh -- "③ token exchange<br/>jobs" --> iss
-  sa -- "④ token exchange<br/>workloads, by the cluster's key set" --> iss
-  iss -- "⑤ who is this address<br/>a function call" --> hub
-  iss -- "⑥ issuer + client id<br/>groups claim" --> eks
-  iss -- "⑦ issuer + audience<br/>trust policy per role" --> aws
-  iss -- "⑧ static clients<br/>groups claim" --> argo
-  iss -- "⑨ login" --> proxy
-  proxy -- "⑩ forwarded bearer" --> consoles
-  lib -. "⑪ reads the bearer,<br/>serves /.access/whoami" .-> consoles
-  ctl -- "⑫ code + PKCE on loopback,<br/>then exchange" --> iss
-  act -- "⑬ exchange, shell only" --> iss
-  iss -. "⑭ who holds each group<br/>console API, the pod's own ServiceAccount token" .-> ghr
-  ghr -- "⑭ invites, teams, removals<br/>as each organisation's App" --> ghteams
-  iss -. "⑲ who holds each group, who is in each directory group<br/>console API, the pod's own ServiceAccount token" .-> slr
-  slr -- "⑲ invites, removals, channels<br/>as each workspace's App" --> slack
-  aws -. "⑮ AWS's own tooling<br/>with --profile" .-> reg
-
+  gws["Google Workspace<br/>tenants"]:::ext
+  entra["Microsoft Entra<br/>(later)"]:::ext
+  gh["GitHub Actions<br/>OIDC tokens"]:::ext
+  sa["Kubernetes<br/>ServiceAccounts"]:::ext
+  hub["the directory<br/>inside sluis"]:::hub
+  iss["sluis serve<br/>issuer, console"]:::token
+  gws -- "① Admin SDK reads" --> hub
+  entra -. "① Graph reads" .-> hub
+  gws -- "② OIDC sign-in" --> iss
+  gh -- "③ token exchange" --> iss
+  sa -- "④ token exchange" --> iss
+  iss -- "⑤ who is<br/>this address" --> hub
   classDef ext fill:#8A93A3,stroke:#5E6675,color:#fff
   classDef hub fill:#0E7C7B,stroke:#0A5958,color:#fff
   classDef token fill:#4A4FB5,stroke:#33378A,color:#fff
-  style in fill:none,stroke:#8A93A3,stroke-dasharray:5 5
-  style out fill:none,stroke:#8A93A3,stroke-dasharray:5 5
-  style ar fill:none,stroke:#4A4FB5,stroke-dasharray:5 5
+```
+
+**Access out (⑥–⑩, ⑮).** The issuer is the trusted issuer of every relying party, and a gateway turns a login into a bearer for the consoles.
+
+```mermaid
+flowchart TB
+  iss["sluis serve<br/>the issuer"]:::token
+  eks["Kubernetes<br/>API servers"]:::ext
+  aws["AWS accounts"]:::ext
+  argo["ArgoCD, Kargo"]:::ext
+  proxy["gateway OIDC"]:::ext
+  consoles["Consoles"]:::ext
+  reg["ECR, CodeArtifact,<br/>any AWS service"]:::ext
+  iss -- "⑥ issuer + client id" --> eks
+  iss -- "⑦ issuer + audience" --> aws
+  iss -- "⑧ static clients" --> argo
+  iss -- "⑨ login" --> proxy
+  proxy -- "⑩ forwarded bearer" --> consoles
+  aws -. "⑮ --profile" .-> reg
+  classDef ext fill:#8A93A3,stroke:#5E6675,color:#fff
+  classDef hub fill:#0E7C7B,stroke:#0A5958,color:#fff
+  classDef token fill:#4A4FB5,stroke:#33378A,color:#fff
+```
+
+**Clients and controllers (⑪–⑭, ⑲).** Libraries, `sluisctl` and the workflow action reach the issuer; the two controllers ask the console who holds each group and act in GitHub and Slack.
+
+```mermaid
+flowchart TB
+  lib["Go module, TS package<br/>inside applications"]:::token
+  ctl["sluisctl<br/>laptops and jobs"]:::token
+  act["exchange action<br/>in workflows"]:::token
+  iss["the issuer"]:::token
+  consoles["Consoles"]:::ext
+  ghr["GitHub controller<br/>a loop in sluis serve"]:::token
+  slr["Slack controller<br/>a loop in sluis serve"]:::token
+  ghteams["GitHub organisations"]:::ext
+  slack["Slack workspaces"]:::ext
+  lib -. "⑪ reads the bearer" .-> consoles
+  ctl -- "⑫ code + PKCE,<br/>then exchange" --> iss
+  act -- "⑬ exchange" --> iss
+  iss -. "⑭ ⑲ who holds<br/>each group" .-> ghr
+  iss -. "⑭ ⑲ who holds<br/>each group" .-> slr
+  ghr -- "⑭ invites, teams,<br/>removals" --> ghteams
+  slr -- "⑲ invites, removals,<br/>channels" --> slack
+  classDef ext fill:#8A93A3,stroke:#5E6675,color:#fff
+  classDef hub fill:#0E7C7B,stroke:#0A5958,color:#fff
+  classDef token fill:#4A4FB5,stroke:#33378A,color:#fff
 ```
 
 ## The batteries, by kind of artifact
@@ -81,7 +88,7 @@ flowchart TB
 | **TypeScript package** | `@truvity/sluis`, on GitHub Packages | `useIdentity()`, `<UserBadge/>` over `/.access/whoami`; `/server` verifies a bearer in Node | every console UI, and Node services | published per tag |
 | **CLI** | `sluisctl` | the broker for people and jobs (login, kubeconfig, AWS profiles, `bao`, `psql`, `r2`) and the renderer of an installation's documents (`render`); [why a CLI](sluisctl.md), [every command](../reference/sluisctl.md) | people, on laptops, and a CI job with the same files; estates, in CI | built; a Nix flake on every release, for devbox |
 | **GitHub Action** | `truvity/sluis` (root `action.yml`), pinned to a release | shell only: exchanges the job's token, writes a kubeconfig and AWS profiles | every workflow that deploys | built |
-| **Store** | the audit trail | not this service's: an installation of [truvity/audit](https://github.com/truvity/audit) in this service's namespace keeps it, locks it and signs it. This service declares what it can record in a catalogue, sends a record per action, and reads that installation's query service for the console's Audit page | the platform, one installation per application | connected since 1.26; kept in a bucket of its own until then, which ages out under its lock. A recovery sign-in is the one action refused when its record cannot be kept |
+| **Store** | the audit trail | not this service's: an installation of [audit](../audit/README.md) in this service's namespace keeps it, locks it and signs it. This service declares what it can record in a catalogue, sends a record per action, and reads that installation's query service for the console's Audit page | the platform, one installation per application | connected since 1.26; kept in a bucket of its own until then, which ages out under its lock. A recovery sign-in is the one action refused when its record cannot be kept |
 | **File format** | the policy | groups, claims, lifetimes, clients, resources, client documents, GitHub bindings, `people` and Slack channels — one schema for the service and both controllers | the platform, in its own repository, rendered from its access matrix | in force |
 | **Contracts** | `proto/directory/v1`, `proto/directoryroster/v1` | DirectoryService and the console's own services | consumers of sluis | now |
 | **Documentation** | `docs/how-to/connect/*` | one guide per kind of relying party, plus the recipes that run on top of the profiles | everyone | now |

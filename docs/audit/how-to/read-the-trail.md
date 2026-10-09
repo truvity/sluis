@@ -26,14 +26,14 @@ The query service is the **only** way back in. Nothing in the write path can
 hand a record to a caller, and every read is itself recorded.
 
 ```mermaid
-flowchart LR
+flowchart TB
   P(["a person, a tool<br/>or an auditor"]) -- "bearer token" --> Q["query service"]
   Q -- "1. verify the token<br/>(trusted issuers)" --> I[("the issuer")]
   Q -- "2. grants" --> Q
   Q -- "3. search, narrowed<br/>to the grant" --> PG[("index")]
-  Q -- "4. the read is recorded" --> R["receiver"]
+  Q -- "4. the read<br/>is recorded" --> R["receiver"]
   Q -- "provenance" --> S3[("archive")]
-  A(["an auditor"]) -- "audit verify<br/>read-only, plus the pinned root thumbprints" --> S3
+  A(["an auditor"]) -- "audit verify, read-only,<br/>pinned root thumbprints" --> S3
 ```
 
 ### Access

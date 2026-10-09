@@ -149,7 +149,7 @@ adds, concretely:
 The full engine set-up and the policies per role are in
 [OpenBAO keys](../how-to/configure-openbao-keys.md).
 
-**`kms` (AWS KMS envelope) — designed, not built.** One customer-managed
+**`kms` (AWS KMS envelope).** One customer-managed
 KMS key per deployment is the root. Each (tenant, purpose) data key is
 minted by `GenerateDataKey` with an encryption context naming the tenant and
 purpose, and the wrapped copy is stored in a key table (the index database)
@@ -167,7 +167,7 @@ count in the thousands.
 - Tests, a laptop, a single-instance trial that does: `local`.
 - Anything with more than one replica, or where secrets already live in
   OpenBAO: `transit`.
-- A deployment on AWS with no OpenBAO: `kms`, once built (designed, not built today). <!-- TODO(coordinator): kms provider status from #428 -->
+- A deployment on AWS with no OpenBAO: `kms`. The KMS key provider (`keys.adapter: kms`) is built and runs in a pod through the SDK's default credential chain: it signs the notary's seals, and, with `keys.state.backend: database`, it pseudonymises with the per-tenant secrets wrapped under the KMS key and kept in your PostgreSQL, so it needs no SSM.
 - The key options for a deployment are, then, KMS (AWS) or OpenBao transit; the seals use either today (below).
 
 The choice is permanent for a deployment. Moving keys between providers

@@ -1,7 +1,7 @@
 {
   "name": "@truvity/sluis",
   "version": "0.0.0",
-  "description": "What a console needs from the identity it is behind: who the caller is, what that gets them, and the way out. Published to GitHub Packages at each release tag's version; see docs/reference/typescript.md.",
+  "description": "What a console needs from the identity it is behind: who the caller is, what that gets them, and the way out. Published to GitHub Packages at each release tag's version; see docs/sdk/typescript/sluis.md.",
   "type": "module",
   "license": "MIT",
   "repository": {

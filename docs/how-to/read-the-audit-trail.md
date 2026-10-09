@@ -13,7 +13,7 @@ Find who did what in an installation: through the console's Audit page, or from 
 ## Before you start
 
 - **sluis keeps no audit trail of its own.** It records into an **audit installation**
-  ([truvity/audit](https://github.com/truvity/audit)) rendered beside it in the same namespace (`audit.writer` and
+  ([audit](../audit/README.md)) rendered beside it in the same namespace (`audit.writer` and
   `audit.query` in the chart). What it records is its catalogue ([audit actions](../reference/audit-actions.md)). The
   installation locks, indexes and signs; retention is its profile's (`security`, every action, people in clear), not a
   setting here. Its own documentation covers the archive, verification and legal holds.

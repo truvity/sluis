@@ -1,8 +1,5 @@
 # Example: short-lived R2 credentials for a bucket
 
-> **Queued.** Cloudflare tokens and R2 credentials ship with the Cloudflare STS pull requests (#411, #413, #416 to #419),
-> not on master yet. This page is written against those branches; field and flag names are theirs.
-
 ## Goal
 
 Give people, CI jobs and pods S3 credentials for one R2 bucket that expire in minutes, with no long-lived R2 secret.
@@ -68,5 +65,6 @@ credential is older than twice its rotation.
 Remove the grant row (an unknown preset and an ungranted one give the same answer). Revoke a live token by id from the
 console or CLI; remove the preset to stop rotation. Delete `<config>/cloudflare/` to drop cached credentials.
 
-Source: the how-to `docs/how-to/cloudflare-tokens.md` on PR #417's branch, and `sluisctl.md` there. Snippets follow those
-pages; the policy grant is validated by `sluisctl policy render` once the PR merges.
+Source: the how-to [mint short-lived Cloudflare tokens](../../how-to/cloudflare-tokens.md) and the
+[`sluisctl cloudflare` reference](../../reference/sluisctl.md#cloudflare-token-and-cloudflare-r2). Snippets follow those pages; the
+policy grant renders with `sluisctl policy render` (checked against master, 2026-10-09).

@@ -26,7 +26,7 @@ read. Nothing is minted for the page, and nothing about the audit trail is
 configured in the console beyond the query service's address.
 
 ```mermaid
-flowchart LR
+flowchart TB
   P["the person"] --> GW["the application's gateway<br/>issues the session's token"]
   GW --> C["the application's console<br/>hosts the Audit page"]
   C -- "the console's own token" --> Q["query service"]

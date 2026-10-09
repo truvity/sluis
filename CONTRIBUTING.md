@@ -219,12 +219,15 @@ that rule produces), `docs/explanation/integrations.md` (every case with its
 anchor), then the design of whatever you touch. `docs/reference/*` says
 exactly what each battery exposes; `CHANGELOG.md` says what exists today.
 
-The service is one process. By now: several directories connected, the
+The service is one binary that runs in a cluster or on AWS Lambda
+(`docs/sluis/deployment/aws-lambda.md`). By now: several directories connected, the
 policy rendered from the installation's access matrix, clusters, AWS
 accounts and CI on the issuer, resources and client-described clients in
 the policy, the GitHub and Slack controllers acting in real organisations and workspaces, runner
-Apps from the console, the audit trail kept by an audit installation, and
-the console's state restorable from five Secrets and the Slack state. The conformance run at
+Apps from the console, the audit trail kept by audit (the second product in this
+repository, `docs/audit/`), and the console's state held in the secrets store
+(SSM layout v4, `internal/` and `external/`; the legacy Kubernetes store is five
+Secrets, see `docs/how-to/back-up-and-restore.md`) and the Slack state. The conformance run at
 1.0 is in [docs/explanation/conformance-findings.md](docs/explanation/conformance-findings.md).
 [CHANGELOG.md](CHANGELOG.md) is the record of what exists at each
 version; read the newest entries before the design documents, which
