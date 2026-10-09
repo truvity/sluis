@@ -90,7 +90,7 @@ func TestHTTPCallerAuthenticatesAndTheServerNamesTheCaller(t *testing.T) {
 		Token: func(_ context.Context, a string) (string, error) { audience = a; return "good", nil },
 	}
 	got, err := modcall.Do[echoReq, echoRes](context.Background(), c, "echo", "say", echoReq{Word: "hi"})
-	if err != nil || got.Said != "hi" || got.Subject != "system:serviceaccount:ns:issuer" || audience != "sluis-echo" {
+	if err != nil || got.Said != "hi" || got.Subject != "issuer" || audience != "sluis-echo" {
 		t.Fatalf("%+v %q, %v", got, audience, err)
 	}
 	if _, err = modcall.Do[echoReq, echoRes](context.Background(), c, "echo", "refuse", echoReq{}); !errors.Is(err, modcall.Coded("not_granted", "")) {
@@ -179,7 +179,9 @@ func TestAllowRefusesEveryOtherCallerClassOnEveryTransport(t *testing.T) {
 
 	srv := httptest.NewServer(s.Handler(func(_ context.Context, b string) (string, error) { return b, nil }))
 	t.Cleanup(srv.Close)
-	for bearer, wantErr := range map[string]bool{"system:serviceaccount:sluis:issuer": false, "system:serviceaccount:sluis:other": true, "console": false, "x": true} {
+	for bearer, wantErr := range map[string]bool{
+		"system:serviceaccount:sluis:issuer": false, "system:serviceaccount:sluis:other": true, "console": false, "x": true,
+	} {
 		c := &modcall.HTTPCaller{URLs: map[string]string{"echo": srv.URL}, Token: func(context.Context, string) (string, error) { return bearer, nil }}
 		_, err := c.Call(context.Background(), "echo", "say", nil)
 		if (err != nil) != wantErr {
@@ -218,7 +220,9 @@ func TestAVersionNewerThanTheServerIsRefusedAndAnAbsentOneIsV1(t *testing.T) {
 }
 
 func TestClassOfSubject(t *testing.T) {
-	for in, want := range map[string]string{"system:serviceaccount:ns:issuer": "issuer", "issuer": "issuer", "system:serviceaccount:ns:": "system:serviceaccount:ns:"} {
+	for in, want := range map[string]string{
+		"system:serviceaccount:ns:issuer": "issuer", "issuer": "issuer", "system:serviceaccount:ns:": "system:serviceaccount:ns:",
+	} {
 		if got := modcall.ClassOfSubject(in); got != want {
 			t.Errorf("%q: %q", in, got)
 		}
