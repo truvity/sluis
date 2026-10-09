@@ -78,7 +78,10 @@ implementations, chosen per deployment and recorded in its own decision.
 - **Cost.** A round trip per pseudonym.
 - **For:** a deployment where secrets already live in OpenBAO or Vault.
 
-### `kms` — AWS KMS envelope (designed; not built)
+### `kms` — AWS KMS envelope (built; amended 2026-10-09)
+
+Built as the storage port's `kms` adapter (`keys.adapter: kms`, `storage/keys/kms`), reached through the SDK's default credential chain, so it runs in a pod (IRSA, Pod Identity) as well as in Lambda. The wrapped copies are kept where `keys.state.backend` says: `database` (the key table in the index database, `audit_wrapped_keys` with `audit_wrapped_key_tombstones`, migration 0007, the writer's role) or `ssm` (SSM Parameter Store). `database` needs no SSM.
+
 
 - **Key material.** One customer-managed KMS key per deployment is the root.
   Each (tenant, purpose) key is minted by `GenerateDataKey` with the
@@ -114,10 +117,10 @@ implementations, chosen per deployment and recorded in its own decision.
 | what must be backed up | the directory | the engine (already) | the key table |
 | erasure is remembered by | a tombstone file | the key itself | a tombstone row |
 | per-pseudonym cost | none | a network call | none |
-| built | yes | yes | no |
+| built | yes | yes | yes (`keys.adapter: kms`) |
 
 Tests and trials use `local`. A deployment with OpenBAO uses `transit`. A
-deployment on AWS without OpenBAO uses `kms`, once built.
+deployment on AWS without OpenBAO uses `kms`.
 
 ## Consequences
 
@@ -128,7 +131,7 @@ deployment on AWS without OpenBAO uses `kms`, once built.
   reason `transit` is preferred where it is available.
 - Erasure is complete only when the provider's own backups taken before it
   have aged out; a deployment states that period with its retention terms.
-- Building `kms` means: the provider, the key table and its migration, destroy
+- Building `kms` meant (done, with `keys.state.backend: database`; the `keys.adapter: kms` shape replaced `keys.provider: kms`): the provider, the key table and its migration, destroy
   with the tombstone, `--key-provider kms`, the chart's `keys.provider: kms`,
   and tests against a KMS that implements `GenerateDataKey` with a context.
 

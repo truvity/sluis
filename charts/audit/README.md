@@ -231,12 +231,11 @@ What stays outside, and is the operator's to bring:
   Each reaches a component through its `secretEnv`.
 - **the PostgreSQL database** and its four roles.
 
-Two limits to know. A preset's `credentials` is an address in an SSM Parameter
+One limit to know. A preset's `credentials` is an address in an SSM Parameter
 Store path, so a store at an endpoint takes its access key from the environment
-as above instead. And pseudonyms under `keys.adapter: kms` keep the per-tenant
-secrets wrapped under the key in a state store (`keys.state`), which is SSM
-Parameter Store today; with KMS and no SSM, declare
-`externalIdentifiersAreOpaque`, or use OpenBAO transit for pseudonyms.
+as above instead. Pseudonyms under `keys.adapter: kms` need no SSM: set
+`keys.state.backend: database` and the wrapped per-tenant secrets are rows in the
+writer's PostgreSQL (`audit_wrapped_keys`, with erasure tombstones beside it).
 
 ## Keys are off
 

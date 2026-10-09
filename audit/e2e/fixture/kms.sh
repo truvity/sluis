@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # The key service for the "services in the cluster" tier: an AWS KMS stand-in
-# (LocalStack, the image the box's S3 already pins) with the notary's seal key,
+# (LocalStack, the image the box's S3 already pins) with the notary's seal key and the pseudonym key,
 # and the Secret that points the pods at it the way a Secret delivered from a
 # secret manager would: AWS_ENDPOINT_URL_KMS and AWS_REGION as environment
 # variables, read by the SDK's default chain. Nothing reads SSM.
@@ -59,6 +59,12 @@ if ! kubectl -n "$NS" exec deploy/kms -- awslocal kms describe-key --key-id alia
   key_id=$(kubectl -n "$NS" exec deploy/kms -- awslocal kms create-key \
     --key-spec ECC_NIST_P384 --key-usage SIGN_VERIFY --query KeyMetadata.KeyId --output text)
   kubectl -n "$NS" exec deploy/kms -- awslocal kms create-alias --alias-name alias/audit-seal --target-key-id "$key_id"
+fi
+
+# The pseudonym key: symmetric, the data keys per tenant are wrapped under it.
+if ! kubectl -n "$NS" exec deploy/kms -- awslocal kms describe-key --key-id alias/audit-pseudonym >/dev/null 2>&1; then
+  key_id=$(kubectl -n "$NS" exec deploy/kms -- awslocal kms create-key --query KeyMetadata.KeyId --output text)
+  kubectl -n "$NS" exec deploy/kms -- awslocal kms create-alias --alias-name alias/audit-pseudonym --target-key-id "$key_id"
 fi
 
 kubectl -n "$NS" get secret audit-e2e-kms >/dev/null 2>&1 || \
