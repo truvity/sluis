@@ -106,6 +106,9 @@ func TestAuthorizationServerMetadataIsDiscoveryNarrowed(t *testing.T) {
 	if methods, _ := doc["code_challenge_methods_supported"].([]any); len(methods) != 1 || methods[0] != "S256" {
 		t.Errorf("code_challenge_methods_supported = %v, want [S256]", methods)
 	}
+	if got, _ := doc["authorization_response_iss_parameter_supported"].(bool); !got {
+		t.Errorf("authorization_response_iss_parameter_supported = %v, want true", doc["authorization_response_iss_parameter_supported"])
+	}
 }
 
 // Anything but the exact path, and any method discovery refuses, is

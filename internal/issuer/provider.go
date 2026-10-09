@@ -254,7 +254,7 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	}
 	mux.Handle("/", neverCached(protocol))
 
-	return withSigningAudience(withOneResolution(mux)), nil
+	return withSigningAudience(withOneResolution(authorizationResponseIssuer(iss.Config().URL, mux))), nil
 }
 
 // withSigningAudience installs a fresh [signingAudience] carrier on every
@@ -607,6 +607,7 @@ var authorizationServerFields = []string{
 	"revocation_endpoint",
 	"revocation_endpoint_auth_methods_supported",
 	"code_challenge_methods_supported",
+	"authorization_response_iss_parameter_supported",
 	"client_id_metadata_document_supported",
 }
 
@@ -704,6 +705,10 @@ func truthfulDiscovery(issuerURL string, documentClientsEnabled func() bool, nex
 		// RECOVERY: a relying party that wants to refuse a break-glass
 		// sign-in has to know the value to refuse.
 		doc["acr_values_supported"] = servedACRValues
+		// Every authorization response carries `iss` (RFC 9207), so a
+		// client that talks to several servers can tell which one sent
+		// it.
+		doc["authorization_response_iss_parameter_supported"] = true
 		// The library advertises a device endpoint from its own defaults,
 		// whatever the configuration says. The grant is gone,
 		// so the address of it is a promise to nobody.
