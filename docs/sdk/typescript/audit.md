@@ -12,7 +12,7 @@ records as the sentences their catalogues declare. It is the TypeScript counterp
 and holds the generated contract (`QueryService`, `SearchRequest`, `Filter`, `Record`, …) next to the helpers below.
 
 Who may read what is decided by the query service's grants, not by the package; the service is described in
-[read the trail](../../audit/how-to/read-the-trail.md) and its wire contract in the [API reference](../../audit/reference/api.md).
+[read the trail](../../guides/audit/connect/read-the-trail.md) and its wire contract in the [API reference](../../reference/audit/api.md).
 
 ## The client
 

@@ -19,7 +19,7 @@ import (
 	auditv1 "github.com/truvity/sluis/audit/sdk/gen/audit/v1"
 )
 
-// The examples in docs/audit/reference/api.md, asked of a real handler.
+// The examples in docs/reference/audit/api.md, asked of a real handler.
 //
 // Nothing read that document before, which is how it could promise snake_case
 // JSON for months while the service wrote camelCase. The examples carry "…"
@@ -93,7 +93,7 @@ func TestTheReferenceExamplesAgreeWithTheService(t *testing.T) {
 // placeholders a reader understands replaced by something JSON does.
 func examples(t *testing.T) (request []byte, response map[string]any) {
 	t.Helper()
-	doc, err := os.ReadFile("../../../docs/audit/reference/api.md")
+	doc, err := os.ReadFile("../../../docs/reference/audit/api.md")
 	if err != nil {
 		t.Fatal(err)
 	}

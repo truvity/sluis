@@ -6,7 +6,7 @@
 Supersedes the object layout in
 [0045](0045-s3-object-lock-as-the-record.md) (its `year=/month=/day=`
 keys); the rest of 0045 stands. The layout itself is specified in
-[the bucket contract](../audit/reference/bucket-contract.md).
+[the bucket contract](../reference/audit/bucket-contract.md).
 
 ## Context
 

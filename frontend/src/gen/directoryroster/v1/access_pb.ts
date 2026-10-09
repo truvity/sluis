@@ -1645,7 +1645,7 @@ export const LinkFilterSchema: GenEnum<LinkFilter> = /*@__PURE__*/
  * The policy's five tables are declared by the deployment. Exactly one of
  * them is writable here — memberships, which directory groups populate an
  * internal group — because everything else shapes a token and belongs in
- * a reviewed commit. See docs/reference/policy.md.
+ * a reviewed commit. See docs/reference/sluis/policy.md.
  *
  * @generated from service directoryroster.v1.AccessService
  */

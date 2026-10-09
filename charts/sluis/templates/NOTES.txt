@@ -12,5 +12,5 @@ installation, and pass them as they are:
 
 The chart then keeps only the deployment-level values (replicas, service
 account, mounts, probes, routes, alerts) and does not rewrite the documents.
-See docs/reference/sluisctl.md (render) and docs/decisions/0038-estates-render-through-sluis.md.
+See docs/reference/sluis/sluisctl.md (render) and docs/decisions/0038-estates-render-through-sluis.md.
 {{- end }}

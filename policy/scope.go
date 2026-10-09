@@ -214,7 +214,7 @@ func asDocumentAudience(audience string) (*url.URL, bool) {
 // narrows a token's `groups` claim ships later.
 //
 // audience is a client id, or the RFC 8707 resource a request named
-// (see docs/reference/policy.md#resources--what-a-token-is-for) -- for a
+// (see docs/reference/sluis/policy.md#resources--what-a-token-is-for) -- for a
 // token exchange, the audience the exchange was GRANTED, never the id of
 // the client presenting it.
 //

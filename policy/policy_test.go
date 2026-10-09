@@ -383,7 +383,7 @@ func TestGroupsDelimiterIsInjectiveAndOptional(t *testing.T) {
 
 // policy.RewriteGroupsDelimiter is the one function that actually applies
 // a configured delimiter to a minted name -- see
-// docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop.
+// docs/reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop.
 // An empty delimiter (unset) is the identity, and a set one replaces every
 // separator, never merely the first.
 func TestRewriteGroupsDelimiter(t *testing.T) {

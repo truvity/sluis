@@ -1,0 +1,539 @@
+# The Pulumi library
+
+The AWS shape of sluis as a Pulumi Go library, `github.com/truvity/sluis/deploy/pulumi`, a module of its own so that Pulumi
+is not in the root module's dependency graph. The infrastructure lives here, in a versioned library next to the code it
+serves, and gitops only wires it: a stack calls the constructors and renders the processes' configuration from the same
+names. Source: `deploy/pulumi`; the exported identifiers are in [Go packages](../../sdk/go/sluis.md).
+
+**Lambda is the main path** (decision of 2026-10-04: both estates run sluis on AWS Lambda). `NewLambda` is the
+whole of it: ONE function, one role, the HTTP API, the signing key and the schedules. The mutual-TLS custom domain in
+front of the API is an [edge module](#the-edge-modules).
+`NewKubernetesIdentity` (EKS Pod Identity) is kept for an installation that still runs the Deployment, and is not
+extended. Since v1.63 sluis is one process everywhere ([decision 0037](../../decisions/0037-one-process-everywhere.md)): one
+function, one role, and on Kubernetes one Deployment, one ServiceAccount, one role.
+
+**Nothing here is deployed by this repository.** The library is tested against Pulumi's mocks (`just pulumi-test`): it
+declares the right resources with the right arguments and creates none, and the `ports:` block it renders is validated
+against the schemas in `schemas/config`.
+
+## The shape
+
+Four components, each usable alone:
+
+| Component | Type token | Creates |
+|---|---|---|
+| `NewStorage` | `sluis:aws:Storage` | the blob bucket |
+| `NewState` | `sluis:aws:State` | the DynamoDB table of the DynamoDB adapter |
+| `NewLambda` | `sluis:aws:Lambda` | the function, its role, the API, the signing key, the schedules |
+| `NewKubernetesIdentity` | `sluis:aws:KubernetesIdentity` | the one EKS Pod Identity role of the one pod (not the main path) |
+
+and `RenderPorts` (`RenderPortsYAML`), which renders the `ports:` block. The Lambda stack is [below](#lambda); the
+example here is the storage, the table and the Pod Identity role.
+
+```go
+store, _ := sluispulumi.NewStorage(ctx, "acme", &sluispulumi.StorageArgs{
+	BucketName: "acme-prod-sluis",
+}, pulumi.Providers(awsProvider))
+state, _ := sluispulumi.NewState(ctx, "acme", &sluispulumi.StateArgs{
+	TableName: "acme-sluis",
+}, pulumi.Providers(awsProvider))
+ids, _ := sluispulumi.NewKubernetesIdentity(ctx, "acme", &sluispulumi.KubernetesIdentityArgs{
+	ClusterName: "acme", ClusterArn: clusterArn, AccountID: accountID,
+	Namespace:              "sluis",
+	PermissionsBoundaryArn: boundaryArn,
+	ServiceAccount:         "sluis",
+	Storage:                store.Grant(),
+	State:                  state.Grant(),
+}, pulumi.Providers(awsProvider))
+```
+
+The AWS provider is the caller's: pass `pulumi.Providers(p)` (or
+`pulumi.Provider(p)`) as an option and the components' children use it. No
+constructor makes a call to AWS to find out something it was not told.
+
+## Storage
+
+### Inputs (`StorageArgs`)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `BucketName` | required without `Blobs` | The bucket's name. It is in the configuration, so it is known before anything is created, and a bucket name is global. |
+| `Blobs` | none | Blobs on an S3-compatible endpoint instead of an S3 bucket (Cloudflare R2): see [Blobs on R2](#blobs-on-r2). Exactly one of `BucketName` and `Blobs`; with `Blobs` the library creates no bucket and `Versioning`, `ProtectedPrefixes` and `Tags` are refused. |
+| `Versioning` | off | S3 versioning. The bucket holds the controllers' last reports and the directory snapshots, which the next tick regenerates and which are never a credential; an ETag is the compare-and-swap's version. |
+| `Tags` | none | On the bucket. |
+
+### Outputs
+
+`BucketName`, `BucketArn` (empty with `Blobs`), and `Grant()`, which is what `NewLambda` and
+`NewKubernetesIdentity` take as `Storage`.
+
+### Blobs on R2
+
+`StorageArgs.Blobs` is an `ExternalBlobs`: `Bucket`, `Endpoint` (an https URL), `Region` (default `auto`, what R2 signs
+with), `PathStyle`, `Prefix`, and `CredentialsRef`. The library creates no bucket and grants no IAM on the store. It
+writes `ports.blob` into the service document (`adapter: s3`, with the bucket, endpoint, region and `credentialsRef`) and
+grants the function's role `ssm:GetParameter` on that one parameter, `/sluis/<instance>/<CredentialsRef>`, decrypted
+through SSM only with a `ParameterKeyArn`. `CredentialsRef` is an address of the form `internal/<kind>/<id>` (for example
+`internal/blobs/r2`); it names the secret that holds the access key pair and is never the secret, so no credential is an
+input and none is in the Pulumi state. Seed the parameter out of band. DynamoDB stays on AWS. A document that names
+`ports.blob` or `adapters.blobs` itself, or an `endpoint` of its own, is refused as before.
+
+The runtime reads `credentialsRef` from a release whose service-document schema carries it (the release that adds the
+S3-compatible Blob credentials): the library holds the whole document, `credentialsRef` included, to that schema, so
+deploy it with that release or later. The document the parameter holds is `s3-credentials/v1`, see
+[the deployment page](../../guides/sluis/operate/blobs-on-r2.md).
+
+```go
+store, _ := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{
+	Blobs: &sluispulumi.ExternalBlobs{
+		Bucket: "acme-sluis", Endpoint: "https://<account>.r2.cloudflarestorage.com", CredentialsRef: "internal/blobs/r2",
+	},
+}, pulumi.Providers(awsProvider))
+l, _ := sluispulumi.NewLambda(ctx, "access", lambdaArgs /* Storage: store.Grant() */, pulumi.Providers(awsProvider))
+// API Gateway reads a truststore only from S3, so the edge gets a small S3 bucket of its own:
+front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
+	FrontDoor: l.FrontDoor(), DomainName: "access.example.test", CertificateArn: originCertArn, TruststorePEM: originPullCA,
+	TruststoreBucket: &edgecloudflare.TruststoreBucketArgs{Name: "acme-sluis-truststore", ApplyPrincipalArns: applyRoles},
+}, pulumi.Providers(awsProvider))
+```
+
+### What is created
+
+- **The bucket**, protected, encrypted with S3-managed keys (AES256), with every public-access block on, and a bucket
+  policy that denies every action to every principal when the transport is not
+  TLS (`aws:SecureTransport` false) on the bucket and its objects. Versioning when
+  asked for.
+
+There is no key: sealing is retired. A stack that an earlier release created has
+the Sealer's key (`<name>-sealer-key`) and its alias (`<name>-sealer-alias`) in
+its state, both protected; the first apply of this release removes them from the
+program, so **unprotect them first** (`pulumi state unprotect <urn>`), and the
+apply then schedules the key's deletion after its 30-day window.
+
+## State
+
+The table of the DynamoDB adapter (`internal/port/dynamodb`, [ADR 0027](../../decisions/0027-the-state-port-nats-jetstream-and-dynamodb.md)); State is DynamoDB on AWS.
+
+### Inputs (`StateArgs`)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `TableName` | required | The table's name (`ports.dynamodb.table`). |
+| `KeyArn` | none | A customer-managed key to encrypt the table with. Absent, the AWS-owned key: free and needing no grant. |
+| `Tags` | none | On the table. |
+
+### Outputs
+
+`TableName`, `TableArn`, and `Grant()` (the table's ARN and the key's, if any).
+
+### What is created
+
+One table, protected and with DynamoDB's own deletion protection, shaped as the
+adapter's documentation says:
+
+| Attribute | Type | |
+|---|---|---|
+| `pk` | S | the hash key: the record kind (`directory`, `github-org`, `issuer-token`) |
+| `sk` | S | the range key: the record's id, `/`-separated when compound (see [storage layout](storage-layout.md)) |
+| `rev` | N | the revision, written by the adapter on every write |
+| `expires` | N | the TTL attribute, epoch seconds |
+
+Only the two key attributes are declared; DynamoDB takes the rest schemaless.
+Billing is on-demand, point-in-time recovery is on and TTL is on `expires`. The
+adapter judges expiry itself on every read, so DynamoDB's own sweep, which can
+be days late, is housekeeping and not a correctness matter. There is no
+secondary index: the adapter's Index is items of the same table.
+
+## Kubernetes identity
+
+ONE EKS Pod Identity role, for the one pod: the service and the GitHub and Slack
+controllers run in one process, in one Deployment, as one ServiceAccount (v1.63,
+[decision 0037](../../decisions/0037-one-process-everywhere.md)). The per-process roles
+of v1.62 are gone, and with them the isolation between the issuer and a controller:
+the controllers' code runs with the issuer's permissions.
+
+### Inputs (`KubernetesIdentityArgs`)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `ClusterName` | required | The EKS cluster the associations are made in. |
+| `ClusterArn`, `AccountID` | required | Pin each trust policy to the cluster: the source ARN and the source account EKS stamps on every assume. |
+| `Region` | provider's | Set on each association. |
+| `Namespace` | required | The namespace of the ServiceAccount. |
+| `PermissionsBoundaryArn` | none | The boundary of the role. The estate's rule is that a role has one (gitops uses `pb@default`). |
+| `RoleNamePrefix` | the component's name | The role is `<prefix>-sluis` (was `<prefix>-sluis-serve`); its managed policy has the role's name. |
+| `ServiceAccount` | required | The ServiceAccount the pod runs as, in `Namespace`. |
+| `Description` | says what the role is allowed | The policy's description, which IAM cannot change once set (a change replaces the policy). |
+| `Instance`, `Region`, `ParameterKeyArn` | none | With `Instance` (the installation's name, as in `NewLambda`; `Region` is then required), the role has the Lambda role's SSM grants under `/sluis/<instance>/`: credentials read/write, config read, exports, and `ParameterKeyArn` through SSM only. |
+| `Storage` | required | `Storage.Grant()`. |
+| `SigningKeyArns` | none | The Lambda stack's signing keys (`SigningKeyArn`, `SigningKeyRS256Arn`). Set, the role may `kms:Sign` and `kms:GetPublicKey` with them. |
+| `WrappedSigningKeyArn` | none | The symmetric key of the `kms-wrapped` signing adapter ([signing on AWS](../../concepts/sluis/signing-on-aws.md)): the Lambda stack's `WrappedSigningKeyArn`: a key whose policy reserves the signing context to the signing roles (list this role in `WrappedSigning.AdditionalSigningRoleArns`, or in the denial merged into a shared key). Set, the role may `kms:GenerateDataKeyPairWithoutPlaintext` and `kms:Decrypt` with it, under the conditions below. |
+| `State` | none | `State.Grant()`. Nil when the pod's State is not DynamoDB (the Kubernetes-objects store, `legacy`): the role then carries no DynamoDB grant. |
+
+### Outputs
+
+`RoleArn`, `RoleName` (v1.62's `ServeRoleArn`, `GitHubRoleArn`, `SlackRoleArn` and the
+names are gone).
+
+### What is created
+
+A customer-managed policy and a role with the same name, the attachment, and one
+`PodIdentityAssociation` of the ServiceAccount with the role. The trust policy
+lets `pods.eks.amazonaws.com` assume the role (`sts:AssumeRole` and
+`sts:TagSession`) only for this account and cluster, this namespace and this one
+ServiceAccount. A ServiceAccount takes one association.
+
+### IAM, whole
+
+The role's grants are the whole of its policy (with `Instance`, the SSM grants of the
+Lambda role are added; see [IAM](lambda.md#iam-one-role)).
+
+| Sid | Actions | Resource |
+|---|---|---|
+| `SluisBlobs` | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | the bucket's objects |
+| `SluisBlobList` | `s3:ListBucket` | the bucket (a read of an absent key is a 404 only with it, a 403 without) |
+| `SluisSigning`, with `SigningKeyArns` | `kms:Sign`, `kms:GetPublicKey` | the signing keys |
+| `SluisWrappedSigning`, with `WrappedSigningKeyArn` | `kms:GenerateDataKeyPairWithoutPlaintext`, `kms:Decrypt` | the symmetric key, only with `kms:EncryptionContext:purpose` = `sluis-signing` and no context keys beside `purpose`, `alg`, `kid` |
+| `SluisState`, with State | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan`, `DescribeTable` | the table |
+| `SluisStateKey`, with a table key | `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey`, `kms:DescribeKey` | the table's key, only through DynamoDB (`kms:ViaService`) |
+
+`Scan` is `sluis migrate` and a listing by a prefix with no dot; `DescribeTable`
+is the start-up check and the readiness probe. Nothing is granted on `*`.
+
+## The configuration
+
+`RenderPorts` renders the `ports:` block of the service document (`sluis serve` and its controllers read it), from names
+the components were given, so none waits for a resource:
+
+```go
+y, _ := sluispulumi.RenderPortsYAML(sluispulumi.PortsArgs{
+	BucketName: "acme-prod-sluis",
+	TableName:  "acme-sluis",
+	Region:     "eu-west-1",
+})
+```
+
+```yaml
+ports:
+  adapter: dynamodb
+  blob:
+    adapter: s3
+    s3: {bucket: acme-prod-sluis, region: eu-west-1}
+  dynamodb: {region: eu-west-1, table: acme-sluis}
+```
+
+`create` is never rendered: the table is the infrastructure's, and the adapter binds to it and checks it. Credentials are
+the platform's. Without `TableName` no State adapter is written (the schema's default) and only the blob is. `Adapter`
+other than `dynamodb` is refused. Sealing is retired: `KeyID` is ignored and nothing renders a `sealer:` block. The tests
+hold the block to the schema in `schemas/config`, so a key renamed there fails there.
+
+Moving the serving pod to the library's role: [switch the serving pod to its own role](../../guides/sluis/operate/switch-serving-pod-role.md).
+
+## Lambda
+
+`NewLambda` is the Lambda shape: **one function from one zip, with the configuration in a layer**, one role, the HTTP API
+in front of it, the token-signing key, and a schedule per controller target. What the function takes in, reads and may
+do is in [AWS Lambda: reference](lambda.md); why it is shaped so, in [sluis on AWS Lambda](../../concepts/sluis/lambda.md).
+
+```go
+l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
+	Region: "eu-central-1", AccountID: accountID,
+	Instance:      "acme",    // the SSM root /sluis/acme (layout v3)
+	Package:       "dist/sluis-lambda_1.63.0_linux_arm64.zip", // or an https URL
+	PackageSHA256: "<the release's digest, pinned here>",
+	Installation:  installation, // *sluisconfig.Installation: the library renders both documents from it
+	Storage:       store.Grant(),
+	State:         state.Grant(),
+	Audit: &sluispulumi.AuditArgs{ // installed beside the function, operational: see Audit below
+		WriterPackage: "dist/audit-writer-lambda_<version>_linux_arm64.zip", WriterPackageSHA256: "<its digest>",
+		CatalogueDir: "dist/sluis-audit-catalogue", // the release's sluis-audit-catalogue bundle, unpacked
+	},
+	Schedule: sluispulumi.ScheduleArgs{GitHubOrgs: []string{"acme"}, SlackWorkspaces: []string{"T0ACME"}},
+}, pulumi.Providers(awsProvider))
+```
+
+**The package** is the released `sluis-lambda_<version>_linux_arm64.zip` (with `bootstrap` at its root), read from a path
+or an https URL when the stack is evaluated, and **deployed byte for byte**: `PackageSHA256` is required and checked, and
+the library adds nothing to the zip. A URL is fetched once and kept under its digest; a local file is copied to a
+temporary file first, so what is checked is what is deployed. Take the digest from a reviewed pin in the stack's source,
+never from a file fetched at deploy time beside the zip. The package must be of the library's own minor or newer (1.63 or
+later), or it is refused: an older binary cannot read the layer.
+
+**The configuration** is one immutable `aws.lambda.LayerVersion`, `<prefix>-config`, mounted last at `/opt/sluis`: the
+service document and the policy, rendered from `Installation` (or, deprecated, given as `Config` and `Policy` or
+`PolicyPath`). Each is held to sluis's own loader before anything is published, and the library writes what is its own
+into them; a document that disagrees is refused, naming the key. A change to a document publishes a new layer version
+and updates the function, never silently. Documents may not name an `endpoint`, unless `AllowEndpoints` is set for a
+LocalStack test. The rules, the keys the library owns and the secrets are in
+[AWS Lambda: configuration is a layer](lambda.md#configuration-is-a-layer).
+
+### Inputs (`LambdaArgs`)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `Region`, `AccountID` | required | Name the SSM parameters and the function in the role's policy. |
+| `Instance` | required | The installation's name (`acme`, `prod`): lower-case letters, digits and dashes, never `private` or `export`. Its SSM root is `/sluis/<instance>` (layout v3), so two installations share an account. |
+| `Package`, `PackageSHA256`, `PackageVersion` | required, required, from the file name | The released zip, deployed unchanged; its SHA-256 (a reviewed pin); the release it is, when its name does not say. |
+| `Installation` | `Config`, or this | What the estate knows ([the installation document](installation-document.md), `github.com/truvity/sluis/config`): the library renders both documents from it, with the renderer `sluisctl render` runs, and writes what is its own (the shape `lambda`, and `Instance`, `Region`, `AccountID` and the function's name from the arguments, when the installation leaves them out; a disagreement is refused). It replaces `Config`, `Policy` and `PolicyPath`. |
+| `Config` (deprecated) | required without `Installation` | The one service document (`sluis/v3`: the `serve` keys at the top level and `controllers.github` / `controllers.slack`), in the configuration layer. With the `invoke` trigger the library writes `adapters.trigger.settings` (`github` and `slack` are this function); a document that names another is refused. `GitHubConfig`, `SlackConfig` are gone. |
+| `Policy`, `PolicyPath` (deprecated) | exactly one, without `Installation` | The policy document, or a file or directory of layers rendered by sluis's renderer (`sluisctl policy render`); the layer holds it at `/opt/sluis/policy.yaml`. The GitHub and Slack catalogues are in it (`apps.github.catalogue`, `apps.slack.catalogue`). |
+| `AllowEndpoints` | false | Lets the documents name a service `endpoint`, for a LocalStack test. Off, one is refused. |
+| `Storage`, `State` | required | `Storage.Grant()` and `State.Grant()`. |
+| `Artifacts`, `Release` | unset | Ship the code through a versioned artifacts bucket; resolve a missing digest or the library's own release from `checksums.txt`. See [Artifacts bucket](#artifacts-bucket-and-the-librarys-own-release). |
+| `Audit` | install | Where the service's audit records go: installed by default, `Use` an installation that exists, or `Enabled: false`. Needs `Installation`. See [Audit](#audit). |
+| `AuditQueueArn` (deprecated) | none | An audit installation's ingest queue that the estate installed itself and named in its installation (`aws.auditQueueURL`); the function may send to it, and the library installs nothing. Exclusive with `Audit`. Required with the deprecated `Config`; with `Installation`, set `Audit` instead. |
+| `ParameterKeyArn` | none | A customer-managed key the SecureString parameters use: the ones the library creates and the ones the function writes at run time (its credentials and exports; the library writes it into the service document as `secrets.kmsKeyId`, and a document that names another key is refused). Absent, the AWS-managed key, which needs no grant. Present, the role may use it through SSM only. |
+| `Keys` | nil | The KMS keys the estate supplies, by alias: see [Keys the estate supplies](#keys-the-estate-supplies). Set, the library creates no key. Exclusive with the four inputs below. |
+| `SigningKeyAlias` (deprecated) | `alias/sluis-signing` | The ES384 signing key's alias. Deprecated with the other key-creating inputs: they work for one more release, with a warning, and are removed after it. |
+| `SigningKeyRS256Alias`, `DisableSigningKeyRS256` (deprecated) | `alias/sluis-signing-rs256`, false | The RSA signing key's alias; the key is created unless disabled. |
+| `WrappedSigning` (deprecated) | nil | Signing with the `kms-wrapped` adapter ([signing on AWS](../../concepts/sluis/signing-on-aws.md)): `KeyArn` (an existing symmetric key; unset creates one), `KeyAlias` (default `alias/sluis-signing-wrapped`). Set, the two asymmetric keys are no longer declared, and a `Config` naming `signingKey.kms` beside it is refused: see [Moving a stack from remote signing](lambda.md#iam-one-role). |
+| `VerifyOnly` | none | `[]VerifyOnlyKeyArgs`: the PUBLIC keys of an earlier signer, published in the JWKS and never signed with, so that the tokens it issued keep verifying for the overlap after a cutover. Each is `PEM` (one `PUBLIC KEY`, `RSA PUBLIC KEY` or `CERTIFICATE` block, RSA or ECDSA), `KeyID` (the `kid` the old tokens carry; unset is the RFC 7638 thumbprint), `Alg` (unset follows the key) and `Until` (required: when it stops being published). The layer holds each at `/opt/sluis/verify-keys/<index>.pem` (`VerifyOnlyKeyPath`), and the library writes `signingKey.verifyOnly` naming them, as the chart's `signingKey.verifyOnly` does; a document or an `Installation` that names `signingKey.verifyOnly` itself is refused. A private key, two keys in one PEM, the same key or `kid` twice, an `Alg` the key does not sign with, and a zero `Until` are refused before anything is published; an error never quotes the key. |
+| `Recovery` | enabled | A `RecoveryArgs`: `Enabled` (a `*bool`) writes `recovery.enabled`. The generated password parameter exists whatever it says, so turning recovery off and on is never a rotation ([Recovery on Lambda](../../guides/sluis/operate/recover-on-lambda.md)). |
+| `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, and the function when `FunctionName` is not set. |
+| `FunctionName` | `Recovery` | enabled | A `RecoveryArgs`: `Enabled` (a `*bool`) writes `recovery.enabled`. The generated password parameter exists whatever it says, so turning recovery off and on is never a rotation ([Recovery on Lambda](../../guides/sluis/operate/recover-on-lambda.md)). |
+| `FunctionNamePrefix` | The function, its role, policy and log group. **A v1.62 installation sets `<prefix>-http` here**, which keeps its function, role, log group and API integration in place: see [Upgrade to v1.63](../../guides/sluis/upgrade/v1.63.md). |
+| `Function` | 512 MB; 300 s | A `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`. (`HTTP`, `GitHub` and `Slack` are gone since v1.63.) |
+| `LogRetentionDays` | 30 | The function's log group. |
+| `AccessLogs` | nil (off) | An `AccessLogsArgs`: `RetentionDays` (default 7). Set, the library declares a log group `/aws/apigateway/<FunctionName>` and the `$default` stage's access log settings. Each request writes one JSON line with exactly `requestTime`, `requestId`, `httpMethod`, `path`, `status`, `responseLatency` and `integrationLatency` (the format is `AccessLogFormat`). The query string is never logged, because OAuth authorization codes and `state` travel in it; no header, source address, user agent or identity field is logged either. An HTTP API needs no account-level CloudWatch role (that is a REST API setting), so this adds no IAM resource; the principal that applies the stack needs API Gateway's log-delivery permissions (`logs:CreateLogDelivery`, `logs:PutResourcePolicy` and the related describe and update actions), and API Gateway adds the log group's resource policy itself. |
+| `PermissionsBoundaryArn` | none | The boundary of the role and the scheduler's. |
+| `API.DomainName`, `API.CertificateArn`, `API.TruststorePEM`, `API.TruststoreBucketName` (deprecated) | none | The custom domain, its ACM certificate, the client-CA bundle and the bucket the library uploads it to. **Deprecated, accepted for one release:** set, all four together, the library still builds the domain with mutual TLS and the truststore bucket as it did (the same resources and names, so a stack shows no diff) and logs a warning. Unset, it builds the API alone. They move to the [edge module](#the-edge-modules); [the migration](../../guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module) keeps the domain. |
+| `API.KeepDefaultEndpoint` | false | Leaves the default `execute-api` endpoint on, for the cutover's acceptance suite to run against `ApiUrl` before the DNS switch. Turn it off again after: it is a way round the client certificate. It is the API's, so it stays in the core with or without an edge. |
+| `Schedule.GitHubOrgs`, `Schedule.SlackWorkspaces` | none | The targets, one schedule each. |
+| `Schedule.Rate` | `rate(5 minutes)` | The EventBridge Scheduler expression. |
+| `Schedule.Paused`, `DirectoryRefresh.Paused` | false | Declares those schedules with `state: DISABLED` and keeps everything else: the schedules, the scheduler's role and the function's grants, so that turning them on is one setting and the preview shows only each schedule's state. Unset, a schedule's state is left to EventBridge Scheduler's default (enabled), as before. `Paused` and `Disabled` together are refused. |
+| `DirectoryRefresh.Rate`, `DirectoryRefresh.Disabled` | `rate(15 minutes)`, false | The directory refresh schedule: how often the function is invoked with `{"kind":"refresh"}` to take a new snapshot of every connected directory, under the refresh lease. Lambda has no refresh loop; a request that finds a snapshot due refreshes it too. |
+| `CloudflareRotation.Rate`, `.Disabled`, `.Paused` | `rate(1 minute)`, false, false | The Cloudflare rotation schedule: invokes the function with `{"kind":"cloudflare"}`. It exists only when `Installation.Cloudflare` declares presets; the same declaration gives the function's role SSM read on `internal/cloudflare/*`, read and write on `internal/cloudflare-minted/*` and write on `external/cloudflare/*` (see [mint short-lived Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)). |
+| `WebIdentityAudience` | any | Restricts the audience of the outbound web identity token the role may ask STS for. |
+| `AdditionalWebIdentityAudiences` | none | Further audiences, after `WebIdentityAudience`, the role may ask STS to mint a web identity token for (for example an OpenTelemetry layer authenticating through the token exchange). Exact match, `ForAllValues:StringEquals`. The role is then no longer console-bearer only: any code running with it can mint these tokens, so a policy rule matching the role must grant only what that audience's consumer needs. Empty entries, duplicates and use with an empty `WebIdentityAudience` are refused; unset, the policy is unchanged. |
+| `Telemetry.LayerArn`, `Telemetry.Env` | nil: no layer | The observability `otlp-lambda` layer and its settings: `Telemetry.Env` holds `OTEL_*`, the layer's own (`ACCESS_ROSTER_*`, `OPENTELEMETRY_*`) and `AWS_LAMBDA_EXEC_WRAPPER`, and nothing else (never `SLUIS_*`, `LD_*` or another `AWS_*`). Optional, so an estate whose collector is not ready leaves it out. `OTEL_SERVICE_NAME` is the function's name unless given. |
+| `Tags` | none | On everything that takes tags. |
+
+`Installation` is the way to configure the function. `Config`, `Policy` and `PolicyPath` are deprecated: they keep
+working for one minor, are removed after it, and `NewLambda` logs a warning while one is used.
+
+### Outputs
+
+### Outputs
+
+| Output | |
+|---|---|
+| `SigningKeyArn`, `SigningKeyID`, `SigningKeyAlias` | The ES384 token-signing key. |
+| `SigningKeyRS256Arn`, `SigningKeyRS256ID`, `SigningKeyRS256Alias` | The RS256 token-signing key (empty when disabled). |
+| `WrappedSigningKeyArn`, `WrappedSigningKeyAlias` | The symmetric key of `WrappedSigning` (`KeyArn` when given; the alias is empty then, and without `WrappedSigning`). |
+| `CodeSha256Matches` | True when the code Lambda reports has the SHA-256 of the verified release zip. |
+| `FunctionArn`, `FunctionName` | The function (replace `HTTP|GitHub|SlackFunctionArn` and the names). |
+| `RoleArn`, `RoleName` | Its role (replace `HTTP|GitHub|SlackRoleArn` and the names). |
+| `AccessLogGroupName` | The API access log group (empty without `AccessLogs`). |
+| `APIID`, `APIStageName`, `APIURL` | The HTTP API, its stage and its default endpoint (it answers only with `KeepDefaultEndpoint`). `FrontDoor()` returns the first two, with the component's name, for an edge module. |
+| `DomainTarget`, `DomainHostedZoneID`, `TruststoreBucketName`, `TruststoreURI` | Empty unless the deprecated `API.DomainName` is set; the edge module has its own. |
+| `SchedulerRoleArn`, `ScheduleNames` | The scheduler's role and the schedules. |
+| `LiveAliasArn`, `LiveVersion` | The alias `live` of the function and the version it points at. |
+| `ConfigLayerArn` | The configuration layer version: the documents and the policy. |
+| `StateSecretParameter` | The SSM parameter of the issuer's OAuth-state secret. |
+| `Audit` | The audit installation the library installed (`*auditpulumi.Audit`: its queue, writer, archive bucket and preset); nil with `Audit.Use`, `Audit.Enabled: false` and `AuditQueueArn`. |
+| `AuditQueueURL`, `AuditQueueArn` | The queue the service publishes to (installed, or `Use`'s); empty when audit is off, and the URL is empty with the deprecated `AuditQueueArn`. |
+
+### Artifacts bucket and the library's own release
+
+By default the library uploads the function's code with the function. Set `Artifacts` and the verified zip is instead uploaded **as it is** (a file asset, never repacked) to the estate's versioned S3 bucket, and the function and the configuration layer are created from that object version.
+
+| input | default | meaning |
+|---|---|---|
+| `Artifacts.Bucket` | unset (direct upload) | The estate's artifacts bucket. It must be **versioned**: the function names the object version, and an unversioned bucket (the upload returns no version id) fails the apply with a message saying so. |
+| `Artifacts.Prefix` | `sluis/` | Starts every key: `<prefix><version>/<sha256>-<file name>`. The digest is in the key, so a key never holds two contents and a re-run uploads nothing new. |
+| `Release.ResolveChecksums` | false | Reads an empty `PackageSHA256` from `<BaseURL>/v<version>/checksums.txt`; a digest that is given is used as it is. |
+| `Release.Version` | from the file name | The release, when the name does not say; names the release when `Package` is empty. `(devel)` and empty are refused. |
+| `Release.BaseURL` | the project's GitHub releases | Where the release is published, for a mirror. |
+
+The function gets `S3Bucket`, `S3Key`, `S3ObjectVersion` and `SourceCodeHash` (the zip's SHA-256, base64). The configuration layer is built as a zip whose bytes are the same on every run (sorted names, no timestamps), uploaded under the same prefix and used the same way.
+
+**No package named.** With `Package` empty the library deploys its own release: the version of its module in the program's build information (or `Release.Version`), fetched from `<BaseURL>/v<version>/sluis-lambda_<version>_linux_arm64.zip`, with its digest from that release's `checksums.txt` unless `PackageSHA256` pins one. A pinned digest always wins; bytes that do not have it are refused. A development build (`(devel)`), a pseudo-version, a module replaced by a local copy and a program without build information have no release and are refused with a message naming `Package` and `Release.Version`.
+
+Downloads are cached by SHA-256 under the user cache directory (`os.UserCacheDir()/sluis/artifacts`), so a preview does not download again; `GITHUB_TOKEN`, when set, is sent to github.com. After the deploy, `CodeSha256Matches` is true when the code Lambda reports has the SHA-256 of the zip the library verified.
+
+### The live alias
+
+The function publishes a version on every change of its code or configuration (`publish: true`), and the alias `live` points at the newest. Every caller uses the alias, never the unqualified function: the HTTP API's integration and its invoke permission (qualified), the schedules' targets, the scheduler role's invoke grant (the alias ARN alone, not `:*`), the function's own grant to invoke itself, and the `invoke` trigger's `<function>:live` in the service document. The asynchronous-invoke configuration (no retries) is set on the alias. A change therefore moves all callers to the new version at once, and the previous version is kept to point the alias back at. The API, its stage and the domain mapping name no function, so they are not replaced. Canary rollouts through CodeDeploy are planned for a later release; the alias moves to the new version in one step today.
+
+### Audit
+
+`LambdaArgs.Audit` (`AuditArgs`) decides where the service's audit records go, in one of three ways. The library writes
+the `audit` adapter into the service document itself (`aws.auditQueueURL`, or the `log` adapter), so an installation that
+names another queue or adapter is refused: the fact is stated once.
+
+| `Audit` | The library |
+|---|---|
+| unset, or set without `Use` and `Enabled: false` | **Installs audit** beside the function: the audit Pulumi library of this repository (`github.com/truvity/sluis/audit/deploy/pulumi`, the same release), named `audit-<instance>` (`Name`). The function's role is the one sender its ingest queue accepts, and the function is granted `sqs:SendMessage` on exactly that queue. The service publishes to it. |
+| `Use: &AuditUse{QueueURL, QueueArn}` | Sends the records to an installation that exists (another stack's or account's) and installs nothing. The URL is written into the configuration layer, so it must be known when the program runs; the queue must be in the function's region. `QueueArn` defaults to the ARN the URL names. |
+| `Enabled: &false` | No audit. Nothing is installed, the role is granted no queue, and the service document names the `log` audit adapter: the runtime validates each record against the catalogue and writes it to the log, and keeps it nowhere else (it logs `no audit installation is connected`). |
+
+The installation is **operational** unless the profiles ask for more. `Profiles` maps each destination (the profile names
+sluis's catalogue puts on its actions: `security`) to the framework profiles it is composed from; the default is
+`security: [history]` (`DefaultAuditProfiles`), whose minimum is `operational`: the writer, the archive, deduplication and the queue
+intake, with no notary, seal key, alarm or Object Lock. A profile's preset is derived with the audit
+library's own rule (the highest `min_preset` of its framework profiles, or the stronger one the profile asks for), and must
+be one of the `Presets` the installation configures, each with a store of its own. Above operational the audit library asks for its own inputs, passed through:
+`Notary`, `Keys` (the seal key), `Alerts`, `Telemetry`, `Observe`. `DeploymentYAML` is the whole deployment document for
+what `Profiles` cannot say (categories, a preset per profile); it names the profiles and not the storage, which is `Presets`.
+It is exclusive with `Profiles`, which needs `Presets` named unless it is the default.
+
+Inputs to install, all required: `WriterPackage` and `WriterPackageSHA256` (the audit release's
+`audit-writer-lambda_<version>_linux_arm64.zip` and its digest, as for `Package`; the audit library holds it to the
+library's release, `Guards`), and `CatalogueDir`, the directory the release's `sluis-audit-catalogue_<version>.tar.gz`
+unpacks to. **The catalogue is delivered with the writer's package**: the service publishes to SQS and registers nothing,
+so the roster catalogue and every schema it references go into the writer's configuration layer, and a catalogue change
+(its version bumped) redeploys the writer on the next apply. An install with any of them missing is refused before anything
+is created, naming `Use` and `Enabled: false` as the other ways.
+
+**The archive** is one store per install preset (`Presets`, `AuditPreset`) and is never the blob bucket. Unset with the
+default profiles it is the operational preset on a bucket the library creates; with `Profiles` or `DeploymentYAML`, name the
+presets they need. Each preset is one of:
+
+- An AWS S3 bucket the library creates (`Create: true`), named `<name>-<account>-<region>-<preset>` unless `Bucket` is
+  set, with an optional `Prefix` (`standard/`) the keys live under and a `KeyAlias` looked up (never created). Without an
+  archive key (`Keys.Archive`) it is encrypted with SSE-S3 (`Archive.Encryption`: `kms`, `s3` or `aws-managed` to choose);
+  Object Lock (`Archive.ObjectLockMode`, `AcknowledgeCompliance`, `DefaultRetentionDays`) is the attested preset's bucket alone.
+- An existing AWS bucket (`Create: false`): only grants.
+- An S3-compatible store (`Endpoint`: R2) the estate made: the library creates no bucket, `Bucket` is required, the
+  store's credentials are read from the installation's own state store (`State.Root`, `CredentialsAddress`, default
+  `internal/archive/<preset>`; written by the operator, never an input), and Object Lock is not available (so no
+  attested preset). `ReuseBlobStore` takes `Endpoint`, `Region` and `PathStyle` from `StorageArgs.Blobs` when the blobs are
+  on that same store; the bucket and the credentials stay the installation's own, and naming the blob bucket is refused.
+
+`deploy/pulumi/go.mod` requires `github.com/truvity/sluis/audit/deploy/pulumi` (a `replace` to the module beside it, at
+`v0.0.0`, until a release pins it with the root module's require: `just release-pin vX.Y.Z`; one version for every module, and releases are cut by hand). A stack that installed
+audit itself keeps working: leave `Audit` out and keep `AuditQueueArn` and the queue URL in the installation; to move, set
+`Audit.Use` (the library then writes the URL), or import the estate's installation under the new component and set `Audit`
+without `Use` ([the audit library's resources are named by `Name`](../../guides/audit/operate/archive-on-r2.md)).
+
+### Keys the estate supplies
+
+`LambdaArgs.Keys` (`KeysArgs`) takes the aliases of keys the estate owns and the library creates none: `Sign` (required) and
+`Secrets` (optional, the key the SSM secrets store encrypts its parameters with). Both are symmetric keys. The library resolves each alias with
+`aws.kms.LookupAlias` and grants on the key behind it, never on the alias:
+
+- `Sign`: `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey`, only with the context `{instance: <Instance>, purpose: sign}`
+  and no other context key (`ForAllValues:StringEquals` on `kms:EncryptionContextKeys`). The runtime generates the ring's
+  key pairs locally and wraps them with `kms:Encrypt` under that context. There is no `kms:Sign` grant.
+- `Secrets`: the same three actions, through SSM only (`kms:ViaService` is `ssm.<region>.amazonaws.com`) and for the
+  installation's parameters only (`kms:EncryptionContext:PARAMETER_ARN` StringLike `…:parameter/sluis/<instance>/*`): SSM
+  encrypts a SecureString under the context `{PARAMETER_ARN}`, so there is no instance or purpose context. The alias is
+  written as `secrets.kmsKeyId` (the key id the `ssm` store passes on PutParameter); it is exclusive with `ParameterKeyArn`.
+- `LegacySigningContext` (nil is true): also keeps the older grant on the `Sign` key, `GenerateDataKeyPair` and `Decrypt`
+  under `purpose=sluis-signing` (`WrappedKeyPolicyStatements` belongs in the key's policy), which ring entries written
+  before the runtime wrapped locally are opened with. Set it false once the ring has rotated past those entries.
+
+The service document gets `instance: <Instance>` and `keys: {adapter: kms, sign: alias/…}`
+(`storage/schemas/keys.schema.json`); a document that names `keys` itself is refused. `SigningKeyArn` and `SigningKeyAlias`
+output the key behind `Sign`. An alias is not a permission: re-pointing it moves the function to the new key at the next
+apply, and the key policy must let the function's role (the account's IAM policies, by default) use it. Moving a stack from
+the keys the library created: supply their aliases as `Keys` and the library adopts the existing keys by alias; the
+library's own `kms.Key` resources are removed from state with `pulumi state delete` (they are protected: unprotect first),
+so that the next apply does not schedule their deletion: [the steps](../../guides/sluis/migrate/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones).
+
+### Reader policies for `external/` secrets
+
+`ExternalReadPolicy(ExternalReadPolicyArgs)` returns the IAM policy document for a consumer's role that reads exact
+`external/<kind>/<id>` secrets of an installation: `ssm:GetParameter` on those parameters' ARNs under
+`/sluis/<instance>/`, and, with `SecretsKeyArn` (or `ParameterKeyArn`), `kms:Decrypt` on the secrets key through SSM only, with
+`kms:EncryptionContext:PARAMETER_ARN` StringEquals exactly those parameter ARNs (no instance or purpose context). No wildcard, no `GetParametersByPath`, no prefix: a
+wildcard, a prefix, a repeated or a non-`external/` address is refused. `NewExternalReader(ctx, name, &ExternalReaderArgs{
+RoleName, Region, AccountID, Instance, Addresses, SecretsKeyArn, ParameterKeyArn})` is the same as a component that attaches
+the policy to the role as an inline policy (`PolicyJSON` is its output).
+
+### The API
+
+An HTTP API (payload format 2.0) with a `$default` route and stage, and the permission that lets it invoke the function.
+Nothing is in front of it: with no edge module and no deprecated domain inputs, only the default `execute-api` endpoint
+exists, and it is **disabled** unless `KeepDefaultEndpoint` is set (a request that reaches the function without going
+through a front door's client certificate is a way round it). `Lambda.FrontDoor()` is what a front door takes: the API
+id, the stage and the component's name.
+
+### The edge modules
+
+A front door is a module of its own, so that the core never depends on one. `deploy/pulumi/edge/cloudflare`
+(`github.com/truvity/sluis/deploy/pulumi/edge/cloudflare`, package `edgecloudflare`) is the one for an estate with
+Cloudflare in front: it builds the regional custom domain (TLS 1.2 or later) with **mutual TLS**, its mapping to the
+API, the truststore and, if asked, the ACM certificate. `edge/aws` (a front door with no Cloudflare in front) is a later
+module. A release tags both at the same version; require the edge at the core's version.
+
+```go
+store, _ := sluispulumi.NewStorage(ctx, "access", &sluispulumi.StorageArgs{
+	BucketName: "acme-sluis", Versioning: true, // the domain pins the truststore's version
+	ProtectedPrefixes: []sluispulumi.ProtectedPrefix{edgecloudflare.Guard(cdRoleArn, operatorsAdminArn, breakglassArn)},
+}, pulumi.Providers(awsProvider))
+l, _ := sluispulumi.NewLambda(ctx, "access", lambdaArgs, pulumi.Providers(awsProvider))
+front, _ := edgecloudflare.NewEdge(ctx, "access", &edgecloudflare.Args{
+	FrontDoor:      l.FrontDoor(),
+	DomainName:     "access.example.test",
+	CertificateArn: originCertArn, // or Certificate: &edgecloudflare.CertificateArgs{...}
+	TruststorePEM:  cloudflareOriginPullCA,
+	Storage:        store, // or TruststoreBucket: ... for blobs on R2
+}, pulumi.Providers(awsProvider))
+```
+
+| `edgecloudflare.Args` | |
+|---|---|
+| `FrontDoor` | required: `Lambda.FrontDoor()`. |
+| `DomainName` | required: the custom domain. |
+| `CertificateArn` or `Certificate` | exactly one. `CertificateArn` is an ACM certificate in the function's region that the caller supplies (a Cloudflare Origin CA certificate imported to ACM, say). `Certificate` requests one with DNS validation: `CreateValidationRecord(ctx, record)` is called with the record ACM asks for (`Name`, `Type`, `Value` as outputs), creates it in the estate's own DNS and returns its fully qualified name, which the edge then waits for. The edge holds no DNS credential and imports no Cloudflare provider. |
+| `TruststorePEM` | required: the PEM bundle of the CAs a client certificate must chain to; for Authenticated Origin Pulls, Cloudflare's origin-pull CA. |
+| `Storage` or `TruststoreBucket` | exactly one, see below. |
+| `Tags` | on what the edge creates. |
+
+| `edgecloudflare.Edge` outputs | |
+|---|---|
+| `DomainTarget`, `DomainHostedZoneID` | What DNS for the custom domain points at (a CNAME or an alias record). |
+| `CertificateArn` | The certificate the domain uses. |
+| `TruststoreBucketName`, `TruststoreURI`, `TruststoreVersion` | Where the client-CA bundle is, and the object version the domain pins. |
+
+**The truststore** is ONE object, `truststore/client-ca.pem`, in a versioned bucket; the domain names the object's
+version, so a new PEM redeploys it. API Gateway reads a truststore from S3 only, and the functions can write the blob
+bucket, and a function that can replace the client CA has no use for a client certificate. So the prefix is guarded by
+the bucket's policy: a `Deny` on every write, delete and re-label under `truststore/` for every principal except the
+identities you name (`ArnNotEquals` on `aws:PrincipalArn`: the role the stack is applied with, the operators' admin role,
+a break-glass role; roles, not sessions). The edge does not trust you to have done this: with `Storage` it refuses a
+bucket that is not versioned or that does not guard the prefix. The guard is part of the bucket, so it is declared on
+the storage (`StorageArgs.ProtectedPrefixes`, with `edgecloudflare.Guard(...)`), which owns the bucket's one policy.
+
+**Blobs on R2.** When the blob store is S3-compatible rather than S3, there is no S3 blob bucket for API Gateway to read.
+Leave `Storage` unset and give `TruststoreBucket` (`Name`, `ApplyPrincipalArns`): the edge creates a small S3 bucket of
+its own for the truststore alone, protected, versioned, encrypted, closed to the public and to plain HTTP, with the same
+guard.
+
+**Authenticated Origin Pulls** is the estate's zone setting, made where the zone is (a Cloudflare provider in the
+estate's own program): the zone's `tls_client_auth` on, so that Cloudflare presents its client certificate to the
+origin. Without it Cloudflare presents none and the domain refuses every request. The setting and the DNS record for
+`DomainTarget` are not in this module.
+
+### The schedules
+
+One EventBridge schedule per target, `<prefix>-github-<org>` and `<prefix>-slack-<workspace>`, each invoking the one
+function with `{"kind":"tick","target":"<id>"}`. A target is letters, digits and `- _ . :`, at most 40 (`github:links` is
+the link check; a colon is a `-` in the schedule's name). `<prefix>-directory-refresh` invokes it with `{"kind":"refresh"}` every `DirectoryRefresh.Rate`. A schedule
+whose `Paused` is set is declared disabled, so an estate preparing a cutover has every schedule and grant in place and
+turns the schedules on with one setting ([cutover](../../guides/sluis/migrate/cutover.md#before-you-start)). The scheduler
+has a role of its own, `<prefix>-scheduler`, that may invoke the one function and nothing else; no schedule retries,
+because the next tick runs the pass again. The controllers' outbound web identity needs outbound identity federation
+enabled in the account; the library does not enable it.
+
+### The environment, IAM, signing and SSM
+
+The library sets `SLUIS_CONFIG` and, from `Telemetry.Env`, the telemetry layer's `OTEL_*`; the binary refuses every
+retired variable ([environment](lambda.md#environment)). The role and its grants are in [IAM: one role](lambda.md#iam-one-role).
+Signing with the `kms` or `kms-wrapped` adapter: [Signing on AWS](../../concepts/sluis/signing-on-aws.md) and
+[the key policy](aws-signing-key.md). The SSM layout, the generated state secret and the recovery password are in [AWS Lambda: `Instance` and the SSM root](lambda.md#instance-and-the-ssm-root) and
+[storage layout](storage-layout.md#ssm-the-ssm-secrets-adapter).
+
+## Upgrading the library
+
+Move the binary and the library together, in one apply: [Upgrade to v1.63](../../guides/sluis/upgrade/v1.63.md) (one function; on
+EKS, one role) and [Upgrade to v1.62](../../guides/sluis/upgrade/v1.62.md). Preview before every apply.
+
+## Releasing
+
+The release workflow tags the library `deploy/pulumi/vX.Y.Z` at a child of the release commit whose `go.mod` requires the
+root module at the release (`hack/modules.py`), which is how
+`go get github.com/truvity/sluis/deploy/pulumi@vX.Y.Z` finds a library that builds for a consumer. Nobody bumps the
+require by hand before a tag. A `deploy/pulumi/vX.Y.Z` tag pushed by hand is refused by design. The procedure and its
+gates are in [CONTRIBUTING](../../../CONTRIBUTING.md#releasing).

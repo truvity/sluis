@@ -257,7 +257,7 @@ type ServedDomain struct {
 	SnapshotAt    time.Time
 }
 
-// AccountResult is one address's standing. See docs/reference/contracts.md
+// AccountResult is one address's standing. See docs/reference/sluis/contracts.md
 // for the truth table; the short version is that Authoritative false makes
 // every other field an opinion rather than a fact.
 type AccountResult struct {

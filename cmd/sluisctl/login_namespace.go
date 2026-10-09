@@ -9,7 +9,7 @@ import "strings"
 // are about to OPERATE in, read the same way bao itself reads them; an
 // installation that keeps every login at one parent namespace while the
 // data a caller asks for lives in a child
-// (docs/how-to/connect/openbao.md#logins-at-a-parent-namespace) needs a SECOND
+// (docs/guides/sluis/connect/openbao.md#logins-at-a-parent-namespace) needs a SECOND
 // setting, not a second meaning piled onto the first one -- reusing
 // BAO_NAMESPACE for it would collide with bao's own reading of that
 // variable the moment the two ever differ, which is the whole reason

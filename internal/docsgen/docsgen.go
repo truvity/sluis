@@ -37,14 +37,14 @@ var regions = map[string]struct {
 	page string
 	gen  generator
 }{
-	"config-keys":             {"docs/reference/configuration.md", configKeys},
-	"config-keys-controllers": {"docs/reference/configuration.md", configKeysControllers},
-	"chart-values":            {"docs/reference/chart-values.md", chartValues},
-	"policy-keys":             {"docs/reference/policy.md", policyKeys},
-	"audit-actions":           {"docs/reference/audit-actions.md", auditActions},
-	"telemetry-alerts":        {"docs/reference/telemetry.md", telemetryAlerts},
+	"config-keys":             {"docs/reference/sluis/configuration.md", configKeys},
+	"config-keys-controllers": {"docs/reference/sluis/configuration.md", configKeysControllers},
+	"chart-values":            {"docs/reference/sluis/chart-values.md", chartValues},
+	"policy-keys":             {"docs/reference/sluis/policy.md", policyKeys},
+	"audit-actions":           {"docs/reference/sluis/audit-actions.md", auditActions},
+	"telemetry-alerts":        {"docs/reference/sluis/telemetry.md", telemetryAlerts},
 	"adr-index":               {"docs/decisions/README.md", adrIndex},
-	"artifacts":               {"docs/reference/artifacts.md", artifacts},
+	"artifacts":               {"docs/reference/sluis/artifacts.md", artifacts},
 }
 
 // Run regenerates every region. With write it rewrites the pages that differ;
@@ -125,9 +125,9 @@ func checkMarkers(root string) error {
 		}
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
-		// docs/audit is audit's tree: its regions are written by hand and
-		// closed-checked by audit's own docscheck, not generated here.
-		if strings.HasPrefix(rel, "docs/audit/") {
+		// The audit pages (docs/<section>/audit/) are audit's tree: its regions are
+		// written by hand and closed-checked by audit's own docscheck, not generated here.
+		if parts := strings.Split(rel, "/"); len(parts) > 2 && parts[0] == "docs" && parts[2] == "audit" {
 			return nil
 		}
 		for _, line := range strings.Split(string(b), "\n") {

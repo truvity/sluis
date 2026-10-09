@@ -36,11 +36,11 @@ ADR_LINKS_MAX = 3
 
 # Directory names that decide the page type (first match from the page's own directory outward).
 KINDS = {
-    "install": "tutorial", "getting-started": "tutorial",
-    "how-to": "how-to", "connect": "how-to", "operate": "how-to", "operations": "how-to",
-    "deployment": "how-to", "examples": "how-to", "upgrade": "how-to",
+    "get-started": "tutorial", "install": "tutorial",
+    "guides": "how-to", "connect": "how-to", "operate": "how-to", "migrate": "how-to",
+    "examples": "how-to", "upgrade": "how-to",
     "reference": "reference", "sdk": "reference",
-    "explanation": "explanation",
+    "concepts": "explanation",
 }
 EXEMPT_PREFIXES = ("docs/decisions/", "docs/_redirects/", "docs/WRITING.md")
 SKIP_DIRS = {".git", "node_modules", ".devbox", "dist", "build", ".venv", "_site"}

@@ -53,7 +53,7 @@ x-stream: &stream
 # partial — so this tier writes with no lock at all. `security` (composed
 # above) is one of the framework profiles whose framework does not demand one
 # (profiles/security.yaml: integrity.object_lock_mode: none); a profile that
-# demanded compliance or governance could not run here, and docs/audit/how-to/test-the-kind-tier.md
+# demanded compliance or governance could not run here, and docs/guides/audit/operate/test-the-kind-tier.md
 # says so.
 x-bucket: &bucket
   name: audit-e2e-archive

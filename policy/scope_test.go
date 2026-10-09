@@ -103,7 +103,7 @@ func TestScopeGroupsOverrideAll(t *testing.T) {
 func TestScopeGroupsOverrideThings(t *testing.T) {
 	t.Parallel()
 	// A console that reads a role beyond what it gates on -- the known
-	// limitation docs/reference/policy.md's Unconsumed section names --
+	// limitation docs/reference/sluis/policy.md's Unconsumed section names --
 	// declares the extra thing it maps, in ANY scope, on top of ordinary
 	// pair matching.
 	p := policy.Policy{

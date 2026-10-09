@@ -426,7 +426,7 @@ func schemaID(raw []byte) (string, error) {
 
 // dotted is a string attribute under a dotted key. The audit log line's keys
 // (audit.id, audit.action, ...) are a documented contract of
-// docs/how-to/read-the-audit-trail.md, flat and dotted by design, so they are
+// docs/guides/sluis/operate/read-the-audit-trail.md, flat and dotted by design, so they are
 // outside the snake_case rule the other keys follow; the key is a parameter so
 // that the exception is made here, once, and nowhere else.
 func dotted(key, value string) slog.Attr {

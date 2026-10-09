@@ -1,5 +1,5 @@
 // Package matrixdoc renders the adapter compatibility and implementation
-// matrix, docs/reference/adapters.md, from the adapter registry and the
+// matrix, docs/reference/sluis/adapters.md, from the adapter registry and the
 // preset table. The file is generated: run `just adapters-doc` after adding,
 // removing or changing an adapter's descriptor. A test fails when the
 // committed file is not what Render returns.
@@ -25,7 +25,7 @@ import (
 )
 
 // File is where the generated matrix lives, relative to the repository root.
-const File = "docs/reference/adapters.md"
+const File = "docs/reference/sluis/adapters.md"
 
 const (
 	yes       = "✅"
@@ -46,10 +46,10 @@ func render(all []port.Descriptor) string {
 # Adapters: compatibility and implementation matrix
 
 Every adapter, per concern, from the registry in ` + "`internal/port`" + `. To pick one,
-start with [choosing a deployment](../getting-started/README.md); to add one,
-see [adding an adapter in a fork](../how-to/add-an-adapter.md); for how adapters,
+start with [choosing a deployment](../../get-started/sluis/README.md); to add one,
+see [adding an adapter in a fork](../../guides/sluis/add-an-adapter.md); for how adapters,
 presets and the platform fit together, see
-[explanation/ports.md](../explanation/ports.md#adapters-presets-and-the-platform).
+[concepts/ports.md](../../concepts/sluis/ports.md#adapters-presets-and-the-platform).
 
 - ` + done + `: built and registered; the maintainers' estates run it.
 - ` + requested + `: designed and in the catalogue, not built; start refuses it. It is built when a user asks.

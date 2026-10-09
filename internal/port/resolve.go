@@ -153,7 +153,7 @@ var awsLambda = map[Concern]string{
 // the reason is what start says. A preset leaves this map when every adapter it
 // names is registered, and TestPresetsNameOnlyImplementedAdapters fails on a
 // preset that is in neither state, in either direction. The docs say so
-// (docs/reference/adapters.md).
+// (docs/reference/sluis/adapters.md).
 var presetUnavailable = map[Preset]string{
 	PresetServer:     "its state, secrets, blobs, signing and trigger adapters (postgres, store, generated, http) are planned and not built",
 	PresetK8sMinimal: "its state, secrets, blobs and trigger adapters (kubernetes, off, watch) are planned and not built",

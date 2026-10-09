@@ -18,7 +18,7 @@ Every component is configured by one file, its `config:` block, rendered as it
 stands and validated against the schema its binary validates it against. A
 secret is never in it: the file names an environment variable, and `secretEnv`
 puts a Secret's key there. Telemetry is the OTEL_* environment, set by the
-platform. docs/audit/reference/configuration.md lists every key.
+platform. docs/reference/audit/configuration.md lists every key.
 
 {{ if not .Values.writer.enabled -}}
 {{- else if eq .Values.mode "stream" -}}
@@ -49,7 +49,7 @@ only safe where the bucket is its own; in a shared one, `prefix` is what keeps
 two installations' archives apart and what their IAM is scoped to.
 {{- end }}
 {{ end }}
-See docs/audit/reference/archive-prefixes-and-iam.md for the policies.
+See docs/reference/audit/archive-prefixes-and-iam.md for the policies.
 
 {{ if and .Values.writer.enabled (not .Values.writer.config.database) -}}
 No database is configured. The writer deduplicates in process and may run only

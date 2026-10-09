@@ -5,4 +5,4 @@ trail, registrations, profile and framework profile changes, key destruction, le
 holds, seal writing and verification, writer lifecycle and the daily
 clock-synchronisation event. Every deployment carries it. Application
 catalogues live next to the application that emits them and are registered
-at deploy; see `docs/audit/reference/catalogue.md`.
+at deploy; see `docs/reference/audit/catalogue.md`.

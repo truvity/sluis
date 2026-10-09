@@ -7,7 +7,7 @@ import (
 )
 
 // The storage layout, version 2, of the adapters that are not the legacy one
-// (docs/reference/storage-layout.md).
+// (docs/reference/sluis/storage-layout.md).
 //
 // The logical keys of State (`ws.dir.<id>`, `issuer:token:<jti>`, ...) are the
 // service's own vocabulary and do not change: the legacy adapter and

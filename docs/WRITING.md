@@ -4,10 +4,10 @@ Every page is one of four types. Pick the type first; it decides what the page m
 
 | Type | Answers | Directory |
 |---|---|---|
-| Tutorial | take me from nothing to a working install | `*/install/` |
-| How-to | how do I do one task | `*/how-to/`, `*/connect/`, `*/operate/` |
-| Reference | what are the keys, flags and fields | `*/reference/`, `docs/sdk/` |
-| Explanation | how does it work | `*/explanation/` |
+| Tutorial | take me from nothing to a working install | `docs/get-started/` |
+| How-to | how do I do one task | `docs/guides/` |
+| Reference | what are the keys, flags and fields | `docs/reference/`, `docs/sdk/` |
+| Explanation | how does it work | `docs/concepts/` |
 
 ADRs under `docs/decisions/` hold the why. Every other page links to them and does not re-argue them.
 
@@ -41,7 +41,7 @@ ADRs under `docs/decisions/` hold the why. Every other page links to them and do
 1. Say each fact once. The glossary row for a term names the page that owns it. Everywhere else, link.
 2. No justification in a how-to or tutorial. The why is an ADR link under "Decided in".
 3. Code or config first, prose second. Show the step, then say one sentence about it.
-4. One name per thing. The glossary owns the names: `docs/sluis/explanation/glossary.md`, `docs/audit/explanation/glossary.md`. Do not coin a term it lacks.
+4. One name per thing. The glossary owns the names: `docs/concepts/sluis/glossary.md`, `docs/concepts/audit/glossary.md`. Do not coin a term it lacks.
 5. Present tense, second person, active voice. "The chart refuses the value", not "the value is refused".
 6. Condition before instruction. "To run two replicas, set `adapters.state: dynamodb`."
 7. History goes to the CHANGELOG or an ADR. A page describes what ships now.

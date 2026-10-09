@@ -1,0 +1,6 @@
+nav:
+  - README.md
+  - aws-lambda.md
+  - kubernetes-aws.md
+  - kubernetes-legacy-store.md
+  - deployment

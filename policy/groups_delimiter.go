@@ -12,7 +12,7 @@ import (
 // to substitute for every `:` in a group name, or nil when it is.
 //
 // The substitution [applies to a token's `groups` claim] (see
-// docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop)
+// docs/reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop)
 // as a plain `strings.ReplaceAll(name, ":", delimiter)`, and that is only
 // SOUND -- two different group names never becoming the same string -- when
 // the delimiter can never itself occur inside a group name: otherwise a
@@ -40,7 +40,7 @@ import (
 // through YAML and, eventually, a comma-joined display list must never
 // need escaping to carry); and any ASCII letter, digit or `-` -- exactly
 // [A-Za-z0-9-], what every scope, thing and role this codebase's own
-// vocabulary examples are built from (docs/reference/taxonomy.md) -- because a
+// vocabulary examples are built from (docs/reference/sluis/taxonomy.md) -- because a
 // delimiter drawn from the same alphabet a name is written in is exactly
 // the classic separator-collision mistake this check exists to catch.
 // `.` is the documented example: not part of that alphabet, and not used
@@ -66,7 +66,7 @@ func validGroupsDelimiter(delimiter string) error {
 		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-':
 			return fmt.Errorf(
 				"groups_delimiter %q contains %q, which a scope, thing or role name may itself be built from "+
-					"(see docs/reference/taxonomy.md); a delimiter drawn from the same alphabet as a group name could make "+
+					"(see docs/reference/sluis/taxonomy.md); a delimiter drawn from the same alphabet as a group name could make "+
 					"two different names collide once rewritten", delimiter, string(r))
 		}
 	}
@@ -112,7 +112,7 @@ func (p Policy) checkGroupsDelimiterCollision(delimiter string) error {
 // applied to a name; the issuer calls it once per group in a minted
 // token's `groups` claim, AFTER [Policy.ScopeGroups] has already decided
 // which groups survive -- see
-// docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop.
+// docs/reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop.
 func RewriteGroupsDelimiter(name, delimiter string) string {
 	if delimiter == "" {
 		return name

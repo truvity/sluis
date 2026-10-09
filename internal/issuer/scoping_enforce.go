@@ -4,7 +4,7 @@ import "github.com/truvity/sluis/policy"
 
 // scopeClaims narrows claims's `groups` entry to what [policy.Set.ScopeGroups]
 // keeps of held for audience, when mode is [GroupsScopingEnforce] -- see
-// docs/reference/policy.md#groups-in-a-token-scoping for the rule and
+// docs/reference/sluis/policy.md#groups-in-a-token-scoping for the rule and
 // docs/decisions/0006-groups-claim-scoped-per-audience.md for why it
 // exists. This is the one function that actually changes what a token or
 // `/userinfo` SAYS; [Storage.reportGroupsScoping] only ever logs.

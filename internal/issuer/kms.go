@@ -94,7 +94,7 @@ func KMSSigningKeyFor(ctx context.Context, api KMSAPI, ref string, seed []byte, 
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "AccessDeniedException" || apiErr.ErrorCode() == "AccessDenied") {
 			return nil, fmt.Errorf("issuer: this role may not call kms:GetPublicKey on %q: grant kms:GetPublicKey and kms:Sign "+
-				"on the signing keys (docs/reference/configuration.md, signingKey.kms): %w", ref, err)
+				"on the signing keys (docs/reference/sluis/configuration.md, signingKey.kms): %w", ref, err)
 		}
 		return nil, fmt.Errorf("issuer: kms:GetPublicKey on %q: %w", ref, err)
 	}

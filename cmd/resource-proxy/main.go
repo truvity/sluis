@@ -4,7 +4,7 @@
 // audit line per request, and proxies to the service -- and, optionally,
 // gives the service an identity of its own for what it calls in turn.
 //
-// See docs/how-to/connect/mcp.md, "Fronting a stock MCP server with
+// See docs/guides/sluis/connect/mcp.md, "Fronting a stock MCP server with
 // resource-proxy". Every flag has an environment variable of the same
 // name in upper case with underscores (--outbound-listen is
 // OUTBOUND_LISTEN); a flag given wins.

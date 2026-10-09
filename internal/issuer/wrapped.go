@@ -176,7 +176,7 @@ func newKid() (string, error) {
 // wrapError says what a failed call on the sign key most likely needs.
 func wrapError(call string, err error) error {
 	return fmt.Errorf("issuer: %s with keys.sign: %w (the role needs encrypt, decrypt and generate-data-key on the sign key, "+
-		"conditioned on its encryption context; docs/explanation/signing-on-aws.md)", call, err)
+		"conditioned on its encryption context; docs/concepts/sluis/signing-on-aws.md)", call, err)
 }
 
 // newPair generates the key pair for alg here: the sign key only wraps it.

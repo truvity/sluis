@@ -13,7 +13,7 @@ while the issuer itself runs on that cluster. A second platform that does not
 share the cluster's fate removes that circle. The AWS side already exists in
 part: the issuer verifies AWS outbound-federation tokens, and an extension
 layer sends a function's telemetry with the function role's identity
-([integrations/aws-lambda.md](../reference/lambda.md)).
+([integrations/aws-lambda.md](../reference/sluis/lambda.md)).
 
 The constraint is that a second platform must not become a second product. A
 platform-specific code path that only one installation exercises rots.
@@ -32,7 +32,7 @@ Neither is a stepping stone to the other. What differs between them is chosen
 by **ports and adapters** ([0027](0027-the-state-port-nats-jetstream-and-dynamodb.md),
 [0028](0028-nothing-writes-configmaps-or-secrets.md),
 [0029](0029-ticks-per-target-under-a-lease.md); the specification is
-[design/ports.md](../explanation/ports.md)): the same business code runs on both, and
+[design/ports.md](../concepts/sluis/ports.md)): the same business code runs on both, and
 an adapter is the only place a platform's name appears. **Go remains the
 language** for services, command-line tools and infrastructure libraries.
 

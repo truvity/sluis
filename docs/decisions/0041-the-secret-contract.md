@@ -8,7 +8,7 @@ live). Its companion [0042](0042-one-repository-one-release-train.md) moves audi
 how audit is installed.
 **Date:** 2026-10-08
 
-Layout v3 ([0036](0036-configuration-is-immutable-per-instance.md), [storage layout](../reference/storage-layout.md))
+Layout v3 ([0036](0036-configuration-is-immutable-per-instance.md), [storage layout](../reference/sluis/storage-layout.md))
 keeps an installation's secrets under `private/config/`, `private/credentials/` and `export/`, and the exports
 controller ([0034](0034-exports-go-to-openbao-directly.md)) re-derives every `export/` copy on a schedule. Every value
 a consumer reads therefore exists twice and the two drift between passes; the path and the field names of a copy are

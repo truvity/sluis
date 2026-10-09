@@ -361,7 +361,7 @@ func TestBaoLoginNamespaceDefaultsToTheTargetNamespace(t *testing.T) {
 // --login-ns logs in at a PARENT namespace while the real `bao` command
 // still runs, unchanged, against the namespace it named itself: an
 // installation that keeps its logins at one parent while data lives in a
-// child (docs/how-to/connect/openbao.md#logins-at-a-parent-namespace).
+// child (docs/guides/sluis/connect/openbao.md#logins-at-a-parent-namespace).
 func TestBaoLoginNsLogsInAtTheParentAndRunsBaoAtTheTarget(t *testing.T) {
 	newFakeBao(t)
 	testRunChild(t)

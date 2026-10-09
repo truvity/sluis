@@ -304,7 +304,7 @@ type WrappedSigningArgs struct {
 	// creates the key, with rotation enabled, protected, and a key policy that
 	// reserves the signing encryption context to the signing roles. With KeyArn
 	// the library creates no key and leaves its policy alone, and the estate MUST
-	// merge WrappedKeyPolicyStatements into it (docs/reference/pulumi-library.md): without
+	// merge WrappedKeyPolicyStatements into it (docs/reference/sluis/pulumi-library.md): without
 	// it any principal that may kms:Decrypt on the key can unwrap a signing key
 	// read from the State and forge tokens. A multi-Region key (mrk-...) is
 	// accepted: the statements go in EVERY replica's key policy, since a wrapped
@@ -443,7 +443,7 @@ type RecoveryArgs struct {
 // DEPRECATED and are accepted for one release: set, the library still builds
 // the domain with mutual TLS and the truststore bucket as it did, with a
 // warning, so that an existing stack keeps its resources until it moves to the
-// edge module (docs/how-to/cutover.md). Leave all four unset to build the API
+// edge module (docs/guides/sluis/migrate/cutover.md). Leave all four unset to build the API
 // alone. They are all or none.
 type APIArgs struct {
 	// DomainName is the custom domain.
@@ -1159,7 +1159,7 @@ func NewLambda(ctx *pulumi.Context, name string, args *LambdaArgs, opts ...pulum
 		_ = ctx.Log.Warn("sluispulumi: LambdaArgs.API.DomainName, CertificateArn, TruststorePEM and TruststoreBucketName are deprecated "+
 			"and are removed after the next minor: the custom domain, the certificate and the truststore are the edge module's "+
 			"(github.com/truvity/sluis/deploy/pulumi/edge/cloudflare), which keeps the truststore in the blob bucket; "+
-			"docs/how-to/cutover.md moves a stack without replacing the domain", nil)
+			"docs/guides/sluis/migrate/cutover.md moves a stack without replacing the domain", nil)
 		domain, truststore, err := newLegacyDomain(ctx, name, &a, api, stage, tags, child)
 		if err != nil {
 			return nil, err

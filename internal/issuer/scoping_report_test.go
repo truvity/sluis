@@ -117,7 +117,7 @@ func serveScoping(
 // requires-pair matching does to [adaDirectory]'s Ada, at a client
 // requiring only that one group: `local-dev` requires only
 // devel:k8s:viewer, so mgmt:k8s:admin (a different thing), rung:platform
-// and rung:engineering (not grants at all — see docs/reference/taxonomy.md) and
+// and rung:engineering (not grants at all — see docs/reference/sluis/taxonomy.md) and
 // all:access-roster:operator (a different pair) are all outside the
 // devel:k8s pair it names. devel:k8s:admin survives: it shares that SAME
 // pair, which is requires-pair matching across roles — the rule

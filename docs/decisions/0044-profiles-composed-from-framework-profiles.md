@@ -51,7 +51,7 @@ prefix was the earlier reading, and it buys nothing with these profiles: the
 only large field, `capture`, is kept by one profile. It would cost a
 seven-year lock on every body, since a writer cannot know which profile will
 reference a payload next and a lock can be extended but never shortened. See
-[the split writer](../audit/explanation/split-writer.md) for the condition that would
+[the split writer](../concepts/audit/split-writer.md) for the condition that would
 change this.
 
 Framework profiles reference core fields and classes only, never an application's

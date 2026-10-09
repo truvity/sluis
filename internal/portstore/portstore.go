@@ -7,7 +7,7 @@
 // hub.Store, a server.GitHubLinks, and so on), so nothing above it changes;
 // internal/app chooses between these and the ConfigMap and Secret stores of
 // internal/kube by the adapter `ports.adapter` names. The layout is the one of
-// docs/explanation/ports.md:
+// docs/concepts/sluis/ports.md:
 //
 //	ws.dir.<provider>.<id>  a directory workspace: record, credential in Secrets
 //	ws.slack.<workspace>    a Slack workspace: record, bot token in Secrets
@@ -110,7 +110,7 @@ func encodeItem(it *item) []byte {
 
 // secretPrefix is where the credentials live in Secrets:
 // `credentials/<kind>/<id>/<ref>`, the kind and id being the item's address in
-// the storage layout (internal/port/keys.go; docs/reference/storage-layout.md).
+// the storage layout (internal/port/keys.go; docs/reference/sluis/storage-layout.md).
 const secretPrefix = port.CredentialsPrefix
 
 // secretPath is the Secrets path of a credential of an item key: the item's

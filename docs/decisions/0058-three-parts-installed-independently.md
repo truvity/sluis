@@ -45,7 +45,7 @@ both. A part can be absent: ingest alone is a complete, provable-by-hand
 archive; adding the notary makes it verifiable by an auditor; adding observe
 makes it searchable. A part can be a different implementation, or run on a
 different platform, or at a different version, provided it keeps the
-[contract](../audit/reference/bucket-contract.md) — which is why the contract has a
+[contract](../reference/audit/bucket-contract.md) — which is why the contract has a
 conformance suite and not only a description.
 
 The emitter, the sink chain and the catalogue stay as

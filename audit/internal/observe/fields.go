@@ -96,7 +96,7 @@ func (g Given) With(cs ...*catalogue.Catalogue) Given {
 
 // ArchiveCatalogues reads catalogues from where the writer put them: the
 // archive's own catalogue/<app>/<version> and the extension schemas beside it
-// (docs/audit/reference/bucket-contract.md). Observe therefore needs no copy of the
+// (docs/reference/audit/bucket-contract.md). Observe therefore needs no copy of the
 // catalogues and no registry: what describes a record is in the bucket that
 // holds it, from before the first record that names it.
 type ArchiveCatalogues struct {

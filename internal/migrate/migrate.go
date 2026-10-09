@@ -371,7 +371,7 @@ func (r *run) steps(from, to Side) []step {
 	case "v3":
 		r.note("DEPRECATED: the destination is on secrets layout v3, which is written for this release only; " +
 			"set secrets.layout: v4 in the destination's installation document, so the secrets are written " +
-			"to internal/ and external/ (docs/how-to/migrate-secrets-layout.md)")
+			"to internal/ and external/ (docs/guides/sluis/migrate/migrate-secrets-layout.md)")
 		r.log.WarnContext(context.Background(), "the destination is on secrets layout v3, which is deprecated: set secrets.layout: v4")
 	case "v4":
 		r.note("the secrets are written straight into layout v4 (internal/ and external/) under the destination's key alias")

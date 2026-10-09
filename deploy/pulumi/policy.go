@@ -188,7 +188,7 @@ func wrappedKeyPolicy(account string, signingRoleArns []string) (string, error) 
 // WrappedKeyPolicyStatements are the statements a wrapped signing key's policy
 // MUST carry: the library puts them in the key it creates, and an estate merges
 // them into the policy of a shared key it passes as WrappedSigningArgs.KeyArn
-// (docs/reference/pulumi-library.md). On a shared key they touch only what presents the
+// (docs/reference/sluis/pulumi-library.md). On a shared key they touch only what presents the
 // signing context and the signing roles themselves:
 //
 //   - SluisSigningContextReserved denies every principal but the signing roles any
@@ -263,7 +263,7 @@ func PrivateParameterPrefix(instance string) string { return SSMRoot(instance) +
 // `config/clients/<id>/secret`) and the ones Pulumi generates
 // (`config/issuer/state-secret`, `config/recovery/password`). sluis only reads
 // them, by the names its http document gives; its own writes are under
-// `credentials/` (docs/reference/storage-layout.md).
+// `credentials/` (docs/reference/sluis/storage-layout.md).
 func ConfigParameterPrefix(instance string) string {
 	return PrivateParameterPrefix(instance) + "/config"
 }

@@ -49,8 +49,8 @@ counts to narrow by, and the records as sentences, newest first. A row opens to 
 | `permalink` | a link to one record, for "copy link"; without it the button is hidden |
 
 What the view shows is what the caller's grant lets through. How a console wires the page, the route and the
-network policy is in [connect an application](../../audit/how-to/connect-an-application.md#the-audit-page); what the
-view does with a record is in [the Audit page](../../audit/explanation/audit-page.md).
+network policy is in [connect an application](../../guides/audit/connect/connect-an-application.md#the-audit-page); what the
+view does with a record is in [the Audit page](../../concepts/audit/audit-page.md).
 
 ## Hooks, for a view of your own
 

@@ -8,7 +8,7 @@
 # into a temporary directory that is removed on exit, and are never
 # printed: a plan configuration is the one place they have to be written
 # down, and it lives inside the suite, which is why the suite's control
-# plane is not public (docs/how-to/run-conformance.md).
+# plane is not public (docs/guides/sluis/run-conformance.md).
 #
 # Usage:
 #   KUBECTL="kubectl --context prod@oidc" hack/conformance-plans.sh [<version label>]

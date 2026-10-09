@@ -3,7 +3,7 @@
 // For each profile and tenant it writes, for every hour that has closed and
 // settled, one signed seal of what that hour holds, chained to the one before:
 // seals/<profile>/<tenant>/<yyyy>/<mm>/<dd>/<hh>.jws
-// (docs/audit/reference/bucket-contract.md, docs/decisions/0061-seals.md). It runs
+// (docs/reference/audit/bucket-contract.md, docs/decisions/0061-seals.md). It runs
 // once and exits, hourly, as a scheduled job.
 //
 // It is a part of its own (docs/decisions/0058): it reads the records, puts

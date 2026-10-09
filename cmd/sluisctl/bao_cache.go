@@ -44,7 +44,7 @@ type cachedBaoToken struct {
 // minutes) -- but nothing here re-checks a token mid-command, and
 // OpenBAO's own side of this contract keeps the jwt-roster role's TTL
 // deliberately short in the first place ("the login exists to make one
-// call", docs/how-to/connect/openbao.md#manager-side). What this margin has to
+// call", docs/guides/sluis/connect/openbao.md#manager-side). What this margin has to
 // cover is the moment between this check and the child `bao` process
 // making ITS first call -- one round trip -- so it is the same margin
 // `refresh` gives the session's own access token before an exchange

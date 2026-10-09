@@ -7,7 +7,7 @@
 
 `groups` is the whole of the authorization a token carries — a flat list
 of internal group names, and nothing downstream re-maps them
-([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)).
+([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/sluis/policy-groups.md#groups-to-token-by-deep-merge)).
 Today that list is every internal group the caller holds, in every token,
 regardless of which client or resource the token is for. A person with a
 long reach across an installation carries the whole of it into a
@@ -27,8 +27,8 @@ naming structure, not the slice that concerns it.
 
 **A token carries only the internal groups relevant to its audience**: the
 groups its client's or its resource's `requires`
-([reference/policy-clients.md#clients](../reference/policy-clients.md#clients),
-[reference/policy.md#resources--what-a-token-is-for](../reference/policy.md#resources--what-a-token-is-for))
+([reference/policy-clients.md#clients](../reference/sluis/policy-clients.md#clients),
+[reference/policy.md#resources--what-a-token-is-for](../reference/sluis/policy.md#resources--what-a-token-is-for))
 names, plus any further group the client or resource explicitly declares
 it needs to read — for example one it maps into an application role but
 does not itself gate on. A group the caller holds that neither the
@@ -45,7 +45,7 @@ The exact policy key that lets a client or resource declare "these
 groups too, beyond what I gate on" is an implementation detail this
 record does not fix — describe the principle here, and let the schema
 that ships it speak for itself in
-[reference/policy.md](../reference/policy.md) once it exists.
+[reference/policy.md](../reference/sluis/policy.md) once it exists.
 
 ## Consequences
 
@@ -77,7 +77,7 @@ installation's own group vocabulary grows.
 
 **Scope by client only, never by resource.** Rejected: a resource's
 `requires` is exactly as much a gate as a client's
-([reference/policy.md#resources--what-a-token-is-for](../reference/policy.md#resources--what-a-token-is-for)),
+([reference/policy.md#resources--what-a-token-is-for](../reference/sluis/policy.md#resources--what-a-token-is-for)),
 and a resource-audienced token that still carried every group the caller
 holds would leak the same information a client-audienced one does today —
 solving the problem for one shape of audience and not the other it was

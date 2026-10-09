@@ -8,7 +8,7 @@
 > any live browser sign-in for the sign-in's own lifetime; it now applies the
 > same check as a silent `/authorize` on every request, and a sign-in past the
 > limit is refused and ended with the same cascade
-> ([sessions.md](../explanation/sessions.md#what-the-console-asks-of-the-sso-session)).
+> ([sessions.md](../concepts/sluis/sessions.md#what-the-console-asks-of-the-sso-session)).
 > The decision below stands as it was taken.
 
 ## Context
@@ -17,7 +17,7 @@ Three things get called a session here, and each has exactly one owner.
 The issuer holds the **SSO session** with the browser and one
 **per-client session** — a refresh chain, indexed and revocable — per
 identity and client
-([sessions.md](../explanation/sessions.md)).
+([sessions.md](../concepts/sluis/sessions.md)).
 An application signed in through either door then keeps **its own local
 session**, on its own clock. A limit enforced at the issuer can only ever
 reach the first two; the third is somebody else's state.
@@ -36,7 +36,7 @@ places: at refresh, at a silent `/authorize` (so an SSO session cannot be
 extended past it by opening a second console), and on the console's own
 session. `auth_time` is fixed at sign-in and carried unchanged across
 every refresh
-([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)),
+([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/sluis/policy-groups.md#groups-to-token-by-deep-merge)),
 so the limit is measured from when the person actually authenticated —
 never reset by use. No token outlives it. There is **no idle timeout** at
 the issuer, for the reason above: it has nothing to measure idleness with.
@@ -63,7 +63,7 @@ surface that has to be reasoned about, which is exactly where this
 repository has found real bugs before — a revoke path that ended one
 session and left its parent SSO session standing looked, from the
 console, like a complete sign-out
-([back-channel-logout.md](../explanation/back-channel-logout.md)).
+([back-channel-logout.md](../concepts/sluis/back-channel-logout.md)).
 
 **Gateway OIDC's caveats, worth stating rather than discovering:**
 
@@ -73,7 +73,7 @@ console, like a complete sign-out
   short `ttl_cap`;
 - there is no server-side session to receive Back-Channel Logout — the
   refresh interval is the whole dial
-  ([design/access-proxy.md#sign-out](../how-to/connect/oauth2-proxy.md#3-wire-sign-out));
+  ([design/access-proxy.md#sign-out](../guides/sluis/connect/oauth2-proxy.md#3-wire-sign-out));
 - the `groups` claim rides in the cookie, so it grows with group count;
 - a misconfigured gateway policy can fail open rather than closed.
 
@@ -87,7 +87,7 @@ the limit binds what comes back to the issuer, not what does not.
 An application already running a multi-day session of its own needs a
 deliberate choice, not the default: cap its session at or under 24h, or
 wire up
-[Back-Channel Logout](../explanation/back-channel-logout.md)
+[Back-Channel Logout](../concepts/sluis/back-channel-logout.md)
 and accept the window that leaves. Silence on this from the application's
 own design is not a safe default.
 
@@ -99,7 +99,7 @@ console — would buy near-zero-lag revocation. Rejected: it puts the
 issuer in every request path of every application it touches, forces a
 shared parent domain across consoles that otherwise share nothing, and
 rebuilds `access-proxy` a second time inside the issuer, which
-[design/access-proxy.md#why-not-something-else](../how-to/connect/oauth2-proxy.md#why-not-something-else)
+[design/access-proxy.md#why-not-something-else](../guides/sluis/connect/oauth2-proxy.md#why-not-something-else)
 already argues against for the proxy that exists today. Revisit only if
 sub-minute revocation becomes a hard requirement, and then as a separate,
 opt-in component — not folded into the issuer's own request path.

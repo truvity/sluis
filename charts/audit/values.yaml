@@ -1,11 +1,11 @@
-# The audit write path. Names follow docs/audit/reference/configuration.md.
+# The audit write path. Names follow docs/reference/audit/configuration.md.
 #
 # WHAT IS A VALUE AND WHAT IS CONFIGURATION. Each component's configuration is
 # one `config:` block, rendered as it stands into a ConfigMap, mounted as
 # /etc/audit/config.yaml and validated by values.schema.json against the
 # schema its binary validates it against at start-up (schemas/config/). The
 # chart translates none of it: a key under `config:` is the binary's key, and
-# docs/audit/reference/configuration.md lists them. Everything else here is the
+# docs/reference/audit/configuration.md lists them. Everything else here is the
 # platform's: how many pods, which image, which service account, which
 # Secrets reach which pod. A secret is never in `config:`: the file names an
 # environment variable, and `secretEnv` below puts a Secret's key there.
@@ -96,12 +96,12 @@ fullnameOverride: ""
 #               labelled for Grafana's sidecar, for the cluster Grafana reads.
 #
 # In `alerts` and `dashboards` mode nothing else is validated or rendered: no
-# `profiles`, no `writer.config`. See docs/audit/reference/telemetry.md. This is not
+# `profiles`, no `writer.config`. See docs/reference/audit/telemetry.md. This is not
 # `mode`, which is how the write path is arranged (direct or stream).
 renders: app
 
 # Alert rules, rendered only with `renders: alerts`. Every threshold and the
-# reason for it is in docs/audit/reference/telemetry.md and in the rule's comment in
+# reason for it is in docs/reference/audit/telemetry.md and in the rule's comment in
 # templates/alerts.yaml. The series are what the writer, the receiver and the
 # emitters publish over OTLP (OTEL_EXPORTER_OTLP_ENDPOINT on the pods).
 alerts:
@@ -135,7 +135,7 @@ alerts:
   emitterSelector: ""
   # Where an alert's runbook entry is. The alert's name, lower-cased, is the
   # anchor.
-  runbookBaseUrl: https://github.com/truvity/sluis/blob/master/docs/audit/how-to/respond-to-alerts.md
+  runbookBaseUrl: https://github.com/truvity/sluis/blob/master/docs/guides/audit/operate/respond-to-alerts.md
   rules:
     deadLettered:
       enabled: true
@@ -284,7 +284,7 @@ writer:
   # being the credential (`sqs:SendMessage` on the queue), or the URL of an
   # external front door. The chart refuses a sink that names this release's own
   # front door. Observe, query, the migration and the jobs run as before and
-  # still need Postgres; see docs/audit/explanation/levels.md.
+  # still need Postgres; see docs/concepts/audit/levels.md.
   enabled: true
   # In stream mode, how many writers consume the stream. They scale with the
   # record rate; the receivers (`replicas`) with the application's request rate.
@@ -294,13 +294,13 @@ writer:
   #
   # The writer puts v1 objects, `records/<profile>/<tenant>/<yyyy>/<mm>/<dd>/
   # <hh>/<ULID>`, and the catalogues at `catalogue/<app>/<version>`
-  # (docs/audit/reference/bucket-contract.md), in the bucket of the preset each
+  # (docs/reference/audit/bucket-contract.md), in the bucket of the preset each
   # profile is kept under (`presets` above). Its `archive` is only
   # `{stateRoot, ca, kmsKey}`; `deployment: /etc/audit/deployment.yaml` is how it
   # finds the buckets. The chart creates no bucket, so the
   # bucket's lifecycle is yours and is written against those prefixes, one rule
   # per profile on `records/<profile>/`: Glacier Instant Retrieval at 30 days
-  # and Deep Archive at 1 year (docs/decisions/0065, docs/audit/reference/archive-prefixes-and-iam.md).
+  # and Deep Archive at 1 year (docs/decisions/0065, docs/reference/audit/archive-prefixes-and-iam.md).
   config: {}
   secretEnv: []
   secretMounts: []
@@ -330,7 +330,7 @@ receiver:
 # names its profiles, such as `security: {frameworks: [security]}`. A profile
 # may add `preset: attested` (or `standard`) to be kept under a stronger preset
 # than its framework profiles need; asking for a weaker one is refused. See
-# docs/audit/explanation/which-profiles-to-compose.md for which of the others a
+# docs/concepts/audit/which-profiles-to-compose.md for which of the others a
 # deployment should compose, and what each costs.
 profiles: {}
 
@@ -437,7 +437,7 @@ query:
   tokens: []
   # The grants file (`grants` in the config names /etc/audit/grants.yaml): the
   # issuers trusted to sign callers in, framework profiles, and rules. See
-  # docs/audit/how-to/read-the-trail.md#access. Without an issuer nobody can sign in, and the
+  # docs/guides/audit/connect/read-the-trail.md#access. Without an issuer nobody can sign in, and the
   # service refuses to start.
   grants: {}
   #  issuers:

@@ -15,7 +15,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 )
 
-// TestTheMatrixIsNotStale fails when docs/reference/adapters.md is not what
+// TestTheMatrixIsNotStale fails when docs/reference/sluis/adapters.md is not what
 // the registry says. Fix it with `just adapters-doc`.
 func TestTheMatrixIsNotStale(t *testing.T) {
 	want := Render()

@@ -13,7 +13,7 @@ import (
 )
 
 // Cloudflare is `cloudflare`: sluis as the STS for Cloudflare API tokens and R2
-// credentials (docs/how-to/cloudflare-tokens.md). An account names the minter
+// credentials (docs/guides/sluis/cloudflare-tokens.md). An account names the minter
 // credential sluis holds; a preset names a disabled prototype token in that
 // account whose policies and condition are the rights a minted token has.
 type Cloudflare struct {

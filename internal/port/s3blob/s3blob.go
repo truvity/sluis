@@ -1,4 +1,4 @@
-// Package s3blob is the S3 adapter of port.Blob (docs/explanation/ports.md, "Blob"):
+// Package s3blob is the S3 adapter of port.Blob (docs/concepts/sluis/ports.md, "Blob"):
 // whole objects under one bucket and one key prefix, for the status reports
 // and the directory snapshots.
 //

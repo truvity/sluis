@@ -11,7 +11,7 @@ import (
 // that still sets one believes it is configuring something, and an unknown one
 // ignored is the silence docs/decisions/0007 and 0032 exist to end.
 //
-// Each names what replaces it. docs/reference/configuration.md carries the same
+// Each names what replaces it. docs/reference/sluis/configuration.md carries the same
 // table, and a test holds the two to one another.
 
 // retiredCommon are retired for every binary that read them, with the same
@@ -186,7 +186,7 @@ func RefuseRetired(binary string, environ []string) error {
 		}
 		fmt.Fprintf(&b, "%s (now %s)", name, retired[name])
 	}
-	b.WriteString(". Remove them and put the setting in the file: docs/reference/configuration.md has the mapping")
+	b.WriteString(". Remove them and put the setting in the file: docs/reference/sluis/configuration.md has the mapping")
 	return fmt.Errorf("%s", b.String())
 }
 
@@ -194,10 +194,10 @@ func RefuseRetired(binary string, environ []string) error {
 // went. A v2 document that still names one is refused with this message rather
 // than the schema's bare "not a key this service reads": the person reading it
 // is migrating, and needs the new place. A v1 document (no apiVersion) is
-// converted instead (docs/reference/configuration.md, "apiVersion").
+// converted instead (docs/reference/sluis/configuration.md, "apiVersion").
 // retiredExports is what a document that still has exports is told.
 const retiredExports = "retired (ADR 0041): the exports controller is gone; a consumer reads the typed document at " +
-	"<root>/external/<kind>/<id> (docs/reference/secrets.md, \"The external documents\")"
+	"<root>/external/<kind>/<id> (docs/reference/sluis/secrets.md, \"The external documents\")"
 
 var retiredKeys = map[string]map[string]string{
 	"serve": {

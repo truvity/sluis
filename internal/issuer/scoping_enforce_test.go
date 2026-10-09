@@ -128,7 +128,7 @@ func TestGroupsScopingEnforceScopesTheExchangeToken(t *testing.T) {
 // `/userinfo` is keyed by the presented ACCESS token, not by a fresh
 // policy evaluation -- so it has to be scoped by that SAME token's own
 // audience, or a caller could recover the unscoped list with one extra
-// call. docs/reference/policy.md#groups-in-a-token-scoping names this
+// call. docs/reference/sluis/policy.md#groups-in-a-token-scoping names this
 // explicitly as the bypass enforce must close.
 func TestGroupsScopingEnforceScopesUserinfo(t *testing.T) {
 	t.Parallel()
@@ -151,7 +151,7 @@ func TestGroupsScopingEnforceScopesUserinfo(t *testing.T) {
 // dropped group is the steady state under enforce rather than news on
 // every token. This is what lets an operator turn it on only when
 // diagnosing a missing role, per
-// docs/how-to/turn-enforce-on.md.
+// docs/guides/sluis/turn-enforce-on.md.
 func TestGroupsScopingEnforceLogsAtDebugNotInfo(t *testing.T) {
 	t.Parallel()
 	server, iss, rec := serveScoping(t, adaDirectory(), issuer.GroupsScopingEnforce, "")

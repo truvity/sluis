@@ -4,7 +4,7 @@
 
 Two products, **sluis** and **audit**, plus the shared **storage** module,
 in one repository with one tag. Every deliverable is installable or importable
-alone; [artifacts](docs/reference/artifacts.md) lists them all.
+alone; [artifacts](docs/reference/sluis/artifacts.md) lists them all.
 
 ```
 cmd/sluis                 the one binary and image: `serve` (the
@@ -12,7 +12,7 @@ cmd/sluis                 the one binary and image: `serve` (the
                           the login page, the console, what it records
                           to the audit trail, and the GitHub and Slack
                           controllers as loops inside it, ADR 0037 and
-                          docs/explanation/one-process.md), and `migrate`
+                          docs/concepts/sluis/one-process.md), and `migrate`
                           (copies the State between storages, ADR 0031)
 cmd/resource-proxy        the sidecar that fronts a stock MCP server
                           with a resource server's front door
@@ -108,7 +108,7 @@ the dependency; run it on its own with `just vuln`, the same way
   nothing adds it afterwards. A patch cut only for dependency bumps has no heading. A change
   to `internal/audit/catalogue/roster.yaml` needs a new catalogue `version`
   and its `testdata/released/roster-<version>.yaml` fixture in the same pull
-  request ([extending.md](docs/how-to/extend.md#7-an-audit-action)).
+  request ([extending.md](docs/guides/sluis/extend.md#7-an-audit-action)).
 - **Rebase-merge only.** Branch from `master`, never stack pull requests.
 - **Generated code is committed.** `just generate` rebuilds `gen/` from
   `proto/`; CI does not run buf. A contract change and its generated code
@@ -177,7 +177,7 @@ needs a real corporate OAuth client, so the code flow and token exchange
 are exercised by the tests rather than by hand.
 
 The console's rules are in
-[docs/explanation/design.md](docs/explanation/design.md), under "The
+[docs/concepts/sluis/design.md](docs/concepts/sluis/design.md), under "The
 console": two
 mirrored sides, every name a link, one meaning per visual form (a name is
 a link, a chip is a state and nothing else, facts are a label over a
@@ -194,10 +194,10 @@ rather than the pixels for anything animated.
 
 The store and runtime are being refactored to use stable ports (see
 [0026](docs/decisions/0026-two-platforms-permanently-kubernetes-and-aws-lambda.md)–[0032](docs/decisions/0032-one-configuration-file-one-binary-one-chart.md)
-and [docs/explanation/ports.md](docs/explanation/ports.md)). During this migration:
+and [docs/concepts/sluis/ports.md](docs/concepts/sluis/ports.md)). During this migration:
 
 - New features must read and write state only through the ports in
-  [docs/explanation/ports.md](docs/explanation/ports.md), never through new
+  [docs/concepts/sluis/ports.md](docs/concepts/sluis/ports.md), never through new
   ConfigMap/Secret writes or new Valkey keys.
 - New configuration goes into the configuration file (ADR 0032), not new
   environment variables.
@@ -209,23 +209,23 @@ The documents are the authority, and decisions and their dates are
 recorded in the repository — in the design documents themselves, and in
 the pull request that made the change; when a document and a pull
 request disagree, the document wins and the pull request gets a comment.
-Read in this order: `docs/explanation/trust.md`
+Read in this order: `docs/concepts/sluis/trust.md`
 (the rule under everything — two trust anchors chosen by scope, `groups`
-as the one vocabulary), `docs/how-to/connect/service-to-service.md` (the how-to
-that rule produces), `docs/explanation/integrations.md` (every case with its
+as the one vocabulary), `docs/guides/sluis/connect/service-to-service.md` (the how-to
+that rule produces), `docs/concepts/sluis/integrations.md` (every case with its
 anchor), then the design of whatever you touch. `docs/reference/*` says
 exactly what each battery exposes; `CHANGELOG.md` says what exists today.
 
 The service is one binary that runs in a cluster or on AWS Lambda
-(`docs/sluis/deployment/aws-lambda.md`). By now: several directories connected, the
+(`docs/get-started/sluis/deployment/aws-lambda.md`). By now: several directories connected, the
 policy rendered from the installation's access matrix, clusters, AWS
 accounts and CI on the issuer, resources and client-described clients in
 the policy, the GitHub and Slack controllers acting in real organisations and workspaces, runner
 Apps from the console, the audit trail kept by audit (the second product in this
-repository, `docs/audit/`), and the console's state held in the secrets store
+repository, `docs/*/audit/`), and the console's state held in the secrets store
 (SSM layout v4, `internal/` and `external/`; the legacy Kubernetes store is five
-Secrets, see `docs/how-to/back-up-and-restore.md`) and the Slack state. The conformance run at
-1.0 is in [docs/explanation/conformance-findings.md](docs/explanation/conformance-findings.md).
+Secrets, see `docs/guides/sluis/operate/back-up-and-restore.md`) and the Slack state. The conformance run at
+1.0 is in [docs/concepts/sluis/conformance-findings.md](docs/concepts/sluis/conformance-findings.md).
 [CHANGELOG.md](CHANGELOG.md) is the record of what exists at each
 version; read the newest entries before the design documents, which
 describe the shape rather than the latest release.
@@ -239,7 +239,7 @@ call; verifying another cluster's key set directly; minting a structured
 roles claim beside `groups`; re-mapping group names in a library; a
 ConfigMap watch instead of a `checksum/policy` rollout. Naming a group is
 its own set of anti-patterns, out of this file's scope — see
-[docs/reference/taxonomy.md](docs/reference/taxonomy.md).
+[docs/reference/sluis/taxonomy.md](docs/reference/sluis/taxonomy.md).
 
 ## Releasing
 
@@ -257,7 +257,7 @@ To cut a release `vX.Y.Z` (or a pre-release `vX.Y.Z-rc.1`):
 3. The workflow does the rest, below. `just release-check vX.Y.Z` rehearses it.
 
 The release workflow, on a `v*` tag, publishes everything listed in
-[artifacts](docs/reference/artifacts.md), all stamped with the tag: sluis (through
+[artifacts](docs/reference/sluis/artifacts.md), all stamped with the tag: sluis (through
 the shared `release-public` workflow), then the `audit` job (`audit/.goreleaser.yaml`,
 `just audit-release`) onto the same GitHub release, the TypeScript packages, and
 last the `modules` job, which tags every other Go module (`hack/modules.py list`

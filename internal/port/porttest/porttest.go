@@ -1,4 +1,4 @@
-// Package porttest is the conformance suite of docs/explanation/ports.md. It is
+// Package porttest is the conformance suite of docs/concepts/sluis/ports.md. It is
 // written once against the port interfaces and run against every adapter:
 // the in-memory one, the legacy one and DynamoDB, where it is the gate for adding or changing an adapter and
 // for the migration tool.

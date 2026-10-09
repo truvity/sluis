@@ -10,7 +10,7 @@ import (
 
 // Composition is what a deployment declares: a profile name and the framework profiles it
 // is made of. The name is also the first component of the key every copy lands
-// under (records/<profile>/..., docs/audit/reference/bucket-contract.md), so it has
+// under (records/<profile>/..., docs/reference/audit/bucket-contract.md), so it has
 // no slash in it.
 type Composition struct {
 	Name       string   `json:"name"`

@@ -9,7 +9,7 @@
 // reading them. That is the whole design goal, and it is why there is no
 // expression language, no per-client rewriting and no precedence order:
 // each of those makes a token's shape something you have to execute
-// rather than read. The reference is docs/reference/policy.md.
+// rather than read. The reference is docs/reference/sluis/policy.md.
 package policy
 
 import (
@@ -32,7 +32,7 @@ import (
 // on thing, in scope. `dev:k8s:admin` is admin of dev's Kubernetes;
 // `prod:shop:deployer` deploys the shop project on prod;
 // `all:access-roster:operator` operates this hub across every directory
-// it serves. The reasoning is in docs/explanation/trust.md under "Naming";
+// it serves. The reasoning is in docs/concepts/sluis/trust.md under "Naming";
 // what matters here is that the name is the whole of the fact, carried
 // verbatim into a token's `groups` claim and out of it into a relying
 // party's own bindings, re-mapped nowhere in between.
@@ -268,8 +268,8 @@ type Policy struct {
 	// unchecked. Declared, it makes every concrete grant anywhere in this
 	// file (see [Policy.checkGrantName]) and every mapping wildcard in
 	// [Policy.Groups] (see [Policy.checkGroupKey]) a claim the loader can
-	// check instead of trust. See docs/reference/policy.md#vocabulary and
-	// docs/reference/taxonomy.md.
+	// check instead of trust. See docs/reference/sluis/policy.md#vocabulary and
+	// docs/reference/sluis/taxonomy.md.
 	Vocabulary *Vocabulary `yaml:"vocabulary,omitempty"`
 	// Groups is every internal group name an installation uses, and how a
 	// caller comes to be in it. A key may be a mapping wildcard — `*` in
@@ -610,7 +610,7 @@ type Client struct {
 	// accepts) so its tokens carry `env.ssh.admin` instead of
 	// `env:ssh:admin` -- a name opkssh's own splitting can actually read.
 	// See docs/decisions/0015-a-per-audience-groups-delimiter-for-opkssh.md
-	// and docs/reference/policy.md#groups-delimiter-per-audience-opkssh-interop.
+	// and docs/reference/sluis/policy.md#groups-delimiter-per-audience-opkssh-interop.
 	GroupsDelimiter string `yaml:"groups_delimiter,omitempty"`
 	// Session is the class of the refresh chains this client opens:
 	// [SessionInteractive] (absent) or [SessionAgent]. An agent chain is

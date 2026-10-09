@@ -6,8 +6,8 @@
 ## Context
 
 Every grant is named `<scope>:<thing>:<role>`
-([design/trust.md#naming](../explanation/trust.md#naming),
-[reference/policy.md#naming](../reference/policy.md#naming)), and the
+([design/trust.md#naming](../concepts/sluis/trust.md#naming),
+[reference/policy.md#naming](../reference/sluis/policy.md#naming)), and the
 loader has never checked what a segment MEANS — only that the shape has
 three non-empty parts. `prod:k8s:admin` and `prod:k8s:adimn` are both
 accepted; the second is a typo that grants nobody anything and is
@@ -44,14 +44,14 @@ when one does not fit.
 `operator` → `viewer`) or a branch (`admin` implying both `deployer` and
 `operator`) is expressed by what each role's own entry says, and the
 transitive closure is computed once, in evaluation
-([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/policy-groups.md#groups-to-token-by-deep-merge)),
+([reference/policy-groups.md#groups-to-token-by-deep-merge](../reference/sluis/policy-groups.md#groups-to-token-by-deep-merge)),
 so a `requires` gate, a token's `groups` claim and GitHub team
 reconciliation all see the expanded set without any of them knowing
 inheritance exists. It never crosses scope: holding a role on `all`
 never implies the same role on an environment, and the reverse never
 holds either — the two are unrelated axes, and mixing them is exactly the
 mistake `all` invites when used for a thing that is not once-per-installation
-([taxonomy.md](../reference/taxonomy.md)).
+([taxonomy.md](../reference/sluis/taxonomy.md)).
 
 **Mapping wildcards are a `groups`-key-only shorthand, not a new kind of
 grant.** `*` in the scope and/or thing position of a `groups` key
@@ -146,7 +146,7 @@ already has both. Rule 4's own text says it plainly: a token sees only
 concrete names.
 
 **A closed role list in code**, shipping `viewer`/`operator`/`admin` as
-the only roles this schema knows, the way [`Client.Kind`](../reference/policy.md)
+the only roles this schema knows, the way [`Client.Kind`](../reference/sluis/policy.md)
 is a fixed set. Rejected: a role ladder is exactly the part of this
 schema that must vary per installation and per thing — argocd's ladder
 branches, grafana's does not — and a role list fixed in code would mean

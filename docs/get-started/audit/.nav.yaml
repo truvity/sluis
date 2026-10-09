@@ -1,0 +1,6 @@
+nav:
+  - README.md
+  - in-cluster.md
+  - aws-lambda.md
+  - kubernetes.md
+  - sluis.md

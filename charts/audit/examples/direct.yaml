@@ -4,7 +4,7 @@
 # This is what an application's chart sets under the `audit:` key when it takes
 # this chart as a dependency. Everything not named here has a default. Each
 # `config:` block is the binary's own configuration, key for key
-# (docs/audit/reference/configuration.md): the chart passes it through, and the same
+# (docs/reference/audit/configuration.md): the chart passes it through, and the same
 # schema validates it here and when the process starts. A secret is never in
 # one: the file names a secret, `secrets` says they are files under
 # /etc/audit/secrets, and `secretFiles` puts a Secret's key at each name. The

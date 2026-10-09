@@ -1,7 +1,7 @@
 // Package invoke is the Trigger of a deployment that runs as AWS Lambda
 // functions: "this target has work" is an asynchronous invoke of the function
 // that runs the target's pass, with the payload {"kind":"run","target":"<id>"}
-// (docs/reference/lambda.md).
+// (docs/reference/sluis/lambda.md).
 //
 // There is no process to deliver a notification to on Lambda, so Subscribe is
 // unused and does nothing: the function is started by the platform, by this
@@ -171,7 +171,7 @@ func (t *Trigger) invoke(ctx context.Context, function string, payload []byte) e
 // function's process: the platform starts it. The returned stop does nothing.
 func (t *Trigger) Subscribe(func(target string)) (stop func()) { return func() {} }
 
-// The `invoke` adapter of the trigger concern (docs/explanation/ports.md). It works
+// The `invoke` adapter of the trigger concern (docs/concepts/sluis/ports.md). It works
 // on Lambda, where there is no process to subscribe in.
 func init() {
 	port.Register(port.Descriptor{

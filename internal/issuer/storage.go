@@ -1381,7 +1381,7 @@ func (s *Storage) SetUserinfoFromRequest(
 		return err
 	}
 	// An ID token's audience is always the client itself, never a
-	// resource — see docs/reference/policy.md#signing-algorithm-per-audience
+	// resource — see docs/reference/sluis/policy.md#signing-algorithm-per-audience
 	// and [signingAudience]'s own doc comment.
 	clientID := request.GetClientID()
 	s.reportGroupsScoping(ctx, clientID, clientID, subject, result.Groups)
@@ -1582,7 +1582,7 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	// by this very token's id, so leaving it unscoped here would leave
 	// `/userinfo` answering with everything regardless of what the token
 	// itself carries — exactly the bypass
-	// docs/reference/policy.md#groups-in-a-token-scoping warns enforce
+	// docs/reference/sluis/policy.md#groups-in-a-token-scoping warns enforce
 	// must close. For an exchange, claims is [Grant.Claims], already
 	// narrowed once in [Issuer.Exchange]; re-narrowing it here from the
 	// SAME held and the SAME audience is a no-op, not a second opinion.

@@ -15,13 +15,18 @@ import (
 // two jobs. It warns and does not fail: a long reference table is legitimate.
 const maxPageLines = 400
 
+// auditSections are the docs/ sections that hold a directory named audit.
+var auditSections = map[string]bool{"get-started": true, "guides": true, "reference": true, "concepts": true}
+
 var (
 	regionOpen  = regexp.MustCompile(`^<!-- generated: ([a-z0-9-]+) -->\s*$`)
 	regionClose = regexp.MustCompile(`^<!-- /generated -->\s*$`)
 )
 
 // root is the audit module, two levels above this package. Its documentation
-// lives in the repository's docs/audit tree, one level above the module.
+// lives in the repository's docs tree, one level above the module, in the
+// audit directory of each of its four sections (get-started, guides,
+// reference, concepts).
 func root(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("..", ".."))
@@ -34,11 +39,20 @@ func root(t *testing.T) string {
 func docPages(t *testing.T) []string {
 	t.Helper()
 	var pages []string
-	err := filepath.WalkDir(filepath.Join(root(t), "..", "docs", "audit"), func(path string, d os.DirEntry, err error) error {
+	docs := filepath.Join(root(t), "..", "docs")
+	err := filepath.WalkDir(docs, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() && strings.HasSuffix(path, ".md") {
+		if d.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(docs, path)
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		if len(parts) > 2 && parts[1] == "audit" && auditSections[parts[0]] {
 			pages = append(pages, path)
 		}
 		return nil
@@ -53,7 +67,7 @@ func docPages(t *testing.T) []string {
 }
 
 // TestPageLength warns about a page over maxPageLines. CHANGELOG.md lives in
-// the module root and is not under docs/audit/, so it is exempt by position.
+// the module root and is not under docs/, so it is exempt by position.
 func TestPageLength(t *testing.T) {
 	for _, page := range docPages(t) {
 		raw, err := os.ReadFile(page)

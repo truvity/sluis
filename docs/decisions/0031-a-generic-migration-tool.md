@@ -6,7 +6,7 @@
 > **Amended (2026-10-04).** The NATS step of the order is gone with the adapter.
 > The order is Kubernetes objects, then DynamoDB with the credentials in
 > the Secrets port, and secrets are no longer rewrapped but written to the
-> destination's Secrets ([operations/migrate.md](../how-to/migrate-state.md)). The
+> destination's Secrets ([operations/migrate.md](../guides/sluis/migrate/migrate-state.md)). The
 > text below is the decision as it was taken.
 
 ## Context
@@ -65,7 +65,7 @@ attributed or reverted separately.
 ## Implementation note (B3-4)
 
 `sluis migrate --from <config> --to <config>` is built
-([the runbook](../how-to/migrate-state.md)). Where this note and the text above
+([the runbook](../guides/sluis/migrate/migrate-state.md)). Where this note and the text above
 differ, this is what exists.
 
 - **Each end is a `serve` configuration file**, the one the Deployment reads, not
