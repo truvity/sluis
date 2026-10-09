@@ -88,6 +88,19 @@ func resourceIndicators(resources func(string) (policy.Resource, bool), next htt
 			refuseTarget(w, r, err.Error())
 			return
 		}
+		// The scheme and the host are case-insensitive (RFC 3986 6.2.2.1,
+		// RFC 8707), so `HTTPS://MCP.Example` names the same service as
+		// `https://mcp.example`; the path is not folded. What was
+		// declared as spelled is still matched, so a policy that already
+		// holds a mixed-case id keeps working.
+		if folded := policy.CanonicalResourceID(wanted); folded != wanted {
+			if _, ok := resources(folded); ok {
+				wanted = folded
+			}
+		}
+		// Everything else stays exact: a trailing slash is part of the
+		// path, so `https://mcp.example` and `https://mcp.example/` are
+		// different resources, as the policy holds them to be.
 		if _, ok := resources(wanted); !ok {
 			// Naming it, because the alternative is somebody comparing
 			// two URLs by eye for an afternoon.
@@ -134,5 +147,33 @@ func refuseTarget(w http.ResponseWriter, r *http.Request, description string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error":             string(oidc.InvalidTarget),
 		"error_description": description,
+	})
+}
+
+// defaultScope supplies `scope=openid` on an authorization request that
+// names none.
+//
+// The library refuses an empty scope outright (`invalid_request`, "The
+// scope of your request is missing"). A pure OAuth client -- a Model
+// Context Protocol client reading a resource server whose RFC 9728
+// metadata lists no scope sends none -- is blocked there for no reason
+// that serves anybody: `scope` is OPTIONAL in RFC 6749, and an
+// authorization server may apply a default.
+//
+// `openid` is the default, whether or not the request names a resource:
+// this is an OpenID provider, and a request that asks for nothing gets
+// the one scope that is always valid here. The access token is the same
+// either way; `openid` only also makes an ID token available. A request
+// that does carry a scope is never touched.
+func defaultScope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == authorizePath && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+			if err := r.ParseForm(); err == nil && strings.TrimSpace(r.Form.Get("scope")) == "" {
+				// The library reads r.Form, which ParseForm has filled.
+				r.Form.Set("scope", oidc.ScopeOpenID)
+			}
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }

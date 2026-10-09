@@ -82,6 +82,11 @@ type Pending struct {
 	// a token for the client itself. It decides which absolute session
 	// limit a silent sign-in is held to.
 	Resource string
+	// ResourceName is what the page calls that resource: its declared
+	// `display_name`, else the resource URL. Empty when there is no
+	// resource. Like [Pending.Client], from the policy and never from
+	// the query string.
+	ResourceName string
 	// Client is what the policy declares about that client, read when the
 	// request is looked up. The sign-in page names the application from
 	// it -- its `display_name` and `description` -- and from nothing the
@@ -353,6 +358,10 @@ func destination(pending Pending) string {
 
 	if description := strings.TrimSpace(pending.Client.Description); description != "" {
 		fmt.Fprintf(&out, `<p class="note">%s</p>`, html.EscapeString(description))
+	}
+
+	if pending.ResourceName != "" {
+		fmt.Fprintf(&out, `<p>to access <strong>%s</strong></p>`, html.EscapeString(pending.ResourceName))
 	}
 
 	host, loopback := returnHost(pending.RedirectURI)

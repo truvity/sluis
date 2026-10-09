@@ -131,6 +131,10 @@ func agentConsentBody(pending Pending, who Authenticated, token, nonce string) s
 		fmt.Fprintf(&out, `<p class="note">%s</p>`, html.EscapeString(description))
 	}
 
+	if pending.ResourceName != "" {
+		fmt.Fprintf(&out, `<p>It asks for access to <strong>%s</strong>.</p>`, html.EscapeString(pending.ResourceName))
+	}
+
 	if target, err := documentURL(pending.ClientID); err == nil {
 		fmt.Fprintf(&out, `<p class="note">It describes itself from <span class="host">%s</span></p>`,
 			html.EscapeString(target.Scheme+"://"+target.Host))
