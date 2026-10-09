@@ -125,6 +125,8 @@ jobs:
       deployment: /etc/audit/deployment.yaml
       keys:
         adapter: kms
+        # Names the installation in the encryption context; stable, not secret.
+        instance: audit
         seal:
           key: alias/audit-seal
       sink:
