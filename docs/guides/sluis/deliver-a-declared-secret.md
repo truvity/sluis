@@ -1,29 +1,16 @@
 # Deliver a declared Secret with external-secrets
 
-## Purpose
-
-Put a service-account key into the namespace for a [declared workspace](../../reference/sluis/declared-workspaces.md) with
-external-secrets. It is one way to do it, not a dependency of the service: any producer that creates the Secret works,
-because the chart lets you name both the Secret and its keys.
-
-## Preconditions
-
-- external-secrets is installed and a `ClusterSecretStore` reaches the store that holds the key.
-- The workspace is declared with `keySecret: directory/<id>/key`, and a `secrets` entry in the chart's values maps that name
-  to the Secret and key below (`{name: directory/<id>/key, secretName: example-sa-key, key: key.json}`).
+Put a service-account key into the namespace of a [declared workspace](../../reference/sluis/declared-workspaces.md). Any producer that creates the Secret works.
 
 ## Before you start
 
-- **The key is a credential.** The store that holds it must be trusted with a workspace's service account.
-- **A restored or rotated key needs the service to read it again.** The chart's `secrets` projection is read on every use,
-  so a rotated Secret takes effect without a restart.
-- **Preview before every apply, and read the preview.**
+- Install external-secrets with a `ClusterSecretStore` that reaches the store holding the key.
 
-## Steps
+- Declare the workspace with `keySecret: directory/<id>/key`, and map that name in the chart's `secrets` values: `{name: directory/<id>/key, secretName: example-sa-key, key: key.json}`.
 
-### 1. Apply the ExternalSecret
+- Trust the store with a workspace's service account. A rotated Secret takes effect without a restart.
 
-**Run**
+## 1. Apply the ExternalSecret
 
 ```yaml
 apiVersion: external-secrets.io/v1
@@ -45,15 +32,17 @@ spec:
         key: /path/in/your/store/example-sa-key-json
 ```
 
-**Expect** `kubectl -n <namespace> get externalsecret example-sa-key` reports `SecretSynced`.
+## 2. Verify
 
-**Verify** `kubectl -n <namespace> get secret example-sa-key -o jsonpath='{.data.key\.json}' | base64 -d | jq .client_email`
-prints the service account.
+```sh
+kubectl -n <namespace> get externalsecret example-sa-key
+kubectl -n <namespace> get secret example-sa-key -o jsonpath='{.data.key\.json}' | base64 -d | jq .client_email
+```
 
-**Rollback**: delete the `ExternalSecret`; with `creationPolicy: Owner` the Secret goes with it.
+The first reports `SecretSynced`. The second prints the service account. The console shows the workspace healthy after its first probe.
 
-## Afterwards
+Do not pull a Secret the service writes itself with an `ExternalSecret` ([back up and restore](operate/back-up-and-restore.md)).
 
-- The console shows the declared workspace healthy after its first probe.
-- Do not use a pulling `ExternalSecret` for a Secret the service writes itself ([back up and
-  restore](operate/back-up-and-restore.md)): the service is the writer.
+## Roll back
+
+Delete the `ExternalSecret`. With `creationPolicy: Owner` the Secret goes with it.

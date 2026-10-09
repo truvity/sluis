@@ -99,7 +99,7 @@ the program that manages the organisation — with what each is for and why
 they are separate identities. It is values to read and copy, not a
 default: creating an App is an owner of the organisation confirming a
 manifest
-([guide](../../docs/guides/sluis/connect/github-apps-catalogue.md#a-default-set)).
+([guide](../../docs/guides/sluis/connect/github-apps-catalogue.md#1-declare-an-app)).
 
 `slackApps` declares Slack Apps the way `githubApps.catalogue` declares GitHub
 Apps: an operator creates each from
@@ -113,7 +113,7 @@ secret store
 workspaces it changes are `policy.controllers.slack.enabledWorkspaces`): it needs `exchange.clusters`
 to name this cluster and `console.mount` to be set, and egress to `slack.com:443` from the fleet's own
 policy
-([guide](../../docs/guides/sluis/connect/slack-workspace.md#running-the-controller)).
+([guide](../../docs/guides/sluis/connect/slack-workspace.md#2-run-the-controller)).
 `slackState.push` is a recovery copy of the Slack state: two `PushSecret`s, one
 for `<release>-slack-credentials` at `remoteKey` and one for the mirror
 `<release>-slack-records` at `recordsRemoteKey` (the two keys must differ), with

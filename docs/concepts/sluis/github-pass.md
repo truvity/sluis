@@ -22,7 +22,7 @@ For each organisation the policy binds:
    addresses in its verified domains count as well; on every other plan
    GitHub discloses no member's address, and a link is the only way. A
    member nobody linked whose public profile shows a work address the
-   directory has, live, is [linked from the profile](../../guides/sluis/connect/github-account-links.md#where-a-link-comes-from).
+   directory has, live, is [linked from the profile](../../guides/sluis/connect/github-account-links.md#link-sources).
    One account with addresses in two workspaces is one member. An address
    two accounts claim is linked to neither, and held.
 4. **What to change.**

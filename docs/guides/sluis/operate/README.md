@@ -1,7 +1,6 @@
 # Operations
 
-Recurring and incident tasks for a running installation. The runbooks already live under
-[how-to](day-two.md); this page is the way in.
+Recurring and incident tasks for a running installation. [Day two](day-two.md) lists every task page.
 
 | When | Page |
 |---|---|

@@ -53,5 +53,5 @@ installation's request if one appears, and presses *Re-check*.
 Audit records: `roster.catalogue_app.created`, `.installed` and
 `.disconnected`, each naming the App by catalogue id and carrying GitHub's
 id; and `roster.github_token.minted` for every installation token asked for
-([audit](../../guides/sluis/connect/github-app-tokens.md#audit)). Nothing is left behind by minting: tokens are never
+([audit](../../guides/sluis/connect/github-app-tokens.md#verify)). Nothing is left behind by minting: tokens are never
 kept.

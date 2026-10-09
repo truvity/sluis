@@ -6,8 +6,9 @@ Put a login, a session and a forwarded bearer in front of a console that cannot 
 
 ## What you need
 
-- Envoy Gateway (the field names below are checked against v1.9), a Secret holding the client's secret, and an `HTTPRoute`
-  the console owns (a `SecurityPolicy` targets a route, never a hostname).
+- Envoy Gateway, with field names checked against v1.9.
+- A Secret holding the client's secret.
+- An `HTTPRoute` the console owns. A `SecurityPolicy` targets a route, never a hostname.
 
 ## The policy snippet
 

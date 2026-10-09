@@ -1,8 +1,6 @@
 # Day-two operations
 
-Everything here is visible in the console. A shell is needed for the export, a restore, a migration, and reading the log
-lines of an installation with no audit trail connected. Each page is one task, in the runbook shape: purpose,
-preconditions, known traps, steps with a way to verify and to roll back, and what to check afterwards.
+Each page is one task. A shell is needed for the export, a restore, a migration, and the log lines of an installation with no audit trail connected.
 
 | I need to | Page |
 |---|---|
@@ -29,5 +27,4 @@ preconditions, known traps, steps with a way to verify and to roll back, and wha
 | see what per-audience group scoping would change | [Read the groups-scoping report](../read-the-groups-scoping-report.md) |
 | enforce per-audience group scoping | [Turn enforce on](../turn-enforce-on.md) |
 
-Two traps apply to every page: **preview before every apply and read the preview**, and **a Secret or ConfigMap is a
-projection, not a live source** ([rotate keys and credentials](rotate-keys-and-credentials.md)).
+Preview before every apply and read the preview. A Secret or ConfigMap is a projection, not a live source: see [rotate keys and credentials](rotate-keys-and-credentials.md).

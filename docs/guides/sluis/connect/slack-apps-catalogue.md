@@ -1,22 +1,16 @@
 # A catalogue of Slack Apps
 
-> **Built.** Declaring, creating, installing and reinstalling ship; there
-> is nothing to disconnect here yet (see [Leaving](#leaving)).
+Declare Slack Apps in values and create them from the console, as in the [GitHub App catalogue](github-apps-catalogue.md).
 
-**Anchor:** an **app configuration token**, pasted by an operator for the
-one call that creates the App. It is used once and never kept. Everything
-after that is two clicks by an owner of the workspace: Slack hands the bot
-token to this service, and nothing is typed.
+## Before you start
 
-A deployment that acts in Slack needs an App per purpose: one that keeps
-channels in step with groups, one that posts notifications. Each is the
-same chore by hand: create an App in Slack's console, pick scopes, install
-it, copy the bot token somewhere. The Slack catalogue is the
-[GitHub App catalogue](github-apps-catalogue.md)'s twin: each App is a
-declaration in the deployment's values, and creating and installing it is
-done from the console.
+- Connect the `workspace` first on the Workspaces tab, or Create and Install fail with *connect the workspace first*.
 
-## Declaring an App
+- Set `config.store: kubernetes`.
+
+- The service refuses to start on a bad entry: unknown key, duplicate id, bad scope, or an undeclared `workspace`.
+
+## 1. Declare an App
 
 ```yaml
 slackApps:
@@ -33,135 +27,35 @@ slackApps:
       remoteKey: platform/slack-apps/sync
 ```
 
-| Field | Meaning |
-|---|---|
-| `id` | the App's name **here**: where it is kept and what the console names. Lower-case letters, digits and dashes, at most 32 |
-| `workspace` | a key of the policy's `slack.workspaces` (lowercase letters, digits and `-`, at most 40), **already connected** on the Workspaces tab of the console's Slack area. The App is installed into that workspace, and **only** that one: the install is refused when Slack says the token belongs to another team than the one recorded when the workspace was first installed |
-| `name` | the App's name in Slack. Empty is `<workspace>-<id>`, cut to 35 characters; a declared name over 35 is refused |
-| `description` | Slack's short description; at most 140 characters |
-| `botScopes` | the bot scopes the App asks for, by Slack's names (`channels:read`, `users:read.email`, `conversations.connect:write`, ...). Listed once each |
-| `push` | optional: copy this App's bot token to a secret store. See [Projecting one App's bot token](#projecting-one-apps-bot-token-to-a-secret-store) |
+The chart renders this into `ConfigMap <release>-slack-apps-catalogue`, read once at start. Scopes use Slack's names, such as `conversations.connect:write`.
 
-The catalogue is rendered into `ConfigMap <release>-slack-apps-catalogue`,
-mounted, and read once at start; a change rolls the service out. **The
-service refuses to start** on an unknown key, a duplicate id, a scope that
-is not a scope name, a name or description Slack would refuse, or an entry
-whose `workspace` the policy's `slack.workspaces` does not name. Add the
-workspace's key to the policy first, then connect it on the console's Slack
-area: the policy never carries its team, owner or domains (see
-[where they come from](../../../concepts/sluis/slack-pass.md#where-a-workspaces-team-owner-and-domains-come-from)).
-Until the workspace is connected, and has recorded its team at its first
-install, Create and Install are refused with *connect the workspace first*.
+## 2. Get a configuration token
 
-Needs `config.store: kubernetes`: with any other store a bot token would
-not survive a restart, and the console says so instead of creating an App.
+On [api.slack.com/apps](https://api.slack.com/apps), signed in to the owning workspace, choose **Generate Token** under **Your App Configuration Tokens**. Copy the **Access Token** (`xoxe.xoxp-`). It expires in 12 hours, is used once and is never stored or logged.
 
-## The app configuration token
+## 3. Create and install
 
-Slack creates an App through its API only for a caller holding an **app
-configuration token**. It is not the bot token, and it is not a credential
-of this service: it belongs to a person and a workspace, and it expires.
+On the **Apps** tab (`#/slack/apps`):
 
-To get one:
+1. **Create.** Paste the token. The manifest has the bot user, the `botScopes` and one redirect URL, with no events or interactivity. The App reads *created, not installed*.
+2. **Install.** An owner approves on Slack, and the console exchanges the code for the bot token. A token for another team is revoked and the install refused. The App reads *installed*.
 
-1. Open [api.slack.com/apps](https://api.slack.com/apps), signed in to the
-   workspace that will own the App.
-2. Scroll to **Your App Configuration Tokens** and choose **Generate
-   Token**, for that workspace.
-3. Copy the **Access Token** (it starts `xoxe.xoxp-`). Ignore the refresh
-   token.
+When you add a scope the row says **scopes missing**. **Reinstall** needs a fresh token to update the manifest, then an owner approves.
 
-It **expires in 12 hours** and this service uses it **once**, for the call
-that creates the App (or, for a [reinstall](#reinstalling), the call that
-updates it). Paste a fresh one each time; throw it away afterwards.
+The owning directory's operators, or the installation-wide operator, may do this ([ownership](../../../reference/sluis/policy-ownership.md#who-owns-a-slack-workspace)).
 
-## Creating and installing
+## 4. Find the credentials
 
-On the **Apps** tab of the console's Slack area (`#/slack/apps`) each declared App is a row with its
-state and the step it waits for.
-
-1. **Create.** The operator pastes a configuration token into the dialog.
-   The service builds the App's manifest from the entry (the bot user, the
-   `botScopes`, the console's callback as the **only** redirect URL, and
-   nothing else: no event subscriptions, no interactivity, no socket),
-   creates the App in Slack, and keeps its **client id and client secret**
-   in the Secret below. The state is *created, not installed*: there is
-   no bot token yet.
-2. **Install.** The console sends the browser to Slack's authorize page for
-   the workspace the entry names. An owner of that workspace approves, and
-   Slack sends the browser back to the console, which exchanges the one-time
-   code for the **bot token**. The token is kept only if it belongs to the
-   team recorded for the entry's `workspace` when it was first installed; a
-   token for any other team is revoked and the install is refused, with a
-   record in the audit trail. The state is *installed*.
-
-The flow is pinned to the browser that started it by a cookie and a signed
-state that carries the operator who began it and the App it is for, exactly
-as the GitHub connect flow is. The callback asks the role question again,
-of whoever is signed in then.
-
-### Reinstalling
-
-Slack grants scopes only at install time, and changes an App's scopes only
-for a configuration token. So when you add a scope to `botScopes` after the
-App was created, the row says **scopes missing** and offers **Reinstall**:
-
-- the dialog asks for a configuration token, which updates the App's
-  manifest once (Slack keeps the App, its id and its client credentials);
-- then an owner approves the new scopes in Slack, and the new bot token
-  replaces the old one.
-
-Without the token a reinstall would grant what it granted before, so the
-console does not offer to skip it. A reinstall where the App already
-carries every declared scope needs no token at all: it is just approved
-again.
-
-## Who may do it
-
-Creating, installing and reinstalling need the **operator** role: the
-installation-wide operator, or the scoped operator of the directory
-workspace recorded as the Slack workspace's owner when it was connected (see
-[who owns a Slack workspace](../../../reference/sluis/policy-ownership.md#who-owns-a-slack-workspace)).
-A workspace connected with no owner is operated by the installation-wide
-operator alone. The owner is read from the workspace's connection record, not
-from the policy; only the installation-wide operator changes it. A viewer sees the Apps of the workspaces they may view and
-nothing else, and each row says whether they may operate it.
-
-## Where the credentials are kept
-
-One Secret, `<release>-slack-catalogue-apps`, created empty at start, holds
-every catalogue Slack App under its id:
+The Secret `<release>-slack-catalogue-apps` is created empty at start.
 
 | Key | Holds | Exists |
 |---|---|---|
-| `<id>.record.json` | ids, scopes, who and when; **never a credential** | from Create |
-| `<id>.client_id` | the App's OAuth client id | from Create |
-| `<id>.client_secret` | the App's OAuth client secret | from Create |
-| `<id>.slack_bot_token` | the bot token | from Install, and only then |
+| `<id>.record.json` | Ids, scopes, who and when. Never a credential | From Create |
+| `<id>.client_id` | The OAuth client id | From Create |
+| `<id>.client_secret` | The OAuth client secret | From Create |
+| `<id>.slack_bot_token` | The bot token | From Install only |
 
-The bot token key does not exist until the App is installed, so a copy made
-in between never hands anybody an empty credential.
-
-**The configuration token is in none of these.** It travels in the body of
-one RPC over TLS, is used for one call to Slack, and is dropped: it is not
-written to the Secret, not put in the signed state, not in a log line, an
-error message or an audit record.
-
-## Projecting one App's bot token to a secret store
-
-> **On a State adapter, read the document.** `push` is **deprecated**: it renders a
-> PushSecret over the Kubernetes Secret only the `legacy` storage writes. With
-> `ports.adapter` other than `legacy` and layout v4 the installed App is the `slack/v1` document at
-> `external/slack/<id>`, which the consumer reads with its own grant
-> ([secrets](../../../reference/sluis/secrets.md#the-external-documents),
-> [0041](../../../decisions/0041-the-secret-contract.md)).
-
-`push` makes External Secrets copy **one key**, the bot token, to a store
-and path the entry names: a program that acts in the workspace as the bot
-cannot ask this service for a short-lived token, because Slack has no token
-exchange to ask. What lands in the store **is** the App's token: a second
-durable copy, in the blast radius of the App, rotated as one (reinstall the
-App to mint a new one).
+Slack has no token exchange, so a consumer reads a copy. With a `ports.adapter` other than `legacy` and layout v4, read `external/slack/<id>` ([secrets](../../../reference/sluis/secrets.md#the-external-documents)). `push` is deprecated and applies only to `legacy`:
 
 ```yaml
 push:
@@ -171,41 +65,23 @@ push:
   deletionPolicy: None         # optional: None (default) | Delete
 ```
 
-A consumer reads the property `bot_token` from `remoteKey`; the name is the
-contract. Only that one key is copied: never the record, never the client
-id or secret, never another App's keys. Two entries may not push to one
-`remoteKey` in one store (the chart refuses), and `push` needs
-`config.store: kubernetes`. `push` is a chart-side instruction: it is
-stripped from the rendered catalogue the service reads.
+The consumer reads `bot_token` at `remoteKey`; only that key is copied. Rotate by reinstalling. The chart refuses two entries on one `remoteKey` and `push` without `config.store: kubernetes`.
 
-## Leaving
+## Verify
 
-There is no *Disconnect* here yet. Slack cannot delete an App through this
-flow, so an App you no longer want is deleted in its settings at
-`https://api.slack.com/apps/<app id>` (the console links to it), and its
-keys are removed from the Secret by hand. An entry removed from `slackApps`
-stays listed as *no longer declared*.
+The App reads *installed*. Audit records `roster.slack_app.created`, `.installed` and `.install_refused` carry no token.
 
-## What it leaves behind
-
-| Object | Holds | Written by |
-|---|---|---|
-| ConfigMap `<release>-slack-apps-catalogue` | the declaration, `catalogue.yaml` | the chart, when `slackApps` is not empty |
-| Secret `<release>-slack-catalogue-apps` | every App's record, client credentials and bot token, as above | the service, on Create and Install; created empty at start |
-| PushSecret `<release>-slack-app-<id>` | the copy instruction for one App's bot token | the chart, for each entry carrying `push` |
-
-Audit records: `roster.slack_app.created`, `roster.slack_app.installed` and
-`roster.slack_app.install_refused`, each naming the App by Slack's id and
-the workspace by the policy's key; `installed` carries the team id and the
-scopes Slack granted. No record carries a token.
-
-## Errors
-
-| You see | Because |
+| You see | Fix |
 |---|---|
-| *Slack refused to create the App: invalid_auth* | the configuration token expired (12 hours), was revoked, or is for another workspace's tokens: generate a fresh one |
-| *Slack refused to create the App: invalid_manifest* | Slack did not accept the declaration; the detail says where, usually a name or a scope |
-| *the policy's slack.workspaces does not name workspace ...* | the entry's `workspace` is not a key of the policy. The service refuses this at start, so it means the policy changed under a running service |
-| *The App was installed into workspace T... and the policy names T...* | the owner approved the App in another workspace. Nothing was kept. Remove the App from that workspace in Slack, and install again from the right one |
-| *declares scopes the App was created without* | a scope was added after Create; paste a configuration token so the App can be updated, then reinstall |
-| *This install did not start in this browser* | the callback came back in another browser, profile or window, or after ten minutes: start Install again |
+| `invalid_auth` on create | The configuration token expired, was revoked or is for another workspace. Generate a fresh one |
+| `invalid_manifest` on create | Slack rejected the declaration, usually a name or scope. The detail says where |
+| *the policy's slack.workspaces does not name workspace* | The policy changed under a running service. Restore the key |
+| *installed into workspace T... and the policy names T...* | The owner approved another workspace. Nothing was kept. Remove the App there and install from the right one |
+| *declares scopes the App was created without* | Paste a token and reinstall |
+| *This install did not start in this browser* | Start Install again within ten minutes in the same browser |
+
+## Roll back
+
+There is no **Disconnect**. Delete the App at `https://api.slack.com/apps/<app id>` and remove its keys from the Secret by hand. A removed entry stays listed as *no longer declared*.
+
+Decided in: [ADR 0025](../../../decisions/0025-slack-apps-catalogue-keeps-credentials-mints-none.md).

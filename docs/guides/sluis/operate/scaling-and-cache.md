@@ -1,43 +1,28 @@
 # Scaling and cache
 
-## Purpose
-
-Decide how many replicas to run and what the directory snapshot cache costs.
-
-## Preconditions
-
-- A State every replica shares: `config.ports.adapter: dynamodb` (or the `k8s-aws` preset). Without it, one replica.
+Choose the replica count and size the directory snapshot cache.
 
 ## Before you start
 
-- **Replicas coordinate through the State port, not through each other.** With DynamoDB, every replica reads and writes
-  the same table, so one refresher runs for all of them (a lease), and the snapshots are in the Blob port. The why is in
-  [high availability](../../../concepts/sluis/high-availability.md).
-- **A single replica may run with no shared State** (`memory`, or `legacy` with no `valkey.address`), at the cost of a
-  cold cache on every restart. At two or more replicas that is a mistake: each replica refreshes the same directory and
-  the directory's API quota is per tenant, not per reader. The service logs `keeping snapshots in memory` at start.
-- **`replicaCount` above 1 with a controller is refused at render** unless the adapter is `dynamodb`.
-- **Every replica serves every workspace**: one connected through the console on another replica is opened from its
-  stored credential on first use.
+- Replicas above one need a shared State: `config.ports.adapter: dynamodb` or the `k8s-aws` preset. The chart refuses a controller with `replicaCount` above 1 on any other adapter.
+- A single replica may run on `memory`, or `legacy` with no `valkey.address`. It starts cold every time and logs `keeping snapshots in memory`.
+
+- Every replica serves every workspace and opens a console-connected one from its stored credential on first use.
 
 ## Steps
 
-### 1. Choose the count
+1. Set `replicaCount` (default 2). For more than one replica follow [high availability](high-availability.md). Each pod logs `keeping snapshots and the refresh lease in the state ports`.
 
-**Run** set `replicaCount` (the default is 2) and, for more than one replica, follow [high availability](high-availability.md).
-**Expect** the render to accept it.
-**Verify** the log at each pod: `keeping snapshots and the refresh lease in the state ports`.
-**Rollback**: set the count back.
+2. Estimate the snapshot size as the directories' size. The Blob port holds one gzip object `snapshots/<workspace>` per workspace, of the order of the number of accounts and groups.
 
-### 2. Size the snapshot store
+## Verify
 
-**Run** estimate the snapshot size as the directories' size: one snapshot per workspace (`snapshots/<workspace>` in the
-Blob port, gzip-encoded).
-**Expect** bytes of the order of the number of accounts and groups.
-**Verify** read the objects' sizes in the bucket.
-**Rollback**: none, because it reads.
+Read the object sizes in the bucket. After raising the count, watch `access_roster.leases.contended` and `AccessRosterLeaseLost` ([telemetry](../../../reference/sluis/telemetry.md)).
 
-## Afterwards
+## Roll back
 
-- Watch `access_roster.leases.contended` and `AccessRosterLeaseLost` ([telemetry](../../../reference/sluis/telemetry.md)) after raising the
-  count.
+Set `replicaCount` back.
+
+## Decided in
+
+[Why more than one replica is safe](../../../concepts/sluis/high-availability.md).

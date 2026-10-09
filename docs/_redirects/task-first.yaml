@@ -128,7 +128,7 @@ how-to/connect/aws-workloads.md: guides/sluis/connect/aws-workloads.md
 how-to/connect/business-surface.md: guides/sluis/connect/business-surface.md
 how-to/connect/choosing-native-or-gateway-oidc.md: guides/sluis/connect/choosing-native-or-gateway-oidc.md
 how-to/connect/console-app.md: guides/sluis/connect/console-app.md
-how-to/connect/corporate-directory.md: guides/sluis/connect/corporate-directory.md
+how-to/connect/corporate-directory.md: guides/sluis/connect/google-workspace.md
 how-to/connect/envoy-gateway-oidc.md: guides/sluis/connect/envoy-gateway-oidc.md
 how-to/connect/github-account-links.md: guides/sluis/connect/github-account-links.md
 how-to/connect/github-actions.md: guides/sluis/connect/github-actions.md

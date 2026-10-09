@@ -1,34 +1,18 @@
 # Bind GitHub teams to internal groups
 
-## Purpose
-
-Make a GitHub organisation's teams and members match the holders of internal groups, from the policy.
-
-## Preconditions
-
-- The organisation is connected on the console, with an owner ([Connect a GitHub organisation](connect/github-organisation.md)).
-- The internal groups you bind are declared in `groups` ([reference](../../reference/sluis/policy-bindings.md#github-teams)).
-- The teams exist in GitHub; you need each team's **slug**, not its display name.
+Make a GitHub organisation's teams and members match the holders of internal groups.
 
 ## Before you start
 
-- **Bind to groups, never to addresses.** A team is a consumer of an internal group; which accounts hold the group is
-  answered once, in `groups`.
-- **The organisation's `members` is for people with no team.** Being in a bound team implies organisation membership,
-  so do not list everybody. What no team and no `members` accounts for is removed as unaccounted for.
-- **`ignore` is for what nobody here controls**: a partner's address, a break-glass owner's login. Without it a bound
-  group nobody can take an account out of keeps being reported.
-- **Refused at load:** a team with neither `members` nor `maintainers`, an organisation binding nothing, a group nothing
-  declares, a team or an organisation's `members` declared twice, and a leftover `github.<org>.owner`.
-- **An organisation is born disabled.** Binding teams changes nothing until its login is in
-  `controllers.github.enabledOrgs`.
-- **A policy change is a new instance.** Preview before every apply, and read the preview.
+- Connect the organisation with an owner ([connect a GitHub organisation](connect/github-organisation.md)) and declare the groups in `groups`.
 
-## Steps
+- Use each team's slug, not its display name.
 
-### 1. Declare the binding
+- List in `members` only people with no team. Anyone no team and no `members` entry accounts for is removed.
 
-**Run**: add to a policy file:
+- Use `ignore` for accounts nobody here controls, such as a partner or a break-glass owner.
+
+## 1. Declare the binding
 
 ```yaml
 github:
@@ -41,26 +25,24 @@ github:
     ignore: [temp-owner]
 ```
 
-**Expect**: `sluisctl policy render policy/ -o /tmp/policy.yaml` succeeds.
+Render the policy. The load refuses a team with neither `members` nor `maintainers`, an organisation binding nothing, an undeclared group, a duplicate and a leftover `github.<org>.owner` ([bindings](../../reference/sluis/policy-bindings.md#github-teams)).
 
-**Verify**: the console's GitHub pages and Rules page list the binding beside every other rule.
+```sh
+sluisctl policy render policy/ -o /tmp/policy.yaml
+```
 
-**Rollback**: remove the entry.
+Verify: the console's Rules page lists the binding.
 
-### 2. Dry run, then enable
+## 2. Roll out as a dry run
 
-**Run**: roll out with the organisation's login absent from `controllers.github.enabledOrgs`, read the report, then add
-the login and roll out ([Enable a GitHub organisation](enable-github-organisation.md)).
+Roll out with the organisation's login absent from `controllers.github.enabledOrgs`. The pass lists who would be invited, added and removed.
 
-**Expect**: the dry-run pass lists who would be invited, added and removed; after enabling the changes appear as
-audit events.
+## 3. Enable
 
-**Verify**: a team's GitHub membership equals the holders of its groups; a holder of a maintainer group is a maintainer
-even when a member group also names them.
+Add the login to `enabledOrgs` and roll out, as in [enable a GitHub organisation](enable-github-organisation.md). A person in no group and no `members` is removed at the next pass, so tell them first.
 
-**Rollback**: remove the login from `enabledOrgs`. Nothing is undone; that is also the emergency stop.
+Verify: each team's membership equals the holders of its groups. A holder of a maintainer group is a maintainer even when a member group also names them.
 
-## Afterwards
+## Roll back
 
-Deleting an `ignore` line brings the account back under the bindings; `git log` says when. A person listed in no group
-and in no `members` will be removed at the next pass after the organisation is enabled, so tell them first.
+Remove the login from `enabledOrgs`. Nothing is undone, and this is the emergency stop. To remove a binding, delete the entry. Deleting an `ignore` line puts the account back under the bindings.

@@ -1,71 +1,37 @@
 # Migrate from google-group-sync
 
-## Purpose
-
-Replace google-group-sync (one Workspace per process, from a service-account key) with sluis, which serves every
-Workspace from one deployment and gives its answers to consumers through the policy and the console's API.
-
-## Preconditions
-
-- sluis installed ([install](../operate/install-with-helm.md)), with an audit installation connected if you want the trail.
-- Every existing service-account key, and the Secrets that deliver them.
-- A list of what reads google-group-sync's answers today.
+Replace google-group-sync, one Workspace per process, with one sluis deployment that serves every Workspace through the policy and the console's API.
 
 ## Before you start
 
-- **Preview before every apply, and read the preview**: each step changes the installation, so render, diff the
-  documents, then upgrade.
-- **Deleting a declared workspace is not deleting its credential.** After step 3 the credential lives in state, not in your
-  delivery; remove a key from the cloud only after the console shows the connection healthy.
-- **Not carried over:** the Lambda and Lambda-extension flavours (single workspace by construction), the per-process
-  configuration, the REST routes and the environment-variable credential path.
+- Install sluis ([install](../operate/install-with-helm.md)), with an audit installation if you want the trail.
+
+- Collect every service-account key and the Secrets that deliver them, and list what reads google-group-sync's answers.
+
+- Render and diff before each upgrade.
+
+- Not carried over: the Lambda and Lambda-extension flavours, per-process configuration, the REST routes and the environment-variable credential path.
+
+- Delete a key in Google Cloud only after the console shows the connection healthy.
 
 ## Steps
 
 ### 1. Overlay first
 
-**Run** declare every existing key as a workspace (`directory.workspaces[]` in the installation, the key Secrets delivered
-the way they were to google-group-sync), render and upgrade. No Connect step.
-
-**Expect** the console's Directories page lists every domain the old instances served, all authoritative.
-
-**Verify** spot-check a sample of addresses with `Explain` against the old instances' answers.
-
-**Rollback** remove the entries and upgrade; nothing reads sluis yet.
+Declare every existing key as a [workspace](../../../reference/sluis/declared-workspaces.md), delivering the key Secret as before. Render and upgrade. The console's Directories page lists every domain, all authoritative. Compare `Explain` on sample addresses with the old answers. To undo, remove the entries.
 
 ### 2. Move the consumers
 
-**Run** a GitHub team sync becomes `github` bindings in the policy, and the GitHub controller that runs inside sluis. Anything
-else asks the console's `AccessService` with its own ServiceAccount token, and reads `authoritative` before acting on a
-removal. One address replaces N per-instance addresses; the service routes by domain.
-
-**Expect** each consumer's decisions match the old ones.
-
-**Verify** watch the consumers' decisions for a day.
-
-**Rollback** point the consumer back at its google-group-sync instance, which still runs.
+Turn a GitHub team sync into `github` bindings in the policy. Anything else asks the console's `AccessService` with its own ServiceAccount token and reads `authoritative` before acting on a removal. One address replaces the per-instance addresses. Watch decisions for a day. To undo, point the consumer back at its instance.
 
 ### 3. Connect through consent
 
-**Run** for each workspace, press Connect as its admin role account, then remove the declared entry, render and upgrade.
-
-**Expect** the console shows the connected workspace taking over its domains.
-
-**Verify** `Explain` on a sample address still answers authoritatively. Then delete the service-account key in Google Cloud.
-
-**Rollback** restore the declared entry and upgrade, before the key is deleted. After it, connect again.
+For each workspace, press Connect as its admin role account, remove the declared entry, render and upgrade. `Explain` still answers authoritatively. Then delete the key in Google Cloud. Before that, restore the entry to undo; after it, connect again.
 
 ### 4. Retire
 
-**Run** remove the google-group-sync deployments and their key Secrets; archive the repository.
-
-**Expect** nothing else is affected.
-
-**Verify** no consumer still resolves an old address.
-
-**Rollback** none, because the deployments and keys are deleted; redeploy from the archive if ever needed.
+Remove the google-group-sync deployments and key Secrets, and archive the repository. Check no consumer resolves an old address. Redeploy from the archive to undo.
 
 ## Afterwards
 
-The credential now lives in `Secret <release>-workspace-credentials` and in state rather than in your delivery: add it to
-your backups ([day two](../operate/back-up-and-restore.md)).
+The credential lives in `Secret <release>-workspace-credentials` and in state: add it to your [backups](../operate/back-up-and-restore.md).

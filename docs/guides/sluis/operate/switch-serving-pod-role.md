@@ -1,66 +1,31 @@
 # Switch the serving pod to its own role
 
-## Purpose
-
-Give the serving pod on EKS the role the Pulumi library creates, `<prefix>-sluis`, in place of the shared
-`acme-shared-audit` role (decision N9a).
-
-## Preconditions
-
-- The installation runs the Kubernetes build on EKS with Pod Identity ([the Pulumi library](../../../reference/sluis/pulumi-library.md#kubernetes-identity)).
-- The library's stack is ready to apply: `NewStorage`, `NewState` and `NewKubernetesIdentity` with `ServiceAccount` set to
-  the one the Deployment runs as.
-- A quiet window: the pod loses its credentials for the moment between the old association and the new one.
-- You can edit gitops's own managed policy for the audit events' writer.
+On EKS, give the serving pod the role the Pulumi library creates, `<prefix>-sluis`, in place of the shared `acme-shared-audit` role.
 
 ## Before you start
 
-- **A ServiceAccount takes one association.** The old role's association must be deleted in the same apply that creates
-  the library's, or the create fails. Looks like: the apply fails creating the `PodIdentityAssociation` for a
-  ServiceAccount that already has one.
-- **The old role also carries the audit-events writer's grants.** They are the audit side's and are not in this library,
-  which neither carries nor removes them. Looks like: audit records stop arriving after the switch.
-- **Preview before the apply, and read the preview.** Expect the new role, policy, association, bucket, key and table to
-  be created, and the old association to be deleted.
-- **No state move is needed.** The earlier sluis resources in the eso-iam stack are empty and are deleted, not adopted.
+- The installation runs the Kubernetes build on EKS with Pod Identity ([Pulumi library](../../../reference/sluis/pulumi-library.md#kubernetes-identity)). The stack is ready: `NewStorage`, `NewState` and `NewKubernetesIdentity` with `ServiceAccount` set to the Deployment's.
+
+- Pick a quiet window. The pod loses its credentials between the old association and the new one.
+
+- A ServiceAccount takes one association. Delete the old one in the same apply that creates the new one, or the `PodIdentityAssociation` create fails.
+
+- The old role carries the audit-events writer's grants, which this library neither carries nor removes. Audit records stop arriving after the switch unless you keep them (step 2).
+
+- No state move is needed. The earlier sluis resources in the eso-iam stack are empty: delete them, do not adopt them.
 
 ## Steps
 
-### 1. Create the library's resources
+1. Apply the new stack. Read the preview first: it creates the role `<prefix>-sluis`, policy, association, bucket, key and table, and deletes the old association. The same apply deletes the serving ServiceAccount's association with the old role.
 
-**Run**: apply the new stack from the library: the role `<prefix>-sluis` (v1.62 named it `<prefix>-sluis-serve`), the
-bucket, the key and the table are new `sluis` resources. Delete the serving ServiceAccount's association with the old
-role in the same apply.
+2. Keep the audit grants: attach your managed policy for the audit events to the new role with a `RolePolicyAttachment` on `RoleName`, or give the audit writer another path.
 
-**Expect**: the pod's next credential refresh resolves to `<prefix>-sluis`.
+3. Delete `acme-shared-audit` and its policy when the last object under its prefix has expired.
 
-**Verify**: from the pod, `aws sts get-caller-identity` names `<prefix>-sluis`; sign-in works.
+## Verify
 
-**Rollback**: re-create the old association (and delete the new one in the same apply); the old role and its policy are
-untouched until step 3.
+From the pod, `aws sts get-caller-identity` names `<prefix>-sluis`, and sign-in works. A new audit record arrives after a sign-in. IAM shows the old role last used before the switch. Check again a day later.
 
-### 2. Keep the audit events' grants
+## Roll back
 
-**Run**: attach gitops's own managed policy for the audit events to the library's role with a `RolePolicyAttachment` on
-`RoleName`, or give the audit writer another path.
-
-**Expect**: the role carries the audit writer's grants again.
-
-**Verify**: a new audit record arrives after a sign-in.
-
-**Rollback**: detach the attachment; nothing else depends on it.
-
-### 3. Retire the old role
-
-**Run**: delete `acme-shared-audit` and its policy when the last object under its prefix has expired.
-
-**Expect**: no principal uses the role.
-
-**Verify**: its last-used date in IAM is before the switch.
-
-**Rollback**: none, because the role and its policy are gone; re-create them from gitops's source.
-
-## Afterwards
-
-- Check that audit records and sign-ins still work a day later.
-- Tell whoever owns the audit side that its writer no longer shares this pod's role.
+Before step 3, re-create the old association and delete the new one in the same apply. The old role and policy are untouched until step 3. After it, re-create them from source. Detach the attachment from step 2 if you undo only that.

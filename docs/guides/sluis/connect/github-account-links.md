@@ -1,71 +1,56 @@
 # Link a GitHub account to a person
 
-GitHub tells an organisation outside its Enterprise Cloud plan nothing about which work address a member has. This page is how a person links their account, how the link App is set up once, and how links are checked. The controller's use of links is in [How a GitHub pass decides](../../../concepts/sluis/github-pass.md).
+Link each GitHub account to a work address so the controller can place it. The controller's use of links is in [How a GitHub pass decides](../../../concepts/sluis/github-pass.md).
 
-Not the App and not an owner can say it, so each person shows it themselves, once.
+## Before you start
 
-**Set up once.** On the GitHub page's *Apps* tab, open the *Link App* and press
-**Create** on its page, under an organisation you own. The link App is
-installation-wide: only the installation-wide operator creates or disconnects
-it. It is a separate App from the
-organisations', on purpose:
+- Only the installation-wide operator creates or disconnects the link App.
+- The link App must be public. A private App is authorised only by members of its owner organisation.
+- A personal address links nothing, an unverified one proves nothing, and a suspended account's address is refused with the reason on the page.
+
+## 1. Create the link App once
+
+On the GitHub page, open the *Apps* tab, open the *Link App* and press **Create** under an organisation you own.
 
 | | The link App | An organisation's App |
 |---|---|---|
-| used by | each person, authorizing it as themselves | the controller |
-| permission | read the person's own email addresses | `members: write`, `organization_administration: read` |
-| installed | nowhere | on its organisation |
-| visibility | **public**: a private App can only be authorized by members of its owner organisation, which a new hire and a partner's engineer are not | private |
-| kept | client id and secret | private key |
+| Used by | each person, as themselves | the controller |
+| Permission | read the person's own email addresses | `members: write`, `organization_administration: read` |
+| Installed | nowhere | on its organisation |
+| Visibility | public | private |
+| Kept | client id and secret | private key |
 
-A person's token carries its App's permissions, so a token for the link
-App reads one person's addresses and nothing else.
+## 2. Each person links once
 
-**What a person does.** They open the link page the GitHub page shows —
-`https://<issuer>/connect/github/link` — press *Continue to GitHub*,
-and authorize. No console role is needed: the proof is GitHub's. The
-service reads the account and its **verified** addresses and links the
-account to each address the directory has, live and vouched for. A
-personal address is ignored; an unverified one proves nothing; a
-suspended account's address is refused with the reason on the page.
-Linking a second account with the same address moves the address to it,
-and the first account, proving nothing, is lost.
+Send people to `https://<issuer>/connect/github/link`. They press *Continue to GitHub* and authorise. No console role is needed.
 
-**Checked every pass.** The link keeps the person's token pair. Every pass
-the controller reads the account's verified addresses again:
+The service links the account to every verified address the directory has live. Linking a second account with the same address moves the address to it, and the first account is lost.
+
+## Verify
+
+Every pass the controller re-reads the account's verified addresses:
 
 | GitHub says | The link | The account |
 |---|---|---|
-| the addresses are still verified | linked | stays |
-| a linked address is gone, or unverified, and others remain | narrowed | stays, by what remains |
-| every linked address is gone or unverified | lost | **leaves the organisation at once** |
-| the authorization was revoked, or the account is gone | lost | **leaves at once** |
-| nothing — an outage, a timeout, a rate limit | unchanged | nothing happens |
-| the token pair was lost in an interrupted renewal | unverifiable | nothing happens; the person links again |
+| Addresses still verified | linked | stays |
+| Some linked addresses gone or unverified | narrowed | stays, by what remains |
+| Every linked address gone or unverified | lost | leaves the organisation at once |
+| Authorization revoked, or account gone | lost | leaves at once |
+| Outage, timeout or rate limit | unchanged | nothing happens |
+| Token pair lost in an interrupted renewal | unverifiable | nothing happens; the person links again |
 
-GitHub rotates the pair on every renewal and kills the old one, so a
-renewal is written as *in progress* before it is made and as done right
-after; one found in progress on a later pass is never read as a
-revocation. A link is only ever checked with the credentials of the App
-that issued it.
+GitHub kills the old token pair on every renewal. The controller records a renewal as in progress before making it, so an interrupted one reads as unverifiable, never as revoked. A link is checked only with the credentials of the App that issued it. A lost owner link is reported.
 
-An owner's link going lost is reported, like anything about an owner.
+## Link sources
 
-## Where a link comes from
-
-| Source | Proof | Checked on GitHub every pass | Removed when the address leaves GitHub |
+| Source | Proof | Checked each pass | Removed when the address leaves GitHub |
 |---|---|---|---|
-| **linked by them** | they authorized the link App; GitHub verified the address | yes | yes |
-| **public profile** | the account publishes the work address; GitHub lets an account publish only a verified one. Matched automatically, members only | no | no — hiding an address is not removing it |
-| **imported** | an approved pairing from elsewhere, handed to the operator RPC `ImportGitHubLinks` once — three checks each: approved, an address the directory has live, the account a member of a connected organisation | no | no |
+| Linked by them | they authorised the link App | yes | yes |
+| Public profile | the account publishes a verified work address; members only | no | no |
+| Imported | `ImportGitHubLinks` once: approved, address live in the directory, account already a member | no | no |
 
-All three count as the person: they are invited, moved between teams and
-removed when the directory suspends them. A profile match or an import
-happens only when the address is a live account the directory vouches
-for and the account is a member already, and never displaces a link the
-person made. The person linking themselves replaces it.
+All three count as the person. A profile match or an import never displaces a link the person made, and the person linking replaces it.
 
-**Disconnecting the link App** makes every self-link unverifiable — nothing
-can check their tokens any more — which adds and removes nobody until
-each person links again. A profile match or an import holds no token of
-the App's, and stands.
+## Roll back
+
+Disconnecting the link App makes every self-link unverifiable. Nobody is added or removed until each person links again. Profile matches and imports hold no token and stand.

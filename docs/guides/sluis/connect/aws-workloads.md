@@ -1,85 +1,29 @@
-# AWS workloads (Lambda, ECS, EC2) via outbound identity federation
+# Connect AWS workloads
 
-**Anchor:** the issuer; the AWS account's own published key set is the proof.
+A Lambda function, ECS task or EC2 instance running as an IAM role proves itself with AWS outbound identity federation and exchanges the proof for a short-lived token ([service to service](service-to-service.md)). For people assuming roles, see [AWS account](aws-account.md).
 
-A workload that runs as an IAM role — a Lambda function, an ECS task, an
-EC2 instance — can prove who it is to this issuer **without a stored
-secret**, then exchange that proof for a short-lived token of the issuer's
-for a client's audience, exactly as a CI job or a Kubernetes workload does
-([service-to-service.md](service-to-service.md)).
+## Before you start
 
-The mechanism is AWS IAM *outbound identity federation*: the role calls
-`sts:GetWebIdentityToken` and gets a JWT signed by its **account's**
-issuer. The issuer verifies it against that account's published key set;
-nothing here holds a credential for AWS, and nothing calls AWS except to
-read a public JWKS.
+- Outbound federation is enabled, or STS answers `OutboundWebIdentityFederationDisabled`.
 
-This is the opposite direction from [aws-account.md](aws-account.md), where
-the issuer's tokens let a *person* assume a role.
+- The issuer reaches `https://*.tokens.sts.global.api.aws` on port 443. The chart ships no egress rules.
 
-## What the token is, and what the verifier decides
+- A VPC function with no route out needs an STS interface endpoint.
 
-AWS documents the token's claims
-([Understanding token claims](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_outbound_token_claims.html)):
-`iss` is a per-account `https://<id>.tokens.sts.global.api.aws`, keys are at
-`<iss>/.well-known/jwks.json`, `sub` is the principal's ARN, `aud` is what
-the role asked for, signed ES384 or RS256, and AWS's own claims sit under
-`https://sts.amazonaws.com/` (`aws_account`, `org_id`, and for Lambda
-`lambda_source_function_arn`).
+- You cannot revoke AWS tokens or the minted token. Give the client a short `ttl_cap`.
 
-A token is accepted only when **all** of these hold, and any failure after
-the issuer is recognised is a final refusal:
-
-- `iss` is a configured account's issuer (any other `iss` is somebody
-  else's token and goes to the next verifier);
-- the signature verifies against that issuer's key set, with an algorithm in
-  the row's `algs` (never the one the token's header prefers). An unknown
-  `kid` re-fetches the set, at most once per ten seconds;
-- `aud` contains the configured audience, exactly;
-- `exp` has not passed, `nbf` has, `iat` is not in the future, **and `iat` is
-  no older than `maxAge`** (default 5 minutes) even if `exp` would allow an
-  hour;
-- the `aws_account` claim, the account in the role's ARN and the account of
-  the row are all the same, and `org_id` equals the row's `orgId` if it sets one;
-- `sub` is a role ARN, as below.
-
-### The identity is the role
-
-`sub` is parsed strictly as `arn:aws:iam::111122223333:role/<path><name>`. The
-minted token's subject is `aws:<account>:role/<path><name>`
-(`aws:111122223333:role/telemetry/otel-writer`). It does not change with the
-session, the function or the instance, so an audit trail does not fragment.
-Which function uses the role is the function's business: a Lambda token's
-function ARN is passed to the policy (an optional `function` matcher) but is
-never the subject.
-
-AWS documents `sub` as "the ARN of the IAM principal that requested the
-token", and every example it gives is the role ARN — never the
-`arn:aws:sts::111122223333:assumed-role/<name>/<session>` form that
-`sts:GetCallerIdentity` returns for the same caller. Nothing documents that
-form as a subject, so it is **refused**. A session name is chosen by whoever
-assumes the role, so a rule that depended on it would be a rule its caller
-could write. Users, the account root, federated users, other partitions and
-anything with a role name or path outside `[A-Za-z0-9_+=,.@-]` are refused
-too.
-
-## Operator steps
+## Steps
 
 ### 1. Enable federation in each account
-
-Once per account, by the account's owner (an account-level IAM setting):
 
 ```sh
 aws iam enable-outbound-web-identity-federation
 aws iam get-outbound-web-identity-federation-info   # prints IssuerUrl
 ```
 
-`IssuerUrl` — `https://<id>.tokens.sts.global.api.aws` — goes in the row
-below. Without this, STS refuses with `OutboundWebIdentityFederationDisabled`.
-`sts:GetWebIdentityToken` is called on the **regional** STS endpoint, and a
-function in a VPC with no route out needs an STS interface endpoint.
+`IssuerUrl` goes in step 3.
 
-### 2. Let the role ask for a token, for this audience only
+### 2. Let the role ask for a token for one audience
 
 ```json
 {
@@ -96,22 +40,9 @@ function in a VPC with no route out needs an STS interface endpoint.
 }
 ```
 
-`sts:IdentityTokenAudience` is a multi-valued key (the API takes a list of
-audiences), so it needs the `ForAllValues:StringEquals` operator. A plain
-`StringEquals` evaluates to an implicit deny when the request carries the
-audience as a list, and STS answers `AccessDenied ... no identity-based policy
-allows the sts:GetWebIdentityToken action`. `ForAllValues` also passes on an
-empty set, which is safe here only because `Audience` is a required parameter
-of [GetWebIdentityToken](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetWebIdentityToken.html).
-`sts:SigningAlgorithm` is single-valued and keeps `StringEquals`.
-
-The audience is the issuer's own URL by default (`exchange.aws.audience`).
-The condition is the account owner's guard that the role can mint a token
-for nobody else; the issuer's audience check is the other half.
+`sts:IdentityTokenAudience` is multi-valued: a plain `StringEquals` is an implicit deny. The audience defaults to the issuer URL (`exchange.aws.audience`).
 
 ### 3. Add the account to the issuer
-
-In the chart:
 
 ```yaml
 exchange:
@@ -120,24 +51,14 @@ exchange:
     maxAge: 5m
     accounts:
       - account: "111122223333"
-        name: apps                      # the estate's word, for logs
+        name: apps                      # for logs
         issuer: https://example-id.tokens.sts.global.api.aws
         orgId: o-example1234            # optional: require this organization
         algs: [ES384, RS256]            # optional: default both
         # jwksUri: ""                   # optional: default <issuer>/.well-known/jwks.json
 ```
 
-The issuer needs egress to `https://*.tokens.sts.global.api.aws` (port 443)
-to read each account's key set; the chart carries no egress rules, so that
-belongs in the fleet's own egress policy, as it does for `api.github.com`.
-
-The chart mounts it as a file and sets `AWS_FEDERATION_FILE`
-([configuration reference](../../../reference/sluis/configuration.md)). **There is no
-default account and an empty list verifies no AWS token**: any AWS account
-can mint a valid token for a role of its own, so the row is what makes an
-account yours. A bad row stops the issuer at start rather than skipping an
-account whose roles would then fail with the wrong cause. Adding a row is a
-rollout.
+An empty list verifies no AWS token; a bad row stops the issuer at start. Adding a row is a rollout ([configuration](../../../reference/sluis/configuration.md), `AWS_FEDERATION_FILE`).
 
 ### 4. Write the matcher
 
@@ -150,14 +71,9 @@ clients:
   otlp: { kind: exchange, requires: [otlp:billing:writer], ttl_cap: 15m }
 ```
 
-The fields and glob rules are in the
-[policy reference](../../../reference/sluis/policy-groups.md#the-aws-matcher). `account` is
-exact and required.
+`account` is exact and required. See the [AWS matcher](../../../reference/sluis/policy-groups.md#the-aws-matcher).
 
 ### 5. Exchange
-
-The workload requests a token for the issuer's audience, then exchanges it
-(the same request as in [service-to-service.md](service-to-service.md)):
 
 ```sh
 TOKEN=$(aws sts get-web-identity-token --audience https://access.example.com \
@@ -171,22 +87,24 @@ curl -u otlp: https://access.example.com/token \
   -d audience=otlp
 ```
 
-The response's `access_token` has `sub=aws:111122223333:role/billing-api`,
-`aud=otlp`, the groups the role holds and the roster's claim fragments, and
-lives no longer than the shortest group lifetime and the client's `ttl_cap`.
-No session or refresh token is created.
+The `access_token` has `sub=aws:111122223333:role/billing-api`, `aud=otlp` and the role's groups. It lives no longer than the shortest group lifetime and the client's `ttl_cap`. It has no refresh token.
 
-## What is recorded
+## Verify
 
-Each exchange is a `roster.token.exchanged` record with `proof` `workload`
-and the actor kind `workload`, whose id is the subject
-(`aws:111122223333:role/billing-api`). Refusals — a role in no group — are
-recorded too.
+Each exchange is a `roster.token.exchanged` record with `proof` `workload`. A role in no group is refused.
 
-## What is given up
+## What the verifier checks
 
-A token stays valid until its `exp` (at most `maxAge` after it was issued
-here) even if the role is deleted or its permission to call
-`sts:GetWebIdentityToken` is withdrawn, and the minted token is not
-revocable either, which is why a client for this should carry a short
-`ttl_cap`.
+A token passes when all of these hold. Once the issuer is recognised, any failure is final.
+
+- `iss` is a configured account's issuer, and `aud` contains the configured audience.
+
+- The signature verifies against that key set with an algorithm in `algs`. An unknown `kid` re-fetches the set once per ten seconds at most.
+
+- `iat` is no older than `maxAge`, and `exp` and `nbf` are valid.
+
+- The `aws_account` claim, the account in the role ARN and the row's account match. `orgId` matches when the row sets it.
+
+- `sub` is a role ARN `arn:aws:iam::<account>:role/<path><name>`.
+
+The subject `aws:<account>:role/<path><name>` is stable across sessions, functions and instances. The verifier refuses the `assumed-role` form, users, the account root, federated users, other partitions and names outside `[A-Za-z0-9_+=,.@-]`. See the AWS [token claims](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_outbound_token_claims.html).

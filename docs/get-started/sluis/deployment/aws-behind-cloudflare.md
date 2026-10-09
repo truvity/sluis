@@ -36,4 +36,4 @@ Before this module, the core library built the custom domain and a truststore bu
 `API.CertificateArn`, `API.TruststorePEM` and `API.TruststoreBucketName`. Those four are deprecated: set, all four
 together, the core still builds what it built (no diff) and warns. The move keeps the domain: the preview must show it
 updated in place, never replaced, and the old truststore bucket is emptied by hand. The steps are in
-[cut over](../../../guides/sluis/migrate/cutover.md#moving-a-stack-from-the-core-librarys-domain-to-the-edge-module).
+[cut over](../../../guides/sluis/migrate/move-the-domain-to-the-edge-module.md).

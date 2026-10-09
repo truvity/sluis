@@ -1,34 +1,40 @@
 # Connect Kargo
 
-**Anchor:** the issuer; Kargo runs its own OIDC flow. It maps claims to
-its own roles and has a CLI that signs in on a loopback port, so it needs two
-clients:
+Kargo runs its own OIDC flow, maps claims to its own roles and has a CLI that signs in on a loopback port. It needs two public clients.
+
+## Before you start
+
+- Kargo accepts RS256 only. Its `api.oidc` has no signing-algorithm setting and go-oidc's verifier defaults to RS256.
+- Keep Kargo's admin account until a policy-granted admin has logged in.
+- `groups` is on every token, so no `additionalScopes` is needed.
+
+## Steps
+
+### 1. Declare the clients
 
 ```yaml
 clients:
   kargo:
-    kind: public              # PKCE in the browser; Kargo's UI holds no secret
-    display_name: Kargo       # the sign-in page: "Sign in to continue to Kargo"
+    kind: public
+    display_name: Kargo
     description: promotions between environments
     redirects:
       - https://kargo.example.internal/
       - https://kargo.example.internal/login
     signed_out: [https://kargo.example.internal]
     requires:   [prod:k8s:admin, prod:k8s:viewer]
-    ttl_cap: 5m               # the revocation window, see below
+    ttl_cap: 5m
+    signing_alg: RS256
   kargo-cli:
-    kind: public              # PKCE; the CLI's redirect is a loopback port — the page says a program on this computer is asking
+    kind: public
     display_name: Kargo CLI
     loopback: true
     requires:   [prod:k8s:admin, prod:k8s:viewer]
 ```
 
-Both are **public**: Kargo's UI is a single-page application that runs
-the code flow itself with PKCE, and a secret it held would be a secret
-in every browser. `groups` is on every token this issuer mints, so no
-`additionalScopes` is needed to receive it.
+Kargo's UI runs the code flow with PKCE and holds no secret. Add an RS256 key to `signingKey.additional` ([configuration](../../../reference/sluis/configuration.md)). Other audiences keep signing ES384 ([per-audience algorithm](../../../reference/sluis/policy.md#signing-algorithm-per-audience)).
 
-Kargo's values:
+### 2. Configure Kargo
 
 ```yaml
 api:
@@ -37,65 +43,22 @@ api:
     issuerURL: https://issuer.example.internal
     clientID: kargo
     cliClientID: kargo-cli
-    admins: { claims: { groups: [prod:k8s:admin] } }   # the cluster tier, reused
+    admins: { claims: { groups: [prod:k8s:admin] } }
 ```
 
-**Kargo accepts RS256 only.** Its `api.oidc` values carry no
-signing-algorithm setting, and its API server builds go-oidc's verifier
-without one (`pkg/server/auth_middleware.go`, `oidc.NewVerifier` with a
-`Config` naming only the client id), which leaves go-oidc's default of
-RS256 — it does not read what discovery advertises. The chart's default
-key signs ES384, so name `kargo`'s own client `signing_alg: RS256` in the
-policy ([reference/policy.md#signing-algorithm-per-audience](../../../reference/sluis/policy.md#signing-algorithm-per-audience))
-and add an RS256 key to `signingKey.additional`
-([reference/configuration.md](../../../reference/sluis/configuration.md)) — every
-OTHER audience keeps signing ES384. Moving the whole installation's
-default to RSA (`signingKey.certificate: {algorithm: RSA, size: 2048,
-encoding: PKCS1}`) still works but is no longer the recommended fix: it
-would move every relying party's tokens off ES384 to satisfy one.
+Bind per-project roles on the `groups` claim in Kargo's RBAC. `<env>:<project>:approver` is the promotion gate.
 
-Per-project roles bind on the `groups` claim through Kargo's own RBAC —
-`<env>:<project>:approver` is the promotion gate, the same name the
-policy mints for the project's approver unit.
-Keep Kargo's admin account until a policy-granted admin has logged in.
+Sign in through the UI and with `kargo login`. Roll back by removing the two client rows.
 
-## Sign-out and revocation, as Kargo actually does them
+## Sign-out and revocation
 
-Kargo runs the flow itself, so what its buttons mean differs from a
-console behind a gateway-side proxy — and it is worth knowing before somebody
-reports it. Verified against Kargo 1.11.2 on 2026-09-12
-([hack/verify_kargo.py](../../../../hack/verify_kargo.py) repeats it).
+Checked against Kargo 1.11.2 on 2026-09-12; [hack/verify_kargo.py](../../../../hack/verify_kargo.py) repeats it.
 
-**Kargo's Logout drops its own tokens and nothing else.** The issuer
-session stays listed, the sign-in stays, and the next click on *SSO
-Login* is admitted with no password. Kargo has no RP-initiated logout —
-there is no `end_session` anywhere in its source — so its button cannot
-end the sign-in. Ending it is the console's **Sign out**, or the
-issuer's `/logout`; after either, Kargo's next renewal is refused and
-it asks again.
+- **Logout** drops Kargo's tokens only. Kargo has no RP-initiated logout, so the issuer session stays and the next *SSO Login* needs no password. End the sign-in with the console's **Sign out** or the issuer's `/logout`.
+- **Revocation** stops Kargo within `ttl_cap`. Kargo serves on its access token until the next renewal, which the issuer refuses. Expect about four minutes on a five-minute cap.
 
-**A revoked session stops Kargo within `ttl_cap`.** There is no proxy to
-refresh early: Kargo serves on its access token until it next renews,
-the renewal is refused, and it drops its tokens and shows its login page
-— about four minutes on a five-minute cap. Nothing replaces the session,
-because Kargo does not start a new authorization on its own.
+## Known Kargo defect
 
-**A known Kargo defect, and why it looks like ours.** After a *silent*
-sign-in — one the standing issuer sign-in admits without a prompt,
-which is exactly what follows Kargo's own Logout — Kargo stores the
-tokens, the issuer lists the session, and the page stays on
-`/login?code=…` still showing the *SSO Login* button. Opening the root
-shows the projects; the tokens were there all along. Reloading that URL
-replays the authorization code, which the issuer refuses and, as the
-specification requires, punishes by revoking what the code issued; Kargo
-then renews, is refused, and signs in again — a fresh session for every
-reload. Both were reported here as issuer faults ("session appears but
-the page shows SSO Login", "refresh opens a new session").
+After a silent sign-in, which follows Kargo's own Logout, the page stays on `/login?code=…` and shows *SSO Login*. The tokens are already stored. Reloading replays the code, the issuer refuses it and revokes the session, and the next reload starts a new one.
 
-The cause is in `ui/src/features/auth/oidc-login.tsx`: after a
-successful exchange Kargo navigates only when a `redirectTo` was carried
-into the flow, and its Logout lands on `/login` without one. Reported
-upstream as [akuity/kargo#7189](https://github.com/akuity/kargo/issues/7189)
-with the fix in [akuity/kargo#7190](https://github.com/akuity/kargo/pull/7190):
-fall back to the home path when there is no safe redirect. Until it
-lands: after a Logout-then-login, open the root rather than reloading.
+Kargo navigates after the exchange only when a `redirectTo` exists, and Logout lands on `/login` without one. The fix is [akuity/kargo#7190](https://github.com/akuity/kargo/pull/7190), reported in [akuity/kargo#7189](https://github.com/akuity/kargo/issues/7189). Until it lands, open the root after a Logout-then-login instead of reloading.

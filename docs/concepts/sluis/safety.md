@@ -25,7 +25,7 @@ substance. For a map of every page in the repository, not just these, see
 - [connect/github-organisation.md](github-pass.md#what-the-render-refuses-and-why-each-is-silent-otherwise)
   — what the render refuses about GitHub bindings, and why each would
   otherwise be silent
-- [connect/github-apps-catalogue.md](../../guides/sluis/connect/github-app-tokens.md#errors)
+- [connect/github-apps-catalogue.md](../../guides/sluis/connect/github-app-tokens.md#2-mint-a-token)
   — how a token request is refused, and what the audit trail records
 - [architecture.md](architecture.md#failure-semantics) and
   [the design](design.md#failure-semantics) —
@@ -36,7 +36,7 @@ substance. For a map of every page in the repository, not just these, see
 - [day two](../../guides/sluis/operate/check-health.md)
   — what each unhealthy state means and what to do, and
   [when the installation cannot be reached](../../guides/sluis/operate/read-the-audit-trail.md#3-when-the-installation-cannot-be-reached)
-- [connect/console-app.md](../../guides/sluis/connect/console-app.md#traps-that-were-real) —
+- [connect/console-app.md](../../guides/sluis/connect/console-app.md#traps) —
   the traps of putting a console behind the gateway
 - [reference/sluisctl.md](../../reference/sluis/sluisctl.md#exit-codes)
   — every failure of `sluisctl bao`/`pg`/`psql` and its exit code, and a
@@ -68,10 +68,10 @@ substance. For a map of every page in the repository, not just these, see
   — a channel defined in git and in the console is held, not merged; the
   console refuses to manage a channel git defines; archiving from the console is
   off by default and refused for Slack Connect channels
-- [connect/slack-workspace.md](../../guides/sluis/connect/slack-workspace.md#connect-a-workspace-from-the-console)
+- [connect/slack-workspace.md](../../guides/sluis/connect/slack-workspace.md#1-connect)
   — a team that is not the recorded one is revoked and refused; the
   configuration token is never stored or logged
-- [connect/slack-apps-catalogue.md](../../guides/sluis/connect/slack-apps-catalogue.md#errors) —
+- [connect/slack-apps-catalogue.md](../../guides/sluis/connect/slack-apps-catalogue.md#verify) —
   how a Slack App install is refused
 
 ## And the rest

@@ -19,7 +19,7 @@ and output of the library is in [the Lambda reference](../../../reference/sluis/
   [AWS-native](edge-aws.md) planned.
 - **Keys.** The estate supplies the KMS keys by alias (`Keys.Sign`, and `Keys.Secrets` for the SSM parameters); the library
   looks them up and grants on them, and creates none. Moving from keys the library created is
-  [a state operation, not a replacement](../../../guides/sluis/migrate/cutover.md#moving-a-stack-from-library-created-keys-to-supplied-ones).
+  [a state operation, not a replacement](../../../guides/sluis/migrate/supply-your-own-signing-keys.md).
   See [signing on AWS](../../../concepts/sluis/signing-on-aws.md).
 - **Secrets layout.** `secrets.layout` is `v3` (the default), `transition` or `v4`; see
   [move the secrets to layout v4](../../../guides/sluis/migrate/migrate-secrets-layout.md). A consumer of an `external/` secret reads

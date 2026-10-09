@@ -1,67 +1,57 @@
 # Verify a release
 
-## Purpose
-
-Check that a published release is the one this repository's release workflow built, before an installation or a CI
-pipeline takes anything from it. The release is checksummed, signed and attested; this page is the procedure, and
-`hack/release-verify.sh` is the one implementation of it. An installation's CI copies that script.
+Check that a release is the one this repository's release workflow built. `hack/release-verify.sh` implements the procedure; copy it into your CI.
 
 ## What a release carries
 
-| what | where | made by |
-| -- | -- | -- |
-| `checksums.txt`, the SHA-256 of every archive, SBOM and bundle of both products | release asset | goreleaser, the sluis and audit lines combined by the `audit` job |
-| `checksums.txt.sigstore.json`, a keyless cosign bundle over `checksums.txt` | release asset | the `attest` job, after the lines are combined |
+| What | Where | Made by |
+|---|---|---|
+| `checksums.txt`, the SHA-256 of every archive, SBOM and bundle of both products | release asset | goreleaser, combined by the `audit` job |
+| `checksums.txt.sigstore.json`, a keyless cosign bundle over `checksums.txt` | release asset | the `attest` job |
 | a build-provenance attestation for every release asset | GitHub attestations | the `attest` job |
-| `<archive>.sbom.spdx.json`, an SPDX SBOM per archive, and an SBOM attestation binding it to the archive | release asset, attestation | syft in goreleaser, `attest-sboms` |
-| for every image digest: a cosign signature, a build-provenance attestation and an SPDX SBOM attestation; for every OCI Helm chart: a signature and provenance | the registry, beside the artifact | `attest-oci` |
+| `<archive>.sbom.spdx.json` per archive, and an SBOM attestation binding it | release asset, attestation | syft, `attest-sboms` |
+| per image digest: a cosign signature, a provenance attestation and an SPDX SBOM attestation; per OCI Helm chart: a signature and provenance | the registry | `attest-oci` |
 
-Nothing is signed with a long-lived key. The signing certificate is short-lived and names the workflow that asked for it
-(`.github/workflows/release.yaml` at the release tag), issued against the workflow's GitHub OIDC token. Keyless means the
-certificate and the signature are recorded in Sigstore's public transparency log (Rekor), so that the fact that this
-workflow signed this digest is public and cannot be rewritten afterwards. The log holds the repository, the workflow and
-the tag, nothing secret.
+Signing is keyless. The short-lived certificate names `.github/workflows/release.yaml` at the release tag, and the signature is recorded in the public Sigstore transparency log (Rekor).
 
-## Verify
+## Steps
 
-You need `gh` (logged in; a token that can read the repository) and `cosign` 3 or later.
+1. Install `gh` (logged in, with a token that reads the repository) and `cosign` 3 or later.
 
-```sh
-just release-verify v1.74.0
-# or, without the repository's toolchain:
-hack/release-verify.sh v1.74.0
-```
+2. Run the script on a tag.
 
-It downloads the release and fails on the first of:
+   ```sh
+   just release-verify v1.74.0
+   # or, without the repository's toolchain:
+   hack/release-verify.sh v1.74.0
+   ```
 
-1. an asset whose SHA-256 differs from `checksums.txt`, or a file `checksums.txt` lists that is not an asset;
-2. a `checksums.txt.sigstore.json` that does not verify `checksums.txt` with
-   `--certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v'` and
-   `--certificate-oidc-issuer https://token.actions.githubusercontent.com`;
-3. an asset with no attestation from `truvity/sluis/.github/workflows/release.yaml`
-   (`gh attestation verify <file> --repo truvity/sluis --signer-workflow ...`);
-4. an image or Helm chart (the list is `hack/release-images.txt`, copy it beside the script) whose signature or attestation does not verify. `RELEASE_VERIFY_SKIP_IMAGES=1` leaves them out.
+   It downloads the release and fails on the first of these:
 
-The identity is pinned to a `v*` tag of the release workflow, not to a branch: a workflow run from another ref, or from a
-fork, cannot produce a certificate that matches.
+   1. An asset whose SHA-256 differs from `checksums.txt`, or a listed file that is not an asset.
+   2. A `checksums.txt.sigstore.json` that does not verify `checksums.txt` with `--certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v'` and `--certificate-oidc-issuer https://token.actions.githubusercontent.com`.
+   3. An asset with no attestation from `truvity/sluis/.github/workflows/release.yaml`.
+   4. An image or Helm chart whose signature or attestation fails. The list is `hack/release-images.txt`: copy it beside the script. `RELEASE_VERIFY_SKIP_IMAGES=1` skips them.
 
-## Verify one image by hand
+   The identity is pinned to a `v*` tag of the release workflow. A run from another ref or a fork cannot match it.
 
-```sh
-ref=ghcr.io/truvity/sluis/sluis:1.74.0
-cosign verify "$ref" \
-  --certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify "oci://$ref" --repo truvity/sluis \
-  --signer-workflow truvity/sluis/.github/workflows/release.yaml
-```
+3. To verify one image by hand:
 
-Deploy by digest, not by tag: verify the tag once, resolve its digest, and pin that digest.
+   ```sh
+   ref=ghcr.io/truvity/sluis/sluis:1.74.0
+   cosign verify "$ref" \
+     --certificate-identity-regexp '^https://github.com/truvity/sluis/.github/workflows/release.yaml@refs/tags/v' \
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+   gh attestation verify "oci://$ref" --repo truvity/sluis \
+     --signer-workflow truvity/sluis/.github/workflows/release.yaml
+   ```
+
+Deploy by digest: verify the tag once, resolve its digest and pin it.
 
 ## Troubleshooting
 
-| symptom | cause |
-| -- | -- |
-| `checksums.txt.sigstore.json is not among the assets` | the release predates signing, or the `attest` job has not finished; a release is complete when it has |
-| `no valid attestation` for a file the release lists | `gh` is not logged in, or the file was replaced after the release |
-| a mismatch on one archive only | the asset was re-uploaded; take the release again, and report it if it still differs |
+| Symptom | Cause |
+|---|---|
+| `checksums.txt.sigstore.json is not among the assets` | the release predates signing, or the `attest` job has not finished |
+| `no valid attestation` for a listed file | `gh` is not logged in, or the file was replaced after the release |
+| a mismatch on one archive only | the asset was re-uploaded: take the release again and report it if it still differs |

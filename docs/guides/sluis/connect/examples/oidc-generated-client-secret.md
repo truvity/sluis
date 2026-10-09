@@ -2,14 +2,13 @@
 
 ## Goal
 
-Stop delivering a confidential client's secret by hand: the issuer makes it, keeps it at `external/oidc/<client>`, and the
-relying party reads it with its own secret operator.
+Stop delivering a confidential client's secret by hand. The issuer makes it and keeps it at `external/oidc/<client>`. The relying party reads it with its own secret operator.
 
 ## What you need
 
-- A confidential client, a Secrets adapter that can write only if absent (`ssm` or `openbao`), and a State shared between
-  replicas.
-- Every replica rolled to a version that understands `secret: {generate: true}` before you write it.
+- A confidential client.
+- A Secrets adapter that writes only if absent (`ssm` or `openbao`), and a State shared between replicas.
+- Every replica on a version that understands `secret: {generate: true}`, before you write it.
 
 ## The policy snippet
 
@@ -38,8 +37,7 @@ spec:
         property: client-secret
 ```
 
-Once the relying party signs in with the generated value, delete the input `clients/grafana/secret`; it is ignored while the
-stored record exists.
+Once the relying party signs in with the generated value, delete the input `clients/grafana/secret`. The stored record takes precedence over it.
 
 ## Verify
 
