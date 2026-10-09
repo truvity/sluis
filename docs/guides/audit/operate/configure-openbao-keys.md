@@ -1,6 +1,6 @@
 # Configure pseudonymisation keys in OpenBao
 
-Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transit` key provider can pseudonymise and crypto-shred, and every replica uses the same key.
+Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transit` adapter can pseudonymise and crypto-shred, with a key per tenant that no replica can mint twice.
 
 ## Before you start
 
@@ -19,29 +19,28 @@ Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transi
    | writer | `<release>` | `writer.config.keys.openbao.login.role` | writer |
    | query service, if it resolves | `<release>-query` | `query.config.keys.openbao.login.role` | resolve |
 
-   The writer creates one key per purpose and tenant, named `<prefix>.<purpose>.<tenant>`, for example `audit.security.acme`. A purpose is a profile name with no dot.
+   The `pseudonym` purpose has one transit key per profile and tenant, `<keys.pseudonym>.pseudonym.<escaped profile/tenant>`, created on first use. Any byte but `a-z`, `0-9` and `-` is written `_` and two hex digits, so `security/acme` is `audit-pseudonym.pseudonym.security_2facme`.
 
-2. Write the policies. The dot after the purpose keeps `billing` from matching `billing2`.
+2. Write the policies. `security_2f*` ends at the escaped `/`, so it does not match `security2`.
 
    ```hcl
-   # writer: one pair per profile; nothing on transit/keys/
-   path "transit/hmac/audit.security.*"    { capabilities = ["update"] }
-   path "transit/encrypt/audit.security.*" { capabilities = ["create", "update"] }
-   path "transit/hmac/audit.billing.*"     { capabilities = ["update"] }
-   path "transit/encrypt/audit.billing.*"  { capabilities = ["create", "update"] }
+   # writer, one block per profile. It seals and pseudonymises, never decrypts,
+   # and has nothing that rotates, configures or trims. It reads the key.
+   path "transit/hmac/audit-pseudonym.pseudonym.security_2f*"    { capabilities = ["update"] }
+   path "transit/encrypt/audit-pseudonym.pseudonym.security_2f*" { capabilities = ["create", "update"] }
+   path "transit/keys/audit-pseudonym.pseudonym.security_2f*"    { capabilities = ["read"] }
 
-   # single-purpose role, such as metering
-   path "transit/hmac/audit.billing.*" { capabilities = ["update"] }
+   # query service, if it resolves sealed identifiers: decrypt only
+   path "transit/decrypt/audit-pseudonym.pseudonym.security_2f*" { capabilities = ["update"] }
+   path "transit/keys/audit-pseudonym.pseudonym.security_2f*"    { capabilities = ["read"] }
 
-   # query service, if it resolves
-   path "transit/decrypt/audit.security.*" { capabilities = ["update"] }
-
-   # erasure operator: a human group, not a workload role
-   path "transit/keys/audit.*"    { capabilities = ["read", "update"] }
-   path "transit/encrypt/audit.*" { capabilities = ["create", "update"] }
+   # erasure operator, a human group. The glob on keys/ reaches rotate, config
+   # and trim; encrypt create destroys a tenant that was never seen.
+   path "transit/keys/audit-pseudonym.pseudonym.*"    { capabilities = ["read", "create", "update"] }
+   path "transit/encrypt/audit-pseudonym.pseudonym.*" { capabilities = ["create", "update"] }
    ```
 
-   The writer creates keys through `encrypt`, never `transit/keys`: that grant reaches `rotate`, `config` and `trim`, which together are erasure. Grant nobody `delete` on `transit/keys/audit.*` and set no key `deletion_allowed`: a deleted key is created afresh and gives the person a second identity.
+   Grant nobody `delete` on `transit/keys/` and set no `deletion_allowed`: a deleted key is created afresh and gives the person a second identity.
 
 3. Configure each component to sign in with its projected service-account token. Add `tokens: [{audience: openbao, mountPath: /var/run/openbao}]` beside `config:` in the chart.
 
@@ -65,12 +64,12 @@ Set up an OpenBao or Vault transit engine, JWT roles and policies so the `transi
 
 ## Verify
 
-The provider's tests run every policy above as its own token against a dev server.
+The backend's tests run these policies as their own tokens against a dev server.
 
 ```sh
 docker run -d --rm --name bao -p 8200:8200 -e BAO_DEV_ROOT_TOKEN_ID=root \
     openbao/openbao:2.4.1 server -dev -dev-listen-address=0.0.0.0:8200
-AUDIT_OPENBAO_URL=http://127.0.0.1:8200 AUDIT_OPENBAO_TOKEN=root go test ./keys/ ./internal/writer/
+cd storage && STORAGE_OPENBAO_ADDR=http://127.0.0.1:8200 STORAGE_OPENBAO_ROOT_TOKEN=root go test ./keys/transit/
 ```
 
 Then destroy a test tenant's key. See [erase a tenant's keys](erase-a-tenants-keys.md).

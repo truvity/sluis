@@ -8,7 +8,7 @@ Crypto-shred a tenant's pseudonyms for the purposes not under a legal duty, when
 
 - Act as a person allowed to erase. Under the storage port (`keys.adapter`) `kms` needs delete on the state store's objects under the wrapped-key prefix.
 
-- The port erases on `kms` and, for tests, `local`. The port's `transit` adapter has one key for the installation, so `audit key destroy` refuses with "operation not supported" and destroys nothing. Put the `pseudonym` purpose on `kms`.
+- The port erases on `kms`, `transit` and, for tests, `local`. On `transit` act as the eraser role of [OpenBao keys](configure-openbao-keys.md).
 
 - You need a writer to record through (`--sink`).
 
