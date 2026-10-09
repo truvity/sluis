@@ -36,6 +36,10 @@ func cloudflareSchema() m {
 			"audience":  str("The audience of that token. The module's name, `cloudflare`, when unset."),
 			"tokenFile": str("Where the projected token is mounted. `/var/run/secrets/sluis/cloudflare/token` when unset."),
 		}),
+		"serve": obj("Makes the Cloudflare module answer other modules' calls (docs/decisions/0071): the issuer's token exchange when its `remote` names this module. On Kubernetes the module listens on `address` and accepts a call that carries a projected ServiceAccount token minted for `audience`, checked with a TokenReview; any other call is a 401. On Lambda the function answers `rpc` events, and IAM decides who may invoke it. Needs `presets`; not with `remote`. Unset serves nothing.", m{
+			"address":  str("The listener on Kubernetes, `host:port`; it also answers `GET /healthz`. Unused on Lambda."),
+			"audience": str("The audience a caller's token must be minted for. The module's name, `cloudflare`, when unset."),
+		}),
 		"forbiddenPermissionGroups": list("Permission groups, by the name Cloudflare lists them under, that a prototype may never grant, IN ADDITION to the built-in list: Account API Tokens Edit (Write), Billing, Account Settings, Memberships, and Access: Organizations, Identity Providers, and Groups. The built-in list is the only thing between the minter and everything its creator could do, so it cannot be shortened by configuration, only extended.", m{"type": "string", "minLength": 1}),
 	})
 	return section

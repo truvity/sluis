@@ -73,6 +73,14 @@ func Open(ctx context.Context, getenv func(string) string) (*Function, error) {
 	if err := config.RefuseRetired("sluis", os.Environ()); err != nil {
 		return nil, err
 	}
+	// Which module the function runs is the document's: one that sets
+	// cloudflare.serve is the Cloudflare module's function, and answers `rpc`
+	// events and nothing else; any other is the issuer's, and refuses them.
+	if serves, err := servesCloudflare(file); err != nil {
+		return nil, err
+	} else if serves {
+		return openCloudflare(ctx, file)
+	}
 	return open(ctx, file)
 }
 

@@ -1404,6 +1404,23 @@
                 }
               },
               "type": "object"
+            },
+            "serve": {
+              "additionalProperties": false,
+              "description": "Makes the Cloudflare module answer other modules' calls (docs/decisions/0071): the issuer's token exchange when its `remote` names this module. On Kubernetes the module listens on `address` and accepts a call that carries a projected ServiceAccount token minted for `audience`, checked with a TokenReview; any other call is a 401. On Lambda the function answers `rpc` events, and IAM decides who may invoke it. Needs `presets`; not with `remote`. Unset serves nothing.",
+              "properties": {
+                "address": {
+                  "description": "The listener on Kubernetes, `host:port`; it also answers `GET /healthz`. Unused on Lambda.",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "audience": {
+                  "description": "The audience a caller's token must be minted for. The module's name, `cloudflare`, when unset.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
             }
           },
           "type": "object"

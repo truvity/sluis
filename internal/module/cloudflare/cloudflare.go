@@ -6,6 +6,8 @@ import (
 	"context"
 	"os"
 
+	"golang.org/x/sync/errgroup"
+
 	app "github.com/truvity/sluis/internal/cloudflare/app"
 	"github.com/truvity/sluis/internal/module"
 )
@@ -16,19 +18,32 @@ type Module struct{}
 // Name implements [module.Module].
 func (Module) Name() string { return "cloudflare" }
 
-// Run implements [module.Module]: the rotation loop, one look a minute.
+// Run implements [module.Module]: the rotation loop, one look a minute, and,
+// when the document sets cloudflare.serve, the listener other modules call.
 func (Module) Run(ctx context.Context, file string) error {
-	a, flush, err := assemble(ctx, file)
+	a, cfg, flush, err := assemble(ctx, file)
 	if err != nil {
 		return err
 	}
 	defer flush()
-	return a.Run(ctx)
+	if !cfg.Serves() {
+		return a.Run(ctx)
+	}
+	// The listener and the rotation loop end together: either one failing stops
+	// the process, which the platform restarts.
+	verify, err := newVerifier(cfg.Audience())
+	if err != nil {
+		return err
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return a.Run(gctx) })
+	g.Go(func() error { return a.ServeRPC(gctx, cfg, verify) })
+	return g.Wait()
 }
 
 // Tick implements [module.Module]: one preset, once, under its lease.
 func (Module) Tick(ctx context.Context, file, target string, unsafeLocal bool) error {
-	a, flush, err := assemble(ctx, file)
+	a, _, flush, err := assemble(ctx, file)
 	if err != nil {
 		return err
 	}
@@ -38,21 +53,21 @@ func (Module) Tick(ctx context.Context, file, target string, unsafeLocal bool) e
 
 // assemble loads the file and builds the module; the returned function closes
 // it and flushes telemetry.
-func assemble(ctx context.Context, file string) (*app.App, func(), error) {
+func assemble(ctx context.Context, file string) (*app.App, app.Config, func(), error) {
 	cfg, err := app.Load(file)
 	if err != nil {
-		return nil, nil, err
+		return nil, cfg, nil, err
 	}
 	log, flush, err := module.Logger(ctx, os.Stdout, "cloudflare-minter", cfg.LogLevel())
 	if err != nil {
-		return nil, nil, err
+		return nil, cfg, nil, err
 	}
 	a, err := app.New(ctx, cfg, log)
 	if err != nil {
 		flush()
-		return nil, nil, err
+		return nil, cfg, nil, err
 	}
-	return a, func() {
+	return a, cfg, func() {
 		module.CloseEmitter(log, a)
 		flush()
 	}, nil
