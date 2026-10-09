@@ -20,6 +20,8 @@
 - **`sluis` is a multi-call binary on urfave/cli v3 (docs/decisions/0071).** The root command gets the module subcommands `issuer`, `console`, `github`, `slack`, `cloudflare`, `google` and `backup`. `issuer` runs what `sluis serve` runs, `github` and `slack` run the controller's loop alone, and a module with no process of its own yet (`console`, `cloudflare`, `google`, `backup`) answers `not yet split` and exits 1. `serve`, `controller`, `tick` and `migrate` are unchanged, and so is the Lambda binary. The root `--help` text is now generated.
 - **An import-boundary test pins the module boundaries that hold today.** Only the issuer's process (the future signer) imports the signing-key adapters; the GitHub, Slack and Cloudflare packages import neither the issuer front end nor each other; the issuer library imports no process.
 
+- **`cmd/sluis` builds for Lambda with `-tags lambda,lambda.norpc`.** The Lambda build carries no Kubernetes, NATS or Valkey storage, and `sluis migrate` answers that it is not part of that build. The untagged build is the Kubernetes one and is unchanged. `cmd/sluis/imports_test.go` holds each build to its platform's adapters, as `cmd/sluis-lambda` already did for its own. `cmd/sluis-lambda` stays the released Lambda entry for now.
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).
