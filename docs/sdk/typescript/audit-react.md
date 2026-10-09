@@ -4,14 +4,9 @@
 yarn add @truvity/audit-react @truvity/audit    # after the registry scope in the SDK overview
 ```
 
-React hooks over the [`@truvity/audit`](audit.md) query client, and a default MUI audit view. It is a package of its
-own, published at the release's version (the same as `@truvity/audit`), so a console that only reads the trail with
-its own components does not pull in React or MUI. The registry scope and token are set once, in
-[the SDK overview](../README.md#installing-from-github-packages).
+React hooks over the [`@truvity/audit`](audit.md) query client, and a default MUI audit view. Set the registry scope once, in the [SDK overview](../README.md#installing-from-github-packages).
 
-**Peer dependencies:** `react` (19 or later), `@mui/material` (7 or later), `@bufbuild/protobuf` and
-`@connectrpc/connect`. The package holds no credentials and signs nobody in: the host passes a client over its own
-transport.
+Peer dependencies: `react` 19 or later, `@mui/material` 7 or later, `@bufbuild/protobuf` and `@connectrpc/connect`. You pass a client over your own transport; the package holds no credentials.
 
 ## The Audit page in a console
 
@@ -35,9 +30,7 @@ const audit = createQueryClient(createConnectTransport({
 </AuditProvider>
 ```
 
-`AuditProvider` takes the `client`, the `sentences` of the application's catalogues (the common one is always
-included) and a `locale` (default `en`). `AuditView` shows profiles along the top, the qualifier box and a time range,
-counts to narrow by, and the records as sentences, newest first. A row opens to the record itself.
+`AuditProvider` takes the `client`, the `sentences` of your catalogues and a `locale` (default `en`). `AuditView` shows profiles, the qualifier box, a time range, counts to narrow by, and records as sentences, newest first.
 
 | `AuditView` prop | meaning |
 |---|---|
@@ -48,14 +41,11 @@ counts to narrow by, and the records as sentences, newest first. A row opens to 
 | `pageSize` | records per page |
 | `permalink` | a link to one record, for "copy link"; without it the button is hidden |
 
-What the view shows is what the caller's grant lets through. How a console wires the page, the route and the
-network policy is in [connect an application](../../guides/audit/connect/connect-an-application.md#the-audit-page); what the
-view does with a record is in [the Audit page](../../concepts/audit/audit-page.md).
+The caller's grant limits what the view shows. Wiring is in [connect an application](../../guides/audit/connect/connect-an-application.md#the-audit-page). Behaviour is in [the Audit page](../../concepts/audit/audit-page.md).
 
 ## Hooks, for a view of your own
 
-All hooks read the client and the sentences of the nearest `AuditProvider` (`useAudit()` returns them; it throws outside
-one). Errors come back as `ReadError`, `{ code, message }`, not thrown.
+Hooks read the nearest `AuditProvider`. `useAudit()` returns it and throws outside one. Errors return as `ReadError`, `{ code, message }`.
 
 | hook | returns |
 |---|---|
@@ -65,5 +55,4 @@ one). Errors come back as `ReadError`, `{ code, message }`, not thrown.
 | `useRecord(profile, id)` | one record, where it is kept and whether a verified digest covers it |
 | `useAccess()` | each profile the caller may read, and what they may do on it |
 
-A searcher that cannot order by recorded time refuses `useTail`; the error says so. Compile a typed filter from a box
-with `compileQualifiers` from [`@truvity/audit`](audit.md#qualifiers-a-typed-filter-from-a-box).
+A searcher that cannot order by recorded time refuses `useTail`. Build filters with [`compileQualifiers`](audit.md#qualifiers-a-typed-filter-from-a-box).
