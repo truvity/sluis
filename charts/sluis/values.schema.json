@@ -2966,6 +2966,37 @@
     }
   },
   "properties": {
+    "adapters": {
+      "additionalProperties": false,
+      "description": "What the chart mounts for the service's OpenBao connection (the `openbao` secrets adapter): the CA that signs OpenBao's certificate and the projected token the login presents. The address and how the service logs in are the `config`'s (`config.adapters.secrets`).",
+      "properties": {
+        "openbao": {
+          "additionalProperties": false,
+          "properties": {
+            "caBundle": {
+              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted.",
+              "type": "string"
+            },
+            "token": {
+              "additionalProperties": false,
+              "properties": {
+                "audience": {
+                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token.",
+                  "type": "string"
+                },
+                "expirationSeconds": {
+                  "minimum": 600,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "alerts": {
       "additionalProperties": false,
       "description": "Alert rules, rendered with `renders: alerts`.",
@@ -3585,37 +3616,6 @@
             "type": "object"
           },
           "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "exports": {
-      "additionalProperties": false,
-      "description": "What the chart mounts for the service's OpenBao connection (the `openbao` secrets adapter): the CA that signs OpenBao's certificate and the projected token the login presents. The address and how the service logs in are the `config`'s (`config.adapters.secrets`). The key keeps the name it had when the exports used the same mounts.",
-      "properties": {
-        "openbao": {
-          "additionalProperties": false,
-          "properties": {
-            "caBundle": {
-              "description": "PEM of the authorities that sign OpenBao's certificate. Rendered into a ConfigMap and mounted at /var/run/access-issuer/openbao-ca/ca.pem, which `config.adapters.secrets.settings.caFile` (the openbao Secrets adapter) must then be. Empty mounts nothing, and the system's authorities are trusted.",
-              "type": "string"
-            },
-            "token": {
-              "additionalProperties": false,
-              "properties": {
-                "audience": {
-                  "description": "The audience of a ServiceAccount token the chart projects at /var/run/openbao/token, for the `jwt` auth method (`config.adapters.secrets.settings.auth.tokenFile` must then be that path). Empty projects nothing: the `kubernetes` method reads the pod's own ServiceAccount token.",
-                  "type": "string"
-                },
-                "expirationSeconds": {
-                  "minimum": 600,
-                  "type": "integer"
-                }
-              },
-              "type": "object"
-            }
-          },
-          "type": "object"
         }
       },
       "type": "object"

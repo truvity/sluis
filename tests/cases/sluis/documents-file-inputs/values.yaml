@@ -356,7 +356,7 @@ documents:
           - example
 serviceAccount:
   awsIdentity: pod-identity
-exports:
+adapters:
   openbao:
     caBundle: |
       -----BEGIN CERTIFICATE-----

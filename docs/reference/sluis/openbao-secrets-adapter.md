@@ -98,7 +98,7 @@ config:
       adapter: openbao
       settings:
         address: https://openbao.example
-        caFile: /var/run/access-issuer/openbao-ca/ca.pem     # exports.openbao.caBundle
+        caFile: /var/run/access-issuer/openbao-ca/ca.pem     # adapters.openbao.caBundle
         namespace: staging
         mount: kv
         root: sluis
@@ -106,13 +106,13 @@ config:
           method: jwt
           mount: jwt-staging
           role: sluis
-          tokenFile: /var/run/openbao/token                  # exports.openbao.token.audience
+          tokenFile: /var/run/openbao/token                  # adapters.openbao.token.audience
   audit: {writer: https://audit.example:8443}
 secrets:
   - {name: issuer/state-secret, secretName: sluis-inputs, key: state-secret}
 serviceAccount:
   awsIdentity: pod-identity          # or irsa, with awsRoleArn
-exports:
+adapters:
   openbao:
     caBundle: |
       -----BEGIN CERTIFICATE-----

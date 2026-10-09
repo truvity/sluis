@@ -659,7 +659,7 @@ documents:
 # slack, vocabulary; see docs/reference/sluis/policy.md) and the decisions beside
 # them: `exchange` (whose tokens the exchange trusts), `apps` (runner tiers
 # and the App catalogues), `controllers` (what each controller may change)
-# and `exports`. The chart adds `exchange.clusters` and `exchange.aws` from
+# and `adapters`. The chart adds `exchange.clusters` and `exchange.aws` from
 # `exchange`, and the catalogues from `githubApps.catalogue` and `slackApps`.
 # One ConfigMap, <release>-policy, mounted as the policy directory by the one
 # process: a change rolls it.
@@ -970,8 +970,8 @@ audit:
 # What the chart mounts for the service's OpenBao connection (the `openbao`
 # secrets adapter): a CA bundle and a projected token, mounted where the
 # config's `caFile` and `auth.tokenFile` must say (the chart refuses another
-# path). The key keeps the name it had when the exports used the same mounts.
-exports:
+# path).
+adapters:
   openbao:
     # PEM of the authorities that sign OpenBao's certificate. Empty mounts
     # nothing, and the system's are trusted. Mounted at

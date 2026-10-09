@@ -481,12 +481,12 @@ OpenBao's certificate, and the projected token the `jwt` login presents. Both
 are optional and independent. Takes the root.
 */}}
 {{- define "sluis.exportsMounts" -}}
-{{- if .Values.exports.openbao.caBundle }}
+{{- if .Values.adapters.openbao.caBundle }}
 - name: openbao-ca
   mountPath: /var/run/access-issuer/openbao-ca
   readOnly: true
 {{- end }}
-{{- if .Values.exports.openbao.token.audience }}
+{{- if .Values.adapters.openbao.token.audience }}
 - name: openbao-token
   mountPath: /var/run/openbao
   readOnly: true
@@ -494,18 +494,18 @@ are optional and independent. Takes the root.
 {{- end -}}
 
 {{- define "sluis.exportsVolumes" -}}
-{{- if .Values.exports.openbao.caBundle }}
+{{- if .Values.adapters.openbao.caBundle }}
 - name: openbao-ca
   configMap:
     name: {{ include "sluis.fullname" . }}-openbao-ca
 {{- end }}
-{{- if .Values.exports.openbao.token.audience }}
+{{- if .Values.adapters.openbao.token.audience }}
 - name: openbao-token
   projected:
     sources:
       - serviceAccountToken:
-          audience: {{ .Values.exports.openbao.token.audience | quote }}
-          expirationSeconds: {{ .Values.exports.openbao.token.expirationSeconds }}
+          audience: {{ .Values.adapters.openbao.token.audience | quote }}
+          expirationSeconds: {{ .Values.adapters.openbao.token.expirationSeconds }}
           path: token
 {{- end }}
 {{- end -}}
