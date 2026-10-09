@@ -277,12 +277,12 @@ func mountOrTransit(m string) string {
 
 // OpenKeysFrom opens the key provider the configuration names. It is nil where
 // a deployment runs without one, which is the default.
-func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets) (keys.Provider, error) {
+func OpenKeysFrom(ctx context.Context, k *config.Keys, secrets *config.Secrets, with ...KeyOption) (keys.Provider, error) {
 	switch {
 	case !k.Enabled():
 		return nil, nil
 	case k.Storage():
-		return OpenPortProvider(ctx, k, secrets)
+		return OpenPortProvider(ctx, k, secrets, with...)
 	case k.IsLocal():
 		root, err := os.ReadFile(k.Local.RootFile)
 		if err != nil {

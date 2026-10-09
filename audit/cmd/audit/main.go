@@ -924,7 +924,22 @@ func keyCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader())
+		var withKeys []cli.KeyOption
+		if cfg.Database != nil {
+			// keys.state.backend: database keeps the wrapped keys, and their
+			// tombstones, in the writer's database: destroy needs it.
+			poolConfig, err := cfg.Database.PoolConfig(ctx, cfg.SecretReader())
+			if err != nil {
+				return err
+			}
+			pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			withKeys = append(withKeys, cli.WithKeyDatabase(pool))
+		}
+		provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader(), withKeys...)
 		if err != nil {
 			return err
 		}

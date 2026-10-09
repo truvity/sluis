@@ -12,6 +12,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
+	index "github.com/truvity/sluis/audit/index/postgres"
 	"github.com/truvity/sluis/audit/internal/config"
 	"github.com/truvity/sluis/audit/keys"
 	"github.com/truvity/sluis/audit/store/s3store"
@@ -28,6 +29,31 @@ import (
 // The storage port is how an installation's keys and its internal state are
 // reached: keys by purpose (seal, pseudonym, conceal, archive) and state by
 // address. What follows builds both from a configuration file.
+
+// KeyOption adjusts how a keys block is opened.
+type KeyOption func(*keyOptions)
+
+type keyOptions struct{ database index.DB }
+
+// WithKeyDatabase gives the keys the process's connection to the index database,
+// for `keys.state.backend: database`: the wrapped per-tenant secrets are rows
+// there, written as the process's own (writer) role.
+func WithKeyDatabase(db index.DB) KeyOption { return func(o *keyOptions) { o.database = db } }
+
+// noDatabase is the wrapped store of a process that was given no connection: it
+// may open nothing that needs a wrapped key, and says why.
+type noDatabase struct{}
+
+var errNoDatabase = errors.New("keys.state.backend is database and this process has no `database` to keep the wrapped keys in")
+
+func (noDatabase) Get(context.Context, string) ([]byte, bool, error) {
+	return nil, false, errNoDatabase
+}
+func (noDatabase) PutIfAbsent(context.Context, string, []byte) ([]byte, error) {
+	return nil, errNoDatabase
+}
+func (noDatabase) Tombstone(context.Context, string) error          { return errNoDatabase }
+func (noDatabase) Tombstoned(context.Context, string) (bool, error) { return false, errNoDatabase }
 
 // stateAt opens the installation's state store at the address a StateRef names.
 // The store is SSM Parameter Store under the root, with the process's own
@@ -76,7 +102,11 @@ func readCredentials(ctx context.Context, st state.Store, address string) (id, s
 // OpenKeyPort opens the keys of a storage-shaped keys block (adapter) and
 // names, for the log, the adapter and alias of the seal key. The block has
 // been checked by the loader (config.Keys).
-func OpenKeyPort(ctx context.Context, k *config.Keys, secrets *config.Secrets) (set *skeys.Keys, sealName string, err error) {
+func OpenKeyPort(ctx context.Context, k *config.Keys, secrets *config.Secrets, with ...KeyOption) (set *skeys.Keys, sealName string, err error) {
+	var o keyOptions
+	for _, f := range with {
+		f(&o)
+	}
 	if !k.Storage() {
 		return nil, "", errors.New("keys: not in the adapter shape")
 	}
@@ -96,7 +126,17 @@ func OpenKeyPort(ctx context.Context, k *config.Keys, secrets *config.Secrets) (
 			return nil, "", fmt.Errorf("keys: %w", err)
 		}
 		var opts []kmskeys.Option
-		if k.State != nil {
+		switch {
+		case k.State != nil && k.State.Backend == "database":
+			// The index database, as the process's own role: the writer holds
+			// the grant. A process without a connection (the query service,
+			// which only opens what was sealed) gets a store that says so.
+			if o.database != nil {
+				opts = append(opts, kmskeys.WithWrappedStore(index.NewWrappedKeys(o.database)))
+			} else {
+				opts = append(opts, kmskeys.WithWrappedStore(noDatabase{}))
+			}
+		case k.State != nil:
 			st, err := stateAt(ctx, config.StateRef{Root: k.State.Root + "/" + k.State.Address}, "")
 			if err != nil {
 				return nil, "", fmt.Errorf("keys.state: %w", err)
@@ -152,8 +192,8 @@ func OpenKeyPort(ctx context.Context, k *config.Keys, secrets *config.Secrets) (
 
 // OpenPortProvider is the key provider of a storage-shaped keys block, or nil
 // where it names neither a pseudonym nor a conceal key.
-func OpenPortProvider(ctx context.Context, k *config.Keys, secrets *config.Secrets) (keys.Provider, error) {
-	set, _, err := OpenKeyPort(ctx, k, secrets)
+func OpenPortProvider(ctx context.Context, k *config.Keys, secrets *config.Secrets, with ...KeyOption) (keys.Provider, error) {
+	set, _, err := OpenKeyPort(ctx, k, secrets, with...)
 	if err != nil {
 		return nil, err
 	}

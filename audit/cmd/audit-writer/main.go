@@ -118,12 +118,6 @@ func run() error {
 		if archive, err = cli.OpenArchive(ctx, d, profiles, *cfg.Archive, cfg.SecretReader()); err != nil {
 			return err
 		}
-		if provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader()); err != nil {
-			return err
-		}
-	}
-	if provider != nil {
-		defer provider.Close() //nolint:errcheck // shutting down
 	}
 
 	var found []*catalogue.Catalogue
@@ -149,6 +143,21 @@ func run() error {
 			return err
 		}
 		defer pool.Close()
+	}
+
+	// The keys, after the database: with `keys.state.backend: database` the
+	// wrapped per-tenant secrets are rows in it.
+	if cfg.Mode == "writer" {
+		var withKeys []cli.KeyOption
+		if pool != nil {
+			withKeys = append(withKeys, cli.WithKeyDatabase(pool))
+		}
+		if provider, err = cli.OpenKeysFrom(ctx, cfg.Keys, cfg.SecretReader(), withKeys...); err != nil {
+			return err
+		}
+	}
+	if provider != nil {
+		defer provider.Close() //nolint:errcheck // shutting down
 	}
 
 	// Who is publishing is verified, not declared: the writer stamps the

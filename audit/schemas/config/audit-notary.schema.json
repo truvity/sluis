@@ -226,23 +226,26 @@
         },
         "state": {
           "additionalProperties": false,
-          "description": "Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the installation's state store (SSM Parameter Store), under `root`/`address`. Nothing in it is usable without the pseudonym key.",
+          "description": "Where the wrapped per-tenant secrets behind the pseudonym purpose are kept, with the kms adapter: the index database (`backend: database`, through the process's own `database`; no SSM), or the installation's SSM Parameter Store (`backend: ssm`, under `root`/`address`). Nothing in it is usable without the pseudonym key.",
           "properties": {
             "address": {
-              "description": "The key below the root, for example internal/pseudonym.",
+              "description": "With backend ssm, the key below the root, for example internal/pseudonym.",
               "minLength": 1,
               "type": "string"
             },
+            "backend": {
+              "description": "`database` keeps them in the index database; `ssm` (the default, for a config that gives a root) in SSM Parameter Store.",
+              "enum": [
+                "ssm",
+                "database"
+              ]
+            },
             "root": {
-              "description": "The SSM path prefix of the installation, for example /audit/main.",
+              "description": "With backend ssm, the SSM path prefix of the installation, for example /audit/main.",
               "minLength": 1,
               "type": "string"
             }
           },
-          "required": [
-            "root",
-            "address"
-          ],
           "type": "object"
         },
         "transit": {

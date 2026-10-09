@@ -46,7 +46,7 @@ func migrations() ([]string, error) {
 // different version refuses to start rather than guess: migrating from several
 // replicas at once is a race, so the migration is its own step and this is the
 // check that it ran.
-const Version = 6
+const Version = 7
 
 // Schema returns the migrations in order, so that a deployment can apply them
 // with whatever it already uses rather than through this code.
@@ -102,7 +102,7 @@ func Migrate(ctx context.Context, db DB) error {
 // start-up.
 var (
 	indexTables  = []string{"events_core", "events_context", "events_data", "facet_counts", "index_cursor"}
-	writerTables = []string{"seen", "catalogues", "audit_key_directory"}
+	writerTables = []string{"seen", "catalogues", "audit_key_directory", "audit_wrapped_keys", "audit_wrapped_key_tombstones"}
 	// rlsTables are the ones row-level security is enabled on. A role that
 	// writes them needs a policy of its own, because the tenant policies read
 	// a per-request setting and a writer of every tenant's rows has none.
