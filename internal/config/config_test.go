@@ -309,7 +309,7 @@ func TestARetiredVariableIsRefused(t *testing.T) {
 // nothing it lists is retired twice: a migration table is a table somebody
 // follows line by line.
 func TestTheReferenceListsEveryRetiredVariable(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "configuration.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "sluis", "configuration.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
