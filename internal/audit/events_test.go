@@ -100,6 +100,8 @@ func every() []*record.Record {
 		audit.CatalogueAppCreated(person, "example", app),
 		audit.CatalogueAppInstalled(person, "example", app, 7),
 		audit.CatalogueAppDisconnected(person, "example", app, false, ""),
+		audit.CatalogueAppWebhookChanged(person, "example", app, audit.WebhookRotated, audit.Succeeded()),
+		audit.CatalogueAppWebhookChanged(person, "example", app, audit.WebhookVerified, audit.Failed("the target answered 401")),
 		audit.RunnerAppCreated(person, "example", app),
 		audit.RunnerAppInstalled(person, "example", app, 7),
 		audit.RunnerAppDisconnected(audit.System(), "example", audit.App{Slug: "runners", Tier: "stable"}, true, ""),

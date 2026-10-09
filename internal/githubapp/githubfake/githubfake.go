@@ -71,6 +71,13 @@ type Org struct {
 	App App
 	// Installations are the App's installations, by id.
 	Installations map[int64]*Installation
+	// Hook is the App's webhook as GitHub holds it, read and replaced through
+	// /app/hook/config.
+	Hook Hook
+	// Deliveries are the App's webhook deliveries, newest first.
+	Deliveries []githubapp.Delivery
+	// Redelivered are the delivery ids asked to be sent again, in order.
+	Redelivered []int64
 	// AppReads counts the calls made as the App to read it or one of its
 	// installations.
 	AppReads int
@@ -117,6 +124,14 @@ type App struct {
 	Slug        string
 	Permissions map[string]string
 	Events      []string
+}
+
+// Hook is an App's webhook configuration. GitHub never returns the secret,
+// so a test reads it here.
+type Hook struct {
+	URL, ContentType, Secret string
+	// Patches counts the PATCH calls made.
+	Patches int
 }
 
 // Installation is one installation of the App: the permissions its owner
@@ -223,6 +238,10 @@ func Start(t *testing.T, login string) *Org {
 	mux.HandleFunc("POST /app/installations/{id}/access_tokens", org.accessToken)
 	mux.HandleFunc("GET /app", org.app)
 	mux.HandleFunc("GET /app/installations/{id}", org.installation)
+	mux.HandleFunc("GET /app/hook/config", org.hookConfig)
+	mux.HandleFunc("PATCH /app/hook/config", org.patchHookConfig)
+	mux.HandleFunc("GET /app/hook/deliveries", org.deliveries)
+	mux.HandleFunc("POST /app/hook/deliveries/{id}/attempts", org.redeliver)
 	mux.HandleFunc("POST /graphql", org.graphql)
 	mux.HandleFunc("GET /orgs/{org}/invitations", org.invitations)
 	mux.HandleFunc("POST /orgs/{org}/invitations", org.invite)
@@ -270,6 +289,84 @@ func (o *Org) app(w http.ResponseWriter, r *http.Request) {
 		"id": o.App.ID, "slug": o.App.Slug, "html_url": "https://github.com/apps/" + o.App.Slug,
 		"owner": map[string]any{"login": o.Login}, "permissions": o.App.Permissions, "events": o.App.Events,
 	})
+}
+
+func (o *Org) hookView() map[string]any {
+	secret := ""
+	if o.Hook.Secret != "" {
+		secret = "********"
+	}
+	return map[string]any{
+		"url": o.Hook.URL, "content_type": o.Hook.ContentType, "insecure_ssl": "0", "secret": secret,
+	}
+}
+
+func (o *Org) hookConfig(w http.ResponseWriter, r *http.Request) {
+	if !appBearer(w, r) {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.AppReads++
+	_ = json.NewEncoder(w).Encode(o.hookView())
+}
+
+func (o *Org) patchHookConfig(w http.ResponseWriter, r *http.Request) {
+	if !appBearer(w, r) {
+		return
+	}
+	var body struct {
+		URL         string `json:"url"`
+		Secret      string `json:"secret"`
+		ContentType string `json:"content_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.act(w, "patch hook "+body.URL) {
+		return
+	}
+	o.Hook.Patches++
+	if body.URL != "" {
+		o.Hook.URL = body.URL
+	}
+	if body.Secret != "" {
+		o.Hook.Secret = body.Secret
+	}
+	if body.ContentType != "" {
+		o.Hook.ContentType = body.ContentType
+	}
+	_ = json.NewEncoder(w).Encode(o.hookView())
+}
+
+func (o *Org) deliveries(w http.ResponseWriter, r *http.Request) {
+	if !appBearer(w, r) {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_ = json.NewEncoder(w).Encode(append([]githubapp.Delivery{}, o.Deliveries...))
+}
+
+func (o *Org) redeliver(w http.ResponseWriter, r *http.Request) {
+	if !appBearer(w, r) {
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, d := range o.Deliveries {
+		if d.ID == id {
+			o.Redelivered = append(o.Redelivered, id)
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = io.WriteString(w, `{"message":"Not Found"}`)
 }
 
 func (o *Org) installation(w http.ResponseWriter, r *http.Request) {

@@ -136,9 +136,13 @@ consumer the same text, and `schema` is a field like the others.
 
 ```json
 {"schema":"oidc/v1","client-id":"example-rp","client-secret":"…"}
-{"schema":"github/v1","app_id":"12345","installation_id":"67890","private_key":"<PEM>"}
+{"schema":"github/v1","app_id":"12345","installation_id":"67890","private_key":"<PEM>","webhook_secret":"…"}
 {"schema":"slack/v1","bot_token":"…"}
 ```
+
+`webhook_secret` of `github/v1` is optional: it is present only for a catalogue App whose entry declares a `webhook`
+(see *Amendment: a webhook secret*). A consumer that verifies deliveries (Argo CD, Kargo) reads it with
+`remoteRef: {key: github/<app>, property: webhook_secret}`, and one that does not ignores it.
 
 Per kind and version the repository holds a JSON Schema and a golden document. The encoder's output for a fixture
 must equal the golden, every field the schema names must be present and a string, and the address the kind encodes to
@@ -221,6 +225,8 @@ These replace `port.Secrets`' `export/` special case, `port.Export` and its adap
   cached the pair before the rotation cannot refuse the old secret during the overlap. 0039's `created` and `rotated`
   are the first and current revisions' `Modified`, and `orphaned` is derived from policy (an address with no client
   row); none of them is stored.
+- **GitHub App webhook secrets** do not overlap, and the order of a rotation is what keeps deliveries from failing
+  (*Amendment: a webhook secret*, below).
 - **GitHub App keys.** GitHub is the verifier and accepts every key the App has. GitHub's public API is not known to
   create or delete an App's private key, and how GitHub hands over a new key during a console flow is to verify. The
   console guides the operator: generate a key in the App's settings, hand it to the console, which checks it by
@@ -398,6 +404,34 @@ estate and recorded:
   change; `secrets.layout: v4` has run for seven days with no write to a v3 path.
 - **Mutual TLS** (the Cloudflare shape) is served from `truststore/` at the pinned version, and the function's role is
   refused a write there.
+
+## Amendment: a webhook secret (2026-10-09)
+
+A catalogue App may declare a `webhook` (a URL, or a Kargo receiver) so GitHub delivers its events to a consumer such
+as Argo CD (`POST /api/webhook`, one secret, `X-Hub-Signature-256`) or Kargo. The decisions:
+
+- **sluis generates the secret** (32 random bytes, as for a generated client secret) and sets it with
+  `PATCH /app/hook/config` as the App, right after the manifest conversion. The conversion's own `webhook_secret` is
+  not kept: it is one more copy of a value this service would then have to keep consistent. The App is created with
+  an active webhook, because GitHub has no API to switch an existing App's webhook on.
+- **It is kept with the App's key.** Pending, beside the pending key; once installed and `export: true`, as the
+  optional `webhook_secret` of `github/v1` at `external/github/<app>`, which is where a consumer reads it. A write of
+  the key never drops it, and the store compares and keeps all four fields.
+- **Rotation has no overlap, so its order is the design.** Argo CD and Kargo each hold one secret, and GitHub signs with
+  one. A rotation therefore (1) keeps the new secret as a new revision, where the consumers read it; (2) sends the new
+  target a signed `ping` until it answers 2xx within a bounded wait, which proves the consumer reloaded; and only then
+  (3) tells GitHub the new secret, and for a Kargo receiver the URL derived from it (its path is
+  `hex(sha256(project + receiver + secret))`, so the URL moves with the secret), in the single PATCH. A failure before
+  GitHub is told restores the previous revision and leaves deliveries exactly as they were; a failure of the PATCH
+  itself does the same. Each step is audited (`roster.catalogue_app.webhook_changed`), never with the secret or the
+  derived URL.
+- **Drift** is read from `GET /app/hook/config`: its URL, content type and whether a secret is set. GitHub masks the
+  secret, so it cannot be compared, only replaced; rotating is the repair for all of them.
+
+Rejected: *keeping two secrets for an overlap* (neither consumer accepts a second one); *telling GitHub first* (every
+delivery between the PATCH and the consumer's reload would fail signature verification and be lost, and GitHub does
+not retry on its own); *a secret declared in values* (a durable credential in git, which this contract exists to
+avoid).
 
 ## Rejected alternatives
 

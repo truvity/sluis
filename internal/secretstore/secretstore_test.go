@@ -51,7 +51,8 @@ func TestExternalDocumentsAreGoldenAndMatchTheirSchema(t *testing.T) {
 		{"github", "github/example-app", func() error {
 			_, err := st.External.GitHubApp("example-app").Put(ctx, secretstore.GitHubv1{
 				AppID: "12345", InstallationID: "67890",
-				PrivateKey: "-----BEGIN EXAMPLE KEY-----\nexample\n-----END EXAMPLE KEY-----\n",
+				PrivateKey:    "-----BEGIN EXAMPLE KEY-----\nexample\n-----END EXAMPLE KEY-----\n",
+				WebhookSecret: "example-webhook-secret",
 			}, "")
 			return err
 		}},

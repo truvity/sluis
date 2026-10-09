@@ -9,6 +9,7 @@
     "schema": { "const": "github/v1" },
     "app_id": { "type": "string", "minLength": 1, "description": "The App's id, as a string." },
     "installation_id": { "type": "string", "minLength": 1, "description": "The installation's id, as a string." },
-    "private_key": { "type": "string", "minLength": 1, "description": "The App's private key, PEM." }
+    "private_key": { "type": "string", "minLength": 1, "description": "The App's private key, PEM." },
+    "webhook_secret": { "type": "string", "minLength": 1, "description": "Optional. The secret GitHub signs the App's webhook deliveries with (X-Hub-Signature-256). Present only for an App whose catalogue entry declares a webhook. Rotating it is not seamless: the App holds one secret, so a consumer verifying deliveries has none to fall back on while it reloads this document." }
   }
 }

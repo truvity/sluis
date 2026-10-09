@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -44,11 +45,47 @@ func (s *GitHubCatalogueApps) Put(ctx context.Context, record catalogueapp.Recor
 		return err
 	}
 	return s.edit(ctx, func(data map[string][]byte) {
+		// The webhook secret is the App's, not the key's: rewriting the key
+		// at install must not lose it.
+		hook, hasHook := catalogueapp.WebhookSecretOf(data, record.ID)
 		for _, key := range catalogueapp.Keys(record.ID) {
 			delete(data, key)
 		}
 		maps.Copy(data, keys)
+		if hasHook {
+			data[catalogueapp.Key(record.ID, catalogueapp.WebhookSecretProperty)] = []byte(hook)
+		}
 	})
+}
+
+// PutWebhookSecret sets the secret GitHub signs one App's webhook with,
+// replacing the one before. The App must have been Put.
+func (s *GitHubCatalogueApps) PutWebhookSecret(ctx context.Context, id, secret string) error {
+	if secret == "" {
+		return errors.New("kube: a webhook secret is not empty")
+	}
+	var missing bool
+	err := s.edit(ctx, func(data map[string][]byte) {
+		if _, ok := data[catalogueapp.RecordKey(id)]; !ok {
+			missing = true
+			return
+		}
+		data[catalogueapp.Key(id, catalogueapp.WebhookSecretProperty)] = []byte(secret)
+	})
+	if err == nil && missing {
+		return fmt.Errorf("kube: no App %s to keep a webhook secret for", id)
+	}
+	return err
+}
+
+// WebhookSecret reads one App's webhook secret.
+func (s *GitHubCatalogueApps) WebhookSecret(ctx context.Context, id string) (string, bool, error) {
+	secret, err := s.read(ctx)
+	if err != nil || secret == nil {
+		return "", false, err
+	}
+	hook, ok := catalogueapp.WebhookSecretOf(secret.Data, id)
+	return hook, ok, nil
 }
 
 // List returns every App's record, sorted by id. A record that does not

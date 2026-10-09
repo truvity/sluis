@@ -119,8 +119,15 @@ type fakeGitHub struct {
 	// 7 hold, as GET /app and GET /app/installations/7 answer; a nil
 	// installed is an installation removed on GitHub.
 	app, installed map[string]string
+	// events are the webhook events GET /app answers with.
+	events []string
 	// reads counts those two calls.
 	reads int
+	// hook is the App's webhook as GitHub holds it, set through
+	// PATCH /app/hook/config; hookPatchRefused makes the next PATCH a 422.
+	hookURL, hookSecret, hookContentType string
+	hookPatches                          int
+	hookPatchRefused                     bool
 }
 
 // githubBaseMu is held by the test that has pointed githubapp at its fake.
@@ -146,8 +153,35 @@ func startFakeGitHub(t *testing.T) *fakeGitHub {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": 42, "slug": "globex-access-roster", "pem": fake.pem, "client_id": "Iv1.created", "client_secret": "created-secret",
-			"html_url": "https://github.com/apps/globex-access-roster", "owner": map[string]any{"login": fake.owner},
+			"webhook_secret": "from-the-conversion",
+			"html_url":       "https://github.com/apps/globex-access-roster", "owner": map[string]any{"login": fake.owner},
 		})
+	})
+	mux.HandleFunc("GET /app/hook/config", func(w http.ResponseWriter, _ *http.Request) {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		masked := ""
+		if fake.hookSecret != "" {
+			masked = "********"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"url": fake.hookURL, "content_type": fake.hookContentType, "insecure_ssl": "0", "secret": masked})
+	})
+	mux.HandleFunc("PATCH /app/hook/config", func(w http.ResponseWriter, r *http.Request) {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		if fake.hookPatchRefused {
+			fake.hookPatchRefused = false
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"Validation Failed"}`))
+			return
+		}
+		var body struct{ URL, Secret, ContentType string }
+		var raw map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		body.URL, body.Secret, body.ContentType = raw["url"], raw["secret"], raw["content_type"]
+		fake.hookURL, fake.hookSecret, fake.hookContentType = body.URL, body.Secret, body.ContentType
+		fake.hookPatches++
+		_ = json.NewEncoder(w).Encode(map[string]any{"url": fake.hookURL, "content_type": fake.hookContentType, "secret": "********"})
 	})
 	mux.HandleFunc("GET /app/installations", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 7, "account": map[string]any{"login": "globex"}}})
@@ -158,7 +192,7 @@ func startFakeGitHub(t *testing.T) *fakeGitHub {
 		fake.reads++
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": 42, "slug": "globex-access-roster", "html_url": "https://github.com/apps/globex-access-roster",
-			"owner": map[string]any{"login": fake.owner}, "permissions": fake.app,
+			"owner": map[string]any{"login": fake.owner}, "permissions": fake.app, "events": fake.events,
 		})
 	})
 	mux.HandleFunc("GET /app/installations/{id}", func(w http.ResponseWriter, r *http.Request) {

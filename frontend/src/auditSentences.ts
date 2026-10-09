@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "locales": [
     "en"
   ],
@@ -24,6 +24,12 @@ export const roster: Sentences = {
       "summary": "A catalogued GitHub App was installed.",
       "message": {
         "en": "{actor} installed GitHub App {targets_0_id} on {targets_1_id}"
+      }
+    },
+    "roster.catalogue_app.webhook_changed": {
+      "summary": "A step of setting or rotating the secret of a catalogued GitHub App's webhook.",
+      "message": {
+        "en": "{outcome, select, success {{actor} {data_step, select, configured {set the webhook of} staged {kept a new webhook secret for} verified {confirmed the consumer holds the new webhook secret of} rotated {rotated the webhook secret of} restored {put back the previous webhook secret of} other {changed the webhook of}} GitHub App {targets_0_id}} other {{actor} could not finish the webhook of GitHub App {targets_0_id} at {data_step}: {outcome_reason}}}"
       }
     },
     "roster.client.secret.adopted": {

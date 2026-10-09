@@ -13,8 +13,10 @@
 //
 // Ported from github-roster 0.x (`pkg/githubapp`) onto the JWT library
 // access-roster already uses. A conversion's webhook secret is dropped on
-// the floor, because nothing here receives a webhook; its client secret is
-// kept only for the link App, which is the one App people authorize.
+// the floor: nothing here receives a webhook, and an App that has one
+// delivered elsewhere gets a secret this service generated itself and sets
+// with [PatchHookConfig]. A conversion's client secret is kept only for the
+// link App, which is the one App people authorize.
 package githubapp
 
 import (
@@ -70,13 +72,14 @@ type Manifest struct {
 	// Description is shown on the App's page. Only a catalogue App has
 	// one.
 	Description string `json:"description,omitempty"`
-	// DefaultEvents are the webhook events the App subscribes to. The
-	// webhook stays inactive whatever they are.
+	// DefaultEvents are the webhook events the App subscribes to. They are
+	// delivered only if the webhook is active.
 	DefaultEvents []string `json:"default_events,omitempty"`
 }
 
-// HookAttributes is an App's webhook. The controller polls, so it is
-// never active; GitHub still wants a URL beside it.
+// HookAttributes is an App's webhook. It is active only for a catalogue App
+// that declares where deliveries go; any other App polls, and GitHub still
+// wants a URL beside an inactive webhook.
 type HookAttributes struct {
 	URL    string `json:"url"`
 	Active bool   `json:"active"`
@@ -94,13 +97,21 @@ const nameLimit = catalogue.NameLimit
 // is installed nowhere); callbacks are where a person authorizing the App
 // as themselves may be sent back to.
 //
-// The webhook is never active: nothing here receives one, so no endpoint
-// of ours has to be reachable from GitHub, whatever events are declared.
+// The webhook is inactive unless the entry declares one: nothing here
+// receives a delivery, so no endpoint of ours has to be reachable from
+// GitHub. A declared webhook is active from the start, because GitHub has
+// no API to switch an existing App's webhook on; its secret (and, for a
+// Kargo receiver, its final URL) is set right after the conversion, by
+// [PatchHookConfig].
 func ManifestFor(app catalogue.App, homepage, redirect, setup string, callbacks []string) Manifest {
+	hook := HookAttributes{URL: homepage}
+	if app.Webhook != nil {
+		hook = HookAttributes{URL: app.Webhook.Placeholder(), Active: true}
+	}
 	return Manifest{
 		Name:               app.DisplayName(),
 		URL:                homepage,
-		HookAttributes:     HookAttributes{URL: homepage, Active: false},
+		HookAttributes:     hook,
 		RedirectURL:        redirect,
 		SetupURL:           setup,
 		Public:             app.Public,

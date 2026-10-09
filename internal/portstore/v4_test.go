@@ -122,3 +122,90 @@ func TestAppsKeepBothLayoutsInTransition(t *testing.T) {
 		}
 	})
 }
+
+// A catalogue App's webhook secret is the App's, not the key's: a rewrite of
+// the key at install keeps it, it is in the exported document when there is
+// one (and only there once v3 readers are gone), and the key still reads back
+// whole beside it.
+func TestACatalogueAppKeepsItsWebhookSecretAcrossWrites(t *testing.T) {
+	each(t, func(t *testing.T, e env) {
+		now := time.Unix(1700000000, 0).UTC()
+		set := e.open(t)
+		stores := secretstore.FromStore(memory.New(), secretstore.LayoutV4, "")
+		b := portstore.New(set).WithV4(stores).ExportGitHubApps(func(id string) bool { return id == "renovate" })
+		cat := portstore.NewGitHubCatalogueApps(b)
+
+		for _, id := range []string{"renovate", "kept"} {
+			rec := catalogueapp.Record{ID: id, Org: "acme", AppID: 8, AppSlug: "acme-" + id, ConnectedAt: now, ConnectedBy: "ada@acme.example"}
+			if err := cat.PutWebhookSecret(ctx, id, "early"); err == nil {
+				t.Fatalf("%s: a secret was kept for an App never put", id)
+			}
+			if err := cat.Put(ctx, rec, "KEY-"+id); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok, err := cat.WebhookSecret(ctx, id); err != nil || ok {
+				t.Fatalf("%s: a secret before any was set = %v, %v", id, ok, err)
+			}
+			// Pending: set, and read back; the key is untouched.
+			if err := cat.PutWebhookSecret(ctx, id, "hook-1"); err != nil {
+				t.Fatalf("%s: PutWebhookSecret: %v", id, err)
+			}
+			if got, ok, err := cat.WebhookSecret(ctx, id); err != nil || !ok || got != "hook-1" {
+				t.Fatalf("%s: pending secret = %q, %v, %v", id, got, ok, err)
+			}
+			if _, key, ok, err := cat.Get(ctx, id); err != nil || !ok || key != "KEY-"+id {
+				t.Fatalf("%s: the key beside the secret = %q, %v, %v", id, key, ok, err)
+			}
+			if _, _, err := stores.External.GitHubApp(id).Get(ctx); !errors.Is(err, state.ErrNotFound) {
+				t.Fatalf("%s: a pending App is external: %v", id, err)
+			}
+
+			// Install: the key is rewritten, the secret stays.
+			rec.InstallationID = 11
+			if err := cat.Put(ctx, rec, "KEY-"+id); err != nil {
+				t.Fatal(err)
+			}
+			if got, ok, err := cat.WebhookSecret(ctx, id); err != nil || !ok || got != "hook-1" {
+				t.Fatalf("%s: the secret after Install = %q, %v, %v", id, got, ok, err)
+			}
+			// Rotation on an installed App.
+			if err := cat.PutWebhookSecret(ctx, id, "hook-2"); err != nil {
+				t.Fatal(err)
+			}
+			if got, _, _ := cat.WebhookSecret(ctx, id); got != "hook-2" {
+				t.Fatalf("%s: the rotated secret = %q", id, got)
+			}
+			if _, key, _, _ := cat.Get(ctx, id); key != "KEY-"+id {
+				t.Fatalf("%s: the key after rotation = %q", id, key)
+			}
+		}
+
+		// Exported: all four fields are in the one document, and a later
+		// write keeps all four.
+		doc, _, err := stores.External.GitHubApp("renovate").Get(ctx)
+		if err != nil || doc.WebhookSecret != "hook-2" || doc.PrivateKey != "KEY-renovate" || doc.InstallationID != "11" || doc.AppID != "8" {
+			t.Fatalf("exported document = %+v, %v", doc, err)
+		}
+		rec := catalogueapp.Record{
+			ID: "renovate", Org: "acme", AppID: 8, AppSlug: "acme-renovate", InstallationID: 11, ConnectedAt: now,
+			WebhookURL: "https://argocd.example/api/webhook",
+		}
+		if err = cat.Put(ctx, rec, "KEY-renovate"); err != nil {
+			t.Fatal(err)
+		}
+		if doc, _, _ = stores.External.GitHubApp("renovate").Get(ctx); doc.WebhookSecret != "hook-2" {
+			t.Fatalf("a later Put dropped the webhook secret from the document: %+v", doc)
+		}
+		if _, _, err = stores.External.GitHubApp("kept").Get(ctx); !errors.Is(err, state.ErrNotFound) {
+			t.Fatalf("an App without export is external: %v", err)
+		}
+
+		// Forgetting the App forgets its secret.
+		if err = cat.Delete(ctx, "renovate"); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok, err := cat.WebhookSecret(ctx, "renovate"); err != nil || ok {
+			t.Fatalf("the secret outlived the App: %v, %v", ok, err)
+		}
+	})
+}

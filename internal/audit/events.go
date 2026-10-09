@@ -522,6 +522,34 @@ func CatalogueAppDisconnected(actor Actor, org string, app App, uninstalled bool
 		[]*record.Target{app.target(), targetOrg(org)}, data{"uninstalled": uninstalled})
 }
 
+// The steps of setting or rotating a catalogued App's webhook secret, in the
+// order a rotation takes them.
+const (
+	// WebhookConfigured is the webhook's URL and first secret set on GitHub,
+	// right after the App was created.
+	WebhookConfigured = "configured"
+	// WebhookStaged is a new secret kept where the consumers read it, before
+	// GitHub is told.
+	WebhookStaged = "staged"
+	// WebhookVerified is the new target answering a signed ping with the new
+	// secret: the consumer holds it.
+	WebhookVerified = "verified"
+	// WebhookRotated is GitHub told to sign with the new secret.
+	WebhookRotated = "rotated"
+	// WebhookRestored is the previous secret put back after a rotation
+	// stopped before GitHub was told.
+	WebhookRestored = "restored"
+)
+
+// CatalogueAppWebhookChanged is one step of setting or rotating a catalogued
+// App's webhook secret; a step that did not complete is Failed, with its
+// reason. Neither the secret nor the target URL is recorded: a Kargo
+// receiver's path is derived from the secret.
+func CatalogueAppWebhookChanged(actor Actor, org string, app App, step string, o Outcome) *record.Record {
+	return build("roster.catalogue_app.webhook_changed", actor, o, nil,
+		[]*record.Target{app.target(), targetOrg(org)}, data{"step": step})
+}
+
 // RunnerAppCreated is a runner App created.
 func RunnerAppCreated(actor Actor, org string, app App) *record.Record {
 	return build("roster.runner_app.created", actor, Succeeded(), nil,

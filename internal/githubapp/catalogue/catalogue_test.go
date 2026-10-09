@@ -1,6 +1,8 @@
 package catalogue_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"slices"
@@ -266,4 +268,57 @@ func TestLoadingNoFileIsAnEmptyCatalogue(t *testing.T) {
 	if _, err = catalogue.Load(filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
 		t.Error("a missing file loaded")
 	}
+}
+
+// A webhook is a URL or a Kargo receiver, never both, never neither; it
+// needs events to deliver; and a Kargo receiver's URL is derived from the
+// secret, so it moves when the secret does.
+func TestAWebhookIsAURLOrAKargoReceiverAndNeedsEvents(t *testing.T) {
+	t.Parallel()
+	app := func(webhook, events string) string {
+		return "apps:\n  - id: a\n    org: example-org\n    permissions: {contents: read}\n    " + events + "\n    webhook: " + webhook + "\n"
+	}
+	for name, c := range map[string]struct {
+		yaml string
+		want string // empty: valid
+	}{
+		"url":               {app(`{url: "https://argocd.example/api/webhook"}`, "events: [push]"), ""},
+		"kargo":             {app(`{kargo: {base: "https://kargo.example", receiver: github, project: apps}}`, "events: [push]"), ""},
+		"kargo, no project": {app(`{kargo: {base: "https://kargo.example", receiver: github}}`, "events: [push]"), ""},
+		"both":              {app(`{url: "https://a.example", kargo: {base: "https://k.example", receiver: r}}`, "events: [push]"), "not both"},
+		"neither":           {app(`{}`, "events: [push]"), "set url or kargo"},
+		"http":              {app(`{url: "http://argocd.example/api/webhook"}`, "events: [push]"), "not an https:// URL"},
+		"credentials":       {app(`{url: "https://u:p@argocd.example/hook"}`, "events: [push]"), "credentials"},
+		"no receiver":       {app(`{kargo: {base: "https://kargo.example"}}`, "events: [push]"), "receiver is empty"},
+		"no events":         {app(`{url: "https://argocd.example/api/webhook"}`, ""), "events is empty"},
+	} {
+		_, err := catalogue.Parse([]byte(c.yaml))
+		switch {
+		case c.want == "" && err != nil:
+			t.Errorf("%s: %v", name, err)
+		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
+			t.Errorf("%s = %v, want %q", name, err, c.want)
+		}
+	}
+
+	plain := catalogue.Webhook{URL: "https://argocd.example/api/webhook"}
+	if plain.Target("one") != plain.URL || plain.Target("two") != plain.URL || plain.Placeholder() != plain.URL {
+		t.Error("a plain URL moved with the secret")
+	}
+	kargo := catalogue.Webhook{Kargo: &catalogue.Kargo{Base: "https://kargo.example/", Receiver: "github", Project: "apps"}}
+	// sha256("apps" + "github" + "s3cret"), joined with nothing.
+	if got, want := kargo.Target("s3cret"), "https://kargo.example/github/"+sha256hex("appsgithubs3cret"); got != want {
+		t.Errorf("Target = %s, want %s", got, want)
+	}
+	if kargo.Target("one") == kargo.Target("two") {
+		t.Error("a Kargo receiver's URL did not move with the secret")
+	}
+	if kargo.Placeholder() != "https://kargo.example/github/pending" {
+		t.Errorf("Placeholder = %s", kargo.Placeholder())
+	}
+}
+
+func sha256hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

@@ -1,0 +1,15 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/app-webhook-changed.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "step": {
+      "type": "string",
+      "enum": ["configured", "staged", "verified", "rotated", "restored"],
+      "description": "The step of setting or rotating the webhook secret this record is: configured (set at creation), staged (kept for the consumers), verified (the consumer answered a signed ping), rotated (GitHub told) or restored (the previous secret put back).",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    }
+  }
+}

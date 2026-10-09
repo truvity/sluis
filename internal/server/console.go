@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -197,6 +198,14 @@ type ConsoleDeps struct {
 	// deployment with no `cloudflare` section and no Cloudflare page; it is
 	// connected late, by [ConsoleServer.UseCloudflare].
 	Cloudflare CloudflareSTS
+	// WebhookHTTP sends the signed ping a webhook rotation checks a new
+	// target with. Nil is a client with a short timeout that follows no
+	// redirect, so a target that moves counts as one that refused.
+	WebhookHTTP *http.Client
+	// WebhookPingWindow is how long a rotation waits for the new target to
+	// accept the new secret, and WebhookPingEvery how often it asks. Zero is
+	// two minutes and five seconds.
+	WebhookPingWindow, WebhookPingEvery time.Duration
 	// Audit records what an identity did through the console. Nil records
 	// nothing.
 	Audit audit.Recorder
@@ -216,6 +225,11 @@ type Console struct {
 	connectors map[string]Connector
 	// githubSeen is what GitHub last said of each GitHub App.
 	githubSeen githubObservations
+	// rotating is the Apps whose webhook secret is being rotated now: two
+	// rotations at once would leave GitHub and the consumers with different
+	// secrets.
+	rotating   map[string]bool
+	rotatingMu sync.Mutex
 }
 
 var (

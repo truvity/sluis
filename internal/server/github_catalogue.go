@@ -19,6 +19,7 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
+	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
@@ -33,6 +34,13 @@ type GitHubCatalogueApps interface {
 	// Get is one App's record and its key, installed or pending.
 	Get(ctx context.Context, id string) (catalogueapp.Record, string, bool, error)
 	Delete(ctx context.Context, id string) error
+	// PutWebhookSecret keeps the secret GitHub signs one App's webhook with,
+	// beside its key and surviving every later Put of the App. The App must
+	// have been Put. Where the App is exported the secret is in its document
+	// (`webhook_secret`), which is where a consumer reads it.
+	PutWebhookSecret(ctx context.Context, id, secret string) error
+	// WebhookSecret reads it back; false is an App with none.
+	WebhookSecret(ctx context.Context, id string) (string, bool, error)
 }
 
 // Where GitHub sends the browser back to while a catalogue App is created:
@@ -84,7 +92,10 @@ type githubObservation struct {
 	app                   *githubapp.AppInfo
 	installation          *githubapp.InstallationInfo
 	installationGone      bool
-	err                   string
+	// hook is the App's webhook configuration, read only for an App whose
+	// entry declares a webhook.
+	hook *githubapp.HookConfig
+	err  string
 }
 
 // get is what GitHub said of this App, if it was this App it was asked
@@ -324,7 +335,7 @@ func legacyState(state directoryrosterv1.AppState) string {
 // observe asks GitHub, as the App, what the App and its installation hold
 // now. An error is kept as the observation's reason: it never fails the
 // page.
-func (c *Console) observe(ctx context.Context, appID, installationID int64, installed bool, key string) githubObservation {
+func (c *Console) observe(ctx context.Context, appID, installationID int64, installed, wantHook bool, key string) githubObservation {
 	seen := githubObservation{appID: appID, installationID: installationID, at: c.githubSeen.now().UTC()}
 	if key == "" {
 		seen.err = "The App's key is not kept here, so GitHub cannot be asked about it. Disconnect it and create it again."
@@ -343,6 +354,14 @@ func (c *Console) observe(ctx context.Context, appID, installationID int64, inst
 		return seen
 	}
 	seen.app = &app
+	if wantHook {
+		hook, err := githubapp.GetHookConfig(ctx, c.githubHTTP(), token)
+		if err != nil {
+			seen.err = "GitHub could not be asked about the webhook: " + err.Error()
+		} else {
+			seen.hook = &hook
+		}
+	}
 	if !installed {
 		return seen
 	}
@@ -393,6 +412,38 @@ func appDrift(entry catalogue.App, app githubapp.AppInfo, declarer string) []str
 			out = append(out, fmt.Sprintf("The App subscribes to %s, and %s declares %s. Change them in the App's settings on GitHub.",
 				listOrNone(have), declarer, listOrNone(want)))
 		}
+	}
+	return out
+}
+
+// hookDrift is every way the webhook on GitHub differs from what this
+// service set. recorded is the URL it last set, which for a Kargo receiver
+// is the only place the derived path is known.
+func hookDrift(entry catalogue.App, recorded string, hook githubapp.HookConfig) []string {
+	if entry.Webhook == nil {
+		return nil
+	}
+	var out []string
+	want := entry.Webhook.URL
+	if entry.Webhook.Kargo != nil {
+		want = recorded
+		if recorded != "" && !strings.HasPrefix(recorded, strings.TrimRight(entry.Webhook.Kargo.Base, "/")+"/github/") {
+			out = append(out, "The webhook was set for another Kargo base than the catalogue declares now. Rotate its secret to move it.")
+		}
+	}
+	switch {
+	case want == "":
+		out = append(out, "This service has not set the webhook's URL and secret. Rotate the secret to set them.")
+	case hook.URL != want && entry.Webhook.Kargo != nil:
+		out = append(out, "The webhook delivers to a URL other than the one this service set. Rotate the secret to set it again.")
+	case hook.URL != want:
+		out = append(out, fmt.Sprintf("The webhook delivers to %s, and the catalogue declares %s. Rotate the secret to move it.", hook.URL, want))
+	}
+	if hook.ContentType != githubapp.ContentTypeJSON {
+		out = append(out, fmt.Sprintf("The webhook delivers as %q, not %q. Rotate the secret to set it again.", hook.ContentType, githubapp.ContentTypeJSON))
+	}
+	if hook.Secret == "" {
+		out = append(out, "The webhook has no secret, so deliveries are unsigned. Rotate the secret to set one.")
 	}
 	return out
 }
@@ -496,6 +547,17 @@ func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.R
 		ID: entry.ID, Org: entry.Org, AppID: registration.ID, AppSlug: registration.Slug, HTMLURL: registration.HTMLURL,
 		ConnectedAt: time.Now().UTC(), ConnectedBy: actor,
 	}
+	// A declared webhook gets a secret this service makes, never the one the
+	// conversion returns: it is generated before anything is kept, so a
+	// failure to generate leaves the App as it was.
+	var hookSecret string
+	if entry.Webhook != nil {
+		if hookSecret, err = clientcreds.Generate(); err != nil {
+			s.githubProblem(w, r, http.StatusConflict,
+				"GitHub created the App, and a webhook secret could not be generated. Delete it on GitHub and create it again.", err.Error(), nil)
+			return
+		}
+	}
 	if err = s.console.deps.GitHubCatalogueApps.Put(r.Context(), record, registration.PEM); err != nil {
 		s.log.ErrorContext(r.Context(), "a catalogue App was created and could not be kept", slog.String("id", entry.ID), slog.String("org", entry.Org),
 			logattr.SafeError("error", err))
@@ -506,8 +568,11 @@ func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.R
 	s.console.githubSeen.forget(entry.ID)
 	s.log.InfoContext(r.Context(), "catalogue App created", slog.String("id", entry.ID), slog.String("org", entry.Org), slog.Int64("app", registration.ID),
 		slog.String("slug", registration.Slug), logattr.SafeString("by", actor))
-	s.console.record(r.Context(), audit.CatalogueAppCreated(audit.Identified(actor), entry.Org,
-		audit.App{Name: entry.ID, ID: registration.ID, Slug: registration.Slug}))
+	app := audit.App{Name: entry.ID, ID: registration.ID, Slug: registration.Slug}
+	s.console.record(r.Context(), audit.CatalogueAppCreated(audit.Identified(actor), entry.Org, app))
+	if hookSecret != "" && !s.configureWebhook(w, r, entry, actor, record, registration.PEM, hookSecret, app) {
+		return
+	}
 
 	state, err := s.state.IssueAs(access.Binding{Bind: githubCatalogueBind + entry.ID, Actor: actor})
 	if err != nil {
@@ -516,6 +581,45 @@ func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.R
 	}
 	http.SetCookie(w, access.ConnectCookie(state, s.sessions.Secure(), githubFlowWindow))
 	http.Redirect(w, r, githubapp.InstallURL(registration.Slug, state), http.StatusFound)
+}
+
+// configureWebhook gives a new App its webhook: the secret is kept first, so
+// a failure after GitHub has it never leaves GitHub holding a secret nobody
+// has, then GitHub is told it and the URL in one call. It says why on the
+// page and returns false when it could not; the App then exists with no
+// working webhook, which a rotation finishes.
+func (s *ConsoleServer) configureWebhook(
+	w http.ResponseWriter, r *http.Request, entry catalogue.App, actor string,
+	record catalogueapp.Record, key, secret string, app audit.App,
+) bool {
+	ctx, store, who := r.Context(), s.console.deps.GitHubCatalogueApps, audit.Identified(actor)
+	fail := func(step, summary string, err error) bool {
+		s.log.WarnContext(ctx, "a catalogue App's webhook could not be set", slog.String("id", entry.ID), slog.String("org", entry.Org),
+			slog.String("step", step), logattr.SafeError("error", err))
+		s.console.record(ctx, audit.CatalogueAppWebhookChanged(who, entry.Org, app, step, audit.Failed(err.Error())))
+		s.githubProblem(w, r, http.StatusConflict, summary, err.Error(), []string{
+			"The App exists and its key is kept. Rotate its webhook secret from the console once it is installed to finish.",
+		})
+		return false
+	}
+	if err := store.PutWebhookSecret(ctx, entry.ID, secret); err != nil {
+		return fail(audit.WebhookStaged, "GitHub created the App, and its webhook secret could not be kept here.", err)
+	}
+	target := entry.Webhook.Target(secret)
+	token, err := githubapp.AppToken(record.AppID, key, time.Now())
+	if err != nil {
+		return fail(audit.WebhookConfigured, "GitHub created the App, and its webhook could not be set.", err)
+	}
+	if _, err = githubapp.PatchHookConfig(ctx, s.console.githubHTTP(), token, githubapp.HookUpdate{URL: target, Secret: secret}); err != nil {
+		return fail(audit.WebhookConfigured, "GitHub created the App, and its webhook could not be set.", err)
+	}
+	record.WebhookURL, record.HookRotatedAt = target, time.Now().UTC()
+	if err = store.Put(ctx, record, key); err != nil {
+		return fail(audit.WebhookConfigured, "The App's webhook was set, and could not be recorded here.", err)
+	}
+	s.console.githubSeen.forget(entry.ID)
+	s.console.record(ctx, audit.CatalogueAppWebhookChanged(who, entry.Org, app, audit.WebhookConfigured, audit.Succeeded()))
+	return true
 }
 
 // githubCatalogueSetup is where GitHub sends the owner after installing a

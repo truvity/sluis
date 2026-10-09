@@ -13,8 +13,9 @@ created empty at the service's first start:
 | `<id>.github_app_id` | the App's numeric id |
 | `<id>.github_app_installation_id` | the installation on the organisation |
 | `<id>.github_app_private_key` | the App's private key, PEM, exactly as GitHub issued it |
-| `<id>.record.json` | the App's record: `version`, `id`, `org`, `app_id`, `app_slug`, `installation_id`, `html_url`, `connected_at`, `connected_by` |
+| `<id>.record.json` | the App's record: `version`, `id`, `org`, `app_id`, `app_slug`, `installation_id`, `html_url`, `connected_at`, `connected_by`, and for an App with a webhook `webhook_url` and `hook_rotated_at` (neither is secret) |
 | `<id>.pending_private_key` | the key of an App created and **not yet installed**, instead of the three above |
+| `<id>.webhook_secret` | only for an App whose entry declares a `webhook`: the secret GitHub signs its deliveries with, kept from creation and through install ([Delivering events](github-apps-catalogue.md#delivering-events)) |
 
 The three property keys exist only once the App is installed, so a copy
 taken between the two clicks never hands anything an App that cannot

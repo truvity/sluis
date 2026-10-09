@@ -812,7 +812,11 @@ githubApps:
   #     description: Dependency updates
   #     public: false
   #     permissions: {contents: write, pull_requests: write}
-  #     events: []                 # optional; the webhook stays inactive
+  #     events: []                 # optional; delivered only if `webhook` is set
+  #     export: false              # true with a `webhook`: consumers read its secret from the exported document
+  #     webhook:                   # optional; exactly one of url | kargo, needs events
+  #       url: https://argocd.example/api/webhook
+  #       # kargo: {base: https://kargo-webhooks.example, receiver: github, project: apps}
   #     installation: selected     # all | selected (default)
   #     grants:                    # who may ask for tokens of it, and for how much
   #       - group: all:platform:engineer
