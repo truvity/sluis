@@ -1,16 +1,16 @@
 package clientcreds
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/truvity/sluis/storage/logtest"
 
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
@@ -109,17 +109,16 @@ func TestOrphansToleratACorruptRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	seed(t, store, "gone")
-	var logs bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&logs, nil))
+	log, logs := logtest.Logger()
 	h := newOrphanHooks(nil)
 	got := ReconcileOrphans(ctx0, nil, store, t0, log, h.hooks)
 	if !slices.Equal(got, []string{"gone"}) {
 		t.Errorf("reported %v, want only the readable one", got)
 	}
-	if !strings.Contains(logs.String(), "level=WARN") || !strings.Contains(logs.String(), "client=bad") {
-		t.Errorf("no warning for the corrupt record: %s", logs.String())
+	if logs.CountLevel(slog.LevelWarn) == 0 || !logs.Mentions("bad") {
+		t.Errorf("no warning for the corrupt record: %q", logs.Messages())
 	}
-	if strings.Contains(logs.String(), "leaky-value") {
+	if logs.Mentions("leaky-value") {
 		t.Error("the log holds a value")
 	}
 }

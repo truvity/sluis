@@ -150,6 +150,12 @@ the dependency; run it on its own with `just vuln`, the same way
   [`storage/logattr`](storage/logattr/logattr.go), which strip line breaks,
   control and bidirectional-control characters and cap the length. Values we
   own (configuration, constants, ids we generated) stay plain `slog.String`.
+  Tests assert on log records, not on printed text: use the capturing
+  handler in [`storage/logtest`](storage/logtest/logtest.go) (find a record
+  by message, read an attribute by key). It is held to the `slog.Handler`
+  contract by `testing/slogtest`, and so must any custom handler added here
+  (an OTel log bridge, a redacting handler): ship it with its own
+  `slogtest.Run` test.
 - **The chart's `version` stays `0.0.0`.** The git tag is the version
   authority; the release workflow stamps it at package time.
 
