@@ -2,13 +2,13 @@ package signer_test
 
 import (
 	"context"
-	"github.com/truvity/sluis/internal/signer"
 	"testing"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // The installation default is the PRIMARY key's own algorithm -- today's

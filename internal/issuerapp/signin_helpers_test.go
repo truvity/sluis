@@ -2,19 +2,18 @@ package issuerapp_test
 
 import (
 	"context"
-	"github.com/truvity/sluis/internal/signer"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"testing"
-
 	"time"
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
 	"github.com/truvity/sluis/internal/issuerapp"
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // stubProvider stands in for a directory's sign-in screen: it redirects

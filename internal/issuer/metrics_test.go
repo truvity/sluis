@@ -2,7 +2,6 @@ package issuer_test
 
 import (
 	"context"
-	"github.com/truvity/sluis/internal/signer"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
 )
 

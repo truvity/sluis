@@ -7,7 +7,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/truvity/sluis/internal/signer"
 	"slices"
 	"sort"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // settableClock is a clock a test moves forward explicitly, so that
@@ -443,9 +443,9 @@ func TestKeyRingPublishedKeyMaterialVerifies(t *testing.T) {
 	if len(published) != 1 {
 		t.Fatalf("published = %d keys, want 1", len(published))
 	}
-	pub, ok := published[0].Key.(crypto.PublicKey)
-	if !ok {
-		t.Fatalf("published key material is %T, want a crypto.PublicKey", published[0].Key)
+	pub := published[0].Key
+	if pub == nil {
+		t.Fatalf("published key has no material")
 	}
 	if _, ok := pub.(interface{ Equal(crypto.PublicKey) bool }); !ok {
 		t.Fatalf("published key material %T has no Equal method to compare against the source key", pub)

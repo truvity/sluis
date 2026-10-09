@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/truvity/sluis/internal/signer"
 	"html"
 	"net/http"
 	"net/url"
@@ -20,6 +19,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/gen/accessissuer/v1/accessissuerv1connect"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/telemetry"
 )
 

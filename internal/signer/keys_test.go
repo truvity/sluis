@@ -8,10 +8,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/truvity/sluis/internal/signer"
 	"testing"
 
 	jose "github.com/go-jose/go-jose/v4"
+
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // The key arrives from somewhere else — cert-manager issuing one,
