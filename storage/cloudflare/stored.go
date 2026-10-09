@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,6 +57,22 @@ func ParseStoredR2(raw []byte) (StoredR2, error) {
 	return StoredR2{AccessKeyID: d.AccessKeyID, SecretAccessKey: d.SecretAccessKey, Endpoint: d.Endpoint, ExpiresOn: expires.UTC()}, nil
 }
 
+// SameEndpoint reports whether two endpoint URLs name the same store: the same
+// scheme and host, without case, and the same path once a trailing slash is
+// dropped. An empty or unparsable endpoint matches nothing.
+func SameEndpoint(a, b string) bool {
+	norm := func(s string) (string, bool) {
+		u, err := url.Parse(strings.TrimSpace(s))
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return "", false
+		}
+		return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + strings.TrimSuffix(u.EscapedPath(), "/"), true
+	}
+	x, okx := norm(a)
+	y, oky := norm(b)
+	return okx && oky && x == y
+}
+
 // Defaults of a [StoredProvider].
 const (
 	// DefaultRecheck is the longest a stored credential is used before its
@@ -76,6 +94,11 @@ type StoredConfig struct {
 	// Source names where the document is read from (a parameter, a file), for
 	// errors. It is never a value.
 	Source string
+	// Endpoint, when set, is the store's endpoint: a document whose `endpoint`
+	// is another (scheme and host compared without case, a trailing slash
+	// ignored), or none, is refused at every read, so a credential for another
+	// account or jurisdiction is never handed out.
+	Endpoint string
 	// Recheck is the longest a credential is used before the document is read
 	// again. Zero is [DefaultRecheck].
 	Recheck time.Duration
@@ -172,6 +195,10 @@ func (p *StoredProvider) readLocked(ctx context.Context, now time.Time) error {
 	doc, err := ParseStoredR2(raw)
 	if err != nil {
 		return fmt.Errorf("cloudflare: the stored credential %s: %w", p.cfg.Source, err)
+	}
+	if p.cfg.Endpoint != "" && !SameEndpoint(doc.Endpoint, p.cfg.Endpoint) {
+		return fmt.Errorf("cloudflare: the stored credential %s is for the endpoint %q and the store is at %q: "+
+			"is credentials_ref the sluis preset of this store's account?", p.cfg.Source, doc.Endpoint, p.cfg.Endpoint)
 	}
 	if !now.Before(doc.ExpiresOn) {
 		return fmt.Errorf("cloudflare: the stored credential %s expired at %s: is sluis rotating the preset, and is the copy being synced?",

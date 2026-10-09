@@ -155,3 +155,66 @@ func TestStoredProviderReauthenticate(t *testing.T) {
 		t.Fatalf("after a reauthentication: %s", c.AccessKeyID)
 	}
 }
+
+func TestSameEndpoint(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"https://acct.r2.example.test", "https://acct.r2.example.test", true},
+		{"HTTPS://Acct.R2.Example.Test/", "https://acct.r2.example.test", true},
+		{"https://acct.r2.example.test", "https://acct.eu.r2.example.test", false},
+		{"https://acct.r2.example.test", "http://acct.r2.example.test", false},
+		{"", "https://acct.r2.example.test", false},
+		{"acct.r2.example.test", "acct.r2.example.test", false},
+	} {
+		if got := cloudflare.SameEndpoint(c.a, c.b); got != c.same {
+			t.Errorf("SameEndpoint(%q, %q) = %v", c.a, c.b, got)
+		}
+	}
+}
+
+// The endpoint is checked at every read: a rotated document that points at
+// another store is refused, and the credential held from the right one is kept
+// while it is good, as for any read that fails.
+func TestStoredProviderRefusesAnotherEndpointAtEveryRead(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	src := &source{doc: storedDoc("k1", now.Add(10*time.Minute))}
+	p, _ := cloudflare.NewStoredProvider(cloudflare.StoredConfig{
+		Read: src.read, Source: "/sluis/main/external/cloudflare/r2", Endpoint: "https://ACCT.r2.example.test/", Now: func() time.Time { return now },
+	})
+	if c, err := p.Retrieve(context.Background()); err != nil || c.AccessKeyID != "k1" {
+		t.Fatalf("the matching endpoint: %+v %v", c, err)
+	}
+	src.doc = []byte(strings.Replace(string(storedDoc("k2", now.Add(15*time.Minute))), "acct.r2", "other.r2", 1))
+	c, err := p.Retrieve(context.Background())
+	if err != nil || c.AccessKeyID != "k1" || !c.Expires.Equal(now.Add(10*time.Second)) {
+		t.Fatalf("a rotation to another endpoint with a good credential held: %+v, %v", c, err)
+	}
+	if replaced, err := p.Reauthenticate(context.Background()); replaced || err == nil {
+		t.Fatalf("after a 403: replaced=%v err=%v", replaced, err)
+	}
+	now = now.Add(10*time.Minute - 10*time.Second)
+	_, err = p.Retrieve(context.Background())
+	if err == nil {
+		t.Fatal("another endpoint was accepted once the held credential ran out")
+	}
+	for _, want := range []string{"/sluis/main/external/cloudflare/r2", "https://other.r2.example.test", "https://ACCT.r2.example.test/"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal lacks %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "secret-k2") {
+		t.Errorf("the refusal carries the secret: %v", err)
+	}
+	// A document with no endpoint is refused as well.
+	p, _ = cloudflare.NewStoredProvider(cloudflare.StoredConfig{
+		Read: func(context.Context) ([]byte, error) {
+			return []byte(`{"schema":"cloudflare/v1","access_key_id":"a","secret_access_key":"b","expires_on":"2099-01-01T00:00:00Z"}`), nil
+		},
+		Source: "x", Endpoint: "https://acct.r2.example.test",
+	})
+	if _, err := p.Retrieve(context.Background()); err == nil {
+		t.Fatal("a document without an endpoint was accepted")
+	}
+}

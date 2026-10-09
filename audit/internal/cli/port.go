@@ -260,21 +260,22 @@ func storedProvider(ctx context.Context, c StoredCredentials) (*cloudflare.Store
 	if c.Dir != "" {
 		path := filepath.Join(c.Dir, filepath.FromSlash(c.Ref))
 		return cloudflare.NewStoredProvider(cloudflare.StoredConfig{
-			Source: path,
-			Read:   func(context.Context) ([]byte, error) { return os.ReadFile(path) }, //nolint:gosec // the path the configuration names
+			Source: path, Endpoint: c.Endpoint,
+			Read: func(context.Context) ([]byte, error) { return os.ReadFile(path) }, //nolint:gosec // the path the configuration names
 		})
 	}
 	st, err := stateAt(ctx, config.StateRef{Root: c.Root}, "")
 	if err != nil {
 		return nil, fmt.Errorf("credentials_ref: %w", err)
 	}
-	return storedFromState(st, c.Root, c.Ref)
+	return storedFromState(st, c.Root, c.Ref, c.Endpoint)
 }
 
-// storedFromState reads the document at ref of a sluis secret store.
-func storedFromState(st state.Store, root, ref string) (*cloudflare.StoredProvider, error) {
+// storedFromState reads the document at ref of a sluis secret store, refusing
+// one whose endpoint is not the store's.
+func storedFromState(st state.Store, root, ref, endpoint string) (*cloudflare.StoredProvider, error) {
 	return cloudflare.NewStoredProvider(cloudflare.StoredConfig{
-		Source: root + "/" + ref,
+		Source: root + "/" + ref, Endpoint: endpoint,
 		Read: func(ctx context.Context) ([]byte, error) {
 			item, err := st.Get(ctx, ref)
 			if err != nil {
