@@ -32,7 +32,7 @@ flowchart TB
 flowchart TB
   sch["EventBridge Scheduler<br/>hourly"] --> n["notary Lambda"]
   b[("S3 archive")]
-  n -->|"list, get; write<br/>seals/, keys/"| b
+  n -->|"list, get, and write<br/>seals/, keys/"| b
   n -->|"Sign, P-384"| k["KMS seal key"]
   b -. "records/, catalogue/,<br/>seals/, keys/" .-> o["observe, in<br/>another account"]
 ```
