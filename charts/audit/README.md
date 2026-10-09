@@ -202,7 +202,7 @@ The chart takes references; it creates none of these.
 | the cluster's service-account issuer, reachable over HTTPS from the pods | `workloadIdentity.issuers` |
 | the images | `image.writer`, `image.query`, `image.observe`, `image.notary`, `image.cli` — one per binary, built by ko from `.goreleaser.yaml`; distroless, no shell |
 | a role per component — writer, indexer, notary, query and verify — bound through its ServiceAccount's annotations. The receiver, purge and clock-sync have accounts and no roles; the chart refuses the receiver, the notary and the indexer, sharing the writer's | `serviceAccount`, `receiver.serviceAccount`, `observe.serviceAccount`, `query.serviceAccount`, `jobs.*.serviceAccount` |
-| **only if the deployment chooses a key provider**: a Secret with the 32-byte root (`local`), or an OpenBAO transit engine with a JWT role per component ([what the engine needs](../../docs/guides/audit/operate/configure-openbao-keys.md#what-the-engine-needs)) | `keys.local.rootFile` with `secretMounts`, or `keys.provider: transit` with `keys.transit.openbao.login` and a `tokens` entry |
+| **only if the deployment chooses a key provider**: a Secret with the 32-byte root (`local`), or an OpenBAO transit engine with a JWT role per component ([what the engine needs](../../docs/guides/audit/operate/configure-openbao-keys.md)) | `keys.local.rootFile` with `secretMounts`, or `keys.provider: transit` with `keys.transit.openbao.login` and a `tokens` entry |
 | a CA bundle, if OpenBAO or Postgres serve from a private chain (e.g. trust-manager's) | `trust.configMap` |
 | a `ReadWriteMany` storage class, for more than one replica on `local` keys (transit needs none) | `keysVolume` |
 

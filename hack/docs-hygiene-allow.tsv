@@ -23,3 +23,4 @@ allow	docs/guides/sluis/run-conformance.md	access-issuer	hack/conformance-plans.
 allow	docs/reference/sluis/chart-values.md	access-issuer	generated from values.schema.json, whose nameOverride description names the chart a migration comes from
 link	CHANGELOG.md	docs/concepts/sluis/ports.md#the-nats-adapter	history: the heading went with the NATS adapter
 link	CHANGELOG.md	docs/concepts/sluis/ports.md#the-s3-blob-and-the-kms-sealer	history: the heading went with the KMS sealer
+link	audit/CHANGELOG.md	../docs/guides/audit/operate/prepare-the-bucket.md#the-attested-tier	history: the heading went with the docs reduction pass

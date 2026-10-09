@@ -1,37 +1,16 @@
 # Emit records from Go
 
-## Purpose
-
-Record an application's actions from its own process with the emit library: describe the actions, register the catalogue at start-up, create the emitter and record.
-
-## Preconditions
-
-- A catalogue, or the intention to write one ([connect an application](connect-an-application.md)).
-- A receiver in the application's namespace and the application's projected service-account token.
-- The working code is [`examples/emit`](../../../../audit/examples/emit/main.go), compiled and tested on every run of the gate.
+Record an application's actions from its own process: register the catalogue at start-up, create the emitter, record.
 
 ## Before you start
 
-- **The emitter is a library in the application's own process**, in a Go module of its own (`go get github.com/truvity/sluis/audit/sdk`): it brings in Connect, protobuf and the OpenTelemetry API, not the writer's database driver or object-store client ([layout](../../../reference/audit/repository-layout.md#the-sdk-module)).
-- **A `block` action fails when the receiver is down; an `async` one queues** and is dropped only if the queue overflows ([recover from an outage](../operate/recover-from-an-outage.md)).
-- **Registration is refused, not retried, for a malformed catalogue** (`emit.ErrCatalogueRefused`); a receiver that is merely unreachable may be retried.
+- You need a [catalogue](connect-an-application.md#the-catalogue), a receiver in the application's namespace and the application's projected ServiceAccount token.
 
-## Steps
+- The emitter is a Go module of its own: `go get github.com/truvity/sluis/audit/sdk`. It does not bring in the writer's database driver or object-store client ([layout](../../../reference/audit/repository-layout.md#the-sdk-module)).
 
-How an application records what it does. The working code is
-[`examples/emit`](../../../../audit/examples/emit/main.go), compiled and tested on every
-run of the gate; this page walks through it.
+- A `block` action fails while the receiver is down. An `async` record queues and drops only when the queue overflows ([recover from an outage](../operate/recover-from-an-outage.md)).
 
-The emitter is a **library in the application's own process**, and it is a Go
-module of its own: `go get github.com/truvity/sluis/audit/sdk`. An application imports
-`sdk/emit`, `sdk/record`, `sdk/catalogue`, `sdk/sink` and `sdk/gen/audit/v1`,
-and what that brings in is Connect, protobuf and the OpenTelemetry API — not
-the writer's database driver, stream server or object-store client
-([layout](../../../reference/audit/repository-layout.md#the-sdk-module)). Everything
-after it — the receiver, the writer, the query service — is a Deployment in
-the application's namespace
-([0053](../../../decisions/0053-one-installation-per-service-or-product.md)), so the
-application holds the address of a Service and nothing else.
+The working code is [`examples/emit`](../../../../audit/examples/emit/main.go).
 
 ```mermaid
 sequenceDiagram
@@ -48,93 +27,9 @@ sequenceDiagram
   Note over App: only now does the request complete
 ```
 
-### 1. Describe your actions: the catalogue
+## Steps
 
-A catalogue lists every action your application records: what it is, which
-profiles keep it, how it is delivered, and how it reads as a sentence. It
-lives next to the code that emits it, so the two change together.
-
-```yaml
-source: shop
-version: "1.0.0"
-locales: [en]
-actor_kinds:
-  customer: { category: external, description: A person buying from the shop. }
-  clerk:    { category: internal, description: A member of staff. }
-target_types:
-  order: { description: "An order." }
-actions:
-  shop.order.placed:
-    summary: A customer placed an order.
-    operation: create
-    categories: [data_change]
-    category: security                    # the per-action `profiles` list is deprecated
-    target_types: [order]
-    delivery: block
-    data_schema: https://schemas.example.com/shop/order-placed.json
-    message: { en: "{actor} placed order {targets_0_id}" }
-```
-
-- **`category`** of an actor kind decides how profiles treat its identifiers.
-  A profile keeps `internal` staff in clear for accountability, and treats
-  `external` people as the deployment's key configuration says — which, by
-  default, is also in clear, because a product's identifier for a person is
-  already opaque
-  ([0055](../../../decisions/0055-no-pseudonymisation-keys-by-default.md)).
-- **`delivery`** is `block` or `async`, described below.
-- **`data_schema`** describes your own fields. Every property says which class
-  it belongs to and whether it is personal data, and the writer keeps it only
-  in the profiles that keep that class. Direct identity attributes — names,
-  e-mail addresses — are refused outright. A property marked
-  `x-audit-expiry: true` is when the thing the record is about expires, and
-  evidence profiles keep the record for years after it.
-- **`extends`** makes an action an addendum: it names a data property holding
-  the ids of earlier records this one relies on — a renewal naming the
-  issuance, a credential naming the identity proofing behind it. The writer
-  then locks the objects holding those records until this record's expiry plus
-  the profile's years, if that is later than their lock, and records
-  `audit.retention.extended`. Locks only ever get longer.
-
-The full vocabulary is [the catalogue reference](../../../reference/audit/catalogue.md)
-and [extension points](../../../reference/audit/extension-points.md). Check a catalogue
-before you ship it:
-
-```sh
-audit validate path/to/catalogue.yaml
-audit check-emitters ./ --catalogue path/to/catalogue.yaml   # in CI
-```
-
-`check-emitters` finds the action names your code emits and fails if one is
-not in the catalogue, or if the catalogue declares one nothing emits. Put each
-action name in code exactly once — a constructor per action
-([integrating](connect-an-application.md#one-constructor-per-action)) — so it can see them.
-
-#### The two deliveries
-
-| delivery | the call returns | if the receiver is down | for |
-|---|---|---|---|
-| `block` | when the receiver has acknowledged durability | the call fails, and so must the action | a privileged sign-in, a key destruction, a billable operation |
-| `async` (the default) | at once | the record waits in a bounded in-memory queue and is retried with backoff | everything else |
-
-**The acknowledgement always means durable.** In stream mode it is the
-stream's replicated publish acknowledgement; in direct mode it is the object
-in the bucket: the receiver puts every batch it takes before answering.
-Nobody is waiting on an `async` batch, so that costs queue depth and nothing
-else.
-
-An `async` record is lost only if the application's pod dies with the record
-still queued — one flush interval of records plus the batch in flight — or if
-an outage long enough to overflow the queue drops the oldest, which are
-counted and logged.
-
-`outbox` and `best_effort` are **retired**
-([0054](../../../decisions/0054-two-deliveries-and-a-durable-ack.md)). The catalogue
-loader refuses both and names the replacement. There is no file outbox, no
-volume on the emitting pod and no `AUDIT_OUTBOX_DIR`: an action either matters
-enough to keep, in which case `async` retries until it is kept, or it does not
-belong in the catalogue.
-
-### 2. Register it at start-up
+### 1. Register the catalogue
 
 ```go
 err := emit.Register(ctx, emit.Registration{
@@ -146,21 +41,9 @@ err := emit.Register(ctx, emit.Registration{
 })
 ```
 
-The **receiver** serves `RegisterCatalogue`. There is no registry service and
-no `audit-registry` binary: an installation has one application to hear a
-catalogue from, and the receiver already validates every record against it
-([0053](../../../decisions/0053-one-installation-per-service-or-product.md)).
+Do not start if `Register` returns `emit.ErrCatalogueRefused`. Retrying cannot fix a malformed document. You may retry an unreachable receiver. Registering the same version again is not an error.
 
-**Do not start if it fails with `emit.ErrCatalogueRefused`.** A malformed
-catalogue is a fact about the document, and trying again will not change it;
-records written against a description nothing accepted are records nobody can
-read. A receiver that is merely unreachable is a different error and may be
-retried. Registering the same version again is not an error — every replica
-does it on every roll.
-
-The caller's identity comes from its **service account**, not from the
-document. Mount a projected token with the audience the installation uses
-(default `audit`):
+Mount a projected token with the installation's audience, default `audit`, and point `AUDIT_TOKEN_FILE` at it. `auth.TokenFile` re-reads it on every request.
 
 ```yaml
 volumes:
@@ -170,12 +53,7 @@ volumes:
         - serviceAccountToken: { path: token, audience: audit, expirationSeconds: 3600 }
 ```
 
-and point `AUDIT_TOKEN_FILE` at it. `auth.TokenFile` reads it on every
-request, because the kubelet replaces it before it expires. A profile's
-required categories are the deployment's to cover, not one catalogue's: a gap
-is reported, not held against you.
-
-### 3. Create the emitter
+### 2. Create the emitter
 
 ```go
 emitter, err := emit.New(emit.Options{
@@ -192,38 +70,11 @@ emitter, err := emit.New(emit.Options{
 defer emitter.Close()
 ```
 
-The **sink** is where records go. In both shapes that is the receiver in the
-application's own namespace, over Connect:
+`Queue`, `Batch` and `Flush` size the `async` path: 1024 records, 100 per send and one second by default. Wrap the hooks with `emit.Instrument(hooks, otel.GetMeterProvider())` to count written, dropped and refused records.
 
-```go
-sink.NewClient(httpClient, receiverURL)
-```
+Watch `audit.emit.queue.pending`: a climbing number means the receiver is slow or gone. Alert on `audit.emit.records.dropped`. The emitter also logs each drop through `Options.Logger`.
 
-Whether the receiver then puts the object itself or publishes to a stream is
-the installation's business, not the application's — the same catalogue and
-the same code run against [direct](../../../concepts/audit/direct-mode.md) and
-[stream](../../../concepts/audit/stream-mode.md). (`natssink.NewPublisher` exists, and the
-writer's stream consumer is built on it, but an application publishing
-straight to a stream is not a shape this component describes: it would hold
-the stream's credentials.)
-
-`Queue`, `Batch` and `Flush` size the `async` path: how many records may wait
-(1024), how many are sent together (100) and how often (one second). Wrap the
-hooks with `emit.Instrument(hooks, otel.GetMeterProvider())` to count what is
-written, dropped and refused.
-
-**Two metrics matter:**
-
-| metric | what it says |
-|---|---|
-| `audit.emit.queue.pending` | how many records are waiting. A number that climbs is the warning — the receiver is slow or gone |
-| `audit.emit.records.dropped` | how many the queue gave up. **Alert on it**: a drop is an incident, not a condition to tolerate. |
-
-Every dropped record is written to the application's log by the emitter
-(`Options.Logger`, or the default logger), so the loss is
-visible where its other evidence is.
-
-### 4. Record
+### 3. Record
 
 ```go
 err := emitter.Record(r.Context(), &record.Record{
@@ -240,31 +91,13 @@ if err != nil {
 }
 ```
 
-- The emitter fills the identifier, the times, the versions and a sequence,
-  and validates the record against the catalogue before it is sent. A record
-  the catalogue does not describe is refused here, not dead-lettered later.
-- **`TenantId`** is the customer organisation this happened for, or
-  `@platform` for the application's own operations. It is what a grant narrows
-  by.
-- **Record identifiers as they are.** The writer treats each identity by its
-  category, per profile, with keys the application never holds. Never put
-  names or e-mail addresses in a record: where the deployment has declared its
-  external identifiers opaque, the writer refuses one that carries something
-  direct, naming the field and why.
-- **Record failures too**: `RESULT_FAILURE` or `RESULT_DENIED` with a reason.
-  A refused action is often the more interesting one.
+The emitter fills the identifier, times, versions and sequence, and validates the record against the catalogue. Set `TenantId` to the customer organisation, or `@platform` for the application's own operations. Put identifiers in the record, never names or e-mail addresses. Record failures too: `RESULT_FAILURE` or `RESULT_DENIED` with a reason.
 
-Wrap your HTTP handler in `emit.Middleware(trustedHops)` and every record made
-while serving the request carries the client address, user agent, request id
-and trace id. `trustedHops` is how many proxies of your own sit in front: get
-it wrong and the trail records your load balancer as every actor's address.
+Wrap the HTTP handler in `emit.Middleware(trustedHops)` to add client address, user agent, request id and trace id. If `trustedHops` is wrong, the trail records your load balancer as every actor's address.
 
-### TypeScript
+### 4. Record from TypeScript
 
-There is **no TypeScript emitter yet**. What exists today is the generated
-contract in [`ts/src/gen`](../../../../audit/ts/src/gen): protobuf-es v2 message types and
-service descriptors, usable with `@connectrpc/connect` v2. A Node service can
-call the receiver directly:
+There is no TypeScript emitter. Call the receiver with the generated contract in [`ts/src/gen`](../../../../audit/ts/src/gen).
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -283,12 +116,12 @@ const receiver = createClient(SinkService, createConnectTransport({
 await receiver.write({ records: [record], delivery: Delivery.BLOCK });
 ```
 
-Without the emitter, nothing checks the record against its catalogue before it
-leaves: the receiver still does, and dead-letters what does not match, but the
-caller learns late. Fill `id` (a UUIDv7), `occurred_at`, `schema_version`,
-`catalogue_version` and `source` yourself.
+Fill `id` (a UUIDv7), `occurred_at`, `schema_version`, `catalogue_version` and `source` yourself. The receiver dead-letters a record the catalogue does not match.
 
-## Afterwards
+## Verify
 
-- Alert on `audit.emit.records.dropped` and watch `audit.emit.queue.pending` ([emitter library](../../../sdk/go/audit-emitter.md)).
-- Read the records back with [read the trail](read-the-trail.md).
+Perform an action, then find it with [read the trail](read-the-trail.md).
+
+## Decided in
+
+[0053](../../../decisions/0053-one-installation-per-service-or-product.md), [0054](../../../decisions/0054-two-deliveries-and-a-durable-ack.md).
