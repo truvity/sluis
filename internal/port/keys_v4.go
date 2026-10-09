@@ -57,6 +57,16 @@ type keyRule struct {
 	exact string
 	// refuse is a rest the rule cannot hold without clashing with an exact.
 	refuse string
+	// The fields below are used by the layout 5 table only (layout5.go); the
+	// layout 4 rules leave them empty.
+	//
+	// refusePrefix is a start of the rest the rule cannot hold without
+	// clashing with another family of the same kind.
+	refusePrefix string
+	// strip is a start the rest must have; it is not part of the id.
+	strip string
+	// idPrefix is put in front of the id.
+	idPrefix string
 }
 
 // keyRules are the State key families, one line per kind a record or a
@@ -151,17 +161,26 @@ func (r keyRule) id(key string) (string, error) {
 		return r.exact, nil
 	}
 	rest := key[len(r.prefix):]
+	if r.strip != "" {
+		if !strings.HasPrefix(rest, r.strip) {
+			return "", fmt.Errorf("%w: %q is not a %q key", ErrUnsupported, key, r.strip)
+		}
+		rest = rest[len(r.strip):]
+	}
 	if rest == "" {
 		return "", fmt.Errorf("%w: %q names no id", ErrUnsupported, key)
 	}
 	if rest == r.refuse {
 		return "", fmt.Errorf("%w: %q: the id %q is the link App's", ErrUnsupported, key, rest)
 	}
+	if r.refusePrefix != "" && strings.HasPrefix(rest, r.refusePrefix) {
+		return "", fmt.Errorf("%w: %q: the id starts with %q, which is the runner Apps'", ErrUnsupported, key, r.refusePrefix)
+	}
 	out, ok := r.convert(rest)
 	if !ok {
 		return "", fmt.Errorf("%w: %q holds a slash", ErrUnsupported, key)
 	}
-	return out, nil
+	return r.idPrefix + out, nil
 }
 
 func (r keyRule) convert(rest string) (string, bool) {
