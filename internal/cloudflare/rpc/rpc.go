@@ -135,9 +135,10 @@ func (c *Client) MintFor(ctx context.Context, preset string, caller Caller, life
 // Granted implements [Minting]. It has no error to return: a module that
 // cannot be reached lists nothing, and says so in the log.
 func (c *Client) Granted(caller Caller) []PresetInfo {
-	out, err := modcall.Do[grantedRequest, grantedResponse](context.Background(), c.c, Module, MethodGranted, grantedRequest{Caller: caller})
+	ctx := context.Background()
+	out, err := modcall.Do[grantedRequest, grantedResponse](ctx, c.c, Module, MethodGranted, grantedRequest{Caller: caller})
 	if err != nil {
-		c.log.Warn("the Cloudflare grants could not be listed", slog.Any("error", err))
+		c.log.WarnContext(ctx, "the Cloudflare grants could not be listed", slog.Any("error", err))
 		return nil
 	}
 	return out.Presets
