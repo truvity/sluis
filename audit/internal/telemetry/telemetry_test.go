@@ -244,7 +244,7 @@ func attrs(t *testing.T) map[string]string {
 	}
 	out := map[string]string{}
 	for _, kv := range res.Attributes() {
-		out[string(kv.Key)] = kv.Value.Emit()
+		out[string(kv.Key)] = kv.Value.String()
 	}
 	return out
 }
@@ -323,7 +323,7 @@ func TestAConnectSpanKeepsItsRPCAttributes(t *testing.T) {
 	for i := range spans {
 		got := map[string]string{}
 		for _, kv := range spans[i].Attributes {
-			got[string(kv.Key)] = kv.Value.Emit()
+			got[string(kv.Key)] = kv.Value.String()
 		}
 		for k, v := range map[string]string{
 			"rpc.system.name": "connectrpc", "rpc.method": "pkg.Service/Method",
