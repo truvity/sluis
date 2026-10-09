@@ -28,6 +28,8 @@
 
 - **`sluis github` and `sluis slack` are single-module processes with a `tick <target>` form.** Each runs its controller's loop without the "deprecated" warning that `sluis controller <kind>` keeps, and `sluis github tick <target>` ticks once, as `sluis tick github <target>` does. The roles are `internal/module` implementations (`Run`, `Tick`) that the commands call; `console`, `cloudflare`, `google` and `backup` are placeholders that answer `not yet split`. The existing commands run the same code and are unchanged.
 
+- **The lambda build of `cmd/sluis` is a Lambda entry too.** Started by the Lambda runtime (no arguments, `AWS_LAMBDA_RUNTIME_API` set) it serves API Gateway events and scheduler ticks through the same dispatch as `cmd/sluis-lambda`, now one function, `lambdaapp.Start`, that both mains call. Elsewhere the command line is the entry, and the Kubernetes build has no event dispatch. `cmd/sluis-lambda` remains the released Lambda binary until the release moves; its behaviour is unchanged.
+
 ## v1.74.1
 
 A patch for sluis on Lambda behind a proxy with many clients: a herd of cold starts no longer fails on a throttled SSM, and telemetry no longer delays a response. See [survive a cold-start herd](docs/guides/sluis/operate/survive-a-cold-start-herd.md).

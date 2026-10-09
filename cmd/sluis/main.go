@@ -47,6 +47,9 @@ import (
 )
 
 func main() {
+	if platformEntry(os.Args[1:], os.Getenv) {
+		return
+	}
 	err := run(os.Args[1:], os.Stderr)
 	switch {
 	case err == nil, errors.Is(err, context.Canceled):
