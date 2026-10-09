@@ -89,6 +89,9 @@ has no audience, or a rule could be satisfied by more than one issuer. The
 full rules are in
 [the configuration reference](../reference/configuration-observe-query.md#query-service).
 
+A sort that leads with `recorded_at` is a tail and needs the `tail` operation.
+The reserved `q` field is refused as `unimplemented`.
+
 Every read — search, facets, get, export, resolve — is itself recorded in the
 trail, naming the caller and the rule that allowed it.
 
@@ -157,7 +160,7 @@ curl -s …/audit.v1.QueryService/Get -H "Authorization: Bearer $TOKEN" -H 'Cont
   -d '{"profile": "security", "id": "0199b100-0000-7000-8000-00000000001a"}'
 ```
 
-`provenance.object_key` and `line` locate the copy in the archive. `digest_id`
+`Get` returns the index projection, not the archive line. `provenance.object_key` and `line` locate the copy in the archive. `digest_id`
 (named from before seals) is the key of the seal that covers the object's hour,
 when the service is given the archive and the hour is sealed
 ([0061](../../decisions/0061-seals.md)); empty means not sealed yet, the ordinary

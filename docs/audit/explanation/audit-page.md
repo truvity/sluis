@@ -60,10 +60,9 @@ Both are described from the application's side in
 
 Profiles are the top level. A person sees only the profiles their grant
 allows, as the query service's `Access` reports them. Inside a profile:
-tenant scope, time range with a histogram from the counts table, a facet
-sidebar, a qualifier box (`actor:` `action:` `target:` `outcome:` `tenant:`
-and a time range) that compiles to the typed filter, and the
-reverse-chronological table.
+a facet sidebar and a qualifier box (`actor:` `action:` `target:` `outcome:` `tenant:`
+and a time range) that compiles to the typed filter, then the
+reverse-chronological table. A tenant scope and a histogram are planned.
 
 The page shows one installation, which is one application's trail. A view
 over several applications is a read across several prefixes, not a surface
@@ -72,12 +71,11 @@ here.
 ## Row
 
 A human sentence rendered from the catalogue template (ICU MessageFormat,
-locale-aware), actor, target, outcome, time, and for the security profile
-the client address. Expanding shows the JSON with filter-for and filter-out
-on every value, the old-versus-new diff on updates, pivots by request id,
-trace id, actor and target, a permalink by event id, and the integrity
-badge when a verified seal covers the record; until seals exist it has
-nothing to show.
+locale-aware), outcome and time, shown with its UTC offset. Expanding shows the JSON,
+filter-for and filter-out on the values it offers, pivots by request id,
+trace id, actor and target, a permalink by event id, and a seal badge with
+three states: not sealed yet, sealed but not yet verified, and verified.
+A client-address column and an old-versus-new diff are planned.
 
 Where the deployment runs no pseudonymisation keys — the default — an
 identity is shown as it was written, and the page offers no resolve: the
@@ -87,8 +85,7 @@ nothing
 
 ## Actions
 
-Live tail (polls the tail cursor), export (async job, signed URL), copy
-permalink.
+Live tail (polls the tail cursor) and copy permalink. An export action is planned.
 
 Every one of them is a read of the trail, so every one of them is itself
 recorded. The page does nothing to make that so; the query service does.

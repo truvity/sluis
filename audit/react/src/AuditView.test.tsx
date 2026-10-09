@@ -77,10 +77,30 @@ describe("the audit view", () => {
     expect(fake.searches.at(-1)?.filter[0]?.requestId?.operator).toEqual({ case: "equal", value: "req-3" });
   });
 
-  it("says a record is not yet covered when no verified digest is", async () => {
+  it("tells unsealed, sealed and verified apart", async () => {
+    show({ sealed: ["r-2"], verified: ["r-3"] });
+    fireEvent.click(await screen.findByText("ps_bob placed order o-2"));
+    expect(await screen.findByText("Sealed, not yet verified")).toBeTruthy();
+    fireEvent.click(screen.getByText("ps_alice placed order o-3"));
+    expect(await screen.findByText(/^Verified /)).toBeTruthy();
+  });
+
+  it("says a record is not sealed yet when no digest covers it", async () => {
     show();
     fireEvent.click(await screen.findByText("ps_bob placed order o-2"));
-    expect(await screen.findByText("Not yet covered by a verified digest")).toBeTruthy();
+    expect(await screen.findByText("Not sealed yet")).toBeTruthy();
+  });
+
+  it("opens a row from the keyboard and shows the zone of the time", async () => {
+    show();
+    const label = await screen.findByText("ps_bob placed order o-2");
+    const row = label.closest("tr") as HTMLElement;
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(row, { key: " " });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(within(row).getByText(/UTC/)).toBeTruthy();
   });
 
   it("counts values to narrow by", async () => {

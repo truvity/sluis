@@ -77,8 +77,8 @@ The categories:
 ICU MessageFormat per locale, one per declared locale, all required. The
 validator reads enough of the grammar to tell an argument from a plural or
 select submessage, and refuses a template that names anything a record of the
-action does not carry. The viewer renders in the browser; exports render a
-constrained subset server-side.
+action does not carry. The viewer renders in the browser; exports render no
+sentences yet.
 
 An argument names a field of the record, with an underscore for each step:
 `{targets_0_id}`, `{data_items}`, `{data_address_city}`. ICU forbids dots in
