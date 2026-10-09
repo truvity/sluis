@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/truvity/sluis/internal/githubroster/appid"
+	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/secretstore"
 	"github.com/truvity/sluis/storage/state"
 )
@@ -18,6 +20,30 @@ func (b *Base) WithV4(v4 *secretstore.Stores) *Base {
 	return b
 }
 
+// WithV5 puts the GitHub Apps on layout v5 (ADR 0072): the credential of an
+// App of any purpose is `internal/github/apps/<id>/<ref>` under a fresh ref per
+// write, and an exported App's document is `external/github/<id>`. The State
+// keys do not change; the adapter locates them (port.Locate5). The other
+// stores keep using the Secrets port. v4 and v5 are exclusive: a Base with
+// both reads and writes layout v5.
+func (b *Base) WithV5(v5 *secretstore.StoresV5) *Base {
+	b.v5 = v5
+	return b
+}
+
+// appOfKey is the id of the GitHub App whose item key it is, when the
+// credentials of Apps are on layout v5. An organisation's key is not an App's.
+func (b *Base) appOfKey(key string) (id string, ok bool) {
+	if b.v5 == nil {
+		return "", false
+	}
+	addr, err := port.Locate5(key)
+	if err != nil || addr.Module != port.ModuleGitHub || addr.Kind != "app" {
+		return "", false
+	}
+	return addr.ID, true
+}
+
 // ExportGitHubApps says which catalogue GitHub Apps have `export: true`. Unset
 // exports none; a runner App is always exported.
 func (b *Base) ExportGitHubApps(exported func(id string) bool) *Base {
@@ -27,14 +53,42 @@ func (b *Base) ExportGitHubApps(exported func(id string) bool) *Base {
 
 // v4Writes is whether a credential also goes to layout v4: whenever the
 // installation has v4 stores.
-func (b *Base) v4Writes() bool { return b.v4 != nil }
+func (b *Base) v4Writes() bool { return b.v4 != nil || b.v5 != nil }
 
 // v4Reads is whether layout v4 is read first.
-func (b *Base) v4Reads() bool { return b.v4 != nil }
+func (b *Base) v4Reads() bool { return b.v4 != nil || b.v5 != nil }
 
 // keepInternal is whether an exported credential is also kept as an internal
 // one: only when there are no v4 stores to export it to.
-func (b *Base) keepInternal() bool { return b.v4 == nil }
+func (b *Base) keepInternal() bool { return b.v4 == nil && b.v5 == nil }
+
+// externalApp is the exported document of the App with the id, wherever the
+// layout keeps it: external/github/<id> on layout v5 and github/<id> on v4.
+// A catalogue id that begins "runner-" fails every call on v4 (see
+// [secretstore.CheckAppName]); layout v5 has one id space, so the runner Apps
+// are told apart by the id alone.
+func (b *Base) externalApp(id string) state.Value[secretstore.GitHubv1] {
+	if b.v5 != nil {
+		return b.v5.GitHubExternal().App(id)
+	}
+	return b.v4.External.GitHubApp(id)
+}
+
+// externalRunnerApp is [Base.externalApp] of a runner App.
+func (b *Base) externalRunnerApp(tier, org string) state.Value[secretstore.GitHubv1] {
+	if b.v5 != nil {
+		return b.v5.GitHubExternal().App(appid.RunnerID(tier, org))
+	}
+	return b.v4.External.GitHubRunnerApp(tier, org)
+}
+
+// deleteExternalApp removes the exported document of the App with the id.
+func (b *Base) deleteExternalApp(ctx context.Context, id string) error {
+	if b.v5 != nil {
+		return b.v5.GitHubExternal().DeleteApp(ctx, id)
+	}
+	return b.deleteExternal(ctx, b.v4.External.Store(), "github/"+id)
+}
 
 func (b *Base) putGitHub(
 	ctx context.Context, value state.Value[secretstore.GitHubv1], appID, installationID int64, privateKey, webhookSecret string,

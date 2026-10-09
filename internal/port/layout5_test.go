@@ -19,7 +19,7 @@ var rows5 = []struct{ key, module, kind, id string }{
 	{"gh.link.299386", "github", "link", "299386"},
 	{"app.gh.link", "github", "app", "link"},
 	{"app.gh.cat.renovate", "github", "app", "renovate"},
-	{"app.gh.runner.stable.acme", "github", "app", "runner/stable/acme"},
+	{"app.gh.runner.stable.acme", "github", "app", "runner-stable-acme"},
 	{"app.slack.cat.alerts", "slack", "app", "alerts"},
 	{"rec.slack.shared.partners", "slack", "shared", "partners"},
 	{"rec.slack.channel.acme.ops", "slack", "channel", "acme/ops"},
@@ -205,7 +205,7 @@ func TestLayout5DoesNotMergeLayout4Kinds(t *testing.T) {
 func TestALayout5KeyNoModuleCanHoldIsRefused(t *testing.T) {
 	keys := []string{
 		"", "ws.dir.", "ws.dir.entra.4b1f", "ws.dir.google.", "ws.dir.google.a/b",
-		"app.gh.cat.link", "app.gh.cat.runner/x", "lease.a:b/c",
+		"app.gh.cat.link", "app.gh.cat.runner-x", "lease.a:b/c",
 	}
 	for _, key := range keys {
 		if _, err := port.Locate5(key); !errors.Is(err, port.ErrUnsupported) {
@@ -227,8 +227,8 @@ func TestALayout5PrefixIsAQueryOnlyWhenItNamesOneKind(t *testing.T) {
 		{"ws.dir.google.C01", "google", "workspace", "C01", true},
 		{"ws.dir.goo", "", "", "", false},
 		{"ws.dir.entra.", "", "", "", false},
-		{"app.gh.runner.", "github", "app", "runner/", true},
-		{"app.gh.runner.stable.", "github", "app", "runner/stable/", true},
+		{"app.gh.runner.", "github", "app", "runner-", true},
+		{"app.gh.runner.stable.", "github", "app", "runner-stable-", true},
 		{"rec.slack.channel.acme.", "slack", "channel", "acme/", true},
 		{"gate.github.acme.", "github", "gate", "acme/", true},
 		{"lease.slack-tick:", "slack", "lease", "slack-tick/", true},

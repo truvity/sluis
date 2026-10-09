@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/status"
 )
 
@@ -86,6 +87,11 @@ type Record struct {
 	Org     string `json:"org"`
 	AppID   int64  `json:"app_id"`
 	AppSlug string `json:"app_slug"`
+	// Purpose is always `runner`: Encode sets it. A record written before it
+	// existed has none and is read as a runner App's all the same.
+	Purpose appid.Purpose `json:"purpose,omitempty"`
+	// Labels are the App's own, for a reader that selects Apps by them.
+	Labels map[string]string `json:"labels,omitempty"`
 	// InstallationID is zero between Create and Install.
 	InstallationID int64     `json:"installation_id,omitempty"`
 	HTMLURL        string    `json:"html_url,omitempty"`
@@ -95,6 +101,9 @@ type Record struct {
 
 // Installed reports whether runners can register with it yet.
 func (r Record) Installed() bool { return r.InstallationID != 0 }
+
+// ID is the App's id in the one id space of GitHub Apps: `runner-<tier>-<org>`.
+func (r Record) ID() string { return appid.RunnerID(r.Tier, r.Org) }
 
 // ErrVersion is a record of a version this build does not read.
 var ErrVersion = errors.New("runnerapp: unsupported record version")
@@ -106,7 +115,11 @@ func Encode(r Record, privateKey string) (map[string][]byte, error) {
 	if !ValidTier(r.Tier) || !status.ValidOrg(r.Org) || r.AppID == 0 || r.AppSlug == "" || privateKey == "" {
 		return nil, fmt.Errorf("runnerapp: an App needs a tier, an organisation, an id, a slug and a key: %s/%s", r.Tier, r.Org)
 	}
+	if err := appid.CheckLabels(r.Labels); err != nil {
+		return nil, err
+	}
 	r.Version = Version
+	r.Purpose = appid.Runner
 	record, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
@@ -156,5 +169,9 @@ func DecodeRecord(raw []byte) (Record, error) {
 	if r.Version != Version {
 		return Record{}, fmt.Errorf("%w: %d", ErrVersion, r.Version)
 	}
+	if r.Purpose != "" && r.Purpose != appid.Runner {
+		return Record{}, fmt.Errorf("runnerapp: a record of the purpose %q", r.Purpose)
+	}
+	r.Purpose = appid.Runner
 	return r, nil
 }

@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/truvity/sluis/internal/githubroster/appid"
 )
 
 // Version is the document version this build writes and reads.
@@ -196,6 +198,11 @@ type App struct {
 	Owner   string `json:"owner"`
 	AppID   int64  `json:"app_id"`
 	AppSlug string `json:"app_slug"`
+	// Purpose is always `link`: EncodeApp sets it. A record written before it
+	// existed has none and is read as the link App's all the same.
+	Purpose appid.Purpose `json:"purpose,omitempty"`
+	// Labels are the App's own, for a reader that selects Apps by them.
+	Labels map[string]string `json:"labels,omitempty"`
 	// ClientID is public: it is in every authorize URL.
 	ClientID    string    `json:"client_id"`
 	HTMLURL     string    `json:"html_url,omitempty"`
@@ -220,7 +227,11 @@ func EncodeApp(a App) (string, error) {
 	if a.AppID == 0 || a.AppSlug == "" || a.ClientID == "" {
 		return "", errors.New("link: the App's record needs an id, a slug and a client id")
 	}
+	if err := appid.CheckLabels(a.Labels); err != nil {
+		return "", err
+	}
 	a.Version = Version
+	a.Purpose = appid.Link
 	raw, err := json.Marshal(a)
 	return string(raw), err
 }
@@ -234,6 +245,10 @@ func DecodeApp(raw string) (App, error) {
 	if a.Version != Version {
 		return App{}, fmt.Errorf("%w: %d", ErrVersion, a.Version)
 	}
+	if a.Purpose != "" && a.Purpose != appid.Link {
+		return App{}, fmt.Errorf("link: a record of the purpose %q", a.Purpose)
+	}
+	a.Purpose = appid.Link
 	return a, nil
 }
 

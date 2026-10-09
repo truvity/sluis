@@ -139,6 +139,22 @@ The logical key maps to kind and credential path as follows.
 | `issuer:kms:state-secret-fingerprint` | `issuer-guard` / `state-secret-fingerprint` | none |
 | `ses.<person>.<sid>`, `sid.<sid>`, `req.`, `code.`, `tok.`, `sso.`, `rt.`, `rtrot.` (legacy), `keyring.` | the layout's dotted forms of the above | none |
 
+## GitHub Apps on layout v5
+
+| App | Purpose | Id | Credential | Exported |
+|---|---|---|---|---|
+| the link App | `link` | `link` | `<root>/internal/github/apps/link/<ref>` | never |
+| a catalogue App | `catalogue` | its own id (not `link`, not `runner-…`) | `<root>/internal/github/apps/<id>/<ref>` | `<root>/external/github/<id>` with `export: true` |
+| a runner App | `runner` | `runner-<tier>-<org>` | `<root>/internal/github/apps/runner-<tier>-<org>/<ref>` | `<root>/external/github/runner-<tier>-<org>`, always |
+
+| Rule | Where |
+|---|---|
+| One kind `app` in the `github` table, keyed by the id; the logical keys do not change | [ADR 0072](../../decisions/0072-storage-layout-v5-module-first.md) |
+| A record has `purpose` and `labels` (16 at most, short lower-case names); one without a purpose is read with its key's | `appid` package |
+| An exported key is kept once, in the external document; each internal write has a fresh `<ref>` | the GitHub Apps store |
+| An organisation's `app_ref` names the App whose key it uses; without it, layout v5 refuses the connection | the organisation record |
+| Runner Apps whose tier and organisation join to one id are refused at the second write | the GitHub Apps store |
+
 ## S3 (the `s3` Blob adapter)
 
 | Prefix | Content |

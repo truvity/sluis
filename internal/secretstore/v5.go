@@ -1,6 +1,8 @@
 package secretstore
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -202,6 +204,16 @@ func (g GitHubInternal) AppCredential(id, ref string) state.Value[[]byte] {
 	return state.NewValue(g.s, "apps/"+segment(id)+"/"+segment(ref), state.Raw())
 }
 
+// DeleteAppCredential removes one write of a GitHub App's credential. An
+// absent one is not an error.
+func (g GitHubInternal) DeleteAppCredential(ctx context.Context, id, ref string) error {
+	err := g.s.Delete(ctx, "apps/"+segment(id)+"/"+segment(ref))
+	if err != nil && !errors.Is(err, state.ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
 // PersonToken is a person's token pair for a linked GitHub account:
 // github/links/<person>, replaced in place under the store's version history.
 func (g GitHubInternal) PersonToken(person string) state.Value[PersonToken] {
@@ -277,6 +289,15 @@ type GitHubExternal struct{ s state.Store }
 // a catalogue, link or runner App is the same address shape.
 func (e GitHubExternal) App(id string) state.Value[GitHubv1] {
 	return state.NewValue(e.s, segment(id), state.Codec[GitHubv1](githubCodec))
+}
+
+// DeleteApp removes a GitHub App's exported key. An absent one is not an error.
+func (e GitHubExternal) DeleteApp(ctx context.Context, id string) error {
+	err := e.s.Delete(ctx, segment(id))
+	if err != nil && !errors.Is(err, state.ErrNotFound) {
+		return err
+	}
+	return nil
 }
 
 // SlackExternal is external/slack.

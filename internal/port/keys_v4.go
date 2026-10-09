@@ -45,6 +45,9 @@ const (
 	convDots
 	// convColons makes every colon of the rest a slash (the rest holds no slash).
 	convColons
+	// convDashes makes every dot of the rest a dash (the rest holds no slash):
+	// a runner App's `<tier>.<org>` is the App id `<tier>-<org>`.
+	convDashes
 	// convLease makes the first colon a slash: `<kind>:<target>`.
 	convLease
 )
@@ -191,6 +194,8 @@ func (r keyRule) convert(rest string) (string, bool) {
 		return strings.ReplaceAll(rest, ".", "/"), !strings.Contains(rest, "/")
 	case convColons:
 		return strings.ReplaceAll(rest, ":", "/"), !strings.Contains(rest, "/")
+	case convDashes:
+		return strings.ReplaceAll(rest, ".", "-"), !strings.Contains(rest, "/")
 	case convLease:
 		return strings.Replace(rest, ":", "/", 1), !strings.Contains(rest, "/")
 	}

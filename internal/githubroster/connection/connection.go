@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/status"
 	"github.com/truvity/sluis/internal/rails"
 )
@@ -59,6 +60,12 @@ type Record struct {
 	// afterwards. The field is optional in version 1, so a record written
 	// before it existed reads as "no owner" and behaves exactly as it did.
 	Owner string `json:"owner,omitempty"`
+	// AppRef is the id of the GitHub App this organisation uses (ADR 0072):
+	// the App's key is kept once, under the App, and the record holds only
+	// the installation and the organisation's own state. Empty is the
+	// organisation's own App, whose key is kept with the record; a record
+	// written before the field existed reads so.
+	AppRef string `json:"app_ref,omitempty"`
 }
 
 // Installed reports whether the App can act yet.
@@ -84,6 +91,9 @@ var ErrVersion = errors.New("connection: unsupported document version")
 func EncodeRecord(r Record) (string, error) {
 	if !status.ValidOrg(r.Org) || r.AppID == 0 || r.AppSlug == "" {
 		return "", fmt.Errorf("connection: a record needs an organisation, an App id and a slug: %+v", r)
+	}
+	if r.AppRef != "" && (!appid.Valid(r.AppRef) || r.AppRef == appid.LinkID) {
+		return "", fmt.Errorf("connection: %q cannot name the App of an organisation", r.AppRef)
 	}
 	r.Version = Version
 	raw, err := json.Marshal(r)
