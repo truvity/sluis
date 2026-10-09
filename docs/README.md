@@ -1,13 +1,65 @@
 # Documentation
 
-This repository ships three things that are installed together or apart. Each has a documentation tree with the same
-sections, organised by what the reader is doing ([Diataxis](https://diataxis.fr/)).
+Two products in one repository, one version: **sluis** and **audit**, plus the shared **storage** module. Each has a
+documentation tree with the same sections, organised by what the reader is doing ([Diataxis](https://diataxis.fr/)).
+
+## How the parts fit
+
+In one line: sluis turns a caller's proof into short-lived credentials and records what it did; audit archives those
+records in S3, seals them, and serves them to the console's Audit page.
+
+```mermaid
+flowchart LR
+  dir["Directory + machine proofs"] --> iss["sluis issuer"]
+  iss --> cred["Tokens and credentials for Kubernetes, AWS, GitHub Apps, Cloudflare"]
+  ctl["Controllers"] --> gh["GitHub teams"]
+  ctl --> sl["Slack channels"]
+  iss --> em["audit emitter"]
+  em --> wr["audit writer"]
+  wr --> s3[("S3 archive")]
+  nt["notary"] --> s3
+  s3 --> ix["indexer"]
+  ix --> pg[("PostgreSQL")]
+  pg --> q["query"]
+  q --> ui["console Audit page"]
+```
+
+## The three products
 
 | | What it is | Start at |
 |---|---|---|
 | **sluis** | the identity and access service: who a caller is, what that gets them, and the way out | [docs/sluis](sluis/README.md) |
 | **audit** | the audit trail: records written once, sealed, searchable, verifiable by an auditor | [docs/audit](audit/README.md) |
 | **storage** | the state and key backends both share, chosen by the `state` and `keys` blocks | [docs/storage](storage/README.md) |
+
+## Deployment shapes
+
+A shape is where a product runs. Each product's page is the owner of its list; this is the map.
+
+| Product | Shape | State | Page |
+|---|---|---|---|
+| sluis | AWS Lambda | available | [AWS Lambda](sluis/deployment/aws-lambda.md) |
+| sluis | AWS Lambda behind Cloudflare | available | [AWS behind Cloudflare](sluis/deployment/aws-behind-cloudflare.md) |
+| sluis | Kubernetes with AWS storage | available | [Kubernetes with AWS storage](getting-started/kubernetes-aws.md) |
+| sluis | Kubernetes with OpenBao | planned | [Kubernetes with OpenBao](sluis/deployment/kubernetes-openbao.md) |
+| audit | services in the cluster (NATS, OpenBao, PostgreSQL) | available | [in the cluster](audit/getting-started/in-cluster.md) |
+| audit | AWS serverless (Lambda, SQS, DynamoDB, SSM) | available | [AWS Lambda](audit/getting-started/aws-lambda.md) |
+| audit | writer on Lambda, readers in the cluster | available | [run readers in Kubernetes](audit/how-to/aws-run-readers-in-kubernetes.md) |
+
+The two audit shapes are peers; both need a KMS key (or OpenBao transit) and an S3 store (AWS S3 or Cloudflare R2), and
+[the audit deployment page](audit/deployment/README.md) says what differs. Installing audit *beside sluis* is a
+connection, not a shape: [a sluis-connected install](audit/getting-started/sluis.md).
+
+| SDK | Go | TypeScript | Kotlin | Python |
+|---|---|---|---|---|
+| sluis client, audit emitter and query | built | built | planned | planned |
+
+Kotlin and Python are planned and have no code ([0042](decisions/0042-one-repository-one-release-train.md)).
+
+## What changed
+
+The [CHANGELOG](../CHANGELOG.md) lists every release; the upgrade pages are under each product's how-to
+(for audit, [upgrade](audit/how-to/upgrade/v0.13.md)).
 
 ## Sections
 

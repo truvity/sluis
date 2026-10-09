@@ -5,10 +5,10 @@ namespace, rendered by the application's own chart with this repository's
 chart as a dependency
 ([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
 
-There are two shapes. They write the same archive, under the same catalogue
-rules and the same bucket layout, and an auditor verifies either with the
-same command. What differs is how a record gets from the application to the
-bucket.
+The [deployment page](../deployment/README.md) owns the list of shapes: **services in the cluster** and **AWS
+serverless**. They write the same archive, under the same catalogue rules and the same bucket layout, and an auditor
+verifies either with the same command. This page explains the two *modes* of the chart that serves the first: how a
+record gets from the application to the bucket.
 
 | shape | for | the receiver | writers | `async` loss window |
 |---|---|---|---|---|
@@ -18,7 +18,7 @@ bucket.
 Switching between them is a change to the receiver's configuration, not to
 any record.
 
-A third shape is not Kubernetes at all: [AWS Lambda](aws-lambda.md) runs the writer and the
+The other shape is not Kubernetes at all: [AWS Lambda](aws-lambda.md) runs the writer and the
 notary as Lambda functions behind an SQS queue, built by a Pulumi library. Its
 status is on the [capabilities](../reference/capabilities.md) page.
 
@@ -79,6 +79,7 @@ its own prefix.
 - Somewhere for the **Audit page** to live: the application's console, which calls the
   query service with the console's own token.
 
-To start: [Kubernetes](../getting-started/kubernetes.md) or
+To start: [services in the cluster](../getting-started/in-cluster.md),
+[Kubernetes with AWS storage](../getting-started/kubernetes.md) or
 [AWS Lambda](../getting-started/aws-lambda.md); to connect a product that already runs
 sluis, [a sluis-connected install](../getting-started/sluis.md).
