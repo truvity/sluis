@@ -608,10 +608,10 @@
         }
       }
     },
-    "exports": {
+    "adapters": {
       "type": "object",
       "additionalProperties": false,
-      "description": "What the chart mounts for the service's OpenBao connection (the `openbao` secrets adapter): the CA that signs OpenBao's certificate and the projected token the login presents. The address and how the service logs in are the `config`'s (`config.adapters.secrets`). The key keeps the name it had when the exports used the same mounts.",
+      "description": "What the chart mounts for the service's OpenBao connection (the `openbao` secrets adapter): the CA that signs OpenBao's certificate and the projected token the login presents. The address and how the service logs in are the `config`'s (`config.adapters.secrets`).",
       "properties": {
         "openbao": {
           "type": "object",
