@@ -213,6 +213,7 @@ data:
     deployment: /etc/audit/deployment.yaml
     keys:
       adapter: kms
+      instance: audit
       seal:
         key: alias/audit-seal
     sink:
@@ -671,7 +672,7 @@ spec:
             app.kubernetes.io/name: audit
             app.kubernetes.io/instance: audit
           annotations:
-            checksum/config: 94d7abbc83abf13463f9abe68076933d4130db80f5513525978d27df7bcc40c0
+            checksum/config: fa2142a2591b39ec47df0135b863d0a500a7ea80a93b8c657fbec992385566a0
             checksum/deployment: 34229ed0d2c819ddb6d3e6e3acc8576565cae49d7dc16f9cf828a6e0a95d3e7c
         spec:
           restartPolicy: OnFailure
