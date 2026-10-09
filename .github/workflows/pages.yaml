@@ -20,6 +20,7 @@ on:
       - "audit/sdk/catalogue/**"
       - "audit/gen/jsonschema/**"
       - "hack/pages-site.sh"
+      - "hack/fetch-mermaid.sh"
       - ".github/workflows/pages.yaml"
   pull_request:
     branches: [master]
@@ -46,7 +47,9 @@ jobs:
       - name: Build the documentation
         run: |
           pip install -r hack/pages-requirements.txt
+          hack/fetch-mermaid.sh
           mkdocs build --strict -d _site
+          test -f _site/assets/vendor/mermaid.min.js || { echo "::error::the site has no Mermaid bundle, so every diagram would show as source"; exit 1; }
       - name: Add the schemas
         run: hack/pages-site.sh _site
       - name: Keep Jekyll off the site
