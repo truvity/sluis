@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/storage/logattr"
 )
 
@@ -149,11 +149,6 @@ func (s *Storage) mintLogoutToken(session *Session) (string, error) {
 	// token is never minted for a resource -- so, like [Storage.MintFor],
 	// this resolves its algorithm directly rather than through the
 	// context carrier the library's own mint paths need.
-	active := s.keys.Active(s.signingAlgorithmFor(session.ClientID))
-	if active == nil {
-		return "", fmt.Errorf("no signing key")
-	}
-
 	claims := logoutToken{
 		Issuer:   s.iss.Config().URL,
 		Audience: session.ClientID,
@@ -177,22 +172,15 @@ func (s *Storage) mintLogoutToken(session *Session) (string, error) {
 		return "", err
 	}
 
-	signer, err := jose.NewSigner(
-		jose.SigningKey{Algorithm: active.SignatureAlgorithm(), Key: active.Key()},
-		// `typ: logout+jwt` is required, and it is the one thing that
-		// stops a relying party mistaking this for an ID token.
-		(&jose.SignerOptions{}).
-			WithType("logout+jwt").
-			WithHeader("kid", active.ID()),
-	)
+	// `typ: logout+jwt` is required, and it is the one thing that
+	// stops a relying party mistaking this for an ID token: the signer
+	// sets it from the purpose.
+	signed, err := s.signer.Sign(context.Background(), signer.Request{
+		Purpose: signer.PurposeLogout, Algorithm: s.signingAlgorithmFor(session.ClientID), Payload: payload,
+	})
 	if err != nil {
 		return "", err
 	}
 
-	signed, err := signer.Sign(payload)
-	if err != nil {
-		return "", err
-	}
-
-	return signed.CompactSerialize()
+	return signed.Token, nil
 }

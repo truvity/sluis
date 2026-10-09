@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
-	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // ErrNoPerson is a mint asked for somebody with no address: only a person
@@ -79,26 +80,16 @@ func (s *Storage) MintFor(ctx context.Context, email, audience string, lifetime 
 	// MintFor's own target is its audience directly -- no ctx trick
 	// needed the way the library's own mint paths need one, because this
 	// signs the token itself rather than asking the library to.
-	s.keys.Maintain(ctx)
-	active := s.keys.Active(s.signingAlgorithmFor(audience))
-	if active == nil {
-		return "", time.Time{}, errors.New("no signing key")
-	}
-	signer, err := jose.NewSigner(
-		jose.SigningKey{Algorithm: active.SignatureAlgorithm(), Key: active.Key()},
-		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", active.ID()),
-	)
+	signed, err := s.signer.Sign(ctx, signer.Request{
+		Purpose: signer.PurposeAccess, Algorithm: s.signingAlgorithmFor(audience), Payload: payload,
+	})
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	signed, err := signer.Sign(payload)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	token, err := signed.CompactSerialize()
-	if err == nil {
+	token := signed.Token
+	{
 		issuerMetrics.tokens.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("client_id", "none"), attribute.String("grant_type", "console_mint")))
 	}
-	return token, expires, err
+	return token, expires, nil
 }
