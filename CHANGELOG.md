@@ -18,6 +18,7 @@
 
 ### Deprecated
 
+- **The legacy store and Valkey** (`ports.adapter: legacy`, the default, which keeps state in the namespace's ConfigMaps and Secrets, and the `valkey` section) are deprecated in v1.74.0 and removed in v1.75, with the module split. Behaviour is unchanged; the service logs one warning at start when it opens the legacy adapter or `valkey` is set, and the schema, the chart values and the docs say so. Move off it with `sluis migrate` (see [migrate the secrets layout](docs/how-to/migrate-secrets-layout.md) and [migrate the State](docs/how-to/migrate-state.md)).
 - **`sluisctl r2`** (the wrapper that runs `r2broker`) prints a deprecation notice and goes with the broker: use `sluisctl cloudflare r2 <preset>`, which needs no broker.
 
 ## v1.74.0-rc.1

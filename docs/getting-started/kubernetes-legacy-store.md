@@ -1,5 +1,10 @@
 # Tutorial: an existing Kubernetes installation on the legacy store
 
+!!! warning "Deprecated"
+    The legacy store (`ports.adapter: legacy`, the default) and Valkey are deprecated in v1.74.0 and removed in v1.75.
+    Move off them with `sluis migrate`: see [migrate the State](../how-to/migrate-state.md) and
+    [migrate the secrets layout](../how-to/migrate-secrets-layout.md).
+
 This is for an installation that already runs on Kubernetes and keeps its state in Kubernetes objects (and Valkey):
 the `legacy` adapter, the storage sluis has always had. It is the oldest shape and it is on its way out: the
 destination is the DynamoDB state of [Kubernetes with AWS storage](kubernetes-aws.md), reached with `sluis migrate`.
