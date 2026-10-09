@@ -12,6 +12,10 @@
 package logattr
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"strings"
 	"unicode"
@@ -76,4 +80,25 @@ func Error(err error) string {
 // SafeError is the sanitised text of err as a string attribute.
 func SafeError(key string, err error) slog.Attr {
 	return slog.String(key, Error(err))
+}
+
+// pseudonymKey keys Pseudonym for the life of the process.
+var pseudonymKey = func() []byte {
+	k := make([]byte, 32)
+	if _, err := rand.Read(k); err != nil {
+		panic("logattr: no randomness for the pseudonym key: " + err.Error())
+	}
+	return k
+}()
+
+// Pseudonym is a string attribute standing for a person without naming them:
+// the first 8 bytes (16 hex digits) of HMAC-SHA256 of value under a random
+// key made at process start. The same value gives the same pseudonym inside
+// one process, so lines about one person can be correlated; across
+// processes it does not, and nothing recovers the value. The audit trail
+// carries the real identity, a log line does not need to.
+func Pseudonym(key, value string) slog.Attr {
+	mac := hmac.New(sha256.New, pseudonymKey)
+	mac.Write([]byte(value))
+	return slog.String(key, hex.EncodeToString(mac.Sum(nil)[:8]))
 }

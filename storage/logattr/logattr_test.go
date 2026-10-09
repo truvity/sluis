@@ -46,3 +46,14 @@ func TestAttrs(t *testing.T) {
 		t.Fatalf("SafeError(nil) = %v", a)
 	}
 }
+
+func TestPseudonym(t *testing.T) {
+	a, b := logattr.Pseudonym("subject", "ada@example.test"), logattr.Pseudonym("subject", "ada@example.test")
+	c := logattr.Pseudonym("subject", "bob@example.test")
+	if a.Key != "subject" || a.Value.String() != b.Value.String() || a.Value.String() == c.Value.String() {
+		t.Fatalf("not stable or not distinct: %v %v %v", a, b, c)
+	}
+	if len(a.Value.String()) != 16 || strings.Contains(a.Value.String(), "ada") {
+		t.Fatalf("pseudonym = %q", a.Value.String())
+	}
+}

@@ -277,7 +277,7 @@ func (s *ConsoleServer) githubCallback(w http.ResponseWriter, r *http.Request) {
 			err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "GitHub App created", logattr.SafeString("org", org), slog.Int64("app", registration.ID),
+	s.log.InfoContext(r.Context(), "a GitHub App was created", logattr.SafeString("org", org), slog.Int64("app", registration.ID),
 		slog.String("slug", registration.Slug), logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.GitHubAppCreated(audit.Identified(actor), org,
 		audit.App{ID: registration.ID, Slug: registration.Slug}))
@@ -349,7 +349,7 @@ func (s *ConsoleServer) githubSetup(w http.ResponseWriter, r *http.Request) {
 		s.githubProblem(w, r, http.StatusConflict, "The App is installed and could not be recorded here.", err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "GitHub App installed", logattr.SafeString("org", org), slog.Int64("installation", installation),
+	s.log.InfoContext(r.Context(), "a GitHub App was installed", logattr.SafeString("org", org), slog.Int64("installation", installation),
 		logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.GitHubOrgConnected(audit.Identified(actor), org, credential.AppID, installation, record.Owner))
 	http.Redirect(w, r, s.at("/#/github"), http.StatusFound)

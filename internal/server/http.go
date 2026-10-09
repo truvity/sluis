@@ -389,7 +389,7 @@ func (s *ConsoleServer) withIdentity(next http.Handler) http.Handler {
 			// does not say who was refused is not one — and it is safe to
 			// write by construction rather than by the handler's choice.
 			s.log.InfoContext(r.Context(), "authorization refused",
-				logattr.SafeString("email", principal.Email),
+				principalSubject(principal),
 				logattr.SafeString("principal_source", string(principal.Source)), logattr.SafeError("error", err))
 			next.ServeHTTP(w, r)
 			return
@@ -671,7 +671,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	known, err := s.hub.ResolveUser(r.Context(), email, nil)
 	switch {
 	case err != nil:
-		s.log.ErrorContext(r.Context(), "sign-in could not be resolved", logattr.SafeString("email", email), logattr.SafeError("error", err))
+		s.log.ErrorContext(r.Context(), "sign-in could not be resolved", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
 		http.Error(w, "signed in as "+email+", but the directory could not be read: "+err.Error(),
 			http.StatusServiceUnavailable)
 		return
@@ -690,7 +690,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The one Authorize refuses outright is an account the directory
 		// authoritatively says is not live.
-		s.log.WarnContext(r.Context(), "sign-in refused", logattr.SafeString("email", email), logattr.SafeError("error", err))
+		s.log.WarnContext(r.Context(), "sign-in refused", logattr.Pseudonym("subject", email), logattr.SafeError("error", err))
 		s.console.record(r.Context(), audit.SignedIn(audit.Person(email), "console", connector.Kind(),
 			audit.Denied("the directory says this account is not live")))
 		http.Error(w, "signed in as "+email+", but that address cannot be served: "+err.Error(),
@@ -705,7 +705,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.InfoContext(r.Context(), "signed in",
-		logattr.SafeString("email", email), slog.String("backend", connector.Kind()), slog.Any("role", identity.Role))
+		logattr.Pseudonym("subject", email), slog.String("backend", connector.Kind()), slog.Any("role", identity.Role))
 	// The console's own door, beside the issuer's: a standalone
 	// installation signs people in here, and a sign-in is a sign-in.
 	s.console.record(r.Context(), audit.SignedIn(audit.Person(email), "console", connector.Kind(), audit.Succeeded()))
@@ -1211,4 +1211,14 @@ func redirectOrOK(w http.ResponseWriter, r *http.Request, to string) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// principalSubject names a caller in a log line without their address: the
+// principal's stable subject when it carries one, else a keyed pseudonym of
+// the address. The audit trail records the real identity.
+func principalSubject(p access.Principal) slog.Attr {
+	if p.Subject != "" {
+		return logattr.SafeString("subject", p.Subject)
+	}
+	return logattr.Pseudonym("subject", p.Email)
 }

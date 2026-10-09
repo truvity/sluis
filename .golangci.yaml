@@ -68,6 +68,7 @@ linters:
     # production logs.
     sloglint:
       attr-only: true
+      msg-style: lowercased
       no-global: all
       context: all
       static-msg: true
