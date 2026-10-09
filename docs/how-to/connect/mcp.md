@@ -99,8 +99,12 @@ resources:
 ```
 
 A resource id is an absolute URI with no fragment (RFC 8707;
-`policy.validateResourceID`), matched **exactly** — a trailing slash or a
-different scheme is a different resource. The MCP client sends it as the
+`policy.validateResourceID`). The scheme and the host are matched without
+regard to case (`HTTPS://MCP.Example/x` is `https://mcp.example/x`;
+RFC 3986 §6.2.2.1); everything after the host is matched **exactly** — a
+trailing slash, a different path or a different scheme is a different
+resource. Declare the id the way the MCP server publishes it, and prefer
+no trailing slash for a resource with a path. The MCP client sends it as the
 `resource` parameter on the authorization and token requests; the
 issuer's `aud` for the resulting token is that URI, not the client's id
 (`internal/issuer/resource.go`).
@@ -178,6 +182,36 @@ responsibility to serve: sluis is the authorization server named
 inside it, not the party that publishes it. Having found the issuer
 there, the client reads its metadata at
 `/.well-known/oauth-authorization-server` (RFC 8414), which sluis serves.
+
+## What the issuer does and does not do for an MCP client
+
+- **The resource server's RFC 9728 metadata need not list a scope.** A
+  client that finds none sends no `scope` at all, and the issuer then
+  supplies `scope=openid` on `/authorize` (a request that carries any
+  scope is left alone). The access token is the same either way.
+- **RFC 9207 `iss` is not emitted yet.** The authorization response
+  carries no `iss` parameter and the metadata does not advertise
+  `authorization_response_iss_parameter_supported`. A client that
+  requires it will refuse the response.
+- **There is no `insufficient_scope` and no step-up.** Who may reach a
+  resource is decided by the caller's groups
+  (`resources.<id>.requires`), not by scopes. A caller lacking the group
+  is refused at sign-in; a token is never "upgraded" by asking again with
+  more scope.
+- **Path-issuer gateway assumption.** The issuer serves its endpoints and
+  its `/.well-known/*` documents at the origin root. If the issuer URL
+  has a path, the gateway must route the path-inserted well-known URLs
+  (RFC 8414 §3.1, e.g. `/.well-known/oauth-authorization-server/<path>`)
+  to the issuer, which answers them at the root; sluis does not serve the
+  path-inserted form itself.
+- **Dynamic client registration (RFC 7591) is not offered.** Client ID
+  Metadata Documents are (above). A host is allow-listed by listing it
+  under `client_documents.origins`; a client whose `client_id` URL is on
+  any other host is refused before anything is fetched. A client the
+  policy declares needs no document.
+- **The sign-in and consent pages name the resource** (its
+  `display_name`, or the URL when it has none) beside the client, so a
+  person sees what they are granting access to.
 
 ## Calling a backend: the server's own identity, not the caller's
 

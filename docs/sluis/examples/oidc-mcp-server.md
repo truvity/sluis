@@ -18,28 +18,34 @@ client_documents:
   requires: [all:observability:user]     # mandatory once origins is set
   ttl_cap:  10m
 resources:
-  https://observability-mcp.example/:
+  https://observability-mcp.example/mcp:
     requires: [all:observability:user]
     ttl_cap:  5m
     display_name: Observability MCP server
 ```
 
-A resource id is an absolute URI without fragment, matched exactly. For a read-only server add `read_only: true` and
+A resource id is an absolute URI without fragment; scheme and host match without regard to case, the rest exactly
+(declare it without a trailing slash, the way the server publishes it). For a read-only server add `read_only: true` and
 `absolute_cap: 168h` (up to seven days).
 
 ## The exchange / command
 
 The client presents an HTTPS URL as its `client_id` and sends the resource on the authorization and token requests:
-`resource=https://observability-mcp.example/`. The token's `aud` is that URI. The server verifies it like any backend:
+`resource=https://observability-mcp.example/mcp`. The token's `aud` is that URI. Do not hand-roll the server's side: a Go
+server uses `identity/resource`, which verifies the token (`aud` = its own resource URL), answers `401` with the challenge and
+serves the RFC 9728 metadata at the path-inserted well-known URL; a stock server runs behind `resource-proxy`.
 
 ```go
-issuer := &identity.Issuer{URL: "https://access.example.com", Audience: "https://observability-mcp.example/"}
-http.ListenAndServe(":8080", identity.Middleware(issuer)(mux))
+res, err := resource.New(resource.Config{
+    IssuerURL:   "https://access.example.com",
+    ResourceURL: "https://observability-mcp.example/mcp",
+})
+mux.Handle(res.Path(), res.Metadata()) // /.well-known/oauth-protected-resource/mcp
+mux.Handle("/", res.Protect(mcpHandler))
 ```
 
-It serves `/.well-known/oauth-protected-resource` naming the issuer; the client reads the issuer's
-`/.well-known/oauth-authorization-server`. When a tool calls a backend, the server uses its own workload identity, never the
-caller's bearer.
+The client reads that metadata, then the issuer's `/.well-known/oauth-authorization-server`. When a tool calls a backend,
+the server uses its own workload identity, never the caller's bearer.
 
 ## Verify
 

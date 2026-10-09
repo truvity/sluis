@@ -282,3 +282,32 @@ func AgentAbsolute(class time.Duration, touched []string, lookup func(id string)
 	}
 	return out
 }
+
+// CanonicalResourceID folds the scheme and the host of a resource
+// indicator to lower case, which RFC 3986 (6.2.2.1) and RFC 8707 make
+// insignificant, and leaves everything else as it is.
+//
+// The path, the query and a trailing slash are NOT touched: a resource is
+// still matched exactly beyond the authority, so `https://mcp.example`
+// and `https://mcp.example/` remain different resources.
+func CanonicalResourceID(id string) string {
+	scheme, rest, ok := strings.Cut(id, "://")
+	if !ok {
+		return id
+	}
+
+	end := strings.IndexAny(rest, "/?#")
+	if end < 0 {
+		end = len(rest)
+	}
+
+	authority, tail := rest[:end], rest[end:]
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		// Userinfo is case-sensitive; only the host after it folds.
+		authority = authority[:at+1] + strings.ToLower(authority[at+1:])
+	} else {
+		authority = strings.ToLower(authority)
+	}
+
+	return strings.ToLower(scheme) + "://" + authority + tail
+}
