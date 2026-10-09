@@ -134,7 +134,7 @@ One bucket and prefix: `reports/<target>` is the object `<prefix>/reports/<targe
 | `lease.<kind>:<workspace>` | `{<workspace>}:lease:<kind>`. `lease.<name>` is `lease:<name>`. Tick leases: `lease.github-tick:<org>`, `lease.github-links:all`, `lease.slack-tick:<workspace>` |
 | Key containing `:` | Itself |
 | `gh.org.<org>` | Entry `<org>.json` of ConfigMap `<release>-github-orgs`; the credential is a separate Secret |
-| `snapshots/<workspace>` | `{<workspace>}:snapshot`, same gzip bytes |
+| `google/<workspace>` | `{<workspace>}:snapshot`, same gzip bytes |
 | `reports/github/<key>`, `reports/slack/<key>` | Entry of `<release>-github-status`, `<release>-slack-status` |
 | `ses.`, `sid.`, `ws.`, `gh.link.`, `app.`, `gate.`, `share.`, `cache.`, `dedupe.`, `notify.` | No object; `ErrUnsupported` |
 

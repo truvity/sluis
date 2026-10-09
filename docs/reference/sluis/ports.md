@@ -55,7 +55,7 @@ Optional capabilities:
 
 ## Blob
 
-Whole objects read whole: target status reports and directory snapshots. Both platforms use S3 with a prefix per kind (`reports/<target>`, `snapshots/<directory>`), server-side encryption and no public access. `Blob` also has `Delete` and `List(prefix)`.
+Whole objects read whole: target status reports and directory snapshots. Both platforms use S3 with a prefix per kind (`reports/<target>`, `google/<workspace>`), server-side encryption and no public access. `Blob` also has `Delete` and `List(prefix)`.
 
 | Operation | Meaning | Errors |
 |---|---|---|

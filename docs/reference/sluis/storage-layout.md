@@ -144,7 +144,9 @@ The logical key maps to kind and credential path as follows.
 | Prefix | Content |
 |---|---|
 | `reports/github/<target>`, `reports/slack/<target>` | What each controller last reported |
-| `snapshots/<directory>` | The hub's cache, never migrated |
+| `google/<workspace>` | The hub's cache of a Google Workspace (`snapshots/<workspace>` before v1.75), never migrated; a reader treats a missing blob as not yet written |
+
+In layout v5 the Google module is named `google` in storage, paths and IAM: kind `workspace` in the `google` table (`directory` in layout v4), the service-account key at `internal/google/workspaces/<id>/key`, and this blob prefix. `Directory` remains only the name of the Go interface and of the console's Directories page.
 
 ## Exports (retired)
 
