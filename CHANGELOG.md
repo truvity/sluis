@@ -4,6 +4,7 @@
 
 - **Breaking: the chart's `exports.openbao.*` values are now `adapters.openbao.*`.** The key named the layout v3 exports, which no longer exist; it only configures the CA bundle and the projected login token of the `openbao` secrets adapter. `exports.openbao.caBundle` becomes `adapters.openbao.caBundle`, `exports.openbao.token.audience` becomes `adapters.openbao.token.audience` and `exports.openbao.token.expirationSeconds` becomes `adapters.openbao.token.expirationSeconds`. The mount paths and the rendered objects are unchanged. A values file that still sets `exports` is refused by the schema.
 - **`/authorize` refuses PKCE `plain`, and a public client that sends no `code_challenge`.** Discovery lists `S256` only, but the library accepted `plain` (a challenge that is the verifier itself) and let a public client omit the challenge. Both are now a 400 `invalid_request` before the sign-in page. A confidential client may still omit PKCE; if it sends a method, it must be `S256`. Breaking for a client that relied on either. (INF-1496)
+- **`/authorize` refuses PKCE `plain`, and a public client that sends no `code_challenge`.** Discovery lists `S256` only, but the library accepted `plain` (a challenge that is the verifier itself) and let a public client omit the challenge. Both are now a 400 `invalid_request` before the sign-in page. A confidential client may still omit PKCE; if it sends a method, it must be `S256`. Breaking for a client that relied on either.
 
 ### Breaking
 
