@@ -396,8 +396,9 @@ presets they need. Each preset is one of:
 - An existing AWS bucket (`Create: false`): only grants.
 - An S3-compatible store (`Endpoint`: R2) the estate made: the library creates no bucket, `Bucket` is required, the
   store's credentials are read from the installation's own state store (`State.Root`, `CredentialsAddress`, default
-  `internal/archive/<preset>`; written by the operator, never an input), and Object Lock is not available (so no
-  attested preset). `ReuseBlobStore` takes `Endpoint`, `Region` and `PathStyle` from `StorageArgs.Blobs` when the blobs are
+  `internal/archive/<preset>`; written by the operator, never an input) or, with `CredentialsRef:
+  external/cloudflare/<preset>` and `Sluis{Root, KeyArn}`, are the R2 credentials a sluis installation rotates, granted
+  as that one parameter. Object Lock is not available (so no attested preset). `ReuseBlobStore` takes `Endpoint`, `Region` and `PathStyle` from `StorageArgs.Blobs` when the blobs are
   on that same store; the bucket and the credentials stay the installation's own, and naming the blob bucket is refused.
 
 `deploy/pulumi/go.mod` requires `github.com/truvity/sluis/audit/deploy/pulumi` (a `replace` to the module beside it, at

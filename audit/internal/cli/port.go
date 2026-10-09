@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -249,10 +250,51 @@ func readMinter(ctx context.Context, st state.Store, address string) (string, er
 	return d.Token, nil
 }
 
-// reauthenticate is what the store does after a 403: mint new credentials (at
-// most once in cloudflare.MinReauth) and drop the cached ones so the request is
-// signed anew. It answers false when nothing was replaced.
-func reauthenticate(prov *cloudflare.Provider, cache *aws.CredentialsCache) s3store.Reauth {
+// storedProvider is the credentials provider of a store whose R2 credentials
+// are the ones a sluis installation rotates (the preset's credentials_ref): the
+// cloudflare/v1 document is read from that installation's secret store on SSM
+// with the process's own identity, or from the file a secrets operator
+// projected, and read again before the credential expires and after a 403.
+// Nothing is minted and no minter is read.
+func storedProvider(ctx context.Context, c StoredCredentials) (*cloudflare.StoredProvider, error) {
+	if c.Dir != "" {
+		path := filepath.Join(c.Dir, filepath.FromSlash(c.Ref))
+		return cloudflare.NewStoredProvider(cloudflare.StoredConfig{
+			Source: path,
+			Read:   func(context.Context) ([]byte, error) { return os.ReadFile(path) }, //nolint:gosec // the path the configuration names
+		})
+	}
+	st, err := stateAt(ctx, config.StateRef{Root: c.Root}, "")
+	if err != nil {
+		return nil, fmt.Errorf("credentials_ref: %w", err)
+	}
+	return storedFromState(st, c.Root, c.Ref)
+}
+
+// storedFromState reads the document at ref of a sluis secret store.
+func storedFromState(st state.Store, root, ref string) (*cloudflare.StoredProvider, error) {
+	return cloudflare.NewStoredProvider(cloudflare.StoredConfig{
+		Source: root + "/" + ref,
+		Read: func(ctx context.Context) ([]byte, error) {
+			item, err := st.Get(ctx, ref)
+			if err != nil {
+				return nil, err
+			}
+			return item.Value, nil
+		},
+	})
+}
+
+// reauther is a provider that replaces its credentials after a 403: the
+// minting one mints, the stored one reads the rotated document again.
+type reauther interface {
+	Reauthenticate(ctx context.Context) (bool, error)
+}
+
+// reauthenticate is what the store does after a 403: have the provider replace
+// its credentials (at most once in cloudflare.MinReauth) and drop the cached
+// ones so the request is signed anew. It answers false when nothing was replaced.
+func reauthenticate(prov reauther, cache *aws.CredentialsCache) s3store.Reauth {
 	return s3store.ReauthFunc(func(ctx context.Context) (bool, error) {
 		replaced, err := prov.Reauthenticate(ctx)
 		if replaced {

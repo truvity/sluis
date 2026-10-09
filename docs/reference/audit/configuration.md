@@ -202,6 +202,8 @@ The process names the deployment (`deployment`) and may carry:
 | key | type | default | meaning |
 |---|---|---|---|
 | `stateRoot` | string | none | the root of the installation's state store, below which a preset's `credentials` address is read. Needed when a preset is at an endpoint with `credentials` |
+| `sluisRoot` | string | none | the SSM root of the sluis installation (`/sluis/<instance>`) below which a preset's `credentials_ref` is read with the process's identity. Exclusive with `sluisDir` |
+| `sluisDir` | path | none | the directory a secrets operator projects a preset's `credentials_ref` into, read at `<sluisDir>/<credentials_ref>`. Exclusive with `sluisRoot` |
 | `ca` | path | the system trust store | a CA bundle for a store whose certificate is not signed by a public root |
 | `kmsKey` | string | the bucket's default encryption | the key objects are encrypted with where a preset names no `key_alias`. Only the writer and the notary have it |
 

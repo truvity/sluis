@@ -399,3 +399,88 @@ func TestACredentialsPresetIsRefusedWhereItCannotWork(t *testing.T) {
 		})
 	}
 }
+
+// A preset that reads the credentials sluis rotates is granted the one
+// parameter of that document below the sluis installation's root, decrypts it
+// with sluis's key through SSM, and is granted nothing of a minter, nothing to
+// write and nothing of its own state root for the store.
+func TestAPresetThatReadsTheRotatedCredentialsIsGrantedThatParameterOnly(t *testing.T) {
+	const sluisKey = arnp + "kms:eu-central-1:123456789012:key/00000000-0000-0000-0000-000000000070"
+	rec, out, err := build(t, func(a *auditpulumi.Args) {
+		a.Keys.Archive, a.Observe = "", nil
+		a.Presets = map[string]auditpulumi.PresetStorage{"standard": {Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsRef: "external/cloudflare/audit-r2"}}
+		a.Sluis = &auditpulumi.SluisArgs{Root: "/sluis/main", KeyArn: sluisKey}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := "/sluis/main/external/cloudflare/audit-r2"
+	if out["credentialsPaths"] != "standard="+doc {
+		t.Errorf("credentials paths = %q", out["credentialsPaths"])
+	}
+	for _, role := range []string{"audit-writer", "audit-notary"} {
+		g := grants(policy(t, rec, role))
+		if got := g["ssm:GetParameter"]; len(got) != 1 || !strings.HasSuffix(got[0], ":parameter"+doc) {
+			t.Errorf("%s's ssm:GetParameter = %v, want the rotated document only", role, got)
+		}
+		if got, ok := g["ssm:PutParameter"]; ok {
+			t.Errorf("%s may write %v", role, got)
+		}
+		found := false
+		for _, r := range g["kms:Decrypt"] {
+			found = found || r == sluisKey
+		}
+		if !found {
+			t.Errorf("%s may not decrypt with sluis's key: %v", role, g["kms:Decrypt"])
+		}
+		for action, resources := range g {
+			for _, r := range resources {
+				if strings.Contains(r, "minter") || strings.Contains(r, "cloudflare-minted") {
+					t.Errorf("%s: %s on %s", role, action, r)
+				}
+			}
+		}
+	}
+	files := layerFiles(t, rec, "audit-writer")
+	if !strings.Contains(files["audit.yaml"], "sluisRoot: /sluis/main") {
+		t.Errorf("the writer's configuration lacks the sluis root:\n%s", files["audit.yaml"])
+	}
+	if !strings.Contains(files["deployment.yaml"], "credentials_ref: external/cloudflare/audit-r2") || strings.Contains(files["deployment.yaml"], "credentials: internal/") {
+		t.Errorf("the deployment document:\n%s", files["deployment.yaml"])
+	}
+	validateConfigs(t, rec, map[string]string{"audit-writer": "audit-writer-lambda", "audit-notary": "audit-notary"})
+}
+
+func TestACredentialsRefIsRefusedWhereItCannotWork(t *testing.T) {
+	for name, mut := range map[string]func(*auditpulumi.Args, *auditpulumi.PresetStorage){
+		"on AWS":            func(_ *auditpulumi.Args, s *auditpulumi.PresetStorage) { s.Endpoint, s.PathStyle = "", false },
+		"with a static one": func(_ *auditpulumi.Args, s *auditpulumi.PresetStorage) { s.CredentialsAddress = "internal/archive/x" },
+		"with a minter":     func(_ *auditpulumi.Args, s *auditpulumi.PresetStorage) { s.CredentialsPreset = mintedPreset() },
+		"an internal ref": func(_ *auditpulumi.Args, s *auditpulumi.PresetStorage) {
+			s.CredentialsRef = "internal/cloudflare/main/minter"
+		},
+		"no sluis":          func(a *auditpulumi.Args, _ *auditpulumi.PresetStorage) { a.Sluis = nil },
+		"a sluis root":      func(a *auditpulumi.Args, _ *auditpulumi.PresetStorage) { a.Sluis.Root = "/audit/main" },
+		"a sluis key alias": func(a *auditpulumi.Args, _ *auditpulumi.PresetStorage) { a.Sluis.KeyArn = "alias/sluis" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := build(t, func(a *auditpulumi.Args) {
+				onR2(a)
+				a.Sluis = &auditpulumi.SluisArgs{Root: "/sluis/main"}
+				s := auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsRef: "external/cloudflare/audit-r2"}
+				mut(a, &s)
+				a.Presets = map[string]auditpulumi.PresetStorage{"operational": s}
+			})
+			if err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
+	// Sluis without a preset that reads from it is refused too.
+	if _, _, err := build(t, func(a *auditpulumi.Args) {
+		onR2(a)
+		a.Sluis = &auditpulumi.SluisArgs{Root: "/sluis/main"}
+	}); err == nil || !strings.Contains(err.Error(), "Sluis") {
+		t.Fatalf("an unused Sluis: %v", err)
+	}
+}

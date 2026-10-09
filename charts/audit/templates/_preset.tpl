@@ -82,6 +82,9 @@ held to in Go (profile.Deployment.CheckStorage and PresetStorage.check). */}}
   {{- if and $s.prefix (or (hasPrefix "/" $s.prefix) (not (hasSuffix "/" $s.prefix))) -}}
   {{- fail (printf "audit: presets.%s.prefix %q is a path ending in a slash and not starting with one (%s/)." $name $s.prefix $name) -}}
   {{- end -}}
+  {{- if and $s.credentials_ref (or $s.credentials $s.credentials_preset) -}}
+  {{- fail (printf "audit: presets.%s names credentials_ref and credentials or credentials_preset: one source of credentials, not two." $name) -}}
+  {{- end -}}
   {{- if $s.endpoint -}}
     {{- if not (regexMatch "^https?://[^/?#[:space:]]+" $s.endpoint) -}}
     {{- fail (printf "audit: presets.%s.endpoint %q is not an http(s) URL." $name $s.endpoint) -}}
@@ -98,6 +101,9 @@ held to in Go (profile.Deployment.CheckStorage and PresetStorage.check). */}}
     {{- end -}}
     {{- if $s.path_style -}}
     {{- fail (printf "audit: presets.%s.path_style is for a store at an endpoint." $name) -}}
+    {{- end -}}
+    {{- if $s.credentials_ref -}}
+    {{- fail (printf "audit: presets.%s.credentials_ref names R2 credentials for a store at an endpoint; on AWS the workload's identity is the credential (set endpoint, or leave credentials_ref out)." $name) -}}
     {{- end -}}
   {{- end -}}
 {{- end -}}

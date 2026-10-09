@@ -31,7 +31,7 @@
           },
           "credentials_preset": {
             "additionalProperties": false,
-            "description": "Instead of static credentials, mint the store's R2 credentials for this process: it clones a disabled Cloudflare prototype token with the minter token and renews with a third of the lifetime left (and mints again once after a 403). Exclusive with `credentials`; only with `endpoint`. The static `credentials` stay the default and need no Cloudflare account.",
+            "description": "Instead of static credentials, mint the store's R2 credentials for this process: it clones a disabled Cloudflare prototype token with the minter token and renews with a third of the lifetime left (and mints again once after a 403). Every process that reads the archive then holds the minter, which can mint anything the Cloudflare account owner can: prefer `credentials_ref`. Exclusive with `credentials` and `credentials_ref`; only with `endpoint`.",
             "properties": {
               "account": {
                 "description": "The Cloudflare account id.",
@@ -61,6 +61,11 @@
               "lifetime"
             ],
             "type": "object"
+          },
+          "credentials_ref": {
+            "description": "The R2 credentials a sluis installation rotates for a Cloudflare preset, by their address in its secret store: `external/cloudflare/<preset>`, a `cloudflare/v1` document. The process reads it below `archive.sluisRoot` (SSM) or `archive.sluisDir` (a projected file), reads it again before the credential expires and after a 403, and mints nothing. The recommended mode on R2. Exclusive with `credentials` and `credentials_preset`; only with `endpoint`.",
+            "pattern": "^external/cloudflare/[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$",
+            "type": "string"
           },
           "endpoint": {
             "description": "The URL of an S3-compatible store that is not AWS (for example Cloudflare R2). Empty is AWS S3. Not with the attested preset: Object Lock is S3 only.",

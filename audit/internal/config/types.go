@@ -142,8 +142,17 @@ type (
 	//
 	// The Object Lock an object is written under is not here either: it is the
 	// preset's, compliance for attested and none for the rest.
+	//
+	// SluisRoot and SluisDir are where a preset's `credentials_ref`, the R2
+	// credentials a sluis installation rotates, is read: below the SSM root of
+	// that installation's secret store (`/sluis/<instance>`), with the
+	// process's own identity, or below a directory a secrets operator projected
+	// the documents into. One of them, and only where a preset names
+	// `credentials_ref`.
 	Archive struct {
 		StateRoot string `json:"stateRoot,omitempty"`
+		SluisRoot string `json:"sluisRoot,omitempty"`
+		SluisDir  string `json:"sluisDir,omitempty"`
 		CA        string `json:"ca,omitempty"`
 		KMSKey    string `json:"kmsKey,omitempty"`
 	}

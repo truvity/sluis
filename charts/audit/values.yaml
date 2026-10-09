@@ -351,6 +351,12 @@ profiles: {}
 #   credentials  the address, below the process's `archive.stateRoot`, of the
 #                static credentials of a store at an endpoint; only with
 #                `endpoint` (on AWS the pod's identity is the credential)
+#   credentials_ref
+#                the R2 credentials a sluis installation rotates,
+#                `external/cloudflare/<preset>`; read below the process's
+#                `archive.sluisDir` (a Secret mounted with `secretMounts`) or
+#                `archive.sluisRoot` (SSM); only with `endpoint`. Prefer it to
+#                `credentials_preset`, which puts the Cloudflare minter in the pod
 #   key_alias    the KMS key alias (`alias/...`, never a key id or ARN) objects
 #                are encrypted with; only on AWS S3; empty is the process's
 #                `archive.kmsKey`, or the bucket's default encryption
@@ -370,6 +376,22 @@ profiles: {}
 #     region: auto
 #     endpoint: https://account.r2.example.test
 #     credentials: internal/audit/r2
+#
+# The same store with the R2 credentials sluis rotates, synced into the Secret
+# `audit-r2` by the external secrets operator (key `audit-r2`, the whole
+# document) and mounted into each component that reads the archive:
+#
+# presets:
+#   operational:
+#     bucket: audit-operational
+#     region: auto
+#     endpoint: https://account.r2.example.test
+#     credentials_ref: external/cloudflare/audit-r2
+# writer:
+#   config:
+#     archive: {sluisDir: /etc/audit/sluis}
+#   secretMounts:
+#     - {secretName: audit-r2, mountPath: /etc/audit/sluis/external/cloudflare}
 #
 # An estate on AWS S3 with a KMS key and the standard preset:
 #

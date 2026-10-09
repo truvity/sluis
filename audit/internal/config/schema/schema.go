@@ -303,12 +303,16 @@ func keysDef() m {
 func archive(encrypts bool) m {
 	props := m{
 		"stateRoot": str("The root of the installation's state store (SSM Parameter Store, through the storage port), for example /audit/main. A preset's `credentials` address in the deployment document is read below it with the process's own identity: the value is a JSON object {accessKeyID, secretAccessKey}. No secret is in this file. Needed when a preset names `credentials`."),
+		"sluisRoot": m{"type": "string", "pattern": "^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$", "description": "The SSM root of the secret store of the sluis installation that rotates a preset's `credentials_ref` (`/sluis/<instance>`). The document is read at `<sluisRoot>/<credentials_ref>` with the process's own identity, and read again before the credential expires. Exclusive with `sluisDir`; needed when a preset names `credentials_ref` and the process reads SSM."},
+		"sluisDir":  m{"type": "string", "pattern": "^/", "description": "The directory a secrets operator projects the documents a preset's `credentials_ref` names into: the document is read at `<sluisDir>/<credentials_ref>`, and read again when it changes and before the credential expires. Mount the Secret as a directory, not with subPath, so the file follows the rotation. Exclusive with `sluisRoot`."},
 		"ca":        str("A bundle of certificate authorities, for a store whose certificate is not signed by a public root."),
 	}
 	if encrypts {
 		props["kmsKey"] = str("The key objects are encrypted with where a preset names no `key_alias` of its own. Unset uses the bucket's default encryption, which a deployment should still be setting.")
 	}
-	return obj("What the process adds to the deployment's presets: where their static credentials are, and the default key.", props)
+	o := obj("What the process adds to the deployment's presets: where their credentials are read from, and the default key.", props)
+	o["not"] = m{"required": []string{"sluisRoot", "sluisDir"}}
+	return o
 }
 
 func listen() m { return ref(policy + "fragments/listen.json") }

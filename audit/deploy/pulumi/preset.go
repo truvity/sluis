@@ -3,6 +3,7 @@ package auditpulumi
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -76,7 +77,18 @@ type PresetStorage struct {
 	// write on exactly that record, and nothing else for it. Exclusive with
 	// CredentialsAddress, and only with Endpoint. Unset (the default) is the
 	// static credentials, which need no Cloudflare account.
+	//
+	// Every role that opens the archive then holds the minter, which can mint
+	// anything the Cloudflare account owner can. Prefer CredentialsRef.
 	CredentialsPreset *profile.CredentialsPreset
+	// CredentialsRef makes the functions read the R2 credentials a sluis
+	// installation rotates for one of its Cloudflare presets (the deployment
+	// document's `credentials_ref`): `external/cloudflare/<preset>`, below
+	// Args.Sluis.Root. The roles are granted ssm:GetParameter on exactly that
+	// parameter (and Decrypt through SSM on Args.Sluis.KeyArn, when set), and
+	// nothing of a minter. Exclusive with CredentialsAddress and
+	// CredentialsPreset, and only with Endpoint. The mode to prefer on R2.
+	CredentialsRef string
 	// KeyAlias is the alias (`alias/...`) of the KMS key this preset's objects are
 	// encrypted with, in place of the installation's archive key. It is looked up
 	// and never created, and is also the document's key_alias. Only on AWS S3, and
@@ -111,6 +123,9 @@ type PresetStorage struct {
 	// cannot verify it; it refuses to adopt without the statement.
 	AcknowledgeLifecycle bool
 }
+
+// credentialsRefRE is a CredentialsRef, as the deployment document holds it.
+var credentialsRefRE = regexp.MustCompile(profile.CredentialsRefPattern)
 
 // managed is a bucket whose settings the library declares: one it creates, or
 // one it adopts.
@@ -156,6 +171,12 @@ func (s presetStore) credentialsPath(stateRoot string) string {
 // minted reports whether the preset's credentials are minted from a Cloudflare
 // prototype and not read from a static document.
 func (s presetStore) minted() bool { return s.CredentialsPreset != nil }
+
+// stored reports whether the preset's credentials are the ones a sluis
+// installation rotates, and storedPath is their parameter below its root.
+func (s presetStore) stored() bool { return s.CredentialsRef != "" }
+
+func (s presetStore) storedPath(sluisRoot string) string { return sluisRoot + "/" + s.CredentialsRef }
 
 // minterPath is the SSM parameter of the minter credential of a preset that
 // mints, and recordPath the one the functions record the tokens they minted in
@@ -204,7 +225,7 @@ func resolvePresets(a *Args) error {
 			in[name] = PresetStorage{
 				Bucket: s.Bucket, Prefix: s.Prefix, Region: s.Region, Endpoint: s.Endpoint,
 				PathStyle: s.PathStyle, CredentialsAddress: s.Credentials, KeyAlias: s.KeyAlias,
-				CredentialsPreset: s.CredentialsPreset,
+				CredentialsPreset: s.CredentialsPreset, CredentialsRef: s.CredentialsRef,
 			}
 		}
 	default:
@@ -299,7 +320,8 @@ func resolvePresets(a *Args) error {
 // mapFieldNames makes a refusal of the profile package say the field of Args it
 // is about, where it has a word for it.
 func mapFieldNames(err error) error {
-	m := strings.NewReplacer("key_alias", "KeyAlias", "path_style", "PathStyle", "credentials are", "CredentialsAddress is")
+	m := strings.NewReplacer("key_alias", "KeyAlias", "path_style", "PathStyle", "credentials are", "CredentialsAddress is",
+		"credentials_ref", "CredentialsRef", "credentials_preset", "CredentialsPreset")
 	return errors.New(m.Replace(err.Error()))
 }
 
@@ -308,7 +330,7 @@ func documentStorage(s presetStore) profile.PresetStorage {
 	return profile.PresetStorage{
 		Bucket: s.Bucket, Prefix: s.Prefix, Region: s.Region, Endpoint: s.Endpoint,
 		PathStyle: s.PathStyle, Credentials: s.CredentialsAddress, KeyAlias: s.KeyAlias,
-		CredentialsPreset: s.CredentialsPreset,
+		CredentialsPreset: s.CredentialsPreset, CredentialsRef: s.CredentialsRef,
 	}
 }
 
@@ -346,6 +368,8 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the roles are the credential", field("CredentialsAddress"), field("Endpoint"))
 		case s.CredentialsPreset != nil:
 			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the roles are the credential", field("CredentialsPreset"), field("Endpoint"))
+		case s.CredentialsRef != "":
+			return s, fmt.Errorf("auditpulumi: %s is for a store at %s; on AWS S3 the roles are the credential", field("CredentialsRef"), field("Endpoint"))
 		}
 		return s, nil
 	}
@@ -368,6 +392,17 @@ func checkPresetStorage(name profile.Preset, s PresetStorage) (PresetStorage, er
 	}
 	if s.Region == "" {
 		s.Region = "auto"
+	}
+	if ref := s.CredentialsRef; ref != "" {
+		switch {
+		case s.CredentialsAddress != "" || s.CredentialsPreset != nil:
+			return s, fmt.Errorf("auditpulumi: %s is set with %s or %s: one source of credentials, not two",
+				field("CredentialsRef"), field("CredentialsAddress"), field("CredentialsPreset"))
+		case !credentialsRefRE.MatchString(ref):
+			return s, fmt.Errorf("auditpulumi: %s %q must be external/cloudflare/<preset>, the address sluis keeps an R2 preset's rotated credentials at: "+
+				"the grant is on that parameter only", field("CredentialsRef"), ref)
+		}
+		return s, nil
 	}
 	if c := s.CredentialsPreset; c != nil {
 		if s.CredentialsAddress != "" {

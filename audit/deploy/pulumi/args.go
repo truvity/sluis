@@ -116,6 +116,10 @@ type Args struct {
 	// archive's credentials on an S3-compatible store, and the secrets behind
 	// pseudonyms. See StateArgs.
 	State StateArgs
+	// Sluis is the sluis installation whose secret store holds the R2
+	// credentials a preset's CredentialsRef names. Required with one, refused
+	// without. See SluisArgs.
+	Sluis *SluisArgs
 
 	// What resolvePresets decided: the presets with their defaults, strongest
 	// last; the deployment document the functions read and its parse; whether the
@@ -562,6 +566,9 @@ func (a *Args) withDefaults(name string) (*Args, error) {
 		return nil, fmt.Errorf("auditpulumi: State.KeyArn %q must be the ARN of a KMS key", c.State.KeyArn)
 	}
 
+	if err := c.checkSluis(); err != nil {
+		return nil, err
+	}
 	if err := c.checkArchive(); err != nil {
 		return nil, err
 	}

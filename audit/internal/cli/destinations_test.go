@@ -157,3 +157,50 @@ func TestAPresetStoreMintsItsCredentialsAndTheStaticPathStaysTheDefault(t *testi
 		t.Errorf("static plan: %+v %v", plans[profile.Operational], err)
 	}
 }
+
+// stored: the operational preset on R2, with the credentials a sluis
+// installation rotates for one of its Cloudflare presets.
+const storedLike = `
+presets:
+  operational: {bucket: edge-audit, prefix: operational/, region: auto, endpoint: "https://acct.r2.cloudflarestorage.com", credentials_ref: external/cloudflare/audit-r2}
+profiles:
+  activity: {frameworks: [history], categories: [activity]}
+`
+
+func TestAPresetStoreReadsTheCredentialsSluisRotates(t *testing.T) {
+	for name, a := range map[string]config.Archive{
+		"ssm":  {SluisRoot: "/sluis/main"},
+		"file": {SluisDir: "/etc/audit/sluis"},
+	} {
+		plans, err := PlanPresets(deploymentFor(t, storedLike), a)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		p := plans[profile.Operational]
+		if p.Credentials != nil || p.Minted != nil || p.Stored == nil || p.Stored.Ref != "external/cloudflare/audit-r2" ||
+			p.Stored.Root != a.SluisRoot || p.Stored.Dir != a.SluisDir {
+			t.Errorf("%s: stored plan: %+v / %+v / %+v", name, p.Credentials, p.Minted, p.Stored)
+		}
+	}
+	if _, err := PlanPresets(deploymentFor(t, storedLike), config.Archive{StateRoot: "/audit/main"}); err == nil || !strings.Contains(err.Error(), "sluisRoot") {
+		t.Errorf("no sluis root or dir: %v", err)
+	}
+	if _, err := PlanPresets(deploymentFor(t, storedLike), config.Archive{SluisRoot: "/sluis/main", SluisDir: "/etc/audit/sluis"}); err == nil || !strings.Contains(err.Error(), "both") {
+		t.Errorf("both a root and a dir: %v", err)
+	}
+}
+
+func TestCredentialsRefIsOneSourceOnAnEndpoint(t *testing.T) {
+	for name, doc := range map[string]string{
+		"with static":   `{bucket: b, endpoint: "https://acct.r2.cloudflarestorage.com", credentials: internal/x, credentials_ref: external/cloudflare/r2}`,
+		"with a minter": `{bucket: b, endpoint: "https://acct.r2.cloudflarestorage.com", credentials_ref: external/cloudflare/r2, credentials_preset: {account: a, minter: internal/m, prototype: p, lifetime: 15m}}`,
+		"on aws":        `{bucket: b, credentials_ref: external/cloudflare/r2}`,
+		"internal":      `{bucket: b, endpoint: "https://acct.r2.cloudflarestorage.com", credentials_ref: internal/cloudflare/main/minter}`,
+		"traversal":     `{bucket: b, endpoint: "https://acct.r2.cloudflarestorage.com", credentials_ref: external/cloudflare/../x}`,
+	} {
+		_, err := profile.ParseDeployment([]byte("apiVersion: " + profile.DeploymentAPIVersion + "\npresets:\n  operational: " + doc + "\nprofiles:\n  a: {frameworks: [history]}\n"))
+		if err == nil || !strings.Contains(err.Error(), "credentials_ref") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
