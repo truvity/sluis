@@ -7278,6 +7278,10 @@
     "^x-": {}
   },
   "properties": {
+    "acknowledgeMinterCustody": {
+      "description": "Required for any preset that names `credentials_preset`: the statement that every process opening the archive holds the Cloudflare minter, which can mint any right its creating user holds. Prefer `credentials_ref`.",
+      "type": "boolean"
+    },
     "affinity": {
       "type": "object"
     },

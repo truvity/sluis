@@ -71,7 +71,7 @@ A config names these paths.
 |---|---|
 | `mode` | Anything but `direct` or `stream` |
 | `renders` | Anything but `app`, `alerts` or `dashboards`; `alerts` when no configured preset has alarms; an `alerts.format` other than `vmrule` or `prometheusrule`; every `alerts.rules` disabled |
-| `presets` | Empty; a key other than `operational`, `standard` or `attested`; no `bucket`; a `key_alias` that is not `alias/<name>`; a `prefix` that starts with `/` or does not end with one; an `endpoint` that is not http(s); `key_alias` or the attested preset with an `endpoint`; `credentials`, `credentials_ref` or `path_style` without one; `credentials_ref` beside `credentials` or `credentials_preset` |
+| `presets` | Empty; a key other than `operational`, `standard` or `attested`; no `bucket`; a `key_alias` that is not `alias/<name>`; a `prefix` that starts with `/` or does not end with one; an `endpoint` that is not http(s); `key_alias` or the attested preset with an `endpoint`; `credentials`, `credentials_ref` or `path_style` without one; `credentials_ref` beside `credentials` or `credentials_preset`; `credentials_preset` unless `acknowledgeMinterCustody: true` |
 | Profiles | A framework profile the chart does not know; a `preset` other than the three; a preset weaker than its framework profiles need; a preset that `presets` does not configure |
 | `telemetry.otlp` | An `endpoint` that is not http(s); `extraEnv` holding `OTEL_EXPORTER_OTLP_ENDPOINT` or a name not starting with `OTEL_` |
 | `secretFiles` | The component's `config.secrets` is not `{source: file, root: /etc/audit/secrets}` |

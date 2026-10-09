@@ -143,6 +143,7 @@ func Values() []byte {
 				"additionalProperties": presetStorage(),
 			}
 		}(),
+		"acknowledgeMinterCustody":     boolean("Required for any preset that names `credentials_preset`: the statement that every process opening the archive holds the Cloudflare minter, which can mint any right its creating user holds. Prefer `credentials_ref`."),
 		"externalIdentifiersAreOpaque": boolean("The identifiers received for people outside the organisation already mean nothing outside the application's own database."),
 		"query": obj("The query service.", with(platform("audit-query", true, true), m{
 			"enabled":        boolean("Run it."),

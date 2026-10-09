@@ -108,6 +108,12 @@ type Args struct {
 	// Writer.DeploymentYAML (the profiles) and these presets; the document must not
 	// have a `presets:` block of its own beside them.
 	Presets map[string]PresetStorage
+	// AcknowledgeMinterCustody is the statement a preset with CredentialsPreset
+	// requires: every role that opens the archive then holds the Cloudflare
+	// minter, which can mint any right its creating user holds, so whoever can act
+	// as those roles holds that power. With a CredentialsPreset and this false the
+	// library refuses to build anything. Prefer PresetStorage.CredentialsRef.
+	AcknowledgeMinterCustody bool
 
 	// Keys are the installation's keys by purpose, named by KMS alias. The
 	// library creates none: see KeysArgs.

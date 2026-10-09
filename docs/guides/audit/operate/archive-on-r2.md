@@ -87,7 +87,7 @@ Name it with `credentials: internal/archive/operational` and set `archive.stateR
 
 ## Minted credentials instead
 
-`credentials_preset` makes every process mint its own token from a disabled prototype. The minter can mint anything the account owner can, so prefer `credentials_ref`.
+`credentials_preset` makes every process mint its own token from a disabled prototype. The minter can mint anything the account owner can, so prefer `credentials_ref`. The chart refuses it unless `acknowledgeMinterCustody: true` is set, and the Pulumi library unless `Args.AcknowledgeMinterCustody` is true.
 
 ```yaml
 presets:

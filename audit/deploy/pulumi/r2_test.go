@@ -322,6 +322,7 @@ func mintedPreset() *profile.CredentialsPreset {
 func TestAPresetThatMintsItsCredentialsIsGrantedTheMinterAndTheRecordOnly(t *testing.T) {
 	rec, out, err := build(t, func(a *auditpulumi.Args) {
 		onR2(a)
+		a.AcknowledgeMinterCustody = true
 		a.Presets = map[string]auditpulumi.PresetStorage{"operational": {Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsPreset: mintedPreset()}}
 	})
 	if err != nil {
@@ -378,6 +379,24 @@ func TestStaticCredentialsGrantNoMinterAndNoRecord(t *testing.T) {
 	}
 }
 
+// A preset that mints its credentials is refused unless the installation
+// acknowledges that every role holds the minter, and the refusal names the
+// preset and points at CredentialsRef.
+func TestACredentialsPresetIsRefusedWithoutTheMinterCustodyAcknowledged(t *testing.T) {
+	_, _, err := build(t, func(a *auditpulumi.Args) {
+		onR2(a)
+		a.Presets = map[string]auditpulumi.PresetStorage{"operational": {Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsPreset: mintedPreset()}}
+	})
+	if err == nil {
+		t.Fatal("accepted without AcknowledgeMinterCustody")
+	}
+	for _, want := range []string{`Presets["operational"].CredentialsPreset`, "CredentialsRef", "AcknowledgeMinterCustody"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not mention %q: %v", want, err)
+		}
+	}
+}
+
 func TestACredentialsPresetIsRefusedWhereItCannotWork(t *testing.T) {
 	for name, mut := range map[string]func(*auditpulumi.PresetStorage){
 		"on AWS":            func(s *auditpulumi.PresetStorage) { s.Endpoint, s.PathStyle = "", false },
@@ -389,6 +408,7 @@ func TestACredentialsPresetIsRefusedWhereItCannotWork(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := build(t, func(a *auditpulumi.Args) {
 				onR2(a)
+				a.AcknowledgeMinterCustody = true
 				s := auditpulumi.PresetStorage{Bucket: "acme-audit", Endpoint: r2Endpoint, PathStyle: true, CredentialsPreset: mintedPreset()}
 				mut(&s)
 				a.Presets = map[string]auditpulumi.PresetStorage{"operational": s}
