@@ -122,7 +122,7 @@ func New(t *testing.T, env Env) *Harness {
 		t.Fatalf("store the workspace: %v", err)
 	}
 	snapshots := hub.NewBlobSnapshots(counted.Blob, counted.State)
-	directory := hub.New(workspaces, snapshots, hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	directory := hub.New(workspaces, snapshots, hub.Config{}, slog.New(slog.DiscardHandler))
 
 	declared, err := policy.Parse([]byte(demo.Policy))
 	if err != nil {

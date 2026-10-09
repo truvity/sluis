@@ -3,7 +3,6 @@ package app_test
 import (
 	"bytes"
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -16,7 +15,7 @@ import (
 	"github.com/truvity/sluis/internal/store"
 )
 
-var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+var quiet = slog.New(slog.DiscardHandler)
 
 func serveConfig(t *testing.T, change ...func(*config.Serve)) app.Config {
 	t.Helper()

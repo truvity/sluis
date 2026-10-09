@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/internal/access"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // The agent consent page (docs/decisions/0040-agent-class-sessions.md,
@@ -63,7 +63,7 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 
 	token, err := s.deps.State.IssueAgentConsent(request, access.AgentConsentActor(who.Subject, who.SSO))
 	if err != nil {
-		s.deps.log().ErrorContext(r.Context(), "an agent-consent token could not be minted", "error", logsafe.Error(err))
+		s.deps.log().ErrorContext(r.Context(), "an agent-consent token could not be minted", logattr.SafeError("error", err))
 		http.Error(w, "the sign-in could not be completed", http.StatusInternalServerError)
 
 		return true
@@ -71,7 +71,7 @@ func (s *signIn) askAgentConsent(w http.ResponseWriter, r *http.Request, err err
 
 	nonce, err := scriptNonce()
 	if err != nil {
-		s.deps.log().ErrorContext(r.Context(), "a consent page's script nonce could not be drawn", "error", logsafe.Error(err))
+		s.deps.log().ErrorContext(r.Context(), "a consent page's script nonce could not be drawn", logattr.SafeError("error", err))
 		http.Error(w, "the sign-in could not be completed", http.StatusInternalServerError)
 
 		return true
@@ -243,7 +243,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 			// the acceptance this browser was shown, for this request and
 			// this person.
 			s.deps.log().WarnContext(r.Context(), "an agent connection's acceptance was refused",
-				"client", logsafe.Value(pending.ClientID), "error", logsafe.Error(err))
+				logattr.SafeString("client", pending.ClientID), logattr.SafeError("error", err))
 			recordLoginFailure(r.Context(), LoginConsentRefused)
 			_ = writePage(w, http.StatusForbidden, "This connection was not allowed",
 				`<p>This acceptance was not made in this browser, for this request, by the person signed in here.</p>
@@ -262,7 +262,7 @@ func (s *signIn) acceptAgent(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, access.AgentConsentCookie("", s.deps.Secure, 0))
 	recordLoginSuccess(r.Context(), "agent_consent")
 	s.deps.Log.InfoContext(r.Context(), "an agent connection was allowed",
-		"identity", logsafe.Value(session.Identity), "client", logsafe.Value(pending.ClientID))
+		logattr.SafeString("identity", session.Identity), logattr.SafeString("client", pending.ClientID))
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 

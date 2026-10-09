@@ -3,15 +3,16 @@ package controller
 import (
 	"context"
 	"crypto/sha256"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
 
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/apply"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // sharedTTL is how long the inputs the ticks share are kept: long enough that
@@ -84,7 +85,7 @@ func (c *Controller) readInputs(ctx context.Context) *pass {
 		for i := range list {
 			invalid++
 			c.deps.Log.WarnContext(ctx, "a shared channel's definition is refused and not acted on",
-				"channel", logsafe.Value(list[i].name), "host", logsafe.Value(host), "error", logsafe.Error(list[i].err))
+				logattr.SafeString("channel", list[i].name), logattr.SafeString("host", host), logattr.SafeError("error", list[i].err))
 		}
 	}
 	p.console, p.consoleRefused = p.store.consoleChannels(c.deps.Policy)
@@ -94,7 +95,7 @@ func (c *Controller) readInputs(ctx context.Context) *pass {
 		for i := range list {
 			invalid++
 			c.deps.Log.WarnContext(ctx, "a console channel's record is refused and not acted on",
-				"channel", logsafe.Value(list[i].name), "workspace", logsafe.Value(ws), "error", logsafe.Error(list[i].err))
+				logattr.SafeString("channel", list[i].name), logattr.SafeString("workspace", ws), logattr.SafeError("error", list[i].err))
 		}
 	}
 	c.metrics.recordInvalid(ctx, invalid)
@@ -125,7 +126,7 @@ func (c *Controller) inviteGuests(ctx context.Context, host string, result apply
 		}
 		if err := c.deps.Handoff.Offer(ctx, host, a.Channel, id, a.Guest, a.InviteID, c.deps.Now()); err != nil {
 			c.deps.Log.WarnContext(ctx, "a share could not be handed to its guest; the guest accepts at its next sweep",
-				"host", logsafe.Value(host), "guest", logsafe.Value(a.Guest), "error", logsafe.Error(err))
+				logattr.SafeString("host", host), logattr.SafeString("guest", a.Guest), logattr.SafeError("error", err))
 			c.wake(ctx, host, a.Guest)
 		}
 	}
@@ -146,7 +147,7 @@ func (c *Controller) acceptedShares(ctx context.Context, guest string, result ap
 		id := result.ChannelIDs[a.Channel]
 		if err := c.deps.Handoff.Accepted(ctx, a.Host, a.Channel, id, guest, c.deps.Now()); err != nil {
 			c.deps.Log.WarnContext(ctx, "an accepted share could not be recorded; the host reads it from Slack",
-				"host", logsafe.Value(a.Host), "guest", logsafe.Value(guest), "error", logsafe.Error(err))
+				logattr.SafeString("host", a.Host), logattr.SafeString("guest", guest), logattr.SafeError("error", err))
 		}
 	}
 }
@@ -161,7 +162,8 @@ func (c *Controller) noteWaitingShares(ctx context.Context, guest string, in rec
 	}
 	waiting, err := c.deps.Handoff.Waiting(ctx, guest)
 	if err != nil {
-		c.deps.Log.WarnContext(ctx, "the shares offered to a workspace could not be read", "workspace", logsafe.Value(guest), "error", logsafe.Error(err))
+		c.deps.Log.WarnContext(ctx, "the shares offered to a workspace could not be read", logattr.SafeString("workspace", guest),
+			logattr.SafeError("error", err))
 		return
 	}
 	for _, w := range waiting {
@@ -172,7 +174,8 @@ func (c *Controller) noteWaitingShares(ctx context.Context, guest string, in rec
 			continue // already in the channel: accepted, and the record follows at the accept
 		}
 		c.deps.Log.InfoContext(ctx, "a share offered to this workspace has no invitation visible yet",
-			"workspace", logsafe.Value(guest), "host", logsafe.Value(w.Host), "channel", logsafe.Value(w.Channel), "offered", w.OfferedAt)
+			logattr.SafeString("workspace", guest), logattr.SafeString("host", w.Host), logattr.SafeString("channel", w.Channel),
+			slog.Time("offered", w.OfferedAt))
 	}
 }
 
@@ -228,6 +231,7 @@ func (c *Controller) wake(ctx context.Context, host, guest string) {
 		return
 	}
 	if err := c.deps.Trigger.Notify(ctx, guest); err != nil {
-		c.deps.Log.WarnContext(ctx, "a guest could not be asked to tick", "host", logsafe.Value(host), "guest", logsafe.Value(guest), "error", logsafe.Error(err))
+		c.deps.Log.WarnContext(ctx, "a guest could not be asked to tick", logattr.SafeString("host", host),
+			logattr.SafeString("guest", guest), logattr.SafeError("error", err))
 	}
 }

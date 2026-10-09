@@ -38,7 +38,7 @@ var files embed.FS
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("shop", "error", err)
+		slog.ErrorContext(context.Background(), "shop", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -92,7 +92,7 @@ func run() error {
 			// async actions are given up only when the queue overflows; a deployment that
 			// does not hear about it has no idea what it is missing.
 			OnDropped: func(r *record.Record, reason string) {
-				slog.Error("audit record dropped", "action", r.GetAction(), "reason", reason)
+				slog.ErrorContext(context.Background(), "audit record dropped", slog.String("action", r.GetAction()), slog.String("reason", reason))
 			},
 		},
 	})

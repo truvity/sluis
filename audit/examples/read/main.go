@@ -28,7 +28,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("read", "error", err)
+		slog.ErrorContext(context.Background(), "read", slog.Any("error", err))
 		os.Exit(1)
 	}
 }

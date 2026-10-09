@@ -35,7 +35,7 @@ func ReconcileOrphans(
 		if errors.Is(err, port.ErrUnsupported) || errors.Is(err, port.ErrNotFound) {
 			return nil
 		}
-		log.WarnContext(ctx, "the stored client secrets could not be listed, so orphans are not looked for", "error", err)
+		log.WarnContext(ctx, "the stored client secrets could not be listed, so orphans are not looked for", slog.Any("error", err))
 		return nil
 	}
 	declared := make(map[string]bool, len(clients))
@@ -87,13 +87,13 @@ func markOrphan(ctx context.Context, id string, store port.Secrets, now time.Tim
 		got, gerr := store.Get(held, Path(id))
 		if gerr != nil {
 			if !errors.Is(gerr, port.ErrNotFound) {
-				log.WarnContext(ctx, "an orphaned client secret could not be read", "client", id, "error", gerr)
+				log.WarnContext(ctx, "an orphaned client secret could not be read", slog.String("client", id), slog.Any("error", gerr))
 			}
 			return
 		}
 		rec, derr := DecodeRecord(got.Value)
 		if derr != nil {
-			log.WarnContext(ctx, "a stored client secret has no client in the policy and cannot be read", "client", id, "error", derr)
+			log.WarnContext(ctx, "a stored client secret has no client in the policy and cannot be read", slog.String("client", id), slog.Any("error", derr))
 			return
 		}
 		if !rec.Orphaned.IsZero() {
@@ -109,18 +109,18 @@ func markOrphan(ctx context.Context, id string, store port.Secrets, now time.Tim
 			marked = true
 		case errors.Is(perr, port.ErrConflict):
 		default:
-			log.WarnContext(ctx, "an orphaned client secret could not be marked", "client", id, "error", fmt.Errorf("write the record: %w", perr))
+			log.WarnContext(ctx, "an orphaned client secret could not be marked", slog.String("client", id), slog.Any("error", fmt.Errorf("write the record: %w", perr)))
 		}
 	})
 	if err != nil {
-		log.WarnContext(ctx, "an orphaned client secret could not be marked", "client", id, "error", err)
+		log.WarnContext(ctx, "an orphaned client secret could not be marked", slog.String("client", id), slog.Any("error", err))
 		return false
 	}
 	if !ran || !marked {
 		return false
 	}
 	log.WarnContext(ctx, "a stored client secret has no generated client in the policy; it is kept until `sluisctl clients purge` removes it",
-		"client", id)
+		slog.String("client", id))
 	countOrphan(ctx)
 	if hooks.Orphaned != nil {
 		hooks.Orphaned(ctx, id)

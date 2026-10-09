@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +28,7 @@ func serve(t *testing.T) (directoryv1connect.DirectoryServiceClient, *fake.Backe
 		WithGroup("platform@example.com", "alice@example.com")
 
 	h := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	if _, err := h.Adopt(context.Background(), hub.Workspace{ID: "C0test", Admin: "admin@example.com"}, b); err != nil {
 		t.Fatalf("Adopt: %v", err)
 	}

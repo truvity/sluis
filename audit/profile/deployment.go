@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -151,8 +152,8 @@ func ParseDeployment(raw []byte) (*Deployment, error) {
 	switch d.APIVersion {
 	case DeploymentAPIVersion:
 	case "", DeploymentAPIVersionV1:
-		slog.Warn("the deployment document is in version 1, which is deprecated and read for one minor only: "+
-			"set apiVersion to "+DeploymentAPIVersion, "apiVersion", d.APIVersion)
+		slog.WarnContext(context.Background(), "the deployment document is in version 1, which is deprecated and read for one minor only: "+
+			"set apiVersion to "+DeploymentAPIVersion, slog.String("api_version", d.APIVersion))
 	default:
 		return nil, fmt.Errorf("deployment: apiVersion %q is not one this build reads (%s, or %s)",
 			d.APIVersion, DeploymentAPIVersion, DeploymentAPIVersionV1)

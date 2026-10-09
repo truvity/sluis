@@ -90,7 +90,7 @@ func (s *TokenSource) Token(ctx context.Context) (string, error) {
 	}
 
 	if s.token != "" && now.Before(s.expires) {
-		s.log.Warn("token exchange failed; serving the token still in date", slog.String("error", err.Error()))
+		s.log.WarnContext(ctx, "token exchange failed; serving the token still in date", slog.String("error", err.Error()))
 		return s.token, nil
 	}
 	return "", err
@@ -131,7 +131,7 @@ func (s *TokenSource) Obtained() bool {
 func (s *TokenSource) Warm(ctx context.Context) {
 	for delay := time.Second; !s.Obtained(); delay = min(delay*2, 15*time.Second) {
 		if _, err := s.Token(ctx); err != nil {
-			s.log.Warn("outbound identity not obtained yet", slog.String("error", err.Error()))
+			s.log.WarnContext(ctx, "outbound identity not obtained yet", slog.String("error", err.Error()))
 		}
 		select {
 		case <-ctx.Done():

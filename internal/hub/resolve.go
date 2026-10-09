@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -42,7 +43,7 @@ func (h *Hub) ResolveGroups(ctx context.Context, emails []string, maxDepth, maxN
 		}
 		s, err := h.snapshots.Get(ctx, id)
 		if err != nil {
-			h.log.WarnContext(ctx, "snapshot unreadable", "workspace", id, "error", err)
+			h.log.WarnContext(ctx, "snapshot unreadable", slog.String("workspace", id), slog.Any("error", err))
 			s = nil
 		}
 		snaps[id] = s

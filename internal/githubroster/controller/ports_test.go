@@ -2,7 +2,6 @@ package controller_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"slices"
 	"sync"
@@ -61,7 +60,7 @@ func TestTwoReplicasNeverSpendARefreshTokenTwice(t *testing.T) {
 			go func() {
 				defer run.Done()
 				c := controller.New(controller.Config{AppsDir: r.appsDir, Enabled: map[string]bool{"globex": true}}, controller.Deps{
-					Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+					Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 					Access: r.console, Audit: r.audit, Status: r.report, Bindings: bindings, Policy: testPolicy,
 					Links: &atBarrier{LinkStore: portstore.NewGitHubLinks(base), wg: &barrier},
 				})

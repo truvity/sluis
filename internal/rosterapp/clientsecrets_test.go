@@ -2,7 +2,6 @@ package rosterapp_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -44,7 +43,7 @@ policyDir: `+dir+`
 listen: {address: ":0"}
 probes: {address: ":0"}
 `+extra)
-	return rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 }
 
 // The function that has no loop runs the same pass on its schedule: it is the

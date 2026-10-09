@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"io"
 	"log/slog"
 	"maps"
 	"os"
@@ -335,7 +334,7 @@ func newRig(t *testing.T) *rig {
 		c, ok := controllers[enabled]
 		if !ok {
 			c = controller.New(controller.Config{AppsDir: dir, Enabled: map[string]bool{"globex": enabled}}, controller.Deps{
-				Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: github.Client(),
+				Log: slog.New(slog.DiscardHandler), GitHub: github.Client(),
 				Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 			})
 			controllers[enabled] = c
@@ -448,7 +447,7 @@ func TestAnOwnerWhoLeavesIsReportedAndRecordedOnce(t *testing.T) {
 	// not record the owner again: the trail is durable, and a restart is
 	// not news.
 	restarted := controller.New(controller.Config{AppsDir: r.appsDir, Enabled: map[string]bool{"globex": true}}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 	})
 	restarted.Pass(context.Background())
@@ -519,7 +518,7 @@ func TestAFailedPassKeepsItsRowsAndARestartAfterItRecordsNothingAgain(t *testing
 	r.console.policy = testPolicy
 	r.console.mu.Unlock()
 	restarted := controller.New(controller.Config{AppsDir: r.appsDir, Enabled: map[string]bool{"globex": true}}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 	})
 	restarted.Pass(context.Background())
@@ -640,7 +639,7 @@ func TestAnotherPolicyIsTriedAgainSoonAndChangesNothingMeanwhile(t *testing.T) {
 		c := controller.New(controller.Config{
 			AppsDir: r.appsDir, Enabled: map[string]bool{"globex": true}, Interval: time.Hour, PolicyRetry: time.Millisecond,
 		}, controller.Deps{
-			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+			Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 			Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 		})
 		ctx, cancel := context.WithCancel(context.Background())
@@ -734,7 +733,7 @@ func TestAnUnconnectedOrganisationSaysSo(t *testing.T) {
 	r := newRig(t)
 	dir := t.TempDir() // no credential in it
 	c := controller.New(controller.Config{AppsDir: dir, Enabled: map[string]bool{"globex": true}}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), GitHub: r.github.Client(),
+		Log: slog.New(slog.DiscardHandler), GitHub: r.github.Client(),
 		Access: r.console, Audit: r.audit, Status: r.report, Links: r.links, Bindings: bindings, Policy: testPolicy,
 	})
 	c.Pass(context.Background())

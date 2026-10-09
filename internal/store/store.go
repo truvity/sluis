@@ -163,7 +163,7 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 	}
 	if secrets != nil {
 		set.Secrets = secrets
-		log.InfoContext(ctx, "secrets are kept by the secrets adapter", "adapter", c.secrets.Adapter)
+		log.InfoContext(ctx, "secrets are kept by the secrets adapter", slog.String("adapter", c.secrets.Adapter))
 	}
 	if b := c.Blob; b != nil {
 		blob, err := c.s3Blob(ctx)
@@ -171,7 +171,7 @@ func (c Config) compose(ctx context.Context, set port.Set, log *slog.Logger) (po
 			return port.Set{}, fmt.Errorf("ports.blob: %w", err)
 		}
 		set.Blob = blob
-		log.InfoContext(ctx, "blobs are kept in S3", "adapter", BlobS3, "bucket", b.S3.Bucket, "prefix", b.S3.Prefix)
+		log.InfoContext(ctx, "blobs are kept in S3", slog.String("adapter", BlobS3), slog.String("bucket", b.S3.Bucket), slog.String("prefix", b.S3.Prefix))
 	}
 	return set, nil
 }
@@ -494,7 +494,7 @@ func (s *Stores) applyTrigger(ctx context.Context, log *slog.Logger) error {
 		return fmt.Errorf("adapters.trigger: %s is not a trigger", choice.Adapter)
 	}
 	s.Ports.Trigger = trigger
-	log.InfoContext(ctx, "run-now notifications go through the trigger adapter", "adapter", choice.Adapter)
+	log.InfoContext(ctx, "run-now notifications go through the trigger adapter", slog.String("adapter", choice.Adapter))
 	return nil
 }
 
@@ -502,7 +502,7 @@ func open(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, error) {
 	switch cfg.Adapter {
 	case AdapterMemory:
 		log.WarnContext(ctx, "the storage ports are in memory: a restart loses every login in progress, "+
-			"snapshot and report", "adapter", AdapterMemory)
+			"snapshot and report", slog.String("adapter", AdapterMemory))
 		set, err := cfg.compose(ctx, memory.New().Set(), log)
 		if err != nil {
 			return nil, err
@@ -542,8 +542,8 @@ func openDynamoDB(ctx context.Context, cfg Config, log *slog.Logger) (*Stores, e
 		return nil, err
 	}
 	st.Ports = observe.Set(set)
-	log.InfoContext(ctx, "keeping state in DynamoDB", "adapter", AdapterDynamoDB,
-		"table", cfg.DynamoDB.Table, "region", cfg.DynamoDB.Region, "create", cfg.DynamoDB.Create)
+	log.InfoContext(ctx, "keeping state in DynamoDB", slog.String("adapter", AdapterDynamoDB),
+		slog.String("table", cfg.DynamoDB.Table), slog.String("region", cfg.DynamoDB.Region), slog.Bool("create", cfg.DynamoDB.Create))
 	return st, nil
 }
 

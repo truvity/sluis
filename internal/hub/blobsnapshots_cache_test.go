@@ -2,7 +2,6 @@ package hub_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -233,7 +232,7 @@ func TestACachedSnapshotPastTheFreshnessWindowIsNotAuthoritative(t *testing.T) {
 	t.Parallel()
 	mem := memory.New()
 	snapshots := hub.NewBlobSnapshots(mem.Blobs(), mem)
-	h := hub.New(hub.NewMemoryStore(), snapshots, hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := hub.New(hub.NewMemoryStore(), snapshots, hub.Config{}, slog.New(slog.DiscardHandler))
 	clock := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	h.SetClock(func() time.Time { return clock })
 

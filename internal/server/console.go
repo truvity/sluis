@@ -24,13 +24,13 @@ import (
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubapp/mints"
 	"github.com/truvity/sluis/internal/hub"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/settings"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/version"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Connector starts and finishes an admin-consent flow for one backend.
@@ -254,7 +254,7 @@ func (c *Console) notify(ctx context.Context, target string) {
 		return
 	}
 	if err := c.deps.Trigger.Notify(ctx, target); err != nil {
-		c.log().WarnContext(ctx, "a tick could not be requested", "target", logsafe.Value(target), "error", logsafe.Error(err))
+		c.log().WarnContext(ctx, "a tick could not be requested", logattr.SafeString("target", target), logattr.SafeError("error", err))
 	}
 }
 

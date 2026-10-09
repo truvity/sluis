@@ -67,7 +67,7 @@ const (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("audit-writer-lambda", "error", err)
+		slog.ErrorContext(context.Background(), "audit-writer-lambda", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -192,14 +192,14 @@ func run() error {
 		before: func(ctx context.Context) {
 			if err := w.RefreshHolds(ctx); err != nil {
 				// The last answer stands, as it does for the background refresh.
-				slog.Error("could not refresh the legal holds; keeping the last answer", "error", err)
+				slog.ErrorContext(ctx, "could not refresh the legal holds; keeping the last answer", slog.Any("error", err))
 			}
 		},
 		after: func(ctx context.Context) {
 			flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			defer cancel()
 			if err := telemetry.Flush(flush); err != nil {
-				slog.Warn("could not export telemetry at the end of the invocation", "error", err)
+				slog.WarnContext(ctx, "could not export telemetry at the end of the invocation", slog.Any("error", err))
 			}
 		},
 	}
@@ -209,7 +209,7 @@ func run() error {
 		shutting, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := w.Close(shutting); err != nil {
-			slog.Error("flushing on shutdown", "error", err)
+			slog.ErrorContext(context.Background(), "flushing on shutdown", slog.Any("error", err))
 		}
 		_ = stopTelemetry(shutting)
 		// The runtime library has no way to be told to return, and the platform
@@ -217,8 +217,8 @@ func run() error {
 		os.Exit(0)
 	}()
 
-	slog.Info("audit-writer-lambda", "presets", len(d.Presets), "profiles", len(profiles),
-		"table", table.Table, "window", window.String())
+	slog.InfoContext(context.Background(), "audit-writer-lambda", slog.Int("presets", len(d.Presets)), slog.Int("profiles", len(profiles)),
+		slog.String("table", table.Table), slog.String("window", window.String()))
 	lambda.StartWithOptions(h.Handle, lambda.WithContext(ctx))
 	return nil
 }

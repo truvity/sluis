@@ -44,7 +44,7 @@ func NATSWake(url, tokenFile, subject string, wake chan<- struct{}, log *slog.Lo
 		nats.MaxReconnects(-1),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			if err != nil {
-				log.Warn("the wake-up subject's connection was lost; polling carries on", "error", err)
+				log.WarnContext(context.Background(), "the wake-up subject's connection was lost; polling carries on", slog.Any("error", err))
 			}
 		}),
 	}
@@ -53,7 +53,7 @@ func NATSWake(url, tokenFile, subject string, wake chan<- struct{}, log *slog.Lo
 		opts = append(opts, nats.TokenHandler(func() string {
 			b, err := os.ReadFile(tokenFile)
 			if err != nil {
-				log.Error("reading the NATS token", "file", tokenFile, "error", err)
+				log.ErrorContext(context.Background(), "reading the NATS token", slog.String("file", tokenFile), slog.Any("error", err))
 				return ""
 			}
 			return strings.TrimSpace(string(b))
@@ -94,7 +94,7 @@ func SQSWake(ctx context.Context, api SQSAPI, queueURL string, wake chan<- struc
 			if ctx.Err() != nil {
 				return
 			}
-			log.Warn("reading the wake-up queue failed; polling carries on", "error", err)
+			log.WarnContext(ctx, "reading the wake-up queue failed; polling carries on", slog.Any("error", err))
 			select {
 			case <-ctx.Done():
 				return
@@ -118,7 +118,7 @@ func SQSWake(ctx context.Context, api SQSAPI, queueURL string, wake chan<- struc
 			QueueUrl: aws.String(queueURL), Entries: entries,
 		}); err != nil && ctx.Err() == nil {
 			// The message comes back and is one more wake-up.
-			log.Warn("deleting wake-up messages failed", "error", err)
+			log.WarnContext(ctx, "deleting wake-up messages failed", slog.Any("error", err))
 		}
 	}
 }

@@ -71,8 +71,8 @@ func (h *handler) Handle(ctx context.Context, ev events.SQSEvent) (events.SQSEve
 		h.received(m)
 		var r record.Record
 		if err := record.Unmarshal([]byte(m.Body), &r); err != nil {
-			h.log.Error("a message could not be decoded; it is returned to the queue and will reach the DLQ",
-				"message", oneLine(m.MessageId), "error", oneLine(err.Error()))
+			h.log.ErrorContext(ctx, "a message could not be decoded; it is returned to the queue and will reach the DLQ",
+				slog.String("message", oneLine(m.MessageId)), slog.String("error", oneLine(err.Error())))
 			fails = append(fails, events.SQSBatchItemFailure{ItemIdentifier: m.MessageId})
 			continue
 		}
@@ -85,12 +85,12 @@ func (h *handler) Handle(ctx context.Context, ev events.SQSEvent) (events.SQSEve
 
 	res, err := h.target.Write(ctx, &sink.Request{Records: records, Delivery: sink.Block})
 	if err != nil {
-		h.log.Error("the writer did not take the batch; every message in it goes back to the queue",
-			"messages", len(ev.Records), "error", oneLine(err.Error()))
+		h.log.ErrorContext(ctx, "the writer did not take the batch; every message in it goes back to the queue",
+			slog.Int("messages", len(ev.Records)), slog.String("error", oneLine(err.Error())))
 		return events.SQSEventResponse{BatchItemFailures: allBut(ev.Records, fails)}, nil
 	}
 	if rej := res.Err(); rej != nil {
-		h.log.Error("the writer refused records of the batch", "error", oneLine(rej.Error()))
+		h.log.ErrorContext(ctx, "the writer refused records of the batch", slog.String("error", oneLine(rej.Error())))
 		refused := map[string]bool{}
 		for _, x := range res.Rejected {
 			refused[x.ID] = true

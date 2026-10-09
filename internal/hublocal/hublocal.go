@@ -18,7 +18,7 @@ import (
 
 	"github.com/truvity/sluis/internal/hub"
 	"github.com/truvity/sluis/internal/issuer"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Resolver is the part of the hub this needs: one method, so a test can
@@ -63,7 +63,7 @@ func New(h Resolver, maxAge time.Duration) *Directory {
 func (d *Directory) ResolveUser(ctx context.Context, email string) (issuer.Standing, error) {
 	got, err := d.hub.ResolveUser(ctx, email, d.maxAge)
 	if err != nil {
-		return issuer.Standing{}, fmt.Errorf("ask the directory about %s: %w", logsafe.Value(email), err)
+		return issuer.Standing{}, fmt.Errorf("ask the directory about %s: %w", logattr.Safe(email), err)
 	}
 	// An address in no served domain is not a refusal and not a person
 	// the hub denies: it is a domain nobody here answers for. The issuer

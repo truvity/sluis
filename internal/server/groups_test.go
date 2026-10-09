@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -18,7 +17,7 @@ import (
 // groups that name each other.
 func groupHub(t *testing.T) *hub.Hub {
 	t.Helper()
-	h := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.DiscardHandler))
 	north := fake.New("C0north", "north.example").
 		WithAccount("admin@north.example", "Admin", "North").
 		WithAccount("ann@north.example", "Ann", "A").WithAccount("bob@north.example", "Bob", "B").

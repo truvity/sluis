@@ -53,7 +53,7 @@ func Ready(log *slog.Logger, checks ...Check) http.Handler {
 				defer wg.Done()
 				if err := c.Fn(ctx); err != nil {
 					// The reason is for the log: the response carries no address.
-					log.Warn("not ready", "check", c.Name, "error", err)
+					log.WarnContext(context.Background(), "not ready", slog.String("check", c.Name), slog.Any("error", err))
 					mu.Lock()
 					failed = append(failed, c.Name)
 					mu.Unlock()

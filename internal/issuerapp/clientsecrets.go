@@ -143,7 +143,7 @@ func (a *App) watchClientSecrets(ctx context.Context, log *slog.Logger) {
 		case <-ticker.C:
 		}
 		if res := a.ReconcileClientSecrets(ctx); res.Failed() > 0 {
-			log.WarnContext(ctx, "some generated client secrets are still unsettled", "clients", res.Failed())
+			log.WarnContext(ctx, "some generated client secrets are still unsettled", slog.Int("clients", res.Failed()))
 		}
 	}
 }

@@ -2,7 +2,6 @@ package telemetry_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -20,7 +19,7 @@ func TestNoCollectorExportsNothing(t *testing.T) {
 	if telemetry.Enabled() {
 		t.Fatal("enabled with no collector named")
 	}
-	shutdown, err := telemetry.Start(context.Background(), "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	shutdown, err := telemetry.Start(context.Background(), "test", slog.New(slog.DiscardHandler))
 	if err != nil || shutdown(context.Background()) != nil {
 		t.Errorf("Start = %v", err)
 	}
@@ -33,7 +32,7 @@ func TestANamedCollectorStartsTheExporter(t *testing.T) {
 	if !telemetry.Enabled() {
 		t.Fatal("not enabled with a collector named")
 	}
-	shutdown, err := telemetry.Start(context.Background(), "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	shutdown, err := telemetry.Start(context.Background(), "test", slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -61,7 +60,7 @@ func TestTheDefaultSamplerKeepsRootTracesAndTheEnvironmentOverridesIt(t *testing
 				t.Fatal("traces are not enabled with a collector named")
 			}
 			previous := otel.GetTracerProvider()
-			shutdown, err := telemetry.Start(context.Background(), "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			shutdown, err := telemetry.Start(context.Background(), "test", slog.New(slog.DiscardHandler))
 			if err != nil {
 				t.Fatalf("Start: %v", err)
 			}

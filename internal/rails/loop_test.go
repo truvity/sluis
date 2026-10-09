@@ -12,7 +12,7 @@ import (
 	"github.com/truvity/sluis/internal/rails"
 )
 
-func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func quiet() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // An interval that is not positive is refused rather than spun on.
 func TestRunNeedsAnInterval(t *testing.T) {

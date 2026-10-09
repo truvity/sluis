@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // A client that identifies itself with a URL.
@@ -168,8 +169,8 @@ func (d *documentClients) Resolve(ctx context.Context, clientID string) (policy.
 		// URI outlives its retirement by at most the cache life plus an
 		// hour -- and only while the origin is down.
 		if stale, ok := d.fromStale(clientID); ok && errors.Is(err, errTransient) {
-			d.log.Warn("serving a stale client document: the origin could not be reached",
-				"origin", target.Host, "client_id", clientID, "error", err)
+			d.log.WarnContext(ctx, "serving a stale client document: the origin could not be reached",
+				logattr.SafeString("origin", target.Host), logattr.SafeString("client_id", clientID), logattr.SafeError("error", err))
 			return stale, nil
 		}
 		return policy.Client{}, err

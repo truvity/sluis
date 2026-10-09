@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		// A failure at cold start is the platform's "Init error": the function
 		// does not take an invocation, and the message is in the log.
-		slog.New(slog.NewJSONHandler(os.Stdout, nil)).Error("sluis could not start", "error", err)
+		slog.New(slog.NewJSONHandler(os.Stdout, nil)).ErrorContext(context.Background(), "sluis could not start", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer fn.Close()

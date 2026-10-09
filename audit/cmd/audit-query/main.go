@@ -38,7 +38,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("audit-query", "error", err)
+		slog.ErrorContext(context.Background(), "audit-query", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -176,7 +176,7 @@ func run() error {
 		_ = server.Shutdown(shutdown)
 	}()
 
-	slog.Info("serving queries", "listen", cfg.Listen.Address, "searcher", cfg.Searcher)
+	slog.InfoContext(context.Background(), "serving queries", slog.String("listen", cfg.Listen.Address), slog.String("searcher", cfg.Searcher))
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

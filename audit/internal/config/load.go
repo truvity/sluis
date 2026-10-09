@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -139,9 +140,9 @@ func upgrade(doc map[string]any) (map[string]any, error) {
 		out["secrets"] = map[string]any{"source": SourceEnv}
 		// One warning for every conversion, naming the field and not what it holds.
 		for _, f := range fields {
-			slog.Warn("a version-1 ...Env field is read as a ...Secret with secrets.source env, which is deprecated "+
+			slog.WarnContext(context.Background(), "a version-1 ...Env field is read as a ...Secret with secrets.source env, which is deprecated "+
 				"and is refused on AWS Lambda: name the secret and declare where it is found",
-				"field", f, "replacement", strings.TrimSuffix(f, "Env")+"Secret")
+				slog.String("field", f), slog.String("replacement", strings.TrimSuffix(f, "Env")+"Secret"))
 		}
 	}
 	return out, nil
@@ -211,8 +212,8 @@ func decodeAs(file, name string, doc any) (any, error) {
 	if err := policyconfig.Validate(any(up), schemaFor(name)); err != nil {
 		return nil, inFile(err, file, "upgraded from v1 to "+current)
 	}
-	slog.Warn("configuration is in version 1, which is deprecated and read for one minor only: move it to version 2",
-		"file", file, "apiVersion", current, "was", previous)
+	slog.WarnContext(context.Background(), "configuration is in version 1, which is deprecated and read for one minor only: move it to version 2",
+		slog.String("file", file), slog.String("api_version", current), slog.String("was", previous))
 	return up, nil
 }
 

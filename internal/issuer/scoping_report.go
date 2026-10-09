@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // groupsScopingReportWindow is how long one (audience, subject,
@@ -115,15 +115,15 @@ func (s *Storage) reportGroupsScoping(ctx context.Context, audience, client, sub
 		return
 	}
 
-	level, message := slog.LevelInfo, "groups scoping (report mode): this token would drop groups under enforce"
-	if mode == GroupsScopingEnforce {
-		level, message = slog.LevelDebug, "groups scoping (enforce mode): this token dropped groups"
+	attrs := []slog.Attr{
+		logattr.SafeString("audience", audience),
+		logattr.SafeString("client", client),
+		logattr.SafeString("subject", subject),
+		slog.Any("dropped", dropped),
 	}
-
-	s.logger().Log(ctx, level, message,
-		"audience", logsafe.Value(audience),
-		"client", logsafe.Value(client),
-		"subject", logsafe.Value(subject),
-		"dropped", dropped,
-	)
+	if mode == GroupsScopingEnforce {
+		s.logger().LogAttrs(ctx, slog.LevelDebug, "groups scoping (enforce mode): this token dropped groups", attrs...)
+		return
+	}
+	s.logger().LogAttrs(ctx, slog.LevelInfo, "groups scoping (report mode): this token would drop groups under enforce", attrs...)
 }

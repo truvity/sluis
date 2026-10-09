@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -26,7 +27,7 @@ func (h *Hub) Run(ctx context.Context) error {
 	defer probe.Stop()
 
 	h.log.InfoContext(ctx, "background loops started",
-		"refresh", h.cfg.RefreshInterval, "probe", h.cfg.ProbeInterval, "freshness", h.cfg.FreshnessWindow)
+		slog.Duration("refresh", h.cfg.RefreshInterval), slog.Duration("probe", h.cfg.ProbeInterval), slog.Duration("freshness", h.cfg.FreshnessWindow))
 
 	h.catchUp(ctx)
 
@@ -38,7 +39,7 @@ func (h *Hub) Run(ctx context.Context) error {
 			h.refreshAll(ctx)
 		case <-probe.C:
 			if _, err := h.Probe(ctx, ""); err != nil {
-				h.log.WarnContext(ctx, "probe pass failed", "error", err)
+				h.log.WarnContext(ctx, "probe pass failed", slog.Any("error", err))
 			}
 		}
 	}
@@ -73,7 +74,7 @@ type Locker interface {
 func (h *Hub) catchUp(ctx context.Context) {
 	workspaces, err := h.store.List(ctx)
 	if err != nil {
-		h.log.WarnContext(ctx, "start-up refresh could not list workspaces", "error", err)
+		h.log.WarnContext(ctx, "start-up refresh could not list workspaces", slog.Any("error", err))
 
 		return
 	}
@@ -86,7 +87,7 @@ func (h *Hub) catchUp(ctx context.Context) {
 		snap, err := h.snapshots.Get(ctx, id)
 		if err != nil {
 			h.log.WarnContext(ctx, "start-up refresh could not read the snapshot",
-				"workspace", id, "error", err)
+				slog.String("workspace", id), slog.Any("error", err))
 
 			continue
 		}
@@ -110,7 +111,7 @@ func (h *Hub) catchUp(ctx context.Context) {
 		}
 
 		h.log.InfoContext(ctx, "the stored snapshot is due at start; refreshing now",
-			"workspace", id, "age", age)
+			slog.String("workspace", id), slog.String("age", age))
 		h.refreshOne(ctx, id)
 	}
 }
@@ -128,7 +129,7 @@ func (h *Hub) catchUp(ctx context.Context) {
 func (h *Hub) refreshAll(ctx context.Context) {
 	workspaces, err := h.store.List(ctx)
 	if err != nil {
-		h.log.WarnContext(ctx, "refresh pass could not list workspaces", "error", err)
+		h.log.WarnContext(ctx, "refresh pass could not list workspaces", slog.Any("error", err))
 		return
 	}
 	for i := range workspaces {
@@ -221,7 +222,7 @@ func (h *Hub) refreshLeased(ctx context.Context, id string) RefreshOutcome {
 			// quota, a skipped one costs freshness, and freshness is what
 			// authority is made of.
 			h.log.WarnContext(ctx, "refresh lease unavailable; refreshing anyway",
-				"workspace", id, "error", err)
+				slog.String("workspace", id), slog.Any("error", err))
 		case !acquired:
 			return RefreshContended
 		default:
@@ -229,7 +230,7 @@ func (h *Hub) refreshLeased(ctx context.Context, id string) RefreshOutcome {
 		}
 	}
 	if _, err := h.Refresh(ctx, id); err != nil {
-		h.log.WarnContext(ctx, "refresh failed", "workspace", id, "error", err)
+		h.log.WarnContext(ctx, "refresh failed", slog.String("workspace", id), slog.Any("error", err))
 		if release != nil {
 			// The context may be the one that just ran out.
 			release(context.WithoutCancel(ctx))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -43,7 +42,7 @@ func newDetachedHub(t *testing.T) (*hub.Hub, *hub.MemoryStore) {
 	t.Helper()
 	store := hub.NewMemoryStore()
 	return hub.New(store, hub.NewMemorySnapshots(), hub.Config{},
-		slog.New(slog.NewTextHandler(io.Discard, nil))), store
+		slog.New(slog.DiscardHandler)), store
 }
 
 // Adopting a workspace must not wait on the directory.
@@ -250,7 +249,7 @@ func TestAWorkspaceConnectedOnOneReplicaIsServedByTheOther(t *testing.T) {
 	store := hub.NewMemoryStore()
 	creds := newMemoryCredentials()
 	snaps := hub.NewMemorySnapshots()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 
 	directories := make([]*hub.Hub, 2)
 	readers := map[string]*fake.Backend{}

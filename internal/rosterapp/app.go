@@ -260,7 +260,7 @@ func (a *App) Close() {
 func (a *App) closeControllers() {
 	closeEmitter := func(err error) {
 		if err != nil {
-			a.log.Warn("the audit emitter could not be closed cleanly; what its queue held is dropped", "error", err)
+			a.log.WarnContext(context.Background(), "the audit emitter could not be closed cleanly; what its queue held is dropped", slog.Any("error", err))
 		}
 	}
 	if a.github != nil {
@@ -390,7 +390,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		assembled.Issuer().UseCloudflare(a.cloudflare)
 	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
-		"call except to the corporate directory", "controllers", len(a.consoles))
+		"call except to the corporate directory", slog.Int("controllers", len(a.consoles)))
 	a.issuer = assembled
 	return a, nil
 }

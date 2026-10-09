@@ -104,11 +104,11 @@ func Reconcile(
 		switch outcome {
 		case OutcomeUnsupported, OutcomeFailed:
 			log.WarnContext(ctx, "a generated client secret could not be settled; the client keeps the input secret, if any, until the next pass",
-				"client", id, "outcome", string(outcome), "error", safeError(err))
+				slog.String("client", id), slog.String("outcome", string(outcome)), slog.String("error", safeError(err)))
 		case OutcomeCreated, OutcomeAdopted, OutcomeConflict, OutcomeRestored:
-			log.InfoContext(ctx, "a generated client secret was settled", "client", id, "outcome", string(outcome))
+			log.InfoContext(ctx, "a generated client secret was settled", slog.String("client", id), slog.String("outcome", string(outcome)))
 		default:
-			log.DebugContext(ctx, "a generated client secret is in place", "client", id, "outcome", string(outcome))
+			log.DebugContext(ctx, "a generated client secret is in place", slog.String("client", id), slog.String("outcome", string(outcome)))
 		}
 		if hooks.Outcome != nil {
 			hooks.Outcome(ctx, id, outcome, err)

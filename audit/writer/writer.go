@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/audit/sinkserver"
+	"github.com/truvity/sluis/storage/logattr"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -299,7 +300,7 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 			Store: c.Archive, Instance: instance, Interval: c.RollInterval,
 			Held: holds.Held,
 			OnPut: func(key string, n int) {
-				log.Info("object written", "key", key, "records", n)
+				log.InfoContext(ctx, "object written", slog.String("key", key), slog.Int("records", n))
 				counts.Written(key, n)
 			},
 		},
@@ -312,32 +313,33 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 		Evidence: c.Evidence,
 		Hooks: inner.Hooks{
 			OnDeadLettered: func(r *record.Record, reason string) {
-				log.Error("dead letter", "id", logSafe(r.GetId(), 128), "action", logSafe(r.GetAction(), 128), "reason", logSafe(reason, 512))
+				log.ErrorContext(ctx, "dead letter", slog.String("id", logSafe(r.GetId(), 128)), slog.String("action", logSafe(r.GetAction(), 128)),
+					slog.String("reason", logSafe(reason, 512)))
 				counts.DeadLettered()
 			},
 			OnUnknownCatalogue: func(source, version string) {
 				// `event=unknown_catalogue` is the field an alarm on the log group matches
 				// (the Pulumi library's metric filter): keep it, and keep it out of
 				// anything a record can say (logSafe).
-				log.Error("a record names a catalogue version this writer does not have, and is dead-lettered",
-					"event", "unknown_catalogue", "source", logSafe(source, 128), "catalogue_version", logSafe(version, 128))
+				log.ErrorContext(ctx, "a record names a catalogue version this writer does not have, and is dead-lettered",
+					slog.String("event", "unknown_catalogue"), slog.String("event_source", logSafe(source, 128)), slog.String("catalogue_version", logSafe(version, 128)))
 				counts.UnknownCatalogue(source, version)
 			},
 			OnDuplicatesLikely: func(ids []string, err error) {
-				log.Warn("records written but not marked; a redelivery will be written again",
-					"records", len(ids), "error", err)
+				log.WarnContext(ctx, "records written but not marked; a redelivery will be written again",
+					slog.Int("records", len(ids)), logattr.SafeError("error", err))
 				counts.DuplicatesLikely(len(ids))
 			},
 			OnUnhandled: func(action string, missing, kept []string) {
 				reportUnhandled(log, action, missing, kept)
 			},
 			OnMetaDropped: func(action, reason string) {
-				log.Error("the writer could not record itself", "action", action, "reason", reason)
+				log.ErrorContext(ctx, "the writer could not record itself", slog.String("action", action), slog.String("reason", reason))
 				counts.MetaDropped()
 			},
 			OnRetentionNotExtended: func(profile, id string, err error) {
-				log.Error("an addendum could not lengthen the lock on an earlier record",
-					"profile", profile, "record", id, "error", err)
+				log.ErrorContext(ctx, "an addendum could not lengthen the lock on an earlier record",
+					logattr.SafeString("profile", profile), logattr.SafeString("record", id), logattr.SafeError("error", err))
 				counts.RetentionNotExtended(profile)
 			},
 		},
@@ -370,7 +372,7 @@ func Open(ctx context.Context, c Config) (*Writer, error) {
 	go func() {
 		defer out.watcher.Done()
 		holds.Run(watching, func(err error) {
-			log.Error("could not refresh the legal holds; keeping the last answer", "error", err)
+			log.ErrorContext(ctx, "could not refresh the legal holds; keeping the last answer", slog.Any("error", err))
 		})
 	}()
 
@@ -505,10 +507,10 @@ func longestRetention(profiles map[string]*profile.Profile) time.Duration {
 // operator must hear about.
 func reportUnhandled(log *slog.Logger, action string, missing, kept []string) {
 	if len(kept) == 0 {
-		log.Warn("no configured profile keeps this action; its records are dead-lettered",
-			"action", action, "profiles", missing)
+		log.WarnContext(context.Background(), "no configured profile keeps this action; its records are dead-lettered",
+			slog.String("action", action), slog.Any("profiles", missing))
 		return
 	}
-	log.Debug("some profiles this action names are not configured; its records are kept by the others",
-		"action", action, "kept", kept, "not_configured", missing)
+	log.DebugContext(context.Background(), "some profiles this action names are not configured; its records are kept by the others",
+		slog.String("action", action), slog.Any("kept", kept), slog.Any("not_configured", missing))
 }

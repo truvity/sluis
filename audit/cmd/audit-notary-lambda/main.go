@@ -58,7 +58,7 @@ const (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("audit-notary-lambda", "error", err)
+		slog.ErrorContext(context.Background(), "audit-notary-lambda", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -117,18 +117,18 @@ func run() error {
 	h := func(ctx context.Context, _ json.RawMessage) (*cli.NotaryReport, error) {
 		report, err := notary.Run(ctx)
 		if report != nil {
-			slog.InfoContext(ctx, "audit-notary-lambda", "sealed", len(report.Sealed), "present", report.Present,
-				"failed", len(report.Failures), "key", report.Key)
+			slog.InfoContext(ctx, "audit-notary-lambda", slog.Int("sealed", len(report.Sealed)), slog.Int("present", report.Present),
+				slog.Int("failed", len(report.Failures)), slog.String("key", report.Key))
 			for _, f := range report.Failures {
 				slog.ErrorContext(ctx, "a tenant could not be sealed further",
-					"profile", f.Profile, "tenant", f.Tenant, "reason", f.Reason)
+					slog.String("profile", f.Profile), slog.String("tenant", f.Tenant), slog.String("reason", f.Reason))
 			}
 		}
 		// Frozen after the invocation: export now, or the series is a run late.
 		flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 		defer cancel()
 		if ferr := telemetry.Flush(flush); ferr != nil {
-			slog.Warn("could not export telemetry at the end of the invocation", "error", ferr)
+			slog.WarnContext(ctx, "could not export telemetry at the end of the invocation", slog.Any("error", ferr))
 		}
 		return report, err
 	}
@@ -140,7 +140,7 @@ func run() error {
 		_ = stopTelemetry(shutting)
 		os.Exit(0)
 	}()
-	slog.Info("audit-notary-lambda", "deployment", cfg.Deployment, "settle", cfg.Settle.D().String())
+	slog.InfoContext(context.Background(), "audit-notary-lambda", slog.String("deployment", cfg.Deployment), slog.String("settle", cfg.Settle.D().String()))
 	lambda.StartWithOptions(h, lambda.WithContext(ctx))
 	return errors.New("the Lambda runtime returned")
 }

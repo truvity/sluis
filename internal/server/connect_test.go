@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +49,7 @@ func TestTheConsentCallbackTakesItsOperatorFromTheSignedState(t *testing.T) {
 		state:      codec,
 		sessions:   &access.Sessions{},
 		connectors: map[string]Connector{"google": stubConsent{}},
-		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log:        slog.New(slog.DiscardHandler),
 	}
 
 	call := func(state string) *httptest.ResponseRecorder {
@@ -138,7 +137,7 @@ func TestTheConsentPageIsNeverA5xx(t *testing.T) {
 		state:      codec,
 		sessions:   &access.Sessions{},
 		connectors: map[string]Connector{"google": stubConsent{}},
-		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log:        slog.New(slog.DiscardHandler),
 	}
 	operator, err := codec.IssueAs(access.Binding{Actor: "ada@north.example"})
 	if err != nil {

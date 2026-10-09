@@ -19,8 +19,8 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // SignIn is a directory a person can prove who they are with.
@@ -492,7 +492,7 @@ func (s *signIn) refuse(w http.ResponseWriter, r *http.Request, pending Pending,
 	to, err := url.Parse(pending.RedirectURI)
 	if err != nil {
 		s.deps.Log.WarnContext(r.Context(), "a pending request has an unparseable redirect uri",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 		s.page(w, "Sign-in required", `<p>`+named(pending, "This application")+` asked to continue without prompting.</p>`)
 
 		return
@@ -600,7 +600,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 		// One message for every reason, and the reason in the log: a
 		// caller told which part of its proof failed is a caller helped
 		// to produce a better one.
-		s.deps.Log.WarnContext(r.Context(), "recovery refused", "error", logsafe.Error(err))
+		s.deps.Log.WarnContext(r.Context(), "recovery refused", logattr.SafeError("error", err))
 		recordLoginFailure(r.Context(), LoginRecoveryRefused)
 		http.Error(w, "that proof was not accepted", http.StatusForbidden)
 		return
@@ -634,7 +634,7 @@ func (s *signIn) recover(w http.ResponseWriter, r *http.Request) {
 	recordLoginSuccess(r.Context(), "recovery")
 	// WARN, not INFO: this is the way in that bypasses the directory, and
 	// it should be as loud in a log as it is rare.
-	s.deps.Log.WarnContext(r.Context(), "recovery sign-in", "subject", logsafe.Value(subject))
+	s.deps.Log.WarnContext(r.Context(), "recovery sign-in", logattr.SafeString("subject", subject))
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 
@@ -667,7 +667,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	email, err := provider.Identify(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
 		s.deps.Log.WarnContext(r.Context(), "sign-in exchange failed",
-			"provider", provider.Kind(), "error", logsafe.Error(err))
+			slog.String("provider", provider.Kind()), logattr.SafeError("error", err))
 		recordLoginFailure(r.Context(), LoginProviderFailed)
 		http.Error(w, "the sign-in could not be completed: "+err.Error(), http.StatusBadGateway)
 		return
@@ -684,12 +684,12 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 		// The directory has an opinion and it is no. Saying so here is
 		// the only place a person will read it: everywhere downstream
 		// they would simply find themselves admitted nowhere.
-		s.deps.Log.WarnContext(r.Context(), "sign-in refused", "email", logsafe.Value(email), "reason", logsafe.Value(refused.Reason))
+		s.deps.Log.WarnContext(r.Context(), "sign-in refused", logattr.SafeString("email", email), logattr.SafeString("reason", refused.Reason))
 		recordLoginFailure(r.Context(), LoginDirectoryRefused)
 		http.Error(w, "signed in as "+email+", but "+refused.Reason, http.StatusForbidden)
 		return
 	case err != nil:
-		s.deps.Log.ErrorContext(r.Context(), "the hub could not be asked", "email", logsafe.Value(email), "error", logsafe.Error(err))
+		s.deps.Log.ErrorContext(r.Context(), "the hub could not be asked", logattr.SafeString("email", email), logattr.SafeError("error", err))
 		recordLoginFailure(r.Context(), LoginDirectoryUnreachable)
 		http.Error(w, "signed in as "+email+", but the directory could not be reached",
 			http.StatusServiceUnavailable)
@@ -714,7 +714,7 @@ func (s *signIn) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	recordLoginSuccess(r.Context(), provider.Kind())
 	s.deps.Log.InfoContext(r.Context(), "signed in",
-		"email", logsafe.Value(email), "provider", provider.Kind(), "groups", len(standing.Groups))
+		logattr.SafeString("email", email), slog.String("provider", provider.Kind()), slog.Int("groups", len(standing.Groups)))
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 }
 
@@ -853,7 +853,7 @@ func signOut(deps SignInDeps, w http.ResponseWriter, r *http.Request, mode spari
 			// Nothing has ended, so nothing may say it has: the cookie
 			// stays for the retry, and the caller answers with an error.
 			deps.log().WarnContext(r.Context(), "sign-out could not read the browser's sign-in",
-				"error", logsafe.Error(err))
+				logattr.SafeError("error", err))
 
 			return errSignOutUnresolved
 		}
@@ -927,7 +927,7 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, mode spa
 	// could reach.
 	if err := deps.SSO.End(ctx, id); err != nil {
 		deps.log().WarnContext(ctx, "sign-out could not end the session",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 	}
 
 	if deps.Issuer == nil {
@@ -968,10 +968,10 @@ func endSignIn(ctx context.Context, deps SignInDeps, signIn SSOSession, mode spa
 	switch {
 	case err != nil:
 		deps.log().WarnContext(ctx, "sign-out could not end what this browser opened",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 	case ended > 0:
 		deps.log().InfoContext(ctx, "sign-out ended the sessions this browser opened",
-			"ended", ended, "spared", len(spared))
+			slog.Int("ended", ended), slog.Int("spared", len(spared)))
 	}
 	if err == nil && mode != spareLive {
 		deps.Issuer.record(ctx, audited(ended, sparedClients(spared)))
@@ -1133,7 +1133,7 @@ func providerName(kind string) string {
 
 func (s *signIn) page(w http.ResponseWriter, title, body string) {
 	if err := writePage(w, http.StatusOK, title, body); err != nil {
-		s.deps.Log.Warn("page could not be written", "error", err)
+		s.deps.Log.WarnContext(context.Background(), "page could not be written", slog.Any("error", err))
 	}
 }
 
@@ -1210,7 +1210,7 @@ func (s *signIn) silent(w http.ResponseWriter, r *http.Request, request string, 
 
 	recordLoginSuccess(r.Context(), "browser_session")
 	s.deps.Log.InfoContext(r.Context(), "signed in from an existing browser session",
-		"identity", logsafe.Value(session.Identity), "how", session.How)
+		logattr.SafeString("identity", session.Identity), slog.String("how", session.How))
 	http.Redirect(w, r, s.deps.Return(r.Context(), request), http.StatusFound)
 
 	return true
@@ -1241,7 +1241,7 @@ func (s *signIn) refuseUnentitled(w http.ResponseWriter, r *http.Request, err er
 	// name, and the answer to "why can I not open this" is a person, not
 	// a list.
 	s.deps.log().InfoContext(r.Context(), "refused a client the identity is not entitled to",
-		"error", logsafe.Error(err))
+		logattr.SafeError("error", err))
 
 	_ = writePage(w, http.StatusForbidden, "You are signed in, but not for this",
 		`<p>Your account is not in a group that opens `+named(s.pendingOf(request), "this application")+`.</p>
@@ -1265,7 +1265,7 @@ func (s *signIn) refuseUnaudited(w http.ResponseWriter, r *http.Request, err err
 	}
 	recordLoginFailure(r.Context(), LoginUnaudited)
 	s.deps.log().ErrorContext(r.Context(), "recovery refused: the audit trail could not be written",
-		"error", logsafe.Error(err))
+		logattr.SafeError("error", err))
 	_ = writePage(w, http.StatusServiceUnavailable, "Recovery is refused: the audit trail could not be written",
 		`<p>Your proof was accepted, but a recovery sign-in never happens without its audit record, and that record could not be written.</p>
 	<p class="note">Check that the audit installation's writer is up and reachable from this service, then try again.</p>`)
@@ -1280,7 +1280,7 @@ func (s *signIn) unestablish(r *http.Request, who Authenticated) {
 		return
 	}
 	if err := s.deps.SSO.End(r.Context(), who.SSO); err != nil {
-		s.deps.log().WarnContext(r.Context(), "a refused recovery's browser session could not be ended", "error", logsafe.Error(err))
+		s.deps.log().WarnContext(r.Context(), "a refused recovery's browser session could not be ended", logattr.SafeError("error", err))
 	}
 }
 
@@ -1303,7 +1303,7 @@ func (s *signIn) established(w http.ResponseWriter, r *http.Request, identity, h
 		// could not be filed. The person is authenticated either way; the
 		// only cost is that the next console asks again.
 		s.deps.Log.WarnContext(r.Context(), "browser session could not be recorded",
-			"identity", logsafe.Value(identity), "error", logsafe.Error(err))
+			logattr.SafeString("identity", identity), logattr.SafeError("error", err))
 
 		// And the browser must not keep the cookie it came with: that
 		// sign-in may be somebody else's, and the next console would
@@ -1359,7 +1359,7 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 	previous, live, err := s.deps.SSO.Resolve(r.Context(), SSOFromRequest(r, s.deps.Secure))
 	if err != nil {
 		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be read",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 		return
 	}
 	if !live || previous.ID == who.SSO {
@@ -1382,12 +1382,12 @@ func (s *signIn) endPrevious(r *http.Request, who Authenticated) {
 
 	if err = s.deps.SSO.End(r.Context(), previous.ID); err != nil {
 		s.deps.log().WarnContext(r.Context(), "the browser's previous sign-in could not be ended",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 	}
 
 	if clientsErr != nil {
 		s.deps.log().WarnContext(r.Context(), "the clients of the browser's previous sign-in could not be read",
-			"error", logsafe.Error(clientsErr))
+			logattr.SafeError("error", clientsErr))
 	}
 
 	carryOver(r.Context(), s.deps, previous, clients, who.SSO)
@@ -1410,7 +1410,7 @@ func carryOver(ctx context.Context, deps SignInDeps, previous SSOSession, client
 	for _, clientID := range clients {
 		if err := deps.SSO.Involve(ctx, to, clientID); err != nil {
 			deps.log().WarnContext(ctx, "the clients of the browser's previous sign-in could not be carried over",
-				"error", logsafe.Error(err))
+				logattr.SafeError("error", err))
 
 			break
 		}
@@ -1422,7 +1422,7 @@ func carryOver(ctx context.Context, deps SignInDeps, previous SSOSession, client
 
 	if _, err := deps.Issuer.Sessions().Refile(ctx, previous.Identity, previous.ID, to); err != nil {
 		deps.log().WarnContext(ctx, "some sessions of the browser's previous sign-in could not be carried over",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 	}
 }
 

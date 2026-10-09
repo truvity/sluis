@@ -112,7 +112,7 @@ func (c Config) legacyTable() port.Table {
 // opened with.
 func (c Config) plan(ctx context.Context, log *slog.Logger) (Config, port.Table, error) {
 	if w := port.Preset(c.sel.Preset).Deprecated(); w != "" {
-		log.WarnContext(ctx, w)
+		log.WarnContext(ctx, "adapter preset warning", slog.String("warning", w))
 	}
 	sel := port.Selection{Legacy: c.legacyTable(), Preset: port.Preset(c.sel.Preset)}
 	if p := c.sel.Platform; p != nil {

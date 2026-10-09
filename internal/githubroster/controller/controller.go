@@ -27,6 +27,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/truvity/sluis/audit/sdk/record"
+	"github.com/truvity/sluis/storage/logattr"
 
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
@@ -236,9 +237,9 @@ func (c *Controller) notified(ctx context.Context, target string) {
 	}
 	switch _, _, err := c.RunTarget(ctx, target); {
 	case errors.Is(err, ErrUnknownTarget):
-		c.deps.Log.DebugContext(ctx, "a notification names no target of this controller", "target", target)
+		c.deps.Log.DebugContext(ctx, "a notification names no target of this controller", slog.String("target", target))
 	case err != nil:
-		c.deps.Log.WarnContext(ctx, "a notified tick failed", "target", target, "error", err)
+		c.deps.Log.WarnContext(ctx, "a notified tick failed", slog.String("target", target), logattr.SafeError("error", err))
 	}
 }
 
@@ -251,7 +252,7 @@ func (c *Controller) Pass(ctx context.Context) (otherPolicy bool) {
 	for _, target := range c.Targets() {
 		_, differs, err := c.RunTarget(ctx, target)
 		if err != nil {
-			c.deps.Log.WarnContext(ctx, "a tick failed", "target", target, "error", err)
+			c.deps.Log.WarnContext(ctx, "a tick failed", slog.String("target", target), logattr.SafeError("error", err))
 		}
 		otherPolicy = otherPolicy || differs
 	}
@@ -281,7 +282,7 @@ func (c *Controller) RunTarget(ctx context.Context, target string) (ran, otherPo
 		return false, false, leaseErr
 	}
 	if !ran {
-		c.deps.Log.DebugContext(ctx, "a target is leased to another runner", "target", target)
+		c.deps.Log.DebugContext(ctx, "a target is leased to another runner", slog.String("target", target))
 	}
 	return ran, otherPolicy, err
 }
@@ -338,7 +339,7 @@ func (c *Controller) organisation(
 	// finds the held and reported rows it recorded, rather than an empty
 	// report that would have it record them all again.
 	fail := func(err error) (status.Org, bool) {
-		c.deps.Log.WarnContext(ctx, "a pass over an organisation failed", "org", org, "error", err)
+		c.deps.Log.WarnContext(ctx, "a pass over an organisation failed", slog.String("org", org), logattr.SafeError("error", err))
 		report := c.journal.Previous(ctx, org)
 		report.Org, report.Enabled = org, enabled
 		report.Tick = status.Tick{At: started, Outcome: status.OutcomeFailed, Error: err.Error()}
@@ -384,8 +385,9 @@ func (c *Controller) organisation(
 	report.Tick.Retrying = countState(report, status.StateRetrying)
 	report.Tick.Waiting = countState(report, status.StateNotLinked)
 	report.Tick.Outcome = outcome(enabled, report.Tick)
-	c.deps.Log.InfoContext(ctx, "passed over an organisation", "org", org, "enabled", enabled,
-		"outcome", report.Tick.Outcome, "changes", report.Tick.Changes, "held", report.Tick.Held, "waiting", report.Tick.Waiting)
+	c.deps.Log.InfoContext(ctx, "passed over an organisation", slog.String("org", org), slog.Bool("enabled", enabled),
+		slog.Any("outcome", report.Tick.Outcome), slog.Int("changes", report.Tick.Changes), slog.Int("held", report.Tick.Held),
+		slog.Int("waiting", report.Tick.Waiting))
 	c.journal.Remember(org, report)
 	return report, otherPolicy
 }
@@ -567,7 +569,8 @@ func (c *Controller) act(ctx context.Context, client githubapp.Org, token string
 		if err != nil {
 			outcome = audit.Failed(err.Error())
 			markHeld(report, action, err.Error())
-			c.deps.Log.WarnContext(ctx, "GitHub refused a change", "org", report.Org, "action", action.String(), "error", err)
+			c.deps.Log.WarnContext(ctx, "GitHub refused a change", slog.String("org", report.Org), slog.String("action", action.String()),
+				logattr.SafeError("error", err))
 		} else {
 			done++
 			markDone(report, action)

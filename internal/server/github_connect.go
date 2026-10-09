@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/status"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // GitHubConnections is where connected organisations are kept: a record
@@ -248,7 +249,7 @@ func (s *ConsoleServer) githubCallback(w http.ResponseWriter, r *http.Request) {
 	registration, err := githubapp.Convert(r.Context(), s.console.githubHTTP(), r.URL.Query().Get("code"))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "a GitHub App was created and its key could not be collected",
-			"org", org, "error", logsafe.Error(err))
+			logattr.SafeString("org", org), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the App, and then would not hand over its key.", err.Error(), []string{
 				"The page was reloaded: the code GitHub returns can be exchanged once.",
@@ -270,14 +271,14 @@ func (s *ConsoleServer) githubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	credential := connection.Credential{Org: org, AppID: registration.ID, PrivateKey: registration.PEM}
 	if err = store.Put(r.Context(), record, credential); err != nil {
-		s.log.ErrorContext(r.Context(), "a GitHub App was created and could not be kept", "org", org, "error", err)
+		s.log.ErrorContext(r.Context(), "a GitHub App was created and could not be kept", logattr.SafeString("org", org), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the App, and it could not be saved here. Delete it on GitHub and connect again.",
 			err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "GitHub App created", "org", org, "app", registration.ID,
-		"slug", registration.Slug, "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "GitHub App created", logattr.SafeString("org", org), slog.Int64("app", registration.ID),
+		slog.String("slug", registration.Slug), logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.GitHubAppCreated(audit.Identified(actor), org,
 		audit.App{ID: registration.ID, Slug: registration.Slug}))
 
@@ -327,7 +328,7 @@ func (s *ConsoleServer) githubSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	if claimed := r.URL.Query().Get("installation_id"); claimed != "" && claimed != strconv.FormatInt(installation, 10) {
 		s.log.WarnContext(r.Context(), "the setup redirect named another installation than GitHub reports; keeping GitHub's",
-			"org", org, "claimed", logsafe.Value(claimed), "installation", installation)
+			logattr.SafeString("org", org), logattr.SafeString("claimed", claimed), slog.Int64("installation", installation))
 	}
 
 	records, err := store.List(r.Context())
@@ -348,7 +349,8 @@ func (s *ConsoleServer) githubSetup(w http.ResponseWriter, r *http.Request) {
 		s.githubProblem(w, r, http.StatusConflict, "The App is installed and could not be recorded here.", err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "GitHub App installed", "org", org, "installation", installation, "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "GitHub App installed", logattr.SafeString("org", org), slog.Int64("installation", installation),
+		logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.GitHubOrgConnected(audit.Identified(actor), org, credential.AppID, installation, record.Owner))
 	http.Redirect(w, r, s.at("/#/github"), http.StatusFound)
 }

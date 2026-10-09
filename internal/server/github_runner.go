@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -18,7 +19,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/githubroster/status"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // GitHubRunnerApps is where runner Apps are kept: every App's record and
@@ -234,7 +235,7 @@ func (s *ConsoleServer) githubRunnerCallback(w http.ResponseWriter, r *http.Requ
 	registration, err := githubapp.Convert(r.Context(), s.console.githubHTTP(), r.URL.Query().Get("code"))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "a runner App was created and its key could not be collected",
-			"org", logsafe.Value(org), "tier", logsafe.Value(tier), "error", logsafe.Error(err))
+			logattr.SafeString("org", org), logattr.SafeString("tier", tier), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the App, and then would not hand over its key.", err.Error(), []string{
 				"The page was reloaded: the code GitHub returns can be exchanged once.",
@@ -254,13 +255,13 @@ func (s *ConsoleServer) githubRunnerCallback(w http.ResponseWriter, r *http.Requ
 	}
 	if err = s.console.deps.GitHubRunnerApps.Put(r.Context(), record, registration.PEM); err != nil {
 		s.log.ErrorContext(r.Context(), "a runner App was created and could not be kept",
-			"org", logsafe.Value(org), "tier", logsafe.Value(tier), "error", logsafe.Error(err))
+			logattr.SafeString("org", org), logattr.SafeString("tier", tier), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the App, and it could not be saved here. Delete it on GitHub and create it again.", err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "runner App created", "org", logsafe.Value(org), "tier", logsafe.Value(tier),
-		"app", registration.ID, "slug", logsafe.Value(registration.Slug), "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "runner App created", logattr.SafeString("org", org), logattr.SafeString("tier", tier),
+		slog.Int64("app", registration.ID), logattr.SafeString("slug", registration.Slug), logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.RunnerAppCreated(audit.Identified(actor), org,
 		audit.App{ID: registration.ID, Slug: registration.Slug, Tier: tier}))
 
@@ -309,8 +310,8 @@ func (s *ConsoleServer) githubRunnerSetup(w http.ResponseWriter, r *http.Request
 		s.githubProblem(w, r, http.StatusConflict, "The App is installed and could not be recorded here.", err.Error(), nil)
 		return
 	}
-	s.log.InfoContext(r.Context(), "runner App installed", "org", logsafe.Value(org), "tier", logsafe.Value(tier),
-		"installation", installation, "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "runner App installed", logattr.SafeString("org", org), logattr.SafeString("tier", tier),
+		slog.Int64("installation", installation), logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.RunnerAppInstalled(audit.Identified(actor), org,
 		audit.App{ID: record.AppID, Slug: record.AppSlug, Tier: tier}, installation))
 	http.Redirect(w, r, s.at("/#/github/apps"), http.StatusFound)

@@ -11,11 +11,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/connection"
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // credentialResult is what reading one workspace's credential gave.
@@ -96,7 +96,7 @@ func readStore(credentialsDir, recordsDir string, log *slog.Logger) store {
 	for _, name := range rails.Entries(recordsDir, log) {
 		raw, err := os.ReadFile(filepath.Join(recordsDir, name)) //nolint:gosec // the directory is the mounted ConfigMap
 		if err != nil {
-			log.Warn("a record could not be read", "key", logsafe.Value(name), "error", logsafe.Error(err))
+			log.WarnContext(context.Background(), "a record could not be read", logattr.SafeString("key", name), logattr.SafeError("error", err))
 			continue
 		}
 		switch {
@@ -107,7 +107,8 @@ func readStore(credentialsDir, recordsDir string, log *slog.Logger) store {
 			}
 			record, err := connection.DecodeRecord(string(raw))
 			if err != nil {
-				log.Warn("a workspace's record could not be read", "workspace", logsafe.Value(workspace), "error", logsafe.Error(err))
+				log.WarnContext(context.Background(), "a workspace's record could not be read", logattr.SafeString("workspace", workspace),
+					logattr.SafeError("error", err))
 				continue
 			}
 			s.recorded[workspace] = recorded{team: record.TeamID, owner: record.Owner}
@@ -135,7 +136,7 @@ func readStore(credentialsDir, recordsDir string, log *slog.Logger) store {
 				confirmation, err := connection.DecodeConfirmation(string(raw))
 				if err != nil || confirmation.Workspace != workspace || confirmation.Channel != channel {
 					// Not a confirmation of what its key says: confirms nothing.
-					log.Warn("a confirmation could not be read and confirms nothing", "key", logsafe.Value(name))
+					log.WarnContext(context.Background(), "a confirmation could not be read and confirms nothing", logattr.SafeString("key", name))
 					continue
 				}
 				s.confirmation = append(s.confirmation, confirmation)
@@ -174,7 +175,7 @@ func readStoreFrom(ctx context.Context, src RecordSource, log *slog.Logger) stor
 	s := store{credentials: map[string]credentialResult{}, bots: map[string]string{}, recorded: map[string]recorded{}}
 	records, err := src.Records(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "the workspaces' records could not be read", "error", logsafe.Error(err))
+		log.WarnContext(ctx, "the workspaces' records could not be read", logattr.SafeError("error", err))
 	}
 	for i := range records {
 		record := &records[i]
@@ -192,14 +193,14 @@ func readStoreFrom(ctx context.Context, src RecordSource, log *slog.Logger) stor
 	}
 	shared, err := src.Shared(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "the shared channels' records could not be read", "error", logsafe.Error(err))
+		log.WarnContext(ctx, "the shared channels' records could not be read", logattr.SafeError("error", err))
 	}
 	for i := range shared {
 		s.shared = append(s.shared, sharedRecord{key: shared[i].Name, channel: shared[i].Channel, err: shared[i].Err})
 	}
 	channels, err := src.Channels(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "the console channels' records could not be read", "error", logsafe.Error(err))
+		log.WarnContext(ctx, "the console channels' records could not be read", logattr.SafeError("error", err))
 	}
 	for i := range channels {
 		rec := &channels[i]
@@ -207,7 +208,7 @@ func readStoreFrom(ctx context.Context, src RecordSource, log *slog.Logger) stor
 	}
 	confirmations, err := src.Confirmations(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "the confirmations could not be read and confirm nothing", "error", logsafe.Error(err))
+		log.WarnContext(ctx, "the confirmations could not be read and confirm nothing", logattr.SafeError("error", err))
 	}
 	for _, key := range slices.Sorted(maps.Keys(confirmations)) {
 		s.confirmation = append(s.confirmation, confirmations[key])

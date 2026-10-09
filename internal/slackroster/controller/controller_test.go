@@ -315,7 +315,7 @@ func (r *rig) captureLogs() *bytes.Buffer {
 
 func (r *rig) logger() *slog.Logger {
 	if r.logs == nil {
-		return slog.New(slog.NewTextHandler(io.Discard, nil))
+		return slog.New(slog.DiscardHandler)
 	}
 	return slog.New(slog.NewTextHandler(r.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
@@ -581,7 +581,7 @@ func TestARemovalConfirmedUnderAnotherPolicyIsHeld(t *testing.T) {
 	// still on the old one.
 	other := &policySplit{console: r.console}
 	c := controller.New(controller.Config{Enabled: map[string]bool{"acme": true}, CredentialsDir: r.creds, RecordsDir: r.records}, controller.Deps{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Access: other, Audit: r.audit, Status: r.reports,
+		Log: slog.New(slog.DiscardHandler), Access: other, Audit: r.audit, Status: r.reports,
 		Policy: r.policy, Digest: testPolicy,
 		Slack: func(token string) *slackapp.Client {
 			return slackapp.New(token, slackapp.WithBaseURL(r.fake.URL()), slackapp.WithRetries(1))
@@ -976,7 +976,7 @@ func TestTheControllerReadsWhatTheConsoleWrites(t *testing.T) {
 	client := kube.NewClient(k8sfake.NewClientset(), "ns", "release")
 	shared := kube.NewSlackShared(client)
 	// The directory the shared channels' source groups are looked up in.
-	directory := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	directory := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{}, slog.New(slog.DiscardHandler))
 	if _, err = directory.Adopt(context.Background(), hub.Workspace{ID: "C0acme", Admin: "admin@dir.example"},
 		fake.New("C0acme", "dir.example").WithAccount("admin@dir.example", "Admin", "A").WithGroup(dirAll, "admin@dir.example")); err != nil {
 		t.Fatal(err)

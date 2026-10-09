@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 				digest, err := src.Digest(ctx)
 				if err != nil {
 					// Not read: unchanged, and the next poll asks again.
-					c.deps.Log.WarnContext(ctx, "the organisations' records could not be read for the change check", "error", err)
+					c.deps.Log.WarnContext(ctx, "the organisations' records could not be read for the change check", slog.Any("error", err))
 					return lastDigest
 				}
 				lastDigest = digest
@@ -74,7 +75,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 			Changed: "an organisation's credentials changed",
 			OnRequest: func(org string) {
 				if err := c.deps.Trigger.Notify(ctx, org); err != nil {
-					c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", "org", org, "error", err)
+					c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", slog.String("org", org), slog.Any("error", err))
 				}
 			},
 		}.Run(ctx, c.deps.Log, wake)
@@ -89,7 +90,7 @@ func (c *Controller) watchCredentials(ctx context.Context, wake chan<- struct{})
 		Changed:  "an organisation's credentials changed",
 		OnRequest: func(org string) {
 			if err := c.deps.Trigger.Notify(ctx, org); err != nil {
-				c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", "org", org, "error", err)
+				c.deps.Log.WarnContext(ctx, "a requested pass could not be handed to the trigger", slog.String("org", org), slog.Any("error", err))
 			}
 		},
 	}.Run(ctx, c.deps.Log, wake)
