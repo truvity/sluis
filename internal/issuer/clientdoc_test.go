@@ -248,6 +248,12 @@ func TestDocumentURLShapesThatAreRefused(t *testing.T) {
 		"a fragment":  "https://clients.example/cimd.json#frag",
 		"credentials": "https://user:pass@clients.example/cimd.json",
 		"no host":     "https:///cimd.json",
+		// draft-00 3: a path component, and no dot segments.
+		"no path":         "https://clients.example",
+		"root path":       "https://clients.example/",
+		"dot segment":     "https://clients.example/a/./cimd.json",
+		"dot-dot segment": "https://clients.example/a/../cimd.json",
+		"encoded dot-dot": "https://clients.example/a/%2e%2E/cimd.json",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -548,5 +554,58 @@ func TestADocumentClientPresentingASecretIsRefusedClearly(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "presents no secret") {
 		t.Errorf("refusal %q does not say the client should have no secret", err)
+	}
+}
+
+// The origin's Cache-Control sets how long a document is reused, within
+// bounds; a header that states nothing keeps the default.
+func TestCacheLifetimeHonoursCacheControlWithinBounds(t *testing.T) {
+	t.Parallel()
+
+	for header, want := range map[string]time.Duration{
+		"":                      documentCacheFor,
+		"public":                documentCacheFor,
+		"max-age=3600":          time.Hour,
+		"public, max-age=120":   2 * time.Minute,
+		"max-age=5":             documentCacheMin,
+		"max-age=0":             documentCacheMin,
+		"no-store":              documentCacheMin,
+		"no-cache, max-age=900": documentCacheMin,
+		"max-age=999999999":     documentCacheMax,
+		"max-age=soon":          documentCacheFor,
+	} {
+		h := http.Header{}
+		if header != "" {
+			h.Set("Cache-Control", header)
+		}
+		if got := cacheLifetime(h); got != want {
+			t.Errorf("Cache-Control %q = %s, want %s", header, got, want)
+		}
+	}
+}
+
+func TestADocumentIsCachedForItsMaxAge(t *testing.T) {
+	t.Parallel()
+
+	var fetches int
+	resolver, srv := served(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetches++
+		w.Header().Set("Cache-Control", "max-age=3600")
+		goodDoc(w, r)
+	}))
+	clock := time.Now()
+	resolver.now = func() time.Time { return clock }
+
+	id := srv.URL + "/cimd.json"
+	if _, err := resolver.Resolve(context.Background(), id); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	clock = clock.Add(documentCacheFor + time.Minute)
+	if _, err := resolver.Resolve(context.Background(), id); err != nil || fetches != 1 {
+		t.Fatalf("after the default life: err %v, fetches %d, want the cached copy (max-age=3600)", err, fetches)
+	}
+	clock = clock.Add(time.Hour)
+	if _, err := resolver.Resolve(context.Background(), id); err != nil || fetches != 2 {
+		t.Fatalf("after max-age: err %v, fetches %d, want a second fetch", err, fetches)
 	}
 }

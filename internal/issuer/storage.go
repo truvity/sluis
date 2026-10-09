@@ -619,6 +619,7 @@ func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.
 	case errors.Is(err, errNotADocumentClient):
 		return nil, fmt.Errorf("%w: %q", ErrUnknownTarget, clientID)
 	default:
+		noteClientRefusal(ctx, err)
 		return nil, err
 	}
 }
