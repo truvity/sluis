@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/truvity/sluis/internal/demo"
@@ -145,5 +146,27 @@ func TestAuthorizationServerMetadataInsertsTheIssuerPath(t *testing.T) {
 	}
 	if rec := asGet(t, handler, http.MethodGet, "/.well-known/oauth-authorization-server"); rec.Code == http.StatusOK {
 		t.Error("the bare path answered for an issuer that has a path")
+	}
+}
+
+// Discovery names no surface this issuer does not serve: no introspection
+// endpoint, and no signing-algorithm list for client authentication or
+// request objects, which the library fills with its RS256 default.
+func TestDiscoveryAdvertisesOnlyWhatIsServed(t *testing.T) {
+	t.Parallel()
+
+	handler := asMetadataHandler(t, "http://issuer.example", false)
+	for _, path := range []string{"/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"} {
+		rec := asGet(t, handler, http.MethodGet, path)
+		var doc map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		for name := range doc {
+			if strings.HasPrefix(name, "introspection_") || name == "request_object_signing_alg_values_supported" ||
+				strings.HasSuffix(name, "_auth_signing_alg_values_supported") {
+				t.Errorf("%s advertises %q, which this issuer does not serve", path, name)
+			}
+		}
 	}
 }
