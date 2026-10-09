@@ -1118,6 +1118,32 @@ clients:
 			[]string{},
 		},
 		{
+			"the sluis spelling of the hub's roles is consumed",
+			`version: 1
+groups:
+  all:sluis:viewer: {}
+  all:sluis:operator: {}
+  team:a:admin: {}
+`,
+			[]string{"team:a:admin"},
+		},
+		{
+			"a vocabulary that declares things.sluis loads",
+			`version: 1
+vocabulary:
+  scopes:
+    all: {}
+  things:
+    sluis:
+      scopes: [all]
+      roles: { viewer: [], operator: [viewer] }
+groups:
+  all:sluis:operator: {}
+  all:sluis:viewer: {}
+`,
+			[]string{},
+		},
+		{
 			"multiple unconsumed groups are sorted",
 			`version: 1
 groups:

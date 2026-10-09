@@ -170,6 +170,8 @@ func TestTheClientSecretsEndpointRequiresATokenIssuedToAccessctlOrTheConsole(t *
 		denied    string
 	}{
 		"accessctl":                     {[]string{"accessctl"}, []string{policy.GroupOperators}, http.StatusOK, ""},
+		"sluisctl":                      {[]string{"sluisctl"}, []string{policy.GroupOperators}, http.StatusOK, ""},
+		"the sluis console":             {[]string{"sluis-console"}, []string{policy.GroupOperators}, http.StatusOK, ""},
 		"the console":                   {[]string{"console"}, []string{policy.GroupOperators}, http.StatusOK, ""},
 		"authorized party among others": {[]string{"https://issuer.example", "console"}, []string{policy.GroupOperators}, http.StatusOK, ""},
 		"another client":                {[]string{"grafana"}, []string{policy.GroupOperators}, http.StatusForbidden, "wrong_audience"},

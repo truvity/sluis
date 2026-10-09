@@ -37,9 +37,11 @@ type ClientSecretAdmin interface {
 }
 
 // ClientSecretsAudiences are the clients whose tokens may manage secrets:
-// sluisctl's (`accessctl`, its default) and the console's. A token minted for
-// any other client, however valid and whatever its groups, is refused.
-var ClientSecretsAudiences = []string{"accessctl", "console"}
+// sluisctl's (`sluisctl`, and `accessctl`, its older default) and the
+// console's (`sluis-console`, and `console`, its older id). Both spellings
+// are accepted while estates move to the new names. A token minted for any
+// other client, however valid and whatever its groups, is refused.
+var ClientSecretsAudiences = []string{"sluisctl", "accessctl", "sluis-console", "console"}
 
 // UseClientSecrets mounts the operator endpoint over admin. Without it the
 // endpoint answers 404.
