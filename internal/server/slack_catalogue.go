@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -19,10 +20,10 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/slackapp"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/internal/slackapp/catalogueapp"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // SlackCatalogueApps is where catalogue Slack Apps are kept: every App's
@@ -421,14 +422,14 @@ func slackAuthorizeURL(authorize, state, redirect, team string, scopes []string)
 // slackRefusal ends a Slack callback that cannot finish: it logs why, records
 // why, and answers with the page. reason is the short sentence the log and
 // the audit record carry; it may hold Slack's own words, so the log takes it
-// through logsafe, and it never holds the code, a token or a secret.
+// through logattr, and it never holds the code, a token or a secret.
 type slackRefusal func(code int, summary, detail, reason string, causes []string)
 
 // slackRefused is the log line every refused Slack callback leaves, whichever
 // of its reasons, so that nobody has to guess why an install did nothing.
 func (s *ConsoleServer) slackRefused(flow slackFlow, r *http.Request, actor, reason string) {
-	s.log.WarnContext(r.Context(), "a Slack install callback was refused", "flow", flow.name,
-		"reason", logsafe.Value(reason), "by", logsafe.Value(actor))
+	s.log.WarnContext(r.Context(), "a Slack install callback was refused", slog.String("flow", flow.name),
+		logattr.SafeString("reason", reason), logattr.SafeString("by", actor))
 }
 
 // slackBound checks a catalogue flow's redirect the way GitHub's is
@@ -563,7 +564,7 @@ func (s *ConsoleServer) slackCatalogueCallback(w http.ResponseWriter, r *http.Re
 	installed, err := console.slackSetup().OAuthAccess(callCtx, record.ClientID, creds.ClientSecret, r.URL.Query().Get("code"), console.slackRedirect())
 	if err != nil {
 		refuse(http.StatusConflict, "Slack accepted the install, and then would not hand over the bot token.", err.Error(),
-			"slack's oauth.v2.access refused: "+logsafe.Error(err), []string{
+			"slack's oauth.v2.access refused: "+logattr.Error(err), []string{
 				"The page was reloaded: the code Slack returns can be exchanged once.",
 				"More than ten minutes passed between approving and returning here.",
 				"This service cannot reach slack.com: the cluster's egress policy has to allow it.",
@@ -592,12 +593,13 @@ func (s *ConsoleServer) slackCatalogueCallback(w http.ResponseWriter, r *http.Re
 		// A token nobody keeps is one nobody can revoke later.
 		revokeErr := console.slackRevoke(r.Context(), installed.BotToken)
 		refuse(http.StatusConflict, "The App is installed and its token could not be saved here. Install it again.", err.Error(),
-			"the token could not be kept: "+logsafe.Error(err)+"; "+revokedWords(revokeErr), nil)
+			"the token could not be kept: "+logattr.Error(err)+"; "+revokedWords(revokeErr), nil)
 		return
 	}
 	app.Scopes = record.Scopes
-	s.log.InfoContext(r.Context(), "catalogue Slack App installed", "id", logsafe.Value(id), "workspace", logsafe.Value(entry.Workspace),
-		"team", logsafe.Value(installed.TeamID), "scopes", logsafe.Value(strings.Join(record.Scopes, ",")), "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "catalogue Slack App installed", logattr.SafeString("id", id), logattr.SafeString("workspace", entry.Workspace),
+		logattr.SafeString("team", installed.TeamID), logattr.SafeString("scopes", strings.Join(record.Scopes, ",")),
+		logattr.SafeString("by", actor))
 	console.record(r.Context(), audit.SlackCatalogueAppInstalled(audit.Identified(actor), app))
 	http.Redirect(w, r, s.at("/#/slack-apps"), http.StatusFound)
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/status"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // RequestGitHubPass asks the GitHub controller to pass over now. The request
@@ -58,6 +58,6 @@ func (c *Console) RequestGitHubPass(
 	}
 	c.record(ctx, audit.GitHubPassRequested(identityActor(who), org))
 	c.notify(ctx, org)
-	c.log().InfoContext(ctx, "a GitHub pass was requested", "org", logsafe.Value(org), "by", logsafe.Value(who.Who()))
+	c.log().InfoContext(ctx, "a GitHub pass was requested", logattr.SafeString("org", org), logattr.SafeString("by", who.Who()))
 	return connect.NewResponse(&directoryrosterv1.RequestGitHubPassResponse{RequestedAt: timestampOf(now)}), nil
 }

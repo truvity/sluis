@@ -2,7 +2,6 @@ package rosterapp_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -50,7 +49,7 @@ func TestReadinessAnswersForTheControllersToo(t *testing.T) {
 	if cfg.GitHub == nil || cfg.Slack == nil {
 		t.Fatalf("the controllers were not read: %+v %+v", cfg.GitHub, cfg.Slack)
 	}
-	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -85,7 +84,7 @@ func TestNoControllersIsNoWait(t *testing.T) {
 	if cfg.GitHub != nil || cfg.Slack != nil {
 		t.Fatal("a controller the document does not name is on")
 	}
-	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -112,7 +111,7 @@ func TestAControllerThatCannotStartStopsTheProcess(t *testing.T) {
 	}
 	cfg, err := rosterapp.Load(file)
 	if err == nil {
-		_, err = rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		_, err = rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	}
 	// Either the policy document or the controller refuses it, and says why.
 	if err == nil || !strings.Contains(err.Error(), "nobody") {

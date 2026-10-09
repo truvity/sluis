@@ -2,7 +2,6 @@ package health_test
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +20,7 @@ func get(h http.Handler) (int, string) {
 	return rec.Code, rec.Body.String()
 }
 
-var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+var quiet = slog.New(slog.DiscardHandler)
 
 func TestReadyWhenEveryCheckHolds(t *testing.T) {
 	ok := func(context.Context) error { return nil }

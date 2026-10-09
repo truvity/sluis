@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -32,7 +31,7 @@ func serveTwoTenants(t *testing.T, grant *server.Grant) directoryv1connect.Direc
 		WithGroup("platform@other.example", "carol@other.example")
 
 	h := hub.New(hub.NewMemoryStore(), hub.NewMemorySnapshots(), hub.Config{},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.DiscardHandler))
 	for _, tenant := range []struct {
 		id, admin string
 		backend   *fake.Backend

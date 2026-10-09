@@ -45,7 +45,7 @@ func openStores(t *testing.T, f *config.Serve) *store.Stores {
 		t.Fatalf("store.FromServe: %v", err)
 	}
 	sc.Secrets = secrets.Env{}
-	st, err := store.Open(context.Background(), sc, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	st, err := store.Open(context.Background(), sc, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -62,7 +62,7 @@ func boot(t *testing.T, change ...func(*config.Serve)) *app.App {
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
-	assembled, err := app.New(context.Background(), cfg, openStores(t, f), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	assembled, err := app.New(context.Background(), cfg, openStores(t, f), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

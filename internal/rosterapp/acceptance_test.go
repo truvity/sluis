@@ -3,7 +3,6 @@ package rosterapp_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +55,7 @@ policyDir: `+dir+`
 listen: {address: ":0"}
 probes: {address: ":0"}
 `)
-	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -146,7 +145,7 @@ probes: {address: ":0"}
 store: memory
 demo: true
 `)
-	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	app, err := rosterapp.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

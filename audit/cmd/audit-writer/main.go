@@ -66,7 +66,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("audit-writer", "error", err)
+		slog.ErrorContext(context.Background(), "audit-writer", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -184,7 +184,7 @@ func run() error {
 		}
 		sourceOf = callers.Map.SourceFrom
 	case cfg.AnonymousWrites:
-		slog.Warn("accepting writes from callers nobody verified: records written over HTTP " +
+		slog.WarnContext(context.Background(), "accepting writes from callers nobody verified: records written over HTTP "+
 			"carry no observer identity, and anyone who can reach this port can write them")
 	default:
 		// Unreachable: the schema requires one of the two.
@@ -321,8 +321,8 @@ func run() error {
 			// A gap in coverage is the deployment's to close, not a reason to
 			// refuse the application that registered while it was open.
 			OnUncovered: func(_ context.Context, profile string, missing []string) {
-				slog.Warn("a profile requires categories no registered catalogue emits",
-					"profile", profile, "missing", missing)
+				slog.WarnContext(context.Background(), "a profile requires categories no registered catalogue emits",
+					slog.String("profile", profile), slog.Any("missing", missing))
 			},
 			// Recorded through this writer itself: a catalogue arriving changes
 			// what the archive's records mean, so the archive should say when.
@@ -335,7 +335,7 @@ func run() error {
 		regPath, regHandler := registry.NewHandler(reg)
 		mux.Handle(regPath, auth.Middleware(authenticated, regHandler))
 	} else {
-		slog.Warn("no database: this writer serves no catalogue registration, " +
+		slog.WarnContext(context.Background(), "no database: this writer serves no catalogue registration, "+
 			"because a registered catalogue is kept in the database")
 	}
 
@@ -351,11 +351,12 @@ func run() error {
 		defer cancel()
 		_ = server.Shutdown(stopping)
 		if err := shutdown(stopping); err != nil {
-			slog.Error("flushing on shutdown", "error", err)
+			slog.ErrorContext(context.Background(), "flushing on shutdown", slog.Any("error", err))
 		}
 	}()
 
-	slog.Info("audit-writer", "mode", cfg.Mode, "listen", cfg.Listen.Address, "presets", len(d.Presets), "profiles", len(profiles))
+	slog.InfoContext(context.Background(), "audit-writer", slog.String("mode", cfg.Mode), slog.String("listen", cfg.Listen.Address),
+		slog.Int("presets", len(d.Presets)), slog.Int("profiles", len(profiles)))
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -374,8 +375,8 @@ func recorder(to sink.Sink, version string) func(context.Context, registry.Entry
 			// The catalogue is registered and the trail does not say so. A
 			// deployment alerts on this: what a record means has changed and
 			// there is no event marking when.
-			slog.Error("a catalogue was registered and could not be recorded",
-				"source", e.Source, "version", e.Version, "error", err)
+			slog.ErrorContext(ctx, "a catalogue was registered and could not be recorded",
+				slog.String("event_source", e.Source), slog.String("version", e.Version), slog.Any("error", err))
 		}
 	}
 }
@@ -424,7 +425,7 @@ func loadAll(dir string) ([]*catalogue.Catalogue, error) {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		out = append(out, c)
-		slog.Info("catalogue registered", "source", c.Source, "version", c.Version)
+		slog.InfoContext(context.Background(), "catalogue registered", slog.String("event_source", c.Source), slog.String("version", c.Version))
 	}
 	return out, nil
 }
@@ -521,7 +522,7 @@ func publisherFor(ctx context.Context, o streamOptions) (sink.Sink, func(), erro
 		conn.Close()
 		return nil, nil, err
 	}
-	slog.Info("publishing to the stream", "stream", o.Stream, "subject", info.Config.Subjects[0])
+	slog.InfoContext(ctx, "publishing to the stream", slog.String("stream", o.Stream), slog.String("subject", info.Config.Subjects[0]))
 	return p, conn.Close, nil
 }
 
@@ -581,7 +582,7 @@ func consume(ctx context.Context, o streamOptions, target sink.Sink) (func(), er
 			// The batch is not acknowledged, so the stream brings it back after
 			// AckWait. Saying so is the only way a deployment learns that
 			// records are going round rather than through.
-			slog.Error("the writer refused a batch from the stream", "error", err)
+			slog.ErrorContext(ctx, "the writer refused a batch from the stream", slog.Any("error", err))
 		},
 	})
 	if err != nil {
@@ -598,7 +599,7 @@ func consume(ctx context.Context, o streamOptions, target sink.Sink) (func(), er
 				// Asked to stop: an orderly shutdown, not a fault.
 				return
 			}
-			slog.Error("the stream consumer stopped", "error", err)
+			slog.ErrorContext(ctx, "the stream consumer stopped", slog.Any("error", err))
 			if o.OnStopped != nil {
 				o.OnStopped(err)
 			}
@@ -607,7 +608,7 @@ func consume(ctx context.Context, o streamOptions, target sink.Sink) (func(), er
 	if o.connHook != nil {
 		o.connHook(conn)
 	}
-	slog.Info("consuming the stream", "url", o.URL, "stream", o.Stream, "consumer", o.Durable)
+	slog.InfoContext(ctx, "consuming the stream", slog.String("url", o.URL), slog.String("stream", o.Stream), slog.String("consumer", o.Durable))
 
 	return func() {
 		// Stop fetching, wait for the batch in hand, then let the connection

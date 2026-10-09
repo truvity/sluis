@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // connectOptions are how both ends of the stream connect: the receiver that
@@ -50,25 +52,25 @@ func connectOptions(name string, o streamOptions) []nats.Option {
 				// with. Expiry is the ordinary end of one, and the reconnect
 				// that follows presents the renewed token.
 				lease.sawExpiry()
-				log.Info("the stream token expired; reconnecting with the renewed one")
+				log.InfoContext(context.Background(), "the stream token expired; reconnecting with the renewed one")
 				return
 			}
-			attrs := []any{"error", err}
+			attrs := []slog.Attr{slog.Any("error", err)}
 			if sub != nil {
-				attrs = append(attrs, "subject", sub.Subject)
+				attrs = append(attrs, logattr.SafeString("subject", sub.Subject))
 			}
-			log.Error("stream connection error", attrs...)
+			log.LogAttrs(context.Background(), slog.LevelError, "stream connection error", attrs...)
 		}),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			switch {
 			case err == nil:
 				// A disconnect the client chose: a planned reconnect, or a
 				// close. Nothing went wrong.
-				log.Info("disconnected from the stream")
+				log.InfoContext(context.Background(), "disconnected from the stream")
 			case lease.expiredRecently():
-				log.Info("disconnected from the stream after its token expired", "error", err)
+				log.InfoContext(context.Background(), "disconnected from the stream after its token expired", slog.Any("error", err))
 			default:
-				log.Error("disconnected from the stream", "error", err)
+				log.ErrorContext(context.Background(), "disconnected from the stream", slog.Any("error", err))
 			}
 		}),
 		nats.ConnectHandler(func(c *nats.Conn) {
@@ -76,7 +78,7 @@ func connectOptions(name string, o streamOptions) []nats.Option {
 		}),
 		nats.ReconnectHandler(func(c *nats.Conn) {
 			lease.bind(c)
-			log.Info("reconnected to the stream", "url", c.ConnectedUrl())
+			log.InfoContext(context.Background(), "reconnected to the stream", slog.String("url", c.ConnectedUrl()))
 		}),
 		nats.ClosedHandler(func(*nats.Conn) {
 			lease.stop()
@@ -162,7 +164,7 @@ func newTokenLease(path string, lead time.Duration) *tokenLease {
 func (l *tokenLease) token() string {
 	data, err := os.ReadFile(l.path)
 	if err != nil {
-		l.log.Error("reading the stream token", "path", l.path, "error", err)
+		l.log.ErrorContext(context.Background(), "reading the stream token", slog.String("path", l.path), slog.Any("error", err))
 		return ""
 	}
 	token := strings.TrimSpace(string(data))
@@ -195,9 +197,9 @@ func (l *tokenLease) presented(expires time.Time) {
 		// The file still holds a token about to expire, so reconnecting early
 		// would present the same one again. The broker's expiry, and the
 		// reconnect after it, reads the file again.
-		l.log.Warn("the stream token expires too soon to reconnect before it; "+
+		l.log.WarnContext(context.Background(), "the stream token expires too soon to reconnect before it; "+
 			"the connection will be renewed when the broker expires it",
-			"expires", expires.UTC().Format(time.RFC3339))
+			slog.String("expires", expires.UTC().Format(time.RFC3339)))
 		return
 	}
 	l.timer = l.after(in, l.renew)
@@ -212,10 +214,10 @@ func (l *tokenLease) renew() {
 	if stopped || conn == nil {
 		return
 	}
-	l.log.Info("reconnecting to the stream before its token expires",
-		"expires", expires.UTC().Format(time.RFC3339))
+	l.log.InfoContext(context.Background(), "reconnecting to the stream before its token expires",
+		slog.String("expires", expires.UTC().Format(time.RFC3339)))
 	if err := conn.ForceReconnect(); err != nil && !errors.Is(err, nats.ErrConnectionClosed) {
-		l.log.Error("reconnecting to the stream before its token expires", "error", err)
+		l.log.ErrorContext(context.Background(), "reconnecting to the stream before its token expires", slog.Any("error", err))
 	}
 }
 

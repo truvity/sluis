@@ -3,7 +3,6 @@ package store_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -17,7 +16,7 @@ import (
 	"github.com/truvity/sluis/internal/store"
 )
 
-var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+var quiet = slog.New(slog.DiscardHandler)
 
 func TestTheDefaultAdapterIsTheLegacyOne(t *testing.T) {
 	cfg, err := store.FromServe(&config.Serve{IssuerURL: "https://i.example"})

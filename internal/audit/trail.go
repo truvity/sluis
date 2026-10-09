@@ -19,7 +19,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/sink"
 	"go.opentelemetry.io/otel"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Config says which installation to connect to, if any.
@@ -113,7 +113,7 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 
 	hooks, err := emit.Instrument(emit.Hooks{
 		OnRefused: func(r *record.Record, err error) {
-			log.Error("an audit record does not satisfy the catalogue", "action", r.GetAction(), "error", logsafe.Error(err))
+			log.ErrorContext(ctx, "an audit record does not satisfy the catalogue", slog.String("action", r.GetAction()), logattr.SafeError("error", err))
 		},
 		OnFailed: func(err error, delivery sink.Delivery, n int) {
 			t.degraded.Store(true)
@@ -121,18 +121,19 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 				// Retrying will not mend a token the writer does not trust.
 				// Say what to look at, rather than "could not be reached"
 				// until the queue gives up.
-				log.Error("the audit installation does not trust this workload's token; records will not be kept until it does",
-					"records", n, "token_file", cfg.TokenFile, "error", logsafe.Error(err))
+				log.ErrorContext(ctx, "the audit installation does not trust this workload's token; records will not be kept until it does",
+					slog.Int("records", n), slog.String("token_file", cfg.TokenFile), logattr.SafeError("error", err))
 				return
 			}
-			log.Warn("audit records could not be delivered yet", "records", n, "delivery", delivery.String(), "error", logsafe.Error(err))
+			log.WarnContext(ctx, "audit records could not be delivered yet", slog.Int("records", n), slog.String("delivery", delivery.String()),
+				logattr.SafeError("error", err))
 		},
 		// The queue gave one up. The Info line for this record was written
 		// when it was made and reads as kept; this is the line that says it
 		// was not, by id, so the two can be found from each other.
 		OnDropped: func(r *record.Record, reason string) {
-			log.Error("audit record dropped and is not in the trail",
-				"audit.id", r.GetId(), "audit.action", r.GetAction(), "reason", reason)
+			log.ErrorContext(ctx, "audit record dropped and is not in the trail",
+				dotted("audit.id", r.GetId()), dotted("audit.action", r.GetAction()), slog.String("reason", reason))
 		},
 	}, otel.GetMeterProvider())
 	if err != nil {
@@ -145,8 +146,8 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 	}
 
 	if !t.connected {
-		log.Warn("no audit installation is connected: records are validated and logged, and kept nowhere else",
-			"audit", "log")
+		log.WarnContext(ctx, "no audit installation is connected: records are validated and logged, and kept nowhere else",
+			slog.String("audit", "log"))
 		options.Sink = sink.Discard
 		if t.emitter, err = emit.New(options); err != nil {
 			return nil, err
@@ -186,16 +187,16 @@ func Open(ctx context.Context, cfg Config) (*Trail, error) {
 		_ = t.Close()
 		return nil, err
 	case notTrusted(err):
-		log.Error("the audit installation does not trust this workload's token; registration is retried, and records will not be kept until it does",
-			"writer", cfg.Writer, "token_file", cfg.TokenFile, "error", logsafe.Error(err))
+		log.ErrorContext(ctx, "the audit installation does not trust this workload's token; registration is retried, and records will not be kept until it does",
+			slog.String("writer", cfg.Writer), slog.String("token_file", cfg.TokenFile), logattr.SafeError("error", err))
 		t.retryRegistration(ctx, registration)
 	case err != nil:
-		log.Warn("the audit installation could not be reached; records wait in the emitter's queue, and registration is retried",
-			"writer", cfg.Writer, "error", logsafe.Error(err))
+		log.WarnContext(ctx, "the audit installation could not be reached; records wait in the emitter's queue, and registration is retried",
+			slog.String("writer", cfg.Writer), logattr.SafeError("error", err))
 		t.retryRegistration(ctx, registration)
 	default:
-		log.Info("audit installation connected", "audit", "connected",
-			"writer", cfg.Writer, "catalogue", c.Source+"@"+c.Version)
+		log.InfoContext(ctx, "audit installation connected", slog.String("audit", "connected"),
+			slog.String("writer", cfg.Writer), slog.String("catalogue", c.Source+"@"+c.Version))
 	}
 	return t, nil
 }
@@ -230,8 +231,9 @@ func (t *Trail) openSQS(ctx context.Context, cfg Config, options emit.Options) (
 		_ = t.Close()
 		return nil, err
 	}
-	t.log.Info("audit records are published to SQS; the catalogue is not registered, because it is delivered with the audit writer's package",
-		"audit", "sqs", "queue", cfg.SQS.QueueURL, "catalogue", t.catalogue.Source+"@"+t.catalogue.Version, "sync", t.sync)
+	t.log.InfoContext(ctx, "audit records are published to SQS; the catalogue is not registered, because it is delivered with the audit writer's package",
+		slog.String("audit", "sqs"), slog.String("queue", cfg.SQS.QueueURL), slog.String("catalogue", t.catalogue.Source+"@"+t.catalogue.Version),
+		slog.Bool("sync", t.sync))
 	return t, nil
 }
 
@@ -276,11 +278,11 @@ func (t *Trail) registerUntilDone(ctx context.Context, r emit.Registration) {
 		err := register(ctx, r)
 		switch {
 		case err == nil:
-			t.log.Info("audit catalogue registered", "audit", "connected", "catalogue", r.Source+"@"+r.Version)
+			t.log.InfoContext(ctx, "audit catalogue registered", slog.String("audit", "connected"), slog.String("catalogue", r.Source+"@"+r.Version))
 			return
 		case errors.Is(err, emit.ErrCatalogueRefused):
-			t.log.Error("the audit installation refused the catalogue; records will not be kept until it is fixed",
-				"error", logsafe.Error(err))
+			t.log.ErrorContext(ctx, "the audit installation refused the catalogue; records will not be kept until it is fixed",
+				logattr.SafeError("error", err))
 			if t.onFatal != nil {
 				t.onFatal(err)
 			}
@@ -314,7 +316,7 @@ func (t *Trail) Record(ctx context.Context, r *record.Record) {
 		defer cancel()
 		if err := t.Flush(wait); err != nil {
 			t.log.WarnContext(ctx, "an audit record is still queued after the wait; it is retried while this process runs",
-				"audit.id", r.GetId(), "audit.action", r.GetAction(), "error", logsafe.Error(err))
+				dotted("audit.id", r.GetId()), dotted("audit.action", r.GetAction()), logattr.SafeError("error", err))
 		}
 	}
 }
@@ -366,29 +368,29 @@ func (t *Trail) RecordDurable(ctx context.Context, r *record.Record) error {
 // line is the record as one log line: the same record, so that whoever reads
 // the logs and whoever reads the trail can find one from the other by id.
 func (t *Trail) line(ctx context.Context, r *record.Record, err error) {
-	attrs := []any{
-		"audit", true,
-		"audit.id", r.GetId(),
-		"audit.action", r.GetAction(),
-		"audit.outcome", strings.ToLower(strings.TrimPrefix(r.GetOutcome().GetResult().String(), "RESULT_")),
+	attrs := []slog.Attr{
+		slog.Bool("audit", true),
+		dotted("audit.id", r.GetId()),
+		dotted("audit.action", r.GetAction()),
+		dotted("audit.outcome", strings.ToLower(strings.TrimPrefix(r.GetOutcome().GetResult().String(), "RESULT_"))),
 	}
 	if a := r.GetActor(); a != nil {
-		attrs = append(attrs, "audit.actor.kind", a.GetKind(), "audit.actor.id", logsafe.Value(a.GetId()))
+		attrs = append(attrs, dotted("audit.actor.kind", a.GetKind()), dotted("audit.actor.id", logattr.Safe(a.GetId())))
 	}
 	if s := r.GetSubject(); s != nil {
-		attrs = append(attrs, "audit.subject.id", logsafe.Value(s.GetId()))
+		attrs = append(attrs, dotted("audit.subject.id", logattr.Safe(s.GetId())))
 	}
 	for i, target := range r.GetTargets() {
-		attrs = append(attrs, fmt.Sprintf("audit.targets.%d", i), target.GetType()+":"+logsafe.Value(target.GetId()))
+		attrs = append(attrs, dotted(fmt.Sprintf("audit.targets.%d", i), target.GetType()+":"+logattr.Safe(target.GetId())))
 	}
 	if reason := r.GetOutcome().GetReason(); reason != "" {
-		attrs = append(attrs, "audit.reason", logsafe.Value(reason))
+		attrs = append(attrs, dotted("audit.reason", logattr.Safe(reason)))
 	}
 	if err != nil {
-		t.log.WarnContext(ctx, "audit record not kept", append(attrs, "error", logsafe.Error(err))...)
+		t.log.LogAttrs(ctx, slog.LevelWarn, "audit record not kept", append(attrs, logattr.SafeError("error", err))...)
 		return
 	}
-	t.log.InfoContext(ctx, "audit", attrs...)
+	t.log.LogAttrs(ctx, slog.LevelInfo, "audit", attrs...)
 }
 
 // Close stops retrying registration and closes the emitter, which delivers
@@ -420,4 +422,13 @@ func schemaID(raw []byte) (string, error) {
 		return "", errors.New("a schema without an $id")
 	}
 	return head.ID, nil
+}
+
+// dotted is a string attribute under a dotted key. The audit log line's keys
+// (audit.id, audit.action, ...) are a documented contract of
+// docs/how-to/read-the-audit-trail.md, flat and dotted by design, so they are
+// outside the snake_case rule the other keys follow; the key is a parameter so
+// that the exception is made here, once, and nowhere else.
+func dotted(key, value string) slog.Attr {
+	return slog.String(key, value)
 }

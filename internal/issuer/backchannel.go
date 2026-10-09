@@ -14,7 +14,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Back-Channel Logout tells a relying party, server to server, that a
@@ -90,13 +90,13 @@ func (s *Storage) announceLogout(ctx context.Context, log *slog.Logger, ended []
 
 			if err := s.postLogoutToken(ctx, declared.BackChannelLogout, one); err != nil {
 				log.WarnContext(ctx, "a client could not be told its session ended",
-					"client_id", logsafe.Value(one.ClientID), "error", logsafe.Error(err))
+					logattr.SafeString("client_id", one.ClientID), logattr.SafeError("error", err))
 
 				return
 			}
 
 			log.InfoContext(ctx, "told a client its session ended",
-				"client_id", logsafe.Value(one.ClientID))
+				logattr.SafeString("client_id", one.ClientID))
 		}()
 	}
 

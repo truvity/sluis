@@ -2,7 +2,6 @@ package kube_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -21,7 +20,7 @@ func TestAConnectedDirectoryStillAnswersAfterARestart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	client := newClient()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 
 	directory := fake.New("C0north", "north.example").
 		WithAccount("ada@north.example", "Ada", "North").

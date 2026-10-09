@@ -40,9 +40,9 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Info("starting", slog.String("version", version.String()))
+	log.InfoContext(context.Background(), "starting", slog.String("version", version.String()))
 	if err := resourceproxy.Run(ctx, cfg, log); err != nil {
-		log.Error("stopped", slog.String("error", err.Error()))
+		log.ErrorContext(context.Background(), "stopped", slog.String("error", err.Error()))
 		return 1
 	}
 	return 0

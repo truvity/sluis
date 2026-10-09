@@ -15,7 +15,7 @@ import (
 
 	"github.com/truvity/sluis/backend"
 	"github.com/truvity/sluis/internal/emailaddr"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // ErrInvalidAddress is returned for an address the hub cannot route.
@@ -239,7 +239,8 @@ func (h *Hub) refreshSoon(ctx context.Context, workspaceID, why string) {
 		defer cancel()
 		defer h.refreshing.Delete(workspaceID)
 		if _, err := h.Refresh(detached, workspaceID); err != nil {
-			h.log.WarnContext(detached, why, "workspace", logsafe.Value(workspaceID), "error", logsafe.Error(err))
+			h.log.WarnContext(detached, "a background refresh failed", slog.String("why", why), logattr.SafeString("workspace", workspaceID),
+				logattr.SafeError("error", err))
 		}
 	}()
 }
@@ -449,13 +450,13 @@ func (h *Hub) reopen(ctx context.Context, id string) (backend.Backend, bool) {
 		h.backends[id] = reader
 		h.mu.Unlock()
 		h.log.InfoContext(ctx, "opened a workspace this replica had not seen",
-			"workspace", logsafe.Value(id), "backend", logsafe.Value(ws.Backend), "credential", logsafe.Value(cred.Type))
+			logattr.SafeString("workspace", id), logattr.SafeString("backend", ws.Backend), logattr.SafeString("credential", cred.Type))
 		return reader, nil
 	})
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			h.log.WarnContext(ctx, "a workspace could not be opened",
-				"workspace", logsafe.Value(id), "error", logsafe.Error(err))
+				logattr.SafeString("workspace", id), logattr.SafeError("error", err))
 		}
 		return nil, false
 	}
@@ -498,7 +499,7 @@ func (h *Hub) Describe(ctx context.Context) ([]ServedDomain, error) {
 		snap, ok := snaps[ws.ID]
 		if !ok {
 			if snap, err = h.snapshots.Get(ctx, ws.ID); err != nil {
-				h.log.WarnContext(ctx, "snapshot unreadable", "workspace", ws.ID, "error", err)
+				h.log.WarnContext(ctx, "snapshot unreadable", slog.String("workspace", ws.ID), slog.Any("error", err))
 			}
 			snaps[ws.ID] = snap
 		}
@@ -545,7 +546,7 @@ func (h *Hub) point(ctx context.Context, v view, email string, maxAge *time.Dura
 
 	snap, err := h.snapshots.Get(ctx, ws.ID)
 	if err != nil {
-		h.log.WarnContext(ctx, "snapshot unreadable", "workspace", ws.ID, "error", err)
+		h.log.WarnContext(ctx, "snapshot unreadable", slog.String("workspace", ws.ID), slog.Any("error", err))
 	}
 	if maxAge == nil {
 		snap = h.keepFresh(ctx, ws.ID, snap)
@@ -612,7 +613,7 @@ func (h *Hub) pointLive(
 		// is the whole reason the line is useful and the reason it needs
 		// sanitising: an address is a caller's input.
 		h.log.WarnContext(ctx, "live account read failed",
-			"workspace", ws.ID, "error", logsafe.Error(err))
+			slog.String("workspace", ws.ID), logattr.SafeError("error", err))
 		return pointResult{}, false
 	}
 
@@ -620,7 +621,7 @@ func (h *Hub) pointLive(
 		patched := snap.clone()
 		patched.patchAccount(email, account, found, groups)
 		if err = h.snapshots.Put(ctx, patched); err != nil {
-			h.log.WarnContext(ctx, "snapshot patch failed", "workspace", ws.ID, "error", err)
+			h.log.WarnContext(ctx, "snapshot patch failed", slog.String("workspace", ws.ID), slog.Any("error", err))
 		}
 	}
 
@@ -814,7 +815,7 @@ func (h *Hub) ListGroups(ctx context.Context, domain string, maxAge *time.Durati
 func (h *Hub) ensureFresh(ctx context.Context, workspaceID string, maxAge *time.Duration) *Snapshot {
 	snap, err := h.snapshots.Get(ctx, workspaceID)
 	if err != nil {
-		h.log.WarnContext(ctx, "snapshot unreadable", "workspace", workspaceID, "error", err)
+		h.log.WarnContext(ctx, "snapshot unreadable", slog.String("workspace", workspaceID), slog.Any("error", err))
 	}
 	// No freshness demand, no directory read. The contract is that an
 	// omitted max_age serves the snapshot, and "there is no snapshot yet"
@@ -832,7 +833,7 @@ func (h *Hub) ensureFresh(ctx context.Context, workspaceID string, maxAge *time.
 		return snap
 	}
 	if _, err = h.Refresh(ctx, workspaceID); err != nil {
-		h.log.WarnContext(ctx, "refresh failed, serving what we have", "workspace", workspaceID, "error", err)
+		h.log.WarnContext(ctx, "refresh failed, serving what we have", slog.String("workspace", workspaceID), slog.Any("error", err))
 		return snap
 	}
 	fresh, err := h.snapshots.Get(ctx, workspaceID)
@@ -936,9 +937,9 @@ func (h *Hub) Refresh(ctx context.Context, workspaceID string) (time.Time, error
 		// The duration is the number an operator needs when a tenant feels
 		// slow, and it is measured on the wall clock rather than the hub's
 		// so that a test with a frozen clock still reports the truth.
-		h.log.InfoContext(ctx, "snapshot taken", "workspace", logsafe.Value(workspaceID),
-			"accounts", len(accounts), "groups", len(groups), "discovered", len(discovered),
-			"took", time.Since(started).Round(time.Millisecond).String())
+		h.log.InfoContext(ctx, "snapshot taken", logattr.SafeString("workspace", workspaceID),
+			slog.Int("accounts", len(accounts)), slog.Int("groups", len(groups)), slog.Int("discovered", len(discovered)),
+			slog.String("took", time.Since(started).Round(time.Millisecond).String()))
 		return snap.TakenAt, nil
 	})
 	if err != nil {
@@ -1018,7 +1019,7 @@ func (h *Hub) probeOne(ctx context.Context, ws Workspace) WorkspaceHealth {
 				break
 			}
 			h.log.InfoContext(ctx, "the directory could not be asked; trying again",
-				"workspace", ws.ID, "attempt", attempt, "error", logsafe.Error(err))
+				slog.String("workspace", ws.ID), slog.Int("attempt", attempt), logattr.SafeError("error", err))
 			select {
 			case <-ctx.Done():
 			case <-time.After(probeBackoff):
@@ -1042,7 +1043,7 @@ func (h *Hub) probeOne(ctx context.Context, ws Workspace) WorkspaceHealth {
 	}
 	ws.Health = Health{ProbedAt: now, OK: health.OK, Error: health.Detail}
 	if err := h.store.Put(ctx, ws); err != nil {
-		h.log.WarnContext(ctx, "storing probe outcome failed", "workspace", ws.ID, "error", err)
+		h.log.WarnContext(ctx, "storing probe outcome failed", slog.String("workspace", ws.ID), slog.Any("error", err))
 	}
 	return health
 }
@@ -1208,10 +1209,10 @@ func (h *Hub) SetServed(ctx context.Context, workspaceID string, domains []strin
 	if snap, snapErr := h.snapshots.Get(ctx, workspaceID); snapErr == nil && snap != nil {
 		if err = h.snapshots.Put(ctx, snap.narrow(ws.Served())); err != nil {
 			h.log.WarnContext(ctx, "narrowing the snapshot failed; dropping it",
-				"workspace", workspaceID, "error", err)
+				slog.String("workspace", workspaceID), slog.Any("error", err))
 			if delErr := h.snapshots.Delete(ctx, workspaceID); delErr != nil {
 				h.log.WarnContext(ctx, "dropping the snapshot failed",
-					"workspace", workspaceID, "error", delErr)
+					slog.String("workspace", workspaceID), slog.Any("error", delErr))
 			}
 		}
 	}
@@ -1257,7 +1258,7 @@ func (h *Hub) SetSynced(ctx context.Context, workspaceID string, groups []string
 	if snap, snapErr := h.snapshots.Get(ctx, workspaceID); snapErr == nil && snap != nil {
 		if err = h.snapshots.Put(ctx, snap.narrowGroups(sync)); err != nil {
 			h.log.WarnContext(ctx, "narrowing the snapshot's groups failed",
-				"workspace", workspaceID, "error", err)
+				slog.String("workspace", workspaceID), slog.Any("error", err))
 		}
 	}
 	h.refreshSoon(ctx, workspaceID, "refresh after narrowing the groups failed")
@@ -1278,15 +1279,15 @@ func (h *Hub) Disconnect(ctx context.Context, workspaceID string) error {
 	if b, ok := h.backendFor(ctx, workspaceID); ok {
 		if err = b.Revoke(ctx); err != nil && !errors.Is(err, backend.ErrUnsupported) {
 			h.log.WarnContext(ctx, "revoking the credential failed; removing it anyway",
-				"workspace", workspaceID, "error", err)
+				slog.String("workspace", workspaceID), slog.Any("error", err))
 		}
 	}
 	if err = h.snapshots.Delete(ctx, workspaceID); err != nil {
-		h.log.WarnContext(ctx, "deleting the snapshot failed", "workspace", workspaceID, "error", err)
+		h.log.WarnContext(ctx, "deleting the snapshot failed", slog.String("workspace", workspaceID), slog.Any("error", err))
 	}
 	if h.credentials != nil {
 		if err = h.credentials.Delete(ctx, workspaceID); err != nil {
-			h.log.WarnContext(ctx, "deleting the credential failed", "workspace", workspaceID, "error", err)
+			h.log.WarnContext(ctx, "deleting the credential failed", slog.String("workspace", workspaceID), slog.Any("error", err))
 		}
 	}
 	h.mu.Lock()
@@ -1385,7 +1386,7 @@ func (h *Hub) WorkspaceViews(ctx context.Context) ([]WorkspaceView, error) {
 		ws := v.workspaces[id]
 		snap, snapErr := h.snapshots.Get(ctx, id)
 		if snapErr != nil {
-			h.log.WarnContext(ctx, "snapshot unreadable", "workspace", id, "error", snapErr)
+			h.log.WarnContext(ctx, "snapshot unreadable", slog.String("workspace", id), slog.Any("error", snapErr))
 		}
 		served := ws.Served()
 		// The discovered domains and any the deployment asked for and the

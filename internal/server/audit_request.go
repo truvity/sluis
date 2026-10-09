@@ -9,7 +9,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/emit"
 	"github.com/truvity/sluis/audit/sdk/record"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // The bounds on what a record keeps of a request. Each value is chosen by
@@ -64,7 +64,7 @@ func auditRequest(r *http.Request, trustedHops int) *record.Context {
 // bounded is a value made safe for a log line and cut, on a rune boundary,
 // to limit bytes.
 func bounded(value string, limit int) string {
-	value = logsafe.Value(value)
+	value = logattr.Safe(value)
 	if len(value) <= limit {
 		return value
 	}

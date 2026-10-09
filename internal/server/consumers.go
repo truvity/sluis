@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Consumers is who may call the API listener.
@@ -71,13 +71,13 @@ func (c *Consumers) Middleware(next http.Handler) http.Handler {
 			// two it was is in the hub's log, where an operator can see
 			// it and a caller cannot.
 			log.WarnContext(r.Context(), "API call refused",
-				"path", logsafe.Value(r.URL.Path), "error", logsafe.Error(err))
+				logattr.SafeString("path", r.URL.Path), logattr.SafeError("error", err))
 			refuse(w, "that token was not accepted")
 			return
 		}
 		if !slices.Contains(c.Allowed, subject) {
 			log.WarnContext(r.Context(), "API call refused: not a consumer",
-				"path", logsafe.Value(r.URL.Path), "subject", logsafe.Value(subject))
+				logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject))
 			refuse(w, subject+" is not a consumer of this hub")
 			return
 		}
@@ -89,14 +89,14 @@ func (c *Consumers) Middleware(next http.Handler) http.Handler {
 			// a caller may see, and a call it has no entry for is one
 			// nobody has decided about.
 			log.WarnContext(r.Context(), "API call refused: not a procedure of this service",
-				"path", logsafe.Value(r.URL.Path), "subject", logsafe.Value(subject))
+				logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject))
 			deny(w, "this listener serves directory.v1.DirectoryService and nothing else")
 			return
 		}
 		if !grant.Allows(read) {
 			log.WarnContext(r.Context(), "API call refused: outside the grant",
-				"path", logsafe.Value(r.URL.Path), "subject", logsafe.Value(subject),
-				"read", string(read), "granted", grantedReads(grant))
+				logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject),
+				slog.String("read", string(read)), slog.Any("granted", grantedReads(grant)))
 			deny(w, "this consumer may not "+string(read))
 			return
 		}
@@ -104,8 +104,8 @@ func (c *Consumers) Middleware(next http.Handler) http.Handler {
 		// through. A grant nobody can see the effect of is one an
 		// operator has to reason about from the declaration alone.
 		log.DebugContext(r.Context(), "API call admitted",
-			"path", logsafe.Value(r.URL.Path), "subject", logsafe.Value(subject),
-			"read", string(read), "scoped", !grant.Everything())
+			logattr.SafeString("path", r.URL.Path), logattr.SafeString("subject", subject),
+			slog.String("read", string(read)), slog.Bool("scoped", !grant.Everything()))
 		next.ServeHTTP(w, r.WithContext(WithGrant(r.Context(), grant)))
 	})
 }

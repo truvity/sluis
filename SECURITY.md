@@ -37,7 +37,7 @@ Each property links the page that owns it; this file does not restate them.
 - A client may describe itself over HTTPS only when `client_documents.origins` allows its
   host (an SSRF surface bounded by that list: 64 KiB, 5 seconds, no redirect).
   [policy clients](docs/reference/policy-clients.md#clients-that-describe-themselves)
-- Every request-derived value is routed through `logsafe` before it is logged.
+- Every request-derived value is routed through `logattr` (`storage/logattr`) before it is logged.
 - The client address in an audit record is read from `X-Forwarded-For` only as far as
   `audit.forwardedForTrustedHops` says: set it to the deployment's own proxies and no more.
 

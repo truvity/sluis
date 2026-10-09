@@ -25,9 +25,9 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/emailaddr"
 	"github.com/truvity/sluis/internal/hub"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // ForwardedIdentity configures how a bearer forwarded by an authenticating
@@ -362,7 +362,7 @@ func (s *ConsoleServer) index(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if _, err = w.Write(page); err != nil {
-		s.log.WarnContext(r.Context(), "console shell could not be written", "error", err)
+		s.log.WarnContext(r.Context(), "console shell could not be written", slog.Any("error", err))
 	}
 }
 
@@ -389,8 +389,8 @@ func (s *ConsoleServer) withIdentity(next http.Handler) http.Handler {
 			// does not say who was refused is not one — and it is safe to
 			// write by construction rather than by the handler's choice.
 			s.log.InfoContext(r.Context(), "authorization refused",
-				"email", logsafe.Value(principal.Email),
-				"source", logsafe.Value(string(principal.Source)), "error", logsafe.Error(err))
+				logattr.SafeString("email", principal.Email),
+				logattr.SafeString("principal_source", string(principal.Source)), logattr.SafeError("error", err))
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -453,7 +453,7 @@ func (s *ConsoleServer) principal(w http.ResponseWriter, r *http.Request) (acces
 		}
 		if email != "" {
 			s.log.WarnContext(r.Context(), "the forwarded identity header is not an address; ignoring it",
-				"header", s.forwarded.EmailHeader, "length", len(email))
+				slog.String("header", s.forwarded.EmailHeader), slog.Int("length", len(email)))
 		}
 	}
 	return access.Principal{}, false
@@ -594,7 +594,7 @@ func (s *ConsoleServer) writePage(w http.ResponseWriter, r *http.Request, status
 	_, err := io.WriteString(w, `<!doctype html><meta charset="utf-8"><title>`+
 		html.EscapeString(title)+` — sluis</title><style>`+consoleCSS+`</style><main>`+body+`</main>`)
 	if err != nil {
-		s.log.WarnContext(r.Context(), "page could not be written", "title", title, "error", err)
+		s.log.WarnContext(r.Context(), "page could not be written", slog.String("title", title), slog.Any("error", err))
 	}
 }
 
@@ -656,7 +656,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	email, err := connector.Identify(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "sign-in exchange failed",
-			"backend", connector.Kind(), "error", logsafe.Error(err))
+			slog.String("backend", connector.Kind()), logattr.SafeError("error", err))
 		http.Error(w, "the sign-in could not be completed: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -671,7 +671,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	known, err := s.hub.ResolveUser(r.Context(), email, nil)
 	switch {
 	case err != nil:
-		s.log.ErrorContext(r.Context(), "sign-in could not be resolved", "email", logsafe.Value(email), "error", logsafe.Error(err))
+		s.log.ErrorContext(r.Context(), "sign-in could not be resolved", logattr.SafeString("email", email), logattr.SafeError("error", err))
 		http.Error(w, "signed in as "+email+", but the directory could not be read: "+err.Error(),
 			http.StatusServiceUnavailable)
 		return
@@ -690,7 +690,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The one Authorize refuses outright is an account the directory
 		// authoritatively says is not live.
-		s.log.WarnContext(r.Context(), "sign-in refused", "email", logsafe.Value(email), "error", logsafe.Error(err))
+		s.log.WarnContext(r.Context(), "sign-in refused", logattr.SafeString("email", email), logattr.SafeError("error", err))
 		s.console.record(r.Context(), audit.SignedIn(audit.Person(email), "console", connector.Kind(),
 			audit.Denied("the directory says this account is not live")))
 		http.Error(w, "signed in as "+email+", but that address cannot be served: "+err.Error(),
@@ -705,7 +705,7 @@ func (s *ConsoleServer) signInCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.InfoContext(r.Context(), "signed in",
-		"email", logsafe.Value(email), "backend", connector.Kind(), "role", identity.Role)
+		logattr.SafeString("email", email), slog.String("backend", connector.Kind()), slog.Any("role", identity.Role))
 	// The console's own door, beside the issuer's: a standalone
 	// installation signs people in here, and a sign-in is a sign-in.
 	s.console.record(r.Context(), audit.SignedIn(audit.Person(email), "console", connector.Kind(), audit.Succeeded()))
@@ -779,12 +779,12 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	subject, err := s.recovery.Verify(r.Context(), strings.TrimSpace(proof))
 	switch {
 	case errors.Is(err, ErrRecoveryThrottled):
-		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", "remote", r.RemoteAddr)
+		s.log.WarnContext(r.Context(), "recovery refused: too many attempts", logattr.SafeString("remote", r.RemoteAddr))
 		refuseCheap(reasonRecoveryThrottled)
 		http.Error(w, "too many attempts; wait a minute", http.StatusTooManyRequests)
 		return
 	case errors.Is(err, ErrRecoveryRefused):
-		s.log.WarnContext(r.Context(), "recovery refused", "remote", r.RemoteAddr, "reason", logsafe.Error(err))
+		s.log.WarnContext(r.Context(), "recovery refused", logattr.SafeString("remote", r.RemoteAddr), logattr.SafeError("reason", err))
 		refuse(reasonRecoveryRefused)
 		http.Error(w, "that proof was not accepted", http.StatusUnauthorized)
 		return
@@ -793,7 +793,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		// that may not create TokenReviews. Saying "wrong password" here
 		// would send an operator hunting for the wrong thing on the worst
 		// possible day.
-		s.log.ErrorContext(r.Context(), "recovery could not be checked", "error", err)
+		s.log.ErrorContext(r.Context(), "recovery could not be checked", logattr.SafeError("error", err))
 		s.console.record(r.Context(), audit.RecoverySignedIn(audit.Anonymous(), "console", how, audit.Failed(reasonRecoveryUnchecked)))
 		http.Error(w, "recovery could not be checked: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -810,7 +810,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if err = s.console.recordDurable(r.Context(), recovered(audit.Succeeded())); err != nil {
 		s.log.ErrorContext(r.Context(), "recovery refused: the audit trail could not be written",
-			"subject", logsafe.Value(subject), "error", logsafe.Error(err))
+			logattr.SafeString("subject", subject), logattr.SafeError("error", err))
 		s.console.record(r.Context(), recovered(audit.Denied(reasonUnaudited)))
 		http.Error(w, "recovery is refused: the audit trail could not be written, and a recovery sign-in "+
 			"never happens without its record. Check that the audit installation's writer is up, then try again.",
@@ -831,7 +831,7 @@ func (s *ConsoleServer) recoveryLogin(w http.ResponseWriter, r *http.Request) {
 		// Spent, as the provider callback spends its own.
 		http.SetCookie(w, access.RecoveryCookie("", s.sessions.Secure(), 0))
 	}
-	s.log.WarnContext(r.Context(), "recovery sign-in", "subject", logsafe.Value(subject), "kind", s.recovery.Kind())
+	s.log.WarnContext(r.Context(), "recovery sign-in", logattr.SafeString("subject", subject), slog.String("kind", s.recovery.Kind()))
 	redirectOrOK(w, r, s.at("/"))
 }
 
@@ -1057,7 +1057,7 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 	ws, b, err := conn.Exchange(r.Context(), r.URL.Query().Get("code"), bind)
 	if err != nil {
 		s.log.WarnContext(r.Context(), "consent exchange failed",
-			"backend", logsafe.Value(conn.Kind()), "error", logsafe.Error(err))
+			logattr.SafeString("backend", conn.Kind()), logattr.SafeError("error", err))
 		s.consentProblem(w, r, http.StatusConflict,
 			providerName(conn.Kind())+" granted the consent, and then refused the first read with it.",
 			err.Error(), consentCauses)
@@ -1074,7 +1074,7 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 	ws.ConnectedBy = actor
 	if _, err = s.hub.Adopt(r.Context(), ws, b); err != nil {
 		s.log.ErrorContext(r.Context(), "the workspace could not be adopted",
-			"workspace", logsafe.Value(ws.ID), "error", logsafe.Error(err))
+			logattr.SafeString("workspace", ws.ID), logattr.SafeError("error", err))
 		s.consentProblem(w, r, http.StatusConflict,
 			"The consent worked, but the workspace could not be saved.", err.Error(), nil)
 		return
@@ -1085,7 +1085,7 @@ func (s *ConsoleServer) connectCallback(w http.ResponseWriter, r *http.Request) 
 	}
 	s.console.record(r.Context(), connected(audit.Identified(actor), ws.ID, b.Kind(), "consent"))
 	s.log.InfoContext(r.Context(), "workspace connected",
-		"workspace", logsafe.Value(ws.ID), "backend", logsafe.Value(b.Kind()), "by", logsafe.Value(actor))
+		logattr.SafeString("workspace", ws.ID), logattr.SafeString("backend", b.Kind()), logattr.SafeString("by", actor))
 	// Straight to the question the connect leaves behind: which of this
 	// tenant's domains this hub should answer for. Asking here, once, is
 	// the difference between an operator choosing and an operator
@@ -1161,7 +1161,7 @@ func (s *ConsoleServer) whoami(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		s.log.WarnContext(r.Context(), "whoami could not be written", "error", err)
+		s.log.WarnContext(r.Context(), "whoami could not be written", slog.Any("error", err))
 	}
 }
 

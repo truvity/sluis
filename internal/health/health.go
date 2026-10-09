@@ -143,7 +143,7 @@ func Serve(ctx context.Context, addr string, handler http.Handler, log *slog.Log
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	log.InfoContext(ctx, "listening", "listener", "health", "address", addr)
+	log.InfoContext(ctx, "listening", slog.String("listener", "health"), slog.String("address", addr))
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("health listener: %w", err)
 	}

@@ -81,7 +81,7 @@ func bootWithSignIn(t *testing.T, hub issuer.Directory, provider *stubProvider, 
 		Storage:   provider,
 		State:     access.NewStateCodec(key.Derive("test"), 10*time.Minute),
 		Return:    func(context.Context, string) string { return "/done" },
-		Log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:       slog.New(slog.DiscardHandler),
 	})
 	// Where the library would take the browser once the request is
 	// complete; here it only has to exist, so that following the redirect

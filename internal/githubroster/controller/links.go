@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/truvity/sluis/audit/sdk/record"
+	"github.com/truvity/sluis/storage/logattr"
 
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/githubapp"
@@ -52,10 +54,10 @@ func (c *Controller) checkLinks(ctx context.Context) error {
 	case errors.Is(err, os.ErrNotExist):
 		if len(links) > 0 {
 			c.deps.Log.WarnContext(ctx, "the link App is not connected, so no link is checked; links are used as last checked",
-				"links", len(links))
+				slog.Int("links", len(links)))
 		}
 	case err != nil:
-		c.deps.Log.WarnContext(ctx, "the link App's credential cannot be read, so no link is checked", "error", err)
+		c.deps.Log.WarnContext(ctx, "the link App's credential cannot be read, so no link is checked", logattr.SafeError("error", err))
 	default:
 		var changed []link.Link
 		var events []*record.Record
@@ -76,7 +78,7 @@ func (c *Controller) checkLinks(ctx context.Context) error {
 		}
 		if len(changed) > 0 {
 			if _, err = c.deps.Links.Update(ctx, changed); err != nil {
-				c.deps.Log.ErrorContext(ctx, "what checking the links found could not be kept", "error", err)
+				c.deps.Log.ErrorContext(ctx, "what checking the links found could not be kept", logattr.SafeError("error", err))
 			}
 		}
 		c.report(ctx, events)
@@ -149,7 +151,7 @@ func (c *Controller) checkLink(ctx context.Context, credential link.AppCredentia
 		valid, err := stillValid()
 		switch {
 		case err != nil:
-			c.deps.Log.WarnContext(ctx, "a link could not be checked", "account", l.ID, "error", err)
+			c.deps.Log.WarnContext(ctx, "a link could not be checked", slog.Int64("account", l.ID), logattr.SafeError("error", err))
 			return l, nil
 		case !valid:
 			return c.unverifiable(l, now, "a token refresh was interrupted and its tokens were lost: link the account again")
@@ -167,7 +169,7 @@ func (c *Controller) checkLink(ctx context.Context, credential link.AppCredentia
 
 	gone := func(err error) (link.Link, *record.Record) {
 		if !errors.Is(err, githubapp.ErrTokenRefused) {
-			c.deps.Log.WarnContext(ctx, "a link could not be checked", "account", l.ID, "error", err)
+			c.deps.Log.WarnContext(ctx, "a link could not be checked", slog.Int64("account", l.ID), logattr.SafeError("error", err))
 			return l, nil
 		}
 		if valid, checkErr := stillValid(); checkErr == nil && !valid {
@@ -217,11 +219,11 @@ func (c *Controller) refresh(
 		l.RefreshingSince = time.Time{}
 		if err == nil {
 			if current, ok := c.refreshedElsewhere(ctx, l, now); ok {
-				c.deps.Log.InfoContext(ctx, "a link was refreshed by another replica; using its token pair", "account", l.ID)
+				c.deps.Log.InfoContext(ctx, "a link was refreshed by another replica; using its token pair", slog.Int64("account", l.ID))
 				return current, nil, true
 			}
 		}
-		c.deps.Log.WarnContext(ctx, "a link's refresh could not be started", "account", l.ID, "error", err)
+		c.deps.Log.WarnContext(ctx, "a link's refresh could not be started", slog.Int64("account", l.ID), logattr.SafeError("error", err))
 		return l, nil, false
 	}
 	l = written[0]
@@ -243,7 +245,7 @@ func (c *Controller) refresh(
 	case err != nil:
 		// Unknown whether GitHub issued a pair: the marker stays, and next
 		// pass asks whether the old token still works.
-		c.deps.Log.WarnContext(ctx, "a link's token could not be renewed", "account", l.ID, "error", err)
+		c.deps.Log.WarnContext(ctx, "a link's token could not be renewed", slog.Int64("account", l.ID), logattr.SafeError("error", err))
 		return l, nil, false
 	}
 
@@ -254,7 +256,8 @@ func (c *Controller) refresh(
 		if written, err = c.deps.Links.Update(ctx, []link.Link{l}); err == nil && len(written) == 1 {
 			return written[0], nil, true
 		}
-		c.deps.Log.ErrorContext(ctx, "a link's renewed token could not be kept", "account", l.ID, "attempt", attempt+1, "error", err)
+		c.deps.Log.ErrorContext(ctx, "a link's renewed token could not be kept", slog.Int64("account", l.ID), slog.Int("attempt", attempt+1),
+			logattr.SafeError("error", err))
 	}
 	// Carried in memory for this pass; the next one finds the marker.
 	return l, nil, true

@@ -62,7 +62,6 @@ import (
 	directoryrosterv1 "github.com/truvity/sluis/gen/directoryroster/v1"
 	"github.com/truvity/sluis/gen/directoryroster/v1/directoryrosterv1connect"
 	"github.com/truvity/sluis/internal/audit"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/rails"
@@ -72,6 +71,7 @@ import (
 	"github.com/truvity/sluis/internal/slackroster/reconcile"
 	"github.com/truvity/sluis/internal/slackroster/status"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // holdersLimit is how many holders one question asks for: more than any
@@ -251,9 +251,9 @@ func (c *Controller) notified(ctx context.Context, target string) {
 	}
 	switch _, _, err := c.RunTarget(ctx, target); {
 	case errors.Is(err, ErrUnknownTarget):
-		c.deps.Log.DebugContext(ctx, "a notification names no workspace of this controller", "target", logsafe.Value(target))
+		c.deps.Log.DebugContext(ctx, "a notification names no workspace of this controller", logattr.SafeString("target", target))
 	case err != nil:
-		c.deps.Log.WarnContext(ctx, "a notified tick failed", "target", logsafe.Value(target), "error", logsafe.Error(err))
+		c.deps.Log.WarnContext(ctx, "a notified tick failed", logattr.SafeString("target", target), logattr.SafeError("error", err))
 	}
 }
 
@@ -273,7 +273,7 @@ func (c *Controller) Pass(ctx context.Context) (otherPolicy bool) {
 	for _, target := range c.Targets() {
 		_, differs, err := c.RunTarget(ctx, target)
 		if err != nil {
-			c.deps.Log.WarnContext(ctx, "a tick failed", "workspace", logsafe.Value(target), "error", logsafe.Error(err))
+			c.deps.Log.WarnContext(ctx, "a tick failed", logattr.SafeString("workspace", target), logattr.SafeError("error", err))
 		}
 		otherPolicy = otherPolicy || differs
 	}
@@ -299,7 +299,7 @@ func (c *Controller) RunTarget(ctx context.Context, target string) (ran, otherPo
 		return false, false, leaseErr
 	}
 	if !ran {
-		c.deps.Log.DebugContext(ctx, "a workspace is leased to another runner", "workspace", logsafe.Value(target))
+		c.deps.Log.DebugContext(ctx, "a workspace is leased to another runner", logattr.SafeString("workspace", target))
 	}
 	return ran, otherPolicy, err
 }
@@ -438,7 +438,7 @@ func (c *Controller) workspace(ctx context.Context, p *pass, key string) (status
 	// finds the holds it recorded, rather than an empty report that would
 	// have it record them all again.
 	fail := func(err error) (status.Workspace, bool) {
-		c.deps.Log.WarnContext(ctx, "a pass over a workspace failed", "workspace", logsafe.Value(key), "error", logsafe.Error(err))
+		c.deps.Log.WarnContext(ctx, "a pass over a workspace failed", logattr.SafeString("workspace", key), logattr.SafeError("error", err))
 		report := c.journal.Previous(ctx, key)
 		report.Workspace, report.Enabled = key, enabled
 		report.Tick = status.Tick{At: started, Outcome: status.OutcomeFailed, Error: err.Error()}
@@ -459,7 +459,7 @@ func (c *Controller) workspace(ctx context.Context, p *pass, key string) (status
 		// workspace with no bot has no known channels or people, and what an
 		// earlier connection saw (before a disconnect, or of another team)
 		// would be shown as if it were current.
-		c.deps.Log.InfoContext(ctx, "a workspace is waiting to be connected", "workspace", logsafe.Value(key), "reason", logsafe.Error(err))
+		c.deps.Log.InfoContext(ctx, "a workspace is waiting to be connected", logattr.SafeString("workspace", key), logattr.SafeError("reason", err))
 		var report status.Workspace
 		report.Version = status.Version
 		report.Workspace, report.Enabled = key, enabled
@@ -528,9 +528,9 @@ func (c *Controller) workspace(ctx context.Context, p *pass, key string) (status
 	report.Tick.Outcome = status.OutcomeOf(rails.Switch(enabled).Decide(rails.Tick{
 		Changes: report.Tick.Changes, Held: report.Tick.Held, Retrying: report.Tick.Retrying, Waiting: report.Tick.Waiting,
 	}))
-	c.deps.Log.InfoContext(ctx, "passed over a workspace", "workspace", logsafe.Value(key), "enabled", enabled,
-		"outcome", report.Tick.Outcome, "changes", report.Tick.Changes, "held", report.Tick.Held,
-		"retrying", report.Tick.Retrying, "leavers", len(report.Leavers))
+	c.deps.Log.InfoContext(ctx, "passed over a workspace", logattr.SafeString("workspace", key), slog.Bool("enabled", enabled),
+		slog.Any("outcome", report.Tick.Outcome), slog.Int("changes", report.Tick.Changes), slog.Int("held", report.Tick.Held),
+		slog.Int("retrying", report.Tick.Retrying), slog.Int("leavers", len(report.Leavers)))
 	c.journal.Remember(key, report)
 	return report, otherPolicy
 }
@@ -752,8 +752,9 @@ func (c *Controller) fold(ctx context.Context, workspace string, report *status.
 		}
 		if o.Err != nil {
 			failed++
-			c.deps.Log.WarnContext(ctx, "Slack refused a change", "workspace", logsafe.Value(workspace), "kind", logsafe.Value(string(o.Action.Kind)),
-				"channel", logsafe.Value(o.Action.Channel), "error", logsafe.Error(o.Err))
+			c.deps.Log.WarnContext(ctx, "Slack refused a change", logattr.SafeString("workspace", workspace),
+				logattr.SafeString("kind", string(o.Action.Kind)),
+				logattr.SafeString("channel", o.Action.Channel), logattr.SafeError("error", o.Err))
 			markFailed(report, o.Action, o.Err)
 			continue
 		}

@@ -7,7 +7,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -86,7 +85,7 @@ func TestTheSameAudienceForBothAWSDoorsIsRefused(t *testing.T) {
 	cfg := Config{aws: config.AWSFederation{Audience: "same", Accounts: []config.AWSAccount{{
 		Account: "111122223333", Name: "prod", Issuer: "https://abc.tokens.sts.global.api.aws",
 	}}}, consoleAWSAudience: "same", audience: "x"}
-	if _, _, err := openVerifiers(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+	if _, _, err := openVerifiers(context.Background(), cfg, slog.New(slog.DiscardHandler)); err == nil {
 		t.Error("the same audience for both doors was accepted")
 	}
 }

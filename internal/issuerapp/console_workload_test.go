@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -93,7 +92,7 @@ func TestAWorkloadReadsTheConsoleWithItsOwnServiceAccountToken(t *testing.T) {
 	clusters := issuer.Verifiers{&verify.Cluster{
 		Name: "mgmt", Issuer: mgmt.URL, Audience: "access-issuer", Client: mgmt.Client(),
 	}}
-	read := workloadBearer(clusters, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	read := workloadBearer(clusters, slog.New(slog.DiscardHandler))
 	if read == nil {
 		t.Fatal("a federated cluster produced no reader")
 	}
@@ -145,7 +144,7 @@ func TestAWorkloadReadsTheConsoleWithItsOwnServiceAccountToken(t *testing.T) {
 // that would verify, so there is no reader at all rather than one
 // consulted on every request to refuse.
 func TestNoFederatedClusterMeansNoWorkloadDoor(t *testing.T) {
-	if read := workloadBearer(nil, slog.New(slog.NewTextHandler(io.Discard, nil))); read != nil {
+	if read := workloadBearer(nil, slog.New(slog.DiscardHandler)); read != nil {
 		t.Error("a reader was built with no cluster to verify against")
 	}
 }
@@ -186,7 +185,7 @@ func TestALambdaControllerReadsTheConsoleWithItsRolesWebIdentityToken(t *testing
 	read := workloadBearer(issuer.Verifiers{&verify.AWSAccount{
 		Account: "111122223333", Name: "prod", Issuer: issuerURL, JWKSURI: keys.URL,
 		Audience: "https://sluis.example/aws", Client: keys.Client(),
-	}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}}, slog.New(slog.DiscardHandler))
 	if read == nil {
 		t.Fatal("a federated AWS account produced no reader")
 	}

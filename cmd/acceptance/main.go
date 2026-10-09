@@ -85,9 +85,9 @@ func run() error {
 		if err = check.run(ctx); err != nil {
 			return fmt.Errorf("%s: %w", check.name, err)
 		}
-		checks.log.Info("ok", "check", check.name, "took", time.Since(started).Round(time.Millisecond))
+		checks.log.InfoContext(context.Background(), "ok", slog.String("check", check.name), slog.Duration("took", time.Since(started).Round(time.Millisecond)))
 	}
-	checks.log.Info("every check passed", "namespace", *namespace)
+	checks.log.InfoContext(context.Background(), "every check passed", slog.String("namespace", *namespace))
 	return nil
 }
 
@@ -327,7 +327,7 @@ func (a *acceptance) clean(ctx context.Context) {
 		},
 	} {
 		if err := remove(); err != nil {
-			a.log.Warn("could not clean up", "error", err)
+			a.log.WarnContext(ctx, "could not clean up", slog.Any("error", err))
 		}
 	}
 }

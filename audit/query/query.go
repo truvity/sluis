@@ -19,6 +19,7 @@
 package query
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -117,7 +118,7 @@ func New(c Config) (*Service, error) {
 		OnUnrecorded: func(action string, err error) {
 			// Not a degraded service: this is the service failing at one of
 			// the two things it is for.
-			log.Error("a read was not recorded", "action", action, "error", err)
+			log.ErrorContext(context.Background(), "a read was not recorded", slog.String("action", action), slog.Any("error", err))
 		},
 	}
 	// With the archive, a record says which seal covers its hour.

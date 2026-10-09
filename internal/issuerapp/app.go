@@ -510,7 +510,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 		// behaves exactly as it always did.
 		if unconsumed := declared.Unconsumed(catalogueGrantGroups(deps.GitHubApps)...); len(unconsumed) > 0 {
 			log.WarnContext(ctx, "internal groups are declared but nothing consumes them",
-				"groups", unconsumed)
+				slog.Any("groups", unconsumed))
 		}
 	}
 
@@ -605,7 +605,7 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	if len(kmsRefs) > 0 {
 		for _, f := range additionalKeys {
 			log.WarnContext(ctx, "signingKey.kms is set but this algorithm is still signed by a file key",
-				"algorithm", f.SignatureAlgorithm(), "kid", f.ID())
+				slog.Any("algorithm", f.SignatureAlgorithm()), slog.String("kid", f.ID()))
 		}
 	}
 	// Each KMS algorithm's newest key is its ring's primary, beside any files
@@ -747,10 +747,10 @@ func New(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*App, er
 	}, deps.Ready...)...)
 
 	log.InfoContext(ctx, "sluis assembled",
-		"issuer", cfg.issuerURL, "directory", directorySource(deps, cfg), "inCluster", cfg.inCluster,
-		"exchangeAudience", cfg.audience, "port", cfg.port, "health", cfg.healthPort,
-		"tokenLifetime", cfg.tokenLifetime, "refreshLifetime", cfg.refreshLifetime,
-		"holdWindow", cfg.holdWindow, "version", version.String())
+		slog.String("issuer", cfg.issuerURL), slog.String("directory", directorySource(deps, cfg)), slog.Bool("in_cluster", cfg.inCluster),
+		slog.String("exchange_audience", cfg.audience), slog.String("port", cfg.port), slog.String("health", cfg.healthPort),
+		slog.Duration("token_lifetime", cfg.tokenLifetime), slog.Duration("refresh_lifetime", cfg.refreshLifetime),
+		slog.Duration("hold_window", cfg.holdWindow), slog.String("version", version.String()))
 	if cfg.allowInsecure {
 		log.WarnContext(ctx, "the issuer URL may be plaintext: every token this service signs is a "+
 			"bearer credential, and an issuer reached over http can be impersonated by anyone on the path")
@@ -908,7 +908,7 @@ func openRecovery(ctx context.Context, cfg Config, st *store.Stores, log *slog.L
 	}
 	log.InfoContext(ctx, "recovery sign-in is available: a token for this account signs in "+
 		"without a directory, and the policy's service_account matchers decide what it gets",
-		"namespace", namespace, "account", cfg.recoveryAccount, "audience", cfg.recoveryAudience)
+		slog.String("namespace", namespace), slog.String("account", cfg.recoveryAccount), slog.String("audience", cfg.recoveryAudience))
 	return &issuer.TokenRecovery{
 		Review:    st.Ports.Identity.Verify,
 		Namespace: namespace,
@@ -939,7 +939,7 @@ func openSignIn(ctx context.Context, cfg Config, log *slog.Logger) ([]issuer.Sig
 		Secret:  cfg.oauthClientSecret,
 		BaseURL: cfg.issuerURL,
 	}
-	log.InfoContext(ctx, "people sign in with Google", "redirect", client.SignInRedirect())
+	log.InfoContext(ctx, "people sign in with Google", slog.String("redirect", client.SignInRedirect()))
 	return []issuer.SignIn{&googleSignIn{client: client}}, nil
 }
 
@@ -988,7 +988,7 @@ func signingKey(ctx context.Context, cfg Config, log *slog.Logger) (*issuer.Sign
 		return nil, err
 	}
 	log.InfoContext(ctx, "signing with the key this installation was given",
-		"file", cfg.signingKeyFile, "kid", key.ID())
+		slog.String("file", cfg.signingKeyFile), slog.String("kid", key.ID()))
 	return key, nil
 }
 
@@ -1015,7 +1015,7 @@ func additionalSigningKeys(ctx context.Context, cfg Config, log *slog.Logger) ([
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		log.InfoContext(ctx, "signing with an additional key this installation was given",
-			"file", path, "algorithm", key.SignatureAlgorithm(), "kid", key.ID())
+			slog.String("file", path), slog.Any("algorithm", key.SignatureAlgorithm()), slog.String("kid", key.ID()))
 		out = append(out, key)
 	}
 	return out, nil
@@ -1072,17 +1072,17 @@ func pollSigningKeyFile(ctx context.Context, path string, storage *issuer.Storag
 	encoded, err := os.ReadFile(path) //nolint:gosec // the path is deployment configuration
 	if err != nil {
 		log.WarnContext(ctx, "could not re-read a signing key; keeping the previous one",
-			"file", path, "error", err)
+			slog.String("file", path), slog.Any("error", err))
 		return
 	}
 	key, err := issuer.ParseSigningKey(encoded)
 	if err != nil {
 		log.WarnContext(ctx, "a re-read signing key could not be parsed; keeping the previous one",
-			"file", path, "error", err)
+			slog.String("file", path), slog.Any("error", err))
 		return
 	}
 	if err := storage.Rotate(ctx, key); err != nil {
-		log.WarnContext(ctx, "a re-read signing key could not be adopted", "file", path, "error", err)
+		log.WarnContext(ctx, "a re-read signing key could not be adopted", slog.String("file", path), slog.Any("error", err))
 	}
 }
 
@@ -1153,11 +1153,11 @@ func openState(ctx context.Context, st *store.Stores, log *slog.Logger) issuer.S
 	if !st.Usable {
 		log.WarnContext(ctx, "keeping logins in progress in memory: correct for one replica, "+
 			"and at more than one a browser that comes back to a different pod finds nothing",
-			"state", "memory")
+			slog.String("state", "memory"))
 		return issuer.NewMemoryState()
 	}
 	log.InfoContext(ctx, "keeping logins in progress in the state ports",
-		"state", st.Name(), "adapter", st.Adapter)
+		slog.String("state", st.Name()), slog.String("adapter", st.Adapter))
 	return issuer.NewPortState(st.Ports.State, st.Ports.Index)
 }
 
@@ -1195,7 +1195,7 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 	}
 	if len(federation.Clusters) > 0 {
 		log.InfoContext(ctx, "workload tokens are verified against each cluster's own key set",
-			"clusters", federation.Names(), "audience", cfg.audience)
+			slog.Any("clusters", federation.Names()), slog.String("audience", cfg.audience))
 	} else {
 		log.InfoContext(ctx, "no workload token can be verified: no cluster's key set is declared")
 	}
@@ -1221,11 +1221,11 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 			clusters = append(clusters, account)
 		}
 		log.InfoContext(ctx, "AWS role tokens are bearers at the console by their own audience",
-			"audience", cfg.consoleAWSAudience)
+			slog.String("audience", cfg.consoleAWSAudience))
 	}
 	if len(awsFederation.Accounts) > 0 {
 		log.InfoContext(ctx, "AWS role tokens are verified against each account's own key set",
-			"accounts", awsFederation.Names(), "audience", awsFederation.Audience)
+			slog.Any("accounts", awsFederation.Names()), slog.String("audience", awsFederation.Audience))
 	} else {
 		log.InfoContext(ctx, "no AWS role token can be verified: no account is declared")
 	}
@@ -1237,7 +1237,7 @@ func openVerifiers(ctx context.Context, cfg Config, log *slog.Logger) (all, clus
 	// rather than none.
 	if len(cfg.githubOwners) > 0 {
 		log.InfoContext(ctx, "CI tokens are verified against GitHub",
-			"owners", cfg.githubOwners, "audience", cfg.issuerURL)
+			slog.Any("owners", cfg.githubOwners), slog.String("audience", cfg.issuerURL))
 		verifiers = append(verifiers, &verify.GitHub{
 			Owners: cfg.githubOwners,
 			// The audience a workflow must request is this issuer's own
@@ -1272,10 +1272,10 @@ func serve(ctx context.Context, addr string, handler http.Handler, name string, 
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdown); err != nil {
-			log.WarnContext(ctx, "listener did not drain", "listener", name, "error", err)
+			log.WarnContext(ctx, "listener did not drain", slog.String("listener", name), slog.Any("error", err))
 		}
 	}()
-	log.InfoContext(ctx, "listening", "listener", name, "address", addr)
+	log.InfoContext(ctx, "listening", slog.String("listener", name), slog.String("address", addr))
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("%s listener: %w", name, err)
 	}
@@ -1330,7 +1330,7 @@ func kmsSigningKeys(
 			}
 			seen[key.ID()] = set.Refs[i]
 			log.InfoContext(ctx, "signing with an AWS KMS key",
-				"key", set.Refs[i], "kid", key.ID(), "algorithm", key.SignatureAlgorithm(), "active", i == len(keys)-1)
+				slog.String("key", set.Refs[i]), slog.String("kid", key.ID()), slog.Any("algorithm", key.SignatureAlgorithm()), slog.Bool("active", i == len(keys)-1))
 		}
 		// The LAST of each list is that algorithm's ring primary; the rest are
 		// only ever refreshed.
@@ -1366,7 +1366,7 @@ func watchKMSKeys(
 		case <-ticker.C:
 			// Re-written if the record lapsed; a mismatch is logged, not fatal.
 			if err := checkSecret(ctx); err != nil {
-				log.WarnContext(ctx, "the KMS state secret check failed", "error", err)
+				log.WarnContext(ctx, "the KMS state secret check failed", slog.Any("error", err))
 			}
 			for _, refs := range sets {
 				pollKMSRefs(ctx, refs, storage, log)
@@ -1382,7 +1382,7 @@ func pollKMSRefs(ctx context.Context, refs *issuer.KMSKeyRefs, storage *issuer.S
 		keys, err := one.Load(ctx)
 		if err != nil {
 			log.WarnContext(ctx, "could not re-read a KMS signing key; keeping the previous one",
-				"key", ref, "error", err)
+				slog.String("key", ref), slog.Any("error", err))
 			continue
 		}
 		// List order is age: only the LAST key may be newly recorded. The
@@ -1393,7 +1393,7 @@ func pollKMSRefs(ctx context.Context, refs *issuer.KMSKeyRefs, storage *issuer.S
 			rotate = storage.Rotate
 		}
 		if err := rotate(ctx, keys[0]); err != nil {
-			log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", "key", ref, "error", err)
+			log.WarnContext(ctx, "a re-read KMS signing key could not be adopted", slog.String("key", ref), slog.Any("error", err))
 		}
 	}
 }
@@ -1581,7 +1581,7 @@ func signKey(ctx context.Context, cfg Config, deps Deps, log *slog.Logger) (*key
 		return nil, err
 	}
 	for _, w := range warnings {
-		log.WarnContext(ctx, w)
+		log.WarnContext(ctx, "signing key configuration warning", slog.String("warning", w))
 	}
 	backend := deps.Keys
 	if backend == nil {
@@ -1647,9 +1647,9 @@ func wrappedSigningKeys(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	log.InfoContext(ctx, "signing with wrapped keys", "purpose", keys.Sign, "context", key.Context(), "algorithms", wcfg.Algorithms,
-		"rotateEvery", wcfg.RotateEvery, "prepublish", wcfg.Prepublish, "retain", wcfg.Retain,
-		"kid", primary.ID(), "algorithm", primary.SignatureAlgorithm())
+	log.InfoContext(ctx, "signing with wrapped keys", slog.Any("purpose", keys.Sign), slog.Any("context", key.Context()), slog.Any("algorithms", wcfg.Algorithms),
+		slog.Duration("rotate_every", wcfg.RotateEvery), slog.Duration("prepublish", wcfg.Prepublish), slog.Duration("retain", wcfg.Retain),
+		slog.String("kid", primary.ID()), slog.Any("algorithm", primary.SignatureAlgorithm()))
 	return ws, primary, more, nil
 }
 
@@ -1736,7 +1736,7 @@ func BroadAWSMatchers(set *policy.Set) []string {
 func warnBroadAWSMatchers(ctx context.Context, set *policy.Set, log *slog.Logger) {
 	if broad := BroadAWSMatchers(set); len(broad) > 0 {
 		log.WarnContext(ctx, "aws matchers with no role (or a bare *) admit EVERY role of the account, "+
-			"including roles created later: name the role unless that is meant", "groups", broad)
+			"including roles created later: name the role unless that is meant", slog.Any("groups", broad))
 	}
 }
 
@@ -1762,14 +1762,14 @@ func warnAgentClasses(ctx context.Context, set *policy.Set, absolute time.Durati
 	if clients := set.BrowserFacingAgents(); len(clients) > 0 {
 		log.WarnContext(ctx, "clients declare session: agent and also signed_out or backchannel_logout_uri, "+
 			"which describe an application a person uses in a browser: an agent chain lives a month and "+
-			"is meant for software that holds its own refresh token", "clients", clients)
+			"is meant for software that holds its own refresh token", slog.Any("clients", clients))
 	}
 	if resources := LengtheningResources(set, absolute); len(resources) > 0 {
 		log.WarnContext(ctx, "resources carry read_only and an absolute_cap longer than lifetimes.absolute; "+
 			"that lengthening is deprecated and a later minor release refuses it: mark the clients that need "+
 			"a longer chain session: agent, then remove absolute_cap from these resources or lower it to at "+
 			"most lifetimes.absolute (docs/decisions/0040-agent-class-sessions.md)",
-			"resources", resources, "absolute", absolute.String())
+			slog.Any("resources", resources), slog.String("absolute", absolute.String()))
 	}
 }
 
@@ -1823,7 +1823,7 @@ func loadVerifyOnly(entries []config.SigningKeyVerifyOnly, log *slog.Logger) ([]
 		}
 		ids[key.ID] = true
 		if !time.Now().Before(key.Until) {
-			log.Warn("a verify-only signing key is past its `until` and is not published", "kid", key.ID)
+			log.WarnContext(context.Background(), "a verify-only signing key is past its `until` and is not published", slog.String("kid", key.ID))
 		}
 		out = append(out, key)
 	}

@@ -75,7 +75,7 @@ func (d Directory) Holders(ctx context.Context, groups []string) (Holders, error
 			out[group] = append(out[group], holders...)
 		}
 		if truncated {
-			d.log().WarnContext(ctx, "a holders list was incomplete; removals are confirmed one by one regardless", "group", group)
+			d.log().WarnContext(ctx, "a holders list was incomplete; removals are confirmed one by one regardless", slog.String("group", group))
 		}
 	}
 	return out, nil
@@ -89,7 +89,7 @@ func (d Directory) Vouch(ctx context.Context, emails []string) (map[string]Vouch
 	return Confirm(emails, d.Guard,
 		func(email string) (Vouch, string, error) { return d.Explain(ctx, email) },
 		func(email string, err error) {
-			d.log().WarnContext(ctx, "a removal could not be confirmed and is held", "email", email, "error", err)
+			d.log().WarnContext(ctx, "a removal could not be confirmed and is held", slog.String("email", email), slog.Any("error", err))
 		},
 	)
 }

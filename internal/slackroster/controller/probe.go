@@ -3,12 +3,13 @@ package controller
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"maps"
 	"slices"
 
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/slackapp"
 	"github.com/truvity/sluis/internal/slackroster/status"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // probeGuestSides adds, to the report of the workspace that HOSTS a managed
@@ -136,7 +137,7 @@ func (c *Controller) probeGuestSides(ctx context.Context, p *pass, host string, 
 	var probed, visible, invisible int
 	defer func() {
 		if probed > 0 {
-			c.deps.Log.InfoContext(ctx, "guest-side probe", "probed", probed, "visible", visible, "invisible", invisible)
+			c.deps.Log.InfoContext(ctx, "guest-side probe", slog.Int("probed", probed), slog.Int("visible", visible), slog.Int("invisible", invisible))
 		}
 	}()
 	clients := map[string]*slackapp.Client{}
@@ -176,10 +177,10 @@ func (c *Controller) probeGuestSides(ctx context.Context, p *pass, host string, 
 					// Expected: the side is private to a bot that is not in it,
 					// or the workspace is not in the channel at all.
 					c.deps.Log.DebugContext(ctx, "a workspace's side of a shared channel is not visible to its bot",
-						"workspace", logsafe.Value(key), "channel", logsafe.Value(id), "error", logsafe.Error(err))
+						logattr.SafeString("workspace", key), logattr.SafeString("channel", id), logattr.SafeError("error", err))
 				} else {
 					c.deps.Log.WarnContext(ctx, "probing a workspace for a shared channel failed; its side stays unknown",
-						"workspace", logsafe.Value(key), "channel", logsafe.Value(id), "error", logsafe.Error(err))
+						logattr.SafeString("workspace", key), logattr.SafeString("channel", id), logattr.SafeError("error", err))
 				}
 				continue
 			}

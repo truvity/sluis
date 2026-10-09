@@ -32,7 +32,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("audit-notary", "error", err)
+		slog.ErrorContext(context.Background(), "audit-notary", slog.Any("error", err))
 		os.Exit(1)
 	}
 }

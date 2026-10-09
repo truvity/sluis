@@ -27,7 +27,6 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/health"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/portstore"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/slackroster/apply"
@@ -36,6 +35,7 @@ import (
 	"github.com/truvity/sluis/internal/telemetry"
 	"github.com/truvity/sluis/internal/version"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Config is what a deployment decides. It is built from the configuration
@@ -219,7 +219,7 @@ func (a *App) Pass(ctx context.Context, target string, unsafeLocal bool) (ran bo
 	}
 	ran, _, err = a.controller.RunTarget(ctx, a.targets[i])
 	if err == nil && !ran {
-		a.log.InfoContext(ctx, "the workspace is leased to another runner: nothing to do", "workspace", logsafe.Value(target))
+		a.log.InfoContext(ctx, "the workspace is leased to another runner: nothing to do", logattr.SafeString("workspace", target))
 	}
 	return ran, err
 }
@@ -293,8 +293,8 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	web := &http.Client{Timeout: 30 * time.Second}
 
 	log.InfoContext(ctx, "the Slack controller is assembled",
-		"workspaces", len(declared.Slack.Workspaces), "enabled", slices.Sorted(maps.Keys(cfg.enabled)),
-		"interval", cfg.interval, "console", cfg.console, "policy", set.Digest())
+		slog.Int("workspaces", len(declared.Slack.Workspaces)), slog.Any("enabled", slices.Sorted(maps.Keys(cfg.enabled))),
+		slog.Duration("interval", cfg.interval), slog.String("console", cfg.console), slog.String("policy", set.Digest()))
 	// A refusal found after the start is fatal the way one at the start is:
 	// the process ends rather than running with records nobody accepts.
 	fatal := make(chan error, 1)
@@ -317,7 +317,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	leaseState, shared := stores.LeaseState()
 	if !shared {
 		log.InfoContext(ctx, "no shared state backs the tick leases, so they are held in this process: run one replica",
-			"adapter", stores.Adapter)
+			slog.String("adapter", stores.Adapter))
 	}
 	return &App{
 		targets:     slices.Collect(maps.Keys(declared.Slack.Workspaces)),

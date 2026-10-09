@@ -73,7 +73,7 @@ func (j *Journal[R]) Previous(ctx context.Context, target string) R {
 	}
 	documents, err := reader.Reports(ctx)
 	if err != nil {
-		j.log().WarnContext(ctx, "the last report could not be read", j.label(), target, "error", err)
+		j.log().WarnContext(ctx, "the last report could not be read", slog.String(j.label(), target), slog.Any("error", err))
 		return none
 	}
 	raw, ok := documents[j.Key(target)]
@@ -82,7 +82,7 @@ func (j *Journal[R]) Previous(ctx context.Context, target string) R {
 	}
 	last, err := j.Decode(raw)
 	if err != nil {
-		j.log().WarnContext(ctx, "the last report could not be decoded", j.label(), target, "error", err)
+		j.log().WarnContext(ctx, "the last report could not be decoded", slog.String(j.label(), target), slog.Any("error", err))
 		return none
 	}
 	return last
@@ -96,13 +96,13 @@ func (j *Journal[R]) Publish(ctx context.Context, reports map[string]R) {
 	for _, target := range slices.Sorted(maps.Keys(reports)) {
 		document, err := j.Encode(reports[target])
 		if err != nil {
-			j.log().ErrorContext(ctx, "a report could not be written", j.label(), target, "error", err)
+			j.log().ErrorContext(ctx, "a report could not be written", slog.String(j.label(), target), slog.Any("error", err))
 			continue
 		}
 		documents[j.Key(target)] = document
 	}
 	if err := j.Store.Replace(ctx, documents); err != nil {
-		j.log().ErrorContext(ctx, "the report could not be replaced", "error", err)
+		j.log().ErrorContext(ctx, "the report could not be replaced", slog.Any("error", err))
 	}
 }
 
@@ -112,11 +112,11 @@ func (j *Journal[R]) Publish(ctx context.Context, reports map[string]R) {
 func (j *Journal[R]) PublishOne(ctx context.Context, target string, report R) {
 	document, err := j.Encode(report)
 	if err != nil {
-		j.log().ErrorContext(ctx, "a report could not be written", j.label(), target, "error", err)
+		j.log().ErrorContext(ctx, "a report could not be written", slog.String(j.label(), target), slog.Any("error", err))
 		return
 	}
 	if err := j.Store.Put(ctx, j.Key(target), document); err != nil {
-		j.log().ErrorContext(ctx, "the report could not be written", j.label(), target, "error", err)
+		j.log().ErrorContext(ctx, "the report could not be written", slog.String(j.label(), target), slog.Any("error", err))
 	}
 }
 
@@ -135,7 +135,7 @@ func (j *Journal[R]) Prune(ctx context.Context, targets []string) {
 	}
 	documents, err := reader.Reports(ctx)
 	if err != nil {
-		j.log().WarnContext(ctx, "the reports could not be listed to prune them", "error", err)
+		j.log().WarnContext(ctx, "the reports could not be listed to prune them", slog.Any("error", err))
 		return
 	}
 	for _, key := range slices.Sorted(maps.Keys(documents)) {
@@ -143,7 +143,7 @@ func (j *Journal[R]) Prune(ctx context.Context, targets []string) {
 			continue
 		}
 		if err := remover.Remove(ctx, key); err != nil {
-			j.log().WarnContext(ctx, "a report of a retired target could not be removed", "key", key, "error", err)
+			j.log().WarnContext(ctx, "a report of a retired target could not be removed", slog.String("key", key), slog.Any("error", err))
 		}
 	}
 }

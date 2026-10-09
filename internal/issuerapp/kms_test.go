@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -127,7 +126,7 @@ func TestAPlaceholderStateSecretIsRefused(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = issuerapp.New(context.Background(), cfg,
-			issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"a": a}, Stores: &store.Stores{Secrets: testSecrets}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			issuerapp.Deps{Directory: nobody{}, KMS: kmsFake{"a": a}, Stores: &store.Stores{Secrets: testSecrets}}, slog.New(slog.DiscardHandler))
 		if err == nil || !strings.Contains(err.Error(), "stateSecret") {
 			t.Errorf("%s: got %v", name, err)
 		}
@@ -188,7 +187,7 @@ func TestKMSRS256AndAnRS256FileClash(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = issuerapp.New(context.Background(), cfg, issuerapp.Deps{Directory: nobody{}, Stores: &store.Stores{Secrets: testSecrets},
-		KMS: kmsFake{"alias/es": a, "alias/rs": r}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		KMS: kmsFake{"alias/es": a, "alias/rs": r}}, slog.New(slog.DiscardHandler))
 	if err == nil || !strings.Contains(err.Error(), "RS256") {
 		t.Fatalf("got %v", err)
 	}

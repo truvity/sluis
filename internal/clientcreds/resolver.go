@@ -149,7 +149,7 @@ func (r *Resolver) fromInput(ctx context.Context, clientID string) (Secrets, boo
 	if err != nil {
 		if !errors.Is(err, secrets.ErrNotFound) {
 			r.log.WarnContext(ctx, "a declared client's secret could not be read; that client cannot authenticate",
-				"client", clientID, "error", err)
+				slog.String("client", clientID), slog.Any("error", err))
 		}
 		return Secrets{}, false
 	}
@@ -190,13 +190,13 @@ func (r *Resolver) record(ctx context.Context, clientID string) (*Record, record
 	case err == nil:
 		decoded, derr := DecodeRecord(got.Value)
 		if derr != nil {
-			r.log.WarnContext(ctx, "a client's secret record cannot be read", "client", clientID, "error", derr)
+			r.log.WarnContext(ctx, "a client's secret record cannot be read", slog.String("client", clientID), slog.Any("error", derr))
 			return r.stale(clientID, c, ok, now)
 		}
 		rec = &decoded
 	case errors.Is(err, port.ErrNotFound):
 	default:
-		r.log.WarnContext(ctx, "a client's secret record could not be fetched", "client", clientID, "error", err)
+		r.log.WarnContext(ctx, "a client's secret record could not be fetched", slog.String("client", clientID), slog.Any("error", err))
 		return r.stale(clientID, c, ok, now)
 	}
 	r.mu.Lock()

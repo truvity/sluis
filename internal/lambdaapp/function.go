@@ -197,7 +197,7 @@ func open(ctx context.Context, file string) (*Function, error) {
 			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
 			if err := service.FlushAudit(fctx); err != nil {
-				log.WarnContext(ctx, "audit records were not delivered before the response", "error", err)
+				log.WarnContext(ctx, "audit records were not delivered before the response", slog.Any("error", err))
 			}
 			flush(ctx)
 		},

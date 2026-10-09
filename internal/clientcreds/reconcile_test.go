@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -21,7 +20,7 @@ var (
 	t0   = time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
 )
 
-func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func quiet() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // inputs is a fake secrets.Source by name: a value, or an error for a name.
 type inputs struct {

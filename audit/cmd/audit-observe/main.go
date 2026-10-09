@@ -41,7 +41,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("audit-observe", "error", err)
+		slog.ErrorContext(context.Background(), "audit-observe", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
@@ -118,7 +118,8 @@ func run() error {
 		Wake:     wake,
 		OnObject: func(profile, _ string, rows int, lag time.Duration) { counts.Indexed(profile, rows, lag) },
 		OnDeferred: func(profile, key string, permanent bool, err error) {
-			slog.Error("an object was not indexed", "profile", profile, "object", key, "permanent", permanent, "error", err)
+			slog.ErrorContext(context.Background(), "an object was not indexed", slog.String("profile", profile), slog.String("object", key),
+				slog.Bool("permanent", permanent), slog.Any("error", err))
 			counts.Deferred(profile, permanent)
 		},
 	}
@@ -136,7 +137,7 @@ func run() error {
 	server := &http.Server{Addr: cfg.Listen.Address, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("the health listener stopped", "error", err)
+			slog.ErrorContext(context.Background(), "the health listener stopped", slog.Any("error", err))
 		}
 	}()
 	defer func() {
@@ -145,7 +146,8 @@ func run() error {
 		_ = server.Shutdown(shutdown)
 	}()
 
-	slog.Info("following the archive", "settle", cfg.Settle.D(), "interval", cfg.Interval.D(), "profiles", cfg.Profiles)
+	slog.InfoContext(context.Background(), "following the archive", slog.Duration("settle", cfg.Settle.D()), slog.Duration("interval", cfg.Interval.D()),
+		slog.Any("profiles", cfg.Profiles))
 	return indexer.Run(ctx)
 }
 
@@ -159,7 +161,7 @@ func wakeFrom(ctx context.Context, w *config.Wake, wake chan<- struct{}) (func()
 		if err != nil {
 			return nil, err
 		}
-		slog.Info("woken by notifications", "subject", w.NATS.Subject)
+		slog.InfoContext(ctx, "woken by notifications", slog.String("subject", w.NATS.Subject))
 		return stop, nil
 	default: // sqs; the schema admits no other
 		var opts []func(*awsconfig.LoadOptions) error
@@ -176,7 +178,7 @@ func wakeFrom(ctx context.Context, w *config.Wake, wake chan<- struct{}) (func()
 			defer close(done)
 			observe.SQSWake(running, sqs.NewFromConfig(cfg), w.SQS.QueueURL, wake, slog.Default())
 		}()
-		slog.Info("woken by notifications", "queue", w.SQS.QueueURL)
+		slog.InfoContext(ctx, "woken by notifications", slog.String("queue", w.SQS.QueueURL))
 		return func() { cancel(); <-done }, nil
 	}
 }

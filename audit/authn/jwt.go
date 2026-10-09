@@ -99,12 +99,12 @@ func (j *JWT) Principal(ctx context.Context, req *http.Request) (auth.Principal,
 	}
 	claimed, err := issuerOf(raw)
 	if err != nil {
-		j.logger.WarnContext(ctx, "token rejected", "error", err)
+		j.logger.WarnContext(ctx, "token rejected", slog.Any("error", err))
 		return auth.Principal{}, auth.ErrUnauthenticated
 	}
 	verifier, ok := j.verifiers[claimed]
 	if !ok {
-		j.logger.WarnContext(ctx, "token rejected: not a trusted issuer", "issuer", claimed)
+		j.logger.WarnContext(ctx, "token rejected: not a trusted issuer", slog.String("issuer", claimed))
 		return auth.Principal{}, auth.ErrUnauthenticated
 	}
 	id, err := verifier.Authenticate(ctx, headers)
@@ -113,7 +113,7 @@ func (j *JWT) Principal(ctx context.Context, req *http.Request) (auth.Principal,
 		return auth.Principal{}, auth.ErrUnauthenticated
 	}
 	if id.Subject == "" {
-		j.logger.WarnContext(ctx, "token rejected: no subject", "issuer", claimed)
+		j.logger.WarnContext(ctx, "token rejected: no subject", slog.String("issuer", claimed))
 		return auth.Principal{}, auth.ErrUnauthenticated
 	}
 	return auth.Principal{

@@ -833,7 +833,7 @@ func (s *Sessions) present(ctx context.Context, token string) (presented, bool, 
 			// the skew is what an operator needs to see.
 			recordMarkAhead(ctx)
 			slog.WarnContext(ctx, "a spent refresh token's mark is dated ahead of this replica's clock; "+
-				"the replicas' clocks disagree", "ahead", ahead.String())
+				"the replicas' clocks disagree", slog.String("ahead", ahead.String()))
 		}
 
 		switch {
@@ -1005,9 +1005,9 @@ func (s *Sessions) endAt(ctx context.Context, p presented, what string) (bool, e
 			}
 		}
 
-		slog.WarnContext(ctx, what+" was already gone when it was to be ended; "+
+		slog.WarnContext(ctx, "a session was already gone when it was to be ended; "+
 			"another presentation of the token, or this one's own retried delete, ended it, "+
-			"and it is not audited a second time", "session", id)
+			"and it is not audited a second time", slog.String("what", what), slog.String("session", id))
 
 		return false, nil
 	}
@@ -1247,7 +1247,7 @@ func (s *Sessions) writeRotated(ctx context.Context, session Session, version st
 // left behind grants nothing to anyone, and it expires on its own.
 func (s *Sessions) discard(ctx context.Context, token string) {
 	if err := s.state.Delete(ctx, sessionTokenKey(token)); err != nil {
-		slog.WarnContext(ctx, "the issuer could not remove an unused refresh token's pointer", "error", err)
+		slog.WarnContext(ctx, "the issuer could not remove an unused refresh token's pointer", slog.Any("error", err))
 	}
 }
 

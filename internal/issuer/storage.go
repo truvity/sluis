@@ -21,8 +21,8 @@ import (
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/policy"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Verifier turns a third-party subject token into a proof. It is the
@@ -833,7 +833,7 @@ func (s *Storage) signInEnded(ctx context.Context, sso, clientID string) (bool, 
 
 	if !live {
 		s.logger().InfoContext(ctx, "refused an authorization code: the sign-in it was completed under has ended",
-			"client", clientID)
+			slog.String("client", clientID))
 	}
 
 	return !live, nil
@@ -855,7 +855,7 @@ func (s *Storage) revokeCodeSession(ctx context.Context, request string) {
 	gone, err := s.iss.Sessions().RevokeID(ctx, string(raw))
 	if err != nil {
 		s.logger().WarnContext(ctx, "an authorization code was reused and its session could not be ended",
-			"error", err)
+			slog.Any("error", err))
 
 		return
 	}
@@ -863,7 +863,7 @@ func (s *Storage) revokeCodeSession(ctx context.Context, request string) {
 	// WARN and not INFO: a code presented twice is either a broken client
 	// or a stolen code, and both are worth seeing in a log.
 	s.logger().WarnContext(ctx, "an authorization code was reused; the session it opened has been ended",
-		"ended", gone)
+		slog.Bool("ended", gone))
 
 	_ = s.state.Delete(ctx, codeSessionKey(request))
 }
@@ -905,7 +905,7 @@ func (s *Storage) Complete(ctx context.Context, id string, who Authenticated) er
 	// on its way to the first person's client.
 	if req.IsDone && (req.Subject != strings.ToLower(who.Subject) || req.SSO != who.SSO) {
 		s.logger().WarnContext(ctx, "refused to complete an authorization request again as somebody else",
-			"client", logsafe.Value(req.Req.ClientID))
+			logattr.SafeString("client", req.Req.ClientID))
 
 		return ErrCompletedByAnother
 	}
@@ -1307,7 +1307,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 	if err != nil || ended {
 		if _, revokeErr := s.iss.Sessions().RevokeID(ctx, session.ID); revokeErr != nil {
 			s.logger().WarnContext(ctx, "a session opened under an ended sign-in could not be ended",
-				"error", logsafe.Error(revokeErr))
+				logattr.SafeError("error", revokeErr))
 		}
 		if err != nil {
 			return "", "", time.Time{}, oidc.ErrServerError().WithDescription("%s", err)
@@ -1344,7 +1344,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(
 			// authenticated, and what is lost is a defence against a reuse
 			// that may never come.
 			s.logger().WarnContext(ctx, "could not record which session a code opened; "+
-				"reusing that code will be denied but will revoke nothing", "error", err)
+				"reusing that code will be denied but will revoke nothing", slog.Any("error", err))
 		}
 	}
 
@@ -1757,11 +1757,11 @@ func (s *Storage) claimsFor(
 func (s *Storage) refuseAtAbsoluteLimit(ctx context.Context, ended Session) error {
 	if revokeErr := s.iss.Sessions().deleteSession(ctx, ended); revokeErr != nil {
 		s.logger().WarnContext(ctx, "a session past the absolute limit could not be revoked",
-			"error", revokeErr)
+			slog.Any("error", revokeErr))
 	}
 
 	s.logger().InfoContext(ctx, "refused a refresh past the absolute session limit",
-		"client_id", logsafe.Value(ended.ClientID))
+		logattr.SafeString("client_id", ended.ClientID))
 	s.iss.record(ctx, audit.SessionRefreshRefused(ended.Identity, ended.ClientID,
 		"the absolute session limit was reached"))
 
@@ -1814,7 +1814,7 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 	if !ended {
 		if err != nil {
 			s.logger().WarnContext(ctx, "a spent refresh token was reused and its session could not be ended",
-				"error", logsafe.Error(err))
+				logattr.SafeError("error", err))
 
 			return oidc.ErrServerError().WithDescription("%s", err)
 		}
@@ -1831,13 +1831,13 @@ func (s *Storage) endReuse(ctx context.Context, p presented) error {
 		// -- with an index set still naming it, which the next listing
 		// drops.
 		s.logger().WarnContext(ctx, "a reused session was ended and an index set still names it",
-			"error", logsafe.Error(err))
+			logattr.SafeError("error", err))
 	}
 
 	// WARN, as for a reused authorization code: a broken client or a
 	// stolen token, and both are worth seeing.
 	s.logger().WarnContext(ctx, "a spent refresh token was reused after its grace window; its session has been ended",
-		"client_id", logsafe.Value(session.ClientID))
+		logattr.SafeString("client_id", session.ClientID))
 	s.announceLogout(ctx, s.logger(), []Session{session})
 
 	return oidc.ErrInvalidGrant().WithDescription("the refresh token is not live")
@@ -1931,7 +1931,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	if err = s.entitled(ctx, session.ClientID, session.Resource, session.Identity, session.serviceAccount()); err != nil {
 		if errors.Is(err, ErrNotEntitled) {
 			s.logger().InfoContext(ctx, "refused a refresh for a client the identity is no longer entitled to",
-				"client_id", logsafe.Value(session.ClientID), "error", logsafe.Error(err))
+				logattr.SafeString("client_id", session.ClientID), logattr.SafeError("error", err))
 			// A refresh is not an event; a refused one is — it is the
 			// moment somebody taken out of a group lost a client.
 			s.iss.record(ctx, audit.SessionRefreshRefused(session.Identity, session.ClientID,
@@ -2011,16 +2011,16 @@ func (s *Storage) refuseDead(ctx context.Context, sum [sha256.Size]byte, dead bo
 		return
 	}
 
-	attrs := []any{
-		"client_id", logsafe.Value(presentedFrom(ctx).clientID),
-		"token_fingerprint", fingerprint(sum),
-		"remembered", dead,
+	attrs := []slog.Attr{
+		logattr.SafeString("client_id", presentedFrom(ctx).clientID),
+		slog.String("token_fingerprint", fingerprint(sum)),
+		slog.Bool("remembered", dead),
 	}
 	if held > 0 {
-		attrs = append(attrs, "suppressed", held)
+		attrs = append(attrs, slog.Int("suppressed", held))
 	}
 
-	s.logger().WarnContext(ctx, "refused a refresh token that names no live session", attrs...)
+	s.logger().LogAttrs(ctx, slog.LevelWarn, "refused a refresh token that names no live session", attrs...)
 }
 
 // refuseNotLive ends a session whose person the directory authoritatively
@@ -2042,7 +2042,7 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 	if !ended {
 		if err != nil {
 			s.logger().WarnContext(ctx, "a session whose person the directory no longer has could not be ended",
-				"client_id", logsafe.Value(p.session.ClientID), "error", logsafe.Error(err))
+				logattr.SafeString("client_id", p.session.ClientID), logattr.SafeError("error", err))
 
 			return oidc.ErrServerError().WithDescription("%s", err)
 		}
@@ -2056,7 +2056,7 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 		// -- with an index set still naming it, which the next listing
 		// drops.
 		s.logger().WarnContext(ctx, "an ended session's index sets still name it",
-			"client_id", logsafe.Value(session.ClientID), "error", logsafe.Error(err))
+			logattr.SafeString("client_id", session.ClientID), logattr.SafeError("error", err))
 	}
 
 	for _, token := range []string{p.token, p.successor} {
@@ -2067,12 +2067,12 @@ func (s *Storage) refuseNotLive(ctx context.Context, p presented) error {
 		if err = s.iss.Sessions().state.Delete(ctx, sessionTokenKey(token)); err != nil {
 			// Ended all the same: every token resolves through the record.
 			s.logger().WarnContext(ctx, "an ended session's refresh token pointer could not be removed",
-				"error", logsafe.Error(err))
+				logattr.SafeError("error", err))
 		}
 	}
 
 	s.logger().InfoContext(ctx, "refused a refresh: the directory says the person is not live; the session has been ended",
-		"client_id", logsafe.Value(session.ClientID))
+		logattr.SafeString("client_id", session.ClientID))
 	s.iss.record(ctx, audit.SessionRefreshRefused(session.Identity, session.ClientID,
 		"the directory says this account is not live"))
 	s.announceLogout(ctx, s.logger(), []Session{session})
@@ -2225,7 +2225,7 @@ func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, _, _ string) 
 // authorizes the caller before it acts.
 func (s *Storage) TerminateSession(ctx context.Context, identity, clientID string) error {
 	s.logger().DebugContext(ctx, "end_session revokes nothing here; the browser's sign-in decides",
-		"identity", logsafe.Value(identity), "client_id", logsafe.Value(clientID))
+		logattr.SafeString("identity", identity), logattr.SafeString("client_id", clientID))
 
 	return nil
 }

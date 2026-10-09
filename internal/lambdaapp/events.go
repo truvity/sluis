@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/truvity/sluis/internal/logsafe"
 	"github.com/truvity/sluis/internal/port/invoke"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // Handler is one function's entry point: the platform's event in, a result out.
@@ -94,10 +94,11 @@ func (c *Controller) Handle(ctx context.Context, payload json.RawMessage) (any, 
 	// its own memory: Pass refuses a State that is not shared.
 	ran, err := pass.Pass(ctx, event.Target, false)
 	if closeErr := pass.Close(); closeErr != nil {
-		log.WarnContext(ctx, "the audit emitter could not be closed cleanly; what its queue held is dropped", "error", logsafe.Error(closeErr))
+		log.WarnContext(ctx, "the audit emitter could not be closed cleanly; what its queue held is dropped", logattr.SafeError("error", closeErr))
 	}
 	if err != nil && event.Kind == KindRun && c.Unknown != nil && c.Unknown(err) {
-		log.InfoContext(ctx, "a run-now for a target this controller does not run", "controller", c.Name, "target", logsafe.Value(event.Target))
+		log.InfoContext(ctx, "a run-now for a target this controller does not run", slog.String("controller", c.Name),
+			logattr.SafeString("target", event.Target))
 		return Result{Kind: event.Kind, Target: event.Target, Outcome: OutcomeUnknown}, nil
 	}
 	if err != nil {
@@ -107,7 +108,7 @@ func (c *Controller) Handle(ctx context.Context, payload json.RawMessage) (any, 
 	if !ran {
 		outcome = OutcomeContended
 	}
-	log.InfoContext(ctx, "invocation done", "controller", c.Name, "kind", logsafe.Value(event.Kind), "outcome", outcome)
+	log.InfoContext(ctx, "invocation done", slog.String("controller", c.Name), logattr.SafeString("kind", event.Kind), slog.String("outcome", outcome))
 	return Result{Kind: event.Kind, Target: event.Target, Outcome: outcome}, nil
 }
 
@@ -225,7 +226,7 @@ func (h *HTTP) controller(ctx context.Context, payload json.RawMessage) (any, er
 	c := h.controllers[kind]
 	if c == nil {
 		if event.Kind == KindRun {
-			h.log.InfoContext(ctx, "a run-now for a target no controller of this function runs", "target", logsafe.Value(event.Target))
+			h.log.InfoContext(ctx, "a run-now for a target no controller of this function runs", logattr.SafeString("target", event.Target))
 			return Result{Kind: event.Kind, Target: event.Target, Outcome: OutcomeUnknown}, nil
 		}
 		return nil, fmt.Errorf("the target %q is declared by no controller this function runs", oneLine(event.Target))

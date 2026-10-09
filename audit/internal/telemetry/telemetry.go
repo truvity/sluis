@@ -159,7 +159,7 @@ func Start(ctx context.Context, service, version string, log *slog.Logger) (func
 		otel.SetMeterProvider(provider)
 		stops = append(stops, provider.Shutdown)
 		addFlusher(provider.ForceFlush)
-		log.InfoContext(ctx, "publishing metrics over OTLP", "service", service)
+		log.InfoContext(ctx, "publishing metrics over OTLP", slog.String("service", service))
 	}
 	if TracesEnabled() {
 		exporter, err := otlptracehttp.New(ctx)
@@ -178,7 +178,7 @@ func Start(ctx context.Context, service, version string, log *slog.Logger) (func
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 		stops = append(stops, provider.Shutdown)
 		addFlusher(provider.ForceFlush)
-		log.InfoContext(ctx, "publishing traces over OTLP", "service", service)
+		log.InfoContext(ctx, "publishing traces over OTLP", slog.String("service", service))
 	}
 	return func(ctx context.Context) error {
 		var errs []error

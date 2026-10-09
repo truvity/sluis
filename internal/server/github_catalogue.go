@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -21,7 +22,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/catalogueapp"
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // GitHubCatalogueApps is where catalogue Apps are kept: every App's record
@@ -476,7 +477,7 @@ func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.R
 	registration, err := githubapp.Convert(r.Context(), s.console.githubHTTP(), r.URL.Query().Get("code"))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "a catalogue App was created and its key could not be collected",
-			"id", entry.ID, "org", entry.Org, "error", logsafe.Error(err))
+			slog.String("id", entry.ID), slog.String("org", entry.Org), logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the App, and then would not hand over its key.", err.Error(), []string{
 				"The page was reloaded: the code GitHub returns can be exchanged once.",
@@ -496,14 +497,15 @@ func (s *ConsoleServer) githubCatalogueCallback(w http.ResponseWriter, r *http.R
 		ConnectedAt: time.Now().UTC(), ConnectedBy: actor,
 	}
 	if err = s.console.deps.GitHubCatalogueApps.Put(r.Context(), record, registration.PEM); err != nil {
-		s.log.ErrorContext(r.Context(), "a catalogue App was created and could not be kept", "id", entry.ID, "org", entry.Org, "error", err)
+		s.log.ErrorContext(r.Context(), "a catalogue App was created and could not be kept", slog.String("id", entry.ID), slog.String("org", entry.Org),
+			logattr.SafeError("error", err))
 		s.githubProblem(w, r, http.StatusConflict,
 			"GitHub created the App, and it could not be saved here. Delete it on GitHub and create it again.", err.Error(), nil)
 		return
 	}
 	s.console.githubSeen.forget(entry.ID)
-	s.log.InfoContext(r.Context(), "catalogue App created", "id", entry.ID, "org", entry.Org, "app", registration.ID,
-		"slug", registration.Slug, "by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "catalogue App created", slog.String("id", entry.ID), slog.String("org", entry.Org), slog.Int64("app", registration.ID),
+		slog.String("slug", registration.Slug), logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.CatalogueAppCreated(audit.Identified(actor), entry.Org,
 		audit.App{Name: entry.ID, ID: registration.ID, Slug: registration.Slug}))
 
@@ -552,8 +554,9 @@ func (s *ConsoleServer) githubCatalogueSetup(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.console.githubSeen.forget(entry.ID)
-	s.log.InfoContext(r.Context(), "catalogue App installed", "id", entry.ID, "org", record.Org, "installation", installation,
-		"by", logsafe.Value(actor))
+	s.log.InfoContext(r.Context(), "catalogue App installed", slog.String("id", entry.ID), slog.String("org", record.Org),
+		slog.Int64("installation", installation),
+		logattr.SafeString("by", actor))
 	s.console.record(r.Context(), audit.CatalogueAppInstalled(audit.Identified(actor), record.Org,
 		audit.App{Name: entry.ID, ID: record.AppID, Slug: record.AppSlug}, installation))
 	http.Redirect(w, r, s.at("/#/github/apps/catalogue"), http.StatusFound)

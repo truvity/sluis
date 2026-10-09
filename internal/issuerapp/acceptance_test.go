@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -75,7 +74,7 @@ clients:
 		deps.Stores = &store.Stores{Secrets: testSecrets}
 	}
 	app, err := issuerapp.New(context.Background(), cfg,
-		deps, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		deps, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -248,7 +247,7 @@ func TestImpossibleConfigurationIsRefused(t *testing.T) {
 		t.Fatalf("FromConfig: %v", err)
 	}
 	if _, err = issuerapp.New(context.Background(), cfg, issuerapp.Deps{},
-		slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+		slog.New(slog.DiscardHandler)); err == nil {
 		t.Error("an issuer with no directory at all was accepted")
 	}
 }
@@ -338,7 +337,7 @@ func TestAMissingSigningKeyStopsTheService(t *testing.T) {
 			t.Fatalf("FromConfig: %v", err)
 		}
 		if _, err = issuerapp.New(context.Background(), cfg, issuerapp.Deps{},
-			slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+			slog.New(slog.DiscardHandler)); err == nil {
 			t.Errorf("%s was accepted as a signing key", name)
 		}
 	}

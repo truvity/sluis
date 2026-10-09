@@ -57,7 +57,7 @@ func (s *shared) Lock(_ context.Context, key string, ttl time.Duration) (func(co
 func TestOneReplicaReadsPerScheduledPass(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 
 	directory := fake.New("C0north", "north.example").
 		WithAccount("ada@north.example", "Ada", "North")
@@ -103,7 +103,7 @@ func TestOneReplicaReadsPerScheduledPass(t *testing.T) {
 func TestAFailedPassHandsTheLeaseBack(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 
 	directory := fake.New("C0north", "north.example").
 		WithAccount("ada@north.example", "Ada", "North")
@@ -136,7 +136,7 @@ func TestAFailedPassHandsTheLeaseBack(t *testing.T) {
 func TestARefusedLeaseStopsAPassButABrokenOneDoesNot(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 
 	directory := fake.New("C0north", "north.example").
 		WithAccount("ada@north.example", "Ada", "North")
@@ -183,7 +183,7 @@ func TestTheLeaseIsShorterThanTheIntervalThatSchedulesIt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	quiet := slog.New(slog.DiscardHandler)
 	interval := 15 * time.Minute
 
 	directory := fake.New("C0north", "north.example").
@@ -226,7 +226,7 @@ func requestRefreshHarness(t *testing.T) (*hub.Hub, *fake.Backend, *shared, *tim
 	clock := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	directory := fake.New("C0north", "north.example").WithAccount("ada@north.example", "Ada", "North")
 	snapshots := newShared()
-	h := hub.New(hub.NewMemoryStore(), snapshots, hub.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := hub.New(hub.NewMemoryStore(), snapshots, hub.Config{}, slog.New(slog.DiscardHandler))
 	h.SetClock(func() time.Time { return clock })
 	if _, err := h.Adopt(ctx, hub.Workspace{Admin: "admin@north.example"}, directory); err != nil {
 		t.Fatalf("Adopt: %v", err)

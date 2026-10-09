@@ -44,9 +44,7 @@ internal/                 hub (snapshots, routing, authority), issuer
                           apply, status, connection, controller, app),
                           slackapp (the Slack client, its catalogue Apps
                           and slackfake), githubapp, rails (what the
-                          reconcilers share), logsafe (every request- or
-                          Slack-derived value goes through it before it
-                          is logged), audit (the catalogue, one
+                          reconcilers share), audit (the catalogue, one
                           constructor per action, and the emitter), demo
                           (fixtures). app and
                           issuerapp assemble the two halves; rosterapp
@@ -138,6 +136,20 @@ the dependency; run it on its own with `just vuln`, the same way
   land in the same commit.
 - **Contracts are additive.** `buf breaking` guards `proto/`; a field is
   added, never renumbered or removed, so every existing client stays valid.
+- **Logging uses typed slog attributes, and untrusted values go through
+  `Safe*`.** Every `slog` call passes `slog.String`, `slog.Int`,
+  `slog.Duration`, `slog.Bool`, `slog.Time`, `slog.Group` (`slog.Any` only
+  where no typed constructor fits), never alternating `"key", value` pairs;
+  the message is a constant, the variable part is an attribute, keys are
+  `snake_case`, and the `*Context` variants are used. `sloglint` enforces
+  this (`.golangci.yaml`, `audit/.golangci.yaml`). It cannot tell a trusted
+  value from an untrusted one, so that part is a **review rule**: a value
+  that came from a request, a token claim, a caller-supplied name or an
+  external API error (error text often quotes its input) is logged with
+  `logattr.SafeString`, `logattr.SafeStrings` or `logattr.SafeError` from
+  [`storage/logattr`](storage/logattr/logattr.go), which strip line breaks,
+  control and bidirectional-control characters and cap the length. Values we
+  own (configuration, constants, ids we generated) stay plain `slog.String`.
 - **The chart's `version` stays `0.0.0`.** The git tag is the version
   authority; the release workflow stamps it at package time.
 

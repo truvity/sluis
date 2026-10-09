@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -39,7 +38,7 @@ func scoped(t *testing.T, next http.Handler) http.Handler {
 				Reads:    []Read{ReadResolve},
 			},
 		},
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log: slog.New(slog.DiscardHandler),
 		Review: func(_ context.Context, token string, _ []string) (string, error) {
 			switch token {
 			case "issuer":

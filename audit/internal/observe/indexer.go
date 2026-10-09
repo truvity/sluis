@@ -143,10 +143,10 @@ func (x *Indexer) Run(ctx context.Context) error {
 	for {
 		report, err := x.Pass(ctx)
 		if err != nil && ctx.Err() == nil {
-			x.log().Error("an indexing pass failed; the next one resumes from the cursors", "error", err)
+			x.log().ErrorContext(ctx, "an indexing pass failed; the next one resumes from the cursors", slog.Any("error", err))
 		}
 		if report.Objects > 0 {
-			x.log().Info("indexed", "tenants", report.Tenants, "objects", report.Objects, "rows", report.Rows)
+			x.log().InfoContext(ctx, "indexed", slog.Int("tenants", report.Tenants), slog.Int("objects", report.Objects), slog.Int("rows", report.Rows))
 		}
 		wait := x.interval()
 		if !report.Next.IsZero() {
@@ -272,8 +272,8 @@ func (x *Indexer) tenant(ctx context.Context, profile, tenant string, horizon ti
 		}
 		got, unreadable, err := ReadObject(ctx, x.Store, e.Key, x.Fields)
 		for _, what := range unreadable {
-			x.log().Error("an object the archive holds could not be read, and is skipped: it will not read later either",
-				"profile", profile, "object", what)
+			x.log().ErrorContext(ctx, "an object the archive holds could not be read, and is skipped: it will not read later either",
+				slog.String("profile", profile), slog.String("object", what))
 			if x.OnDeferred != nil {
 				x.OnDeferred(profile, what, true, errors.New("unreadable"))
 			}

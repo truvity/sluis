@@ -7,7 +7,7 @@ import (
 
 	"github.com/zitadel/oidc/v3/pkg/op"
 
-	"github.com/truvity/sluis/internal/logsafe"
+	"github.com/truvity/sluis/storage/logattr"
 )
 
 // signInVerdict is what the issuer decided about a browser's sign-in.
@@ -160,7 +160,7 @@ func standingSignIn(deps SignInDeps, w http.ResponseWriter, r *http.Request, res
 		// those clients meets the directory's refusal itself, at its next
 		// refresh, which resolves the person afresh.
 		deps.log().WarnContext(r.Context(), "browser session is no longer admitted",
-			"identity", logsafe.Value(standing.Session.Identity), "error", logsafe.Error(standing.Refusal))
+			logattr.SafeString("identity", standing.Session.Identity), logattr.SafeError("error", standing.Refusal))
 		_ = deps.SSO.End(r.Context(), standing.Session.ID)
 		http.SetCookie(w, deps.SSO.Cookie("", deps.Secure))
 
