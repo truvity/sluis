@@ -92,7 +92,7 @@ func TestClientDocumentsTTLCapReachesAccessTokens(t *testing.T) {
 	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set,
 		aDirectory{"ada@north.example": {Found: true, Authoritative: true, Groups: []string{"eng@north.example"}}},
 		NewMemoryState())
-	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	storage, err := NewTestStorage(iss, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func agentInternalIssuer(t *testing.T) (*Issuer, *Storage) {
 	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set,
 		aDirectory{"ada@north.example": {Found: true, Authoritative: true, Groups: []string{"eng@north.example"}}},
 		NewMemoryState())
-	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	storage, err := NewTestStorage(iss, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

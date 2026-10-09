@@ -148,3 +148,24 @@ func TestKeyRingsRotateRefusesAnUnconfiguredAlgorithm(t *testing.T) {
 		t.Errorf("RS256 active = %v, want nil: nothing was ever configured for it", got)
 	}
 }
+
+// Secret is HKDF of the primary seed under the label: stable, never the seed,
+// different per label, and absent where the key has no seed.
+func TestKeyRingsSecretIsDerivedPerLabel(t *testing.T) {
+	t.Parallel()
+	key, err := signer.NewSigningKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := signer.NewKeyRings(key, nil, issuer.NewMemoryState(), signer.KeyRingConfig{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := keys.Secret("one"), keys.Secret("two")
+	if len(a) != 32 || string(a) == string(b) || string(a) != string(keys.Secret("one")) {
+		t.Errorf("Secret(one)=%x Secret(two)=%x: want stable, 32 bytes, distinct per label", a, b)
+	}
+	if string(a) == string(key.Seed()) || string(a) == string(key.Derive("one")) {
+		t.Error("the secret is the seed or the sign-in state's derivation")
+	}
+}

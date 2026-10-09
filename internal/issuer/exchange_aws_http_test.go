@@ -95,7 +95,7 @@ func awsExchange(t *testing.T) (server *httptest.Server, mint func(sub string) s
 		Account: "111122223333", Name: "apps", Issuer: fake.URL,
 		Audience: awsExchangeAudience, Client: fake.Client(),
 	}
-	storage, err := issuer.NewStorage(iss, issuer.Verifiers{aws}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, issuer.Verifiers{aws}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

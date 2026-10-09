@@ -122,7 +122,7 @@ func serveCloudflare(t *testing.T, withMinter bool) cloudflareIssuer {
 	if withMinter {
 		iss.UseCloudflare(fake)
 	}
-	storage, err := issuer.NewStorage(iss, jobVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, jobVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

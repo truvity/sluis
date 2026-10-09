@@ -31,7 +31,7 @@ func asMetadataHandler(t *testing.T, issuerURL string, documents bool) http.Hand
 		t.Fatalf("policy set: %v", err)
 	}
 	iss := issuer.New(issuer.Config{URL: issuerURL, AllowInsecure: true}, set, &fakeDirectory{}, issuer.NewMemoryState())
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

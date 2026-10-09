@@ -165,7 +165,7 @@ func TestAnAgentChainOutlivesADayAndEndsAtThirtyDays(t *testing.T) {
 	// that is simply gone: the record is still stored for the class's
 	// refresh window, so it is refused BY the limit, with that reason.
 	w.at(30 * day)
-	storage, err := issuer.NewStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +443,7 @@ func TestTheClassDecidedAtCompleteSurvivesAPolicyFlip(t *testing.T) {
 			w := newAgentWorld(t, agentPolicyText(tc.atComplete))
 			w.now = time.Now()
 
-			before, err := issuer.NewStorage(w.iss, fakeVerifier{}, nil, nil, nil, requests)
+			before, err := issuer.NewTestStorage(w.iss, fakeVerifier{}, nil, nil, nil, requests)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -460,7 +460,7 @@ func TestTheClassDecidedAtCompleteSurvivesAPolicyFlip(t *testing.T) {
 				t.Fatalf("complete: %v", err)
 			}
 
-			after, err := issuer.NewStorage(w.issuerOver(t, agentPolicyText(tc.redeem)), fakeVerifier{}, nil, nil, nil, requests)
+			after, err := issuer.NewTestStorage(w.issuerOver(t, agentPolicyText(tc.redeem)), fakeVerifier{}, nil, nil, nil, requests)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -550,7 +550,7 @@ func TestASignInHeldByAnAgentSessionIsNotAProof(t *testing.T) {
 
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true},
 		agentPolicySet(t, agentPolicyText(true)), adaDirectory(), issuer.NewMemoryState())
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -601,7 +601,7 @@ func TestAgentTokensAreCappedAtTheClassAccessLifetime(t *testing.T) {
 
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true},
 		agentPolicySet(t, agentPolicyText(true)), adaDirectory(), issuer.NewMemoryState())
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,7 +707,7 @@ func TestAShorterAgentIdleLimitEndsAChainAlreadyIdlePastIt(t *testing.T) {
 			w := newAgentWorld(t, agentPolicyText(true))
 			w.open(t, issuer.Opened{ClientID: agentClient, Token: "t-0", Class: issuer.ClassAgent})
 			w.iss.Sessions().SetAgentLifetimes(issuer.AgentLifetimes{Refresh: 2 * day, Absolute: 30 * day, Access: 30 * time.Minute}, nil)
-			storage, err := issuer.NewStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
+			storage, err := issuer.NewTestStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -729,7 +729,7 @@ func TestARecoverySignInIsAlwaysInteractive(t *testing.T) {
 	ctx := t.Context()
 	w := newAgentWorld(t, agentPolicyText(true))
 	w.now = time.Now()
-	storage, err := issuer.NewStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(w.iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

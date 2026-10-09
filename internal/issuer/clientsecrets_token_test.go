@@ -40,7 +40,7 @@ func TestTheClientSecretsEndpointChecksTheRealTokensAudience(t *testing.T) {
 	store := memory.NewSecrets()
 	clientcreds.Reconcile(context.Background(), []string{"grafana"}, store, nil, time.Now(), nil, clientcreds.Hooks{})
 	iss.UseClientSecrets(&clientcreds.Manager{Store: store, Generated: func(id string) bool { return id == "grafana" }})
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -443,7 +443,7 @@ func newSSORigWith(t *testing.T, cfg issuer.Config, text string) *ssoRig {
 	iss := issuer.New(cfg, set, dir, state)
 	iss.UseAudit(trail)
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

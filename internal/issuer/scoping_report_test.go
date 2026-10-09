@@ -97,7 +97,7 @@ func serveScoping(
 		URL: "http://issuer.example", AllowInsecure: true, GroupsScoping: mode,
 	}, set, dir, issuer.NewMemoryState())
 
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

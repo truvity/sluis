@@ -167,7 +167,7 @@ func TestRefreshPastADayWithinSevenOverHTTP(t *testing.T) {
 	t.Parallel()
 
 	iss := resourceAbsoluteIssuer(t)
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestAWithdrawnExtensionEndsTheChainAtItsNextRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	withdrawn := issuer.New(cfg, set, dir, state)
-	storage, err := issuer.NewStorage(withdrawn, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(withdrawn, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestSilentAuthorizeUsesTheRequestsResourcesLimit(t *testing.T) {
 
 	email := "ada@north.example"
 	iss := resourceAbsoluteIssuer(t)
-	storage, err := issuer.NewStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
+	storage, err := issuer.NewTestStorage(iss, fakeVerifier{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -543,7 +543,7 @@ func TestADocumentClientPresentingASecretIsRefusedClearly(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 	iss := New(Config{URL: "http://issuer.example", AllowInsecure: true}, set, nil, NewMemoryState())
-	storage, err := NewStorage(iss, nil, nil, nil, nil, nil)
+	storage, err := NewTestStorage(iss, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}

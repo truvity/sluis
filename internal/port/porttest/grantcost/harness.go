@@ -40,6 +40,7 @@ import (
 	"github.com/truvity/sluis/internal/port"
 	"github.com/truvity/sluis/internal/port/memory"
 	"github.com/truvity/sluis/internal/portstore"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -137,7 +138,16 @@ func New(t *testing.T, env Env) *Harness {
 	dir := hublocal.New(asked, 0)
 	state := issuer.NewPortState(counted.State, counted.Index)
 	iss := issuer.New(issuer.Config{URL: "http://issuer.example", AllowInsecure: true}, set, dir, state)
-	storage, err := issuer.NewStorage(iss, issuer.Verifiers{}, nil, nil, nil, state)
+	key, err := signer.NewSigningKey()
+	if err != nil {
+		t.Fatalf("signing key: %v", err)
+	}
+	keys, err := signer.NewKeyRings(key, nil, state, signer.KeyRingConfig{}, nil)
+	if err != nil {
+		t.Fatalf("key rings: %v", err)
+	}
+	storage, err := issuer.NewStorage(iss, issuer.Verifiers{}, nil,
+		signer.New(keys, signer.LimitsFor(iss.Config().TokenLifetime)), keys, state)
 	if err != nil {
 		t.Fatalf("storage: %v", err)
 	}
