@@ -90,7 +90,7 @@ func TestTheRotatedCredentialsAreReadFromTheSluisStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prov, err := storedFromState(st, "/sluis/main", "external/cloudflare/r2")
+	prov, err := storedFromState(st, "/sluis/main", "external/cloudflare/r2", "HTTPS://acct.r2.example.test/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,14 +108,14 @@ func TestTheRotatedCredentialsAreReadFromTheSluisStore(t *testing.T) {
 		t.Fatalf("after a rotation: %s", c.AccessKeyID)
 	}
 
-	missing, _ := storedFromState(st, "/sluis/main", "external/cloudflare/absent")
+	missing, _ := storedFromState(st, "/sluis/main", "external/cloudflare/absent", "")
 	if _, err := missing.Retrieve(ctx); err == nil || !strings.Contains(err.Error(), "/sluis/main/external/cloudflare/absent") {
 		t.Fatalf("a missing document: %v", err)
 	}
 	if _, err = st.Put(ctx, "external/cloudflare/token", []byte(`{"schema":"cloudflare/v1","token":"s3cret-t","expires_on":"2099-01-01T00:00:00Z"}`), ""); err != nil {
 		t.Fatal(err)
 	}
-	token, _ := storedFromState(st, "/sluis/main", "external/cloudflare/token")
+	token, _ := storedFromState(st, "/sluis/main", "external/cloudflare/token", "")
 	if _, err := token.Retrieve(ctx); err == nil || strings.Contains(err.Error(), "s3cret") {
 		t.Fatalf("a token preset's document: %v", err)
 	}
@@ -137,5 +137,33 @@ func TestTheRotatedCredentialsAreReadFromAProjectedFile(t *testing.T) {
 	}
 	if c, err := prov.Retrieve(context.Background()); err != nil || c.AccessKeyID != "k1" {
 		t.Fatalf("%+v %v", c, err)
+	}
+}
+
+// A document for another endpoint than the preset's is refused, naming its
+// address and both endpoints and never the secret.
+func TestARotatedDocumentForAnotherEndpointIsRefused(t *testing.T) {
+	ctx := context.Background()
+	st := memory.New()
+	doc := `{"schema":"cloudflare/v1","access_key_id":"k1","secret_access_key":"s3cret-k1","endpoint":"https://other.r2.example.test","expires_on":"` +
+		time.Now().Add(15*time.Minute).UTC().Format(time.RFC3339) + `"}`
+	if _, err := st.Put(ctx, "external/cloudflare/r2", []byte(doc), ""); err != nil {
+		t.Fatal(err)
+	}
+	prov, err := storedFromState(st, "/sluis/main", "external/cloudflare/r2", "https://acct.r2.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = prov.Retrieve(ctx)
+	if err == nil {
+		t.Fatal("a document for another endpoint was accepted")
+	}
+	for _, want := range []string{"/sluis/main/external/cloudflare/r2", "https://other.r2.example.test", "https://acct.r2.example.test"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal lacks %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("the refusal carries the secret: %v", err)
 	}
 }

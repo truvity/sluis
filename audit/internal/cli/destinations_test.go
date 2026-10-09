@@ -178,7 +178,7 @@ func TestAPresetStoreReadsTheCredentialsSluisRotates(t *testing.T) {
 		}
 		p := plans[profile.Operational]
 		if p.Credentials != nil || p.Minted != nil || p.Stored == nil || p.Stored.Ref != "external/cloudflare/audit-r2" ||
-			p.Stored.Root != a.SluisRoot || p.Stored.Dir != a.SluisDir {
+			p.Stored.Root != a.SluisRoot || p.Stored.Dir != a.SluisDir || p.Stored.Endpoint != "https://acct.r2.cloudflarestorage.com" {
 			t.Errorf("%s: stored plan: %+v / %+v / %+v", name, p.Credentials, p.Minted, p.Stored)
 		}
 	}

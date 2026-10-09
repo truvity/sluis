@@ -111,6 +111,8 @@ type StoredCredentials struct {
 	// (archive.sluisRoot); Dir the directory the documents are projected into
 	// (archive.sluisDir). Exactly one is set.
 	Root, Dir string
+	// Endpoint is the preset's endpoint: a document for another is refused.
+	Endpoint string
 }
 
 // MintedCredentials is a store whose credentials are minted: the preset's
@@ -164,7 +166,7 @@ func PlanPresets(d *profile.Deployment, a config.Archive) (map[profile.Preset]Pr
 				case a.SluisRoot != "" && a.SluisDir != "":
 					problems = append(problems, errors.New("archive.sluisRoot and archive.sluisDir are both set: the rotated credentials are read from one place"))
 				}
-				plan.Stored = &StoredCredentials{Ref: ref, Root: a.SluisRoot, Dir: a.SluisDir}
+				plan.Stored = &StoredCredentials{Ref: ref, Root: a.SluisRoot, Dir: a.SluisDir, Endpoint: st.Endpoint}
 			}
 			if st.Credentials != "" {
 				if a.StateRoot == "" {
