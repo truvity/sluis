@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -208,4 +209,32 @@ func (s *statusRecorder) status() int {
 		return http.StatusOK
 	}
 	return s.code
+}
+
+// The wire propagator: how a trace crosses a boundary that is not an HTTP header: a module
+// call whose envelope carries the W3C `traceparent` and `tracestate` fields.
+// It uses the W3C propagator directly, not the global one, so a process that
+// installed none still continues a trace it was handed.
+var wire = propagation.TraceContext{}
+
+// InjectWire returns the `traceparent` and `tracestate` of the span in ctx, both
+// empty when ctx holds no valid span.
+func InjectWire(ctx context.Context) (traceparent, tracestate string) {
+	carrier := propagation.MapCarrier{}
+	wire.Inject(ctx, carrier)
+	return carrier.Get("traceparent"), carrier.Get("tracestate")
+}
+
+// ExtractWire is ctx continuing the trace the two fields name. A malformed or
+// empty value leaves ctx as it was, so a bad header starts a new trace instead
+// of failing the call.
+func ExtractWire(ctx context.Context, traceparent, tracestate string) context.Context {
+	if traceparent == "" {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{"traceparent": traceparent}
+	if tracestate != "" {
+		carrier["tracestate"] = tracestate
+	}
+	return wire.Extract(ctx, carrier)
 }

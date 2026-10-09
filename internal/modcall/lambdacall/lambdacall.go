@@ -54,6 +54,10 @@ type Caller struct {
 	Functions map[string]string
 	// Class is the caller class the calls arrive as: the alias is `live-<Class>`.
 	Class string
+	// MaxBytes bounds a request payload and a result ([modcall.DefaultMaxBytes]
+	// when 0); raise it only for a callee that registered a larger
+	// [modcall.MaxBytes]. Lambda's own bound is 6 MB each way.
+	MaxBytes int
 }
 
 // New is the Caller for the functions a configuration names.
@@ -80,7 +84,15 @@ func (c *Caller) Call(ctx context.Context, module, method string, payload []byte
 	if !ok {
 		return nil, fmt.Errorf("%w: no function is configured for module %q", modcall.ErrNoRoute, module)
 	}
-	body, err := json.Marshal(modcall.Request{V: modcall.Version, Kind: modcall.Kind, Module: module, Method: method, Payload: payload})
+	ctx, req, p, err := modcall.Begin(ctx, module, method, payload, c.MaxBytes)
+	if err != nil {
+		return nil, err
+	}
+	return p.Finish(c.invoke(ctx, fn, req, p))
+}
+
+func (c *Caller) invoke(ctx context.Context, fn string, req modcall.Request, p *modcall.Pending) ([]byte, error) {
+	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +106,9 @@ func (c *Caller) Call(ctx context.Context, module, method string, payload []byte
 	// A function that crashed or timed out answers 200 with FunctionError set.
 	if out.FunctionError != nil {
 		return nil, fmt.Errorf("%w: %s failed: %s", modcall.ErrTransport, fn, aws.ToString(out.FunctionError))
+	}
+	if p.Oversize(out.Payload) {
+		return nil, &modcall.Error{Code: modcall.CodeInternal, Message: "the result is too large"}
 	}
 	var res modcall.Response
 	if err = json.Unmarshal(out.Payload, &res); err != nil {
