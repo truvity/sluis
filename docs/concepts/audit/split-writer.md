@@ -1,164 +1,71 @@
-# Split writer
+# What does the writer do with a record?
 
-The single trusted consumer of the wide stream. **It is a service**, never a
-library inside the application: the credentials for the archive, the index and
-the stream live in its pods and nowhere else, and a fix to it does not rebuild
-the application
-([0053](../../decisions/0053-one-installation-per-service-or-product.md)).
+The writer is the single trusted consumer of the wide record. It is a service, never a library in the application. The archive, index and stream credentials live in its pods only.
 
-It runs in one of two ways, and the steps below are the same in both. In
-[stream mode](stream-mode.md) it is `audit-writer` in consumer mode,
-N pods reading a durable pull consumer. In
-[direct mode](direct-mode.md) the receiver is the writer: the same
-code, in the process the application talks to, with the records arriving from
-the request instead of from the stream, and the acknowledgement withheld until
-the roll that holds them has been put and indexed.
+In [stream mode](stream-mode.md) it is `audit-writer` in consumer mode: N pods sharing one durable pull consumer. In [direct mode](direct-mode.md) the receiver is the writer, and records arrive from the request. The steps are the same in both.
 
-With a stream, every replica shares one durable consumer, which is what makes a
-second replica a second pair of hands rather than a second copy of every record.
-The stream itself is the deployment's to create and the writer refuses to start
-without it: its retention and discard policy decide whether a full stream
-refuses publishers or drops records, and that is not a choice this component
-should make quietly. The acknowledgement wait must exceed the longest a write
-can honestly take, since a batch is acknowledged only once its records are in
-the archive; set it too short and the stream offers the same records to a
-second replica while the first is still writing them.
+The deployment creates the stream, and the writer refuses to start without it. Set the acknowledgement wait above the longest write, or a second replica receives records the first is still writing.
 
 ## Per record
 
-1. **Ask** the deduplication table whether the `id` has been written, within a
-   configurable window (framework profile `pipeline.dedupe_window_days`). Asking marks
-   nothing; see below.
-2. **Resolve** the catalogue by `source` and `catalogue_version`. Unknown
-   version: dead-letter, alert, never drop.
-3. **Validate** against the composed schema. Violation: dead-letter.
-4. **Stamp** `recorded_at`, `observer` from the publisher's verified identity,
-   `origin_hash` as SHA-256 of the canonical wide record.
-5. **Split**: for each profile the action belongs to, build a copy with the
-   profile's allowed fields and classes.
-6. **Treat identities** per profile: clear, pseudonym (HMAC with the
-   tenant-and-purpose key), scoped, or omit. Apply `x-audit-sensitive`. With
-   `keys.provider: none` — the default — there is no pseudonym treatment at all,
-   and a deployment declares `external_identifiers_are_opaque` instead
-   ([0055](../../decisions/0055-no-pseudonymisation-keys-by-default.md)).
-8. **Buffer** per profile and tenant. Roll on interval (one to five minutes) or
-   size, measured before compression; what rolls is one ingest batch, and it is
-   keyed by the hour it was taken in, whatever the records' own dates. An
-   object's retention is fixed when it is opened rather than when it is written,
-   so every copy in it is kept at least as long as the profile asks of the
-   oldest.
-9. **PUT** each rolled object, conditionally (`If-None-Match: *`), with
-   `ObjectLockMode=COMPLIANCE` and `RetainUntilDate` from the profile's
-   retention, SSE-KMS, a checksum, `Content-Encoding: zstd` and the metadata
-   `format`, `sha256` and `count` ([the bucket
-   contract](../../reference/audit/bucket-contract.md)).
-10. **Copy schemas** on first use of a catalogue version: the catalogue to
-    `catalogue/<app>/<version>`, written once (the same bytes again are a
-    success, other bytes and the writer refuses to start), and extension schemas
-    to the schema prefix, locked for the longest profile the catalogue's actions
-    belong to. On first use of a record major, copy the record's JSON Schema and
-    its proto there too: the archive keeps the meaning of every field, not only
-    its shape.
-11. **Index** the object's rows, which moves the facet counts for the rows the
-    insert actually created. A failure here does not fail the write: the index
-    is a projection and `audit reindex` rebuilds it from the objects. The
-    deployment is told, because an index nobody notices is behind is one that
-    quietly answers wrongly.
-12. **Mark** the identifiers as written, now that the copies are durable.
-13. **Acknowledge** only after the PUT: the stream message in stream mode, the
-    caller's batch in direct mode. In both, an acknowledgement means the records
-    are in the archive.
+1. **Ask** the deduplication table whether the `id` was written within the window (`pipeline.dedupe_window_days`). Asking marks nothing.
+
+2. **Resolve** the catalogue by `source` and `catalogue_version`. An unknown version is dead-lettered with an alert, never dropped.
+
+3. **Validate** against the composed schema. A violation is dead-lettered.
+
+4. **Stamp** `recorded_at`, `observer` from the publisher's verified identity, and `origin_hash` as the SHA-256 of the canonical wide record.
+
+5. **Split** into one copy per profile the action belongs to, with the profile's allowed fields and classes.
+
+6. **Treat identities** per profile: clear, pseudonym (HMAC under the tenant-and-purpose key), scoped or omit. Apply `x-audit-sensitive`. With `keys.provider: none`, the default, there is no pseudonym treatment. Declare `external_identifiers_are_opaque` instead.
+
+7. **Buffer** per profile and tenant. Roll on an interval of one to five minutes or on size before compression. A roll is one ingest batch keyed by the hour it was taken. Retention is fixed when an object opens, so every copy keeps at least the oldest's period.
+
+8. **PUT** each object conditionally (`If-None-Match: *`) with `ObjectLockMode=COMPLIANCE`, `RetainUntilDate` from the profile, SSE-KMS, a checksum, `Content-Encoding: zstd` and the metadata `format`, `sha256` and `count`. See the [bucket contract](../../reference/audit/bucket-contract.md).
+
+9. **Copy schemas** on first use of a catalogue version. The catalogue goes to `catalogue/<app>/<version>`, written once: the same bytes again succeed, other bytes stop the writer. Extension schemas go to the schema prefix, locked for the longest profile involved. A new record major copies the record's JSON Schema and proto there too.
+
+10. **Mark** the identifiers as written, now that the copies are durable.
+
+11. **Acknowledge** after the PUT: the stream message in stream mode, the caller's batch in direct mode. An acknowledgement means the records are in the archive.
 
 ## Asking and marking are two calls
 
-The order is the interesting part, and it is the opposite of what reads best.
+The writer marks after the PUT, not before. With a shared table, a writer that claims an identifier and dies before its PUT leaves the record nowhere. The redelivery that would save it looks like a duplicate.
 
-Claiming an identifier before writing it is the natural shape, and it loses
-records. With deduplication in one process a crash takes the table with it, so
-the redelivery is accepted and nothing is lost. With a shared table the mark
-survives the crash: a writer that claims an identifier and dies before its PUT
-leaves the record nowhere, and the redelivery that would have saved it arrives
-looking like a duplicate. That is a silent hole in an audit trail, produced by
-the component whose job is to have none.
+A crash between PUT and mark writes the redelivery again. The archive holds a second object, the index keeps one row per identifier, and a reader sees the record once. A duplicate costs an object. A loss cannot be repaired.
 
-Marking afterwards can only fail the other way. A crash between the PUT and the
-mark means a redelivery is written again, and the archive holds a second copy:
-the index keeps one row per identifier, both objects are in the archive, and a
-reader sees the record once. A duplicate costs an object. A loss cannot be
-repaired at all.
-
-Because nothing is marked until the batch is durable, a batch carrying a
-redelivery beside its original is not settled by asking. The writer keeps its
-own account within the batch, and the second copy is absorbed there.
-
-## Payloads are not detached, and why
-
-An earlier design stored a body above a threshold once under `payload/sha256=…`
-and referenced it from each copy, so that several copies would not each carry
-it. With the framework profiles this repository ships there is nothing to duplicate:
-`capture` is kept by the security profile alone, and billing and history forbid
-it. The emitter already drops a body over its bound and caps the whole record,
-so object size is bounded without a payload prefix.
-
-The cost would not be small. A payload referenced later by a longer-lived
-profile would need its lock extended, and a writer cannot know its future
-referrers, so every payload would be locked for the longest profile: seven
-years on a request body kept for a copy that lives one.
-
-This comes back when a deployment keeps `capture` in more than one profile, or
-carries a large shared-class property that every copy gets. Until then it is
-machinery for a case that does not exist.
+The writer keeps its own account within a batch. It absorbs a redelivery that sits beside its original there.
 
 ## Idempotency
 
-An object's key ends in a ULID made when the put starts, monotonic per writer,
-and the put is conditional, so a key is never written twice. Index inserts are
-keyed by `(profile, id)`. A crash between PUT and index leaves an object
-without rows; the nightly reindex of the ingest day repairs it.
+An object key ends in a ULID made when the put starts. The put is conditional, so a key is never written twice. The writer does not index: observe follows the bucket and indexes each object, keyed on `(profile, id)`, so an object read twice adds no rows.
 
 ## Failure
 
-- Object storage unavailable: in stream mode the buffer holds until the
-  stream horizon, then the writer stops consuming and alerts, and the
-  stream's discard-new policy surfaces the stall to emitters as publish
-  failures. In direct mode there is no buffer to hold it: nothing is
-  acknowledged, so a `block` call fails and an `async` record waits in the
-  application's queue.
-- Postgres unavailable: PUT proceeds, index is deferred to reindex, ack is
-  withheld until a configurable grace, then dead-letter.
-- Writer restart: in stream mode unacknowledged messages are redelivered and
-  dedupe absorbs them; in direct mode nothing was acknowledged, so the
-  emitter's queue retries what it holds.
+| failure | stream mode | direct mode |
+|---|---|---|
+| object storage unavailable | the buffer holds to the stream horizon, then the writer stops consuming and alerts; discard-new surfaces publish failures to emitters | nothing is acknowledged; a `block` call fails and an `async` record waits in the application's queue |
+| writer restart | unacknowledged messages redeliver and dedupe absorbs them | the emitter's queue retries |
 
 ## Meta-events
 
-`audit.writer.started`, `audit.writer.stopped`,
-`audit.writer.dead_lettered`, `audit.catalogue.registered`,
-`audit.retention.extended`.
+The writer records `audit.writer.started`, `audit.writer.stopped`, `audit.writer.dead_lettered`, `audit.catalogue.registered` and `audit.retention.extended`. It holds an emitter bound to the common catalogue whose sink is the writer itself, over the in-process transport.
 
-They are records like any other, so the writer holds an emitter bound to the
-common catalogue whose sink is the writer itself, over the in-process
-transport. That is a loop by construction and it is the right one: the
-writer's own account of itself lands in the same archive under the same rules,
-and there is no second path to keep honest. Two rules keep the loop safe. The
-emitter uses `async` delivery by construction, because a `block` write from
-inside the writer's own batch would wait on itself
-([0054](../../decisions/0054-two-deliveries-and-a-durable-ack.md)). And a dead
-letter caused by one of these records is dead-lettered and logged, never
-emitted about, or one bad meta-record would beget another.
+The emitter uses `async` delivery, because a `block` write inside the writer's own batch would wait on itself. A dead letter caused by a meta-record is logged and dead-lettered, never emitted about.
 
 ## Replay
 
-A dead letter carries the reason and the full record. Once the cause is fixed,
-`audit replay --dlq --from --to` reads the dead letters of a range and hands the
-records back to the writer as a batch. Deduplication makes a replay of
-something that did get through harmless. Without a sink it reads and groups the
-reasons and sends nothing, which is how an operator decides what to replay;
-`--reason` and `--action` then narrow it to the cause that was fixed.
+A dead letter carries the reason and the full record. After you fix the cause, `audit replay --dlq --from --to` hands the range back to the writer as a batch. Deduplication makes replaying a record that got through harmless.
 
-Replay reports what failed again by listing the prefix before and after. That
-works because the writer dead-letters within the call that carried the record,
-so once a blocking write returns, whatever it could not process is already
-back. It is also the only way to tell: the writer *accepts* a record it
-dead-letters, and is right to, because a record that can never become valid
-must not be retried forever by every hop below.
+Without a sink, replay groups the reasons and sends nothing. Narrow with `--reason` and `--action`. Replay reports what failed again by listing the prefix before and after.
+
+## Decided in
+
+- [0044 Profiles composed from framework profiles](../../decisions/0044-profiles-composed-from-framework-profiles.md).
+- [0047 Identity tiers and pseudonymisation](../../decisions/0047-identity-tiers-and-pseudonymisation.md).
+- [0053 One installation per service or product](../../decisions/0053-one-installation-per-service-or-product.md).
+- [0055 No pseudonymisation keys by default](../../decisions/0055-no-pseudonymisation-keys-by-default.md).
+- [0059 Sink durability and transports](../../decisions/0059-sink-durability-and-transports.md).
+- [0060 The v1 bucket layout](../../decisions/0060-v1-bucket-layout.md).

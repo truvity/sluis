@@ -1,4 +1,6 @@
-# Failure semantics
+# What happens when something fails?
+
+Each row names a failure and what consumers and operators see.
 
 | Situation | What consumers and operators see |
 |---|---|
@@ -13,7 +15,7 @@
 | A request would wait on the directory | it does not: the work runs detached and the answer is *first snapshot pending* |
 | A policy the process refuses to load | the new pod does not start and the previous pods keep serving the previous policy |
 | A GitHub pass fails | the last report with rows stands; the pass is retried next interval; nothing is removed on a failed read |
-| The console answers a controller under another policy | the pass changes nothing and is tried again within seconds, a bounded number of times, before the interval resumes |
+| The console answers a controller under another policy | the pass changes nothing and is tried again 6 times, 5 seconds apart and doubling up to a minute, before the interval resumes |
 | A Slack workspace is not connected or not installed yet | that workspace reports a `waiting` pass with no error; nothing else is affected |
 | A Slack pass cannot read the workspace whole, or the directory cannot be read | the report is kept with the failure on it; nothing is decided or changed on a partial read, and nobody is removed |
 | A removal set is over half of a channel or of the workspace's managed members | nobody in that set is removed until an operator confirms that exact fingerprint (valid 24 hours; one confirmation covers every gate it fits) |
@@ -21,8 +23,14 @@
 | The audit installation cannot be reached | records queue in the process; sign-ins are not refused, except a recovery sign-in, which fails closed |
 | The whole installation is down | no new sign-ins; existing sessions and tokens live to expiry; [recovery](recovery.md) is by cluster proof |
 
-The rule under all of them: **access is removed only on an authoritative answer.** Everything that can go wrong
-degrades to *provisional*, never to "gone".
+## Access is removed only on an authoritative answer
 
-What operators do about each of these is in [day two](../../guides/sluis/operate/day-two.md); the controllers' refusals are collected
-in [safety](safety.md).
+Every failure degrades to *provisional*, never to "gone".
+
+To act on a failure, see [day two](../../guides/sluis/operate/day-two.md). [Safety](safety.md) collects the controllers' refusals.
+
+## Decided in
+
+- [ADR 0017: The Slack reconciler keeps membership only](../../decisions/0017-the-slack-reconciler-membership-only.md)
+- [ADR 0020: A channel defined twice is held](../../decisions/0020-hold-on-double-definition-instead-of-taking-over.md)
+- [ADR 0024: Reconciler rails are shared pieces](../../decisions/0024-reconciler-rails-are-shared-pieces-not-a-framework.md)

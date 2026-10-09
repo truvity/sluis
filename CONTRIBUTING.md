@@ -12,7 +12,7 @@ cmd/sluis                 the one binary and image: `serve` (the
                           the login page, the console, what it records
                           to the audit trail, and the GitHub and Slack
                           controllers as loops inside it, ADR 0037 and
-                          docs/concepts/sluis/one-process.md), and `migrate`
+                          docs/concepts/sluis/design.md), and `migrate`
                           (copies the State between storages, ADR 0031)
 cmd/resource-proxy        the sidecar that fronts a stock MCP server
                           with a resource server's front door

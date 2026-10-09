@@ -1,85 +1,60 @@
-# Integrity
+# How does the archive show it is intact?
 
-How the archive shows that nothing was removed, nothing was changed, and the operator did not choose what
-was signed. The decisions are [0045](../../decisions/0045-s3-object-lock-as-the-record.md) (the lock),
-[0056](../../decisions/0056-lock-modes-and-store-tiers.md) (the tiers) and [0061](../../decisions/0061-seals.md)
-(seals); the byte-level contract is the [bucket contract](../../reference/audit/bucket-contract.md#seals), and the
-check is [`audit verify`](../../reference/audit/verify-command.md). The v0 digest chain that preceded seals was removed
-with the v0 layout ([0050](../../decisions/0050-digest-chain-and-verification.md)).
+The archive shows that nothing was removed, nothing was changed, and the operator did not choose what was signed. The byte-level contract is the [bucket contract](../../reference/audit/bucket-contract.md#seals). The check is [`audit verify`](../../reference/audit/verify-command.md).
 
 ## Three layers
 
-1. **Per-object and per-record hashes.** Every object names its `sha256` and each record line carries its
-   `hash`; `audit verify` recomputes both from the archive alone. This shows each object is the object that
-   was written. It cannot show that an object was removed or added beside the others.
-2. **The lock.** On the record tier the store is written in Object Lock compliance mode, so nobody, the
-   account's root included, can overwrite or delete an object before its retention ends.
-3. **Seals.** The notary writes one signed seal per profile, tenant and hour, for empty hours too, chained
-   through `prev` and carrying a Merkle root over the hour's record hashes. A seal that disagrees with the
-   bucket shows an object added, removed or changed after it was sealed.
+1. **Hashes.** Every object names its `sha256` and each record line carries its `hash`. `audit verify` recomputes both from the archive alone. This shows each object is the one written. It cannot show that an object was removed or added.
 
-## Why a job, and not a signature on each record
+2. **The lock.** On the record tier the store is written in Object Lock compliance mode. Nobody, the account root included, can overwrite or delete an object before its retention ends.
 
-What the seals must prove is that nothing was **removed**, nothing was **changed**, and the operator did
-not **choose** what was signed. A signature per record, made by the emitter or by the writer, proves only the
-second:
+3. **Seals.** The notary writes one signed seal per profile, tenant and hour, empty hours included. Seals chain through `prev` and carry a Merkle root over the hour's record hashes. A seal that disagrees with the bucket shows an object added, removed or changed after sealing.
 
-- **Removal leaves nothing behind.** A signed record that is deleted takes its signature with it. Only a signed
-  list of everything written in an hour, including an empty list for a quiet hour, makes a missing object
-  visible.
-- **An emitter's signature says "the application said so",** which the trail already knows: the writer verifies
-  each caller's workload token and stamps it as the record's observer, and the `origin_hash` covers the record as
-  accepted. A compromised application would sign its own false records as readily, and keys per emitter would
-  have to be issued, rotated and revoked in the least trusted place in the system.
-- **The writer must not hold the signing key.** It already has write rights on the archive; with the key as well,
-  one compromised process could both write and vouch for what it wrote. The notary runs as its own identity, may
-  use the key, and may write only under `seals/` and `keys/`.
-- **Quiet hours need a seal too,** and nothing wakes the writer when nothing happens. A scheduled job seals every
-  hour, and one that missed its runs seals the hours it missed.
+The current hour is not sealed yet. A seal is due after the settle window and a grace. Until then the lock protects the objects.
 
-The cost is that the current hour is not sealed yet (a seal is due after the settle window and a grace). Until
-then its objects are protected by the lock and not yet by the seal.
+## Seals come from a job
+
+A signature per record proves only that the signer chose it. Four properties need a job:
+
+- **Removal.** A deleted signed record takes its signature with it. Only a signed list of the hour, empty for a quiet hour, makes a missing object visible.
+
+- **Emitter signatures.** They say only that the application said so. The writer already verifies the workload token and stamps the observer, and `origin_hash` covers the accepted record.
+
+- **The writer holds no signing key.** The notary runs as its own identity. It may use the key and write only under `seals/` and `keys/`.
+
+- **Quiet hours.** Nothing wakes the writer when nothing happens. A scheduled job seals every hour, and seals the hours it missed.
 
 ## Two tiers
 
-The **record** tier is a store with the Object Lock API, written in compliance mode. The **attested** tier is the
-same archive and the same seals on a store with no lock: one without the Object Lock API, such as an
-S3-compatible service from another provider, or a bucket a deployment chooses not to lock. On it the seals are the
-whole of the integrity story, and the gap the lock alone covered (the unsealed hour, and the operator's own
-ability to delete) is covered by compensating controls: a managed signing key, which is required there rather than
-recommended; no delete permission on any component; and an administrative no-delete rule where the store offers one.
+| tier | store | integrity |
+|---|---|---|
+| record | Object Lock API, compliance mode | lock plus seals |
+| attested | same archive and seals on a store without the lock, such as an S3-compatible service from another provider | seals plus compensating controls |
 
-Which tier a deployment may run on is the profiles' decision. Every framework profile says the least lock its
-framework demands (`compliance` for `pci-dss`, `nen-7513`, `dora` and `evidence-etsi`; `none` for `security`,
-`history` and `billing-nl`), and the writer refuses to start when the Object Lock of a profile's preset (compliance for `attested`, none for the others)
-is weaker than the profile demands.
+On the attested tier, use a managed signing key and grant no component delete permission. Add an administrative no-delete rule where the store offers one.
+
+Each framework profile states the least lock its framework demands. `pci-dss`, `nen-7513`, `dora` and `evidence-etsi` demand `compliance`. `security`, `history` and `billing-nl` demand `none`. The writer refuses to start when a profile's preset has a weaker lock than the profile demands. The preset lock is compliance for `attested` and none for the others.
 
 ## Who holds the key
 
-With a signing key the writer holds itself, the seals would prove objects have not changed since signing, by a
-party who could also have chosen what to sign. A managed key, in KMS or a transit engine, never leaves its
-provider, so the seals also prove the operator did not choose what to sign. A deployment that must answer an
-assessor uses a managed key; a key file is for tests and for a deployment that accepts the weaker claim knowingly.
-An auditor believes a key because they **pinned its thumbprint**, not because it is in the bucket
-([key custody](key-custody.md#signing-key)).
+A managed key in KMS or a transit engine never leaves its provider, so seals also prove the operator did not choose what to sign. Use one when you must answer an assessor. A key file suits tests and a deployment that accepts the weaker claim.
+
+An auditor trusts a key because they pinned its thumbprint, not because the key is in the bucket. See [key custody](key-custody.md#signing-key).
 
 ## Time
 
-Emitters and writers run on synchronised clocks. `audit clock-sync` checks the
-offset against UTC daily and records `audit.clock.synchronised`, which the
-evidence and PCI framework profiles require. It measures and records; it never sets the
-clock, because a component that both set the time and recorded the times of
-things would be marking its own paper.
+Emitters and writers need synchronised clocks. `audit clock-sync` checks the offset against UTC daily and records `audit.clock.synchronised`, which the evidence and PCI framework profiles require. It never sets the clock.
 
-The recorded `offset_ms` is the correction this clock needs, as RFC 5905 §8 has
-it: positive means the clock is behind. Given several references it believes
-the quickest to answer, since the error in an offset is bounded by half the
-round trip that carried it. A clock outside the deployment's tolerance fails the
-run and is recorded anyway — that hour is exactly the one an auditor wants the
-measurement from. Nothing is recorded when no reference answered: the clock was
-not checked, and saying it was would be worse than a failed job.
+`offset_ms` is the correction the clock needs per RFC 5905 §8: positive means the clock is behind. With several references it trusts the quickest to answer. A clock outside the tolerance fails the run and is still recorded. Nothing is recorded when no reference answered.
 
 ## Anchoring
 
-Framework profiles may require or recommend anchoring the head of the seal chain with an RFC 3161 or ETSI
-time-stamp. **Not built.** Time-stamp anchoring is not part of the seal ([0061](../../decisions/0061-seals.md)).
+Framework profiles may require or recommend anchoring the seal chain head with an RFC 3161 or ETSI time-stamp. This is not built.
+
+## Decided in
+
+- [0045 S3 Object Lock as the record](../../decisions/0045-s3-object-lock-as-the-record.md).
+- [0050 Digest chain and verification](../../decisions/0050-digest-chain-and-verification.md).
+- [0056 Lock modes and store tiers](../../decisions/0056-lock-modes-and-store-tiers.md).
+- [0061 Seals](../../decisions/0061-seals.md).
+- [0068 Storage is configured per preset](../../decisions/0068-storage-is-configured-per-preset.md).
