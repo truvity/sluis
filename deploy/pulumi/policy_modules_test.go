@@ -145,7 +145,8 @@ func TestModuleRoleSidsUniqueAndDeterministic(t *testing.T) {
 			}
 			seen[sid] = true
 		}
-		if rendered(t, r) != rendered(t, r) {
+		first, second := rendered(t, r), rendered(t, r)
+		if first != second {
 			t.Errorf("role %s: not deterministic", r.Name)
 		}
 	}
