@@ -3,7 +3,7 @@
 Every point where something outside talks to something in this
 repository, numbered once here and explained case by case below. The
 structural drawing is [architecture.md](architecture.md); the how-to per
-relying party is under [how-to/connect/](../how-to/connect/).
+relying party is under [how-to/connect/](../how-to/connect/README.md).
 
 Every arrow below rests on one of the **two trust anchors**, chosen by scope ([trust.md](trust.md)): the cluster for a
 workload calling a service in the same cluster, the issuer for everything further away. Each case names its anchor.
