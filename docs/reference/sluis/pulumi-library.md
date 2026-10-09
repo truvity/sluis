@@ -162,7 +162,8 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `Recovery` | Enabled | `RecoveryArgs.Enabled` (`*bool`) writes `recovery.enabled`; the password parameter exists either way ([recovery](../../guides/sluis/operate/recover-on-lambda.md)) |
 | `FunctionNamePrefix` | `sluis` | Names `<prefix>-scheduler`, `<prefix>-config` and the function default |
 | `FunctionName` | `FunctionNamePrefix` | Function, role, policy and log group. A v1.62 installation sets `<prefix>-http` ([upgrade v1.63](../../guides/sluis/upgrade/v1.63.md)) |
-| `Function` | 512 MB; 300 s | `FunctionArgs`: `MemoryMB`, `TimeoutSeconds` |
+| `Function` | 512 MB; 300 s; unreserved | `FunctionArgs`: `MemoryMB`, `TimeoutSeconds`, `ReservedConcurrency` (`*int`, at least 1) |
+| `Function.ReservedConcurrency` | nil | A ceiling on concurrent environments. It costs nothing and is not provisioned concurrency. It bounds a [cold-start herd](../../guides/sluis/operate/survive-a-cold-start-herd.md). A cap set by hand is removed by the next apply unless set here |
 | `LogRetentionDays` | 30 | Function log group |
 | `AccessLogs` | nil (off) | `RetentionDays` (7). Declares log group `/aws/apigateway/<FunctionName>` and `$default` access logs: `requestTime`, `requestId`, `httpMethod`, `path`, `status`, `responseLatency`, `integrationLatency`. The query string, headers, address and identity are never logged. The applying principal needs `logs:CreateLogDelivery`, `logs:PutResourcePolicy` and related actions |
 | `PermissionsBoundaryArn` | None | Boundary of the role and the scheduler's |
@@ -175,7 +176,7 @@ l, _ := sluispulumi.NewLambda(ctx, "access", &sluispulumi.LambdaArgs{
 | `CloudflareRotation.Rate`, `.Disabled`, `.Paused` | `rate(1 minute)`, false, false | Invokes `{"kind":"cloudflare"}`. Exists only when `Installation.Cloudflare` declares presets, which also grants SSM read on `internal/cloudflare/*`, read and write on `internal/cloudflare-minted/*`, write on `external/cloudflare/*` ([Cloudflare tokens](../../guides/sluis/cloudflare-tokens.md)) |
 | `WebIdentityAudience` | Any | Restricts the audience of the role's web identity token |
 | `AdditionalWebIdentityAudiences` | None | Extra exact audiences after it. Any code under the role can mint them. Empty, duplicate, or with empty `WebIdentityAudience`: refused |
-| `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, `ACCESS_ROSTER_*`, `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name |
+| `Telemetry.LayerArn`, `.Env` | nil | The `otlp-lambda` layer; `Env` accepts `OTEL_*`, `OPENTELEMETRY_*`, `ACCESS_ROSTER_*`, `AWS_LAMBDA_EXEC_WRAPPER` and nothing else. `OTEL_SERVICE_NAME` defaults to the function name. The layer's token comes from an issuer: one other than the function it observes keeps telemetry flowing while that function is saturated. The function drops what the layer refuses |
 | `Tags` | None | On everything that takes tags |
 
 ### Outputs

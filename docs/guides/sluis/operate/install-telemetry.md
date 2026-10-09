@@ -8,8 +8,6 @@ Point the pod at an OpenTelemetry collector, then install the alert rules and th
 
 - You need a ruler that reads `VMRule`, or `PrometheusRule` with `alerts.format: prometheusrule`.
 
-- Telemetry is the OpenTelemetry environment only. With no endpoint set, nothing is exported.
-
 - The chart refuses a non-http(s) endpoint, an `extraEnv` name without the `OTEL_` prefix, and `OTEL_EXPORTER_OTLP_ENDPOINT` in `extraEnv`. `helm template` fails naming the key.
 
 - `extraEnv` renders as plain values. Put `OTEL_EXPORTER_OTLP_HEADERS` with a token in a Secret and reach the pod through `secretEnv`.

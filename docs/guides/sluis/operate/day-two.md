@@ -14,6 +14,7 @@ Each page is one task. A shell is needed for the export, a restore, a migration,
 | let the issuer generate a confidential client's secret | [Let the issuer generate a client's secret](../let-the-issuer-generate-a-clients-secret.md) |
 | rotate such a secret | [Rotate a client secret](rotate-a-client-secret.md) |
 | choose replica counts, size the snapshot cache | [Scaling and cache](scaling-and-cache.md) |
+| keep a Lambda serving through a herd of cold starts | [Survive a cold-start herd](survive-a-cold-start-herd.md) |
 | run more than one replica | [Run more than one replica](high-availability.md) |
 | find something in the service's own log | [Read the logs](read-the-logs.md) |
 | move the State between storages | [Move the State](../migrate/migrate-state.md) |
