@@ -18,7 +18,9 @@ import (
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/cloudflare/cfapi"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	"github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/modcall"
 	"github.com/truvity/sluis/internal/rails"
 	"github.com/truvity/sluis/internal/secrets"
 	"github.com/truvity/sluis/internal/store"
@@ -107,6 +109,7 @@ func FromService(f *config.Serve, p *config.PolicyDocument) (Config, error) {
 // App is the assembled module.
 type App struct {
 	minter *minter.Minter
+	rpc    *modcall.Server
 	log    *slog.Logger
 	stores *store.Stores
 	trail  *audit.Trail
@@ -161,8 +164,19 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		log.InfoContext(ctx, "no shared state backs the tick leases, so they are held in this process: run one replica",
 			slog.String("adapter", stores.Adapter))
 	}
-	return &App{minter: m, log: log, stores: stores, trail: trail, sharedLease: shared}, nil
+	return &App{minter: m, rpc: serve(m), log: log, stores: stores, trail: trail, sharedLease: shared}, nil
 }
+
+// serve is the module's methods for the other modules: the on-demand mint and
+// the grants listing.
+func serve(m *minter.Minter) *modcall.Server {
+	s := modcall.NewServer(rpc.Module)
+	rpc.Register(s, m)
+	return s
+}
+
+// RPC is the module's server: what a transport of internal/modcall serves.
+func (a *App) RPC() *modcall.Server { return a.rpc }
 
 // Close closes the audit emitter, which delivers what its queue holds within its
 // timeout and drops the rest, and the ports.

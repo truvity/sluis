@@ -33,6 +33,7 @@ import (
 	"github.com/truvity/sluis/internal/app"
 	"github.com/truvity/sluis/internal/clientcreds"
 	"github.com/truvity/sluis/internal/cloudflare/minter"
+	cfrpc "github.com/truvity/sluis/internal/cloudflare/rpc"
 	"github.com/truvity/sluis/internal/config"
 	githubapp "github.com/truvity/sluis/internal/githubroster/app"
 	"github.com/truvity/sluis/internal/health"
@@ -388,6 +389,16 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		directory.ConsoleServer().UseCloudflare(a.cloudflare)
 		// The on-demand exchange and the grants listing at the issuer.
 		assembled.Issuer().UseCloudflare(a.cloudflare)
+	}
+	if cfg.Cloudflare != nil && cfg.Cloudflare.Remote != nil {
+		// The minter is another module's: only the on-demand exchange and the
+		// grants listing at the issuer call it.
+		remote, err := cfrpc.Dial(ctx, cfg.Cloudflare.Remote, log)
+		if err != nil {
+			a.Close()
+			return nil, err
+		}
+		assembled.Issuer().UseCloudflare(remote)
 	}
 	log.InfoContext(ctx, "sluis assembled as one service: a login makes no network "+
 		"call except to the corporate directory", slog.Int("controllers", len(a.consoles)))

@@ -152,3 +152,36 @@ func TestWhoMayAskForWhat(t *testing.T) {
 		t.Error("Allows disagrees with the rows")
 	}
 }
+
+func TestCloudflareRemoteNamesOneTransportAndHoldsNoPresets(t *testing.T) {
+	ok := func(r *config.CloudflareRemote) *config.Cloudflare { return &config.Cloudflare{Remote: r} }
+	for name, c := range map[string]*config.Cloudflare{
+		"function": ok(&config.CloudflareRemote{Function: "fn"}),
+		"url":      ok(&config.CloudflareRemote{URL: "https://cloudflare.example"}),
+	} {
+		if err := c.Validate(); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, c := range map[string]*config.Cloudflare{
+		"neither":    ok(&config.CloudflareRemote{}),
+		"both":       ok(&config.CloudflareRemote{Function: "fn", URL: "https://cloudflare.example"}),
+		"bad url":    ok(&config.CloudflareRemote{URL: "cloudflare"}),
+		"and preset": {Remote: &config.CloudflareRemote{Function: "fn"}, Presets: map[string]config.CloudflarePreset{"dns": {}}},
+	} {
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "cloudflare.remote") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// The grants name presets the remote module's document declares.
+func TestGrantsAreNotHeldToPresetsOfARemoteMinter(t *testing.T) {
+	p := &config.PolicyDocument{CloudflareGrants: &config.PolicyCloudflare{Grants: []config.CloudflareGrant{{Group: "ops", Presets: []string{"dns"}}}}}
+	if err := config.CheckCloudflare(&config.Cloudflare{Remote: &config.CloudflareRemote{Function: "fn"}}, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.CheckCloudflare(&config.Cloudflare{}, p); err == nil {
+		t.Fatal("a grant for an undeclared preset was accepted")
+	}
+}

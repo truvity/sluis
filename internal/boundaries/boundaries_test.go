@@ -232,7 +232,6 @@ var minterPackages = []string{"internal/cloudflare/minter", "internal/cloudflare
 // becomes an Invoke boundary to the Cloudflare module (docs/decisions/0071
 // D93 a); an entry nobody uses any more is an error, so the list only shrinks.
 var minterWiring = map[string]string{
-	"internal/issuer":    "the on-demand token exchange and the grants listing (cloudflaretoken_http.go)",
 	"internal/rosterapp": "assembles the minter into the one process of `serve`",
 	"internal/server":    "the console's view of the minter (CloudflareSTS)",
 	"internal/store":     "the blob credentials of a preset (credentials.preset)",
