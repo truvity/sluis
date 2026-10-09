@@ -38,7 +38,7 @@ access key, a database password held on that system's behalf) and reading
 per-system mapping from an internal group to that system's own roles — an
 RBAC binding, a policy attached to a login — is real and useful, and it is
 published as a **recipe** (a connect page under
-[how-to/connect/](../how-to/connect/), such as
+[how-to/connect/](../how-to/connect/README.md), such as
 [connect/openbao.md](../how-to/connect/openbao.md)), never carried as a
 first-class feature of the service itself. A recipe can go stale without
 taking the issuer down with it; a feature cannot.
