@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"github.com/truvity/sluis/internal/signer"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/truvity/sluis/internal/demo"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
 )
 

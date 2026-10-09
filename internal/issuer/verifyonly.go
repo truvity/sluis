@@ -10,12 +10,13 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/truvity/sluis/internal/signer"
 	"strings"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/zitadel/oidc/v3/pkg/op"
+
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // VerifyOnlyKey is a PUBLIC key the issuer publishes in its JWKS and never signs

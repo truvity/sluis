@@ -3,7 +3,6 @@ package issuer_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/truvity/sluis/internal/signer"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/policy"
 )
 

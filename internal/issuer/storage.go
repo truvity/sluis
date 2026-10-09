@@ -14,10 +14,10 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
-	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
+	"github.com/truvity/sluis/audit/sdk/record"
 	"github.com/truvity/sluis/internal/access"
 	"github.com/truvity/sluis/internal/audit"
 	"github.com/truvity/sluis/internal/clientcreds"

@@ -5,7 +5,6 @@ import (
 	"crypto"
 	"encoding/json"
 	"errors"
-	"github.com/truvity/sluis/internal/signer"
 	"slices"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // The console reads another service as the person signed in with a token

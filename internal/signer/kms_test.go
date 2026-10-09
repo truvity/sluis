@@ -12,7 +12,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
-	"github.com/truvity/sluis/internal/signer"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"github.com/truvity/sluis/internal/issuer"
+	"github.com/truvity/sluis/internal/signer"
 )
 
 // fakeKMS signs with a local P-384 key and answers in DER, as KMS does.

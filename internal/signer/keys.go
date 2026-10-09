@@ -192,6 +192,11 @@ func (k *SigningKey) Key() any { return k.key }
 // so that a verifier knows which key to check it with.
 func (k *SigningKey) ID() string { return k.id }
 
+// Seed is the secret this key was made with, for deriving a value that must
+// outlive a restart with the key (the issuer's dead-refresh fingerprint). It
+// is never the private key; nil for a key with no seed.
+func (k *SigningKey) Seed() []byte { return k.seed }
+
 // Derive returns a key for a purpose that is not signing tokens — the
 // short-lived state a half-finished login carries, and anything else that
 // must be the same in every replica.
@@ -204,11 +209,6 @@ func (k *SigningKey) ID() string { return k.id }
 //
 // The label separates purposes: two derivations of the same key are
 // unrelated, so a value one of them signs cannot be replayed at another.
-// Seed is the secret this key was made with, for deriving a value that must
-// outlive a restart with the key (the issuer's dead-refresh fingerprint). It
-// is never the private key; nil for a key with no seed.
-func (k *SigningKey) Seed() []byte { return k.seed }
-
 func (k *SigningKey) Derive(label string) []byte {
 	mac := hmac.New(sha256.New, k.seed)
 	mac.Write([]byte(label))
