@@ -1213,12 +1213,12 @@ func redirectOrOK(w http.ResponseWriter, r *http.Request, to string) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// principalSubject names a caller in a log line without their address: the
-// principal's stable subject when it carries one, else a keyed pseudonym of
-// the address. The audit trail records the real identity.
+// principalSubject names a caller in a log line without naming them: a keyed
+// pseudonym (logattr.Pseudonym) of the principal's stable subject, or of the
+// address when it carries none. The audit trail records the real identity.
 func principalSubject(p access.Principal) slog.Attr {
 	if p.Subject != "" {
-		return logattr.SafeString("subject", p.Subject)
+		return logattr.Pseudonym("subject", p.Subject)
 	}
 	return logattr.Pseudonym("subject", p.Email)
 }
