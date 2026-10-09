@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/truvity/sluis/internal/modcall"
@@ -148,6 +149,78 @@ func TestRouterRefusesATargetWithNoTransport(t *testing.T) {
 	} {
 		if _, err := modcall.NewRouter(cfg, nil, nil, nil); err == nil {
 			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestAllowRefusesEveryOtherCallerClassOnEveryTransport(t *testing.T) {
+	s := modcall.NewServer("echo")
+	ran := 0
+	modcall.Handle(s, "say", func(context.Context, echoReq) (echoRes, error) { ran++; return echoRes{}, nil },
+		modcall.Allow("issuer", "console"))
+	l := modcall.Local{"echo": s}
+	for _, class := range []string{"issuer", "console"} {
+		if _, err := l.As(class).Call(context.Background(), "echo", "say", nil); err != nil {
+			t.Errorf("%s: %v", class, err)
+		}
+	}
+	for _, class := range []string{"restore", ""} {
+		_, err := l.As(class).Call(context.Background(), "echo", "say", nil)
+		if !errors.Is(err, modcall.Coded(modcall.CodeForbidden, "")) {
+			t.Errorf("%q: %v", class, err)
+		}
+	}
+	if _, err := l.Call(context.Background(), "echo", "say", nil); !errors.Is(err, modcall.Coded(modcall.CodeForbidden, "")) {
+		t.Errorf("a Local with no class: %v", err)
+	}
+	if ran != 2 {
+		t.Errorf("ran %d", ran)
+	}
+
+	srv := httptest.NewServer(s.Handler(func(_ context.Context, b string) (string, error) { return b, nil }))
+	t.Cleanup(srv.Close)
+	for bearer, wantErr := range map[string]bool{"system:serviceaccount:sluis:issuer": false, "system:serviceaccount:sluis:other": true, "console": false, "x": true} {
+		c := &modcall.HTTPCaller{URLs: map[string]string{"echo": srv.URL}, Token: func(context.Context, string) (string, error) { return bearer, nil }}
+		_, err := c.Call(context.Background(), "echo", "say", nil)
+		if (err != nil) != wantErr {
+			t.Errorf("%s: %v", bearer, err)
+		}
+	}
+	// WithClasses maps a subject whose name is not its class.
+	srv2 := httptest.NewServer(s.Handler(func(_ context.Context, b string) (string, error) { return b, nil },
+		modcall.WithClasses(map[string]string{"sluis-controller": "issuer"})))
+	t.Cleanup(srv2.Close)
+	c := &modcall.HTTPCaller{URLs: map[string]string{"echo": srv2.URL}, Token: func(context.Context, string) (string, error) { return "sluis-controller", nil }}
+	if _, err := c.Call(context.Background(), "echo", "say", nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestACallerWrittenInThePayloadOrTheEnvelopeIsNotTheCaller(t *testing.T) {
+	s := server()
+	resp := s.Dispatch(modcall.WithCaller(context.Background(), "console"), modcall.Request{
+		V: modcall.Version, Kind: modcall.Kind, Module: "echo", Method: "say", Payload: []byte(`{"word":"x","caller":"issuer","subject":"issuer"}`)})
+	raw, err := modcall.Result(resp)
+	if err != nil || !strings.Contains(string(raw), `"subject":"console"`) {
+		t.Fatalf("%s %v", raw, err)
+	}
+}
+
+func TestAVersionNewerThanTheServerIsRefusedAndAnAbsentOneIsV1(t *testing.T) {
+	s := server()
+	r := s.Dispatch(context.Background(), modcall.Request{V: modcall.Version + 1, Kind: modcall.Kind, Module: "echo", Method: "say"})
+	if r.Error == nil || r.Error.Code != modcall.CodeBadRequest {
+		t.Errorf("%+v", r)
+	}
+	if r = s.Dispatch(context.Background(), modcall.Request{Kind: modcall.Kind, Module: "echo", Method: "say"}); r.Error != nil {
+		t.Errorf("%+v", r)
+	}
+}
+
+func TestClassOfSubject(t *testing.T) {
+	for in, want := range map[string]string{"system:serviceaccount:ns:issuer": "issuer", "issuer": "issuer", "system:serviceaccount:ns:": "system:serviceaccount:ns:"} {
+		if got := modcall.ClassOfSubject(in); got != want {
+			t.Errorf("%q: %q", in, got)
 		}
 	}
 }

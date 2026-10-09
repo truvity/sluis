@@ -55,6 +55,13 @@ const (
 	MethodGranted = "granted"
 )
 
+// Caller classes: who may call which method (docs/decisions/0071). The issuer
+// asks for the on-demand mint and the grants listing; the console lists grants.
+const (
+	CallerIssuer  = "issuer"
+	CallerConsole = "console"
+)
+
 // The codes of the errors that cross the boundary.
 const (
 	codeUnknownPreset = "unknown_preset"
@@ -81,10 +88,10 @@ func Register(s *modcall.Server, m Minting) {
 	modcall.Handle(s, MethodMint, func(ctx context.Context, r mintRequest) (*Minted, error) {
 		minted, err := m.MintFor(ctx, r.Preset, r.Caller, r.Lifetime)
 		return minted, codeOf(err)
-	})
+	}, modcall.Allow(CallerIssuer))
 	modcall.Handle(s, MethodGranted, func(_ context.Context, r grantedRequest) (grantedResponse, error) {
 		return grantedResponse{Presets: m.Granted(r.Caller)}, nil
-	})
+	}, modcall.Allow(CallerIssuer, CallerConsole))
 }
 
 // codeOf is an error as the boundary tells it: the three a caller answers

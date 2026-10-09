@@ -39,7 +39,7 @@ func (f *fake) Granted(c rpc.Caller) []rpc.PresetInfo {
 func client(f *fake) *rpc.Client {
 	s := modcall.NewServer(rpc.Module)
 	rpc.Register(s, f)
-	return rpc.NewClient(modcall.Local{rpc.Module: s}, nil)
+	return rpc.NewClient(modcall.Local{rpc.Module: s}.As(rpc.CallerIssuer), nil)
 }
 
 func TestAMintCrossesTheBoundaryWithItsCallerAndLifetime(t *testing.T) {
@@ -82,7 +82,7 @@ func TestGrantedListsAndAnUnreachableModuleListsNothing(t *testing.T) {
 	if got := c.Granted(rpc.Caller{}); len(got) != 0 {
 		t.Errorf("%+v", got)
 	}
-	if got := rpc.NewClient(modcall.Local{}, nil).Granted(rpc.Caller{Groups: []string{"ops"}}); got != nil {
+	if got := rpc.NewClient(modcall.Local{}.As(rpc.CallerIssuer), nil).Granted(rpc.Caller{Groups: []string{"ops"}}); got != nil {
 		t.Errorf("%+v", got)
 	}
 }
