@@ -40,4 +40,4 @@ Deploy sluis's Lambda functions from the estate's own versioned S3 bucket, with 
 - "is a development build" / "replaced by a local copy": the program has no release to fetch; set `Package` or `Release.Version`.
 - "has the SHA-256 ... not the ... asked for": the bytes are not the release's; do not deploy them.
 
-For the audit functions the same fields exist on the audit library's `Args` ([reference](../../audit/docs/reference/aws-pulumi-library.md)); `LambdaArgs.Audit` passes the bucket on, with its own `audit/` prefix.
+For the audit functions the same fields exist on the audit library's `Args` ([reference](../audit/reference/aws-pulumi-library.md)); `LambdaArgs.Audit` passes the bucket on, with its own `audit/` prefix.
