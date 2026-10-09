@@ -142,6 +142,13 @@ func TestModuleBoundaries(t *testing.T) {
 			sees:   "internal/module/cloudflare",
 		},
 		{
+			// The transport between modules knows no module: it carries bytes.
+			name:   "the module-call transport imports no role",
+			from:   []string{"internal/modcall"},
+			forbid: slices.Concat(front, github, slack, cloudflare, modules, []string{"internal/module"}),
+			sees:   "internal/modcall/lambdacall",
+		},
+		{
 			// A role is assembled by its module and the main, never the reverse.
 			name:   "no role imports the module packages that wrap it",
 			from:   append(append(append([]string{}, front...), github...), append(slack, cloudflare...)...),
