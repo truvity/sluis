@@ -290,5 +290,5 @@ caller learns late. Fill `id` (a UUIDv7), `occurred_at`, `schema_version`,
 
 ## Afterwards
 
-- Alert on `audit.emit.records.dropped` and watch `audit.emit.queue.pending` ([emitter library](../reference/emitter-library.md)).
+- Alert on `audit.emit.records.dropped` and watch `audit.emit.queue.pending` ([emitter library](../../sdk/go/audit-emitter.md)).
 - Read the records back with [read the trail](read-the-trail.md).

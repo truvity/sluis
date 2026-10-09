@@ -3,7 +3,7 @@
 The configuration file of each binary: its shape, secrets, the shared blocks and what is
 refused. The per-binary keys are in [the writer](configuration-writer.md),
 [observe and query](configuration-observe-query.md) and [the jobs](configuration-jobs.md); the
-Go emitter's options in [the emitter library](emitter-library.md); the chart's values in
+Go emitter's options in [the emitter library](../../sdk/go/audit-emitter.md); the chart's values in
 [chart values](chart-values.md). Every name here exists in the code, in
 `schemas/config/` or in `charts/audit/values.yaml`, and the chart's file has a
 comment on each value. Where something is designed and not built,

@@ -64,7 +64,7 @@ smaller security margin and a larger token, for every relying party, to
 accommodate the one that could not be configured or fixed. The chart's
 own Go and TypeScript verifiers accept whichever algorithm discovery
 advertises, RS256, ES256, ES384 or ES512, by design
-([reference/typescript.md](../reference/typescript.md)) — the constraint
+([the TypeScript package](../sdk/typescript/sluis.md)) — the constraint
 is never on this repository's own side of a connection.
 
 ## Consequences

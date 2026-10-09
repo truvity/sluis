@@ -32,7 +32,7 @@ A topic that crosses products lives with the owner of the contract, and the othe
 | Topic | Owner |
 |---|---|
 | the roster catalogue (what sluis records, its actions and schemas) | sluis: [audit actions](reference/audit-actions.md), [change the audit catalogue](how-to/change-the-audit-catalogue.md) |
-| the record format, extension slots and the SDKs (emitter and query) | audit: [the record](audit/reference/record.md), [extension points](audit/reference/extension-points.md), [emitter library](audit/reference/emitter-library.md) |
+| the record format, extension slots and the SDKs (emitter and query) | audit: [the record](audit/reference/record.md), [extension points](audit/reference/extension-points.md), [emitter library](sdk/go/audit-emitter.md) |
 | the adapter block (`keys`, `state`) | storage: [the adapter block](storage/explanation/adapter-block.md) |
 | people and agents: client classes and sign-out scopes | sluis: [people and agents](sluis/explanation/people-and-agents.md) |
 

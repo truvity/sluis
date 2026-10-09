@@ -71,7 +71,7 @@ session](../../explanation/sessions.md#what-the-console-asks-of-the-sso-session)
   take them as they are.
 - **Frontend**: `useIdentity()` and `<UserBadge/>` from the TypeScript
   package, `@truvity/sluis` on GitHub Packages
-  ([installing it](../../reference/typescript.md)). Views in the URL
+  ([installing it](../../sdk/typescript/sluis.md)). Views in the URL
   fragment, dist embedded in the binary.
 - **Nothing else**: no login page, no session, no token parsing, no
   sign-out logic — and no signing-algorithm setting. Both verifiers accept
@@ -108,7 +108,7 @@ the address and the groups, read from the access token. A console that
 shows who is signed in has no userinfo call to make.
 
 There is no `authz` package: role helpers over `Verified` are designed
-and not built ([../reference/go-module.md](../../reference/go-module.md)).
+and not built ([the Go module](../../sdk/go/sluis.md)).
 `Require` is what exists, and it takes the group names as the policy
 spells them — the name in the policy is the name in the token is the name
 in the check.

@@ -232,8 +232,8 @@ grant says.
 
 The Go module offers **two verifiers and nothing else**, `Issuer` and `Cluster`, both yielding one `Verified` with
 `Groups []string`, so a handler never learns which anchor proved the caller. There is no third verifier and no "trust
-this header" mode that outlives a local run. The surface is in [the Go module](../reference/go-module.md); the
-TypeScript package carries the same caller to a UI ([typescript](../reference/typescript.md)).
+this header" mode that outlives a local run. The surface is in [the Go module](../sdk/go/sluis.md); the
+TypeScript package carries the same caller to a UI ([typescript](../sdk/typescript/sluis.md)).
 
 ## What this rules out
 
@@ -252,7 +252,7 @@ TypeScript package carries the same caller to a UI ([typescript](../reference/ty
 
 - [design.md](design.md): the whole service: what the estate anchor verifies and mints, the directory model, recovery.
 - [oauth2-proxy](../how-to/connect/oauth2-proxy.md): a console behind a gateway that is not Envoy Gateway.
-- [Go module](../reference/go-module.md): the two verifiers.
+- [Go module](../sdk/go/sluis.md): the two verifiers.
 - [Service to service](../how-to/connect/service-to-service.md): the how-to for a service calling another.
 - [policy](../reference/policy.md): internal groups, the claim tables, and what a token is minted *for*: a client, a
   declared **resource** (RFC 8707), or a client that describes itself by an allow-listed URL.
